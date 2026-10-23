@@ -633,11 +633,20 @@ class SetFinisher:
             else:
                 st = await asyncio.to_thread(store.add_image_set, recipe.stage_id, rec.id, recipe.asset_id, lens_deg, floor_y, glb)
                 obj = st.objects[-1]
+            if recipe.replace_set_id:                                                  # SC3f: the made things follow their set
+                moved = await asyncio.to_thread(set_things.restand_things, store, q.catalogue, recipe.stage_id, obj.id)
+                st = await asyncio.to_thread(store.get, recipe.stage_id) or st
+                job.result["restood"] = moved
+                if moved["stood"] or moved["left"] or moved["failed"]:
+                    job.log_tail.append("the made things: " + "; ".join(x for x in (
+                        f"stood again on the new relief: {', '.join(moved['stood'])}" if moved["stood"] else "",
+                        f"left where you put them: {', '.join(moved['left'])}" if moved["left"] else "",
+                        f"not stood again: {'; '.join(moved['failed'])}" if moved["failed"] else "") if x))
             job.result["stage_id"], job.result["set_id"], job.result["camera_id"] = st.id, obj.id, obj.plate_camera_id
             q.hub.broadcast("stage.updated", {"id": st.id, "revision": st.revision})
             job.log_tail.append(f"on stage {st.id}: {obj.name} with its camera {obj.plate_camera_id} (lens {obj.lens_deg}°, the floor {obj.floor_y} m under it)")
             job.result["level"] = obj.level
-            job.log_tail.append(f"laid level: pitched {obj.level['pitch_deg']}° (the sideways tilt {obj.level['roll_deg']}° left)" if obj.level
+            job.log_tail.append(f"laid level: pitched {obj.level['pitch_deg']}°, turned {obj.level['roll_deg']}° sideways" if obj.level
                                 else "not laid level (too little floor in the picture, or too steep a one)")
 
 

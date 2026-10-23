@@ -8306,3 +8306,33 @@ The author asked for a review of the state of things, then "record all this and 
   the shadows route (w·h bytes, 404); the Make's share; `thingsStore.test.ts` (the shadows read when a thing waits to be made, not without);
   the e2e things scenario (the sheet's foot and its `data-shadows`). Offline 518 passed, Vitest 430 + 3 skipped, e2e 54/54 full and 54/54 open, typecheck
   and build clean, lint 0 errors, audits clean.
+
+## 2026-10-23 18:27 — SC3f built: the made things follow their set when it is rebuilt; a picture set laid level sideways too
+
+- **Why** (25 §3, after SC3e): a rebuild at a corrected lens, or a second *Make*, gives the set a new relief — its scale, its slope, its
+  level — while the props already made kept the transforms they were stood with, so they floated or sank; and SC3d left the floor's
+  sideways slope (0.2° in the rig's room; a hand-held photograph shows more).
+- **Laid level both ways** (`relief.levelling`, `turn`, `camera_roll`, `to_stage`): the set turned by Rz(ψ) then Rx(φ) — ψ = atan(−a)
+  takes the floor's normal (−a, 1, −b) into the yz-plane, φ = atan(b / √(1 + a²)) stands it up — which is three's Euler XYZ, so the engine
+  applies `[φ, 0, ψ]` as it is; the slope is measured against LEVEL_MAX_DEG as one angle; the picture camera keeps the relief's origin turned,
+  looks along the turned −Z and is rolled so its up is the turned up (Stage aims a camera by a look-at with the world's up, then `rotateZ`
+  by its roll). `levelling` returns `camera.roll`; the store sets it; `level.roll_deg` is now the turn applied (it was the slope left).
+- **Carried by its pixel** (`set_things.carried`, `relief_lens`): the footprint read where the thing was picked is projected to its pixel
+  with that relief's lens and the pixel's ray cast with the set's current lens onto its floor; its ends the same way give the width. For one
+  lens this is SC3d's ratio of the camera's heights; across a corrected lens the ratio was wrong (MoGe reads the same pixels into another
+  room shape). A relief's lens comes from its `params.relief`, else from its vertices.
+- **Following a rebuild** (`SetThing.placed`, `set_things.restand_things`, the set finisher): a made thing records the transform its prop
+  was stood with; after any rebuild of a picture set (`replace_set_id`) every made thing whose prop still has that transform is stood again
+  on the new relief (and records it); a prop moved by hand is left (the job's log: *stood again … · left where you put them …*). OpenAPI and
+  schema.d.ts regenerated; the set's row adds *, N° askew* past 0.1°, its ? says the made things follow.
+- **Rig** (`engine/spikes/sc3f_rig.py`; SC3d's project copied, framed and stood again as the code now does; the real engine for MoGe; the
+  screenshots with the engine stopped): through the picture camera, each prop's front edge against the pixel where its thing met the floor
+  in the picture — before: the crate 13.7 px, the small block 5.8 px; *Rebuild with this lens* at 62° (19.1 s with the engine's start; MoGe
+  reads the room 4.3° down at that lens, 1.2° at 69°): 14.3 and 6.0 px, both on the relief's floor (−0.027 and +0.001 m); the crate moved
+  0.4 m right and 0.3 m forward by hand, rebuilt at 66° (3.0 s): the crate left where it was put (75 px off its spot, as moved), the small
+  block followed (5.7 px). The camera rolled 0.14–0.15° with the set. Screenshots proto01_animate/img/25-sc3f-*.jpg.
+- **Tests:** `test_level_sc3d.py` — a camera held askew (−6° and 3°, −2° and −4°) laid level both ways, the floor at y = 0 left and right,
+  near and far, the camera's roll the photograph's; a footprint carried across a corrected lens (the same picture read at 58° instead of 70°)
+  lands where the box's footprint on the new relief is; the clean plate's carry by the new route; `test_set_things_d123.py` — the prop's
+  `placed`, a 58° rebuild stands it again on the new floor, a prop moved by hand stays through the next rebuild. Offline 521 passed,
+  Vitest 430 + 3 skipped, e2e 54/54 full and 54/54 open, typecheck and build clean, lint 0 errors (79), audits clean.

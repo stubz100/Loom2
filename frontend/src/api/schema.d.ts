@@ -9024,6 +9024,7 @@ export interface components {
             name: string;
             /** Object Id */
             object_id: string | null;
+            placed: components["schemas"]["Transform"] | null;
             /** Points */
             points: {
                 [key: string]: number;

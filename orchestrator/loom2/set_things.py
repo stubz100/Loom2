@@ -7,6 +7,7 @@ floor it was picked on — what SC3c-3's placement reads. Nothing is cut or mode
 """
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +15,7 @@ import numpy as np
 from PIL import Image, ImageFilter
 
 from .fsio import new_id
-from .stages import SetThing, Stage, StageObject, StageStore
+from .stages import SetThing, Stage, StageObject, StageStore, Transform
 
 FIND_SURFACE = "set_thing_find"
 CLEAN_SURFACE = "set_clean"                        # SC3c-3: the plate cleaned under the things (a Fill on the set's document)
@@ -395,16 +396,33 @@ def footprint(relief: Path, mask: np.ndarray, others: np.ndarray, floor_y: float
     return {"x": fx, "y": fy, "z": fz, "width": max(0.05, width), "height": max(0.05, height), "points": int(inside.sum()), "floor": plane}
 
 
-def carried(foot: dict[str, Any], dst: dict) -> dict[str, Any]:
-    """SC3d: a footprint read on the relief the thing was picked on, carried to the set's relief as it is now (the clean plate's): one
-    camera and one lens, so the two differ by MoGe's scale — the ratio of the camera's heights over their floors — and the edge lands on
-    the new relief's floor. (Read on the clean plate's relief instead, the rows where the thing stood show what the Fill painted there —
-    the floor behind it, or the foot of a wall — and the thing goes back: the rig's crate by 0.45 m.)"""
-    from .relief import floor_height
-    k = floor_height(dst) / floor_height(foot["floor"])
-    x, z = foot["x"] * k, foot["z"] * k
-    return foot | {"x": x, "y": dst["a"] * x + dst["b"] * z + dst["c"], "z": z, "width": foot["width"] * k, "height": foot["height"] * k,
-                   "floor": dst, "carried": k}
+def carried(foot: dict[str, Any], src: dict, dst: dict, dst_floor: dict) -> dict[str, Any]:
+    """SC3d / SC3f: a footprint read on the relief the thing was picked on, carried to the set's relief as it is now — the clean plate's,
+    or one rebuilt at a corrected lens. Both are the same picture seen from one camera, so the front edge's pixel stays: the edge is
+    projected to its pixel with the first relief's lens (`src`, fov_x / fov_y) and that pixel's ray cast with the new one's (`dst`) onto
+    the new relief's floor; its ends the same way give the width. (Read on the clean plate's relief instead, the rows where the thing stood
+    show what the Fill painted there — the floor behind it, or the foot of a wall — and the thing goes back: the rig's crate by 0.45 m.)"""
+    f = lambda lens, k: 0.5 / math.tan(math.radians(float(lens[k])) / 2)  # noqa: E731
+    fx0, fy0, fx1, fy1 = f(src, "fov_x"), f(src, "fov_y"), f(dst, "fov_x"), f(dst, "fov_y")
+    a, b, c = dst_floor["a"], dst_floor["b"], dst_floor["c"]
+
+    def cast(x: float, y: float, z: float) -> np.ndarray:
+        u, v = 0.5 + x / -z * fx0, 0.5 - y / -z * fy0                        # the pixel (the picture's share across and down)
+        d = np.array([(u - 0.5) / fx1, -(v - 0.5) / fy1, -1.0])              # its ray through the new lens
+        return d * (c / (d[1] - a * d[0] + b))                                # onto the new floor y = a·x + b·z + c
+
+    mid = cast(foot["x"], foot["y"], foot["z"])
+    left, right = cast(foot["x"] - foot["width"] / 2, foot["y"], foot["z"]), cast(foot["x"] + foot["width"] / 2, foot["y"], foot["z"])
+    width = float(np.linalg.norm(right - left))
+    k = width / max(1e-6, foot["width"])
+    return foot | {"x": float(mid[0]), "y": float(mid[1]), "z": float(mid[2]), "width": width, "height": foot["height"] * k, "floor": dst_floor, "carried": k}
+
+
+def relief_lens(catalogue: Any, rec: Any) -> dict | None:
+    """A relief's lens as MoGe read it (`params.relief` from the set's finisher, else read from its vertices)."""
+    from .relief import lens_of_glb
+    lens = (rec.params or {}).get("relief") or {}
+    return lens if lens.get("fov_x") and lens.get("fov_y") else lens_of_glb(catalogue.abs_path(rec))
 
 
 def placement(foot: dict[str, float], lo: np.ndarray, hi: np.ndarray, floor_y: float | None, level: dict | None = None) -> dict[str, Any]:
@@ -423,8 +441,8 @@ def placement(foot: dict[str, float], lo: np.ndarray, hi: np.ndarray, floor_y: f
 def stand(catalogue: Any, obj: StageObject, t: SetThing, mesh_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
     """A thing's model on the stage: its footprint read on the relief it was picked on (its own front edge), carried to the set's relief
     as it is now (SC3d: the clean plate's, once the rebuild landed — MoGe reads one room at slightly different scales from the picture
-    and its clean plate, and the prop stands in the frame of the set on the stage), then through the set's lift and levelling. Returns
-    the footprint and the transform."""
+    and its clean plate; SC3f: one rebuilt at another lens), then through the set's lift and levelling. Returns the footprint and the
+    transform."""
     from .relief import floor_of_glb, levelling
     cur = catalogue.get(obj.asset_id) if obj.asset_id else None
     mesh = catalogue.get(mesh_id)
@@ -436,14 +454,44 @@ def stand(catalogue: Any, obj: StageObject, t: SetThing, mesh_id: str) -> tuple[
     cpath = catalogue.abs_path(cur)
     dst = floor_of_glb(cpath)
     foot = footprint(catalogue.abs_path(own), mask, others, t.floor_y) if own is not None else None
-    if foot is not None and foot["floor"] and dst:
-        foot = carried(foot, dst)
-    else:                                                                   # picked on this relief, or a floor missing on either
+    lenses = (relief_lens(catalogue, own), relief_lens(catalogue, cur)) if foot is not None else (None, None)
+    if foot is not None and foot["floor"] and dst and lenses[0] and lenses[1]:
+        foot = carried(foot, lenses[0], lenses[1], dst)
+    else:                                                                   # picked on this relief, or a floor or a lens missing on either
         foot = footprint(cpath, mask, others, obj.floor_y)
     lift = -(obj.floor_y if obj.floor_y is not None else -1.0)
     level = levelling(dst, lift) if obj.level and dst else None             # the set's own levelling (the store's, from the same fit)
     lo, hi = model_bounds(catalogue.abs_path(mesh))
     return foot, placement(foot, lo, hi, obj.floor_y, level)
+
+
+def restand_things(store: StageStore, catalogue: Any, st_id: str, set_id: str) -> dict[str, list[str]]:
+    """SC3f (on a worker thread): the set's relief changed — a corrected lens, a clean plate — so each made thing whose prop still has the
+    transform it was stood with is stood again on the relief as it is now (`stand`); a prop the author moved stays where they put it.
+    Returns the names stood again, left, and failed (with the reason)."""
+    out: dict[str, list[str]] = {"stood": [], "left": [], "failed": []}
+    _, obj = store.picture_set(st_id, set_id)
+    if not any(t.mesh_asset_id and t.object_id for t in obj.things):
+        return out
+    same = lambda a, b: all(np.allclose(getattr(a, k), getattr(b, k), atol=1e-3) for k in ("pos", "rot", "scale"))  # noqa: E731
+
+    def fn(st: Any, o: Any) -> None:
+        for t in o.things:
+            m = next((x for x in st.objects if x.id == t.object_id), None) if t.mesh_asset_id and t.object_id else None
+            if m is None:
+                continue
+            if t.placed is not None and not same(m.transform, t.placed):
+                out["left"].append(t.name)
+                continue
+            try:
+                _, tf = stand(catalogue, o, t, t.mesh_asset_id)
+            except Exception as e:  # noqa: BLE001
+                out["failed"].append(f"{t.name}: {e}")
+                continue
+            m.transform, t.placed = Transform(**tf), Transform(**tf)
+            out["stood"].append(t.name)
+    store.edit_picture_set(st_id, set_id, fn)
+    return out
 
 
 def model_landed(q: Any, job: Any, mesh_id: str) -> None:
@@ -464,7 +512,7 @@ def model_landed(q: Any, job: Any, mesh_id: str) -> None:
             st.objects.append(StageObject(id=oid, kind="mesh", name=t.name, asset_id=mesh_id, transform=tf, colour_id=(len(st.objects) % 12) + 1))
             for x in o.things:
                 if x.id == thing_id:
-                    x.mesh_asset_id, x.object_id = mesh_id, oid
+                    x.mesh_asset_id, x.object_id, x.placed = mesh_id, oid, Transform(**tf)
         st = store.edit_picture_set(st_id, set_id, fn)
         job.result.update({"stage_id": st_id, "object_id": oid, "footprint": {k: round(v, 3) for k, v in foot.items() if isinstance(v, (int, float))},
                            "transform": tf})

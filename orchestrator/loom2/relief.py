@@ -133,23 +133,46 @@ def floor_fit(pos: np.ndarray, uv: np.ndarray, rows: float = 0.62, keep: np.ndar
             "residual": round(float(np.median(d[inl])), 4)}
 
 
+def turn(rot_deg: list[float]) -> np.ndarray:
+    """An object's rotation as a matrix, as the engine applies it (three's Euler XYZ: Rx·Ry·Rz, so Z first)."""
+    x, y, z = (math.radians(float(v)) for v in rot_deg)
+    rx = np.array([[1, 0, 0], [0, math.cos(x), -math.sin(x)], [0, math.sin(x), math.cos(x)]])
+    ry = np.array([[math.cos(y), 0, math.sin(y)], [0, 1, 0], [-math.sin(y), 0, math.cos(y)]])
+    rz = np.array([[math.cos(z), -math.sin(z), 0], [math.sin(z), math.cos(z), 0], [0, 0, 1]])
+    return rx @ ry @ rz
+
+
+def camera_roll(fwd: np.ndarray, up: np.ndarray) -> float:
+    """The roll (degrees) that turns a camera looking along `fwd` (a look-at with the world's up, as Stage aims a camera) so its up is `up`
+    — the engine's `rotateZ(roll)` after the look-at."""
+    zc = -fwd / np.linalg.norm(fwd)
+    xc = np.cross([0.0, 1.0, 0.0], zc)
+    xc = xc / max(1e-9, float(np.linalg.norm(xc)))
+    yc = np.cross(zc, xc)
+    return math.degrees(math.atan2(-float(np.dot(up, xc)), float(np.dot(up, yc))))
+
+
 def levelling(fit: dict, lift: float) -> dict | None:
-    """SC3d: the transform that lays the fitted floor level on the stage floor (y = 0) — a pitch about x (the photograph's camera looked up
-    or down; a sideways tilt is small in photographs and left), after the set's own lift (`lift` = −floor_y) — and where the picture camera
-    then stands and looks. None beyond LEVEL_MAX_DEG or when the fit is poor (the set stays as it came)."""
-    phi = math.atan(fit["b"])                                                   # R_x(φ) takes the floor's normal (−a, 1, −b) to the yz-plane's up
-    if abs(math.degrees(phi)) > LEVEL_MAX_DEG or fit["residual"] > 0.05:
+    """SC3d / SC3f: the transform that lays the fitted floor level on the stage floor (y = 0) — a turn about z (the photograph's camera held
+    a little askew) and then about x (it looked up or down), after the set's own lift (`lift` = −floor_y) — and where the picture camera
+    then stands, looks and rolls, so the picture still lines up through it. None beyond LEVEL_MAX_DEG or when the fit is poor (the set
+    stays as it came)."""
+    a, b = fit["a"], fit["b"]
+    slope = math.degrees(math.acos(1.0 / math.sqrt(1.0 + a * a + b * b)))
+    if slope > LEVEL_MAX_DEG or fit["residual"] > 0.05:
         return None
-    cphi, sphi = math.cos(phi), math.sin(phi)
-    rot = lambda v: np.array([v[0], cphi * v[1] - sphi * v[2], sphi * v[1] + cphi * v[2]])  # noqa: E731
+    psi = math.atan(-a)                                                          # Rz(ψ) takes the floor's normal (−a, 1, −b) into the yz-plane,
+    phi = math.atan(b / math.sqrt(1.0 + a * a))                                  # Rx(φ) then to the up
+    rot = [round(math.degrees(phi), 3), 0.0, round(math.degrees(psi), 3)]
+    R = turn(rot)
     # the floor's height after the turn: the plane sampled in the room, lifted and turned; the set raised so it lands on y = 0
-    pts = [rot(np.array([x, fit["a"] * x + fit["b"] * z + fit["c"] + lift, z])) for x in (-1.0, 0.0, 1.0) for z in (-2.0, -4.0, -6.0)]
+    pts = [R @ np.array([x, a * x + b * z + fit["c"] + lift, z]) for x in (-1.0, 0.0, 1.0) for z in (-2.0, -4.0, -6.0)]
     pos_y = -float(np.mean([q[1] for q in pts]))
-    cam = rot(np.array([0.0, lift, 0.0])) + np.array([0.0, pos_y, 0.0])
-    fwd = rot(np.array([0.0, 0.0, -1.0]))
-    return {"rot": [round(math.degrees(phi), 3), 0.0, 0.0], "pos": [0.0, round(pos_y, 4), 0.0],
-            "camera": {"pos": [round(float(v), 4) for v in cam], "target": [round(float(v), 4) for v in cam + fwd]},
-            "pitch_deg": round(math.degrees(phi), 2), "roll_deg": round(math.degrees(math.atan(fit["a"])), 2), "fit": fit}
+    cam = R @ np.array([0.0, lift, 0.0]) + np.array([0.0, pos_y, 0.0])
+    fwd, up = R @ np.array([0.0, 0.0, -1.0]), R @ np.array([0.0, 1.0, 0.0])
+    return {"rot": rot, "pos": [0.0, round(pos_y, 4), 0.0],
+            "camera": {"pos": [round(float(v), 4) for v in cam], "target": [round(float(v), 4) for v in cam + fwd], "roll": round(camera_roll(fwd, up), 3)},
+            "pitch_deg": round(math.degrees(phi), 2), "roll_deg": round(math.degrees(psi), 2), "fit": fit}
 
 
 def floor_of_glb(path: Path) -> dict | None:
@@ -194,10 +217,8 @@ def frame_of_glb(path: Path, lift: float) -> tuple[dict | None, float | None]:
 
 
 def to_stage(p: np.ndarray | list, lift: float, level: dict | None) -> np.ndarray:
-    """A point of the relief's frame on the stage: lifted by the set's floor, then (SC3d) turned and raised as the set is."""
+    """A point of the relief's frame on the stage: lifted by the set's floor, then (SC3d / SC3f) turned and raised as the set is."""
     v = np.array([float(p[0]), float(p[1]) + lift, float(p[2])])
     if not level:
         return v
-    phi = math.radians(level["rot"][0])
-    c, s = math.cos(phi), math.sin(phi)
-    return np.array([v[0], c * v[1] - s * v[2], s * v[1] + c * v[2]]) + np.asarray(level["pos"], float)
+    return turn(level["rot"]) @ v + np.asarray(level["pos"], float)

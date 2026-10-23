@@ -1,8 +1,9 @@
 # 25 · The Clay level's coherence — the author's notes of 2026-10-22 and the plan (D119)
 
-Status: **proposed 2026-10-22; D119 recorded; SC1, SC2, E30 (→ D120), SC3, SC3b, SC3c (D123), SC3d and SC3e built by 2026-10-23 (§3b).** The
-author's notes, what each meets in the app, and the plan: SC1 the scene outliner with the camera as an object, SC2 the preset panel behind
-the +, E30 → SC3 a set from an image (its lens, its things, laid level, its picture as the final's plate). Next: SC3f (§3).
+Status: **proposed 2026-10-22; D119 recorded; SC1, SC2, E30 (→ D120), SC3, SC3b, SC3c (D123), SC3d, SC3e, D124 (E31) and SC3f built by
+2026-10-23 (§3b).** The author's notes, what each meets in the app, and the plan: SC1 the scene outliner with the camera as an object, SC2
+the preset panel behind the +, E30 → SC3 a set from an image (its lens, its things and their shadows, laid level both ways, its picture as
+the final's plate, its made things following a rebuild). What is left waits on the author's checks (§4).
 
 ## 1 · The notes (the author, 2026-10-22, after AE4)
 
@@ -50,7 +51,7 @@ the +, E30 → SC3 a set from an image (its lens, its things, laid level, its pi
 | **SC3d · a picture set laid level** (what SC3c's rig found) | The floor fitted to the picture's lowest rows the robust way (a seeded RANSAC over near-level planes only, then least squares in a band narrowed to the floor's own noise: the walls, the baseboards and the things in those rows are vertical and never the floor); the set turned about x and raised so that floor is the stage floor, its picture camera pitched to match (the picture still lines up through it); the things stood by the same fit on the set's relief as it is when they land (the clean plate's), through the set's transform; the row says *laid level · the camera 1.9° down* or *as it came* (too little floor, or steeper than 25°) | `relief.py`, `stages.py`, `set_things.py`, the set finisher, `StageParts` | no new job | ½ |
 | **SC3e · the final's plate is the picture** (D120's "the relief re-projected is the plate", unbuilt till now) | A final made on a stage with a visible picture set takes that picture as its plate: the server marks the plate layer `picture`, Stage renders the relief textured with the (clean) picture and the picture behind it through each frame's camera with every actor hidden, right after the layers' passes — no Klein still, no GPU job; the frames carry the set's picture as the plate's still (the assembled shot's lineage). Found on the way: the picture camera looks at the distance whose depth pass holds the picture's depths (a target 1 m ahead saturated the room and the assembly could not tell a prop from the set), the picture behind the relief is carried past its edge (a frame a little taller than the picture showed black bands), and every Stage render waits for what it loads | `finals.py`, `routes/finals.py`, `finalShot.ts`, `FinalPanel.tsx`, `engine.ts`, `relief.py`, `stages.py` | none | 1 |
 | **D124 · the clean takes the things' shadows** (the author's answer to §4, after SC3e) | *Make the things* cleans the plate under each thing and under the shadow it casts: found beside the thing, darker than the same surface lit around it and of its colour, grown out from the thing, below its top, on the side away from the light (all the things weighed together: one light, one side); the things sheet shows them violet before the Make. E31 measured SAM 3's *shadow* concept against this search first | `set_things.py` (`shadows_of`), the things routes, `thingsStore`, `ThingsSheet` | none (CPU, ≈ 1.4 s for four things) | ½ |
-| **SC3f · made things follow their set; the sideways tilt** (next) | A rebuild (a corrected lens, a second *Make*) re-stands the things already made — the front edge's pixel cast onto the new relief's floor (a lens change needs more than the height ratio), the props the author moved by hand left where they are; the set levelled sideways too (the fit's `a`) | `set_things.py`, `stages.py`, the set finisher | none | ½ |
+| **SC3f · made things follow their set; the sideways tilt** (built 2026-10-23, §3b) | A rebuild (a corrected lens, a second *Make*) re-stands the things already made — the front edge's pixel cast onto the new relief's floor (a lens change needs more than the height ratio), the props the author moved by hand left where they are; the set levelled sideways too (the fit's `a`) | `set_things.py`, `stages.py`, the set finisher | none | ½ |
 
 Order: SC1 (the usability the author hit first; no GPU), SC2, E30 → SC3. Each step: its tests, a commit, a rig or headed check, and a
 check row here.
@@ -200,6 +201,20 @@ check row here.
   | --- | --- | --- |
   | ![sheet](img/25-d124-things-sheet.jpg) | ![clean](img/25-d124-clean.jpg) | ![masks](img/25-e31-masks.jpg) |
 
+- **2026-10-23 18:27 — SC3f built: the made things follow their set; laid level sideways too.** A rebuild — *Rebuild with this lens*, or a clean
+  plate's — stands every made thing again on the new relief, unless you moved its prop (each thing remembers the transform it was stood
+  with; a moved prop stays where you put it, and the job's log says so). A thing is carried by its pixel: the point where it met the floor is
+  found in the picture with the old relief's lens and cast with the new lens onto the new relief's floor — the height ratio SC3d used holds
+  only for one lens. The set is also turned for a camera held askew (the floor's sideways slope), the picture camera rolled to match; the
+  set's row says *laid level · the camera 2.8° down, 0.1° askew*. Rig (`engine/spikes/sc3f_rig.py`, SC3d's room with its crate and small
+  block, the real engine): through the picture camera each prop's front edge lands on the pixel where its thing touched the floor in the
+  picture — 13.7 and 5.8 px before; rebuilt at 62° (MoGe reads the room 4.3° down at that lens, not 1.2°) 14.3 and 6.0 px, both on the
+  floor; the crate then moved by hand and the set rebuilt at 66°: the crate stays where it was put, the small block follows (5.7 px).
+
+  | Through the picture camera after the 66° rebuild (the block followed; the crate where it was moved) | From the side | The set's row |
+  | --- | --- | --- |
+  | ![picture camera](img/25-sc3f-picture-camera.jpg) | ![side](img/25-sc3f-side.jpg) | ![row](img/25-sc3f-set-row.jpg) |
+
 ## 4 · Checks for the author
 
 | Check | Your note |
@@ -213,6 +228,7 @@ check row here.
 | SC3: *From an image…* on one of your own pictures of a place (a Klein still or an import): does the relief read as the place in the viewport, and does the Picture camera frame it as the picture did? Move the camera a little — is the budget line's warning early enough, or too fussy? | |
 | SC3: should the things in the picture be cut out and modelled automatically (one job: the cut, the clean plate, the models), or stay a choice per thing? | 2026-10-23: chosen one by one (D123, SC3c) |
 | SC3e: *Make the final shot…* on a picture set of yours, then *Assemble* — does the shot read as the place? The clean plate keeps a thing's own photographed shadow (the Fill takes the thing only): in the rig's shot it reads as the model's shadow — keep it, or take the shadow too when cleaning? | 2026-10-23: take it too (D124) |
+| SC3f: correct the lens of one of your picture sets after its things are made — do they stay on their spots in the picture? Move one first: does it stay where you put it? | |
 | D124: *Things in the picture…* on one of yours — are the violet shadows the ones each thing casts? Is anything shaded that is not a thing's shadow, or a shadow missed? | |
 | SC3d: a picture set of yours taken looking up or down — do the figures stand on its floor through the picture camera and beside it? |  |
 | SC3c: *Things in the picture…* on one of your pictures — does a click find the thing you meant? Are the models (Pixal3D from one view) close enough to stand in for the things, and do they stand where the things stood? | |

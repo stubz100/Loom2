@@ -26,8 +26,8 @@ Kind = Literal["mannequin", "set", "prop", "plane", "mesh", "light"]
 
 def _level(obj: "StageObject", cam: "StageCamera | None", relief_path: Path | None) -> None:
     """SC3d: a picture set laid level by the floor fitted to its relief (`relief.frame_of_glb`, at the lift the engine gives it) — the set
-    turned and raised (its transform), its picture camera where the picture was taken in that frame (pitched as the photograph's camera
-    was); without a relief, too little floor or too steep a one, as it came (the floor's lift alone). SC3e: the camera looks at the
+    turned and raised (its transform), its picture camera where the picture was taken in that frame (pitched and, SC3f, rolled as the
+    photograph's camera was); without a relief, too little floor or too steep a one, as it came (the floor's lift alone). SC3e: the camera looks at the
     distance whose depth pass holds the picture's depths (`relief.subject_distance`; 1 m when the relief cannot say)."""
     from .relief import frame_of_glb
     level, subject = frame_of_glb(relief_path, -(obj.floor_y if obj.floor_y is not None else -1.0)) if relief_path is not None else (None, None)
@@ -36,7 +36,7 @@ def _level(obj: "StageObject", cam: "StageCamera | None", relief_path: Path | No
     if cam is None:
         return
     if level:
-        cam.pos, cam.target = list(level["camera"]["pos"]), list(level["camera"]["target"])
+        cam.pos, cam.target, cam.roll = list(level["camera"]["pos"]), list(level["camera"]["target"]), float(level["camera"].get("roll", 0.0))
     d = subject or 1.0
     fwd = [t - q for t, q in zip(cam.target, cam.pos)]
     n = math.sqrt(sum(v * v for v in fwd)) or 1.0
@@ -85,6 +85,7 @@ class SetThing(BaseModel):
     floor_y: float | None = None                   # the set's floor then (its relief's frame → the stage's)
     mesh_asset_id: str | None = None               # SC3c-3: its Pixal3D model
     object_id: str | None = None                   # SC3c-3: the prop it stands as on the stage
+    placed: Transform | None = None                # SC3f: the transform the prop was stood with (a rebuild re-stands it while it still has it)
 
 
 class StageObject(BaseModel):

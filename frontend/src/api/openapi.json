@@ -13999,6 +13999,16 @@
             ],
             "title": "Object Id"
           },
+          "placed": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Transform"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "points": {
             "items": {
               "additionalProperties": {
@@ -14029,7 +14039,8 @@
           "relief_asset_id",
           "floor_y",
           "mesh_asset_id",
-          "object_id"
+          "object_id",
+          "placed"
         ],
         "title": "SetThing",
         "type": "object"

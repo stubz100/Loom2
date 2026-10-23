@@ -10,11 +10,12 @@ import numpy as np
 import pytest
 
 from loom2 import set_things
-from loom2.relief import floor_fit, floor_height, floor_of_glb, glb_read, level_of_glb, levelling, mesh_arrays, subject_distance, to_stage
+from loom2.relief import (camera_roll, floor_fit, floor_height, floor_of_glb, glb_read, lens_of_glb, level_of_glb, levelling, mesh_arrays,
+                          subject_distance, to_stage, turn)
 from loom2.stages import StageStore
 from loom2.workspace import Workspace
 
-from test_set_things_d123 import _glb, room_relief
+from test_set_things_d123 import FOV, _glb, _relens, room_relief
 
 
 def _floor_points(path: Path, pitch: float) -> np.ndarray:
@@ -84,7 +85,7 @@ def test_the_store_lays_the_set_level_and_a_rebuild_without_a_relief_does_not(tm
 
 def test_a_footprint_carried_to_the_clean_plates_relief(tmp_path: Path):
     """The clean plate's relief is the same room from the same camera at MoGe's scale of the moment: the footprint read on the relief the
-    thing was picked on, carried by the ratio of the camera's heights, is the one the box would have there — and on its floor."""
+    thing was picked on, carried by its pixel's ray, is the one the box would have there — and on its floor."""
     picked, clean, truth = tmp_path / "picked.glb", tmp_path / "clean.glb", tmp_path / "truth.glb"
     box = room_relief(picked, pitch_deg=-6.0)
     room_relief(clean, box=False, pitch_deg=-6.0, scale=1.15)
@@ -92,7 +93,7 @@ def test_a_footprint_carried_to_the_clean_plates_relief(tmp_path: Path):
     foot = set_things.footprint(picked, box, box, -1.0)
     dst = floor_of_glb(clean)
     assert floor_height(dst) == pytest.approx(1.15, abs=0.01) and floor_height(foot["floor"]) == pytest.approx(1.0, abs=0.01)
-    moved = set_things.carried(foot, dst)
+    moved = set_things.carried(foot, lens_of_glb(picked), lens_of_glb(clean), dst)
     want = set_things.footprint(truth, box, box, -1.15)
     assert moved["carried"] == pytest.approx(1.15, abs=0.01)
     for k in ("x", "y", "z", "width"):
@@ -114,3 +115,40 @@ def test_the_picture_camera_looks_where_the_depth_pass_holds_the_picture(tmp_pat
     deep = np.c_[np.zeros(100), np.zeros(100), -np.linspace(1.0, 40.0, 100)]                          # deeper than one pass can hold: the near end
     assert subject_distance(deep) == pytest.approx(float(np.percentile(np.linspace(1.0, 40.0, 100), 2)) / 0.6, abs=1e-3)
     assert subject_distance(np.zeros((10, 3))) is None
+
+
+@pytest.mark.parametrize("pitch,roll", [(-6.0, 3.0), (-2.0, -4.0)])
+def test_a_camera_held_askew_is_laid_level_both_ways(tmp_path: Path, pitch: float, roll: float):
+    """SC3f: the set turned about z as well (the photograph's camera held a little askew), the floor level left and right, near and far, and
+    the picture camera rolled to match — its view the photograph's own (the relief's frame back through the camera's turn)."""
+    path = tmp_path / "room.glb"
+    room_relief(path, pitch_deg=pitch, roll_deg=roll)
+    level = level_of_glb(path, 1.0)
+    assert level is not None and level["rot"][0] == pytest.approx(pitch, abs=0.2) and level["rot"][2] == pytest.approx(roll, abs=0.2)
+    doc, binary = glb_read(path)
+    pos = mesh_arrays(doc, binary)[0]
+    room = pos @ turn([pitch, 0.0, roll]).T                                                   # the camera's frame into the room's
+    floor = pos[np.abs(room[:, 1] + 1.0) < 1e-4]
+    ys = np.array([to_stage(p, 1.0, level)[1] for p in floor[::7]])
+    assert np.abs(ys).max() < 0.02 and floor[:, 0].min() < -1.0 < 1.0 < floor[:, 0].max()       # left and right, near and far
+    cam, target = np.array(level["camera"]["pos"]), np.array(level["camera"]["target"])
+    R = turn(level["rot"])
+    assert np.allclose(target - cam, R @ [0.0, 0.0, -1.0], atol=1e-3)
+    assert level["camera"]["roll"] == pytest.approx(camera_roll(R @ [0.0, 0.0, -1.0], R @ [0.0, 1.0, 0.0]), abs=1e-3)
+    assert level["camera"]["roll"] == pytest.approx(roll, abs=0.5)                              # a small pitch: the roll is the photograph's
+
+
+def test_a_footprint_carried_across_a_corrected_lens(tmp_path: Path):
+    """SC3f: *Rebuild with this lens* reads the same picture at another lens — the scale of a room and its shape change, the pixels do
+    not. The footprint carried by its pixel's ray lands where the box's footprint read on the new relief is."""
+    picked, relensed = tmp_path / "picked.glb", tmp_path / "relensed.glb"
+    box = room_relief(picked, pitch_deg=-4.0)
+    _relens(picked, relensed, 58.0)
+    src, dst = lens_of_glb(picked), lens_of_glb(relensed)
+    assert src["fov_x"] == pytest.approx(FOV, abs=0.3) and dst["fov_x"] == pytest.approx(58.0, abs=0.3)
+    foot = set_things.footprint(picked, box, box, -1.0)
+    moved = set_things.carried(foot, src, dst, floor_of_glb(relensed))
+    want = set_things.footprint(relensed, box, box, None)
+    assert moved["carried"] != pytest.approx(1.0, abs=0.05)                                     # the lens moved the room
+    for k in ("x", "y", "z", "width"):
+        assert moved[k] == pytest.approx(want[k], abs=0.05), k

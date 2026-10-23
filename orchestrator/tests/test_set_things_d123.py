@@ -44,16 +44,18 @@ def _glb(path: Path, pos: np.ndarray, uv: np.ndarray | None, idx: np.ndarray, no
                      + struct.pack("<I4s", len(binary), b"BIN\0") + binary)
 
 
-def room_relief(path: Path, box: bool = True, pitch_deg: float = 0.0, scale: float = 1.0) -> np.ndarray:
+def room_relief(path: Path, box: bool = True, pitch_deg: float = 0.0, scale: float = 1.0, roll_deg: float = 0.0, fov: float = FOV) -> np.ndarray:
     """MoGe's point map of a room as a relief GLB: the floor a metre under the camera, a wall 6 m away, a box (x ±0.4 m, 0.6 m tall) whose
-    front stands 3 m away — the camera pitched `pitch_deg` (down when negative), the points in its own frame as MoGe gives them, at
-    MoGe's `scale`. Returns the box's mask in picture pixels (what SAM 3 would find)."""
-    fx = 0.5 / math.tan(math.radians(FOV) / 2)
+    front stands 3 m away — the camera pitched `pitch_deg` (down when negative) and rolled `roll_deg` about its view, with a lens of `fov`,
+    the points in its own frame as MoGe gives them, at MoGe's `scale`. Returns the box's mask in picture pixels (what SAM 3 would find)."""
+    fx = 0.5 / math.tan(math.radians(fov) / 2)
     fy = fx * W / H
     u, v = np.meshgrid((np.arange(W) + 0.5) / W, (np.arange(H) + 0.5) / H)
     d = np.stack([(u - 0.5) / fx, -(v - 0.5) / fy, -np.ones_like(u)], axis=-1)
+    cr, sr = math.cos(math.radians(roll_deg)), math.sin(math.radians(roll_deg))
+    d0 = np.stack([cr * d[..., 0] - sr * d[..., 1], sr * d[..., 0] + cr * d[..., 1], d[..., 2]], axis=-1)   # the camera's roll first,
     c, s = math.cos(math.radians(pitch_deg)), math.sin(math.radians(pitch_deg))
-    dw = np.stack([d[..., 0], c * d[..., 1] - s * d[..., 2], s * d[..., 1] + c * d[..., 2]], axis=-1)    # the rays in the room
+    dw = np.stack([d0[..., 0], c * d0[..., 1] - s * d0[..., 2], s * d0[..., 1] + c * d0[..., 2]], axis=-1)  # then its pitch: the rays in the room
     t = np.where(dw[..., 2] < 0, -6.0 / np.minimum(dw[..., 2], -1e-9), np.inf)       # the back wall (z = −6)
     t_floor = np.where(dw[..., 1] < 0, -1.0 / np.minimum(dw[..., 1], -1e-9), np.inf)  # the floor (y = −1)
     t = np.minimum(t, t_floor)
@@ -70,6 +72,18 @@ def room_relief(path: Path, box: bool = True, pitch_deg: float = 0.0, scale: flo
             idx += [a, a + W, a + 1, a + 1, a + W, a + W + 1]
     _glb(path, pos, uv, np.array(idx))
     return hit
+
+
+def _relens(src: Path, dst: Path, fov: float) -> None:
+    """MoGe asked again at another lens: the same picture, each pixel's point pushed along the new lens's ray at its own depth."""
+    from loom2.relief import glb_read, mesh_arrays
+    doc, binary = glb_read(src)
+    pos, uv, idx = mesh_arrays(doc, binary)
+    fx = 0.5 / math.tan(math.radians(fov) / 2)
+    fy = fx * W / H
+    z = -pos[:, 2]
+    out = np.stack([(uv[:, 0] - 0.5) / fx * z, -(uv[:, 1] - 0.5) / fy * z, -z], axis=1)
+    _glb(dst, out, uv, idx.reshape(-1))
 
 
 def test_points_masks_and_cutout(tmp_path: Path):
@@ -182,6 +196,26 @@ async def test_picked_kept_and_made(tmp_path: Path, object_info: dict, monkeypat
         assert abs(mesh.transform.pos[0]) < 0.1 and abs(mesh.transform.pos[1]) < 0.05 and mesh.transform.pos[2] < -2.9      # at the box, on the floor
         assert j3.result["footprint"]["z"] < -2.9 and j3.result["transform"]["scale"][0] > 0
         assert j3.result["footprint"]["carried"] == pytest.approx(1.0, abs=0.01)                                # read where it was picked
+        assert t.placed is not None and t.placed == mesh.transform                                             # SC3f: what it was stood with
+        # SC3f: the lens corrected — the same picture read at 58°: the made thing is stood again on the new relief, carried by its pixel
+        from loom2.relief import lens_of_glb
+        rel58 = tmp_path / "relief58.glb"
+        _relens(rig.catalogue.abs_path(rig.catalogue.get(obj.asset_id)), rel58, 58.0)
+        r58 = rig.catalogue.ingest_file(rel58, kind="mesh", move=False, suite="stage", parents=[pic.id], lineage_kind="image-to-set",
+                                        params={"relief": lens_of_glb(rel58)})
+        store.replace_image_set(st_id, set_id, r58.id, 58.0, obj.floor_y, None, rig.catalogue.abs_path(r58))
+        moved = set_things.restand_things(store, rig.catalogue, st_id, set_id)
+        assert moved == {"stood": ["Big crate"], "left": [], "failed": []}
+        st = store.get(st_id)
+        mesh58 = next(x for x in st.objects if x.id == t.object_id)
+        assert mesh58.transform != mesh.transform and next(x for x in st.objects if x.id == set_id).things[0].placed == mesh58.transform
+        assert abs(mesh58.transform.pos[1]) < 0.05                                                                 # still on the (levelled) floor
+        # moved by hand, it stays where it was put
+        st.objects = [x.model_copy(update={"transform": x.transform.model_copy(update={"pos": [0.5, 0.0, -2.0]})}) if x.id == t.object_id else x for x in st.objects]
+        store.save(st)
+        store.replace_image_set(st_id, set_id, obj.asset_id, FOV, obj.floor_y, None, rig.catalogue.abs_path(rig.catalogue.get(obj.asset_id)))
+        assert set_things.restand_things(store, rig.catalogue, st_id, set_id) == {"stood": [], "left": ["Big crate"], "failed": []}
+        assert next(x for x in store.get(st_id).objects if x.id == t.object_id).transform.pos == [0.5, 0.0, -2.0]
         with pytest.raises(ValueError, match="every thing is made"):
             set_things.prepare_make(store, rig.docs, rig.catalogue, st_id, set_id, "full")
         assert set_things.remove_thing(store, st_id, set_id, thing.id).objects[-1].things == [] or True

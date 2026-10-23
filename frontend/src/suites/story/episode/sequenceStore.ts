@@ -8,7 +8,7 @@ import { useSession } from '../../../store/session'
 import { DEV_HOOKS } from '../../../devHooks'
 import { append, at, duration, move, remove, setOverlap, starts, trim, type Lane, type LaneClip, chainIn } from './lane'
 
-export type ExportFormat = 'edl' | 'fcpxml' | 'srt'
+export type ExportFormat = 'edl' | 'fcpxml' | 'srt' | 'resolve'          // D125 (S14): resolve = the three and markers.txt in one folder named after the cut
 
 /** The server document as the pure lane the view and the maths use. */
 export function laneOf(tl: Timeline): Lane {
@@ -35,6 +35,9 @@ interface SequenceState {
   undo: Lane[]; redo: Lane[]
   saving: boolean
   lastExport: { format: ExportFormat; path: string } | null
+  /** D125 (S13): the Assemble sheet — a new cut from a route (`tlId` null) or the open cut assembled again from its route. */
+  assembleFor: { tlId: string | null } | null
+  setAssembleFor: (v: { tlId: string | null } | null) => void
   load: () => Promise<void>
   create: (name: string) => Promise<Timeline | null>
   open: (id: string | null) => Promise<void>
@@ -81,7 +84,7 @@ async function save(get: () => SequenceState, set: (p: Partial<SequenceState>) =
 }
 
 export const useSequence = create<SequenceState>()((set, get) => ({
-  timelines: [], current: null, lane: null, selected: null, playhead: 0, playing: false, pxPerFrame: 3, undo: [], redo: [], saving: false, lastExport: null,
+  timelines: [], current: null, lane: null, selected: null, playhead: 0, playing: false, pxPerFrame: 3, undo: [], redo: [], saving: false, lastExport: null, assembleFor: null,
 
   load: async () => {
     try { set({ timelines: (await unwrap(http.GET('/timelines'))).items }) } catch { set({ timelines: [] }) }
@@ -137,6 +140,7 @@ export const useSequence = create<SequenceState>()((set, get) => ({
   trimClip: (i, edge, delta, sourceLen) => get().apply((l) => trim(l, i, edge, delta, () => sourceLen), 'trim'),
   setDissolve: (i, frames) => get().apply((l) => setOverlap(l, i, frames), 'dissolve'),
   select: (i) => set({ selected: i }),
+  setAssembleFor: (assembleFor) => set({ assembleFor }),
   setPlayhead: (f) => { const d = get().lane ? duration(get().lane!) : 0; set({ playhead: Math.max(0, Math.min(Math.max(0, d - 1), Math.round(f))) }) },
   togglePlay: (on) => set({ playing: on ?? !get().playing }),
   zoom: (factor) => set({ pxPerFrame: Math.max(0.25, Math.min(24, get().pxPerFrame * factor)) }),
@@ -146,6 +150,7 @@ export const useSequence = create<SequenceState>()((set, get) => ({
     try {
       const r = await unwrap(http.POST('/timelines/{tl_id}/export', { params: { path: { tl_id: cur.id } }, body: { format } }))
       set({ lastExport: { format, path: r.path } })
+      if (format === 'resolve') { useSession.getState().toast(`For Resolve: ${r.text.split('\n').length} files in ${r.path}${r.audio ? ` · ${r.audio} spoken line${r.audio === 1 ? '' : 's'} on the audio lane` : ''}`, 'success'); return }
       useSession.getState().toast(`${format.toUpperCase()} written: ${r.path}${r.audio ? ` · ${r.audio} spoken line${r.audio === 1 ? '' : 's'} on the audio lane` : ''}`, 'success')
     } catch (e) { useSession.getState().toast(`Export failed: ${(e as ApiError).detail ?? e}`, 'error') }
   },

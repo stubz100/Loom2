@@ -1,10 +1,11 @@
 // P17 (D83): the Sequence tab's verbs — every one has a mouse home (the lane's context menu, the Inspector, the transport) per D32;
 // undo / redo take Ctrl+Z / Ctrl+Shift+Z in the Animate scope (the clip player has no undo of its own).
-import { ArrowLeft, ArrowRight, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, FileDown, Pause, Play, Plus, Redo2, Scissors, SkipBack, SkipForward, Trash2, Undo2, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, FileDown, Pause, Play, Plus, Redo2, RefreshCw, Scissors, SkipBack, SkipForward, Trash2, Undo2, Workflow, ZoomIn, ZoomOut } from 'lucide-react'
 import { registerCommands, sep, type MenuItem } from '../../../frame/commands'
 import { askConfirm, askText, useSession } from '../../../store/session'
 import { useAnimate } from '../../animate/animateStore'
 import { useStory } from '../storyStore'
+import { assembleLane, laneChanges, routeLabel, routePicks, updateClip, walkRoute } from './assemble'
 import { duration, ticks } from './lane'
 import { useSequence } from './sequenceStore'
 
@@ -21,11 +22,14 @@ export function laneChecklist(): { i: number; what: string }[] {
   const lane = sq().lane; if (!lane) return []
   const st = useStory.getState()
   const out: { i: number; what: string }[] = []
+  const changed = new Map(laneChanges(lane, st.shots).map((x) => [x.i, x]))
   lane.clips.forEach((c, i) => {
     if (!c.shot) { out.push({ i, what: 'a plain clip, not a shot' }); return }
     const sh = st.shots.find((s) => s.id === c.shot!.id)
     const v = sh?.versions.find((x) => x.id === c.shot!.version)
-    if (!sh || !v) out.push({ i, what: 'its shot is gone' })
+    const ch = changed.get(i)
+    if (ch) out.push({ i, what: `${ch.name} has a newer approved take (${ch.version}) — Update` })   // D125 (S13): changed
+    else if (!sh || !v) out.push({ i, what: 'its shot is gone' })
     else if (v.state !== 'final') out.push({ i, what: `${sh.name} ${v.id} is not final` })
     else if (st.shotStale(v)) out.push({ i, what: `${sh.name} ${v.id} is stale (its stage moved)` })
   })
@@ -43,21 +47,62 @@ export function laneBelowFormat(): { count: number; sizes: string[] } {
   return { count: small.length, sizes }
 }
 
-/** The export goes on after a look at the checklist when something on the lane is not a final shot (loom R153 kept advisory). */
-async function exportChecked(format: 'edl' | 'fcpxml' | 'srt'): Promise<void> {
+/** The export goes on after a look at the checklist when something on the lane is not a final shot (loom R153 kept advisory). D125 (S14):
+ *  asked once, only when something is listed; the clips below the format ride along as a note. */
+async function exportChecked(format: 'edl' | 'fcpxml' | 'srt' | 'resolve'): Promise<void> {
   const issues = laneChecklist()
   const n = sq().lane?.clips.length ?? 0
   if (issues.length) {
-    const ok = await askConfirm({ title: `Export with ${issues.length} of ${n} clips not final shots?`, okLabel: 'Export anyway',
-      text: issues.slice(0, 6).map((x) => `clip ${x.i + 1}: ${x.what}`).join('\n') + (issues.length > 6 ? `\n… and ${issues.length - 6} more` : '') })
+    const below = laneBelowFormat()
+    const ok = await askConfirm({ title: `Export with ${issues.length} of ${n} clips listed?`, okLabel: 'Export anyway',
+      text: issues.slice(0, 6).map((x) => `clip ${x.i + 1}: ${x.what}`).join('\n') + (issues.length > 6 ? `\n… and ${issues.length - 6} more` : '')
+        + (below.count ? `\n(${below.count} below the format — Resolve scales them)` : '') })
     if (!ok) return
   }
   await sq().exportAs(format)
 }
 
+/** D125 (S13): the cut from a route — a new one named `name`, or the open one again (its trims and dissolves kept where the same shots follow
+ *  each other); the route's picks kept on the cut. */
+export async function assembleCut(picks: Record<string, string>, name: string | null): Promise<void> {
+  const st = useStory.getState()
+  if (!st.flowGraph) return
+  const walk = walkRoute(st.flowGraph, st.flowNodes, st.world?.variables ?? [], picks)
+  if (name !== null && !(await sq().create(name))) return
+  const cur = sq().current
+  if (!cur) return
+  const { lane, missing } = assembleLane(walk.nodes, st.shots, new Map(an().clips.map((c) => [c.id, c])), cur.fps, name === null ? sq().lane : null)
+  useSequence.setState({ current: { ...cur, route: routePicks(walk.choices) } })
+  sq().apply(() => lane, 'assemble')
+  const label = routeLabel(walk.choices)
+  useSession.getState().toast(`${cur.name}: ${lane.clips.length} shot${lane.clips.length === 1 ? '' : 's'}${label ? ` of the ${label} route` : ''}${missing.length ? ` · ${missing.length} without a clip yet (${missing.slice(0, 4).join(', ')})` : ''}`, missing.length ? 'info' : 'success')
+}
+
+/** D125 (S13): the selected lane clip's change, when its shot has a newer approved take. */
+const selChange = () => { const l = sq().lane; const i = sq().selected; return l && i !== null ? laneChanges(l, useStory.getState().shots).find((x) => x.i === i) ?? null : null }
+const allChanges = () => { const l = sq().lane; return l ? laneChanges(l, useStory.getState().shots) : [] }
+/** *Update* the changes: each clip swapped for its shot's approved take, the trims kept (one undo step). */
+async function updateChanges(list: ReturnType<typeof allChanges>): Promise<void> {
+  if (list.some((x) => !an().clips.some((c) => c.id === x.clip))) await an().loadClips()          // a take made since the clips were listed
+  const byId = new Map(an().clips.map((c) => [c.id, c]))
+  const ok = list.filter((x) => byId.has(x.clip))
+  if (!ok.length) { useSession.getState().toast('The newer take is not loaded yet — try again in a moment', 'info'); return }
+  sq().apply((l) => ok.reduce((acc, x) => updateClip(acc, x, byId.get(x.clip)!), l), 'update')
+}
+
 registerCommands([
   { id: 'story.episode.new', scope: 'story', label: 'New cut…', icon: Plus, placement: ['panel', 'context'],
     run: () => void askText({ title: 'New cut', text: 'One cut of the episode: a single lane at the project frame rate; shots and clips come from the bins.', placeholder: 'cut name', initial: 'Cut' }).then((n) => { if (n?.trim()) void sq().create(n.trim()) }) },
+  // D125 (S13, S14): the cut from the Flow, its changed shots, one export for Resolve
+  { id: 'story.episode.assemble', scope: 'story', label: 'Assemble from the Flow…', icon: Workflow, hint: 'a new cut of one route: every shot in order at its approved take, stamped — the sheet asks at each Choice',
+    placement: ['panel', 'context'], when: () => !!useStory.getState().flowGraph?.start, run: () => sq().setAssembleFor({ tlId: null }) },
+  { id: 'story.episode.reassemble', scope: 'story', label: 'Assemble again…', icon: Workflow, hint: 'the cut rebuilt from its route (the picks can change); trims and dissolves stay where the same shots follow each other',
+    placement: ['inspector', 'context'], when: () => hasSeq() && !!sq().current?.route && !!useStory.getState().flowGraph?.start, run: () => sq().setAssembleFor({ tlId: sq().current!.id }) },
+  { id: 'story.episode.update', scope: 'story', label: 'Update to the approved take', icon: RefreshCw, hint: "the shot's newer approved take replaces the clip; the trims stay", placement: ['inspector', 'context'],
+    when: () => !!selChange(), run: () => { const c = selChange(); if (c) void updateChanges([c]) } },
+  { id: 'story.episode.updateAll', scope: 'story', label: 'Update every changed clip', icon: RefreshCw, placement: ['inspector', 'context'], when: () => allChanges().length > 0, run: () => void updateChanges(allChanges()) },
+  { id: 'story.episode.exportResolve', scope: 'story', label: 'Export for Resolve ▶', icon: FileDown, hint: 'the FCPXML with markers and the voice lane, the EDL, the SRT and markers.txt in one folder named after the cut; the checklist asks once, only when something is listed',
+    placement: ['panel', 'inspector', 'context'], when: () => hasSeq() && !!sq().lane?.clips.length, run: () => void exportChecked('resolve') },
   { id: 'story.episode.rename', scope: 'story', label: 'Rename the cut…', icon: Clapperboard, placement: ['inspector', 'context'], when: hasSeq,
     run: () => void askText({ title: 'Rename the cut', initial: sq().current?.name ?? '', placeholder: 'cut name' }).then((n) => { if (n?.trim()) void sq().rename(n.trim()) }) },
   { id: 'story.episode.delete', scope: 'story', label: 'Delete the cut', icon: Trash2, placement: ['inspector', 'context'], when: hasSeq,
@@ -95,6 +140,6 @@ registerCommands([
 /** Right-click on a lane clip (selected by the caller) or on the lane's empty space. */
 export function laneMenu(onClip: boolean): MenuItem[] {
   return onClip
-    ? [{ cmd: 'story.episode.dissolve' }, { cmd: 'story.episode.moveLeft' }, { cmd: 'story.episode.moveRight' }, { cmd: 'story.episode.openClip' }, sep, { cmd: 'story.episode.removeClip' }, sep, { cmd: 'story.episode.undo' }, { cmd: 'story.episode.redo' }]
-    : [{ cmd: 'story.episode.addCurrent' }, sep, { cmd: 'story.episode.play' }, { cmd: 'story.episode.stepBack' }, { cmd: 'story.episode.stepForward' }, { cmd: 'story.episode.home' }, { cmd: 'story.episode.end' }, sep, { cmd: 'story.episode.exportEdl' }, { cmd: 'story.episode.exportFcpxml' }, { cmd: 'story.episode.exportSrt' }, { cmd: 'story.episode.render' }, sep, { cmd: 'story.episode.rename' }, { cmd: 'story.episode.delete' }, { cmd: 'story.episode.new' }, sep, { cmd: 'story.episode.undo' }, { cmd: 'story.episode.redo' }]
+    ? [{ cmd: 'story.episode.update' }, { cmd: 'story.episode.dissolve' }, { cmd: 'story.episode.moveLeft' }, { cmd: 'story.episode.moveRight' }, { cmd: 'story.episode.openClip' }, sep, { cmd: 'story.episode.removeClip' }, sep, { cmd: 'story.episode.undo' }, { cmd: 'story.episode.redo' }]
+    : [{ cmd: 'story.episode.addCurrent' }, sep, { cmd: 'story.episode.play' }, { cmd: 'story.episode.stepBack' }, { cmd: 'story.episode.stepForward' }, { cmd: 'story.episode.home' }, { cmd: 'story.episode.end' }, sep, { cmd: 'story.episode.exportResolve' }, { label: 'Export one file', icon: FileDown, items: [{ cmd: 'story.episode.exportEdl' }, { cmd: 'story.episode.exportFcpxml' }, { cmd: 'story.episode.exportSrt' }] }, { cmd: 'story.episode.render' }, sep, { cmd: 'story.episode.assemble' }, { cmd: 'story.episode.reassemble' }, { cmd: 'story.episode.updateAll' }, sep, { cmd: 'story.episode.rename' }, { cmd: 'story.episode.delete' }, { cmd: 'story.episode.new' }, sep, { cmd: 'story.episode.undo' }, { cmd: 'story.episode.redo' }]
 }

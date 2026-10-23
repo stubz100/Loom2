@@ -1546,11 +1546,12 @@ test("an episode (17 / SY4, D85): the Shots bin lists a final shot and adds it s
   expect(tl.clips[1].shot_id).toBeNull()
   await expect(page.locator('.seq-insp .seq-check li.warn')).toHaveCount(1)                   // clip 2: a plain clip
   await expect(page.locator('.panel .foot .estimate')).toContainText('1 of 2 clips not final shots')
-  // Export ▶ (the panel foot): the checklist asks, then the FCPXML carries the marker; markers.txt and the SRT follow
-  await page.locator('.panel .foot button.primary', { hasText: /^Export/ }).click()
-  await expect(dialog).toContainText(/1 of 2 clips not final shots/)
+  // Export for Resolve ▶ (the panel foot, D125 S14): the checklist asks once, then one folder named after the cut holds the FCPXML with the
+  // marker, the EDL, the SRT and markers.txt
+  await page.locator('.panel .foot button.primary', { hasText: /^Export for Resolve/ }).click()
+  await expect(dialog).toContainText(/1 of 2 clips listed/)
   await dialog.locator('button.primary').click()
-  await expect(page.locator('.seq-insp .hint', { hasText: 'last:' })).toContainText('.fcpxml')
+  await expect(page.locator('.seq-insp .hint', { hasText: 'last:' })).toContainText(`timelines/${tl.id}/`)
   const fx = await api<{ text: string; path: string }>('POST', `/timelines/${tl.id}/export`, { format: 'fcpxml' })
   expect(fx.text).toContain(`value="${name} node"`)
   expect(fx.text.match(/<marker /g)).toHaveLength(1)
@@ -3000,4 +3001,74 @@ test('Cast readiness (D125 SP5): a Cast row says what the character owes for its
   // a use opens its shot on the Shots board
   await inShots.locator(`.use-row[data-id="${walk.shot_id}"]`).click()
   await expect(page.locator(`.shots-board tr.row.sel[data-id="${walk.shot_id}"]`)).toBeVisible()
+})
+
+test('the cut from the Flow (D125 SP6): Assemble from the Flow… asks at the Choice and lays the route\'s shots in order, stamped; a newer take marks a lane clip changed and its badge updates it; Assemble again takes the other route; Export for Resolve writes one folder', async ({ page }) => {
+  test.setTimeout(180_000)
+  const tag = Date.now().toString(36)
+  type NodeLite = { id: string; shot_id: string }
+  type JobLite = { id: string; status: string; result: { clip_id?: string } }
+  type ShotLite = { versions: { clip_id: string | null }[] }
+  const a = await api<NodeLite>('POST', '/story/flow/nodes', { type: 'shot', title: `Gate ${tag}`, text: 'the gate opens' })
+  const choice = await api<{ id: string }>('POST', '/story/flow/nodes', { type: 'choice', title: `Stay or go ${tag}` })
+  await api('PATCH', `/story/flow/nodes/${choice.id}`, { options: [{ id: 'stay', label: 'Stay', require: null, set: [] }, { id: 'leave', label: 'Leave', require: null, set: [] }] })
+  const b = await api<NodeLite>('POST', '/story/flow/nodes', { type: 'dialogue', title: `Talk ${tag}` })
+  const c = await api<NodeLite>('POST', '/story/flow/nodes', { type: 'shot', title: `Road ${tag}`, text: 'she walks away' })
+  const g = (await api<{ graph: { revision: number; start: string | null; edges: { from: string; port: string; to: string }[] } }>('GET', '/story/flow')).graph
+  const start = g.start ?? (await api<{ id: string }>('POST', '/story/flow/nodes', { type: 'start' })).id
+  const g2 = (await api<{ graph: { revision: number; edges: { from: string; port: string; to: string }[] } }>('GET', '/story/flow')).graph
+  await api('PUT', '/story/flow/graph', { revision: g2.revision, start, edges: [...g2.edges.filter((e) => e.from !== start), { from: start, port: 'out', to: a.id }, { from: a.id, port: 'out', to: choice.id },
+    { from: choice.id, port: 'opt:stay', to: b.id }, { from: choice.id, port: 'opt:leave', to: c.id }] })
+  const caps = await api<{ defaults: { i2v: string } }>('GET', '/capabilities')
+  const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
+  const clipFor = async (sid: string, use = false) => {
+    const job = (await api<{ jobs: { id: string }[] }>('POST', '/jobs', { recipe: { kind: 'i2v', model_id: caps.defaults.i2v, start_asset: img, width: 832, height: 480, frames: 9, fps: 16, prompt_text: sid }, stage: false,
+      origin: { suite: 'story', surface: 'for_shot', payload: { shot_id: sid, version: 'v1', ...(use ? { use: true } : {}) } } })).jobs[0]
+    await expect.poll(async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.id === job.id)?.status, { timeout: 60_000 }).toBe('done')
+    return (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.id === job.id)!.result.clip_id!
+  }
+  const clipA = await clipFor(a.shot_id), clipB = await clipFor(b.shot_id), clipC = await clipFor(c.shot_id)
+  await api('POST', `/story/shots/${a.shot_id}/versions/v1/finalize`)
+  await openApp(page, { suite: 'story', tab: 'episode' })
+  // Assemble from the Flow… (the foot): the sheet asks at the Choice; Stay → the gate, then the talk
+  await page.locator('.panel .foot button.primary', { hasText: /^Assemble from the Flow/ }).click()
+  const sheet = page.locator('.modal.assemble')
+  await expect(sheet).toBeVisible()
+  await sheet.locator(`select#pick-${choice.id}`).selectOption('stay')
+  await expect(sheet.locator('[data-testid="assemble-what"]')).toHaveText(/^2 shots/)
+  await expect(sheet.locator('input#assemble-name')).toHaveValue(/ · Stay$/)
+  const name = `Cut ${tag} · Stay`
+  await sheet.locator('input#assemble-name').fill(name)
+  await sheet.locator('button.primary', { hasText: /^Assemble$/ }).click()
+  await expect(page.locator('.seq-row.active')).toContainText(name)
+  await expect(page.locator('.seq-clip')).toHaveCount(2)
+  type TL = { id: string; name: string; route: Record<string, string> | null; clips: { clip_id: string; shot_id: string | null; shot_version: string | null; node_id: string | null }[] }
+  const cut = async () => (await api<{ items: TL[] }>('GET', '/timelines')).items.find((t) => t.name === name)!
+  await expect.poll(async () => (await cut())?.clips.length, { timeout: 10_000 }).toBe(2)
+  expect((await cut()).clips.map((x) => [x.clip_id, x.shot_id, x.node_id])).toEqual([[clipA, a.shot_id, a.id], [clipB, b.shot_id, b.id]])
+  expect((await cut()).route).toEqual({ [choice.id]: 'stay' })
+  // a newer take of the talk (used as its clip) marks its lane clip changed; the badge updates it
+  const clipB2 = await clipFor(b.shot_id, true)
+  await expect.poll(async () => (await api<ShotLite>('GET', `/story/shots/${b.shot_id}`)).versions[0].clip_id).toBe(clipB2)
+  const badge = page.locator('.seq-clip .seq-changed')
+  await expect(badge).toHaveCount(1, { timeout: 15_000 })
+  await expect(page.locator('.seq-insp .seq-check li.warn', { hasText: 'newer approved take' })).toHaveCount(1)
+  await badge.click()
+  await expect(badge).toHaveCount(0)
+  await expect.poll(async () => (await cut()).clips[1].clip_id, { timeout: 10_000 }).toBe(clipB2)
+  // Assemble again… (the Inspector) with Leave: the gate, then the road
+  await page.locator('.inspector button[title^="Assemble again"]').click()
+  await expect(sheet.locator('input#assemble-name')).toHaveCount(0)
+  await sheet.locator(`select#pick-${choice.id}`).selectOption('leave')
+  await sheet.locator('button.primary', { hasText: /^Assemble again$/ }).click()
+  await expect.poll(async () => (await cut()).clips.map((x) => x.clip_id), { timeout: 10_000 }).toEqual([clipA, clipC])
+  expect((await cut()).route).toEqual({ [choice.id]: 'leave' })
+  // Export for Resolve ▶: the road is not final — the checklist asks once; one folder named after the cut
+  await page.locator('.panel .foot button.primary', { hasText: /^Export for Resolve/ }).click()
+  const dialog = page.locator('.modal.ask')
+  await expect(dialog).toContainText(/1 of 2 clips listed/)
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('.seq-insp .hint', { hasText: 'last:' })).toContainText(`timelines/${(await cut()).id}/cut-`)
+  const out = await api<{ path: string; text: string }>('POST', `/timelines/${(await cut()).id}/export`, { format: 'resolve' })
+  expect(out.text.split('\n').map((f) => f.split('.').pop()).sort()).toEqual(['edl', 'fcpxml', 'srt', 'txt'])
 })

@@ -16927,6 +16927,20 @@
             "title": "Revision",
             "type": "integer"
           },
+          "route": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route"
+          },
           "schema_version": {
             "default": 1,
             "title": "Schema Version",
@@ -16951,6 +16965,7 @@
           "h",
           "clips",
           "overlaps",
+          "route",
           "revision",
           "created_at",
           "updated_at"
@@ -17087,7 +17102,8 @@
             "enum": [
               "edl",
               "fcpxml",
-              "srt"
+              "srt",
+              "resolve"
             ],
             "title": "Format",
             "type": "string"

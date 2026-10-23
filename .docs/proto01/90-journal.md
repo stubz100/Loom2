@@ -8504,3 +8504,29 @@ WB1–WB3, *Mark final* at any size, the For context ended by *← Back* and hon
   foot, the voice item's form giving a first and a second voice, a use opening its shot). Offline 533 passed; Vitest 441 + 3 skipped;
   typecheck and build clean; lint 0 errors (79 warnings); e2e full 57/57 and open 57/57. Screenshots `proto01_UIcomp/img/sp5-*.jpg` (a
   done item without a runnable verb kept at full colour after them, CSS only).
+
+## 2026-10-23 23:25 — SP6 built (D125 S13, S14, proto01_UIcomp 04 §8): the cut assembled from the Flow; changed · Update; Export for Resolve
+
+- **S13 · Assemble from the Flow…** (`episode/assemble.ts`, the Cuts head, the lane's right-click, the foot when no cut is open): a sheet
+  asks at each Choice the route meets which option this cut follows (play mode's walk — `walkRoute`, conditions read the World's
+  variables and the options' sets; an unpicked Choice takes its first option; a node met again ends the route), says how many shots it
+  will hold and names those without a clip yet, and proposes the name after the route (*Episode 2 · Stay*). The cut gets every Dialogue or
+  Shot node's shot of that route in order at its approved version (`binVersion`: the final one, else the current), its whole clip, stamped
+  (shot, version, node). The cut keeps its picks (`Timeline.route`, a new optional field; None for a cut built by hand). ***Assemble
+  again…*** (the Inspector, a right-click) rebuilds it from its route — the picks can change — and keeps a shot's trims on the same clip and
+  a dissolve where the same two shots still follow each other.
+- **changed · Update**: a stamped lane clip whose shot's approved version now has another clip (or is another version) wears a *changed ·
+  Update* badge on the lane, is listed by the checklist, and the Inspector says so; *Update* (the badge, the clip's Inspector and
+  right-click) swaps the clip and keeps its trims within the new one (RC3's rule), *Update every changed clip* takes them all (one undo
+  step; the clips list is loaded first when the take is newer than it).
+- **S14 · Export for Resolve ▶** (the foot, the Inspector, the lane's right-click): `POST /timelines/{id}/export {format: resolve}` writes
+  the FCPXML (markers and the voice lane), the EDL, the SRT and `markers.txt` into one folder named after the cut
+  (`timelines/<id>/<cut>/`); the checklist asks once, only when something is listed, the clips below the format as a note; the three
+  single exports stay under *one file*. Deleting a cut removes its export tree. The confirm dialog keeps its text's line breaks.
+- The Shots bin lists the shots in the Flow's order.
+- OpenAPI and schema.d.ts regenerated.
+- **Tests:** `test_episode_resolve_d125.py` (1), `assemble.test.ts` (4); the episode scenario exports for Resolve from the foot; a new
+  e2e scenario (Assemble from the Flow with Stay: two shots stamped in order, the route kept; a newer take used as the talk's clip → the
+  lane's badge and the checklist, the badge updates it; Assemble again with Leave; Export for Resolve asks once and writes four files).
+  Offline 534 passed; Vitest 445 + 3 skipped; typecheck and build clean; lint 0 errors (79 warnings); e2e full 58/58 and open 58/58.
+  Screenshots `proto01_UIcomp/img/sp6-*.jpg` (after them, CSS only: the sheet one column, the dialog's line breaks).

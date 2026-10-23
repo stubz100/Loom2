@@ -328,3 +328,7 @@
 .flow-node .pill.done { color: var(--ok, #4caf50); border-color: color-mix(in srgb, var(--ok, #4caf50) 45%, transparent); }
 .flow-node .pill.running { color: var(--info, #58a6ff); }
 .flow-node .pill.stale { color: #b083f0; }
+/* D125 (S13): the Assemble sheet */
+.modal.assemble .body.form { display: grid; grid-template-columns: 1fr; gap: 8px; min-width: 380px; }
+.modal.assemble .row { display: grid; grid-template-columns: 110px 1fr; gap: 8px; align-items: center; }
+.modal.assemble .what { color: var(--fg2); font-size: 12px; }

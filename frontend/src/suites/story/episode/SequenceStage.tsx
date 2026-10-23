@@ -14,6 +14,8 @@ import { useAnimate } from '../../animate/animateStore'
 import { useStory } from '../storyStore'
 import { storyKey } from '../storyKeys'
 import { laneTake } from './bin'
+import { laneChanges } from './assemble'
+import { runCommand } from '../../../frame/commands'
 import { at, duration, starts, tc, ticks, type Lane } from './lane'
 import { laneMenu } from './sequenceCommands'
 import { useSequence } from './sequenceStore'
@@ -102,6 +104,7 @@ function LaneView({ lane, byId }: { lane: Lane; byId: Map<string, Clip> }) {
   const playhead = useSequence((s) => s.playhead)
   const clips = useAnimate((st) => st.clips)
   const shots = useStory((st) => st.shots)
+  const changed = useMemo(() => new Map(laneChanges(lane, shots).map((x) => [x.i, x])), [lane, shots])   // D125 (S13): a newer approved take
   const { ref: dropRef, over } = useDropTarget((d) => laneTake(d, clips, shots).verdict.ok,
     (d) => { const sq = useSequence.getState(); for (const t of laneTake(d, clips, shots).take) { if (t.shot) sq.addShot(t.clip, t.shot); else sq.addClip(t.clip) } },
     (d) => laneTake(d, clips, shots).verdict)
@@ -193,6 +196,8 @@ function LaneView({ lane, byId }: { lane: Lane; byId: Map<string, Clip> }) {
               onPointerDown={blockDrag(i)}
               onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); useSequence.getState().select(i); showMenu(e, laneMenu(true)) }}>
               <div className="seq-thumbs">{thumbs(c, clip, ticks(lane, c) * ppf)}</div>
+              {changed.has(i) && <button type="button" className="seq-changed" title={`${changed.get(i)!.name} ${changed.get(i)!.version} is the approved take now — Update swaps the clip, the trims stay`}
+                onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); useSequence.getState().select(i); runCommand('story.episode.update') }}>changed · Update</button>}
               {ov > 0 && <i className="seq-ov" style={{ width: ov * ppf }} title={`dissolve · ${ov} frames (drag to change)`} onPointerDown={dissolveDrag(i)} />}
               <b>{clip ? `${clip.model_id.split('-')[0]} · ${c.out - c.in}f` : c.source}</b>
               <span className="seq-h l" onPointerDown={trimDrag(i, 'in')} title="trim in (drag)" />

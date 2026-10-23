@@ -25,7 +25,7 @@ class TimelineCreate(BaseModel):
 
 
 class TimelineExport(BaseModel):
-    format: Literal["edl", "fcpxml", "srt"]   # 17 §3e (D85): .srt from the lane clips' Dialogue lines, markers with the FCPXML
+    format: Literal["edl", "fcpxml", "srt", "resolve"]   # 17 §3e (D85): .srt from the lane clips' Dialogue lines, markers with the FCPXML; D125 (S14): resolve = all three and markers.txt in one folder
 
 
 @router.get("/timelines", response_model=TimelineList)
@@ -116,7 +116,7 @@ async def timeline_export(svc: Svc, tl_id: str, body: TimelineExport):
         path, text = await asyncio.to_thread(store.export, tl, body.format, recs, names, lines, audio)
     except ValueError as e:
         raise HTTPException(422, str(e))
-    cues = sum(1 for c in tl.clips for cue in audio(c) if cue) if body.format in ("fcpxml", "edl") else 0     # CN2: the audio lane's spoken lines
+    cues = sum(1 for c in tl.clips for cue in audio(c) if cue) if body.format in ("fcpxml", "edl", "resolve") else 0     # CN2: the audio lane's spoken lines
     return {"format": body.format, "path": path.relative_to(ws.path).as_posix(), "text": text, "audio": cues}
 
 

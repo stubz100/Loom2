@@ -10244,6 +10244,10 @@ export interface components {
              * @default 0
              */
             revision: number;
+            /** Route */
+            route: {
+                [key: string]: string;
+            } | null;
             /**
              * Schema Version
              * @default 1
@@ -10299,7 +10303,7 @@ export interface components {
              * Format
              * @enum {string}
              */
-            format: "edl" | "fcpxml" | "srt";
+            format: "edl" | "fcpxml" | "srt" | "resolve";
         };
         /**
          * TimelineExported

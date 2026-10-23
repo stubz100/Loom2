@@ -214,14 +214,15 @@ export function PrimaryAction() {
   const flowNodes = useStory((s) => s.flowNodes)
   const seqLane = useSequence((s) => s.lane)
   const seqCurrent = useSequence((s) => s.current)
-  markUsed('story.cast.expand'); markUsed('story.shot.new'); markUsed('story.flow.play'); markUsed('story.flow.stop'); markUsed('story.episode.exportFcpxml'); markUsed('story.episode.new')
+  const flowStart = useStory((s) => !!s.flowGraph?.start)
+  markUsed('story.cast.expand'); markUsed('story.shot.new'); markUsed('story.flow.play'); markUsed('story.flow.stop'); markUsed('story.episode.exportResolve'); markUsed('story.episode.assemble')
   if (tab === 'episode') {
     const issues = seqLane ? laneChecklist().length : 0
     const n = seqLane?.clips.length ?? 0
     return (
       <div>
-        {seqCurrent ? <button className="primary" disabled={!n} onClick={() => runCommand('story.episode.exportFcpxml')} title="FCPXML with chapter markers (and markers.txt beside it); the checklist asks first when a clip is not a final shot">Export ▶</button>
-          : <button className="primary" onClick={() => runCommand('story.episode.new')}>New cut…</button>}
+        {seqCurrent ? <button className="primary" disabled={!n} onClick={() => runCommand('story.episode.exportResolve')} title="The FCPXML with markers and the voice lane, the EDL, the SRT and markers.txt in one folder named after the cut; the checklist asks once, only when something is listed">Export for Resolve ▶</button>
+          : <button className="primary" disabled={!flowStart} onClick={() => runCommand('story.episode.assemble')} title="A new cut of one route of the Flow, every shot at its approved take">Assemble from the Flow…</button>}
         <div className="estimate">{!seqCurrent ? <span style={{ color: 'var(--fg3)' }}>no cut open</span> : !n ? <span style={{ color: 'var(--fg3)' }}>the lane is empty</span> : issues ? <span style={{ color: 'var(--fg3)' }}>{issues} of {n} clips not final shots</span> : <><span className="dot ok" />{n} clip{n === 1 ? '' : 's'} · every one a final shot</>}</div>
       </div>
     )

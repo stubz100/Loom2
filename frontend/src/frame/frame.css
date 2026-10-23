@@ -191,7 +191,7 @@ kbd { font: var(--mono); background: var(--bg3); border: 1px solid var(--line2);
 .modal.train-album { width: min(560px, 94vw); }                       /* D122: Train a LoRA on this album… */
 .modal.train-album .foot { display: flex; align-items: center; gap: 10px; }
 .modal.ask .body { display: flex; flex-direction: column; gap: 10px; }
-.modal.ask .ask-text { margin: 0; line-height: 1.45; opacity: 0.9; }
+.modal.ask .ask-text { margin: 0; line-height: 1.45; opacity: 0.9; white-space: pre-line; }   /* a text's line breaks are its lines (the export's checklist) */
 .modal.ask input[type=text] { width: 100%; }
 button.danger, .modal .foot button.danger { border-color: var(--error); color: var(--error); }
 

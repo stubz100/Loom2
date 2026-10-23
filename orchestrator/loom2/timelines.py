@@ -10,6 +10,7 @@ EDL text. Writes go through fsio (temp → fsync → replace); `revision` guards
 """
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 from typing import Any, Callable
 
@@ -52,6 +53,7 @@ class Timeline(BaseModel):
     h: int = 1080
     clips: list[TimelineClip] = Field(default_factory=list)
     overlaps: list[int] = Field(default_factory=list)      # overlaps[i] for clip i (overlaps[0] is 0)
+    route: dict[str, str] | None = None                     # D125 (S13): the Flow route it was assembled from (a Choice node id → its option id); None: built by hand
     revision: int = 0
     created_at: str = Field(default_factory=utc_now)
     updated_at: str = Field(default_factory=utc_now)
@@ -325,7 +327,7 @@ class TimelineStore:
         base = data.get("revision")
         if base is not None and int(base) != cur.revision:
             raise StaleTimeline(f"the sequence is at revision {cur.revision}, the change is based on {base} — reload it first")
-        merged = {**cur.model_dump(by_alias=True), **{k: v for k, v in data.items() if k in ("name", "fps", "w", "h", "clips", "overlaps")},
+        merged = {**cur.model_dump(by_alias=True), **{k: v for k, v in data.items() if k in ("name", "fps", "w", "h", "clips", "overlaps", "route")},
                   "id": tl_id, "schema_version": TIMELINE_SCHEMA_VERSION, "revision": cur.revision + 1, "created_at": cur.created_at, "updated_at": utc_now()}
         tl = Timeline.model_validate(merged)
         check(tl, clip_frames)
@@ -339,17 +341,30 @@ class TimelineStore:
         p.unlink()
         d = self.export_dir(tl_id)
         if d.is_dir():
-            for f in d.iterdir():
-                f.unlink()
-            d.rmdir()
+            shutil.rmtree(d)                                    # its exports, the Resolve folder (D125) among them
         return True
 
     def export(self, tl: Timeline, fmt: str, clips: dict[str, ClipRecord], name_of: Callable[[TimelineClip], str | None] | None = None,
                lines_of: Callable[[TimelineClip], list[str]] | None = None,
                audio_of: Callable[[TimelineClip], list[AudioCue | None]] | None = None) -> tuple[Path, str]:
-        """Write the EDL, FCPXML or SRT beside the document (`timelines/<id>/<name>.<ext>`); the FCPXML names each clip's proxy by file URL and
+        """D125 (S14): `resolve` writes the FCPXML (its markers in `markers.txt`), the EDL and the SRT into one folder named after the cut
+        (`timelines/<id>/<name>/`) and returns the folder and the files' names. Otherwise: write the EDL, FCPXML or SRT beside the document (`timelines/<id>/<name>.<ext>`); the FCPXML names each clip's proxy by file URL and
         carries a chapter marker per named clip (`name_of`), written to `markers.txt` beside it too; the SRT takes each clip's lines (`lines_of`);
         the FCPXML and the EDL carry the lines' voices (`audio_of`, CN2) on an audio lane at the lines' ticks."""
+        if fmt == "resolve":
+            folder = self.export_dir(tl.id) / slugify(tl.name, "sequence")
+            folder.mkdir(parents=True, exist_ok=True)
+            names = []
+            for one in ("fcpxml", "edl", "srt"):
+                path, _ = self.export(tl, one, clips, name_of, lines_of, audio_of)
+                target = folder / path.name
+                path.replace(target)
+                names.append(target.name)
+            marks = self.export_dir(tl.id) / "markers.txt"
+            if marks.is_file():
+                marks.replace(folder / "markers.txt")
+                names.append("markers.txt")
+            return folder, "\n".join(names)
         if fmt == "edl":
             text = to_edl(tl, tl.name, audio_of)
         elif fmt == "fcpxml":

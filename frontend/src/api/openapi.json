@@ -568,28 +568,6 @@
       },
       "AssetPatch": {
         "properties": {
-          "rating": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Rating"
-          },
-          "state": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "State"
-          },
           "tags": {
             "anyOf": [
               {
@@ -824,11 +802,6 @@
             ],
             "title": "Prompt Text"
           },
-          "rating": {
-            "default": 0,
-            "title": "Rating",
-            "type": "integer"
-          },
           "root_id": {
             "anyOf": [
               {
@@ -877,16 +850,6 @@
               }
             ],
             "title": "Sha256"
-          },
-          "state": {
-            "default": "none",
-            "enum": [
-              "none",
-              "keep",
-              "reject"
-            ],
-            "title": "State",
-            "type": "string"
           },
           "suite": {
             "default": "generate",
@@ -970,8 +933,6 @@
           "timings",
           "compiled_graph_hash",
           "variant",
-          "state",
-          "rating",
           "tags",
           "collection_ids",
           "duplicate_of",
@@ -2791,55 +2752,6 @@
           "phrases"
         ],
         "title": "CoverageCaps",
-        "type": "object"
-      },
-      "CurateBody": {
-        "properties": {
-          "asset_ids": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Asset Ids",
-            "type": "array"
-          },
-          "verdict": {
-            "enum": [
-              "keep",
-              "reject"
-            ],
-            "title": "Verdict",
-            "type": "string"
-          }
-        },
-        "required": [
-          "asset_ids",
-          "verdict"
-        ],
-        "title": "CurateBody",
-        "type": "object"
-      },
-      "Curated": {
-        "properties": {
-          "kept": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Kept",
-            "type": "array"
-          },
-          "rejected": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Rejected",
-            "type": "array"
-          }
-        },
-        "required": [
-          "kept",
-          "rejected"
-        ],
-        "title": "Curated",
         "type": "object"
       },
       "Deleted": {
@@ -9597,8 +9509,15 @@
             "type": "array"
           },
           "profile_id": {
-            "title": "Profile Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Id"
           },
           "rank": {
             "title": "Rank",
@@ -9633,8 +9552,15 @@
             "type": "string"
           },
           "version": {
-            "title": "Version",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
           }
         },
         "required": [
@@ -17001,6 +16927,17 @@
       },
       "TrainBody": {
         "properties": {
+          "group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
           "lr": {
             "default": 0.0001,
             "exclusiveMinimum": 0.0,
@@ -18240,7 +18177,6 @@
                 "clips",
                 "documents",
                 "imported",
-                "rejected",
                 "trash"
               ],
               "title": "Folder",
@@ -18289,29 +18225,6 @@
           },
           {
             "in": "query",
-            "name": "state",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "enum": [
-                    "none",
-                    "keep",
-                    "reject"
-                  ],
-                  "type": "string"
-                },
-                {
-                  "const": "all",
-                  "type": "string"
-                }
-              ],
-              "default": "all",
-              "title": "State"
-            }
-          },
-          {
-            "in": "query",
             "name": "model_id",
             "required": false,
             "schema": {
@@ -18324,16 +18237,6 @@
                 }
               ],
               "title": "Model Id"
-            }
-          },
-          {
-            "in": "query",
-            "name": "rating_min",
-            "required": false,
-            "schema": {
-              "default": 0,
-              "title": "Rating Min",
-              "type": "integer"
             }
           },
           {
@@ -18620,7 +18523,6 @@
               "enum": [
                 "created_desc",
                 "created_asc",
-                "rating_desc",
                 "model",
                 "size_desc"
               ],
@@ -18865,7 +18767,6 @@
                 "clips",
                 "documents",
                 "imported",
-                "rejected",
                 "trash"
               ],
               "title": "Folder",
@@ -18914,29 +18815,6 @@
           },
           {
             "in": "query",
-            "name": "state",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "enum": [
-                    "none",
-                    "keep",
-                    "reject"
-                  ],
-                  "type": "string"
-                },
-                {
-                  "const": "all",
-                  "type": "string"
-                }
-              ],
-              "default": "all",
-              "title": "State"
-            }
-          },
-          {
-            "in": "query",
             "name": "model_id",
             "required": false,
             "schema": {
@@ -18949,16 +18827,6 @@
                 }
               ],
               "title": "Model Id"
-            }
-          },
-          {
-            "in": "query",
-            "name": "rating_min",
-            "required": false,
-            "schema": {
-              "default": 0,
-              "title": "Rating Min",
-              "type": "integer"
             }
           },
           {
@@ -19245,7 +19113,6 @@
               "enum": [
                 "created_desc",
                 "created_asc",
-                "rating_desc",
                 "model",
                 "size_desc"
               ],
@@ -23265,6 +23132,59 @@
         ]
       }
     },
+    "/groups/{gid}/train": {
+      "post": {
+        "description": "D122: one `train_lora` job on an album page — every image on it that is not in the Trash. An album that is a Cast version's\nreference set trains for that version (the adapter and the trigger on it, as the Cast tab's Train); any other album's adapter is its\nown (the registry and Generate's LoRA slots). Here with the training routes rather than in groups.py: the queue, the triggers and the\nCast versions are this module's.",
+        "operationId": "album_train_groups__gid__train_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "gid",
+            "required": true,
+            "schema": {
+              "title": "Gid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrainBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrainQueued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Album Train",
+        "tags": [
+          "story"
+        ]
+      }
+    },
     "/groups/{gid}/ungroup": {
       "post": {
         "operationId": "groups_ungroup_groups__gid__ungroup_post",
@@ -26371,7 +26291,7 @@
     },
     "/story/profiles/{pid}/train": {
       "post": {
-        "description": "One `train_lora` job (staged by default) from the version's reference set; the queue's validation answers 422 with the sentence.",
+        "description": "One `train_lora` job (staged by default) on an album — the version's reference album unless the body names another (D122) — the\nadapter on the version; the queue's validation answers 422 with the sentence.",
         "operationId": "profile_train_story_profiles__pid__train_post",
         "parameters": [
           {
@@ -26758,68 +26678,6 @@
           }
         },
         "summary": "Profile Body Fit",
-        "tags": [
-          "story"
-        ]
-      }
-    },
-    "/story/profiles/{pid}/versions/{vid}/curate": {
-      "post": {
-        "description": "Keep: the assets are marked keep and move onto the version's reference page; reject: marked reject, left where they are.",
-        "operationId": "profile_curate_story_profiles__pid__versions__vid__curate_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "pid",
-            "required": true,
-            "schema": {
-              "title": "Pid",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "vid",
-            "required": true,
-            "schema": {
-              "title": "Vid",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CurateBody"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Curated"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Profile Curate",
         "tags": [
           "story"
         ]

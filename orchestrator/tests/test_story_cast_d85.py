@@ -145,8 +145,8 @@ def test_profile_mentions_resolve_to_the_version_group_with_the_stub(tmp_path: P
     assert resolve_mentions(T2I(model_id=KLEIN, mentions=[Mention(profile_id=q.id)]), groups, cat, 4, st).refs[0].note == "Lantern"
 
 
-# ---- the routes: create from a hero, curate, lock → 423 on the album, expand on the fake engine, capabilities ---------------------
-def test_routes_profiles_and_curate(tmp_path: Path):
+# ---- the routes: create from a hero, add to the reference set, lock → 423 on the album, expand on the fake engine, capabilities ---------------------
+def test_routes_profiles_and_references(tmp_path: Path):
     state = tmp_path / "state"
     AppState(state).update_settings({"engine": {"python": str(tmp_path / "missing.exe"), "health_timeout_s": 1}, "models_root": str(tmp_path / "models"),
                                      "mounted_model_trees": [], "variant": "full"})
@@ -161,24 +161,23 @@ def test_routes_profiles_and_curate(tmp_path: Path):
         gid = p["versions"][0]["group_id"]
         assert cl.get("/story/profiles").json()["items"][0]["id"] == p["id"] and cl.get(f"/story/profiles/{p['id']}").json()["name"] == "Mara"
         assert cl.get(f"/groups/{gid}").json()["group"]["cover_id"] == ids[0]
-        # curate: keep moves onto the reference page with state keep; reject marks and leaves
-        c = cl.post(f"/story/profiles/{p['id']}/versions/v1/curate", json={"asset_ids": [ids[1], ids[2]], "verdict": "keep"}).json()
-        assert c["kept"] == [ids[1], ids[2]] and svc.catalogue.get(ids[1]).state == "keep" and svc.groups.parent[("asset", ids[2])] == gid
-        c = cl.post(f"/story/profiles/{p['id']}/versions/v1/curate", json={"asset_ids": [ids[3]], "verdict": "reject"}).json()
-        assert c["rejected"] == [ids[3]] and svc.catalogue.get(ids[3]).state == "reject" and ("asset", ids[3]) not in svc.groups.parent
+        # D122: Add to the reference set moves onto the reference page and stamps nothing; there is no curate (keep / reject) any more
+        c = cl.post(f"/story/profiles/{p['id']}/versions/v1/add", json={"asset_ids": [ids[1], ids[2]], "role": "reference"}).json()
+        assert c["moved"] == [ids[1], ids[2]] and svc.groups.parent[("asset", ids[2])] == gid and "state" not in svc.catalogue.get(ids[1]).model_dump()
+        assert cl.post(f"/story/profiles/{p['id']}/versions/v1/curate", json={"asset_ids": [ids[3]], "verdict": "reject"}).status_code in (404, 405)
         # patch with the revision; stale → 409; a bad current → 422
         p = cl.get(f"/story/profiles/{p['id']}").json()
         r = cl.patch(f"/story/profiles/{p['id']}", json={"revision": p["revision"], "versions": [{"id": "v1", "stub": "Mara Vey, a courier"}]})
         assert r.status_code == 200 and r.json()["versions"][0]["appearance"] == "Mara Vey, a courier"
         assert cl.patch(f"/story/profiles/{p['id']}", json={"revision": p["revision"], "name": "x"}).status_code == 409
         assert cl.patch(f"/story/profiles/{p['id']}", json={"revision": p["revision"] + 1, "current": "v7"}).status_code == 422
-        # lock: the album's routes answer 423 on the reference page; curate is refused; the preview still resolves @Mara
+        # lock: the album's routes answer 423 on the reference page; adding is refused; the preview still resolves @Mara
         r = cl.post(f"/story/profiles/{p['id']}/versions/v1/lock")
         assert r.status_code == 200 and r.json()["versions"][0]["state"] == "final"
         assert cl.post("/groups/move", json={"items": [{"kind": "asset", "id": ids[1]}], "to": None}).status_code == 423
         assert cl.patch(f"/groups/{gid}", json={"name": "renamed"}).status_code == 423
         assert cl.delete(f"/groups/{gid}").status_code == 423
-        assert cl.post(f"/story/profiles/{p['id']}/versions/v1/curate", json={"asset_ids": [ids[3]], "verdict": "keep"}).status_code == 423
+        assert cl.post(f"/story/profiles/{p['id']}/versions/v1/add", json={"asset_ids": [ids[3]], "role": "reference"}).status_code == 423
         pv = cl.post("/recipes/preview", json={"recipe": {"kind": "t2i", "model_id": KLEIN, "prompt_mode": "text", "prompt_text": "@Mara at the gate",
                                                            "mentions": [{"profile_id": p["id"], "name": "Mara"}]}}).json()
         assert pv["mentions"][0]["profile_id"] == p["id"] and pv["mentions"][0]["version"] == "v1" and pv["mentions"][0]["group_id"] == gid

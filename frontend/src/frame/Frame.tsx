@@ -9,6 +9,7 @@ import { Dock } from './Dock'
 import { HelpOverlay } from './HelpOverlay'
 import { ModelsSheet } from './ModelsSheet'
 import { AngleSheet } from '../suites/generate/AngleTab'
+import { TrainAlbumSheet } from '../suites/story/TrainAlbumSheet'
 import { frameWidths } from './panelWidth'
 import { Inspector } from './Inspector'
 import { Panel } from './Panel'
@@ -87,6 +88,7 @@ export function Frame() {
       {helpOpen && <HelpOverlay />}
       <ModelsSheet />
       <AngleSheet />
+      <TrainAlbumSheet />
       <AskDialog />
     </div>
   )

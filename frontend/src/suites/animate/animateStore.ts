@@ -76,16 +76,14 @@ export function recipeFor(p: AnimPanel & { start: string }, seeds?: number[]): I
   }
 }
 
-/** D90 (02 §9, X12): the Clips tab's filter — words of the prompt, and the Catalogue's keep / reject state ('none' = unmarked). */
-export interface ClipFilter { q: string; state: 'all' | 'keep' | 'reject' | 'none' }
+/** D90 (02 §9, X12): the Clips tab's filter — words of the prompt (D122: no keep / reject state). */
+export interface ClipFilter { q: string }
 /** The clips the Clips tab lists: trashed ones hidden once the live set is known (`live`: the asset ids of the clips not in the Trash),
- *  then the filter; a clip whose asset state is not loaded yet counts as unmarked. */
-export function visibleClips(clips: Clip[], assets: Record<string, Asset>, live: Record<string, true> | null, f: ClipFilter): Clip[] {
+ *  then the filter. */
+export function visibleClips(clips: Clip[], live: Record<string, true> | null, f: ClipFilter): Clip[] {
   const words = f.q.trim().toLowerCase().split(/\s+/).filter(Boolean)
   return clips.filter((c) => {
     if (live && c.asset_id && !live[c.asset_id]) return false
-    const st = (c.asset_id ? assets[c.asset_id]?.state : undefined) ?? 'none'
-    if (f.state !== 'all' && st !== f.state) return false
     const text = `${c.prompt} ${c.model_id} seed ${c.seed}`.toLowerCase()
     return words.every((w) => text.includes(w))
   })
@@ -135,7 +133,6 @@ interface AnimateState {
   extractRange: () => Promise<Asset[]>
   sendFrameToEdit: () => Promise<void>
   useFrameAsStart: () => Promise<void>
-  setState: (state: 'keep' | 'reject' | 'none') => Promise<void>
   /** D95 (AN1, UX0 #11): the saved panels are a project record (`/project/animate-presets`); presets this browser still holds from before
    *  are moved into the project once (the first load that finds the project's list empty). */
   loadPresets: () => Promise<void>
@@ -166,7 +163,7 @@ export const useAnimate = create<AnimateState>()(
       panel: DEFAULT_PANEL, presets: [], lastPreset: null, preview: null, previewError: null,
       clips: [], current: null, assets: {}, pins: {},
       view: 'player', filmTrack: false, compareWith: null, playing: false, frame: 0, speed: 1, loop: true, onion: false, inPoint: null, outPoint: null, extractEvery: 8, busy: null,
-      clipLive: null, clipFilter: { q: '', state: 'all' },
+      clipLive: null, clipFilter: { q: '' },
 
       set: (patch) => { set({ panel: { ...get().panel, ...patch } }); get().refreshPreview() },
       setModel: (model_id) => {
@@ -240,7 +237,7 @@ export const useAnimate = create<AnimateState>()(
           await unwrap(http.POST('/assets/trash', { body: { ids: [aid] } }))
           const live = { ...(get().clipLive ?? {}) }; delete live[aid]
           set({ clipLive: get().clipLive ? live : null })
-          if (get().current === c.id) { const next = visibleClips(get().clips, get().assets, get().clipLive, get().clipFilter)[0]; get().select(next?.id ?? null) }
+          if (get().current === c.id) { const next = visibleClips(get().clips, get().clipLive, get().clipFilter)[0]; get().select(next?.id ?? null) }
           s.toast('Clip moved to Trash', 'info', () => void unwrap(http.POST('/assets/restore', { body: { ids: [aid] } })).then(() => get().loadClipStates()))
         } catch (e) { s.toast(`Could not trash the clip: ${(e as ApiError).detail ?? e}`, 'error') }
       },
@@ -374,12 +371,6 @@ export const useAnimate = create<AnimateState>()(
         const [a] = await get().extract([get().frame])
         if (a) { get().setStart(a.id); useSession.getState().toast('The frame is the next clip\'s start (Extend, by hand)', 'info') }
       },
-      setState: async (state) => {
-        const c = get().clip()
-        if (!c?.asset_id) return
-        try { const a = await unwrap(http.PATCH('/assets/{asset_id}', { params: { path: { asset_id: c.asset_id } }, body: { state } })); set({ assets: { ...get().assets, [a.id]: a } }) } catch (e) { useSession.getState().toast(`Could not mark the clip: ${(e as ApiError).detail ?? e}`, 'error') }
-      },
-
       loadPresets: async () => {
         try {
           const r = await unwrap(http.GET('/project/animate-presets'))

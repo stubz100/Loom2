@@ -565,7 +565,7 @@ export const useGenerate = create<GenerateState>()(
         const gid = await useStory.getState().ensureCandidates(prof.id, v.id)
         if (!gid) return null
         return get().generate(false, castOrigin(prof.id, v.id, gid), {
-          text: ` — they land as ${prof.name}'s candidates (keep ✓ the good ones, make one the hero)`,
+          text: ` — they land as ${prof.name}'s candidates (add ✓ the good ones to the reference set, make one the hero)`,
           action: { label: `Open ${prof.name} in Cast`, run: () => void import('../../store/origin').then((m) => m.goToStory({ tab: 'cast', id: prof.id, version: v.id })) } })
       },
       // ---- D115: Expand ----

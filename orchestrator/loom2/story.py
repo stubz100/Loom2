@@ -1212,6 +1212,14 @@ class StoryStore(_ShotMixin, _FlowMixin):
         self.save_profile(p)
         return p
 
+    def version_of_album(self, gid: str) -> tuple[Profile, ProfileVersion] | None:
+        """D122: the Cast version whose reference set is this album page, if any (an album trained on goes to its version)."""
+        for p in self.profiles():
+            for v in p.versions:
+                if v.group_id == gid:
+                    return p, v
+        return None
+
     def set_version_lora(self, pid: str, vid: str, lora: str | None, trigger: str | None) -> Profile:
         """LT2: the trainer's promotion (and a delete's clearing) — server-side, no revision guard; a locked version takes it too (the LoRA is
         the version's product, not an edit of its reference set)."""
@@ -1333,13 +1341,12 @@ class StoryStore(_ShotMixin, _FlowMixin):
                     raise ValueError(f"{aid} could not be copied")
                 groups.move([("asset", dup.id)], target)
                 copied[aid] = dup.id; out.append(dup.id)
-        updated = cat.patch_many([a for a in out if a not in already], {"state": "keep"}) if role in ("hero", "reference") else []   # as Cast's keep does
         if role == "hero":
             groups.update(target, cover_id=out[0])
             versions = [x.model_copy(update={"hero_asset_id": out[0]}) if x.id == v.id else x for x in p.versions]
             p = p.model_copy(update={"versions": versions, "revision": p.revision + 1, "updated_at": utc_now()})
             self.save_profile(p)
-        return {"profile": p, "group_id": target, "role": role, "asset_ids": out, "moved": moved, "copied": copied, "already": already, "made_page": made, "updated": updated}
+        return {"profile": p, "group_id": target, "role": role, "asset_ids": out, "moved": moved, "copied": copied, "already": already, "made_page": made}
 
     def delete_profile(self, pid: str, groups: GroupStore | None = None) -> bool:
         """The record goes; its groups and images stay in the album (unlocked again)."""

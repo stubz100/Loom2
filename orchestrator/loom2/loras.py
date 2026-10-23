@@ -25,7 +25,7 @@ from .roster import ROSTER, ROSTER_BY_ID, Roster, RosterEntry
 
 FILE_PREFIX = "file:"
 MAX_SLOTS = 4
-LORA_SCHEMA_VERSION = 1
+LORA_SCHEMA_VERSION = 2                     # D122: profile_id / version optional (an album's own adapter)
 
 
 # ---- the project's trained LoRAs (18 §3a): files are truth, the engine's copy is a cache ---------------------------------------------
@@ -35,8 +35,8 @@ class LoraRecord(BaseModel):
     schema_version: int = LORA_SCHEMA_VERSION
     id: str
     name: str
-    profile_id: str
-    version: str
+    profile_id: str | None = None                 # D122: None for an album's own adapter (trained on an album no Cast version holds)
+    version: str | None = None
     base: str                                     # the model base it fits (klein-4b | klein-9b …)
     model_id: str                                 # the base's roster id it was trained on
     trigger: str

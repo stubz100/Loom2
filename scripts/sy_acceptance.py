@@ -1,5 +1,5 @@
 """17 §12 (D85) acceptance of the Story workspace on the rig, through the app. SY1 (item 2): a hero → a character profile → Expand (one job per
-coverage cell on D78's clay model, Klein 9B) → the candidates on the version's page with their cells → curate ≥ 25 into the reference set
+coverage cell on D78's clay model, Klein 9B) → the candidates on the version's page with their cells → ≥ 25 added to the reference set
 with every shot-size row covered → Lock (the album refuses) → `@Mara` resolves to the locked version with the hero first, and a Generate
 job with the mention records the stamp. SY2 (item 3): a stage with a camera → "New shot from this camera" → the camera's clay frame
 arrives on the shot's v1 as its frame (the finisher's link) → a draft clip is refused by the gate with the reason, a Full-size clip
@@ -108,7 +108,7 @@ def sheet(ids: list[str], path: Path, cols: int = 8, cell: int = 192, labels: di
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--preset", default="full")
-    ap.add_argument("--keep", type=int, default=30, help="how many candidates to keep (by cell order, every shot-size row first)")
+    ap.add_argument("--keep", type=int, default=30, help="how many candidates to add to the reference set (by cell order, every shot-size row first)")
     ap.add_argument("--part", default="world,sy1,durability,sy2,sy3,sy4", help="which slices to run")
     a = ap.parse_args()
     if not EDGE:
@@ -292,7 +292,7 @@ def sy1(cdp, hero, caps, a, check, rows, failures, proc: dict | None = None) -> 
         labels = {x["id"]: f"{x['params']['coverage_cell']['shot'][:6]} {x['params']['coverage_cell']['angle'][:9]} {x['params']['coverage_cell']['expression'][:4]}" for x in cands}
         sheet([x["id"] for x in sorted(cands, key=lambda x: x["created_at"])], OUT / "candidates.jpg", labels=labels)
         check(cdp.wait_for(f"document.querySelectorAll('.cand-card').length === {r['cells']}", timeout=30, settle=1.0), "the Cast page shows every candidate")
-        # 3. curate: every shot-size row first, then by cell order, up to --keep
+        # 3. the reference set: every shot-size row first, then by cell order, up to --keep (D122: added, nothing stamped)
         by_shot: dict[str, list[dict]] = {}
         for x in sorted(cands, key=lambda x: x["created_at"]):
             by_shot.setdefault(x["params"]["coverage_cell"]["shot"], []).append(x)
@@ -305,16 +305,15 @@ def sy1(cdp, hero, caps, a, check, rows, failures, proc: dict | None = None) -> 
                 break
             if x["id"] not in keep:
                 keep.append(x["id"])
-        reject = [x["id"] for x in cands if x["id"] not in keep][:3]
-        ok = cdp.eval(f"window.__loom2Story.curate({json.dumps(keep)}, 'keep').then(() => true)", timeout=120)
-        cdp.eval(f"window.__loom2Story.curate({json.dumps(reject)}, 'reject').then(() => true)", timeout=60)
+        left = [x["id"] for x in cands if x["id"] not in keep][:3]
+        ok = cdp.eval(f"window.__loom2Story.addRefs({json.dumps(keep)}).then(() => true)", timeout=120)
         ref = api("GET", f"/groups/{gid}")
         kept = [x for x in ref["assets"].values() if x["id"] != hero]
         rows_covered = {x["params"].get("coverage_cell", {}).get("shot") for x in kept}
         check(ok is True and len(kept) >= BARS["kept_min"], f"{len(kept)} kept in the reference set (bar ≥ {BARS['kept_min']})")
         check(set(caps["coverage"]["shots"]) <= rows_covered, f"every shot-size row covered: {sorted(rows_covered)}")
-        check(all(x["state"] == "keep" for x in kept), "the kept ones are marked keep")
-        check(all(api("GET", f"/assets/{i}")["state"] == "reject" for i in reject) and all(i in api("GET", f"/groups/{r['group_id']}")["assets"] for i in reject), "the rejected ones stay on the candidates page, marked reject")
+        check(all("state" not in x for x in kept), "nothing is stamped on the added ones (D122)")
+        check(all(i in api("GET", f"/groups/{r['group_id']}")["assets"] for i in left), "the others stay on the candidates page")
         sheet([hero, *[x["id"] for x in kept]], OUT / "kept.jpg", labels=labels | {hero: "hero"})
         grid_ok = cdp.wait_for("document.querySelectorAll('.cov-grid td.one, .cov-grid td.full').length >= 4", timeout=30, settle=1.0)
         check(bool(grid_ok), "the coverage grid shows the kept cells")

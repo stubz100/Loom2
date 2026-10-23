@@ -5,12 +5,12 @@ import { flatGroups, useAlbum, type AlbumNode } from './albumStore'
 import { queryOf, type CatalogueState, type Query } from './catalogueStore'
 import { addFilterMenu, CLEAR_ALL, FILTERS } from './filters'
 
-const Q0: Query = { folder: 'all', state: 'all', rating_min: 0, tags_any: [], search: '', sort: 'created_desc', group: 'batch' }
+const Q0: Query = { folder: 'all', tags_any: [], search: '', sort: 'created_desc', group: 'batch' }
 const fake = (q: Partial<Query> = {}) => ({ q: { ...Q0, ...q }, setQuery: vi.fn(async () => undefined), tagCloud: [{ tag: 'harbour', count: 3 }] }) as unknown as CatalogueState & { setQuery: ReturnType<typeof vi.fn> }
 const filter = (id: string) => FILTERS.find((f) => f.id === id)!
 
 // one query that turns every filter on
-const ALL_ON: Query = { ...Q0, state: 'keep', kind: 'video', suite: 'animate', model_id: 'some-model', rating_min: 3, date_preset: '7d', tags_any: ['a', 'b'],
+const ALL_ON: Query = { ...Q0, kind: 'video', suite: 'animate', model_id: 'some-model', date_preset: '7d', tags_any: ['a', 'b'],
   aspect: 'portrait', has_children: false, batch_id: 'bat_1', batch_label: '10:02', root_id: 'ast_r', root_label: 'root' }
 
 describe('filters', () => {
@@ -30,11 +30,9 @@ describe('filters', () => {
     expect(q.search).toBe('')
   })
   it('name the active value on the chip', () => {
-    expect(filter('state').chip({ ...Q0, state: 'none' })).toBe('State: unjudged')
     expect(filter('type').chip({ ...Q0, kind: 'video' })).toBe('Type: clips')
     expect(filter('type').chip({ ...Q0, has_document: true })).toBe('Type: documents')
     expect(filter('source').chip({ ...Q0, suite: 'extract' })).toBe('Source: Frame extract')
-    expect(filter('rating').chip({ ...Q0, rating_min: 2 })).toBe('Rating ≥ ★★')
     expect(filter('date').chip({ ...Q0, date_preset: '30d' })).toBe('Date: last 30 days')
     expect(filter('date').chip({ ...Q0, created_from: '2026-10-01T00:00:00' })).toBe('Date: 2026-10-01 → …')
     expect(filter('derived').chip({ ...Q0, has_children: false })).toBe('No derivations')
@@ -44,16 +42,17 @@ describe('filters', () => {
     const c = fake()
     const menu = addFilterMenu(c)
     const labels = menu.map((m) => ('label' in m ? m.label : 'sep' in m ? '—' : '?'))
-    expect(labels).toEqual(['State', 'Type', 'Source', 'Model', 'Rating', 'Date', 'Tags', '—', 'More'])
+    expect(labels).toEqual(['Type', 'Source', 'Model', 'Date', 'Tags', '—', 'More'])                          // D122: no State, no Rating
+    expect(FILTERS.some((f) => f.id === 'state' || f.id === 'rating')).toBe(false)
     const more = menu[menu.length - 1] as { items: MenuItem[] }
     expect(more.items.map((m) => ('label' in m ? m.label : '?'))).toEqual(['Aspect', 'Derivations'])   // batch / lineage come from a tile's menu
   })
   it('apply their patch through setQuery and check the current value', () => {
-    const c = fake({ state: 'reject' })
-    const opts = filter('state').options(c) as { label: string; checked?: boolean; run: () => void }[]
-    expect(opts.map((o) => [o.label, !!o.checked])).toEqual([['Kept', false], ['Rejected', true], ['Unjudged', false]])
+    const c = fake({ kind: 'video' })
+    const opts = filter('type').options(c) as { label: string; checked?: boolean; run: () => void }[]
+    expect(opts.map((o) => [o.label, !!o.checked])).toEqual([['Images', false], ['Clips', true], ['Audio', false], ['Has a document', false]])
     opts[0].run()
-    expect(c.setQuery).toHaveBeenCalledWith({ state: 'keep' })
+    expect(c.setQuery).toHaveBeenCalledWith({ kind: 'image', has_document: undefined })
     const tags = filter('tags').options(fake({ tags_any: ['harbour'] })) as { label: string; checked?: boolean }[]
     expect(tags[0]).toMatchObject({ label: 'harbour  (3)', checked: true })
   })
@@ -61,11 +60,11 @@ describe('filters', () => {
 
 describe('queryOf (GET /assets parameters)', () => {
   it('sends the four fixed fields and nothing unset', () => {
-    expect(queryOf(Q0)).toEqual({ folder: 'all', state: 'all', sort: 'created_desc', group: 'batch' })
+    expect(queryOf(Q0)).toEqual({ folder: 'all', sort: 'created_desc', group: 'batch' })
   })
-  it('leaves out empty strings, an empty tag list and a zero rating, and trims the search', () => {
-    const p = queryOf({ ...Q0, suite: '', model_id: '', search: '   ', tags_any: [], rating_min: 0 })
-    expect(Object.keys(p).sort()).toEqual(['folder', 'group', 'sort', 'state'])
+  it('leaves out empty strings and an empty tag list, and trims the search', () => {
+    const p = queryOf({ ...Q0, suite: '', model_id: '', search: '   ', tags_any: [] })
+    expect(Object.keys(p).sort()).toEqual(['folder', 'group', 'sort'])
     expect(queryOf({ ...Q0, search: '  fog ' }).search).toBe('fog')
   })
   it('sends booleans when set, false included (D38 fix: "No derivations")', () => {
@@ -76,7 +75,7 @@ describe('queryOf (GET /assets parameters)', () => {
     const p = queryOf({ ...ALL_ON }, { limit: 200, cursor: 'c1' })
     expect(p).not.toHaveProperty('batch_label')
     expect(p).not.toHaveProperty('root_label')
-    expect(p).toMatchObject({ batch_id: 'bat_1', root_id: 'ast_r', tags_any: ['a', 'b'], rating_min: 3, limit: 200, cursor: 'c1' })
+    expect(p).toMatchObject({ batch_id: 'bat_1', root_id: 'ast_r', tags_any: ['a', 'b'], limit: 200, cursor: 'c1' })
   })
 })
 

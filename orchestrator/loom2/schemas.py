@@ -782,11 +782,6 @@ class Expanded(Out):
     model_id: str
 
 
-class Curated(Out):
-    kept: list[str]
-    rejected: list[str]
-
-
 class StageList(Out):
     """P13 / ST1 (D81): the project's stages."""
     items: list[Stage]
@@ -945,8 +940,8 @@ class LoraRecordOut(Open):
     schema_version: int
     id: str
     name: str
-    profile_id: str
-    version: str
+    profile_id: str | None                        # D122: None for an album's own LoRA (no Cast version holds its album)
+    version: str | None
     base: str
     model_id: str
     trigger: str

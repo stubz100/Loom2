@@ -47,11 +47,25 @@ def _cast(rig: Rig, n_refs: int = 4, cells: bool = True):
         p = src / f"ref{i}.png"
         Image.new("RGB", (640, 360), (i * 40 % 255, 80, 120)).save(p)
         params = {"coverage_cell": CELLS[(i - 1) % len(CELLS)]} if i and cells else {}
-        ids.append(rig.catalogue.ingest_file(p, move=False, params=params, state="keep" if i else "none", suite="story").id)
+        ids.append(rig.catalogue.ingest_file(p, move=False, params=params, suite="story").id)
     prof = store.create_profile("Mara", "character", groups, hero_asset_id=ids[0], stub="Mara, a wiry courier in a long grey coat")
     v = prof.versions[0]
     groups.move([("asset", a) for a in ids[1:]], v.group_id)
     return store, groups, prof, v, ids
+
+
+def _album(rig: Rig, groups: GroupStore, n: int, name: str = "Alley studies") -> tuple[str, list[str]]:
+    """D122: a plain album page (no Cast version holds it) with `n` images, one with an Expand cell."""
+    src = rig.ws.temp_dir / "album"
+    src.mkdir(parents=True, exist_ok=True)
+    ids = []
+    for i in range(n):
+        p = src / f"{name[:4]}{i}.png"
+        Image.new("RGB", (320, 180), (90, i * 50 % 255, 60)).save(p)
+        ids.append(rig.catalogue.ingest_file(p, move=False, params={"coverage_cell": CELLS[0]} if i == 0 else {}).id)
+    g = groups.create(name)
+    groups.move([("asset", a) for a in ids], g.id)
+    return g.id, ids
 
 
 def _settings(rig: Rig, **extra) -> None:
@@ -119,6 +133,21 @@ def test_materialise_and_config(tmp_path: Path, object_info: dict):
         assert got == {"step": 260, "total": 1000, "s_per_it": 1.06, "loss": 0.4996}
         assert T.parse_progress("Found step 250 in metadata, starting from there\n")["resumed_from"] == 250
         assert T.parse_progress("x: 50%| | 5/10 [00:00<00:00, 20.00it/s]\r")["s_per_it"] == 0.05
+        # D122: an album of its own — every image on the page but one in the Trash; the trigger alone, a cell's sentence where Expand left one
+        gid, aids = _album(rig, groups, 5)
+        rig.catalogue.trash([aids[4]])
+        own = TrainLora(group_id=gid, model_id=base, trigger="alley_1a2b", steps=300)
+        assert T.train_target(store, groups, own)[:2] == (None, None)
+        meta = T.materialise(rig.ws, rig.catalogue, groups, store, own, tmp_path / "set2")
+        assert meta["group_id"] == gid and meta["count"] == 4 and aids[4] not in meta["asset_ids"] and meta["stub"] == ""
+        caps = {p.stem.split("_", 1)[1]: p.with_suffix(".txt").read_text(encoding="utf-8") for p in sorted((tmp_path / "set2").glob("*.png"))}
+        assert caps[aids[0]] == f"alley_1a2b, {cell_sentence(CELLS[0])}" and caps[aids[1]] == "alley_1a2b"
+        # the version's own album by default; a recipe that names neither is refused
+        assert T.train_target(store, groups, recipe)[2] == v.group_id
+        with pytest.raises(ValueError, match="names its album"):
+            T.train_target(store, groups, TrainLora(model_id=base, trigger="x"))
+        with pytest.raises(ValueError, match="not found"):
+            T.train_target(store, groups, TrainLora(group_id="grp_nope", model_id=base, trigger="x"))
     finally:
         import asyncio
         asyncio.run(rig.close())
@@ -180,6 +209,37 @@ async def test_train_job_staged_released_promoted_and_used(tmp_path: Path, objec
         assert d3.status == "done", d3.error
         rec2 = reg.get(d3.result["lora_id"])
         assert rec2.previous == [rec.id] and store.profile(prof.id).version(v.id).lora == rec2.id and len(reg.list()) == 2
+    finally:
+        await rig.close()
+
+
+@pytest.mark.asyncio
+async def test_train_job_on_an_album_of_its_own(tmp_path: Path, object_info: dict, monkeypatch: pytest.MonkeyPatch):
+    """D122: an album no Cast version holds trains too — the adapter is the album's (named after it, no profile), in the registry and
+    the roster's trained map like any other; fewer than four images refused at submission."""
+    rig = Rig(tmp_path, object_info)
+    try:
+        _settings(rig)
+        groups = GroupStore(rig.ws, rig.catalogue)
+        rig.queue.groups = groups
+        gid, _ = _album(rig, groups, 4)
+        small, _ = _album(rig, groups, 3, name="Three")
+        base = _trainable_base(rig.roster)
+        rig.queue.load()
+        await rig.queue.start()
+        body = {"kind": "train_lora", "group_id": gid, "model_id": base, "steps": 100, "trigger": "alley_1a2b"}
+        with pytest.raises(ValueError, match="the album has 3 images"):
+            rig.queue.submit({**body, "group_id": small})
+        monkeypatch.setenv("FAKE_TRAINER_STEP_S", "0.002")
+        job = rig.queue.submit(body)[0]
+        done = await rig.wait(job.id, timeout=60)
+        assert done.status == "done", done.error
+        assert done.result["profile_id"] is None and done.result["group_id"] == gid and done.result["refs"] == 4
+        rec = L.LoraRegistry(rig.ws).get(done.result["lora_id"])
+        assert rec.profile_id is None and rec.version is None and rec.name == "Alley studies" and rec.dataset["group_id"] == gid and rec.schema_version == 2
+        assert rig.roster.trained[rec.id]["profile_id"] is None and rec.id in {o["id"] for o in L.lora_options(rig.roster, base, "full")}
+        from loom2.schemas import LoraRecordList
+        assert LoraRecordList.model_validate({"items": [rec.model_dump()]}).items[0].profile_id is None      # GET /story/loras answers it (it failed first)
     finally:
         await rig.close()
 
@@ -258,7 +318,7 @@ def test_train_routes_and_capabilities(tmp_path: Path):
             q = tmp_path / f"r{i}.png"
             Image.new("RGB", (64, 64), (50, 50, 200)).save(q)
             aid = cl.post("/assets/import", json={"paths": [str(q)]}, headers=H).json()["items"][0]["id"]
-            cl.post(f"/story/profiles/{p['id']}/versions/v1/curate", json={"asset_ids": [aid], "verdict": "keep"}, headers=H)
+            assert cl.post(f"/story/profiles/{p['id']}/versions/v1/add", json={"asset_ids": [aid], "role": "reference"}, headers=H).status_code == 200
         r = cl.post(f"/story/profiles/{p['id']}/train", json={"steps": 200, "stage": True}, headers=H)
         assert r.status_code == 200, r.text
         body = r.json()
@@ -270,3 +330,22 @@ def test_train_routes_and_capabilities(tmp_path: Path):
         pv = cl.post("/recipes/preview", json={"recipe": job["recipe"]}, headers=H)
         assert pv.status_code == 200 and pv.json()["engine"] is False and pv.json()["estimate"]["seconds"] == 214
         assert cl.delete("/story/loras/lora_nope", headers=H).status_code == 404
+        # D122: an album trains from its own route — the version's reference album for that version; any other album for itself
+        gid = p["versions"][0]["group_id"]
+        r = cl.post(f"/groups/{gid}/train", json={"steps": 200, "stage": True}, headers=H).json()
+        rj = cl.get(f"/jobs/{r['job_id']}", headers=H).json()["recipe"]
+        assert r["trigger"] == body["trigger"] and rj["profile_id"] == p["id"] and rj["version"] == "v1" and rj["group_id"] == gid
+        other = cl.post("/groups", json={"name": "Neon alleys"}, headers=H).json()["id"]
+        assert cl.post(f"/groups/{other}/train", json={}, headers=H).status_code == 422                    # an empty album: the queue's sentence
+        moved = []
+        for i in range(4):
+            q = tmp_path / f"n{i}.png"
+            Image.new("RGB", (64, 64), (10, 200, 90)).save(q)
+            moved.append(cl.post("/assets/import", json={"paths": [str(q)]}, headers=H).json()["items"][0]["id"])
+        cl.post("/groups/move", json={"items": [{"kind": "asset", "id": a} for a in moved], "to": other}, headers=H)
+        r = cl.post(f"/groups/{other}/train", json={"steps": 200}, headers=H)
+        assert r.status_code == 200, r.text
+        rj = cl.get(f"/jobs/{r.json()['job_id']}", headers=H).json()
+        assert r.json()["trigger"].startswith("neonalleys_") and rj["recipe"]["profile_id"] is None and rj["recipe"]["group_id"] == other
+        assert rj["recipe"]["name"] == "Neon alleys" and rj["origin"]["surface"] == "train" and rj["origin"]["suite"] == "catalogue"
+        assert cl.post("/groups/grp_nope/train", json={}, headers=H).status_code == 404

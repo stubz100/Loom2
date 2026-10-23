@@ -1,6 +1,6 @@
 // Animate commands (11 §9, 07 §3c, D32): one definition each for the transport buttons, the strip, the inspector verbs,
 // the right-click menus and the keys. Keys are accelerators for buttons that exist anyway.
-import { ArrowLeftRight, Check, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, Columns2, Download, Eye, Film, Layers, Pause, Play, Repeat, RotateCcw, Scissors, Shuffle, SkipBack, SkipForward, Sparkles, SquareX, StepBack, StepForward, Trash, X } from 'lucide-react'
+import { ArrowLeftRight, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, Columns2, Download, Eye, Film, Layers, Pause, Play, Repeat, RotateCcw, Scissors, Shuffle, SkipBack, SkipForward, Sparkles, SquareX, StepBack, StepForward, Trash, X } from 'lucide-react'
 import { command, isEnabled, registerCommands, runCommand, sep, setReach, type Command, type MenuItem } from '../../frame/commands'
 import { http, unwrap, type ApiError } from '../../api/client'
 import { askText, useSession } from '../../store/session'
@@ -120,8 +120,6 @@ registerCommands([
     run: () => void extendClip() },
   { id: 'anim.useAsStart', scope: 'animate', label: 'Use frame as next start', icon: Clapperboard, placement: ['inspector', 'context'], when: hasClip, run: () => void an().useFrameAsStart() },
   // clip verbs
-  { id: 'anim.keep', scope: 'animate', label: 'Keep', icon: Check, placement: ['inspector', 'context'], when: () => !!an().clip()?.asset_id, run: () => void an().setState('keep') },
-  { id: 'anim.reject', scope: 'animate', label: 'Reject', icon: X, keys: 'X', placement: ['inspector', 'context'], when: () => !!an().clip()?.asset_id, run: () => void an().setState('reject') },
   { id: 'anim.variations', scope: 'animate', label: 'Variations (new seeds)', icon: Shuffle, keys: 'V', placement: ['inspector', 'context'], when: hasClip, run: () => void an().variations() },
   { id: 'anim.rerun', scope: 'animate', label: 'Re-run (same seed)', icon: RotateCcw, keys: 'Ctrl+R', placement: ['inspector', 'context'], when: hasClip, run: () => void an().rerun() },
   { id: 'anim.tryOther', scope: 'animate', label: 'Try the other model', icon: Shuffle, placement: ['inspector', 'context'], when: hasClip, run: () => void an().tryOther() },
@@ -170,7 +168,7 @@ export function playerMenu(): MenuItem[] {
     { cmd: 'anim.extractFrame' }, { cmd: 'anim.extractRange' }, { cmd: 'anim.sendToEdit' }, { cmd: 'anim.useAsStart' }, { cmd: 'anim.extend' }, sep,
     { cmd: 'anim.onion', checked: s.onion }, { cmd: 'anim.loop', checked: s.loop },
     { cmd: 'anim.view.compare', label: s.view === 'compare' ? 'Leave compare' : 'Compare…' }, sep,
-    { cmd: 'anim.keep' }, { cmd: 'anim.reject' }, { cmd: 'anim.variations' }, { cmd: 'anim.rerun' }, { cmd: 'anim.tryOther' }, { cmd: 'anim.identity' }, sep,
+    { cmd: 'anim.variations' }, { cmd: 'anim.rerun' }, { cmd: 'anim.tryOther' }, { cmd: 'anim.identity' }, sep,
     { cmd: 'anim.toShot' }, { cmd: 'anim.toCatalogue' },
   ]
 }
@@ -178,5 +176,5 @@ export function playerMenu(): MenuItem[] {
 /** D90 (02 §9, A16): right-click on a row of the Clips tab (the clip is selected first). */
 export function clipMenu(id: string): MenuItem[] {
   if (an().current !== id) an().select(id)
-  return [{ cmd: 'anim.toCatalogue' }, sep, { cmd: 'anim.keep' }, { cmd: 'anim.reject' }, sep, { cmd: 'anim.toShot' }, sep, { cmd: 'anim.trash' }]
+  return [{ cmd: 'anim.toCatalogue' }, sep, { cmd: 'anim.toShot' }, sep, { cmd: 'anim.trash' }]
 }

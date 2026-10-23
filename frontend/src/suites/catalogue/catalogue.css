@@ -11,7 +11,6 @@
 .tile:hover { background: var(--bg3); }
 .tile.selected { outline-color: var(--accent); }
 .tile.primary { box-shadow: 0 0 0 2px var(--accent), 0 0 0 4px var(--ring-gap); }
-.tile.reject .thumb { opacity: .4; }
 .tile .thumb { flex: 1; min-height: 0; display: grid; place-items: center; background: var(--media-bg); }
 .tile .thumb img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .tile.fill .thumb img { object-fit: cover; }
@@ -24,11 +23,8 @@
 .tile .tile-pick { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; padding: 0; min-height: 0; display: grid; place-items: center; border-radius: var(--radius); background: var(--accent); color: #fff; border: 1px solid rgba(0,0,0,.35); box-shadow: 0 1px 3px rgba(0,0,0,.5); }
 .tile .tile-pick:hover { filter: brightness(1.15); }
 .tile .tile-pick { z-index: 2; }
-.tile .tile-pick + .stars { top: 30px; }                      /* the rating's stars share the corner: they step down while the button is there */
 .bin-bar .meta.picking { color: var(--fg); display: inline-flex; align-items: center; gap: 6px; }
 .tile .badge-dot { width: 18px; height: 18px; border-radius: 4px; display: grid; place-items: center; font-size: 11px; background: var(--overlay); color: var(--fg); }
-.tile .badge-dot.keep { color: var(--keep); } .tile .badge-dot.reject { color: var(--reject); }
-.tile .stars { position: absolute; top: 4px; right: 4px; font-size: 10px; color: var(--accent); background: var(--overlay); border-radius: 4px; padding: 1px 4px; }
 .tile .pin { position: absolute; bottom: 4px; right: 4px; font-size: 10px; color: var(--accent-fg); background: var(--accent); border-radius: 4px; padding: 1px 5px; font-weight: 700; }
 .tile .missing { position: absolute; inset: 0; display: grid; place-items: center; color: var(--reject); font-size: 11px; }
 .cat-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--fg3); text-align: center; }
@@ -76,8 +72,6 @@
 .verbs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
 .verbs button { font-size: 12px; padding: 4px 6px; }
 .verbs button kbd { float: right; }
-.stars-edit button { background: transparent; border: none; padding: 0 2px; min-height: 0; font-size: 16px; color: var(--fg3); }
-.stars-edit button.on { color: var(--accent); }
 pre.json { font: var(--mono); background: var(--bg0); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px; max-height: 320px; overflow: auto; white-space: pre-wrap; margin: 0; }
 .lin-list button { display: flex; gap: 8px; align-items: center; width: 100%; text-align: left; background: transparent; border-color: transparent; }
 .lin-list img { width: 40px; height: 26px; object-fit: cover; border-radius: 3px; background: var(--bg3); }
@@ -151,11 +145,6 @@ button.danger.armed { background: var(--error); color: var(--accent-fg); border-
 .insp .insp-thumb { margin-bottom: 0; cursor: zoom-in; }
 .insp .stack { position: relative; height: 150px; }
 .insp .stack img { position: absolute; left: 20px; top: 8px; width: 210px; height: 118px; object-fit: cover; border-radius: 4px; background: var(--media-bg); box-shadow: 0 3px 10px var(--shadow); border: 2px solid var(--bg1); }
-.judge { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.judge .segmented button { padding: 3px 10px; min-height: 28px; }
-.judge .segmented button.active.keep { background: var(--keep-bg); color: var(--keep); }
-.judge .segmented button.active.reject { background: var(--reject-bg); color: var(--reject-fg); }
-.judge .stars-edit button { font-size: 18px; }
 .isec { display: flex; flex-direction: column; gap: 6px; }
 .isec.fold { border-top: 1px solid var(--line); padding-top: 8px; }
 .isec-head { display: flex; align-items: center; justify-content: space-between; min-height: 18px; }
@@ -244,10 +233,6 @@ button.link:hover { text-decoration: underline; background: transparent; }
 .pitem img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 2px; pointer-events: none; }
 .pitem.selected, .pcard.selected { outline: 2px solid var(--accent); outline-offset: 2px; }
 .pitem.dim { opacity: .28; }
-.pitem.reject img { opacity: .5; }
-.pitem .marks { position: absolute; left: 4px; top: 4px; display: flex; gap: 3px; pointer-events: none; }
-.pitem .marks i { font-style: normal; font-size: 11px; padding: 0 5px; border-radius: 4px; background: var(--overlay); }
-.pitem .marks .k { color: var(--keep); } .pitem .marks .r { color: var(--reject); } .pitem .marks .s { color: var(--accent); }
 .pitem .handle, .pcard .handle { position: absolute; right: -7px; bottom: -7px; width: 12px; height: 12px; background: var(--accent); border: 2px solid var(--bg0); border-radius: 2px; cursor: nwse-resize; }
 .pcard { padding: 8px; display: flex; flex-direction: column; gap: 6px; background: var(--bg2); border: 1px solid var(--line2); border-radius: 8px; box-shadow: 0 6px 18px var(--shadow-strong); cursor: pointer; }
 .pcard .fan { position: relative; flex: 1; min-height: 0; }

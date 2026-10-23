@@ -169,7 +169,7 @@ describe('D32 command audit', () => {
     expect(at('stage')).toEqual(expect.arrayContaining(['stage.shot.passes', 'anim.play', 'anim.setIn', 'anim.nextKey', 'anim.level.performance', 'anim.level.final']))
     expect(at('stage').filter((id) => !id.startsWith('stage.') && !shared(id))).toEqual([])
     // Performance: the animate scope but Final's
-    expect(at('animate')).toEqual(expect.arrayContaining(['anim.run', 'anim.play', 'anim.keep', 'anim.level.final']))
+    expect(at('animate')).toEqual(expect.arrayContaining(['anim.run', 'anim.play', 'anim.variations', 'anim.level.final']))
     expect(at('animate').filter((id) => id.startsWith('anim.final.'))).toEqual([])
     expect(at('generate')).toEqual(commands.commandsFor('generate').map((c) => c.id))   // a suite without a reach: its own scope
     // a reach joins scopes, and its key hook answers with the first match: a chord two of them shared would hide the second

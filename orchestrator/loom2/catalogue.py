@@ -26,14 +26,13 @@ from .fsio import StateError, _tmp_for, atomic_copy, atomic_move, atomic_write_j
 from .workspace import Workspace
 
 ASSET_SCHEMA_VERSION = 2                     # D66: `origin` (a version-1 manifest loads with none)
-INDEX_SCHEMA_VERSION = 2
+INDEX_SCHEMA_VERSION = 3                     # D122: no `state` / `rating` columns (an older index is dropped and rebuilt)
 log = logging.getLogger(__name__)
 
 AssetKind = Literal["image", "video", "mask", "document-render", "mesh", "audio"]     # mesh: P18 (D84), a GLB; audio: CN2 (D87), a WAV master
-AssetState = Literal["none", "keep", "reject"]
 GroupMode = Literal["none", "batch", "lineage", "session", "model"]
-Folder = Literal["all", "unprocessed", "today", "last_session", "images", "clips", "documents", "imported", "rejected", "trash"]
-Sort = Literal["created_desc", "created_asc", "rating_desc", "model", "size_desc"]
+Folder = Literal["all", "unprocessed", "today", "last_session", "images", "clips", "documents", "imported", "trash"]   # D122: no Rejected
+Sort = Literal["created_desc", "created_asc", "model", "size_desc"]                  # D122: no rating sort
 
 
 class AssetRecord(BaseModel):
@@ -64,8 +63,6 @@ class AssetRecord(BaseModel):
     timings: dict = Field(default_factory=dict)
     compiled_graph_hash: str | None = None
     variant: str = "full"
-    state: AssetState = "none"
-    rating: int = 0
     tags: list[str] = Field(default_factory=list)
     collection_ids: list[str] = Field(default_factory=list)
     duplicate_of: str | None = None             # D34: a copy made with Duplicate (not a lineage edge)
@@ -77,6 +74,12 @@ class AssetRecord(BaseModel):
     origin: JobOrigin | None = None             # D66: the job's origin, copied at ingest (lineage at write time)
 
 
+def culled_filter(f: dict) -> bool:
+    """D122: a pre-D34 smart collection's filter on the culling that is gone (a state, a rating, the Rejected folder, the rating sort) —
+    it matches nothing now (the collection keeps its name)."""
+    return f.get("state") not in (None, "all") or bool(f.get("rating_min")) or f.get("folder") == "rejected" or f.get("sort") == "rating_desc"
+
+
 GROUP_KEY = {"batch": "COALESCE(batch_id, job_id, id)", "lineage": "COALESCE(root_id, id)", "session": "COALESCE(session_id, '')", "model": "COALESCE(model_id, '')"}
 
 
@@ -84,9 +87,7 @@ class AssetQuery(BaseModel):
     folder: Folder = "all"
     kind: AssetKind | None = None
     suite: str | None = None
-    state: AssetState | Literal["all"] = "all"
     model_id: str | None = None
-    rating_min: int = 0
     tags_any: list[str] = Field(default_factory=list)
     tags_all: list[str] = Field(default_factory=list)
     has_document: bool | None = None
@@ -144,7 +145,7 @@ class CollectionRecord(BaseModel):
 _DDL = """
 CREATE TABLE IF NOT EXISTS assets (
   id TEXT PRIMARY KEY, kind TEXT, path TEXT, w INTEGER, h INTEGER, aspect REAL, frames INTEGER, created_at TEXT, job_id TEXT, batch_id TEXT,
-  session_id TEXT, root_id TEXT, model_id TEXT, seed INTEGER, prompt_text TEXT, suite TEXT, state TEXT, rating INTEGER, tags TEXT,
+  session_id TEXT, root_id TEXT, model_id TEXT, seed INTEGER, prompt_text TEXT, suite TEXT, tags TEXT,
   has_document INTEGER DEFAULT 0, trashed_at TEXT, bytes INTEGER, thumb_status TEXT, manifest TEXT
 );
 CREATE INDEX IF NOT EXISTS assets_created ON assets(created_at DESC, id DESC);
@@ -252,7 +253,7 @@ class Catalogue:
         with self._lock:
             # an index from an older schema is dropped and rebuilt from the sidecars (the files are the truth)
             cols = {r[1] for r in self._db.execute("PRAGMA table_info(assets)").fetchall()}
-            stale = bool(cols) and "root_id" not in cols
+            stale = bool(cols) and ("root_id" not in cols or "state" in cols)      # D122: the columns state / rating went (index schema 3)
             if stale:
                 self._db.executescript("DROP TABLE IF EXISTS assets; DROP TABLE IF EXISTS lineage; DROP TABLE IF EXISTS assets_fts; DROP TABLE IF EXISTS meta;")
             self._db.executescript(_DDL)
@@ -389,9 +390,9 @@ class Catalogue:
                 return
             self._db.execute(
                 "INSERT OR REPLACE INTO assets (id, kind, path, w, h, aspect, frames, created_at, job_id, batch_id, session_id, root_id, model_id, seed, prompt_text,"
-                " suite, state, rating, tags, has_document, trashed_at, bytes, thumb_status, manifest) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " suite, tags, has_document, trashed_at, bytes, thumb_status, manifest) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (rec.id, rec.kind, rec.path, rec.w, rec.h, aspect, rec.frames, rec.created_at, rec.job_id, rec.batch_id, rec.session_id, rec.root_id, rec.model_id,
-                 rec.seed, rec.prompt_text, rec.suite, rec.state, rec.rating, json.dumps(rec.tags), int(rec.has_document), rec.trashed_at, rec.bytes, rec.thumb_status,
+                 rec.seed, rec.prompt_text, rec.suite, json.dumps(rec.tags), int(rec.has_document), rec.trashed_at, rec.bytes, rec.thumb_status,
                  json.dumps(rec.model_dump(), default=str)))
             if self.fts:
                 text = " ".join(x for x in (rec.prompt_text or "", _flatten_text(rec.prompt_json), " ".join(rec.tags), rec.model_id or "", str(rec.seed or "")) if x)
@@ -453,18 +454,12 @@ class Catalogue:
             where.append("(kind = 'document-render' OR has_document = 1)")
         elif q.folder == "imported":
             where.append("suite = 'import'")
-        elif q.folder == "rejected":
-            where.append("state = 'reject'")
         if q.kind:
             where.append("kind = ?"); args.append(q.kind)
         if q.suite:
             where.append("suite = ?"); args.append(q.suite)
-        if q.state != "all":
-            where.append("state = ?"); args.append(q.state)
         if q.model_id:
             where.append("model_id = ?"); args.append(q.model_id)
-        if q.rating_min > 0:
-            where.append("rating >= ?"); args.append(q.rating_min)
         for t in q.tags_all:
             where.append("tags LIKE ?"); args.append(f'%"{t}"%')
         if q.tags_any:
@@ -513,7 +508,7 @@ class Catalogue:
     def _order(sort: Sort) -> tuple[str, str]:
         return {
             "created_desc": ("created_at DESC, id DESC", "<"), "created_asc": ("created_at ASC, id ASC", ">"),
-            "rating_desc": ("rating DESC, created_at DESC, id DESC", "<"), "model": ("model_id IS NULL, model_id ASC, created_at DESC, id DESC", "<"),
+            "model": ("model_id IS NULL, model_id ASC, created_at DESC, id DESC", "<"),
             "size_desc": ("bytes DESC, created_at DESC, id DESC", "<"),
         }[sort]
 
@@ -551,8 +546,8 @@ class Catalogue:
         if col is None:
             return []
         where, args = self._where(q)
-        sql = (f"WITH f AS (SELECT {col} AS k, id, rating, created_at, model_id, prompt_text FROM assets WHERE {where}), "
-               "r AS (SELECT k, id, model_id, prompt_text, ROW_NUMBER() OVER (PARTITION BY k ORDER BY rating DESC, created_at ASC) AS rn FROM f), "
+        sql = (f"WITH f AS (SELECT {col} AS k, id, created_at, model_id, prompt_text FROM assets WHERE {where}), "                       # D122: the cover is the first made
+               "r AS (SELECT k, id, model_id, prompt_text, ROW_NUMBER() OVER (PARTITION BY k ORDER BY created_at ASC, id ASC) AS rn FROM f), "
                "g AS (SELECT k, COUNT(*) AS n, MIN(created_at) AS first_c, MAX(created_at) AS last_c FROM f GROUP BY k) "
                "SELECT g.k, g.n, g.first_c, g.last_c, r.id AS cover, r.model_id, r.prompt_text AS prompt FROM g JOIN r ON r.k = g.k AND r.rn = 1 ORDER BY g.last_c DESC")
         with self._lock:
@@ -567,7 +562,7 @@ class Catalogue:
 
     def counts(self) -> dict[str, int]:
         out: dict[str, int] = {}
-        for folder in ("all", "unprocessed", "today", "last_session", "images", "clips", "documents", "imported", "rejected", "trash"):
+        for folder in ("all", "unprocessed", "today", "last_session", "images", "clips", "documents", "imported", "trash"):
             where, args = self._where(AssetQuery(folder=folder))  # type: ignore[arg-type]
             with self._lock:
                 out[folder] = self._db.execute(f"SELECT COUNT(*) FROM assets WHERE {where}", args).fetchone()[0]
@@ -596,7 +591,7 @@ class Catalogue:
         rec = self.get(asset_id)
         if rec is None:
             return None
-        allowed = {"state", "rating", "tags", "collection_ids", "has_document"}
+        allowed = {"tags", "collection_ids", "has_document"}                  # D122: no state / rating
         data = rec.model_dump()
         for k, v in changes.items():
             if k in allowed:
@@ -730,7 +725,8 @@ class Catalogue:
         out = []
         for r in rows:
             rec = CollectionRecord(id=r["id"], name=r["name"], kind=r["kind"], filter=json.loads(r["filter"]) if r["filter"] else None, created_at=r["created_at"], updated_at=r["updated_at"])
-            rec.count = counts.get(rec.id, 0) if rec.kind == "manual" else self.list(AssetQuery(**(rec.filter or {}), limit=1)).total or 0
+            rec.count = (counts.get(rec.id, 0) if rec.kind == "manual" else 0 if culled_filter(rec.filter or {})
+                         else self.list(AssetQuery(**(rec.filter or {}), limit=1)).total or 0)
             out.append(rec)
         return out
 
@@ -750,8 +746,8 @@ class Catalogue:
             new_kind = kind if kind is not None else row["kind"]
             new_filter = json.dumps(filter_) if filter_ is not None else row["filter"]
             if new_kind == "manual" and row["kind"] == "smart":          # convert smart → manual: freeze the members
-                q = AssetQuery(**(json.loads(row["filter"]) if row["filter"] else {}), limit=2000)
-                for a in self.list(q).items:
+                f = json.loads(row["filter"]) if row["filter"] else {}
+                for a in ([] if culled_filter(f) else self.list(AssetQuery(**f, limit=2000)).items):
                     self._db.execute("INSERT OR IGNORE INTO collection_assets VALUES (?,?,?)", (cid, a.id, utc_now()))
                 new_filter = None
             self._db.execute("UPDATE collections SET name=?, kind=?, filter=?, updated_at=? WHERE id=?", (new_name, new_kind, new_filter, utc_now(), cid))

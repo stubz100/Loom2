@@ -3,7 +3,7 @@
 // fresh page and picks its own assets; they share one project (global-setup.ts), so none relies on another's leftovers.
 import { api, centre, contextChoose, env, expect, openApp, openCatalogue, test, thumbsLoaded, tiles } from './fixtures'
 
-interface AssetLite { id: string; state: string; job_id: string | null }
+interface AssetLite { id: string; job_id: string | null }
 interface Group { id: string; name: string; items: { kind: string; id: string }[] }
 
 test('open the project: the Catalogue grid shows tiles and their thumbnails load', async ({ page }) => {
@@ -33,21 +33,24 @@ test('open the project: the Catalogue grid shows tiles and their thumbnails load
   await expect(page.locator('.modal.models-sheet')).toHaveCount(0)
 })
 
-test('Keep / Reject / Clear through the tile context menu change the tile and the asset', async ({ page }) => {
+test('no keep / reject and no ratings (D122): not in the tile menu, the Inspector, the filters, the sort or the asset', async ({ page }) => {
   await openApp(page, { suite: 'catalogue' })
   const tile = tiles(page).nth(3)
   const id = (await tile.getAttribute('data-id'))!
-  await contextChoose(page, tile, 'Keep')
-  await expect(tile.locator('.badge-dot.keep')).toBeVisible()
-  await expect(tile).not.toHaveClass(/\breject\b/)
-  await expect.poll(async () => (await api<AssetLite>('GET', `/assets/${id}`)).state).toBe('keep')
-  await contextChoose(page, tile, 'Reject')
-  await expect(tile).toHaveClass(/\breject\b/)
-  await expect(tile.locator('.badge-dot.reject')).toBeVisible()
-  await expect.poll(async () => (await api<AssetLite>('GET', `/assets/${id}`)).state).toBe('reject')
-  await contextChoose(page, tile, 'Clear keep / reject')
-  await expect(tile.locator('.badge-dot.keep, .badge-dot.reject')).toHaveCount(0)
-  await expect.poll(async () => (await api<AssetLite>('GET', `/assets/${id}`)).state).toBe('none')
+  await tile.click({ button: 'right' })
+  const items = page.locator('.ctx-menu button.item')
+  await expect(items.filter({ hasText: /^Tag…/ })).toHaveCount(1)
+  for (const gone of [/^Keep/, /^Reject/, /^Clear keep/, /^Rate/]) await expect(items.filter({ hasText: gone })).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await tile.click()
+  await expect(page.locator('.insp')).toBeVisible()
+  await expect(page.locator('.insp .judge, .insp .stars-edit')).toHaveCount(0)
+  await expect(page.locator('.tile .stars, .tile .badge-dot.keep, .tile .badge-dot.reject, .tile.reject')).toHaveCount(0)
+  await page.keyboard.press('k')                                                         // K and X are free keys in the Catalogue now
+  await page.keyboard.press('x')
+  const a = await api<Record<string, unknown>>('GET', `/assets/${id}`)
+  expect('state' in a || 'rating' in a).toBe(false)
+  await expect(api('GET', '/assets?sort=rating_desc')).rejects.toThrow(/422/)
 })
 
 test('drag a tile onto a group in Places with the mouse: it moves onto that page', async ({ page }) => {
@@ -262,8 +265,9 @@ test('the loupe is the send-to hub (D71): every verb on its bar; narrow, the sec
   await tiles(page).nth(7).dblclick()
   const hub = page.locator('.loupe .hub')
   await expect(hub).toBeVisible()
-  for (const label of ['Keep', 'Reject', 'Rate', 'Edit', 'Reference', 'Animate', 'Re-run (same seed)', 'Variations (new seeds)', 'Duplicate', 'Move to group', 'Show lineage', 'Reveal in folder', 'More'])
+  for (const label of ['Edit', 'Reference', 'Animate', 'Re-run (same seed)', 'Variations (new seeds)', 'Duplicate', 'Move to group', 'Show lineage', 'Reveal in folder', 'More'])
     await expect(hub.getByRole('button', { name: label, exact: true })).toBeVisible()
+  for (const gone of ['Keep', 'Reject', 'Rate']) await expect(hub.getByRole('button', { name: gone, exact: true })).toHaveCount(0)   // D122
   await hub.getByRole('button', { name: 'Animate', exact: true }).click()               // a press menu: click opens it
   await expect(page.locator('.ctx-menu button.item', { hasText: 'Use as the end frame' })).toBeVisible()
   await hub.getByRole('button', { name: 'Animate', exact: true }).click()               // a second press on the button closes it (Esc would close the loupe too)
@@ -293,22 +297,22 @@ test('quick actions (D71): "Select subject" in the Inspector reaches Edit with A
   await expect.poll(() => editorTool(page), { timeout: 30_000 }).toMatchObject({ tool: 'ai', op: 'upscale' })
 })
 
-test('remappable keys (D72): Keep to G is refused (Cycle grouping has it); Keep to J — menu, tooltip and help show J, J keeps, K does not, it survives a reload', async ({ page }) => {
+test('remappable keys (D72): Pin for compare to G is refused (Cycle grouping has it); to J — menu, tooltip and help show J, J pins, C does not, it survives a reload', async ({ page }) => {
   await openApp(page, { suite: 'catalogue' })
   const openKeys = async () => {
     await page.locator('nav.rail').getByRole('button', { name: 'Settings…', exact: true }).click()
-    const row = page.locator('.keys-row[data-cmd="cat.keep"]')
+    const row = page.locator('.keys-row[data-cmd="cat.pin"]')
     await row.scrollIntoViewIfNeeded()
     return row
   }
   const closeSettings = () => page.locator('.modal-backdrop').click({ position: { x: 4, y: 4 } })
   let row = await openKeys()
-  await expect(row.locator('.keys-chord')).toHaveText('K')
+  await expect(row.locator('.keys-chord')).toHaveText('C')
   await row.locator('.keys-chord').click()
   await expect(row.locator('.keys-chord')).toHaveText('press a key…')
   await page.keyboard.press('g')                                                         // the plan's example: G is Cycle grouping's — refused, with its name
   await expect(row.locator('.keys-note.error')).toContainText('“Cycle grouping”')
-  await expect(row.locator('.keys-chord')).toHaveText('K')
+  await expect(row.locator('.keys-chord')).toHaveText('C')
   await row.locator('.keys-chord').click()
   await page.keyboard.press('j')
   await expect(row.locator('.keys-chord')).toHaveText('J')
@@ -316,24 +320,23 @@ test('remappable keys (D72): Keep to G is refused (Cycle grouping has it); Keep 
   await closeSettings()
 
   const [a, b] = [tiles(page).nth(10), tiles(page).nth(11)]
-  const [ida, idb] = [(await a.getAttribute('data-id'))!, (await b.getAttribute('data-id'))!]
-  for (const id of [ida, idb]) await api('PATCH', `/assets/${id}`, { state: 'none' })      // arranged: the synthetic project gives some tiles a state
   await a.click({ button: 'right' })                                                     // the tile menu shows J
-  await expect(page.locator('.ctx-menu button.item', { hasText: /^Keep/ }).locator('kbd')).toHaveText('J')
+  await expect(page.locator('.ctx-menu button.item', { hasText: /^Pin for compare/ }).locator('kbd')).toHaveText('J')
   await a.click()                                                                         // closes the menu and selects the tile (Esc would clear it)
   await expect(page.locator('.ctx-menu')).toHaveCount(0)
-  await a.dblclick()                                                                      // the loupe hub's Keep button: its tooltip says J
-  await expect(page.locator('.loupe .hub button[aria-label="Keep"]')).toHaveAttribute('title', 'Keep (J)')
-  await page.keyboard.press('j')                                                          // J keeps
-  await expect.poll(async () => (await api<AssetLite>('GET', `/assets/${ida}`)).state).toBe('keep')
+  await a.dblclick()                                                                      // the loupe hub's Pin button: its tooltip says J
+  await expect(page.locator('.loupe .hub button[aria-label="Pin for compare"]')).toHaveAttribute('title', 'Pin for compare (J)')
+  await page.keyboard.press('j')                                                          // J pins
+  await expect(page.locator('.loupe .hub button[aria-label="Unpin"]')).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(page.locator('.loupe')).toHaveCount(0)
+  await expect(a.locator('.pin')).toHaveText('C1')
   await b.click()
-  await page.keyboard.press('k')                                                          // K does nothing now
+  await page.keyboard.press('c')                                                          // C does nothing now
   await page.waitForTimeout(500)
-  expect((await api<AssetLite>('GET', `/assets/${idb}`)).state).not.toBe('keep')
-  await page.keyboard.press('?')                                                          // help lists Keep with J
-  await expect(page.locator('.cmd-help .row', { hasText: /^Keep/ }).first().locator('kbd')).toHaveText('J')
+  await expect(b.locator('.pin')).toHaveCount(0)
+  await page.keyboard.press('?')                                                          // help lists Pin for compare with J
+  await expect(page.locator('.cmd-help .row', { hasText: /^Pin for compare/ }).first().locator('kbd')).toHaveText('J')
   await page.keyboard.press('Escape')
 
   await page.reload()                                                                     // a restart keeps it
@@ -341,8 +344,8 @@ test('remappable keys (D72): Keep to G is refused (Cycle grouping has it); Keep 
   row = await openKeys()
   await expect(row.locator('.keys-chord')).toHaveText('J')
   await expect(row).toHaveClass(/changed/)
-  await row.getByRole('button', { name: 'Reset the key of Keep' }).click()
-  await expect(row.locator('.keys-chord')).toHaveText('K')
+  await row.getByRole('button', { name: 'Reset the key of Pin for compare' }).click()
+  await expect(row.locator('.keys-chord')).toHaveText('C')
 })
 
 test('@mentions (D73): "@hero walks into @tavern" — both groups give references in the preview, and the job records both at their revisions', async ({ page }) => {
@@ -432,10 +435,9 @@ test('a new angle (P14, D82; a sheet since D90): "New angle" on a tile opens the
   const job = (await jobOf())!
   expect(job.recipe).toMatchObject({ kind: 'reangle', move: 'wide' })
   expect(job.result?.asset_ids).toHaveLength(1)
-  const newest = await api<AssetLite & { parents: string[]; lineage_kind: string | null; state: string }>('GET', `/assets/${job.result!.asset_ids![0]}`)
+  const newest = await api<AssetLite & { parents: string[]; lineage_kind: string | null }>('GET', `/assets/${job.result!.asset_ids![0]}`)
   expect(newest.parents).toEqual([srcId])                                                               // lineage: the source …
-  expect(newest.lineage_kind).toBe('reangle')
-  expect(newest.state).toBe('none')                                                                     // … it landed in Unprocessed
+  expect(newest.lineage_kind).toBe('reangle')                                                           // … it landed in Unprocessed
   await expect.poll(async () => (await api<Record<string, number>>('GET', '/assets/counts')).unprocessed ?? 0, { timeout: 10_000 }).toBeGreaterThanOrEqual(before + 1)
   const edges = await api<{ parents: { from_id: string; kind: string }[] }>('GET', `/lineage/${newest.id}`)
   expect(edges.parents.map((p) => [p.from_id, p.kind])).toEqual([[srcId, 'reangle']])                   // … and the edge kind
@@ -1144,7 +1146,7 @@ test('a world (17 / SY0, D85): the Story suite\'s World tab adds a style and a l
   expect(newest.prompt_text).toContain('a courier on a rooftop at dawn. ink and wash storyboard, loose brush')
 })
 
-test('a cast (17 / SY1, D85): "Make a character…" on a tile opens Story · Cast with the image as the hero; Expand says its cost and queues one fake-engine job per cell onto the candidates page; keep fills the coverage grid; Lock makes the album refuse; @name resolves to the version', async ({ page }) => {
+test('a cast (17 / SY1, D85): "Make a character…" on a tile opens Story · Cast with the image as the hero; Expand says its cost and queues one fake-engine job per cell onto the candidates page; adding to the reference set fills the coverage grid; Lock makes the album refuse; @name resolves to the version', async ({ page }) => {
   test.setTimeout(150_000)                                                             // ~18 fake-engine jobs on the CI runners
   const name = `Mara ${Date.now().toString(36)}`                                       // unique: the project is reused between runs
   await openApp(page, { suite: 'catalogue' })
@@ -1199,7 +1201,7 @@ test('a cast (17 / SY1, D85): "Make a character…" on a tile opens Story · Cas
   await page.locator('nav.tabs button.tab', { hasText: /^Story/ }).click()               // back to the character's page
   await expect(page.locator('.cast-page h2')).toContainText(name)
   await expect(page.locator('.cand-card')).toHaveCount(r.cells)                       // the page followed the group.changed events
-  // keep one with the mouse (the card's ✓), reject one through the context menu: the grid gains a cell, the card dims
+  // add one with the mouse (the card's ✓), another through its right-click (D122: no Reject there): the grid gains a cell
   const first = page.locator('.cand-card').first()
   const keptId = (await first.getAttribute('data-id'))!
   await first.hover()
@@ -1208,14 +1210,17 @@ test('a cast (17 / SY1, D85): "Make a character…" on a tile opens Story · Cas
   await expect(page.locator('.cov-grid td.one, .cov-grid td.full')).toHaveCount(1)
   expect((await api<{ group: { items: { id: string }[] } }>('GET', `/groups/${gid}`)).group.items.map((i) => i.id)).toContain(keptId)
   const second = page.locator('.cand-card').first()
-  await contextChoose(page, second, 'Reject')
-  await expect(second).toHaveClass(/\breject\b/)
+  const secondId = (await second.getAttribute('data-id'))!
+  await second.click({ button: 'right' })
+  await expect(page.locator('.ctx-menu button.item', { hasText: /^Reject/ })).toHaveCount(0)
+  await page.locator('.ctx-menu button.item', { hasText: 'Add to the reference set' }).click()
+  await expect(page.locator('.cand-card')).toHaveCount(r.cells - 2)
+  await expect(page.locator('.cand-card button[aria-label="reject"]')).toHaveCount(0)
   // LT2: four more references of the same shot size through the API (training needs 4; the Curate step stays open — one row of four)
   const keptShot = cands.find((a) => a.id === keptId)?.params.coverage_cell?.shot
-  const rejectedId = (await second.getAttribute('data-id'))!
-  const more = cands.filter((a) => a.id !== keptId && a.id !== rejectedId).sort((a, b) => Number(b.params.coverage_cell?.shot === keptShot) - Number(a.params.coverage_cell?.shot === keptShot)).slice(0, 4)
-  await api('POST', `/story/profiles/${profile.id}/versions/v1/curate`, { asset_ids: more.map((a) => a.id), verdict: 'keep' })
-  await expect(page.locator('.cand-card')).toHaveCount(r.cells - 5)
+  const more = cands.filter((a) => a.id !== keptId && a.id !== secondId).sort((a, b) => Number(b.params.coverage_cell?.shot === keptShot) - Number(a.params.coverage_cell?.shot === keptShot)).slice(0, 4)
+  await api('POST', `/story/profiles/${profile.id}/versions/v1/add`, { asset_ids: more.map((a) => a.id), role: 'reference' })
+  await expect(page.locator('.cand-card')).toHaveCount(r.cells - 6)
   // the bootstrap strip and the Inspector show the state; Lock through the strip → the album refuses a move on the reference page
   await expect(page.locator('.story-strip .bootstrap .bs-step.done')).toHaveCount(2)  // Cast ✓ · Expand ✓
   await page.locator('.story-strip button[title^="Mark final"]').click()
@@ -2124,6 +2129,31 @@ test('Flatten image (D90 · UI6): the canvas menu\'s Layer ▸ folds a group, a 
   expect((await ed()).layers.map((n) => n.kind)).toEqual(['adjustment', 'group', 'raster'])
   expect(await page.evaluate(() => (window as unknown as { __loom2Editor: { getState: () => { history: { label: string }[] } } }).__loom2Editor.getState().history.at(-1)?.label)).not.toMatch(/solo|visib/i)
   await page.keyboard.press('Escape')
+})
+
+test('an album trains a LoRA (D122): its card\'s right-click opens the sheet with the image count; Train ▶ queues a staged job on the album, the adapter its own', async ({ page }) => {
+  const name = `Neon ${Date.now().toString(36)}`                                                        // unique: the project is reused between runs
+  const g = await api<Group>('POST', '/groups', { name })
+  const free = (await api<{ items: (AssetLite & { kind: string })[] }>('GET', '/assets?folder=unprocessed&limit=40')).items.filter((a) => a.kind === 'image').slice(0, 4)
+  await api('POST', '/groups/move', { items: free.map((a) => ({ kind: 'asset', id: a.id })), to: g.id })
+  await openApp(page, { suite: 'catalogue' })
+  await page.locator('.place-open.album').click()
+  const card = page.locator('.pcard', { hasText: name })
+  await expect(card).toBeVisible()
+  await card.click({ button: 'right' })
+  await page.locator('.ctx-menu button.item', { hasText: 'Train a LoRA on this album…' }).click()
+  const sheet = page.locator('.modal.train-album')
+  await expect(sheet.locator('.head')).toContainText(`Train a LoRA on ${name}`)
+  await expect(sheet.locator('.foot .estimate')).toHaveText('4 images on the album')
+  await sheet.locator('input[aria-label="train steps"]').fill('100')
+  await sheet.locator('input[aria-label="train staged"]').check()
+  await sheet.getByRole('button', { name: 'Train ▶' }).click()
+  await expect(sheet).toHaveCount(0)
+  type TrainJob = { id: string; kind: string; status: string; recipe: { group_id?: string; profile_id?: string | null; name?: string; steps?: number } }
+  const job = async () => (await api<{ items: TrainJob[] }>('GET', '/jobs')).items.find((j) => j.kind === 'train_lora' && j.recipe.group_id === g.id)
+  await expect.poll(async () => (await job())?.status, { timeout: 10_000 }).toBe('staged')
+  expect((await job())!.recipe).toMatchObject({ group_id: g.id, profile_id: null, name, steps: 100 })   // no Cast version holds the album: its own adapter
+  await api('POST', `/jobs/${(await job())!.id}/cancel`)                                                 // the queue left as it was
 })
 
 test('a group\'s "used by" (D92 §4.2): a Cast version\'s reference set says so on its page and in the card\'s Inspector, the link opens Cast, and Delete group… warns', async ({ page }) => {

@@ -1,4 +1,4 @@
-// The Inspector (D34, proto01_design/01 §6e): one scrolling column with collapsible sections instead of tabs — Judge, Tags,
+// The Inspector (D34, proto01_design/01 §6e): one scrolling column with collapsible sections instead of tabs — Tags,
 // Location, Actions, Lineage, Prompt, Details — for one asset, or the bulk subset for several. The single home for the actions
 // on the selection (the strip carries none); ids appear only under Details.
 import { BookOpen, ChevronDown, ChevronRight, Columns2, Copy, ExternalLink, Film, FolderInput, GitBranch, Image, Images, Inbox, Layers, MoreHorizontal, Pencil, Pin, RotateCcw, Shuffle, Trash, Undo, Ungroup, UserRoundPlus, Wand2, X } from 'lucide-react'
@@ -74,21 +74,6 @@ function CmdBtn({ id, icon, label }: { id: string; icon?: ReactNode; label?: str
 
 function Btn({ icon, label, run, disabled, danger, title }: { icon?: ReactNode; label: string; run: (e: React.MouseEvent) => void; disabled?: boolean; danger?: boolean; title?: string }) {
   return <button className={`ibtn${danger ? ' danger' : ''}`} disabled={disabled} title={title ?? label} onClick={run}>{icon}<span>{label}</span></button>
-}
-
-function Judge({ ids, a }: { ids: string[]; a?: Asset }) {
-  const c = useCat()
-  const state = a?.state, rating = a?.rating ?? 0
-  return (
-    <div className="judge">
-      <div className="segmented" role="group" aria-label="Keep or reject">
-        <button className={state === 'keep' ? 'active keep' : ''} onClick={() => void c.setState(ids, 'keep')} title="Keep (K)">✓ Keep</button>
-        <button className={state === 'reject' ? 'active reject' : ''} onClick={() => void c.setState(ids, 'reject')} title="Reject (X)">✗ Reject</button>
-        <button className={state === 'none' ? 'active' : ''} onClick={() => void c.setState(ids, 'none')} title="Clear (U)" aria-label="Clear keep or reject">○</button>
-      </div>
-      <span className="stars-edit" aria-label={a ? `Rating ${rating} of 5` : 'Rate all'}>{[1, 2, 3, 4, 5].map((n) => <button key={n} className={rating >= n ? 'on' : ''} title={`${n} star${n > 1 ? 's' : ''} (${n})`} onClick={() => void c.setRating(ids, rating === n && a ? 0 : n)}>★</button>)}</span>
-    </div>
-  )
 }
 
 function Tags({ ids, shared, recs }: { ids: string[]; shared: string[]; recs: Asset[] }) {
@@ -234,7 +219,6 @@ function One({ a }: { a: Asset }) {
       <img className="insp-thumb" src={api.thumbUrl(a.id, 512)} alt="" onDoubleClick={() => runCommand('cat.loupe')} />
       {a.kind === 'audio' && <audio className="insp-audio" controls src={api.assetUrl(a.id)} aria-label="the spoken line" />}
       <div className="meta-line">{a.model_id ?? a.suite} · {a.kind === 'audio' ? `${a.duration_s ?? '?'} s` : `${a.w}×${a.h}`} · {relTime(a.created_at)}</div>
-      <Judge ids={ids} a={a} />
       <Section id="tags" title="Tags"><Tags ids={ids} shared={a.tags} recs={[a]} /></Section>
       <Section id="location" title="Location">
         <div className="loc">{a.trashed_at ? <span className="muted">In Trash{here ? ' (back on its page when restored)' : ''}</span> : here ? <Crumbs path={here.path} /> : <span className="crumbs-i"><Inbox size={13} /><button className="link" onClick={() => open('unprocessed')}>Unprocessed</button></span>}</div>
@@ -283,15 +267,12 @@ function Many({ recs }: { recs: Asset[] }) {
   const shared = recs.length ? recs[0].tags.filter((t) => recs.every((r) => r.tags.includes(t))) : []
   const places = loc ? new Set(ids.map((i) => loc[i]?.group_id ?? '')) : null
   const onePage = places && places.size === 1 && [...places][0] ? [...places][0] : null
-  const same = <T,>(f: (r: Asset) => T) => recs.every((r) => f(r) === f(recs[0])) ? f(recs[0]) : undefined
-  const proxy = { ...recs[0], state: same((r) => r.state) ?? 'mixed', rating: same((r) => r.rating) ?? 0 } as unknown as Asset
   const groupThese = () => void askText({ title: 'Group these', text: `${ids.length} items become a group on this page, keeping their layout.`, placeholder: 'group name' })
     .then((n) => { if (n?.trim() && onePage) void unwrap(http.POST('/groups/{gid}/group', { params: { path: { gid: onePage } }, body: { items: ids.map((id) => ({ kind: 'asset' as const, id })), name: n.trim() } })).then(() => useAlbum.getState().load()) })
   return (
     <div className="insp">
       <div className="stack">{recs.slice(0, 3).reverse().map((r, i) => <img key={r.id} src={api.thumbUrl(r.id, 256)} alt="" style={{ transform: `translate(${(2 - i) * 16}px, ${(2 - i) * 10}px)` }} />)}</div>
       <div className="meta-line"><b>{recs.length} selected</b></div>
-      <Judge ids={ids} a={proxy} />
       <Section id="tags" title="Tags they share"><Tags ids={ids} shared={shared} recs={recs} /></Section>
       <Section id="location" title="Location">
         <div className="loc">{!loc ? '…' : onePage ? <Crumbs path={loc[ids[0]]!.path} /> : places!.size === 1 ? <span className="crumbs-i"><Inbox size={13} />all in Unprocessed</span> : <span className="muted">in {places!.size} places</span>}</div>

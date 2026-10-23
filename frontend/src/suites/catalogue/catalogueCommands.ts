@@ -1,7 +1,7 @@
 // Catalogue commands (08 §3/§6, 07 §3c): one definition each; the grid keys, the strip icons, the inspector verbs
 // and the right-click menus (tile, grid, group header, loupe) all read from here. They act on whichever
 // catalogue store instance is on screen (the Catalogue itself or Generate's results).
-import { ArrowLeftRight, Wand2, Box, Check, Clapperboard, ImageUp, ImagePlus, Inbox as InboxIcon, MapPin, Package, UserRound, ChevronLeft, Eraser, ImageUpscale, Orbit, ChevronRight, Circle, Columns2, Copy, Expand, GitBranch, ExternalLink, Film, FolderInput, FolderPlus, Image, Images, Inbox, Layers, ListTree, Pencil, Pin, PinOff, RotateCcw, Search, Shrink, Shuffle, SquareCheck, SquareX, Star, Tag, Trash, Undo, Upload, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowLeftRight, Wand2, Box, Clapperboard, ImageUp, ImagePlus, Inbox as InboxIcon, MapPin, Package, UserRound, ChevronLeft, Eraser, ImageUpscale, Orbit, ChevronRight, Columns2, Copy, Expand, GitBranch, ExternalLink, Film, FolderInput, FolderPlus, Image, Images, Inbox, Layers, ListTree, Pencil, Pin, PinOff, RotateCcw, Search, Shrink, Shuffle, SquareCheck, SquareX, Tag, Trash, Undo, Upload, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { ApiError, http, unwrap } from '../../api/client'
 import { registerCommands, sep, type MenuItem } from '../../frame/commands'
 import { openWith } from '../../frame/openWith'
@@ -38,10 +38,6 @@ registerCommands([
   { id: 'cat.clearSelection', scope: 'catalogue', label: 'Clear selection', icon: SquareX, keys: 'Escape', placement: ['context', 'strip'], when: hasSel, run: () => cat().clearSelection() },
   { id: 'cat.loupe', scope: 'catalogue', label: 'Open in loupe', icon: Image, keys: 'Enter', placement: ['context', 'inspector', 'strip'], when: () => !!cat().primary, run: () => cat().openLoupe(cat().primary) },
   { id: 'cat.edit', scope: 'catalogue', label: 'Open in Edit', icon: Pencil, keys: 'E', placement: ['context', 'inspector', 'strip'], when: () => !!cat().primary, run: () => { const id = cat().primary!; void import('../edit/editorStore').then((m) => m.useEditor.getState().openFromAsset(id)) } },
-  { id: 'cat.keep', scope: 'catalogue', label: 'Keep', icon: Check, keys: 'K', placement: ['context', 'strip', 'inspector'], when: hasSel, run: () => void cat().setState(ids(), 'keep') },
-  { id: 'cat.reject', scope: 'catalogue', label: 'Reject', icon: X, keys: 'X', placement: ['context', 'strip', 'inspector'], when: hasSel, run: () => void cat().setState(ids(), 'reject') },
-  { id: 'cat.unstate', scope: 'catalogue', label: 'Clear keep / reject', icon: Circle, keys: 'U', placement: ['context', 'strip', 'inspector'], when: hasSel, run: () => void cat().setState(ids(), 'none') },
-  ...[0, 1, 2, 3, 4, 5].map((n) => ({ id: `cat.rate.${n}`, scope: 'catalogue' as const, label: n ? `Rate ${'★'.repeat(n)}` : 'Remove rating', icon: Star, keys: String(n), placement: ['context', 'inspector'] as ['context', 'inspector'], when: hasSel, run: () => void cat().setRating(ids(), n) })),
   { id: 'cat.tag', scope: 'catalogue', label: 'Tag…', icon: Tag, keys: 'T', placement: ['context', 'strip', 'inspector'], when: hasSel, run: () => { if (!useSession.getState().ui.inspectorOpen) useSession.getState().setUi({ inspectorOpen: true }); focusField('insp-tag') } },
   { id: 'cat.reference', scope: 'catalogue', label: 'Use as reference in Image', icon: Images, keys: 'R', placement: ['context', 'inspector', 'strip'], when: hasSel, run: () => { const list = ids(); void gen().then((g) => g.addRefs(list)) } },   // D90 (B12): up to the model's max_refs, one toast for the rest
   { id: 'cat.rerun', scope: 'catalogue', label: 'Re-run (same seed)', icon: RotateCcw, keys: 'Ctrl+R', placement: ['context', 'inspector'], when: () => !!primary()?.params?.recipe, run: () => { const a = primary(); const o = originHere(); if (a) void gen().then((g) => g.rerun(a, o)) } },
@@ -144,7 +140,6 @@ registerCommands([
 ])
 function loupeIndex(): number { const c = cat(); return c.loupe ? c.visibleOrder().indexOf(c.loupe) : -1 }
 
-export const rateMenu = (): MenuItem => ({ label: 'Rate', icon: Star, items: [5, 4, 3, 2, 1, 0].map((n) => ({ cmd: `cat.rate.${n}` })) })
 export const groupMenu = (): MenuItem => ({ label: 'Group by', icon: ListTree, items: [...GROUP_MODES.map(([g, l]): MenuItem => ({ label: l, checked: cat().q.group === g, run: () => void cat().setQuery({ group: g }) })), sep, { cmd: 'cat.groupCycle' }] })   // D90 (C20): G's mouse home
 
 /** "Move to group ▸": every group of the Album, plus a new one (D34). */
@@ -169,7 +164,7 @@ export function tileMenu(): MenuItem[] {
   return [
     { cmd: 'cat.loupe' }, { cmd: 'cat.edit' }, sep,
     moveToMenu(), { cmd: 'cat.toUnprocessed' }, { cmd: 'cat.duplicate' }, { cmd: 'cat.showBatch' }, { cmd: 'cat.lineage' }, sep,
-    { cmd: 'cat.keep' }, { cmd: 'cat.reject' }, { cmd: 'cat.unstate' }, rateMenu(), { cmd: 'cat.tag' }, sep,
+    { cmd: 'cat.tag' }, sep,
     { cmd: 'cat.reference' }, { cmd: 'cat.loadInGenerate' }, { cmd: 'cat.rerun' }, { cmd: 'cat.variations' }, { cmd: 'cat.animate' }, { cmd: 'cat.animateEnd' }, ...(clipTile() ? [{ cmd: 'cat.start.shot' }] : []), sep,
     ...(clipTile() || inTrash() ? [] : [addToCharacterMenu()]),
     ...(clipTile() ? [] : [{ label: 'Start from this image', icon: Image, items: [{ cmd: 'cat.start.removeBg' }, { cmd: 'cat.start.upscale' }, { cmd: 'cat.start.angle' }, { cmd: 'cat.start.mesh' }, sep, { cmd: 'cat.start.character' }, { cmd: 'cat.start.place' }, { cmd: 'cat.start.prop' }] } as MenuItem, sep]),

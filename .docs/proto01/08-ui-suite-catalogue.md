@@ -4,6 +4,8 @@ Status: **implemented — M2 closed 2026-10-05**, extended through M6 (Empty tra
 keyboard-by-row, loupe + compare, and branching derivations were right; virtualisation, thumbnails, video
 tiles and persistent selection state were missing (02 §4b).
 
+**D122 (2026-10-23):** keep / reject and the star ratings are gone — the state toggle, the Rating filter and sort, *show rejected*, K / X / U and 1–5 / 0, and the state / rating editors below are historical; a curated set is an album page (D34).
+
 **Redesigned (2026-10-07, D34, implemented the same day):** the current layout and organisation (Places, filter chips, album pages,
 split Stage, one-column Inspector, lineage view) are specified in
 [`../proto01_design/01-catalogue-inventory.md`](../proto01_design/01-catalogue-inventory.md); this document records the MVP layout

@@ -15,7 +15,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .catalogue import AssetQuery, Catalogue
+from .catalogue import AssetQuery, Catalogue, culled_filter
 from .fsio import StateError, atomic_write_json, new_id, read_json, utc_now
 from .workspace import Workspace
 
@@ -142,6 +142,8 @@ class GroupStore:
                 with self.cat._lock:
                     ids = [r["asset_id"] for r in self.cat._db.execute(
                         "SELECT asset_id FROM collection_assets WHERE collection_id=? ORDER BY added_at", (col.id,)).fetchall()]
+            elif culled_filter(col.filter or {}):
+                ids = []                                                  # D122: a filter on keep / reject or a rating matches nothing now; the name stays
             else:
                 ids = [a.id for a in self.cat.list(AssetQuery(**(col.filter or {}), limit=2000)).items]
             g = GroupRecord(name=col.name)

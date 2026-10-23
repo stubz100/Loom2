@@ -22,7 +22,7 @@ import { type SuiteDef } from '../../frame/suiteRegistry'
 import { byOrder, shortName } from '../../store/modelCaps'
 import { useSession } from '../../store/session'
 import { clipMenu, playerMenu } from './animateCommands'
-import { fmtTime, modelRules, MOTION_CHIPS, useAnimate, visibleClips, type AnimPanel, type ClipFilter } from './animateStore'
+import { fmtTime, modelRules, MOTION_CHIPS, useAnimate, visibleClips, type AnimPanel } from './animateStore'
 import { ClipFoot, StageClipCard, useStageLoad } from '../stage/StageParts'
 import { ShotHead } from '../stage/ShotStepper'
 import { FinalSection, FinalShotFoot } from '../stage/FinalPanel'
@@ -218,34 +218,30 @@ function PresetsTab() {
   )
 }
 
-// D90 (02 §9, A16): the clips not in the Trash, filtered by words of the prompt and the keep / reject state; a row's right-click has the
+// D90 (02 §9, A16): the clips not in the Trash, filtered by words of the prompt (D122: no keep / reject); a row's right-click has the
 // clip verbs, Move to trash among them (the Catalogue's semantics: Undo in the toast)
-const STATES: { id: ClipFilter['state']; label: string }[] = [{ id: 'all', label: 'all' }, { id: 'keep', label: 'kept' }, { id: 'reject', label: 'rejected' }, { id: 'none', label: 'unmarked' }]
 function ClipsTab() {
   const caps = useSession((s) => s.capabilities)
   const clips = useAnimate((s) => s.clips)
   const current = useAnimate((s) => s.current)
-  const assets = useAnimate((s) => s.assets)
   const live = useAnimate((s) => s.clipLive)
   const filter = useAnimate((s) => s.clipFilter)
   useEffect(() => { void an().loadClipStates() }, [])                     // the states and the Trash may have moved in the Catalogue
-  const shown = useMemo(() => visibleClips(clips, assets, live, filter), [clips, assets, live, filter])
+  const shown = useMemo(() => visibleClips(clips, live, filter), [clips, live, filter])
   const total = live ? clips.filter((c) => !c.asset_id || live[c.asset_id]).length : clips.length
   const [folded, setFolded] = useState<string | null>(null)              // AW3: the clip whose editor its row's second click folded
   return (
     <div className="clip-list">
       <div className="clip-filter">
         <input type="search" value={filter.q} aria-label="search clips" placeholder="search the prompts" onChange={(e) => an().setClipFilter({ q: e.target.value })} />
-        <div className="segmented" aria-label="clip state">{STATES.map((x) => <button key={x.id} className={filter.state === x.id ? 'active' : ''} onClick={() => an().setClipFilter({ state: x.id })}>{x.label}</button>)}</div>
       </div>
       {shown.map((c) => {
-        const a = c.asset_id ? assets[c.asset_id] : undefined
         const on = c.id === current
         return <div key={c.id} className={`clip-item${on ? ' active' : ''}`}>
           <button className={`clip-row${on ? ' active' : ''}`} data-id={c.id} aria-expanded={on ? folded !== c.id : undefined} onContextMenu={(e) => showMenu(e, clipMenu(c.id))}
             onClick={() => { if (on) setFolded(folded === c.id ? null : c.id); else { setFolded(null); an().select(c.id) } }} title={`${c.prompt} — click: in the player, its details under it (again: folded); right-click: its verbs`}>
             {c.asset_id ? <img src={api.thumbUrl(c.asset_id, 256)} alt="" /> : <span />}
-            <span>{c.prompt || '(no prompt)'}<small>{shortName(c.model_id, caps)} · {c.preset} · {c.frames} f @ {c.fps} · seed {c.seed}{a?.state && a.state !== 'none' ? ` · ${a.state}` : ''}</small></span>
+            <span>{c.prompt || '(no prompt)'}<small>{shortName(c.model_id, caps)} · {c.preset} · {c.frames} f @ {c.fps} · seed {c.seed}</small></span>
           </button>
           {on && folded !== c.id && <div className="row-editor clip-editor"><ClipSelection /></div>}{/* AW3 (D121): the clip's editor under its row, as a layer's at Final */}
         </div>
@@ -539,16 +535,14 @@ function Stage() {
 
 // ------------------------------------------------------------------ Inspector (11 §6)
 function ClipTab({ clip }: { clip: Clip }) {
-  const asset = useAnimate((s) => (clip.asset_id ? s.assets[clip.asset_id] : undefined))
   const caps = useSession((s) => s.capabilities?.i2v)
   const facesim = useSession((s) => s.capabilities?.facesim)
   const experimental = useSession((s) => s.capabilities?.experimental)
   const wall = (clip.timings as { wall_s?: number }).wall_s
   return (
     <div>
-      <div className="verbs">{['anim.keep', 'anim.reject', 'anim.variations', 'anim.rerun', 'anim.tryOther', 'anim.toCatalogue', 'anim.trash'].map((id) => <CommandButton key={id} id={id} text />)}</div>
+      <div className="verbs">{['anim.variations', 'anim.rerun', 'anim.tryOther', 'anim.toCatalogue', 'anim.trash'].map((id) => <CommandButton key={id} id={id} text />)}</div>
       <dl className="kv">
-        <dt>state</dt><dd>{asset ? <span className={`badge ${asset.state}`}>{asset.state}</span> : '—'}</dd>
         <dt>model</dt><dd>{caps?.models[clip.model_id]?.label ?? clip.model_id} · {clip.preset}</dd>
         <dt>format</dt><dd>{clip.frames} f @ {clip.fps} fps · {clip.w}×{clip.h} · {(clip.frames / clip.fps).toFixed(1)} s</dd>
         <dt>seed</dt><dd className="mono">{clip.seed}</dd>

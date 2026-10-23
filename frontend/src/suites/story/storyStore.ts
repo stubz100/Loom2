@@ -79,6 +79,8 @@ export interface StoryState {
   loadLoras: () => Promise<void>
   setTrainOpts: (patch: Partial<TrainOpts>) => void
   train: () => Promise<{ job_id: string; trigger: string; model_id: string; staged: boolean } | null>
+  /** D122: a LoRA trained on an album page (a Cast version's reference album trains for that version). */
+  trainAlbum: (gid: string, name: string) => Promise<{ job_id: string; trigger: string; model_id: string; staged: boolean } | null>
   deleteLora: (id: string) => Promise<void>
   useLora: (id: string) => Promise<void>
   requeueTrain: (jobId: string) => Promise<void>
@@ -166,7 +168,8 @@ export interface StoryState {
   newVersion: () => Promise<void>
   lockVersion: () => Promise<void>
   deleteProfile: () => Promise<void>
-  curate: (ids: string[], verdict: 'keep' | 'reject') => Promise<void>
+  /** D122: Cast's Add to the reference set — the candidates move onto the version's album page (nothing is stamped). */
+  addRefs: (ids: string[]) => Promise<void>
   /** D93 (A1): the version's candidates page (made when it has none) — a casting run from Generate lands there. Its id, or null (said). */
   ensureCandidates: (pid: string, vid: string) => Promise<string | null>
   /** D93 (A2) "Add to character ▸": images into a profile's current version as the hero, into the reference set or as candidates — moved
@@ -569,13 +572,13 @@ export const useStory = create<StoryState>()((set, get) => {
       try { await unwrap(http.DELETE('/story/profiles/{pid}', { params: { path: { pid: p.id } } })); set({ profiles: get().profiles.filter((x) => x.id !== p.id) }); get().selectProfile(null) }
       catch (e) { toast(`Delete: ${detail(e)}`) }
     },
-    curate: async (ids, verdict) => {
+    addRefs: async (ids) => {
       const p = get().profile(); const v = get().version(); if (!p || !v || !ids.length) return
       try {
-        await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/curate', { params: { path: { pid: p.id, vid: v.id } }, body: { asset_ids: ids, verdict } }))
+        await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/add', { params: { path: { pid: p.id, vid: v.id } }, body: { asset_ids: ids, role: 'reference' } }))
         set({ picked: get().picked.filter((i) => !ids.includes(i)) })
         await get().loadPages()
-      } catch (e) { toast(`Curate: ${detail(e)}`) }
+      } catch (e) { toast(`Add to the reference set: ${detail(e)}`) }
     },
     loadLoras: async () => {
       try { set({ loras: (await unwrap(http.GET('/story/loras'))).items }) } catch { set({ loras: [] }) }
@@ -592,6 +595,19 @@ export const useStory = create<StoryState>()((set, get) => {
         await get().loadProfiles()
         await useSession.getState().refreshAll()
         toast(r.staged ? `Training ${p.name} ${v.id} queued for later — Run now when the rig is free (trigger ${r.trigger})` : `Training ${p.name} ${v.id} queued (trigger ${r.trigger})`, 'info')
+        return r
+      } catch (e) { toast(`Train: ${detail(e)}`); return null }
+    },
+    trainAlbum: async (gid, name) => {
+      const o = get().trainOpts
+      const caps = useSession.getState().capabilities?.train
+      const model_id = o.model_id ?? caps?.bases.find((b) => b.health !== 'missing')?.model_id ?? null
+      try {
+        const r = await unwrap(http.POST('/groups/{gid}/train', { params: { path: { gid } },
+          body: { model_id, steps: o.steps, rank: o.rank, resolution: o.resolution, name: o.name, setting: o.setting, stage: o.stage } }))
+        await get().loadProfiles()
+        await useSession.getState().refreshAll()
+        toast(r.staged ? `Training on ${name} queued for later — Run now when the rig is free (trigger ${r.trigger})` : `Training on ${name} queued (trigger ${r.trigger})`, 'info')
         return r
       } catch (e) { toast(`Train: ${detail(e)}`); return null }
     },

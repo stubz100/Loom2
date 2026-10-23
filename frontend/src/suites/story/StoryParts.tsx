@@ -2,7 +2,7 @@
 // adders; Stage: the editor over story/world.json (logline, synopsis, styles, the spine, variables); Inspector: the project format (the
 // finalize gate), counts, the selected item's fields (a style's editor: StyleWorld.tsx, D90; a library entry's and a saved panel's:
 // LibraryWorld.tsx, D92). SY1: the Cast tab — Panel: the profiles by class; Strip: the
-// version selector and the bootstrap strip; Stage: the version page (hero, the character sheet — D93 B4, the coverage grid, the candidates with keep / reject);
+// version selector and the bootstrap strip; Stage: the version page (hero, the character sheet — D93 B4, the coverage grid, the candidates and Add to the reference set);
 // Inspector: the profile and the version. Mouse-first (D32): every verb is a button or a menu entry.
 import { Film, ImagePlus, Lock } from 'lucide-react'
 import { Help } from '../../frame/Help'
@@ -52,7 +52,7 @@ function devHook(): Record<string, unknown> {
     // SY1
     loadProfiles: () => sy().loadProfiles(), selectProfile: (id: string | null, v?: string | null) => sy().selectProfile(id, v), loadPages: () => sy().loadPages(),
     createProfile: (name: string, cls: ProfileClass, hero?: string | null, appearance?: string) => sy().createProfile(name, cls, hero, appearance),
-    expand: (preset: string, seeds = 1, tier: 'draft' | 'full' = 'draft') => sy().expand(preset, seeds, tier), curate: (ids: string[], verdict: 'keep' | 'reject') => sy().curate(ids, verdict),
+    expand: (preset: string, seeds = 1, tier: 'draft' | 'full' = 'draft') => sy().expand(preset, seeds, tier), addRefs: (ids: string[]) => sy().addRefs(ids),
     animTest: (pid: string, vid: string, stage = false) => import('./animTest').then((m) => m.runAnimTest(pid, vid, stage)),   // CA0: scripts/ca0_acceptance.py --parts test
     lock: () => sy().lockVersion(), newVersion: () => sy().newVersion(), setStub: (s: string) => sy().setSheet({ appearance: s }), setSheet: (patch: Record<string, unknown>) => sy().setSheet(patch as never),
     train: (opts: Record<string, unknown> = {}) => { sy().setTrainOpts(opts as never); return sy().train() }, loras: () => sy().loras, loadLoras: () => sy().loadLoras(),
@@ -494,20 +494,19 @@ function WorldEditor() {
 function candidateMenu(id: string): MenuItem[] {
   const s = sy()
   if (!s.picked.includes(id)) s.pick(id)
-  return [{ cmd: 'story.cast.keep' }, { cmd: 'story.cast.reject' }, { cmd: 'story.cast.setHero' }, sep, { cmd: 'story.cast.useAsAnimRef' }, { cmd: 'story.cast.useAsAnimRefBack' }, sep, { cmd: 'story.cast.openCandidates' }]
+  return [{ cmd: 'story.cast.addRef' }, { cmd: 'story.cast.setHero' }, sep, { cmd: 'story.cast.useAsAnimRef' }, { cmd: 'story.cast.useAsAnimRefBack' }, sep, { cmd: 'story.cast.openCandidates' }]
 }
 
 function Candidate({ a, picked }: { a: Asset; picked: boolean }) {
   const cell = (a.params as { coverage_cell?: { shot?: string; angle?: string; expression?: string } } | null)?.coverage_cell
   const title = cell ? `${cell.shot ?? ''} · ${cell.angle ?? ''} · ${cell.expression ?? ''}` : a.prompt_text ?? ''
   return (
-    <div className={`cand-card${picked ? ' picked' : ''}${a.state === 'reject' ? ' reject' : ''}${a.state === 'keep' ? ' keep' : ''}`} data-id={a.id} title={title}
+    <div className={`cand-card${picked ? ' picked' : ''}`} data-id={a.id} title={title}
       onClick={(e: ReactMouseEvent) => sy().pick(a.id, e.ctrlKey || e.shiftKey)} onContextMenu={(e) => showMenu(e, candidateMenu(a.id))}>
       <img src={api.thumbUrl(a.id, 256)} alt="" />
       {cell && <span className="cell">{cell.shot} · {cell.angle}</span>}
       <span className="tools">
-        <button className="quiet" title="Add to the reference set" aria-label="add to the reference set" onClick={(e) => { e.stopPropagation(); void sy().curate([a.id], 'keep') }}>✓</button>
-        <button className="quiet" title="Reject" aria-label="reject" onClick={(e) => { e.stopPropagation(); void sy().curate([a.id], 'reject') }}>✕</button>
+        <button className="quiet" title="Add to the reference set" aria-label="add to the reference set" onClick={(e) => { e.stopPropagation(); void sy().addRefs([a.id]) }}>✓</button>
       </span>
     </div>
   )
@@ -600,7 +599,7 @@ function CastPage({ scope }: { scope: 'cast' | 'props' }) {
   const candPage = useStory((s) => s.candPage)
   const picked = useStory((s) => s.picked)
   const caps = useSession((s) => s.capabilities?.story)
-  markUsed('story.cast.keep'); markUsed('story.cast.reject'); markUsed('story.cast.setHero'); markUsed('story.cast.openCandidates'); markUsed('story.cast.openGroup'); markUsed('story.cast.delete')
+  markUsed('story.cast.addRef'); markUsed('story.cast.setHero'); markUsed('story.cast.openCandidates'); markUsed('story.cast.openGroup'); markUsed('story.cast.delete')
   const p = profiles.find((x) => x.id === profileId && inTab(x, scope))
   if (!p) return scope === 'props'
     ? <div className="story-empty"><div>Pick a prop on the left, or make one. A prop is made like a character: its look and reference images first, then its 3D model, which Animate places in the scene. <b>Make a prop…</b> on a Catalogue tile puts the image in as the hero.<div className="quick-cards"><CommandButton id="story.cast.newProp" text /></div></div></div>
@@ -791,7 +790,7 @@ function CastInspector({ scope }: { scope: 'cast' | 'props' }) {
         <div className="verbs"><CommandButton id="story.cast.openGroup" text /><CommandButton id="story.cast.openCandidates" text /></div>
         <TrainingBlock p={p} v={v} />
         {p.cls === 'character' && <VoicesBlock p={p} />}
-        {picked.length > 0 && <><h4>{picked.length} candidate{picked.length === 1 ? '' : 's'} selected</h4><div className="verbs"><CommandButton id="story.cast.keep" text /><CommandButton id="story.cast.reject" text /><CommandButton id="story.cast.setHero" text /></div></>}
+        {picked.length > 0 && <><h4>{picked.length} candidate{picked.length === 1 ? '' : 's'} selected</h4><div className="verbs"><CommandButton id="story.cast.addRef" text /><CommandButton id="story.cast.setHero" text /></div></>}
       </>}
       <div className="verbs"><CommandButton id="story.cast.delete" text /></div>
     </div>

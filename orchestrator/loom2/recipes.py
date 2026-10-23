@@ -404,12 +404,14 @@ class Render(BaseModel):
 
 
 class TrainLora(BaseModel):
-    """18 §3c (LT2, D86): a LoRA trained from a Cast version's reference set — a staged job that runs ai-toolkit in its own venv with the
-    engine stopped (16 GB first); the adapter lands in the project's registry (story/loras/) and on the version's `lora` + `trigger`.
-    `model_id` is the base's roster id (a spec with `recipes.train`; the Cast tab offers /capabilities.train's bases)."""
+    """18 §3c (LT2, D86): a LoRA trained on an album page (D122: every image on it not in the Trash) — a staged job that runs ai-toolkit
+    in its own venv with the engine stopped (16 GB first); the adapter lands in the project's registry (story/loras/) and, with a Cast
+    version (`profile_id` + `version`), on the version's `lora` + `trigger`. `group_id` None is the version's reference album (a recipe
+    queued before D122). `model_id` is the base's roster id (a spec with `recipes.train`; /capabilities.train's bases)."""
     kind: Literal["train_lora"] = "train_lora"
-    profile_id: str
-    version: str
+    group_id: str | None = None                   # D122: the album trained on
+    profile_id: str | None = None                 # the Cast version the adapter goes to; none for an album's own adapter
+    version: str | None = None
     model_id: str
     steps: int = Field(1000, ge=100, le=5000)
     rank: int = Field(16, ge=4, le=128)

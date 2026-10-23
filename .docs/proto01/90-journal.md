@@ -8048,3 +8048,58 @@ The author asked for a review of the state of things, then "record all this and 
   and a raising test client still raises. Each fails with its fix reverted. Under a real uvicorn: the 500 with `access-control-allow-origin`,
   the traceback in the log, `/health` and `/capabilities` served after it. Offline 501 passed (3 new), frontend build clean, e2e 52/52 full.
 - **No rig run:** no graph, recipe or job changed; the preview is the plan a submission would follow.
+
+## 2026-10-23 07:46 — D122 recorded: no keep / reject, no star ratings; training reads an album
+
+- **The author** (2026-10-23): "can you take out the whole keep/reject mechanism throughout the whole app — it is mainly in image, but
+  could be elsewhere also. I also won't need the star ratings"; then, on the trainer's reject filter: "The LoRA trainer could be attached
+  to an album instead."
+- **What it touches** (mapped before the work): the asset record's `state` and `rating`, the index's two columns, the list's filters,
+  sort and *Rejected* folder, the patch; the Catalogue (and Image's results, which are its grid), Animate's clip verbs and filter, Story's
+  Cast (`/curate`'s verdicts: *keep* moved candidates onto the version's reference page and stamped them, *reject* only stamped), the
+  hero / reference role stamping *keep* (story.py), and the trainer, which skipped rejected images on the version's page. The *Unprocessed*
+  folder is D34's (not on a page), not culling, and stays; Edit's `edit.cand.keep` is the AI panel's *Use the shown candidate*, not
+  culling, and stays.
+- **Decided as D122** (decision log): the mechanism goes everywhere; Cast keeps *Add to the reference set* as a plain move; old manifests
+  are not rewritten; a `train_lora` job names its album — the Cast version's reference album by default, any album from its right-click.
+
+## 2026-10-23 08:58 — D122 built: no keep / reject, no star ratings; training reads an album
+
+- **The record and the index:** `AssetRecord` lost `state` and `rating`; `AssetQuery` its `state` / `rating_min`; the folders their
+  *Rejected*, the sorts their `rating_desc` (both now 422); the patch takes tags only. Index schema 3: an index with the old columns is
+  dropped and rebuilt from the manifests. A manifest written before keeps its fields until something else rewrites it (reading never
+  does); a group's cover is the first made where it was the best rated. A pre-D34 smart collection filtered on the culling matches
+  nothing and migrates as an empty group with its name (`catalogue.culled_filter`).
+- **Story:** `/curate` and its `keep` / `reject` are gone — Cast's *Add to the reference set* (`story.cast.addRef`, K) is D93's `/add` with
+  role `reference` (candidates move onto the version's album page); *Reject*, its X and the card's ✕ went; nothing stamps `keep` on a
+  hero or a reference any more.
+- **Training reads an album:** `TrainLora.group_id` (None: the version's reference album, a job queued before); `profile_id` / `version`
+  optional; the set is every image on the page not in the Trash (`trainer.album_images`, the reject filter gone); an album's own adapter
+  is named after it, has no profile (`LoraRecord` schema 2) and no identity check (422 with the reason). New route
+  `POST /groups/{gid}/train` (the album's right-click): a Cast version's reference album trains for that version, any other album for
+  itself. The Cast block's options became `TrainOptions`, shared with the new sheet (`TrainAlbumSheet`, *Train a LoRA on this album…* on a
+  group card's and an album page's right-click); Models › Trained shows *Show the album* for an album's own adapter.
+- **The UI:** the Catalogue (and Image's results) lost Keep / Reject / Clear (K · X · U), Rate 0–5, the Inspector's Judge section, the
+  State and Rating filters and chips, the rating sort (a remembered one falls back to newest), the ✓ ✗ ★ on tiles and page items, the
+  loupe's Keep / Reject / Rate; Animate lost a clip's Keep / Reject (X), the Clips tab's state chips and the clip's state row.
+- **Found by the screenshots:** `LoraRecordOut` still typed `profile_id` / `version` as `str`, so `GET /story/loras` failed once an album's
+  own adapter existed (the same 500 as this morning's preview). Fixed, with a schema check in the album job's test that fails without it.
+- **The author's projects (read only):** stubz001 has two rejected images (`ast_c8c2e00c`, `ast_de93f969`), both on rippley v1's
+  candidates page — they show as ordinary candidates again; the reference album is untouched, so training is not affected. One kept
+  image, no ratings; the other projects have none (synthetic-10k's 8 010 states and 12 440 ratings are the generator's).
+- **Tests:** offline 503 passed (the culling cases rewritten; new: the schema-2 index rebuilt and an old manifest read, an album of its own
+  materialised, trained on the fake trainer and listed, the album route); Vitest 420 + 3 skipped (new: the album sheet; the keymap test's
+  sample ids neutral); e2e 53/53 full and 53/53 open (new: no culling anywhere in the Catalogue; an album trains from its card; the D72
+  remap scenario now on *Pin for compare*; Cast adds through its menu with no Reject); typecheck and build clean, lint 0 errors (79),
+  settings audit, model literals and agents check clean. Scripts: make_synthetic_assets.py, lt_acceptance.py and sy_acceptance.py follow.
+- **No rig run:** no graph, model or job's GPU path changed; the trainer's run is unchanged apart from where its images come from (the
+  fake trainer runs the album path end to end).
+- **Screenshots** (headless Edge on the e2e project, sent to the author):
+
+  | | |
+  | --- | --- |
+  | ![tile menu and Inspector](img/d122-catalogue-tile-menu.jpg) | ![+ Filter](img/d122-catalogue-filters.jpg) |
+  | ![the loupe's bar](img/d122-loupe.jpg) | ![an album's right-click](img/d122-album-card-menu.jpg) |
+  | ![Train a LoRA on this album](img/d122-album-train-sheet.jpg) | ![Cast candidates](img/d122-cast-candidates.jpg) |
+  | ![a candidate's menu](img/d122-cast-candidate-menu.jpg) | ![Animate's Clips](img/d122-animate-clips.jpg) |
+  | ![Models · Trained](img/d122-models-trained.jpg) | ![Image with Lumina 2](img/d122-generate-lumina2.jpg) |

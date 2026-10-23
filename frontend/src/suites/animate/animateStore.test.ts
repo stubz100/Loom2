@@ -1,6 +1,6 @@
 // D68 (ArtCraft P6): Animate's recipe and size rules against a capabilities fixture (D65: geometry comes from the model specs).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Asset, Capabilities, Clip } from '../../api/types'
+import type { Capabilities, Clip } from '../../api/types'
 import { useSession } from '../../store/session'
 import { DEFAULT_PANEL, modelRules, recipeFor, sizeFor, useAnimate, visibleClips, type AnimPanel } from './animateStore'
 
@@ -91,16 +91,12 @@ describe('panel size snapping', () => {
 
 describe('visibleClips (D90 02 §9, A16)', () => {
   const clip = (id: string, prompt: string, asset_id: string | null = `ast_${id}`) => ({ id, prompt, asset_id, model_id: 'vid-geo', seed: 7 }) as unknown as Clip
-  const asset = (id: string, state: string) => ({ id, state }) as unknown as Asset
   const clips = [clip('a', 'she walks to the gate'), clip('b', 'rain on the gate'), clip('c', 'a dog runs'), clip('d', 'no asset yet', null)]
-  const assets = { ast_a: asset('ast_a', 'keep'), ast_b: asset('ast_b', 'reject'), ast_c: asset('ast_c', 'none') }
   const ids = (cs: Clip[]) => cs.map((c) => c.id)
-  it('hides the trashed ones once the live set is known, then filters by words and state', () => {
-    expect(ids(visibleClips(clips, assets, null, { q: '', state: 'all' }))).toEqual(['a', 'b', 'c', 'd'])
-    expect(ids(visibleClips(clips, assets, { ast_a: true, ast_c: true }, { q: '', state: 'all' }))).toEqual(['a', 'c', 'd'])     // b is in the Trash
-    expect(ids(visibleClips(clips, assets, null, { q: 'the GATE', state: 'all' }))).toEqual(['a', 'b'])
-    expect(ids(visibleClips(clips, assets, null, { q: 'gate', state: 'keep' }))).toEqual(['a'])
-    expect(ids(visibleClips(clips, assets, null, { q: '', state: 'none' }))).toEqual(['c', 'd'])                                     // not loaded = unmarked
-    expect(ids(visibleClips(clips, assets, null, { q: 'seed 7 dog', state: 'all' }))).toEqual(['c'])
+  it('hides the trashed ones once the live set is known, then filters by words (D122: no keep / reject)', () => {
+    expect(ids(visibleClips(clips, null, { q: '' }))).toEqual(['a', 'b', 'c', 'd'])
+    expect(ids(visibleClips(clips, { ast_a: true, ast_c: true }, { q: '' }))).toEqual(['a', 'c', 'd'])     // b is in the Trash
+    expect(ids(visibleClips(clips, null, { q: 'the GATE' }))).toEqual(['a', 'b'])
+    expect(ids(visibleClips(clips, null, { q: 'seed 7 dog' }))).toEqual(['c'])
   })
 })

@@ -194,7 +194,7 @@ def main() -> int:
         r = api("POST", f"/story/profiles/{pid}/expand", {"preset": a.preset, "seeds_per_cell": 1, "tier": "draft"})
         jobs = wait_jobs(r["job_ids"])
         cands = list(api("GET", f"/groups/{r['group_id']}")["assets"].values())
-        api("POST", f"/story/profiles/{pid}/versions/{vid}/curate", {"asset_ids": [x["id"] for x in cands], "verdict": "keep"})
+        api("POST", f"/story/profiles/{pid}/versions/{vid}/add", {"asset_ids": [x["id"] for x in cands], "role": "reference"})   # D122: Add to the reference set
         refs = api("GET", f"/groups/{p['versions'][0]['group_id']}")["assets"]
         check(len(refs) == len(cands) + 1 >= 25, f"{len(refs)} references on the version's page after Expand ({time.time() - t_exp:.0f} s)")
         row["refs"] = len(refs)

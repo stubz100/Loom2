@@ -6,29 +6,30 @@ import { http, unwrap, type AssetQueryParams } from '../../api/client'
 import type { Asset, EventFrame, GroupHeader as ApiGroupHeader } from '../../api/types'
 import { useSession } from '../../store/session'
 
-export type Folder = 'all' | 'unprocessed' | 'today' | 'last_session' | 'images' | 'clips' | 'documents' | 'imported' | 'rejected' | 'trash'
+export type Folder = 'all' | 'unprocessed' | 'today' | 'last_session' | 'images' | 'clips' | 'documents' | 'imported' | 'trash'
 export type DatePreset = 'today' | 'last_session' | '7d' | '30d'
 export type GroupMode = 'none' | 'batch' | 'lineage' | 'session' | 'model'
-export type Sort = 'created_desc' | 'created_asc' | 'rating_desc' | 'model' | 'size_desc'
+export type Sort = 'created_desc' | 'created_asc' | 'model' | 'size_desc'                // D122: no rating sort
+const SORT_IDS: Sort[] = ['created_desc', 'created_asc', 'model', 'size_desc']
 
 export interface Query {
-  folder: Folder; state: 'all' | 'none' | 'keep' | 'reject'; kind?: 'image' | 'video' | 'mask' | 'document-render' | 'mesh' | 'audio'; suite?: string; model_id?: string
-  rating_min: number; tags_any: string[]; aspect?: 'landscape' | 'portrait' | 'square'; has_children?: boolean; search: string
+  folder: Folder; kind?: 'image' | 'video' | 'mask' | 'document-render' | 'mesh' | 'audio'; suite?: string; model_id?: string
+  tags_any: string[]; aspect?: 'landscape' | 'portrait' | 'square'; has_children?: boolean; search: string
   sort: Sort; group: GroupMode; collection_id?: string; root_id?: string; created_from?: string; created_to?: string; batch_id?: string; session_id?: string
   group_id?: string; date_preset?: DatePreset; has_document?: boolean
   batch_label?: string; root_label?: string                       // chip labels only, never sent
 }
 export type GroupHeader = ApiGroupHeader
 
-const DEFAULT_QUERY: Query = { folder: 'all', state: 'all', rating_min: 0, tags_any: [], search: '', sort: 'created_desc', group: 'batch' }
+const DEFAULT_QUERY: Query = { folder: 'all', tags_any: [], search: '', sort: 'created_desc', group: 'batch' }
 
 /** The store's query as GET /assets parameters: empty strings and unset fields are left out; booleans are sent when set, `false`
  *  included (D38 fix: "No derivations" sent nothing before, so its chip showed every asset). */
 export function queryOf(q: Query, extra: Partial<AssetQueryParams> = {}): AssetQueryParams {
-  const out: AssetQueryParams = { folder: q.folder, state: q.state, sort: q.sort, group: q.group }
+  const out: AssetQueryParams = { folder: q.folder, sort: q.sort, group: q.group }
   const text = (v: string | undefined) => (v ? v : undefined)
   Object.assign(out, {
-    kind: q.kind, suite: text(q.suite), model_id: text(q.model_id), rating_min: q.rating_min > 0 ? q.rating_min : undefined,
+    kind: q.kind, suite: text(q.suite), model_id: text(q.model_id),
     tags_any: q.tags_any.length ? q.tags_any : undefined, aspect: q.aspect, has_children: q.has_children, has_document: q.has_document,
     search: text(q.search.trim()), collection_id: text(q.collection_id), root_id: text(q.root_id), created_from: text(q.created_from), created_to: text(q.created_to),
     batch_id: text(q.batch_id), session_id: text(q.session_id), group_id: text(q.group_id), date_preset: q.date_preset,
@@ -61,8 +62,6 @@ export interface CatalogueState {
   select: (id: string, mode: 'single' | 'toggle' | 'range') => void
   selectAll: () => void
   clearSelection: () => void
-  setState: (ids: string[], state: 'none' | 'keep' | 'reject') => Promise<void>
-  setRating: (ids: string[], rating: number) => Promise<void>
   setTags: (ids: string[], tags: string[]) => Promise<void>
   trash: (ids: string[]) => Promise<void>
   restore: (ids: string[]) => Promise<void>
@@ -206,8 +205,6 @@ export function createCatalogueStore(name: string, defaults: Partial<Query> = {}
       selectAll: () => { const order = get().visibleOrder(); set({ selected: order, primary: order[0] ?? null }) },
       clearSelection: () => set({ selected: [], primary: null, groupSel: [] }),
 
-      setState: async (ids, state) => { await patchMany(ids, { state }, set, get) },
-      setRating: async (ids, rating) => { await patchMany(ids, { rating }, set, get) },
       setTags: async (ids, tags) => { await patchMany(ids, { tags }, set, get); void get().refreshMeta() },
       trash: async (ids) => {
         await unwrap(http.POST('/assets/trash', { body: { ids } }))
@@ -267,7 +264,9 @@ export function createCatalogueStore(name: string, defaults: Partial<Query> = {}
       },
     }),
     { name, partialize: (s) => ({ tile: s.tile, q: { sort: s.q.sort, group: s.q.group } }) as never,
-      merge: (persisted, current) => { const p = (persisted ?? {}) as Partial<CatalogueState> & { q?: Partial<Query> }; return { ...current, tile: p.tile ?? current.tile, q: { ...current.q, ...(p.q ?? {}) } } } },
+      merge: (persisted, current) => { const p = (persisted ?? {}) as Partial<CatalogueState> & { q?: Partial<Query> }; const q = { ...current.q, ...(p.q ?? {}) }
+        if (!SORT_IDS.includes(q.sort)) q.sort = current.q.sort                       // D122: a remembered rating sort is gone
+        return { ...current, tile: p.tile ?? current.tile, q } } },
   ),
   )
 }

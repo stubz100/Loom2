@@ -1,5 +1,5 @@
-"""LT2 (18 §3c, D86): the `train_lora` job — ai-toolkit in its own venv (`trainers/.venv`, scripts/trainer-setup.ps1) on a Cast version's
-reference set, with the engine stopped for it (16 GB first); progress from the trainer's own lines, VRAM from Windows' GPU adapter
+"""LT2 (18 §3c, D86): the `train_lora` job — ai-toolkit in its own venv (`trainers/.venv`, scripts/trainer-setup.ps1) on an album page
+(D122: a Cast version's reference album, or any other), with the engine stopped for it (16 GB first); progress from the trainer's own lines, VRAM from Windows' GPU adapter
 counter, a kill resumed by ai-toolkit's own checkpoints (the run dir is the job's, so a requeued job continues), the adapter promoted
 into the project's registry (`story/loras/`, loras.py) and the version's `lora` + `trigger`. E16 (`engine/spikes/e16_klein_lora.py`,
 journal 2026-10-14) is the record of the recipe: 1 000 steps of Klein base-4B on 37 refs at 512 → 1.07 s/it, 13.6 GB.
@@ -66,28 +66,36 @@ def validate_train(q: "JobQueue", recipe: TrainLora) -> None:
         raise ValueError("a trigger word is required (the Cast tab makes one from the profile's name)")
     if q.groups is None:
         raise ValueError("no album store")
-    store = StoryStore(q.ws)
-    p = store.profile(recipe.profile_id)
-    if p is None:
-        raise ValueError(f"profile {recipe.profile_id!r} not found")
-    try:
-        v = p.version(recipe.version)
-    except KeyError as e:
-        raise ValueError(str(e))
-    n = len(reference_assets(q.groups, v.group_id))
+    _, _, gid = train_target(StoryStore(q.ws), q.groups, recipe)
+    n = len(album_images(q.groups, gid))
     if n < MIN_REFS:
-        raise ValueError(f"version {v.id} has {n} reference image{'s' if n != 1 else ''}; training needs at least {MIN_REFS}")
+        raise ValueError(f"the album has {n} image{'s' if n != 1 else ''}; training needs at least {MIN_REFS}")
 
 
-def reference_assets(groups: Any, group_id: str) -> list[dict[str, Any]]:
-    """The version's reference set: every image on its page that is not rejected, in page order."""
+def train_target(store: StoryStore, groups: Any, recipe: TrainLora) -> tuple[Any, Any, str]:
+    """D122: (profile, version, album) — the Cast version the adapter goes to (None, None for an album's own) and the album page trained
+    on: the recipe's `group_id`, else the version's reference album."""
+    p = v = None
+    if recipe.profile_id:
+        p = store.profile(recipe.profile_id)
+        if p is None:
+            raise ValueError(f"profile {recipe.profile_id!r} not found")
+        try:
+            v = p.version(recipe.version)
+        except KeyError as e:
+            raise ValueError(str(e))
+    gid = recipe.group_id or (v.group_id if v is not None else None)
+    if not gid:
+        raise ValueError("a training job names its album (group_id) or a Cast version")
+    if gid not in groups.groups:
+        raise ValueError(f"album page {gid!r} not found")
+    return p, v, gid
+
+
+def album_images(groups: Any, group_id: str) -> list[dict[str, Any]]:
+    """D122: what a job trains on — every image on the album page that is not in the Trash, in page order."""
     page = groups.page(group_id)
-    out = []
-    for a in page.get("assets", {}).values():
-        if a.get("kind", "image") != "image" or a.get("state") == "reject" or a.get("trashed_at"):
-            continue
-        out.append(a)
-    return out
+    return [a for a in page.get("assets", {}).values() if a.get("kind", "image") == "image" and not a.get("trashed_at")]
 
 
 # ---- the dataset and the config ----------------------------------------------------------------------------------------------------
@@ -112,14 +120,11 @@ def caption_for(recipe: TrainLora, asset: dict[str, Any], stub: str, hero_id: st
 def materialise(ws: Any, catalogue: Any, groups: Any, store: StoryStore, recipe: TrainLora, out: Path) -> dict[str, Any]:
     """The reference set as ai-toolkit reads it: `<n>_<asset>.png` + `.txt` captions under `out`; the same names every launch, so the
     trainer's latent cache in the folder stays valid across a resume."""
-    p = store.profile(recipe.profile_id)
-    if p is None:
-        raise ValueError(f"profile {recipe.profile_id!r} not found")
-    v = p.version(recipe.version)
-    stub = compose_sheet(v, name=p.name)                                # D93 (B4): the version's sheet, composed (the hero's caption)
-    refs = reference_assets(groups, v.group_id)
+    p, v, gid = train_target(store, groups, recipe)
+    stub = compose_sheet(v, name=p.name) if v is not None else ""      # D93 (B4): the version's sheet, composed; an album's own: the trigger alone
+    refs = album_images(groups, gid)
     if len(refs) < MIN_REFS:
-        raise ValueError(f"version {v.id} has {len(refs)} reference images; training needs at least {MIN_REFS}")
+        raise ValueError(f"the album has {len(refs)} images; training needs at least {MIN_REFS}")
     out.mkdir(parents=True, exist_ok=True)
     for stale in out.glob("*.png"):
         stale.unlink()
@@ -138,11 +143,11 @@ def materialise(ws: Any, catalogue: Any, groups: Any, store: StoryStore, recipe:
             if im.width > MAX_PX or im.height > MAX_PX:
                 im.thumbnail((MAX_PX, MAX_PX), Image.LANCZOS)
             im.save(out / f"{name}.png", "PNG")
-        cap = caption_for(recipe, a, stub, v.hero_asset_id)
+        cap = caption_for(recipe, a, stub, v.hero_asset_id if v is not None else None)
         (out / f"{name}.txt").write_text(cap, encoding="utf-8")
         h.update(f"{name}\n{cap}\n".encode("utf-8"))
         ids.append(a["id"])
-    return {"group_id": v.group_id, "asset_ids": ids, "count": len(ids), "captions_sha256": h.hexdigest(), "setting": recipe.setting.strip(), "stub": stub}
+    return {"group_id": gid, "asset_ids": ids, "count": len(ids), "captions_sha256": h.hexdigest(), "setting": recipe.setting.strip(), "stub": stub}
 
 
 def train_config(recipe: TrainLora, name: str, set_path: Path, out_path: Path, models_root: Path, vae: str, quantize: str) -> dict[str, Any]:
@@ -343,10 +348,11 @@ async def run_train(job: "JobRecord", recipe: TrainLora, q: "JobQueue") -> bool:
     if not adapter.is_file():
         raise ValueError(f"the trainer finished but wrote no adapter ({adapter})")
     await q.irreversible(job)                                           # C8: the promotion below must never run twice
-    p = store.profile(recipe.profile_id)
+    p = store.profile(recipe.profile_id) if recipe.profile_id else None
     v = p.version(recipe.version) if p else None
+    album = q.groups.groups.get(meta["group_id"]) if q.groups else None
     reg = LoraRegistry(q.ws)
-    rec = LoraRecord(id=new_id("lora"), name=recipe.name.strip() or (f"{p.name} {recipe.version}" if p else recipe.version), profile_id=recipe.profile_id,
+    rec = LoraRecord(id=new_id("lora"), name=recipe.name.strip() or (f"{p.name} {recipe.version}" if p else album.name if album else "LoRA"), profile_id=recipe.profile_id,
                      version=recipe.version, base=model_base(recipe.model_id) or spec.family, model_id=recipe.model_id, trigger=recipe.trigger.strip(),
                      steps=int(recipe.steps), rank=int(recipe.rank), resolution=int(recipe.resolution), lr=float(recipe.lr), seed=int(recipe.seed),
                      dataset=meta, job_id=job.id, sha256=await asyncio.to_thread(_sha256, adapter), size=adapter.stat().st_size,
@@ -356,13 +362,14 @@ async def run_train(job: "JobRecord", recipe: TrainLora, q: "JobQueue") -> bool:
     reg.dir.mkdir(parents=True, exist_ok=True)
     await asyncio.to_thread(shutil.copy2, adapter, reg.file(rec.id))
     reg.save(rec)
-    p = store.set_version_lora(recipe.profile_id, recipe.version, rec.id, rec.trigger)
+    p = store.set_version_lora(recipe.profile_id, recipe.version, rec.id, rec.trigger) if p else None   # D122: an album's own adapter stays in the registry
     project_id = (q.ws.info() or {}).get("id") or q.ws.path.name
     await asyncio.to_thread(publish, q.roster, reg, Path(settings.models_root), project_id)
     job.result = {"lora_id": rec.id, "trigger": rec.trigger, "steps": rec.steps, "profile_id": rec.profile_id, "version": rec.version,
                   "s_per_it": rec.measured.get("s_per_it"), "peak_vram_gb": rec.measured.get("peak_vram_gb"), "resumed_from": rec.measured.get("resumed_from"),
-                  "refs": meta["count"], "log": str(log_path)}
-    q.hub.broadcast("story.changed", {"kind": "profile", "id": p.id, "revision": p.revision})
+                  "refs": meta["count"], "group_id": meta["group_id"], "log": str(log_path)}
+    if p is not None:
+        q.hub.broadcast("story.changed", {"kind": "profile", "id": p.id, "revision": p.revision})
     q.hub.broadcast("lora.changed", {"id": rec.id, "profile_id": rec.profile_id, "version": rec.version})
     shutil.rmtree(odir.parent, ignore_errors=True)                      # the set, the saves and the optimizer state; the log stays
     return True

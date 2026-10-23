@@ -99,11 +99,11 @@ def test_duplicates(tmp_path: Path):
     ws, cat, st, ids = _setup(tmp_path, 2)
     page = st.create("Alley")
     st.move([("asset", ids[0])], page.id, [{"x": 50, "y": 60, "w": 300}])
-    cat.patch(ids[0], {"tags": ["alley"], "rating": 4})
+    cat.patch(ids[0], {"tags": ["alley"]})
     [dup_id] = st.duplicate_assets([ids[0]])
     dup, orig = cat.get(dup_id), cat.get(ids[0])
     assert dup.duplicate_of == orig.id and dup.path != orig.path and cat.abs_path(dup).is_file()
-    assert dup.tags == ["alley"] and dup.rating == 4 and dup.prompt_text == orig.prompt_text
+    assert dup.tags == ["alley"] and dup.prompt_text == orig.prompt_text
     assert dup.parents == [] and dup.root_id == dup.id and cat.lineage(dup_id)["parents"] == []    # not lineage
     assert dup.thumb_status == "done" and ws.thumb_path(dup_id, 32).is_file()
     placed = next(it for it in st.groups[page.id].items if it.id == dup_id)
@@ -148,19 +148,20 @@ def test_repair_double_placement(tmp_path: Path):
 def test_collections_migrate_once(tmp_path: Path):
     ws = Workspace.create(tmp_path / "p", name="P", size_cap_gb=10)
     cat = Catalogue(ws, [32])
-    ids = [cat.ingest_file(_png(tmp_path / f"{i}.png"), rating=i).id for i in range(3)]
+    ids = [cat.ingest_file(_png(tmp_path / f"{i}.png"), model_id=f"m{i}").id for i in range(3)]
     heroes = cat.collection_create("Heroes")
     cat.collection_add(heroes.id, [ids[0], ids[1]])
     alley = cat.collection_create("Alley")
     cat.collection_add(alley.id, [ids[1]])                                          # ids[1] is in two collections
-    cat.collection_create("Rated", kind="smart", filter_={"rating_min": 2})        # ids[2]
+    cat.collection_create("M2", kind="smart", filter_={"model_id": "m2"})           # ids[2]
+    cat.collection_create("Rated", kind="smart", filter_={"rating_min": 2})        # D122: the culling is gone — an empty group, its name kept
     st = GroupStore(ws, cat)
-    assert st.migrated == 3
+    assert st.migrated == 4
     by_name = {g.name: g for g in st.groups.values()}
     assert {it.id for it in by_name["Heroes"].items} == {ids[0], ids[1]}           # the oldest keeps the original
     [alley_item] = by_name["Alley"].items
     assert cat.get(alley_item.id).duplicate_of == ids[1]                            # the other gets a duplicate
-    assert {it.id for it in by_name["Rated"].items} == {ids[2]}
+    assert {it.id for it in by_name["M2"].items} == {ids[2]} and by_name["Rated"].items == []
     assert {it.id for it in st.groups[ROOT_ID].items} == {g.id for g in by_name.values() if g.id != ROOT_ID}
     assert GroupStore(ws, cat).migrated == 0                                        # once
 

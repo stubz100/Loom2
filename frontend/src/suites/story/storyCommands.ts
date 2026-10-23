@@ -1,5 +1,5 @@
 // 17 (D85): the Story suite's verbs — every one has a mouse home (the panel's buttons, the editor rows' tools, the Inspector, right-click
-// menus) per D32; Delete and the arrows are accelerators. SY1 adds the Cast tab's verbs (new profile, expand, curate, lock, copy, open).
+// menus) per D32; Delete and the arrows are accelerators. SY1 adds the Cast tab's verbs (new profile, expand, add to the reference set, lock, copy, open).
 import { ArrowDown, ArrowLeft, Box, Ruler, ArrowUp, BookOpen, BookPlus, ChevronLeft, ChevronRight, Pencil, UserRoundPlus, Users, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImageOff, ImagePlus, ImageUp, Link, ListChecks, ListPlus, Lock, MapPinPlus, Maximize, MessageSquare, Mic, PackagePlus, Palette, PersonStanding, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
 import { registerCommands, runCommand, sep, type Command, type MenuItem } from '../../frame/commands'
 import { goBack, useMakeFor } from '../../store/origin'
@@ -152,7 +152,7 @@ export async function addStyleSamples(id: string, assetIds: string[]): Promise<v
 }
 
 /** A group page in the active Catalogue pane (Story's Catalogue workspace). */
-function openGroupPage(gid: string): void {
+export function openGroupPage(gid: string): void {
   useSession.getState().setSuite('catalogue')
   void import('../catalogue/split').then((m) => { const sp = m.useSplit.getState(); m.openPlace(m.paneStore(sp.mode === 'single' ? 0 : sp.active).getState(), { group: gid }) })
 }
@@ -216,10 +216,8 @@ const cmds: Command[] = [
         gs.setPoses({ cells: plan.map((c) => ({ shot: c.shot, angle: c.angle, expression: c.expression })), expressions: Array.from(new Set(plan.map((c) => c.expression))) })
         gs.setRun('expand'); r.setRailTab('generate', 'poses'); useSession.getState().setSuite('generate')
         useSession.getState().toast(`${p.name} ${v.id}: pick the poses, then Expand ▶ — the images land as its candidates`, 'info') }) } },
-  { id: 'story.cast.keep', scope: 'story', label: 'Add to the reference set', icon: Check, keys: 'K', placement: ['context', 'inspector', 'toolbar'], when: () => openVersion() && picked().length > 0,
-    run: () => void sy().curate(picked(), 'keep') },
-  { id: 'story.cast.reject', scope: 'story', label: 'Reject', icon: X, keys: 'X', placement: ['context', 'inspector', 'toolbar'], when: () => openVersion() && picked().length > 0,
-    run: () => void sy().curate(picked(), 'reject') },
+  { id: 'story.cast.addRef', scope: 'story', label: 'Add to the reference set', icon: Check, keys: 'K', placement: ['context', 'inspector', 'toolbar'], when: () => openVersion() && picked().length > 0,
+    run: () => void sy().addRefs(picked()) },
   { id: 'story.cast.setHero', scope: 'story', label: 'Make it the hero', icon: ImageUp, placement: ['context', 'inspector'], when: () => openVersion() && picked().length === 1,
     run: () => void sy().setHero(picked()[0]) },
   // CA0 (01 step 2, §10): the animation reference — characters (front, back) and props (front, a three-quarter view); a final version takes one too

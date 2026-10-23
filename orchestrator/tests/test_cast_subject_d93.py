@@ -117,7 +117,7 @@ def test_add_moves_from_unprocessed_and_candidates_copies_from_elsewhere(tmp_pat
     ws, cat, groups, ids, st, mara, ines = _cast(tmp_path)
     loose = ids[6]                                                                                     # Unprocessed
     r = st.add_assets(mara.id, None, [loose], "reference", groups, cat)
-    assert r["moved"] == [loose] and groups.parent[("asset", loose)] == mara.version().group_id and cat.get(loose).state == "keep"
+    assert r["moved"] == [loose] and groups.parent[("asset", loose)] == mara.version().group_id and "state" not in cat.get(loose).model_dump()   # D122: nothing stamped
     # from another profile's set: copied, the original stays on Ines's page
     r = st.add_assets(mara.id, None, [ids[4]], "reference", groups, cat)
     dup = r["copied"][ids[4]]

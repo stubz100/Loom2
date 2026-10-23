@@ -2,6 +2,8 @@
 
 Status: **accepted 2026-10-14** (D86, the author: §9 as written, E16 with the 9B stretch, the downloads); **E16 GO on Klein base-4B 2026-10-14** (§2's run line, journal 09:12) — LT1–LT3 may start; **E16d: Klein base-9B fits with layer offloading** (2.8 s/it, 8.7 GB) and is a per-job base. **LT1 built 2026-10-14** (the slots live for the roster's free LoRAs and the files under the loras folders); **LT2 built 2026-10-14** (the staged `train_lora` job, the registry, readiness, the Cast and Models UI); **LT3 built 2026-10-14 and the wave accepted on the rig** (§8's run line, journal) — **D86 closed.** 03 §5 item 2, 17 §13 "LT · LoRA training", loom P2 (02 §2).
 
+**D122 (2026-10-23):** a job trains on an album page — every image on it not in the Trash (the reject filter gone): the Cast tab's Train on its version's reference album as below, and any album from its right-click (*Train a LoRA on this album…*); a version's reference album trains for that version, any other album's adapter is its own (no profile, no identity check).
+
 A character, place or prop of the Cast (17 §3b) gets its own LoRA, trained on the rig from a version's reference set as a staged
 queue job, promoted into the version's `trigger` and `lora` slots, loaded by Generate's LoRA slots (09 §3b) and, through `@Mara`,
 by every recipe that mentions the profile. The spike E16 decides first whether ai-toolkit trains Klein on this card at all.

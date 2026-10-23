@@ -1,4 +1,4 @@
-"""Catalogue assets: query, judge, trash and purge, duplicate, files and thumbnails, lineage, import, index rebuild (08, 06 §6).
+"""Catalogue assets: query, tag, trash and purge, duplicate, files and thumbnails, lineage, import, index rebuild (08, 06 §6).
 
 Order matters: the literal `/assets/...` paths are registered before `/assets/{asset_id}` (tests/test_routes_d37.py checks it).
 """
@@ -24,9 +24,7 @@ IMMUTABLE = {"Cache-Control": "private, max-age=31536000, immutable"}
 
 
 class AssetPatch(BaseModel):
-    state: str | None = None
-    rating: int | None = None
-    tags: list[str] | None = None
+    tags: list[str] | None = None                 # D122: no state / rating
 
 
 class ImportRequest(BaseModel):

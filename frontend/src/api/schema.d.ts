@@ -1448,6 +1448,29 @@ export interface paths {
         patch: operations["groups_layout_groups__gid__items_patch"];
         trace?: never;
     };
+    "/groups/{gid}/train": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Album Train
+         * @description D122: one `train_lora` job on an album page — every image on it that is not in the Trash. An album that is a Cast version's
+         *     reference set trains for that version (the adapter and the trigger on it, as the Cast tab's Train); any other album's adapter is its
+         *     own (the registry and Generate's LoRA slots). Here with the training routes rather than in groups.py: the queue, the triggers and the
+         *     Cast versions are this module's.
+         */
+        post: operations["album_train_groups__gid__train_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/groups/{gid}/ungroup": {
         parameters: {
             query?: never;
@@ -2664,7 +2687,8 @@ export interface paths {
         put?: never;
         /**
          * Profile Train
-         * @description One `train_lora` job (staged by default) from the version's reference set; the queue's validation answers 422 with the sentence.
+         * @description One `train_lora` job (staged by default) on an album — the version's reference album unless the body names another (D122) — the
+         *     adapter on the version; the queue's validation answers 422 with the sentence.
          */
         post: operations["profile_train_story_profiles__pid__train_post"];
         delete?: never;
@@ -2776,26 +2800,6 @@ export interface paths {
          *     (the height, build, head, feet and attachments stay).
          */
         post: operations["profile_body_fit_story_profiles__pid__versions__vid__body_fit_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/story/profiles/{pid}/versions/{vid}/curate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Profile Curate
-         * @description Keep: the assets are marked keep and move onto the version's reference page; reject: marked reject, left where they are.
-         */
-        post: operations["profile_curate_story_profiles__pid__versions__vid__curate_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3495,10 +3499,6 @@ export interface components {
         };
         /** AssetPatch */
         AssetPatch: {
-            /** Rating */
-            rating?: number | null;
-            /** State */
-            state?: string | null;
             /** Tags */
             tags?: string[] | null;
         };
@@ -3560,11 +3560,6 @@ export interface components {
             } | null;
             /** Prompt Text */
             prompt_text: string | null;
-            /**
-             * Rating
-             * @default 0
-             */
-            rating: number;
             /** Root Id */
             root_id: string | null;
             /**
@@ -3578,12 +3573,6 @@ export interface components {
             session_id: string | null;
             /** Sha256 */
             sha256: string | null;
-            /**
-             * State
-             * @default none
-             * @enum {string}
-             */
-            state: "none" | "keep" | "reject";
             /**
              * Suite
              * @default generate
@@ -4304,23 +4293,6 @@ export interface components {
             };
             /** Shots */
             shots: string[];
-        };
-        /** CurateBody */
-        CurateBody: {
-            /** Asset Ids */
-            asset_ids: string[];
-            /**
-             * Verdict
-             * @enum {string}
-             */
-            verdict: "keep" | "reject";
-        };
-        /** Curated */
-        Curated: {
-            /** Kept */
-            kept: string[];
-            /** Rejected */
-            rejected: string[];
         };
         /** Deleted */
         Deleted: {
@@ -7128,7 +7100,7 @@ export interface components {
             /** Previous */
             previous: string[];
             /** Profile Id */
-            profile_id: string;
+            profile_id: string | null;
             /** Rank */
             rank: number;
             /** Resolution */
@@ -7146,7 +7118,7 @@ export interface components {
             /** Trigger */
             trigger: string;
             /** Version */
-            version: string;
+            version: string | null;
         } & {
             [key: string]: unknown;
         };
@@ -10138,6 +10110,8 @@ export interface components {
         };
         /** TrainBody */
         TrainBody: {
+            /** Group Id */
+            group_id?: string | null;
             /**
              * Lr
              * @default 0.0001
@@ -10711,12 +10685,10 @@ export interface operations {
     assets_list_assets_get: {
         parameters: {
             query?: {
-                folder?: "all" | "unprocessed" | "today" | "last_session" | "images" | "clips" | "documents" | "imported" | "rejected" | "trash";
+                folder?: "all" | "unprocessed" | "today" | "last_session" | "images" | "clips" | "documents" | "imported" | "trash";
                 kind?: ("image" | "video" | "mask" | "document-render" | "mesh" | "audio") | null;
                 suite?: string | null;
-                state?: ("none" | "keep" | "reject") | "all";
                 model_id?: string | null;
-                rating_min?: number;
                 tags_any?: string[];
                 tags_all?: string[];
                 has_document?: boolean | null;
@@ -10734,7 +10706,7 @@ export interface operations {
                 collection_id?: string | null;
                 group_id?: string | null;
                 job_id?: string | null;
-                sort?: "created_desc" | "created_asc" | "rating_desc" | "model" | "size_desc";
+                sort?: "created_desc" | "created_asc" | "model" | "size_desc";
                 group?: "none" | "batch" | "lineage" | "session" | "model";
                 group_by?: ("none" | "batch" | "lineage" | "session" | "model") | null;
                 group_key?: string | null;
@@ -10858,12 +10830,10 @@ export interface operations {
     assets_groups_assets_groups_get: {
         parameters: {
             query?: {
-                folder?: "all" | "unprocessed" | "today" | "last_session" | "images" | "clips" | "documents" | "imported" | "rejected" | "trash";
+                folder?: "all" | "unprocessed" | "today" | "last_session" | "images" | "clips" | "documents" | "imported" | "trash";
                 kind?: ("image" | "video" | "mask" | "document-render" | "mesh" | "audio") | null;
                 suite?: string | null;
-                state?: ("none" | "keep" | "reject") | "all";
                 model_id?: string | null;
-                rating_min?: number;
                 tags_any?: string[];
                 tags_all?: string[];
                 has_document?: boolean | null;
@@ -10881,7 +10851,7 @@ export interface operations {
                 collection_id?: string | null;
                 group_id?: string | null;
                 job_id?: string | null;
-                sort?: "created_desc" | "created_asc" | "rating_desc" | "model" | "size_desc";
+                sort?: "created_desc" | "created_asc" | "model" | "size_desc";
                 group?: "none" | "batch" | "lineage" | "session" | "model";
                 group_by?: ("none" | "batch" | "lineage" | "session" | "model") | null;
                 group_key?: string | null;
@@ -13556,6 +13526,41 @@ export interface operations {
             };
         };
     };
+    album_train_groups__gid__train_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                gid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrainBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrainQueued"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     groups_ungroup_groups__gid__ungroup_post: {
         parameters: {
             query?: never;
@@ -16167,42 +16172,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BodyFitQueued"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    profile_curate_story_profiles__pid__versions__vid__curate_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                pid: string;
-                vid: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CurateBody"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Curated"];
                 };
             };
             /** @description Validation Error */

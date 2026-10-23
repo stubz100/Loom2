@@ -2,8 +2,8 @@
 
   orchestrator/.venv/Scripts/python.exe scripts/make_synthetic_assets.py --project F:/loom2-projects/synthetic-10k [--count 10000]
 
-Creates (or opens) the project, writes small PNGs with varied sizes, models, batches, sessions, states,
-ratings, tags and lineage chains through the real ingest path (sidecar manifests + index + WebP thumbs), so
+Creates (or opens) the project, writes small PNGs with varied sizes, models, batches, sessions,
+tags and lineage chains through the real ingest path (sidecar manifests + index + WebP thumbs), so
 the result is indistinguishable from real output for the UI.
 """
 from __future__ import annotations
@@ -63,8 +63,7 @@ def main() -> int:
             parents = [rnd.choice(roots)] if derived else []
             rec = cat.ingest_file(src, kind="image", move=True, job_id=new_id("job"), batch_id=batch, session_id=session, model_id=model, seed=rnd.randrange(1, 2**31),
                                   prompt_text=prompt, prompt_json={"scene": prompt, "camera": rnd.choice(["wide", "medium", "closeup"])} if model.startswith("flux2") else None,
-                                  suite="inpaint" if derived else "generate", parents=parents, state=rnd.choice(["none", "none", "none", "keep", "reject"]),
-                                  rating=rnd.choice([0, 0, 0, 1, 2, 3, 4, 5]), tags=rnd.sample(TAGS, rnd.choice([0, 0, 1, 2])),
+                                  suite="inpaint" if derived else "generate", parents=parents, tags=rnd.sample(TAGS, rnd.choice([0, 0, 1, 2])),
                                   params={"width": w, "height": h, "steps": 20 if model.startswith("flux2") else 4})
             if not a.no_thumbs:
                 cat.make_thumbs(rec)

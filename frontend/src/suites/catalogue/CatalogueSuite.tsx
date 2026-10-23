@@ -35,7 +35,7 @@ import './catalogue.css'
 const excerptOf = (p: string) => { const m = /^\{\s*"scene"\s*:\s*"([^"]{1,80})/.exec(p); return m ? m[1] : p }
 
 const GROUPS: [GroupMode, string][] = [['batch', 'Batch'], ['lineage', 'Lineage'], ['session', 'Session'], ['model', 'Model'], ['none', 'None']]
-const SORTS: [Sort, string][] = [['created_desc', 'newest'], ['created_asc', 'oldest'], ['rating_desc', 'rating'], ['model', 'model'], ['size_desc', 'size']]
+const SORTS: [Sort, string][] = [['created_desc', 'newest'], ['created_asc', 'oldest'], ['model', 'model'], ['size_desc', 'size']]
 
 // ---------------------------------------------------------------- Panel
 function Panel() {
@@ -71,13 +71,12 @@ export function Strip() {
   const ids = selectedOrPrimary(c)
   const [tagText, setTagText] = useState('')
   if (!s.project?.open) return <span>Catalogue</span>
-  const activeChips = [c.q.search && `"${c.q.search}"`, c.q.state !== 'all' && c.q.state, c.q.model_id, c.q.rating_min > 0 && `★≥${c.q.rating_min}`, ...c.q.tags_any.map((t) => `#${t}`), c.q.aspect, c.q.has_children !== undefined && (c.q.has_children ? 'has derivations' : 'no derivations'), (c.q.created_from || c.q.created_to) && `${c.q.created_from?.slice(0, 10) ?? '…'} → ${c.q.created_to?.slice(0, 10) ?? '…'}`].filter(Boolean) as string[]
+  const activeChips = [c.q.search && `"${c.q.search}"`, c.q.model_id, ...c.q.tags_any.map((t) => `#${t}`), c.q.aspect, c.q.has_children !== undefined && (c.q.has_children ? 'has derivations' : 'no derivations'), (c.q.created_from || c.q.created_to) && `${c.q.created_from?.slice(0, 10) ?? '…'} → ${c.q.created_to?.slice(0, 10) ?? '…'}`].filter(Boolean) as string[]
   return (
     <>
       <span>group</span>
       <select value={c.q.group} onChange={(e) => c.setQuery({ group: e.target.value as GroupMode })}>{GROUPS.map(([g, l]) => <option key={g} value={g}>{l}</option>)}</select>
       {c.q.group !== 'none' && <CommandRow ids={['cat.expandAll', 'cat.collapseAll']} />}
-      <div className="segmented">{(['all', 'keep', 'reject'] as const).map((st) => <button key={st} className={c.q.state === st ? 'active' : ''} onClick={() => c.setQuery({ state: st })}>{st}</button>)}</div>
       <span>sort</span>
       <select value={c.q.sort} onChange={(e) => c.setQuery({ sort: e.target.value as Sort })}>{SORTS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
       {activeChips.length > 0 && <span className="chips">{activeChips.map((x) => <span key={x} className="chip-f">{x}</span>)}</span>}
@@ -86,7 +85,7 @@ export function Strip() {
       {ids.length > 0 && (
         <>
           <span>▣ {ids.length}</span>
-          <CommandRow ids={['cat.keep', 'cat.reject', 'cat.unstate', 'gap', 'cat.loupe', 'cat.edit', 'cat.reference', 'cat.pin', 'gap', 'cat.selectAll', 'cat.clearSelection']} />
+          <CommandRow ids={['cat.loupe', 'cat.edit', 'cat.reference', 'cat.pin', 'gap', 'cat.selectAll', 'cat.clearSelection']} />
           <input id="strip-tag" type="text" value={tagText} placeholder="tag…" style={{ width: 90, minHeight: 24 }} onChange={(e) => setTagText(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && tagText.trim()) { const t = tagText.trim(); void Promise.all(ids.map((id) => { const a = c.byId(id); return a && !a.tags.includes(t) ? c.setTags([id], [...a.tags, t]) : Promise.resolve() })); setTagText('') } }} />
           {c.q.folder === 'trash' ? <><CommandRow ids={['cat.restore', 'cat.purge']} /><EmptyTrashButton /></> : <CommandButton id="cat.trash" />}

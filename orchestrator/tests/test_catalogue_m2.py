@@ -24,9 +24,9 @@ def _cat(tmp_path: Path) -> Catalogue:
 
 
 def _seed(cat: Catalogue, tmp_path: Path) -> dict:
-    a = cat.ingest_file(_png(tmp_path / "a.png"), job_id="job_a", batch_id="bat_1", model_id="flux2-dev-fp8mixed", seed=1, prompt_text="rainy alley neon sign", tags=["alley", "night"], state="keep", rating=5)
-    b = cat.ingest_file(_png(tmp_path / "b.png"), job_id="job_a", batch_id="bat_1", model_id="flux2-dev-fp8mixed", seed=2, prompt_json={"scene": "harbour market", "mood": "dawn"}, state="reject")
-    c = cat.ingest_file(_png(tmp_path / "c.png", 32, 64), job_id="job_c", batch_id=None, model_id="klein-9b", seed=3, prompt_text="portrait grief", parents=[a.id], suite="inpaint", rating=3)
+    a = cat.ingest_file(_png(tmp_path / "a.png"), job_id="job_a", batch_id="bat_1", model_id="flux2-dev-fp8mixed", seed=1, prompt_text="rainy alley neon sign", tags=["alley", "night"])
+    b = cat.ingest_file(_png(tmp_path / "b.png"), job_id="job_a", batch_id="bat_1", model_id="flux2-dev-fp8mixed", seed=2, prompt_json={"scene": "harbour market", "mood": "dawn"})
+    c = cat.ingest_file(_png(tmp_path / "c.png", 32, 64), job_id="job_c", batch_id=None, model_id="klein-9b", seed=3, prompt_text="portrait grief", parents=[a.id], suite="inpaint")
     d = cat.ingest_file(_png(tmp_path / "d.png", 48, 48), suite="import", prompt_text="imported reference", session_id="ses_old")
     return {"a": a, "b": b, "c": c, "d": d}
 
@@ -35,7 +35,6 @@ def test_filters_sort_and_fts(tmp_path: Path):
     cat = _cat(tmp_path)
     x = _seed(cat, tmp_path)
     assert cat.list(AssetQuery()).total == 4
-    assert [i.id for i in cat.list(AssetQuery(state="keep")).items] == [x["a"].id]
     assert [i.id for i in cat.list(AssetQuery(search="harbour")).items] == [x["b"].id]           # JSON prompt is searchable
     assert [i.id for i in cat.list(AssetQuery(search="rain alley")).items] == [x["a"].id]        # prefix tokens, ANDed
     assert cat.list(AssetQuery(search='"; DROP TABLE assets; --')).items == []                   # neutralised
@@ -45,14 +44,16 @@ def test_filters_sort_and_fts(tmp_path: Path):
     assert [i.id for i in cat.list(AssetQuery(has_children=True)).items] == [x["a"].id]
     assert [i.id for i in cat.list(AssetQuery(folder="imported")).items] == [x["d"].id]
     assert [i.id for i in cat.list(AssetQuery(folder="last_session")).items] == [x["d"].id]      # the other session
-    assert [i.id for i in cat.list(AssetQuery(sort="rating_desc")).items][:2] == [x["a"].id, x["c"].id]
+    by_size = cat.list(AssetQuery(sort="size_desc")).items
+    assert [i.bytes for i in by_size] == sorted((i.bytes for i in by_size), reverse=True)        # D122: size stands where rating sorted
     assert [i.model_id for i in cat.list(AssetQuery(sort="model")).items][0] == "flux2-dev-fp8mixed"
     page1 = cat.list(AssetQuery(limit=3))
     assert len(page1.items) == 3 and page1.next_cursor
     page2 = cat.list(AssetQuery(limit=3, cursor=page1.next_cursor))
     assert len(page2.items) == 1 and page2.next_cursor is None and page2.total is None
     counts = cat.counts()
-    assert counts["all"] == 4 and counts["imported"] == 1 and counts["rejected"] == 1 and counts["trash"] == 0 and counts["last_session"] == 1
+    assert counts["all"] == 4 and counts["imported"] == 1 and counts["trash"] == 0 and counts["last_session"] == 1
+    assert "rejected" not in counts                                                              # D122: no Rejected folder
     assert cat.tags()[0] == {"tag": "alley", "count": 1} or {"tag": "night", "count": 1} in cat.tags()
     cat.close()
 
@@ -63,7 +64,7 @@ def test_groups_and_lineage_roots(tmp_path: Path):
     assert x["c"].root_id == x["a"].id and x["a"].root_id == x["a"].id
     batches = cat.groups(AssetQuery(group="batch"))
     keys = {g.key: g for g in batches}
-    assert keys["bat_1"].count == 2 and keys["bat_1"].model_id == "flux2-dev-fp8mixed" and keys["bat_1"].cover_id == x["a"].id   # best rated cover
+    assert keys["bat_1"].count == 2 and keys["bat_1"].model_id == "flux2-dev-fp8mixed" and keys["bat_1"].cover_id in (x["a"].id, x["b"].id)   # D122: the first made (no rating to pick by; one second)
     assert keys["job_c"].count == 1 and keys[x["d"].id].count == 1                                                            # job / id fallbacks
     lineage = {g.key: g for g in cat.groups(AssetQuery(group="lineage"))}
     assert lineage[x["a"].id].count == 2
@@ -100,9 +101,11 @@ def test_collections(tmp_path: Path):
     manual = cat.collection_create("Hero shots")
     assert cat.collection_add(manual.id, [x["a"].id, x["c"].id]) == 2
     assert {i.id for i in cat.list(AssetQuery(collection_id=manual.id)).items} == {x["a"].id, x["c"].id}
-    smart = cat.collection_create("Rated", kind="smart", filter_={"rating_min": 3})
+    smart = cat.collection_create("FLUX", kind="smart", filter_={"model_id": "flux2-dev-fp8mixed"})
+    rated = cat.collection_create("Rated", kind="smart", filter_={"rating_min": 3})           # D122: a filter on the culling that is gone
     cols = {c.id: c for c in cat.collections()}
-    assert cols[manual.id].count == 2 and cols[smart.id].count == 2 and cols[smart.id].kind == "smart"
+    assert cols[manual.id].count == 2 and cols[smart.id].count == 2 and cols[smart.id].kind == "smart" and cols[rated.id].count == 0
+    assert cat.collection_update(rated.id, kind="manual").count == 0 and cat.collection_delete(rated.id)
     frozen = cat.collection_update(smart.id, kind="manual")
     assert frozen and frozen.kind == "manual" and frozen.count == 2 and frozen.filter is None
     assert cat.collection_remove(manual.id, [x["a"].id]) == 1
@@ -138,4 +141,30 @@ def test_stale_index_is_rebuilt(tmp_path: Path):
     con.commit(); con.close()
     cat2 = Catalogue(cat.ws, [32], session_id="ses_now")        # old columns → drop + rebuild from sidecars
     assert cat2.count() == 4 and cat2.get(x["c"].id).root_id == x["a"].id and cat2.get("old") is None
+    cat2.close()
+
+
+def test_a_schema_2_index_and_old_manifests_lose_the_culling(tmp_path: Path):
+    """D122: an index of schema 2 (its `state` / `rating` columns) is dropped and rebuilt; a manifest written before still carries them,
+    reads without them, and is not rewritten until something else changes it."""
+    import json
+    import sqlite3
+    cat = _cat(tmp_path)
+    x = _seed(cat, tmp_path)
+    m = cat.manifest_path(x["a"])
+    old = {**json.loads(m.read_text(encoding="utf-8")), "state": "reject", "rating": 5}
+    m.write_text(json.dumps(old), encoding="utf-8")                                   # as loom2 wrote it before D122
+    cat.close()
+    con = sqlite3.connect(str(cat.ws.catalogue_db))
+    con.executescript("ALTER TABLE assets ADD COLUMN state TEXT; ALTER TABLE assets ADD COLUMN rating INTEGER; UPDATE meta SET v='2' WHERE k='index_schema';")
+    con.commit(); con.close()
+    cat2 = Catalogue(cat.ws, [32], session_id="ses_now")
+    cols = {r[1] for r in cat2._db.execute("PRAGMA table_info(assets)").fetchall()}
+    assert "state" not in cols and "rating" not in cols and cat2._meta("index_schema") == "3" and cat2.count() == 4
+    a = cat2.get(x["a"].id)
+    assert a is not None and "state" not in a.model_dump() and a.tags == ["alley", "night"]
+    assert x["a"].id in [i.id for i in cat2.list(AssetQuery()).items]                    # once rejected, it shows like any other
+    assert json.loads(m.read_text(encoding="utf-8"))["state"] == "reject"                 # the file is not rewritten by reading it
+    cat2.patch(a.id, {"tags": ["alley"]})
+    assert "state" not in json.loads(m.read_text(encoding="utf-8"))                       # the next write drops the old fields
     cat2.close()

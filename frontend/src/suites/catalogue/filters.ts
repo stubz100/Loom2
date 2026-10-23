@@ -1,6 +1,6 @@
 // Query-bar filters (D34, proto01_design/01 §6b): each filter is a chip when active (click = its editor, ✕ = remove) and an
 // entry in the "+ Filter" menu. Batch and lineage chips are set from a tile's menu, not from "+ Filter".
-import { CalendarDays, Cpu, FileType, GitBranch, Layers, Ratio, Star, Tag, ToggleLeft, Workflow } from 'lucide-react'
+import { CalendarDays, Cpu, FileType, GitBranch, Layers, Ratio, Star, Tag, Workflow } from 'lucide-react'
 import type { MenuItem } from '../../frame/commands'
 import { askText, useSession } from '../../store/session'
 import type { CatalogueState, Query } from './catalogueStore'
@@ -20,9 +20,6 @@ const DATES: [string, string][] = [['today', 'Today'], ['last_session', 'Last se
 const day = (iso?: string) => iso?.slice(0, 10) ?? '…'
 
 export const FILTERS: FilterDef[] = [
-  { id: 'state', label: 'State', icon: ToggleLeft, inMenu: true, clear: { state: 'all' },
-    active: (q) => q.state !== 'all', chip: (q) => `State: ${q.state === 'none' ? 'unjudged' : q.state}`,
-    options: (c) => (['keep', 'reject', 'none'] as const).map((s) => opt(c, s === 'none' ? 'Unjudged' : s === 'keep' ? 'Kept' : 'Rejected', c.q.state === s, { state: s })) },
   { id: 'type', label: 'Type', icon: FileType, inMenu: true, clear: { kind: undefined, has_document: undefined },
     active: (q) => !!q.kind || q.has_document !== undefined, chip: (q) => `Type: ${q.kind === 'video' ? 'clips' : q.kind === 'image' ? 'images' : q.kind === 'audio' ? 'audio' : 'documents'}`,
     options: (c) => [opt(c, 'Images', c.q.kind === 'image', { kind: 'image', has_document: undefined }), opt(c, 'Clips', c.q.kind === 'video', { kind: 'video', has_document: undefined }),
@@ -34,9 +31,6 @@ export const FILTERS: FilterDef[] = [
   { id: 'model', label: 'Model', icon: Cpu, inMenu: true, clear: { model_id: undefined },
     active: (q) => !!q.model_id, chip: (q) => `Model: ${q.model_id}`,
     options: (c) => Object.keys(useSession.getState().capabilities?.models ?? {}).map((m) => opt(c, m, c.q.model_id === m, { model_id: m })) },
-  { id: 'rating', label: 'Rating', icon: Star, inMenu: true, clear: { rating_min: 0 },
-    active: (q) => q.rating_min > 0, chip: (q) => `Rating ≥ ${'★'.repeat(q.rating_min)}`,
-    options: (c) => [5, 4, 3, 2, 1].map((n) => opt(c, `${'★'.repeat(n)} or more`, c.q.rating_min === n, { rating_min: n })) },
   { id: 'date', label: 'Date', icon: CalendarDays, inMenu: true, clear: { date_preset: undefined, created_from: undefined, created_to: undefined },
     active: (q) => !!q.date_preset || !!q.created_from || !!q.created_to,
     chip: (q) => q.date_preset ? `Date: ${DATES.find(([k]) => k === q.date_preset)?.[1].toLowerCase()}` : `Date: ${day(q.created_from)} → ${day(q.created_to)}`,

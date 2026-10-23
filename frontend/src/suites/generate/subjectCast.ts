@@ -33,7 +33,7 @@ export function castOffer(p: Profile | undefined, refs = 0, vid?: string | null)
   return {
     kind: give ? 'give' : 'more',
     label: give ? `Give ${p.name} a look` : `More looks for ${p.name}`,
-    hint: `a casting run: the panel's images land as ${p.name} ${v.id}'s candidates in Story · Cast (keep ✓, reject ✕, make one the hero)`,
+    hint: `a casting run: the panel's images land as ${p.name} ${v.id}'s candidates in Story · Cast (add ✓ the good ones to the reference set, make one the hero)`,
     disabled: v.state !== 'open' ? `${p.name} ${v.id} is final — make a new version to cast it again` : null,
   }
 }

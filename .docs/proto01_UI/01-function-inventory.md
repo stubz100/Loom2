@@ -5,6 +5,8 @@ exists and where it sits today, so that the reorganisation that follows can give
 whole app what [proto01_design/01](../proto01_design/01-catalogue-inventory.md) did for the Catalogue on 2026-10-07. That earlier
 document also describes a newer Catalogue than the one Generate still embeds (§4.4).
 
+**D122 (2026-10-23):** C29 Keep / Reject, the ratings and the Inspector's Judge listed below are gone.
+
 Sources: `frontend/src/frame/` (TopBar, Rail, Panel, Dock, Settings, Help, palette, drag rules, `openWith`, `origin`) and every suite under
 `frontend/src/suites/`: their `*Commands.ts`, panels, strips, centre views, inspectors and context menus. Specs for intent:
 [07](../proto01/07-ui-frame.md), [08](../proto01/08-ui-suite-catalogue.md)–[11](../proto01/11-ui-suite-animate.md),

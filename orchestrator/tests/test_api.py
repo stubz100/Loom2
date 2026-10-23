@@ -44,7 +44,8 @@ def test_api_flow(tmp_path: Path):
         assert asset["suite"] == "import" and asset["thumb_status"] == "done"
         assert client.get(f"/assets/{asset['id']}/file").status_code == 200
         assert client.get(f"/thumbs/{asset['id']}/256").headers["content-type"] == "image/webp"
-        assert client.patch(f"/assets/{asset['id']}", json={"rating": 5}, headers=H).json()["rating"] == 5
+        r = client.patch(f"/assets/{asset['id']}", json={"tags": ["ref"], "rating": 5, "state": "keep"}, headers=H).json()
+        assert r["tags"] == ["ref"] and "rating" not in r and "state" not in r                    # D122: no rating, no keep / reject
         assert client.get("/assets", params={"search": "nothing"}).json()["items"] == []
         # queue: pause, submit, inspect, cancel
         assert client.post("/queue/pause", headers=H).json()["paused"] is True
@@ -90,7 +91,9 @@ def test_api_error_codes_and_alpha_thumbs(tmp_path: Path):
         assert r.status_code == 422 and "nope" in r.json()["detail"]
         assert client.post("/jobs", json={"recipe": {"kind": "t2i", "prompt_text": "x", "model_id": "nope"}}, headers=H).status_code == 422
         assert client.get("/assets", params={"cursor": "garbage"}).status_code == 400
-        assert client.get("/assets", params={"cursor": "12x", "sort": "rating_desc"}).status_code == 400
+        assert client.get("/assets", params={"cursor": "12x", "sort": "size_desc"}).status_code == 400
+        assert client.get("/assets", params={"sort": "rating_desc"}).status_code == 422             # D122: no rating sort
+        assert client.get("/assets", params={"folder": "rejected"}).status_code == 422             # nor a Rejected folder
         assert client.put("/settings", json={"vram_budget_gb": "lots"}, headers=H).status_code == 422
         png = tmp_path / "alpha.png"
         Image.new("RGBA", (64, 64), (200, 40, 40, 0)).save(png)                 # fully transparent red

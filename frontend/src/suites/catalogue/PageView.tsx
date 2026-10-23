@@ -3,7 +3,8 @@
 // Places row, a tab); the corner handle resizes; a marquee on empty space selects; wheel pans, Ctrl+wheel zooms at the cursor,
 // middle-drag or Space+drag pans. Ctrl+G groups the selection, Ctrl+Shift+G dissolves a card, Del sends photos back to
 // Unprocessed, arrows nudge, Ctrl+Z / Ctrl+Shift+Z undo layout. Filters highlight matches; nothing is hidden or moved.
-import { ArrowDownToLine, ArrowUpToLine, BookOpen, Columns2, Copy, Expand, FolderPlus, Layers, Pencil, Redo, Undo, Ungroup, X } from 'lucide-react'
+import { ArrowDownToLine, ArrowUpToLine, BookOpen, Columns2, Copy, Expand, FolderPlus, Layers, Pencil, Redo, Undo, Ungroup, X, GraduationCap } from 'lucide-react'
+import { useTrainAlbum } from '../story/trainAlbum'
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { api, ApiError, http, unwrap } from '../../api/client'
 import type { GroupItem, GroupPage, GroupSummary } from '../../api/types'
@@ -276,7 +277,7 @@ export function PageView({ gid, onOpenGroup }: { gid: string; onOpenGroup?: (id:
       void commit(sel.map((i) => ({ ...i, x: i.x + dx, y: i.y + dy })))
       return
     }
-    if (c.selected.length) handleKeyFor('catalogue', e.nativeEvent)   // K / X / E / R … act on the selected photos
+    if (c.selected.length) handleKeyFor('catalogue', e.nativeEvent)   // E / R / T … act on the selected photos
   }
 
   // ---- menus ----------------------------------------------------------------------------------------------
@@ -288,6 +289,7 @@ export function PageView({ gid, onOpenGroup }: { gid: string; onOpenGroup?: (id:
     { label: 'Rename…', icon: Pencil, run: () => void askText({ title: 'Rename group', initial: s.name }).then((n) => { if (n?.trim() && n !== s.name) void useAlbum.getState().rename(s.id, n.trim()) }) },
     { label: 'Duplicate', icon: Copy, run: () => void useAlbum.getState().duplicate(s.id) },
     { label: 'Ungroup', icon: Ungroup, keys: 'Ctrl+Shift+G', run: () => ungroup(s.id) },
+    sep, { label: 'Train a LoRA on this album…', icon: GraduationCap, run: () => useTrainAlbum.getState().open(s.id, s.name) },   // D122
     sep, ...stackItems, sep,
     { label: 'Delete group…', icon: X, danger: true, run: () => deleteGroup(s) },
   ]
@@ -303,6 +305,7 @@ export function PageView({ gid, onOpenGroup }: { gid: string; onOpenGroup?: (id:
       { label: 'New group here…', icon: FolderPlus, run: () => void askText({ title: 'New group', placeholder: 'group name' }).then((n) => { if (n?.trim()) void unwrap(http.POST('/groups', { body: { name: n.trim(), parent_id: gid, x: Math.round(at.x), y: Math.round(at.y) } })).then(() => useAlbum.getState().load()) }) },
       { label: 'Select all', keys: 'Ctrl+A', run: () => setSel(items.filter((i) => i.kind === 'asset').map((i) => i.id), items.filter((i) => i.kind === 'group').map((i) => i.id)) },
       { label: 'Fit', icon: Expand, run: fit },
+      ...(gid !== 'album' && page ? [sep, { label: 'Train a LoRA on this album…', icon: GraduationCap, run: () => useTrainAlbum.getState().open(gid, page.group.name) }] : []),   // D122
       sep,
       { label: 'Undo', icon: Undo, keys: 'Ctrl+Z', disabled: !undo.current.length, run: undoLayout },
       { label: 'Redo', icon: Redo, keys: 'Ctrl+Shift+Z', disabled: !redo.current.length, run: redoLayout },
@@ -340,11 +343,10 @@ export function PageView({ gid, onOpenGroup }: { gid: string; onOpenGroup?: (id:
           if (!a) return null
           const dim = filtering && !matches.has(it.id)
           return (
-            <div key={key(it)} className={`pitem${sel ? ' selected' : ''}${dim ? ' dim' : ''}${a.state === 'reject' ? ' reject' : ''}`} style={style} onPointerDown={(e) => onItemDown(e, it)}
+            <div key={key(it)} className={`pitem${sel ? ' selected' : ''}${dim ? ' dim' : ''}`} style={style} onPointerDown={(e) => onItemDown(e, it)}
               onDoubleClick={() => c.openLoupe(it.id)} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); if (!sel) setSel([it.id], []); showMenu(e, photoMenu()) }}
               title={`${a.model_id ?? a.suite} · seed ${a.seed ?? '—'} · ${a.w}×${a.h}`}>
               <img src={api.thumbUrl(it.id, thumbFor(p.w))} alt="" draggable={false} />
-              {(a.state !== 'none' || a.rating > 0) && <span className="marks">{a.state === 'keep' && <i className="k">✓</i>}{a.state === 'reject' && <i className="r">✗</i>}{a.rating > 0 && <i className="s">{'★'.repeat(a.rating)}</i>}</span>}
               {primaryOne === it.id && <span className="handle" onPointerDown={(e) => onResizeDown(e, it)} title="drag to resize" />}
             </div>
           )

@@ -14,7 +14,7 @@ import type { CatalogueState, Sort } from './catalogueStore'
 import { addFilterMenu, CLEAR_ALL, FILTERS } from './filters'
 import { openPlace, swapPanes, useSplit } from './split'
 
-const SORTS: [Sort, string][] = [['created_desc', 'Newest'], ['created_asc', 'Oldest'], ['rating_desc', 'Rating'], ['model', 'Model'], ['size_desc', 'Size']]
+const SORTS: [Sort, string][] = [['created_desc', 'Newest'], ['created_asc', 'Oldest'], ['model', 'Model'], ['size_desc', 'Size']]
 
 /** Import ▸ Files… / Folder… / Paths…: the OS pickers inside the app, a typed path in a browser. Imports land in Unprocessed. */
 export async function importInteractive(c: CatalogueState, how: 'files' | 'folder' | 'paths'): Promise<void> {

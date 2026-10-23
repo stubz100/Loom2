@@ -1,13 +1,13 @@
 // Loupe and Compare (08 §3c): zoom/pan at any scale, prev/next, facts strip; 2-up / 4-up with locked zoom/pan,
 // wipe slider and difference toggle. One transform shared by every cell in Compare.
-import { Ellipsis, Film, FolderInput, Star } from 'lucide-react'
+import { Ellipsis, Film, FolderInput } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Asset } from '../../api/types'
 import { CommandButton, CommandRow, MenuButton } from '../../frame/CommandButton'
 import { handleKeyFor, runCommand, sep } from '../../frame/commands'
 import { catView } from './viewKeys'
 import { showMenu } from '../../frame/ContextMenu'
-import { moveToMenu, rateMenu, tileMenu } from './catalogueCommands'
+import { moveToMenu, tileMenu } from './catalogueCommands'
 import type { MenuItem } from '../../frame/commands'
 import { useCat } from './catalogueContext'
 import { loupeMedia, type LoupeMedia } from './media'
@@ -89,7 +89,6 @@ export function Loupe({ asset }: { asset: Asset }) {
         {asset.duration_s ? <span>{asset.duration_s} s</span> : null}
         <span>seed {asset.seed ?? '—'}</span>
         <span>{new Date(asset.created_at).toLocaleString()}</span>
-        <span>{asset.state !== 'none' ? asset.state : ''} {asset.rating ? '★'.repeat(asset.rating) : ''}</span>
         <span className="spacer" />
         {m.zoom ? <><span>{Math.round(xf.s * 100)}%</span><CommandButton id="cat.loupe.fit" text label="Fit" /><CommandButton id="cat.loupe.one" text label="1:1" /></>
           : m.kind === 'video' && m.clipId ? <CommandButton id="cat.animate" text label="Play in Animate" /> : null}
@@ -98,10 +97,6 @@ export function Loupe({ asset }: { asset: Asset }) {
       {/* D71 (P11): the loupe is the send-to hub — every verb of the tile menu on one bar; the secondary ones fold into More when narrow.
           The verbs act on the selection, so a press here selects the loupe's asset first (as its right-click and keys do). */}
       <div className="hub" role="toolbar" aria-label="Send this image" onPointerDownCapture={() => { if (!c.selected.includes(asset.id) || c.selected.length > 1) c.select(asset.id, 'single') }}>
-        <CommandRow ids={['cat.keep', 'cat.reject']} />
-        <span className="secondary"><CommandButton id="cat.unstate" /></span>
-        <span className="secondary"><MenuButton label="Rate" icon={Star} items={() => subItems(rateMenu())} /></span>
-        <span className="gap" />
         <CommandButton id="cat.edit" text label="Edit" />
         <CommandButton id="cat.reference" text label="Reference" />
         <CommandButton id="cat.start.angle" text label="New angle" />

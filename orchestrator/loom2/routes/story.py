@@ -18,7 +18,7 @@ from ..models import registry
 from ..clips import ClipStore
 from ..loras import LoraRegistry, publish, unpublish
 from ..library import Library, LibraryStore, StaleLibrary
-from ..schemas import Curated, Deleted, ProfileAdded, LibraryChange, LibraryRemoved, Expanded, FlowOut, FlowProblems, LipsyncQueued, LoraCheckQueued, LoraRecordList, LoraRecordOut, NodeShot, ProfileList, ShotList, TrainQueued, TtsQueued, VoiceList, VoiceRecordOut
+from ..schemas import Deleted, ProfileAdded, LibraryChange, LibraryRemoved, Expanded, FlowOut, FlowProblems, LipsyncQueued, LoraCheckQueued, LoraRecordList, LoraRecordOut, NodeShot, ProfileList, ShotList, TrainQueued, TtsQueued, VoiceList, VoiceRecordOut
 from ..stages import StageStore, encode_guide
 from ..shot_recipe import TEMPLATES, StampReader, Template, recipe_state, rerun_recipe, stale_plan, used_run
 from ..story import FOR_SHOT, NODE_TYPES, body_fit_origin, model_source, prop_model_origin, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
@@ -127,11 +127,6 @@ class ProfileCreate(BaseModel):
     colours: list[SheetColour] | None = None
     marks: str | None = None
     label: str | None = None
-
-
-class CurateBody(BaseModel):
-    asset_ids: list[str]
-    verdict: Literal["keep", "reject"]
 
 
 class ExpandBody(BaseModel):
@@ -252,30 +247,6 @@ async def profile_lock(svc: Svc, pid: str, vid: str):
     return p.model_dump()
 
 
-@router.post("/story/profiles/{pid}/versions/{vid}/curate", response_model=Curated)
-async def profile_curate(svc: Svc, pid: str, vid: str, body: CurateBody):
-    """Keep: the assets are marked keep and move onto the version's reference page; reject: marked reject, left where they are."""
-    ws, cat, _ = svc.require_project()
-    groups = svc.require_groups()
-    p = await asyncio.to_thread(StoryStore(ws).profile, pid)
-    if p is None:
-        raise HTTPException(404, "profile not found")
-    try:
-        v = p.version(vid)
-    except KeyError as e:
-        raise HTTPException(404, str(e))
-    if v.state != "open":
-        raise HTTPException(423, f"version {vid} is locked")
-    ids = [i for i in body.asset_ids if (r := await asyncio.to_thread(cat.get, i)) is not None and r.trashed_at is None]
-    recs = await asyncio.to_thread(cat.patch_many, ids, {"state": body.verdict})
-    for r in recs:
-        svc.hub.broadcast("asset.updated", r.model_dump())
-    if body.verdict == "keep" and ids:
-        changed = await asyncio.to_thread(groups.move, [("asset", i) for i in ids], v.group_id)
-        svc.group_changed(changed)
-    return {"kept": ids if body.verdict == "keep" else [], "rejected": ids if body.verdict == "reject" else []}
-
-
 @router.post("/story/profiles/{pid}/candidates", response_model=Profile)
 async def profile_candidates(svc: Svc, pid: str, body: CandidatesBody):
     """D93 (A1): the version's candidates page, made when it has none (as Expand does) — a casting run from Generate sends its results
@@ -319,8 +290,6 @@ async def profile_add(svc: Svc, pid: str, vid: str, body: AddBody):
     for dup in r["copied"].values():
         if (rec := await asyncio.to_thread(cat.get, dup)) is not None:
             svc.hub.broadcast("asset.created", rec.model_dump())
-    for rec in r.pop("updated"):
-        svc.hub.broadcast("asset.updated", rec.model_dump())
     made = r.pop("made_page")
     svc.group_changed(sorted({r["group_id"], *(g for a, g in before.items() if g and a in r["moved"])} | ({groups.parent.get(("group", r["group_id"]), "root")} if made else set())))
     _changed(svc, r["profile"])
@@ -622,6 +591,7 @@ class TrainBody(BaseModel):
     name: str = ""
     setting: str = ""
     trigger: str | None = None                    # made from the profile's name when absent (<slug>_<4 hex>)
+    group_id: str | None = None                   # D122: the album to train on; the version's reference album when absent
     stage: bool = True                            # staged by default (18 §9): released when the rig is free
 
 
@@ -633,8 +603,9 @@ def _trigger(name: str) -> str:
 
 @router.post("/story/profiles/{pid}/train", response_model=TrainQueued)
 async def profile_train(svc: Svc, pid: str, body: TrainBody):
-    """One `train_lora` job (staged by default) from the version's reference set; the queue's validation answers 422 with the sentence."""
-    ws, _, q = svc.require_project()
+    """One `train_lora` job (staged by default) on an album — the version's reference album unless the body names another (D122) — the
+    adapter on the version; the queue's validation answers 422 with the sentence."""
+    ws, _, _ = svc.require_project()
     store = StoryStore(ws)
     p = await asyncio.to_thread(store.profile, pid)
     if p is None:
@@ -643,22 +614,56 @@ async def profile_train(svc: Svc, pid: str, body: TrainBody):
         v = p.version(body.version)
     except KeyError as e:
         raise HTTPException(404, str(e))
+    gid = body.group_id or v.group_id
+    trigger = (body.trigger or v.trigger or _trigger(p.name)).strip()
+    out = _queue_train(svc, body, gid, trigger, body.name.strip() or f"{p.name} {v.id}", pid, v.id,
+                       JobOrigin(suite="story", surface="train", ref=pid, payload={"version": v.id}))
+    if v.trigger != trigger:                                                      # the trigger is the version's from now on (a retrain keeps it)
+        p = await asyncio.to_thread(store.set_version_lora, pid, v.id, v.lora, trigger)
+        _changed(svc, p)
+    return out
+
+
+@router.post("/groups/{gid}/train", response_model=TrainQueued)
+async def album_train(svc: Svc, gid: str, body: TrainBody):
+    """D122: one `train_lora` job on an album page — every image on it that is not in the Trash. An album that is a Cast version's
+    reference set trains for that version (the adapter and the trigger on it, as the Cast tab's Train); any other album's adapter is its
+    own (the registry and Generate's LoRA slots). Here with the training routes rather than in groups.py: the queue, the triggers and the
+    Cast versions are this module's."""
+    ws, _, _ = svc.require_project()
+    groups = svc.require_groups()
+    g = groups.groups.get(gid)
+    if g is None:
+        raise HTTPException(404, "album page not found")
+    store = StoryStore(ws)
+    owner = await asyncio.to_thread(store.version_of_album, gid)
+    if owner is not None:
+        p, v = owner
+        trigger = (body.trigger or v.trigger or _trigger(p.name)).strip()
+        out = _queue_train(svc, body, gid, trigger, body.name.strip() or f"{p.name} {v.id}", p.id, v.id,
+                           JobOrigin(suite="story", surface="train", ref=p.id, payload={"version": v.id, "group_id": gid}))
+        if v.trigger != trigger:
+            _changed(svc, await asyncio.to_thread(store.set_version_lora, p.id, v.id, v.lora, trigger))
+        return out
+    trigger = (body.trigger or _trigger(g.name)).strip()
+    return _queue_train(svc, body, gid, trigger, body.name.strip() or g.name, None, None,
+                        JobOrigin(suite="catalogue", surface="train", ref=gid, payload={"group_id": gid}))
+
+
+def _queue_train(svc, body: TrainBody, gid: str, trigger: str, name: str, pid: str | None, vid: str | None, origin: JobOrigin) -> dict:
+    """The job's recipe and its submission: the base (the first of /capabilities.train with its weights when the body names none)."""
+    _, _, q = svc.require_project()
     from ..capabilities import _train
     caps = _train(svc, svc.app.settings.variant)
     model_id = body.model_id or next((b["model_id"] for b in caps["bases"] if b["health"] in ("present", "verified")), None)
     if not model_id:
         raise HTTPException(422, caps["why"] or "no trainable base with its weights on disk")
-    trigger = (body.trigger or v.trigger or _trigger(p.name)).strip()
-    recipe = {"kind": "train_lora", "profile_id": pid, "version": v.id, "model_id": model_id, "steps": body.steps, "rank": body.rank, "resolution": body.resolution,
-              "lr": body.lr, "seed": body.seed, "trigger": trigger, "name": body.name.strip() or f"{p.name} {v.id}", "setting": body.setting}
-    origin = JobOrigin(suite="story", surface="train", ref=pid, payload={"version": v.id})
+    recipe = {"kind": "train_lora", "group_id": gid, "profile_id": pid, "version": vid, "model_id": model_id, "steps": body.steps, "rank": body.rank,
+              "resolution": body.resolution, "lr": body.lr, "seed": body.seed, "trigger": trigger, "name": name, "setting": body.setting}
     try:
         job = q.submit(recipe, stage=body.stage, origin=origin)[0]
     except ValueError as e:
         raise HTTPException(422, str(e))
-    if v.trigger != trigger:                                                      # the trigger is the version's from now on (a retrain keeps it)
-        p = await asyncio.to_thread(store.set_version_lora, pid, v.id, v.lora, trigger)
-        _changed(svc, p)
     return {"job_id": job.id, "trigger": trigger, "model_id": model_id, "staged": job.status == "staged"}
 
 
@@ -693,6 +698,8 @@ async def lora_check(svc: Svc, lid: str):
     if rec is None:
         raise HTTPException(404, "LoRA not found")
     store = StoryStore(ws)
+    if rec.profile_id is None:
+        raise HTTPException(422, "the check compares with a Cast version's hero; this LoRA was trained on an album of its own")   # D122
     p = await asyncio.to_thread(store.profile, rec.profile_id)
     if p is None:
         raise HTTPException(404, "the LoRA's profile is gone")

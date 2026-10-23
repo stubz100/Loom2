@@ -84,12 +84,12 @@ def test_catalogue_ingest_thumbs_list_patch_delete_rebuild(tmp_path: Path):
     assert cat.list(search="hell").items and not cat.list(search="zzz").items
     assert cat.lineage(rec.id)["parents"][0]["from_id"] == "ast_parent"
     rec2 = cat.patch(rec.id, {"state": "keep", "rating": 4, "tags": ["a"], "path": "hack"})
-    assert rec2.state == "keep" and rec2.rating == 4 and rec2.path == rec.path
+    assert rec2.tags == ["a"] and rec2.path == rec.path and "state" not in rec2.model_dump() and "rating" not in rec2.model_dump()   # D122
     # the index is rebuildable from sidecars
     cat.close()
     ws.catalogue_db.unlink()
     cat = Catalogue(ws, [32])
-    assert cat.count() == 0 and cat.rebuild() == 1 and cat.get(rec.id).state == "keep"
+    assert cat.count() == 0 and cat.rebuild() == 1 and cat.get(rec.id).tags == ["a"]
     assert cat.delete(rec.id) and cat.count() == 0 and not (ws.path / rec.path).exists() and not ws.thumb_path(rec.id, 32).exists()
     assert cat.delete(rec.id) is False
     cat.close()

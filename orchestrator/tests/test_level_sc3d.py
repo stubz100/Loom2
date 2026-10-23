@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 from loom2 import set_things
-from loom2.relief import floor_fit, floor_height, floor_of_glb, glb_read, level_of_glb, levelling, mesh_arrays, to_stage
+from loom2.relief import floor_fit, floor_height, floor_of_glb, glb_read, level_of_glb, levelling, mesh_arrays, subject_distance, to_stage
 from loom2.stages import StageStore
 from loom2.workspace import Workspace
 
@@ -71,6 +71,9 @@ def test_the_store_lays_the_set_level_and_a_rebuild_without_a_relief_does_not(tm
     assert obj.level is not None and abs(obj.level["pitch_deg"] + 7.0) < 0.2 and obj.level["residual"] < 0.01
     assert obj.transform.rot[0] == pytest.approx(obj.level["pitch_deg"], abs=0.01) and obj.transform.rot[1:] == [0.0, 0.0]
     assert 0.0 < obj.transform.pos[1] < 1.0 and abs(cam.pos[1] - 1.0) < 0.02 and cam.target[1] < cam.pos[1]
+    doc, binary = glb_read(path)
+    d = subject_distance(mesh_arrays(doc, binary)[0])
+    assert math.dist(cam.pos, cam.target) == pytest.approx(d, abs=1e-3)                        # SC3e: it looks at the picture's subject distance
     again = store.get(st.id)                                                                  # it is in the file
     assert again.objects[-1].level == obj.level and again.objects[-1].transform == obj.transform
     st = store.replace_image_set(st.id, obj.id, "ast_relief_2", 75.0, -1.2)                   # no relief given: as it came
@@ -95,3 +98,19 @@ def test_a_footprint_carried_to_the_clean_plates_relief(tmp_path: Path):
     for k in ("x", "y", "z", "width"):
         assert moved[k] == pytest.approx(want[k], abs=0.03), k
     assert moved["y"] == pytest.approx(dst["a"] * moved["x"] + dst["b"] * moved["z"] + dst["c"], abs=1e-9)      # on the clean floor
+
+
+def test_the_picture_camera_looks_where_the_depth_pass_holds_the_picture(tmp_path: Path):
+    """SC3e: Stage's depth pass spans 0.6× to 3× the camera's distance to its target; the picture camera's target is put where that span
+    holds the relief's depths (a target 1 m ahead saturated the room, and the final's masks could not tell a prop from the set)."""
+    path = tmp_path / "room.glb"
+    room_relief(path, pitch_deg=-6.0)
+    doc, binary = glb_read(path)
+    pos = mesh_arrays(doc, binary)[0]
+    z = -pos[:, 2]
+    near, far = float(np.percentile(z, 2)), float(np.percentile(z, 98))
+    d = subject_distance(pos)
+    assert 0.6 * d <= near + 1e-3 and 3.0 * d >= far - 1e-3 and d > 1.5                             # the room's 2 % to 98 % inside the pass
+    deep = np.c_[np.zeros(100), np.zeros(100), -np.linspace(1.0, 40.0, 100)]                          # deeper than one pass can hold: the near end
+    assert subject_distance(deep) == pytest.approx(float(np.percentile(np.linspace(1.0, 40.0, 100), 2)) / 0.6, abs=1e-3)
+    assert subject_distance(np.zeros((10, 3))) is None

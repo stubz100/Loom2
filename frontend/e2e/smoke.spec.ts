@@ -2520,6 +2520,36 @@ test('a set from an image (D120, SC3): a Bin picture becomes a relief set on the
   expect(doc2.objects.filter((o) => o.kind === 'set')).toHaveLength(1); expect(set2.asset_id).not.toBe(set.asset_id)
   expect(doc2.cameras.find((c) => c.id === set.plate_camera_id)!.focal_mm).toBeLessThan(pc.focal_mm)                    // a wider lens, a shorter focal
   await expect(page.locator('.outl-row[data-row="object"]', { has: page.locator('.kind', { hasText: 'set' }) })).toHaveCount(1)
+  // SC3e: the final's plate is the picture — Stage renders it with the layers' passes (no Klein still, no job), its still the set's picture
+  await page.evaluate(() => (window as unknown as { __loom2Stage: { setRange: (a: number, b: number) => void } }).__loom2Stage.setRange(0, 3))   // F16: 0, 1.5, 3
+  const shotJobs = async () => (await api<{ items: { kind: string }[] }>('GET', '/jobs')).items.filter((j) => j.kind === 'stage_shot').length
+  const shotsBefore = await shotJobs()
+  await perfCard(page, 'Final shot')
+  await page.locator('.final-section button', { hasText: /^Make the final shot/ }).click()
+  await expect(dialog).toContainText(/the plate from the picture set's picture/)
+  await dialog.locator('button.primary').click()
+  type FinP = { id: string; frames: number; layers: { id: string; method: string; status: string; frames_done: number; still_asset_id: string | null }[] }
+  const finOf = async () => (await api<{ items: FinP[] }>('GET', `/finals?stage_id=${doc2.id}`)).items[0]
+  await expect.poll(async () => { const f = await finOf(); const p = f?.layers.find((x) => x.id === 'plate'); return p ? `${p.method} ${p.status} ${p.frames_done}/${f.frames}` : '' }, { timeout: 60_000 })
+    .toBe('picture done 3/3')
+  const fin = await finOf()
+  expect(fin.layers.find((x) => x.id === 'plate')!.still_asset_id).toBe(set2.plate_asset_id)
+  expect(await shotJobs()).toBe(shotsBefore)                                                                                // no Klein still was queued
+  const means = await page.evaluate(async ([port, token, fid, pic]) => {                                                    // the frame is the set's picture, not the dark
+    const mean = async (path: string) => {
+      const bmp = await createImageBitmap(await (await fetch(`http://127.0.0.1:${port}${path}`, { headers: { 'X-Loom-Token': token } })).blob())
+      const c = new OffscreenCanvas(64, 36); const g = c.getContext('2d')!; g.drawImage(bmp, 0, 0, 64, 36)
+      const px = g.getImageData(8, 6, 48, 24).data                                                                            // the middle: the edges are the backdrop's margin
+      const m = [0, 0, 0]
+      for (let i = 0; i < px.length; i += 4) for (let k = 0; k < 3; k++) m[k] += px[i + k] / (px.length / 4)
+      return m
+    }
+    return [await mean(`/finals/${fid}/layers/plate/frames/0`), await mean(`/assets/${pic}/file`)]
+  }, [env().port, env().token, fin.id, set2.plate_asset_id] as const)
+  expect(Math.max(...means[0].map((v, k) => Math.abs(v - means[1][k])))).toBeLessThan(24)
+  await expect(page.locator('.final-section li[data-kind="plate"] .status')).toHaveText(/done · 3 frames/)
+  await expect(page.locator('.final-section li[data-kind="plate"] img.still')).toBeVisible()
+  await expect(page.locator('.panel .foot button.primary')).not.toHaveText(/plate/)                                       // the next step is past the plate
 })
 
 test('the things of a picture set (D123, SC3c): picked on the picture, kept by name, renamed; Make cleans the plate, rebuilds the relief and models each thing', async ({ page }) => {

@@ -170,6 +170,29 @@ def level_of_glb(path: Path, lift: float) -> dict | None:
     return levelling(fit, lift) if fit else None
 
 
+def subject_distance(pos: np.ndarray) -> float | None:
+    """SC3e: how far a picture camera looks — the distance whose depth pass (Stage's `depthRange`: 0.6× to 3× the camera's distance to its
+    target) holds the relief's depths, the nearest 2 % to the farthest 2 % (the geometric middle of the distances that do; the near end
+    when none does: the things in front matter more). A target 1 m ahead saturated a room 1.4–6.5 m deep, so the final's depth passes
+    could not tell a prop from the set (SC3e's rig). None without depths in front of the camera."""
+    z = -pos[:, 2]
+    z = z[np.isfinite(z) & (z > 1e-3)]
+    if len(z) < 16:
+        return None
+    near, far = float(np.percentile(z, 2)), float(np.percentile(z, 98))
+    lo, hi = far / 3.0, near / 0.6
+    return round(math.sqrt(lo * hi) if lo <= hi else hi, 3)
+
+
+def frame_of_glb(path: Path, lift: float) -> tuple[dict | None, float | None]:
+    """SC3d / SC3e: a relief read once for its picture set — its levelling (see `levelling`) and its camera's subject distance (see
+    `subject_distance`), either None when the relief cannot say."""
+    doc, binary = glb_read(path)
+    pos, uv, _ = mesh_arrays(doc, binary)
+    fit = floor_fit(pos, uv) if uv is not None else None
+    return (levelling(fit, lift) if fit else None), subject_distance(pos)
+
+
 def to_stage(p: np.ndarray | list, lift: float, level: dict | None) -> np.ndarray:
     """A point of the relief's frame on the stage: lifted by the set's floor, then (SC3d) turned and raised as the set is."""
     v = np.array([float(p[0]), float(p[1]) + lift, float(p[2])])

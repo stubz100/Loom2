@@ -38,6 +38,7 @@ interface Entry { holder: THREE.Group; body: THREE.Object3D; doc: StageObject; f
 
 const deg = THREE.MathUtils.radToDeg, rad = THREE.MathUtils.degToRad
 const BEAUTY_ENV = 0.8                            // D109: the beauty pass's room-environment intensity (E28c: the models read near the plate's brightness)
+const BACKDROP_MARGIN = 0.06                      // SC3e: the picture behind a set carried on past its edge, a share of its size each side
 
 export class StageEngine {
   readonly renderer: THREE.WebGLRenderer
@@ -74,6 +75,9 @@ export class StageEngine {
   // P18: which mesh objects have their GLB in the scene (the smoke test and the rig ask)
   readonly meshesLoaded = new Set<string>()
   readonly meshesFailed = new Map<string, string>()
+  // SC3e: the loads in flight (a model, a relief and the picture behind it, an image plane's picture, a proxy, a detailed mannequin) — a
+  // render waits for them (`settled`), so a headless pass never catches a stand-in
+  private loading = new Set<Promise<void>>()
   // ST3: the pass materials and the helpers that stay out of the passes
   private grid: THREE.GridHelper
   private passClay = new THREE.MeshLambertMaterial({ color: 0xd8d8d8 })
@@ -530,7 +534,7 @@ export class StageEngine {
       stub.position.y = 0.25
       group.add(stub)
       const id = o.id
-      new GLTFLoader().loadAsync(api.assetUrl(o.asset_id)).then((gltf) => {
+      this.track(new GLTFLoader().loadAsync(api.assetUrl(o.asset_id)).then((gltf) => {
         const e = this.entries.get(id)
         if (!e || e.body !== group || this.disposed) return
         const model = gltf.scene
@@ -544,20 +548,20 @@ export class StageEngine {
         if (this.selectedId === id) this.selection.setFromObject(e.holder)
         this.dirty = true
         if (this.hooks.onMeshThumb && o.asset_id) { const aid = o.asset_id; void this.thumbnailOf(model).then((b) => this.hooks.onMeshThumb?.(aid, b)).catch(() => {}) }
-      }).catch((err: unknown) => { this.meshesFailed.set(id, String(err)); this.dirty = true })
+      }).catch((err: unknown) => { this.meshesFailed.set(id, String(err)); this.dirty = true }))
       body = group
     }
     else if (o.kind === 'plane' && o.asset_id) {
       const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true })
       const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.9), mat)
       mesh.position.y = 0.9
-      this.texLoader.load(api.assetUrl(o.asset_id), (tex) => {
+      this.track(this.texLoader.loadAsync(api.assetUrl(o.asset_id)).then((tex) => {
         tex.colorSpace = THREE.SRGBColorSpace
         mat.map = tex; mat.needsUpdate = true
         const img = tex.image as { width?: number; height?: number }
         if (img?.width && img?.height) { mesh.scale.set(1, (img.height / img.width) / (0.9 / 1.6), 1) }
         this.dirty = true
-      })
+      }))
       body = mesh
     } else if (o.kind === 'light') {
       const g = new THREE.Group()
@@ -585,7 +589,7 @@ export class StageEngine {
     stub.position.set(0, 0.01, -3)
     group.add(stub)
     const id = o.id
-    new GLTFLoader().loadAsync(api.assetUrl(o.asset_id!)).then((gltf) => {
+    this.track(new GLTFLoader().loadAsync(api.assetUrl(o.asset_id!)).then((gltf) => {
       const e = this.entries.get(id)
       if (!e || e.body !== group || this.disposed) return
       const model = gltf.scene
@@ -613,7 +617,7 @@ export class StageEngine {
       this.meshesLoaded.add(id)
       if (this.selectedId === id) this.selection.setFromObject(e.holder)
       this.dirty = true
-    }).catch((err: unknown) => { this.meshesFailed.set(id, String(err)); this.dirty = true })
+    }).catch((err: unknown) => { this.meshesFailed.set(id, String(err)); this.dirty = true }))
     return group
   }
   /** SC3b: shadows only, over a picture set's relief (transparent elsewhere); drawn just in front of the relief it copies. */
@@ -622,7 +626,7 @@ export class StageEngine {
    *  lens and the picture's aspect) — what MoGe masked (the sky) and a seam a move opens show the picture. Out of the set's bounds and
    *  picking (an empty bounding box), unlit, no shadows; the clay, depth, normal and mask passes leave it out (hideBackdrops). */
   private attachBackdrop(id: string, group: THREE.Group, model: THREE.Object3D, plateId: string, lensDeg: number, lift: number): void {
-    new THREE.TextureLoader().loadAsync(api.assetUrl(plateId)).then((tex) => {
+    this.track(new THREE.TextureLoader().loadAsync(api.assetUrl(plateId)).then((tex) => {
       const e = this.entries.get(id)
       if (!e || e.body !== group || this.disposed) { tex.dispose(); return }
       tex.colorSpace = THREE.SRGBColorSpace
@@ -631,14 +635,18 @@ export class StageEngine {
       const far = Math.max(2, -box.min.z) * 1.02
       const hfov = rad(Math.min(150, Math.max(20, lensDeg)))
       const w = 2 * far * Math.tan(hfov / 2), h = w * (img.height / Math.max(1, img.width))
-      const geo = new THREE.PlaneGeometry(w, h)
+      // SC3e: a margin past the picture's edge repeating its edge pixels (the texture clamps) — a frame a little taller or wider than the
+      // picture (the final's 832×480 against a 16:9 picture) shows the picture's edge carried on, not a black band
+      const geo = new THREE.PlaneGeometry(w * (1 + 2 * BACKDROP_MARGIN), h * (1 + 2 * BACKDROP_MARGIN))
+      const uv = geo.getAttribute('uv') as THREE.BufferAttribute
+      for (let i = 0; i < uv.count; i++) uv.setXY(i, (uv.getX(i) - 0.5) * (1 + 2 * BACKDROP_MARGIN) + 0.5, (uv.getY(i) - 0.5) * (1 + 2 * BACKDROP_MARGIN) + 0.5)
       geo.boundingBox = new THREE.Box3()                                              // empty: never in the set's box, the framing or a pick
       const backdrop = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex }))
       backdrop.position.set(0, lift, -far)
       Object.assign(backdrop.userData, { stageId: id, unlit: true, backdrop: true })
       group.add(backdrop)
       this.dirty = true
-    }).catch((err: unknown) => this.hooks.onDetailError?.(id, `the picture behind the set: ${err instanceof Error ? err.message : String(err)}`))
+    }).catch((err: unknown) => this.hooks.onDetailError?.(id, `the picture behind the set: ${err instanceof Error ? err.message : String(err)}`)))
   }
   /** SC3b: the picture sets' backdrops out of a pass (they belong to the viewport and the beauty pass); returns the undo. */
   private hideBackdrops(): () => void {
@@ -664,7 +672,7 @@ export class StageEngine {
   /** E23d (D105): the figure's shadow proxy — a mesh asset bound to its joints, seen by the light only; the dummy then casts nothing. */
   private attachProxy(e: Entry, assetId: string): void {
     const id = e.doc.id
-    new GLTFLoader().loadAsync(api.assetUrl(assetId)).then((gltf) => {
+    this.track(new GLTFLoader().loadAsync(api.assetUrl(assetId)).then((gltf) => {
       if (this.disposed || this.entries.get(id) !== e || !e.figure) return
       e.holder.updateMatrixWorld(true)
       const px = bindProxy(gltf.scene, e.figure.joints, e.figure.limbs, e.holder, e.doc.pose ?? null)
@@ -673,13 +681,13 @@ export class StageEngine {
       e.holder.traverse((c) => { const m = c as THREE.Mesh; if (m.isMesh) m.castShadow = false })
       this.followAll()
       this.dirty = true
-    }).catch((err) => this.hooks.onDetailError?.(id, `shadow proxy: ${err instanceof Error ? err.message : String(err)}`))
+    }).catch((err) => this.hooks.onDetailError?.(id, `shadow proxy: ${err instanceof Error ? err.message : String(err)}`)))
   }
   /** CA1: the Detailed level — the starter set's mannequin, loaded once and cloned, follows the figure's joints; the Simple shapes hide
    *  (the joints, pickers and markers stay: they drive the pose and carry the pose pass). Until it loads, or without it, the figure is Simple. */
   private attachDetailed(e: Entry, kind: 'male' | 'female'): void {
     const id = e.doc.id
-    void import('./motion/mannequins').then((m) => m.mannequinClone(kind, this.clayMat)).then(({ root, rig }) => {
+    this.track(import('./motion/mannequins').then((m) => m.mannequinClone(kind, this.clayMat)).then(({ root, rig }) => {
       if (this.disposed || this.entries.get(id) !== e || !e.figure) return
       e.holder.updateMatrixWorld(true)
       const d = makeDetailed(root, rig, e.figure.joints.root.parent!, e.figure.joints, e.figure.limbs, { hands: e.doc.body?.hands, feet: e.doc.body?.feet })
@@ -689,7 +697,7 @@ export class StageEngine {
       e.detailed = d
       d.follow(e.figure.joints, e.doc.pose?.extra)
       this.dirty = true
-    }).catch((err) => this.hooks.onDetailError?.(id, err instanceof Error ? err.message : String(err)))
+    }).catch((err) => this.hooks.onDetailError?.(id, err instanceof Error ? err.message : String(err))))
   }
   /** CA1: a hand preset as the figure's `extra` bone turns — null while the figure is Simple (or its mannequin is still loading). */
   handPreset(id: string, side: 'r' | 'l', preset: HandPreset): Record<string, number[]> | null {
@@ -729,6 +737,7 @@ export class StageEngine {
    *  colour per object, the legend returned) and the pose (every figure's COCO-18 in OpenPose colours). Helpers, pickers and the gizmo
    *  stay out; hidden objects too. The viewport's own renderer and state are untouched. */
   async renderPasses(cam: StageCamera, w: number, h: number): Promise<RenderedPasses> {
+    await this.settled()                                                             // SC3e: no stand-in in a pass
     const r = this.passRenderer(w, h)
     const camera = this.shotCamera(cam, w / h)
     const restore = this.hideHelpers(camera)
@@ -762,11 +771,25 @@ export class StageEngine {
       this.dirty = true
     }
   }
+  /** SC3e: a load joins the ones a render waits for (its success or failure both end the wait). */
+  private track(p: Promise<unknown>): void {
+    const q: Promise<void> = p.then(() => undefined, () => undefined).then(() => { this.loading.delete(q) })
+    this.loading.add(q)
+  }
+  /** SC3e: every load in flight has landed or failed — a load that starts another (a relief, then the picture behind it) is waited for
+   *  too; at most `ms`. */
+  async settled(ms = 30_000): Promise<void> {
+    const until = Date.now() + ms
+    while (this.loading.size && Date.now() < until) {
+      await Promise.race([Promise.allSettled([...this.loading]), new Promise((r) => setTimeout(r, Math.max(0, until - Date.now())))])
+    }
+  }
   /** ST4 (16 §8): one pass per frame of an animated range — the scene synced to each frame's sampled document and camera (anim.ts),
    *  the depth (the IC-LoRA guide, D76) or the pose sequence, with every frame's COCO-18 keypoints for the rig's scoring. The scene
    *  is left at `restoreDoc` (the frame the viewport shows). */
   async renderSequence(frames: { cam: StageCamera; doc: StageDoc }[], w: number, h: number, kind: 'depth' | 'pose' | 'clay' | 'proxy' | 'proxymask' | 'beauty', restoreDoc: StageDoc,
                        onProgress?: (done: number, total: number) => void): Promise<{ blobs: Blob[]; keypoints: Keypoint[][][]; wholebody: (WholeBody | null)[][] }> {
+    if (frames.length) { this.sync(frames[0].doc); await this.settled() }          // SC3e: what the frames show, loaded
     const r = this.passRenderer(w, h)
     let restore = () => {}
     // D109: a mesh prop's PBR material (Pixal3D bakes metalness) reflects its surroundings — without an environment it renders near
@@ -812,6 +835,7 @@ export class StageEngine {
    *  show the set alone (the caller hides the actors). */
   async renderProjected(frames: { cam: StageCamera; doc: StageDoc }[], w: number, h: number, plate: TexImageSource, proj: StageCamera, projAspect: number,
                         restoreDoc: StageDoc, onProgress?: (done: number, total: number) => void): Promise<Blob[]> {
+    if (frames.length) { this.sync(frames[0].doc); await this.settled() }          // SC3e: the set loaded
     const r = this.passRenderer(w, h)
     const tex = new THREE.Texture(plate as HTMLImageElement)
     tex.colorSpace = THREE.NoColorSpace; tex.needsUpdate = true                    // the plate's own sRGB values, written as they are

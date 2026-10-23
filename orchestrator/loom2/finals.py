@@ -22,7 +22,7 @@ BATCH, CARRY = 77, 5                              # E23a W1: 77-frame batches, t
 CHARACTER_TAIL = "moving exactly as the pose shows. Plain studio background, static camera."
 PLATE_LEAD = "The room is empty: there are no people and no objects in it, only the bare walls and floor."   # E28: a plate without the lead grew people
 LayerKind = Literal["plate", "figure", "prop", "shadows"]
-LayerMethod = Literal["projected", "move", "rendered", "drawn", "stage"]
+LayerMethod = Literal["projected", "picture", "move", "rendered", "drawn", "stage"]
 LayerStatus = Literal["passes", "queued", "running", "done", "failed"]
 MAX_FRAMES = 721                                   # 30 s at 24 fps (D96: ≈ 30 s a Shot, a warning beyond)
 # the passes each kind of layer brings from Stage (PS5a); a pass with one frame is a still (the plate's frame-0 render)
@@ -33,6 +33,13 @@ LAYER_PASSES: dict[str, tuple[str, ...]] = {
     "shadows": ("clay",),                          # everything, lit: the shadows over the bare set's lit clay
 }
 DEFAULT_METHOD: dict[str, str] = {"plate": "projected", "figure": "move", "prop": "rendered", "shadows": "stage"}
+
+
+def picture_plate(st: Any) -> str | None:
+    """SC3e (D120): the picture a stage's plate is — its first visible picture set's (clean) picture — or None (the plate is projected:
+    PS5b's Klein still of the bare set). A set from an image already is the place: the plate is that picture through its relief."""
+    o = next((o for o in st.objects if o.kind == "set" and o.preset == "image" and o.visible and o.plate_asset_id), None)
+    return o.plate_asset_id if o is not None else None
 
 
 class FinalLayer(BaseModel):
@@ -48,7 +55,7 @@ class FinalLayer(BaseModel):
     keypoints: bool = False                        # a figure's per-frame COCO-18 keypoints are in keypoints.json (PS5c: where it starts; D107: its soles)
     status: LayerStatus = "passes"
     error: str | None = None
-    still_asset_id: str | None = None              # PS5b: the plate's still (a Klein Stage shot of the bare set at frame 0)
+    still_asset_id: str | None = None              # PS5b: the plate's still (a Klein Stage shot of the bare set at frame 0); SC3e: the set's picture
     frames_done: int = 0                           # the layer's own sequence on disk (`frames/`): the projected plate, a character's performance …
     job_ids: list[str] = Field(default_factory=list)   # the jobs that made (or make) the layer
     seed: int = 0                                  # PS5c: a character layer's performance seed (a re-take takes another)
@@ -404,8 +411,9 @@ class FinalStore:
         self.save(f)
         return f
 
-    def set_frames(self, fid: str, lid: str, files: list[Path], status: str = "done") -> Final:
-        """A layer's own sequence (`frames/`), one file per frame at the final's count; the layer is done (or runs on: a character's matte)."""
+    def set_frames(self, fid: str, lid: str, files: list[Path], status: str = "done", still_asset_id: str | None = None) -> Final:
+        """A layer's own sequence (`frames/`), one file per frame at the final's count; the layer is done (or runs on: a character's matte).
+        SC3e: `still_asset_id` names the picture the frames were rendered from (a picture set's plate)."""
         f = self.get(fid)
         if f is None:
             raise KeyError(fid)
@@ -416,7 +424,7 @@ class FinalStore:
         d.mkdir(parents=True)
         for i, src in enumerate(files):
             shutil.copyfile(src, d / f"{i:04d}.png")
-        return self.update_layer(fid, lid, frames_done=len(files), status=status, error=None)
+        return self.update_layer(fid, lid, frames_done=len(files), status=status, error=None, **({"still_asset_id": still_asset_id} if still_asset_id else {}))
 
     def set_result(self, fid: str, clip_id: str, stats: dict[str, Any]) -> Final:
         """PS5e: the assembled shot (a clip) and what the assembly did."""

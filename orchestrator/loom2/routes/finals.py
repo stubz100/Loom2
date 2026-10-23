@@ -72,8 +72,9 @@ def _reconcile(svc, store: FinalStore, f: Final) -> Final:
 
 @router.post("/finals", response_model=Final)
 async def final_create(svc: Svc, body: FinalCreate):
-    """PS5a: a final from the scene's layers — the record and each layer's passes (Stage's renders at the shot's rate) on disk."""
-    from ..finals import DEFAULT_METHOD
+    """PS5a: a final from the scene's layers — the record and each layer's passes (Stage's renders at the shot's rate) on disk. SC3e: on a
+    stage with a picture set the plate is that picture (method `picture`: Stage renders it through the relief), not a Klein still."""
+    from ..finals import DEFAULT_METHOD, picture_plate
     ws, _, _ = svc.require_project()
     st = await asyncio.to_thread(StageStore(ws).get, body.stage_id)
     if st is None:
@@ -85,7 +86,8 @@ async def final_create(svc: Svc, body: FinalCreate):
             raise HTTPException(422, f"layer {x.id}: a layer is a plate, a figure, a prop or the shadows")
     passes = {x.id: {name: [_blob(ws, sha) for sha in shas] for name, shas in x.passes.items()} for x in body.layers}
     keypoints = {x.id: x.keypoints for x in body.layers if x.keypoints is not None}
-    data = body.model_dump(exclude={"layers"}) | {"layers": [FinalLayer(id=x.id, kind=x.kind, name=x.name, object_id=x.object_id, method=x.method or DEFAULT_METHOD[x.kind],  # type: ignore[arg-type]
+    method = DEFAULT_METHOD | ({"plate": "picture"} if picture_plate(st) else {})
+    data = body.model_dump(exclude={"layers"}) | {"layers": [FinalLayer(id=x.id, kind=x.kind, name=x.name, object_id=x.object_id, method=x.method or method[x.kind],  # type: ignore[arg-type]
                                                                         profile_id=x.profile_id, version=x.version).model_dump() for x in body.layers]}
     try:
         f = await asyncio.to_thread(FinalStore(ws).create, data, passes, keypoints)
@@ -153,6 +155,8 @@ async def final_plate(svc: Svc, fid: str, body: PlateBody):
     f = await asyncio.to_thread(store.get, fid)
     if f is None:
         raise HTTPException(404, "final not found")
+    if any(x.id == "plate" and x.method == "picture" for x in f.layers):                    # SC3e
+        raise HTTPException(422, "the plate is the set's picture: Stage renders it through the relief (no Klein still)")
     src = store.pass_dir(fid, "plate", "clay") / "0000.png"
     if not src.is_file():
         raise HTTPException(422, "the plate's clay pass is missing")
@@ -181,11 +185,22 @@ class FramesBody(BaseModel):
 
 @router.put("/finals/{fid}/layers/{lid}/frames", response_model=Final)
 async def final_layer_frames(svc: Svc, fid: str, lid: str, body: FramesBody):
-    """A layer's own sequence made by the client (PS5b: the projected plate) — stored as its `frames/`; the layer is done."""
+    """A layer's own sequence made by the client (PS5b: the projected plate; SC3e: the picture plate, its still stamped as the stage's
+    picture — the lineage the assembled shot carries) — stored as its `frames/`; the layer is done."""
+    from ..finals import picture_plate
     ws, _, _ = svc.require_project()
     files = [_blob(ws, sha) for sha in body.frames]
+    store = FinalStore(ws)
+    f = await asyncio.to_thread(store.get, fid)
+    layer = next((x for x in f.layers if x.id == lid), None) if f is not None else None
+    still = None
+    if layer is not None and layer.method == "picture":
+        st = await asyncio.to_thread(StageStore(ws).get, f.stage_id)
+        still = picture_plate(st) if st is not None else None
+        if still is None:
+            raise HTTPException(422, "the stage has no picture set any more: the plate cannot be its picture")
     try:
-        f = await asyncio.to_thread(FinalStore(ws).set_frames, fid, lid, files)
+        f = await asyncio.to_thread(store.set_frames, fid, lid, files, "done", still)
     except KeyError as e:
         raise HTTPException(404, str(e.args[0]))
     except ValueError as e:

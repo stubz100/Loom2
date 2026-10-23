@@ -746,7 +746,8 @@ export interface paths {
         put?: never;
         /**
          * Final Create
-         * @description PS5a: a final from the scene's layers — the record and each layer's passes (Stage's renders at the shot's rate) on disk.
+         * @description PS5a: a final from the scene's layers — the record and each layer's passes (Stage's renders at the shot's rate) on disk. SC3e: on a
+         *     stage with a picture set the plate is that picture (method `picture`: Stage renders it through the relief), not a Klein still.
          */
         post: operations["final_create_finals_post"];
         delete?: never;
@@ -1093,7 +1094,8 @@ export interface paths {
         get?: never;
         /**
          * Final Layer Frames
-         * @description A layer's own sequence made by the client (PS5b: the projected plate) — stored as its `frames/`; the layer is done.
+         * @description A layer's own sequence made by the client (PS5b: the projected plate; SC3e: the picture plate, its still stamped as the stage's
+         *     picture — the lineage the assembled shot carries) — stored as its `frames/`; the layer is done.
          */
         put: operations["final_layer_frames_finals__fid__layers__lid__frames_put"];
         post?: never;
@@ -5237,7 +5239,7 @@ export interface components {
              * Method
              * @enum {string}
              */
-            method: "projected" | "move" | "rendered" | "drawn" | "stage";
+            method: "projected" | "picture" | "move" | "rendered" | "drawn" | "stage";
             /** Name */
             name: string;
             /** Object Id */

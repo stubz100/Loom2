@@ -174,7 +174,8 @@ async def test_picked_kept_and_made(tmp_path: Path, object_info: dict, monkeypat
         assert abs(obj.level["pitch_deg"] - PITCH) < 0.3 and obj.transform.rot[0] == pytest.approx(obj.level["pitch_deg"], abs=0.01)   # SC3d
         assert j2.result["level"] == obj.level and any("laid level" in line for line in j2.log_tail)
         cam = next(c for c in st.cameras if c.id == obj.plate_camera_id)
-        assert abs(cam.pos[1] - 1.0) < 0.03 and cam.target[1] - cam.pos[1] == pytest.approx(math.sin(math.radians(PITCH)), abs=0.01)   # looking down
+        look = np.subtract(cam.target, cam.pos)
+        assert abs(cam.pos[1] - 1.0) < 0.03 and look[1] / np.linalg.norm(look) == pytest.approx(math.sin(math.radians(PITCH)), abs=0.01)   # looking down
         t = obj.things[0]
         mesh = next(x for x in st.objects if x.id == t.object_id)
         assert mesh.kind == "mesh" and mesh.name == "Big crate" and mesh.asset_id == t.mesh_asset_id == j3.result["asset_ids"][0]

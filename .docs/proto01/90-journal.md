@@ -8228,3 +8228,42 @@ The author asked for a review of the state of things, then "record all this and 
   the rebuilt set laid level, its camera pitched, the prop on the stage floor and carried ×1.0; a diamond turned 45° measures √2, not 2√2);
   the fake engine takes a test's own GLB for a graph (`FakeComfy.glb_for`); the e2e set scenario's row reads *as it came*. Offline 515
   passed, Vitest 426 + 3 skipped, e2e 54/54 full and 54/54 open, typecheck and build clean, lint 0 errors (79), audits clean.
+
+## 2026-10-23 17:18 — SC3e built: the final shot of a picture set takes its picture as the plate
+
+- **Why.** D120 said "the relief re-projected is the plate" and SC3's plan row promised the picture as the plate at every camera; it was
+  never built — a final made on a picture set still made PS5b's Klein still of the bare set's clay and projected it, so the shot lost the
+  place the author had photographed.
+- **Server** (`finals.py`, `routes/finals.py`): `LayerMethod` gains `picture`; `POST /finals` gives the plate that method when the stage has
+  a visible picture set (`finals.picture_plate`: its first visible picture set's picture); `POST /finals/{fid}/plate` (the Klein still)
+  refuses such a plate with the reason; `PUT /finals/{fid}/layers/plate/frames` stamps the set's picture as the plate's `still_asset_id`
+  (the assembled clip's parents carry it) and refuses when the stage has no picture set any more. OpenAPI and schema.d.ts regenerated (D38).
+- **Client** (`finalShot.ts`, `FinalPanel.tsx`): `picturePlate` renders Stage's beauty pass with every actor hidden through each frame's
+  camera — the relief textured with the clean picture, the picture behind it — and stores the frames; `make()` runs it right after the
+  layers' passes (the confirm says so; a failure keeps the final and says *Render the plate on its row*); the plate's row shows *the
+  picture, through its relief*, *rendering the picture…*, *Render the plate* (again); the next step reads *Render the plate ▶* when it is
+  still owed.
+- **Found by the rig and fixed:** (1) the final's depth passes of the picture set were black — the picture camera looked at a point 1 m
+  ahead and Stage's depth pass spans 0.6–3× the camera's distance to its target, so a room 1.4–6.5 m deep saturated and the assembly's
+  masks (an actor where its depth differs from the bare set's) left the crate half see-through; the picture camera now looks at
+  `relief.subject_distance` (the distance whose span holds the relief's 2nd–98th percentile depths; the room: 2.76 m), set by the store
+  with the levelling (`frame_of_glb`, one read of the relief); (2) 2.5 % of the plate's first frame was black bands — the final's 832×480 is
+  a little taller than a 16:9 picture at the same lens — so the picture behind the relief now carries on 6 % past its edge with its edge
+  pixels (the texture clamps); (3) Stage's renders did not wait for their models (a headless pass could catch the wireframe stand-in): the
+  engine tracks every load in flight (models, reliefs, the picture behind a set, image planes, proxies, detailed mannequins) and the pass
+  and sequence renderers and the projector wait for them (`settled`, at most 30 s).
+- **Rig** (`engine/spikes/sc3e_rig.py`; SC3d's project copied, the set framed again as the code now does it, the figures hidden, a dolly
+  0.45 m in and 0.15 m across over frames 0–48; the browser half a throwaway Playwright spec; ComfyUI never started): the final 33 frames
+  at 832×480 in four layers (the plate, the crate, the small block, the shadows), the plate `picture` and done straight after the split, its
+  still the clean plate, no `stage_shot` job; its first frame against the clean picture mean |Δ| 2.69 / 255 and 0.00 % black (2.50 % before
+  the backdrop's margin), its last 18.6 from its first; assembled on the CPU in 9.0 s (33 frames in 6.9 s, RIFE to 49 at 24 fps), the crate
+  and the small block solid in it (half see-through before the subject distance). Screenshots and the contact sheet:
+  proto01_animate/img/25-sc3e-*.jpg.
+- **Tests:** `test_final_picture_plate_sc3e.py` (the plate's method, the Klein route's refusal, the frames' still, a hidden set gives the
+  projected plate, a removed one refuses); `test_level_sc3d.py` (the subject distance holds the room inside the depth pass, the near end
+  when nothing can, the store's camera at it); `finalShot.test.ts` (a visible picture set, the beauty pass with every actor hidden stored as
+  the plate's frames, the next step's words); the e2e set scenario makes a final on its picture set (the plate `picture`, done, its still the
+  set's picture, its mean colour the picture's, no Klein job — a first version checked for a bright frame and failed in the open variant,
+  whose first Bin picture is a dark one). Offline 517 passed, Vitest 429 + 3 skipped, e2e 54/54 full and 54/54 open (two earlier full runs
+  each lost one scenario to the known flakes — ERR_NO_BUFFER_SPACE, the World library's tile — each clean when rerun), typecheck and build
+  clean, lint 0 errors (79), audits clean.

@@ -28,6 +28,10 @@ export function framesAt(start: number, end: number, rate: Rate): number[] {
 export const batchCount = (n: number): number => (n <= 77 ? 1 : 1 + Math.ceil((n - 77) / 72))
 
 const isActor = (o: StageObject) => o.visible && (o.kind === 'mannequin' || o.kind === 'mesh' || o.kind === 'prop' || o.kind === 'plane')
+/** SC3e (D120): a stage with a visible picture set — its plate is that picture through the relief, not a Klein still (finals.py picture_plate). */
+export const hasPictureSet = (doc: StageDoc): boolean => doc.objects.some((o) => o.kind === 'set' && o.preset === 'image' && o.visible && !!o.plate_asset_id)
+/** SC3e: the final's plate is a picture set's picture (the server decided when the final was made). */
+export const picturePlated = (f: Final): boolean => f.layers.some((l) => l.id === 'plate' && l.method === 'picture')
 
 /** The layers of a scene: the plate (the sets), each visible figure, each visible prop (a 3D model, a stand-in or an image plane), the shadows. */
 export function planFinal(doc: StageDoc, rate: Rate): FinalPlan {
@@ -128,6 +132,28 @@ export async function projectPlate(f: Final, onProgress?: (done: number, total: 
   const camOf = (d: StageDoc) => d.cameras.find((c) => c.id === f.camera_id) ?? d.cameras[0]
   const frames = times.map((t) => { const d = sampleDoc(doc, t); return { cam: camOf(d), doc: only(d, []) } })
   const blobs = await project(frames, f.size.w, f.size.h, img, frames[0].cam, img.naturalWidth / img.naturalHeight, sampleDoc(doc, st().frame), onProgress)
+  return storePlate(f, blobs)
+}
+
+/** SC3e (D120): the plate from the picture — the picture set's relief, textured with its (clean) picture and the picture behind it,
+ *  through each frame's camera with every actor hidden (Stage's beauty pass): the place itself, moving as the camera moves. No Klein
+ *  still, no GPU job; the server stamps the set's picture as the plate's still. The stage must be the final's, open. */
+export async function picturePlate(f: Final, onProgress?: (done: number, total: number) => void): Promise<Final> {
+  const doc = st().current
+  if (!doc || doc.id !== f.stage_id) throw new Error('open the final\'s stage to render its plate')
+  if (!hasPictureSet(doc)) throw new Error('the stage has no picture set any more')
+  if (!st().sequenceRenderer) (await import('./headless')).ensureHeadless()
+  const render = st().sequenceRenderer
+  if (!render) throw new Error('the stage is not ready to render')
+  const times = framesAt(f.range.start, f.range.end, f.rate as Rate)
+  const camOf = (d: StageDoc) => d.cameras.find((c) => c.id === f.camera_id) ?? d.cameras[0]
+  const frames = times.map((t) => { const d = sampleDoc(doc, t); return { cam: camOf(d), doc: only(d, []) } })
+  const out = await render(frames, f.size.w, f.size.h, 'beauty', sampleDoc(doc, st().frame), onProgress)
+  return storePlate(f, out.blobs)
+}
+
+/** The plate's frames uploaded (each once, by its hash) and stored as the layer's own; the layer is done. */
+async function storePlate(f: Final, blobs: Blob[]): Promise<Final> {
   const shas: string[] = []
   const uploaded = new Set<string>()
   for (const blob of blobs) {
@@ -148,7 +174,7 @@ export function finalSize(): [number, number] {
 interface FinalsState {
   finals: Final[]
   making: { done: number; total: number; what: string } | null
-  projecting: string | null                                  // PS5b: the final whose plate Stage is projecting
+  projecting: string | null                                  // PS5b: the final whose plate Stage is projecting (SC3e: or rendering from the picture)
   awaiting: Record<string, { was: string | null; since: number; field: 'assembled_at' | 'clip_id' }>   // PS5e / AE1: a job's result awaited: the field's value before (the poll runs till it moves)
   compositions: Record<string, Composition | null>                     // AE1: per assembled final, its composition (null: none yet)
   load: () => Promise<void>
@@ -225,6 +251,17 @@ export const useFinals = create<FinalsState>((set, get) => ({
   plate: async (id) => {
     const f = get().finals.find((x) => x.id === id)
     if (!f) return
+    if (picturePlated(f)) {                                                    // SC3e: Stage renders it here, in seconds
+      if (get().projecting) return
+      set({ projecting: id })
+      try {
+        const next = await picturePlate(f)
+        set({ finals: replace(get().finals, next) })
+        useSession.getState().toast(`${f.name}: the plate is the picture — ${next.frames} frames through its relief`, 'success')
+      } catch (e) { useSession.getState().toast(`Render the plate: ${(e as ApiError).detail ?? (e as Error).message ?? e}`, 'error') }
+      finally { set({ projecting: null }) }
+      return
+    }
     try {
       await makePlate(f)
       useSession.getState().toast(`${f.name}: the plate is queued (a Klein Stage shot of the bare set) — Stage projects it along the camera path when it lands`, 'info')
@@ -301,16 +338,23 @@ export const useFinals = create<FinalsState>((set, get) => ({
     const plan = planFinal(doc, rate)
     const figures = plan.layers.filter((l) => l.kind === 'figure').length, props = plan.layers.filter((l) => l.kind === 'prop').length
     const [w, h] = finalSize()
+    const picture = hasPictureSet(doc)
     const ok = await askConfirm({ title: 'Make the final shot?', okLabel: 'Split into layers',
       text: `The scene through ${st().activeCamera()?.name ?? 'the camera'}, frames ${doc.range.start}–${doc.range.end} at ${rate} fps: ${plan.times.length} frames at ${w}×${h}. ` +
-        `${plan.layers.length} layers — the plate, ${figures} figure${figures === 1 ? '' : 's'}, ${props} prop${props === 1 ? '' : 's'} and the shadows. Stage renders their passes here (a minute or two); the layers are made from them next.` })
+        `${plan.layers.length} layers — the plate, ${figures} figure${figures === 1 ? '' : 's'}, ${props} prop${props === 1 ? '' : 's'} and the shadows. Stage renders their passes here (a minute or two)` +
+        (picture ? ', and the plate from the picture set\'s picture; the other layers are made next.' : '; the layers are made from them next.') })
     if (!ok) return null
     set({ making: { done: 0, total: 1, what: 'starting' } })
     try {
       const n = get().finals.filter((f) => f.stage_id === doc.id).length + 1
-      const f = await makeFinal({ rate, name: `Final ${n}`, onProgress: (done, total, what) => set({ making: { done, total, what } }) })
+      let f = await makeFinal({ rate, name: `Final ${n}`, onProgress: (done, total, what) => set({ making: { done, total, what } }) })
       set({ finals: [f, ...get().finals] })
-      s.toast(`${f.name}: ${f.layers.length} layers, ${f.frames} frames each — their passes are on disk`, 'success')
+      if (picturePlated(f)) {                                                  // SC3e: the plate is the picture — rendered now, no job to wait for
+        set({ making: { done: 0, total: f.frames, what: 'the plate from the picture' } })
+        try { f = await picturePlate(f, (done, total) => set({ making: { done, total, what: 'the plate from the picture' } })); set({ finals: replace(get().finals, f) }) }
+        catch (e) { s.toast(`${f.name}: the plate from the picture: ${(e as ApiError).detail ?? (e as Error).message ?? e} — Render the plate on its row`, 'error'); return f }
+      }
+      s.toast(`${f.name}: ${f.layers.length} layers, ${f.frames} frames each — their passes are on disk${picturePlated(f) ? ', the plate is the picture' : ''}`, 'success')
       return f
     } catch (e) { s.toast(`Make the final shot: ${(e as ApiError).detail ?? (e as Error).message ?? e}`, 'error'); return null } finally { set({ making: null }) }
   },
@@ -334,7 +378,8 @@ export function nextFinalStep(stageId: string | null): FinalStep {
     return { label: 'Make the final shot… ▶', run: why ? null : () => void fs.make(16), why }
   }
   const plate = f.layers.find((l) => l.kind === 'plate' && (l.status === 'passes' || l.status === 'failed'))
-  if (plate) return { label: 'Make the plate ▶', run: () => void fs.plate(f.id) }
+  if (plate) return fs.projecting === f.id ? { label: 'Rendering the plate…', run: null, why: 'the picture through its relief' }
+    : { label: plate.method === 'picture' ? 'Render the plate ▶' : 'Make the plate ▶', run: () => void fs.plate(f.id) }
   const fig = f.layers.find((l) => l.kind === 'figure' && (l.status === 'passes' || l.status === 'failed'))
   if (fig) return { label: `Perform ${fig.name} ▶`, run: () => void fs.perform(f.id, fig.id) }
   const working = f.layers.find((l) => l.status === 'queued' || l.status === 'running')

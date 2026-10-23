@@ -25,15 +25,22 @@ Kind = Literal["mannequin", "set", "prop", "plane", "mesh", "light"]
 
 
 def _level(obj: "StageObject", cam: "StageCamera | None", relief_path: Path | None) -> None:
-    """SC3d: a picture set laid level by the floor fitted to its relief (`relief.level_of_glb`, at the lift the engine gives it) — the set
+    """SC3d: a picture set laid level by the floor fitted to its relief (`relief.frame_of_glb`, at the lift the engine gives it) — the set
     turned and raised (its transform), its picture camera where the picture was taken in that frame (pitched as the photograph's camera
-    was); without a relief, too little floor or too steep a one, as it came (the floor's lift alone)."""
-    from .relief import level_of_glb
-    level = level_of_glb(relief_path, -(obj.floor_y if obj.floor_y is not None else -1.0)) if relief_path is not None else None
+    was); without a relief, too little floor or too steep a one, as it came (the floor's lift alone). SC3e: the camera looks at the
+    distance whose depth pass holds the picture's depths (`relief.subject_distance`; 1 m when the relief cannot say)."""
+    from .relief import frame_of_glb
+    level, subject = frame_of_glb(relief_path, -(obj.floor_y if obj.floor_y is not None else -1.0)) if relief_path is not None else (None, None)
     obj.transform = Transform(pos=list(level["pos"]), rot=list(level["rot"]), scale=[1.0, 1.0, 1.0]) if level else Transform()
     obj.level = {k: level[k] for k in ("pitch_deg", "roll_deg")} | {"residual": level["fit"]["residual"]} if level else None
-    if cam is not None and level:
+    if cam is None:
+        return
+    if level:
         cam.pos, cam.target = list(level["camera"]["pos"]), list(level["camera"]["target"])
+    d = subject or 1.0
+    fwd = [t - q for t, q in zip(cam.target, cam.pos)]
+    n = math.sqrt(sum(v * v for v in fwd)) or 1.0
+    cam.target = [round(q + v / n * d, 4) for q, v in zip(cam.pos, fwd)]
 
 
 class StaleStage(ValueError):

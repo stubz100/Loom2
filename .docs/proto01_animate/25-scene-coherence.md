@@ -1,7 +1,8 @@
 # 25 · The Clay level's coherence — the author's notes of 2026-10-22 and the plan (D119)
 
-Status: **proposed 2026-10-22; D119 recorded; SC1 and SC2 built, E30 run (→ D120) and SC3's first slice built the same day (journal 2026-10-22 15:16).** The author's four notes, what each meets in the app today, and the
-plan: SC1 the scene outliner with the camera as an object, SC2 the preset panel behind the +, E30 → SC3 a set from an image.
+Status: **proposed 2026-10-22; D119 recorded; SC1, SC2, E30 (→ D120), SC3, SC3b, SC3c (D123), SC3d and SC3e built by 2026-10-23 (§3b).** The
+author's notes, what each meets in the app, and the plan: SC1 the scene outliner with the camera as an object, SC2 the preset panel behind
+the +, E30 → SC3 a set from an image (its lens, its things, laid level, its picture as the final's plate). Next: SC3f (§3).
 
 ## 1 · The notes (the author, 2026-10-22, after AE4)
 
@@ -47,6 +48,8 @@ plan: SC1 the scene outliner with the camera as an object, SC2 the preset panel 
 
 | **SC3c · the lens first, the things one by one** (D123, after the author's answers to §4) | **SC3c-1** *From an image…* asks for the lens before the job (prefilled from a Stage still's camera or the prompt's lens; empty = MoGe reads it). **SC3c-2** *Things in the picture…* on the set's row: the picture in a sheet, a click finds a thing (SAM 3 points on the set's own document, a right-click or − marks what is not it), its mask drawn on the picture, kept under a name; the list on the row. **SC3c-3** *Make the things*: the clean plate (Fill under the union of the masks, grown), the relief rebuilt from it at the set's lens, a cut-out per thing → Pixal3D → the model stood on the relief at its footprint (E30's placement on the first relief), each a prop on the stage | `StageParts`, `stageStore`, `stages.py` (the set's things, its document), a `set_things` module (the masks, the cut-outs, the placement), the segment / inpaint / image_to_mesh / image_to_set finishers by origin | SAM 3 seconds a click; the clean plate ≈ 1 min (E28b's Fill); Pixal3D ≈ 4–6 min a thing | 3–4 |
 | **SC3d · a picture set laid level** (what SC3c's rig found) | The floor fitted to the picture's lowest rows the robust way (a seeded RANSAC over near-level planes only, then least squares in a band narrowed to the floor's own noise: the walls, the baseboards and the things in those rows are vertical and never the floor); the set turned about x and raised so that floor is the stage floor, its picture camera pitched to match (the picture still lines up through it); the things stood by the same fit on the set's relief as it is when they land (the clean plate's), through the set's transform; the row says *laid level · the camera 1.9° down* or *as it came* (too little floor, or steeper than 25°) | `relief.py`, `stages.py`, `set_things.py`, the set finisher, `StageParts` | no new job | ½ |
+| **SC3e · the final's plate is the picture** (D120's "the relief re-projected is the plate", unbuilt till now) | A final made on a stage with a visible picture set takes that picture as its plate: the server marks the plate layer `picture`, Stage renders the relief textured with the (clean) picture and the picture behind it through each frame's camera with every actor hidden, right after the layers' passes — no Klein still, no GPU job; the frames carry the set's picture as the plate's still (the assembled shot's lineage). Found on the way: the picture camera looks at the distance whose depth pass holds the picture's depths (a target 1 m ahead saturated the room and the assembly could not tell a prop from the set), the picture behind the relief is carried past its edge (a frame a little taller than the picture showed black bands), and every Stage render waits for what it loads | `finals.py`, `routes/finals.py`, `finalShot.ts`, `FinalPanel.tsx`, `engine.ts`, `relief.py`, `stages.py` | none | 1 |
+| **SC3f · made things follow their set; the sideways tilt** (next) | A rebuild (a corrected lens, a second *Make*) re-stands the things already made — the front edge's pixel cast onto the new relief's floor (a lens change needs more than the height ratio), the props the author moved by hand left where they are; the set levelled sideways too (the fit's `a`) | `set_things.py`, `stages.py`, the set finisher | none | ½ |
 
 Order: SC1 (the usability the author hit first; no GPU), SC2, E30 → SC3. Each step: its tests, a commit, a rig or headed check, and a
 check row here.
@@ -162,6 +165,22 @@ check row here.
   | --- | --- | --- |
   | ![picture camera](img/25-sc3d-picture-camera.jpg) | ![side](img/25-sc3d-side.jpg) | ![row](img/25-sc3d-set-row.jpg) |
 
+- **2026-10-23 17:18 — SC3e built: the final shot of a picture set takes its picture as the plate.** *Make the final shot…* on a stage with a
+  picture set says so in its question, splits the layers and then renders the plate itself — the clean picture through its relief along the
+  camera path, a few seconds in Stage — so the Final shot card shows the plate *done* with the picture as its thumbnail and *Assemble* (or
+  *Perform*) as the next step; the plate's row keeps *Render the plate* (again). No Klein still is made for it (the Klein plate route
+  refuses it with the reason). Three things the rig showed were fixed with it: the picture camera now looks at the distance whose depth
+  pass holds the picture's depths (looking 1 m ahead, the depth passes of the room were black, and the assembly showed the crate half
+  see-through), the picture behind the relief carries on past its edge (the final's 832×480 is a little taller than a 16:9 picture: 2.5 %
+  of the first frame was black bands), and Stage waits for its models before it renders. Rig (`engine/spikes/sc3e_rig.py`, SC3d's room
+  with its two models, the figures hidden, a dolly 0.45 m in and 0.15 m across over two seconds): 33 frames at 832×480 in four layers, the
+  plate's first frame within 2.69 / 255 of the clean picture with no black, its last 18.6 from its first (the move); the shot assembled on
+  the CPU in 9 s (conformed to 49 frames at 24 fps); ComfyUI never started.
+
+  | The plate (top) and the assembled shot (below) at the start, the middle and the end of the dolly | The assembled shot in Animate | The card after the split |
+  | --- | --- | --- |
+  | ![frames](img/25-sc3e-frames.jpg) | ![assembled](img/25-sc3e-assembled-card.jpg) | ![card](img/25-sc3e-final-card.jpg) |
+
 ## 4 · Checks for the author
 
 | Check | Your note |
@@ -173,8 +192,9 @@ check row here.
 | E30: `engine/spikes/out/e30/sheet_room_props.jpg` — the clean room with the things as models: do they sit where the picture had them? `sheet_room_cut.jpg` and `sheet_room_sheet.jpg` — the picture with its things left in: the holes behind them (cut) or the skirts (sheet) — which do you prefer when a thing is not worth a model? | |
 | One Scene: does the grouping (figures, sets, props, stand-ins, meshes, lights, planes, cameras) read better than the flat list did, or should a kind with nothing on the stage hide its header? | |
 | SC3: *From an image…* on one of your own pictures of a place (a Klein still or an import): does the relief read as the place in the viewport, and does the Picture camera frame it as the picture did? Move the camera a little — is the budget line's warning early enough, or too fussy? | |
-| SC3: should the things in the picture be cut out and modelled automatically (one job: the cut, the clean plate, the models), or stay a choice per thing? | |
+| SC3: should the things in the picture be cut out and modelled automatically (one job: the cut, the clean plate, the models), or stay a choice per thing? | 2026-10-23: chosen one by one (D123, SC3c) |
+| SC3e: *Make the final shot…* on a picture set of yours, then *Assemble* — does the shot read as the place? The clean plate keeps a thing's own photographed shadow (the Fill takes the thing only): in the rig's shot it reads as the model's shadow — keep it, or take the shadow too when cleaning? | |
 | SC3d: a picture set of yours taken looking up or down — do the figures stand on its floor through the picture camera and beside it? |  |
 | SC3c: *Things in the picture…* on one of your pictures — does a click find the thing you meant? Are the models (Pixal3D from one view) close enough to stand in for the things, and do they stand where the things stood? | |
 | SC3b: the figure's shadow on the relief (the room's picture-camera view) — dark enough, too dark? And the picture behind the street: does what shows through the sky and the seams read as the place, or should it be plain? | |
-| E30: the lens — MoGe read 75° from the PNG and 69° from its JPEG. Should a set from an image ask you for the lens (the Klein recipe's camera when the picture is the app's own)? | |
+| E30: the lens — MoGe read 75° from the PNG and 69° from its JPEG. Should a set from an image ask you for the lens (the Klein recipe's camera when the picture is the app's own)? | 2026-10-23: ask before the first job (D123, SC3c-1) |

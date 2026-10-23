@@ -14607,23 +14607,6 @@
         "title": "ShuttingDown",
         "type": "object"
       },
-      "SourceBody": {
-        "properties": {
-          "take": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Take"
-          }
-        },
-        "title": "SourceBody",
-        "type": "object"
-      },
       "SpawnBody": {
         "properties": {
           "name": {
@@ -18463,6 +18446,51 @@
           "updated_at"
         ],
         "title": "World",
+        "type": "object"
+      },
+      "loom2__routes__finals__SourceBody": {
+        "properties": {
+          "take": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Take"
+          }
+        },
+        "title": "SourceBody",
+        "type": "object"
+      },
+      "loom2__routes__story__SourceBody": {
+        "properties": {
+          "camera_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Camera Id"
+          },
+          "stage_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Id"
+          }
+        },
+        "title": "SourceBody",
         "type": "object"
       }
     }
@@ -22629,7 +22657,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SourceBody"
+                "$ref": "#/components/schemas/loom2__routes__finals__SourceBody"
               }
             }
           },
@@ -28023,6 +28051,68 @@
           }
         },
         "summary": "Shot Run Stale",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/shots/{sid}/versions/{vid}/source": {
+      "put": {
+        "description": "D125 (S11): point an open version at a stage camera (its stills and clips come back by the camera), or at none (both null).",
+        "operationId": "shot_source_story_shots__sid__versions__vid__source_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "title": "Sid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/loom2__routes__story__SourceBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Shot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Shot Source",
         "tags": [
           "story"
         ]

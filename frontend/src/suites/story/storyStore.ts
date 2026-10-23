@@ -5,7 +5,7 @@
 // the styles for its picker (09 §3a) and the profiles for its @ picker (D73 / D85).
 import { create } from 'zustand'
 import { type ApiError, api, http, unwrap } from '../../api/client'
-import type { Clip, FlowGraph, FlowNode, FlowProblem, GroupPage, Job, LoraRecord, Profile, ProfileAdded, ProfileVersion, Shot, ShotVersion, StoryBeat, StoryVariable, VoiceRecord, World, WorldStyle } from '../../api/types'
+import type { Clip, Final, FlowGraph, FlowNode, FlowProblem, GroupPage, Job, LoraRecord, Profile, ProfileAdded, ProfileVersion, Shot, ShotVersion, StoryBeat, StoryVariable, VoiceRecord, World, WorldStyle } from '../../api/types'
 import { askConfirm, useSession } from '../../store/session'
 import { useLibrary } from './libraryStore'
 import { startPlay, stepPlay, type PlayState } from './flow/play'
@@ -14,6 +14,8 @@ export type Section = 'logline' | 'synopsis' | 'styles' | 'library' | 'panels' |
 /** A variable's id is its name; D92: a library entry's id is its `lib_` id, a saved panel's its name. */
 export type Selection = { kind: 'style' | 'beat' | 'variable' | 'entry' | 'panel'; id: string } | null
 export type ProfileClass = Profile['cls']
+/** D125 (SP3): the board's filter — every shot, the ones owing a step, the stale ones, the ones not approved. */
+export type BoardFilter = 'all' | 'owes' | 'stale' | 'open'
 /** D125 (#3): the bible first — Logline · Synopsis · Spine · Styles · Variables — then Image's presets (D92's Library and saved panels) under
  *  one heading at the end. */
 export const SECTIONS: { id: Section; label: string; presets?: true }[] = [
@@ -144,6 +146,9 @@ export interface StoryState {
   setLipsyncOpts: (patch: Partial<{ node_id: string | null; index: number | null; preset: 'draft' | 'fast' }>) => void
   lipsync: () => Promise<void>
   castFilter: ProfileClass | 'all'; castSearch: string
+  // D125 (SP3): the Shots board — the finals and the cuts its cells read, its filter; the shot a stage camera is being linked for
+  boardFinals: Final[]; boardCuts: { clips: { shot_id: string | null; shot_version: string | null; clip_id: string }[] }[]; boardFilter: BoardFilter
+  linkFor: { shotId: string; version: string } | null
   picked: string[]; expanding: boolean; busy: boolean
   // SY2 · Shots
   shots: Shot[]; shotsLoaded: boolean; shotId: string | null; shotVersionId: string | null
@@ -213,6 +218,10 @@ export interface StoryState {
   expand: (preset: string, seeds: number, tier: 'draft' | 'full') => Promise<{ batch_id: string; job_ids: string[]; cells: number } | null>
   pick: (id: string | null, additive?: boolean) => void
   setCastFilter: (f: ProfileClass | 'all') => void
+  loadBoard: () => Promise<void>
+  setBoardFilter: (f: BoardFilter) => void
+  setLinkFor: (f: { shotId: string; version: string } | null) => void
+  linkStage: (shotId: string, version: string, stageId: string | null, cameraId: string | null) => Promise<boolean>
   setCastSearch: (s: string) => void
   // SY2 · Shots
   loadShots: () => Promise<void>
@@ -375,7 +384,7 @@ export const useStory = create<StoryState>()((set, get) => {
     world: null, loading: false, saving: false, section: 'logline', selected: null,
     profiles: [], profilesLoaded: false, profileId: null, versionId: null, refPage: null, candPage: null, pagesFor: null,
     loras: [], trainOpts: DEFAULT_TRAIN, voices: [], voiceId: null, voiceForm: false, lipsyncOpts: { node_id: null, index: null, preset: 'draft' }, audioSecs: {},
-    castFilter: 'all', castSearch: '', picked: [], expanding: false, busy: false,
+    castFilter: 'all', castSearch: '', picked: [], expanding: false, busy: false, boardFinals: [], boardCuts: [], boardFilter: 'all', linkFor: null,
     shots: [], shotsLoaded: false, shotId: null, shotVersionId: null, clipsById: {}, stagesLite: [],
     flowNodes: {}, flowGraph: null, flowLoaded: false, nodeId: null, problems: null, play: null, addAt: null, edge: null,
     load: async () => {
@@ -763,6 +772,27 @@ export const useStory = create<StoryState>()((set, get) => {
       set({ picked: additive ? (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]) : [id] })
     },
     setCastFilter: (castFilter) => set({ castFilter }),
+    loadBoard: async () => {                                                                        // D125 (SP3): what the board's cells read
+      const want = new Set<string>()
+      for (const s of get().shots) { const v = s.versions.find((x) => x.id === s.current); if (v?.clip_id) want.add(v.clip_id) }
+      const missing = [...want].filter((id) => !get().clipsById[id])
+      const [got, finals, cuts] = await Promise.all([
+        Promise.all(missing.map((id) => unwrap(http.GET('/clips/{clip_id}', { params: { path: { clip_id: id } } })).catch(() => null))),
+        unwrap(http.GET('/finals')).catch(() => null), unwrap(http.GET('/timelines')).catch(() => null)])
+      const next = { ...get().clipsById }
+      got.forEach((c, i) => { if (c) next[missing[i]] = c })
+      set({ clipsById: next, ...(finals ? { boardFinals: finals.items } : {}), ...(cuts ? { boardCuts: cuts.items.map((t) => ({ clips: t.clips.map((c) => ({ shot_id: c.shot_id ?? null, shot_version: c.shot_version ?? null, clip_id: c.clip_id })) })) } : {}) })
+    },
+    setBoardFilter: (boardFilter) => set({ boardFilter }),
+    setLinkFor: (linkFor) => set({ linkFor }),
+    linkStage: async (shotId, version, stageId, cameraId) => {                                       // D125 (S11): the version's stage source
+      try {
+        const next = await unwrap(http.PUT('/story/shots/{sid}/versions/{vid}/source', { params: { path: { sid: shotId, vid: version } }, body: { stage_id: stageId, camera_id: cameraId } }))
+        set({ shots: get().shots.map((x) => (x.id === next.id ? next : x)) })
+        void get().loadShotDetails()
+        return true
+      } catch (e) { toast(`Link: ${detail(e)}`); return false }
+    },
     setCastSearch: (castSearch) => set({ castSearch }),
     // ---- SY2 · Shots
     loadShots: async () => {

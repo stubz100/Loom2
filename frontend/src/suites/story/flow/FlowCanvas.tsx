@@ -19,10 +19,11 @@ import { CLASS_LABEL, sy, useStory } from '../storyStore'
 import { edgeMenu, flowView, nodeMenu } from '../storyCommands'
 import { storyKey } from '../storyKeys'
 import { NODE_LABEL } from './types'
+import { cellsOf, owes, routeOf, STEPS, type CellState, type Step } from '../board'
 
 const NODE_W = 220
 
-interface StoryData extends Record<string, unknown> { node: FlowNode; thumb: string | null; speaker: string | null; problem: string | null; shotState: string | null
+interface StoryData extends Record<string, unknown> { node: FlowNode; thumb: string | null; speaker: string | null; problem: string | null; shotState: string | null; pills: { step: Step; label: string; state: CellState }[] | null
   board: { name: string; cover: string | null; total: number } | null; place: string | null }
 type StoryNodeT = Node<StoryData, 'story'>
 
@@ -43,6 +44,7 @@ function StoryNode({ id, data, selected }: NodeProps<StoryNodeT>) {
       {(n.type === 'dialogue' || n.type === 'shot') && (
         <div className={`shot${n.shot_id ? '' : ' none'}`}>{data.thumb ? <img src={api.thumbUrl(data.thumb, 256)} alt="" /> : <span>{n.shot_id ? 'shot' : 'no shot'}</span>}{data.shotState && <i className={`dot ${data.shotState === 'final' ? 'ok' : 'tight'}`} title={data.shotState} />}</div>
       )}
+      {data.pills && <div className="pills" aria-label="the shot's steps">{data.pills.map((p) => <span key={p.step} className={`pill ${p.state}`} title={`${p.label}: ${p.state}`}>{p.label.toLowerCase()}</span>)}</div>}{/* D125 (SP3): the shot's steps, as on the board */}
       {data.place && <div className="place" title="where — a Cast place; Make frame links Generate's scene to it">@ {data.place}</div>}{/* D93 (C7) */}
       {n.board_group_id && <div className="board" title={data.board ? `board: ${data.board.name} — its images seed Make frame's references` : 'its board group was deleted'}>
         {data.board?.cover ? <img src={api.thumbUrl(data.board.cover, 256)} alt="" /> : <span className="empty" />}<span>{data.board ? `${data.board.name} · ${data.board.total}` : 'board gone'}</span></div>}
@@ -76,6 +78,9 @@ export function FlowCanvas() {
   const nodeId = useStory((s) => s.nodeId)
   const shots = useStory((s) => s.shots)
   const clipsById = useStory((s) => s.clipsById)
+  const boardFinals = useStory((s) => s.boardFinals)                                          // D125 (SP3): the pills read the board's records
+  const boardCuts = useStory((s) => s.boardCuts)
+  useEffect(() => { void sy().loadBoard() }, [shots])
   const profiles = useStory((s) => s.profiles)
   const problems = useStory((s) => s.problems)
   const edgeSel = useStory((s) => s.edge)
@@ -96,10 +101,12 @@ export function FlowCanvas() {
       const thumb = v?.frame_asset_id ?? (v?.clip_id ? clipsById[v.clip_id]?.asset_id ?? null : null)
       const sp = n.lines[0]?.speaker ? profiles.find((x) => x.id === n.lines[0].speaker) : undefined
       const g = findNode(tree, n.board_group_id)
-      return { id: p.id, type: 'story' as const, position: { x: p.x, y: p.y }, selected: p.id === nodeId, data: { node: n, thumb, speaker: sp ? `${sp.name} (${CLASS_LABEL[sp.cls]})` : null, problem: byProblem.get(p.id) ?? null, shotState: v?.state ?? null,
+      const cells = sh && v ? cellsOf(sh, v, n, { clipAudio: (id) => (clipsById[id] ? !!clipsById[id].audio_asset_id : undefined), finals: boardFinals, cuts: boardCuts, busy: () => new Set() }) : null
+      const pills = cells && v ? STEPS.filter((s) => s.id !== 'lines' && s.id !== 'cut' && owes(routeOf(v), n, s.id)).map((s) => ({ step: s.id, label: s.label, state: cells[s.id].state })) : null
+      return { id: p.id, type: 'story' as const, position: { x: p.x, y: p.y }, selected: p.id === nodeId, data: { node: n, thumb, speaker: sp ? `${sp.name} (${CLASS_LABEL[sp.cls]})` : null, problem: byProblem.get(p.id) ?? null, shotState: v?.state ?? null, pills,
         board: g ? { name: g.name, cover: g.cover_ids[0] ?? null, total: g.total } : null, place: n.place_id ? profiles.find((x) => x.id === n.place_id)?.name ?? 'a deleted place' : null } }
     })
-  }, [graph, flowNodes, nodeId, shots, clipsById, profiles, problems, tree])
+  }, [graph, flowNodes, nodeId, shots, clipsById, profiles, problems, tree, boardFinals, boardCuts])
   if (from !== built) { setFrom(built); setNodes(built) }                                      // derived state, synced in render (not an effect)
   const edges = useMemo<Edge[]>(() => (graph?.edges ?? []).filter((e) => flowNodes[e.from] && flowNodes[e.to]).map((e) => {
     const n = flowNodes[e.from]

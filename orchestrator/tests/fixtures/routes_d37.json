@@ -213,6 +213,7 @@
  "PUT /story/library/order",
  "PUT /story/profiles/{pid}/versions/{vid}/anim-ref",
  "PUT /story/profiles/{pid}/versions/{vid}/model",
+ "PUT /story/shots/{sid}/versions/{vid}/source",
  "PUT /story/shots/{sid}/versions/{vid}/template",
  "PUT /story/world",
  "PUT /timelines/{tl_id}",

@@ -1055,6 +1055,33 @@ class BindBody(BaseModel):
     version: str | None = None                    # the current one when absent
 
 
+class SourceBody(BaseModel):
+    stage_id: str | None = None
+    camera_id: str | None = None
+
+
+@router.put("/story/shots/{sid}/versions/{vid}/source", response_model=Shot)
+async def shot_source(svc: Svc, sid: str, vid: str, body: SourceBody):
+    """D125 (S11): point an open version at a stage camera (its stills and clips come back by the camera), or at none (both null)."""
+    ws, _, _ = svc.require_project()
+    rev = None
+    if body.stage_id:
+        st = await asyncio.to_thread(StageStore(ws).get, body.stage_id)
+        if st is None:
+            raise HTTPException(422, f"stage {body.stage_id} not found")
+        if body.camera_id not in [c.id for c in st.cameras]:
+            raise HTTPException(422, f"camera {body.camera_id} is not in {st.name}")
+        rev = st.revision
+    try:
+        s = await asyncio.to_thread(StoryStore(ws).set_source, sid, vid, body.stage_id, body.camera_id, rev)
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    _shot_changed(svc, s)
+    return s.model_dump()
+
+
 class SpawnBody(BaseModel):
     name: str = ""
 

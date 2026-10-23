@@ -3,12 +3,13 @@
 import { ArrowDown, ArrowLeft, Box, Ruler, ArrowUp, BookOpen, BookPlus, ChevronLeft, ChevronRight, Pencil, UserRoundPlus, Users, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImageOff, ImagePlus, ImageUp, Link, ListChecks, ListPlus, Lock, MapPinPlus, Maximize, MessageSquare, Mic, PackagePlus, Palette, PersonStanding, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
 import { registerCommands, runCommand, sep, type Command, type MenuItem } from '../../frame/commands'
 import { goBack, useMakeFor } from '../../store/origin'
+import { cellsOf, nextStep, routeOf, type Cell, type Step } from './board'
 import { askConfirm, askConfirmCheck, askText, useSession } from '../../store/session'
 import { useAlbum } from '../catalogue/albumStore'
 import { CLASS_LABEL, latestModelJob, latestTrainJob, modelSource, nodesAfterWithoutPlace, revealClass, sy, ttsJobFor, useStory, type ProfileClass } from './storyStore'
-import { makeClipFor, makeFrameFor, makeTarget, speakersOf } from './makeFor'
+import { forShot, makeClipFor, makeFrameFor, makeTarget, speakersOf } from './makeFor'
 import { runStale, staleOf } from './runStale'
-import type { Profile, Shot } from '../../api/types'
+import type { Profile, Shot, ShotVersion } from '../../api/types'
 import { findNode, pickSampleModel, sampleJob, sampleRecipe, styleGroupName } from './styleSamples'
 import { useLibrary } from './libraryStore'
 import { FIELD_LABEL, type FieldKey } from '../generate/fieldPresets'
@@ -54,12 +55,14 @@ const board = () => { const g = node()?.board_group_id; return g ? findNode(useA
 const placeTargets = (): string[] => { const n = node(); const g = sy().flowGraph; return n && g ? nodesAfterWithoutPlace(n.id, g.edges, sy().flowNodes) : [] }
 /** Open a stage at a camera (Shots' "Open in Stage" and the Stage routes of Make ▸). D93 (C8): `speakers` — Make frame ▸ in Stage binds the
  *  shot's speakers to the stage's figures in screen order when the counts match, else says how to bind them. */
-function openStageAt(stageId: string, cam: string | null, speakers?: (Profile & { version?: string | null })[], where: 'image' | 'animate' = 'animate'): void {
-  // D95 (AN1): a still from the stage is made in Image (From a stage); the stage itself in Animate's Clay, its clips in Performance's Stage clip card (D121)
+function openStageAt(stageId: string, cam: string | null, speakers?: (Profile & { version?: string | null })[], where: 'image' | 'animate' = 'animate', card: 'clay' | 'clip' | 'final' = 'clay', start: string | null = null): void {
+  // D95 (AN1): a still from the stage is made in Image (From a stage); the stage itself in Animate's Clay, its clips in Performance's Stage clip card (D121).
+  // D125 (A2): a card asked for opens on Performance (the stage clip with the shot's frame as its start, or the final shot), not on Clay
   if (where === 'image') { void import('../generate/generateStore').then((g) => g.useGenerate.setState({ source: 'stage' })); useSession.getState().setSuite('generate') }
-  else { void import('../animate/routeStore').then((r) => r.useAnimRoute.getState().set('clip')); useSession.getState().setSuite('stage') }
+  else { void import('../animate/routeStore').then((r) => r.useAnimRoute.getState().set(card === 'final' ? 'final' : 'clip')); useSession.getState().setSuite(card === 'clay' ? 'stage' : 'animate') }
   void import('../stage/stageStore').then((m) => { const st = m.useStage.getState(); const go = st.current?.id === stageId ? Promise.resolve() : st.open(stageId); void go.then(() => {
     if (cam) m.useStage.getState().setActiveCamera(cam)
+    if (start && card === 'clip') m.useStage.getState().setShotStart(start)
     if (!speakers?.length) return
     const n = m.useStage.getState().prebindSpeakers(speakers)
     const figs = (m.useStage.getState().current?.objects ?? []).filter((o) => o.kind === 'mannequin' && o.visible).length
@@ -71,6 +74,56 @@ const shotSpeakers = (s: Shot | undefined): (Profile & { version?: string | null
   const n = s?.owner_node ? sy().flowNodes[s.owner_node] : undefined
   return speakersOf(n, sy().profiles).map((p) => { const pin = n?.speaker_versions?.[p.id]; return pin && p.versions.some((v) => v.id === pin) ? { ...p, version: pin } : p })
 }
+/** D125 (A2): a shot's stage route in context — the For chip set for Animate (its clips and finals come back to the shot), the stage at the
+ *  shot's camera, the card asked for. */
+function openStageRoute(card: 'clay' | 'clip' | 'final'): void {
+  const s = shot(); const v = shotTarget()
+  if (!s || !v?.stage_id) return
+  useMakeFor.getState().set('animate', forShot(s, v))
+  openStageAt(v.stage_id, v.camera_id, shotSpeakers(s), 'animate', card, v.frame_asset_id ?? null)
+}
+
+// ---- D125 (SP3): the Shots board's cells — each step's verb for the selected shot (the cell is its mouse home; Ctrl+Enter the next one) ----
+export const STEP_VERB: Record<Step, (v: ShotVersion, c: Cell) => { label: string; always?: boolean }> = {
+  lines: () => ({ label: 'Write its lines in Flow' }),
+  voice: () => ({ label: 'Voice its lines' }),
+  frame: (v) => ({ label: v.stage_id ? 'Make frame from the stage (Image)' : 'Make frame in Image', always: true }),
+  stage: (v) => ({ label: v.stage_id ? 'Open the stage (Animate · Clay)' : 'Link a stage camera…', always: true }),
+  clip: (v) => ({ label: v.stage_id ? 'Make clip on the stage (Animate)' : 'Make clip in Animate', always: true }),
+  final: (v) => ({ label: v.stage_id ? 'The final shot (Animate)' : 'Link a stage camera first', always: !!v.stage_id }),
+  lipsync: (v) => ({ label: routeOf(v).startsWith('clay') ? 'The Lip-sync pass (the final shot)' : 'Lip-sync ▶ (experimental)', always: true }),
+  approved: (v) => ({ label: v.state === 'final' ? 'Marked final' : 'Mark final' }),
+  cut: () => ({ label: 'Open the Episode' }),
+}
+const openStory = (tab: string, then?: () => void) => void import('../../frame/suiteRegistry').then((m) => { m.setRailTab('story', tab); useSession.getState().setSuite('story'); then?.() })
+/** Run a step's verb for the selected shot (its cell's click, the foot's next step). */
+export function runStep(step: Step): void {
+  const v = shotTarget() ?? shotVersion()
+  if (!v) return
+  switch (step) {
+    case 'lines': { const n = shot()?.owner_node; openStory('flow', () => { if (n) sy().selectNode(n) }); return }
+    case 'voice': runCommand('story.flow.voiceAll'); return
+    case 'frame': runCommand(v.stage_id ? 'story.shot.makeFrameStage' : 'story.shot.makeFrame'); return
+    case 'stage': runCommand(v.stage_id ? 'story.shot.openStage' : 'story.shot.linkStage'); return
+    case 'clip': runCommand(v.stage_id ? 'story.shot.makeClipStage' : 'story.shot.makeClip'); return
+    case 'final': runCommand(v.stage_id ? 'story.shot.makeFinal' : 'story.shot.linkStage'); return
+    case 'lipsync': runCommand(routeOf(v).startsWith('clay') ? 'story.shot.makeFinal' : 'story.shot.lipsync'); return
+    case 'approved': runCommand('story.shot.finalize'); return
+    case 'cut': openStory('episode'); return
+  }
+}
+/** The selected shot's cells (the jobs aside — the board shows them), for the foot's next step. */
+function selectedCells(): Record<Step, Cell> | null {
+  const s = shot(); const v = shotVersion()
+  if (!s || !v) return null
+  const st = sy()
+  return cellsOf(s, v, s.owner_node ? st.flowNodes[s.owner_node] ?? null : null, {
+    clipAudio: (id) => (st.clipsById[id] ? !!st.clipsById[id].audio_asset_id : undefined), finals: st.boardFinals, cuts: st.boardCuts, busy: () => new Set() })
+}
+export const NEXT_LABEL: Record<Step, string> = { lines: 'Write its lines', voice: 'Voice its lines', frame: 'Make its frame', stage: 'Link a stage camera', clip: 'Make its clip',
+  final: 'Make the final shot', lipsync: 'Lip-sync it', approved: 'Mark it final', cut: 'Put it in the cut' }
+export const selectedNext = (): Step | null => { const c = selectedCells(); return c ? nextStep(c) : null }
+
 const NODE_ICON = { start: Play, hub: GitFork, dialogue: MessageSquare, choice: ListChecks, condition: CircleHelp, action: Zap, shot: Clapperboard, jump: CornerDownRight, comment: StickyNote } as const
 const NODE_LABEL = { start: 'Start', hub: 'Hub', dialogue: 'Dialogue', choice: 'Choice', condition: 'Condition', action: 'Action', shot: 'Shot', jump: 'Jump', comment: 'Note' } as const
 /** The viewport registers its fit, its centre and the screen → flow mapping (D90 B11) in flow coordinates (the canvas is not a store). */
@@ -300,7 +353,24 @@ const cmds: Command[] = [
   { id: 'story.shot.useTake', scope: 'story', label: 'Use this take', icon: Check, placement: ['toolbar', 'context'], hint: 'a frame take becomes the version\'s frame, a clip take its clip', when: takeUsable,
     run: () => { const t = storyItem.take; storyItem.take = undefined; if (t) void sy().useTake(t.kind, t.id) } },
   { id: 'story.shot.openStage', scope: 'story', label: 'Open the stage (Animate · Clay)', icon: Shapes, placement: ['strip', 'inspector', 'context'], when: () => !!shotVersion()?.stage_id,
-    run: () => { const v = shotVersion(); if (v?.stage_id) openStageAt(v.stage_id, v.camera_id) } },
+    run: () => { if (shotTarget()?.stage_id) { openStageRoute('clay'); return } const v = shotVersion(); if (v?.stage_id) openStageAt(v.stage_id, v.camera_id) } },   // D125: in context while open
+  // D125 (S11): an existing shot pointed at a stage camera (no second shot); a new stage made for it; its final shot opened in context
+  { id: 'story.shot.linkStage', scope: 'story', label: 'Link a stage camera…', icon: Link, hint: 'this version takes a stage camera as its source — its stills and clips come back by the camera', placement: ['inspector', 'context'],
+    when: () => projectOpen() && !!shotTarget(), run: () => { const s = shot(); const v = shotTarget(); if (s && v) sy().setLinkFor({ shotId: s.id, version: v.id }) } },
+  { id: 'story.shot.blockOnStage', scope: 'story', label: 'Block it on a stage…', icon: Shapes, hint: 'a new stage named after the shot, its camera linked; Animate · Clay opens on it for this shot', placement: ['inspector', 'context'],
+    when: () => projectOpen() && !!shotTarget() && !shotTarget()?.stage_id,
+    run: () => { const s = shot(); const v = shotTarget(); if (!s || !v) return
+      void askConfirm({ title: `Block ${s.name} on a new stage?`, okLabel: 'Make the stage', text: `A stage named ${s.name} with one camera, linked to ${s.name} ${v.id}; Animate · Clay opens on it, the speakers bound to its figures as you add them.` })
+        .then(async (ok) => { if (!ok) return
+          try {
+            const { http, unwrap } = await import('../../api/client')
+            const st = await unwrap(http.POST('/stages', { body: { name: s.name } }))
+            if (await sy().linkStage(s.id, v.id, st.id, st.cameras[0]?.id ?? null)) openStageRoute('clay')
+          } catch (e) { useSession.getState().toast(`Stage: ${(e as { detail?: string }).detail ?? String(e)}`) } }) } },
+  { id: 'story.shot.makeFinal', scope: 'story', label: 'The final shot (Animate)', icon: Film, hint: 'Performance › Final shot on the stage camera of this shot, for it — its finished render comes back as a take', placement: ['inspector', 'context'],
+    when: () => !!shotTarget()?.stage_id, run: () => openStageRoute('final') },
+  { id: 'story.shot.next', scope: 'story', label: 'Do the next step', icon: Play, keys: 'Ctrl+Enter', hint: 'the first step the shot still owes, from the board', placement: ['panel'],
+    when: () => !!shot() && !!selectedNext(), run: () => { const n = selectedNext(); if (n) runStep(n) } },
   // D90 (02 §5): Make frame ▸ / Make clip ▸ — the maker opens with the For chip and its results come back as this version's takes; the
   // Stage routes open the version's camera (its results already become takes of the shots pointing at it)
   { id: 'story.shot.makeFrame', scope: 'story', label: 'Make frame in Image', icon: ImagePlus, placement: ['strip', 'inspector', 'context'], when: () => projectOpen() && !!shotTarget(),
@@ -310,7 +380,7 @@ const cmds: Command[] = [
   { id: 'story.shot.makeClip', scope: 'story', label: 'Make clip in Animate', icon: Film, placement: ['strip', 'inspector', 'context'], when: () => projectOpen() && !!shotTarget(),
     run: () => { const s = shot(); const v = shotTarget(); if (s && v) void makeClipFor(s, v) } },
   { id: 'story.shot.makeClipStage', scope: 'story', label: 'Make clip on the stage (Animate)', icon: Shapes, placement: ['strip', 'inspector', 'context'], when: () => !!shotTarget()?.stage_id,
-    run: () => { const v = shotTarget(); if (v?.stage_id) openStageAt(v.stage_id, v.camera_id, shotSpeakers(shot())) } },   // D95 (AN1, UX0 #21): the speakers bound for the clip too
+    run: () => openStageRoute('clip') },   // D95 (AN1, UX0 #21): the speakers bound; D125 (A2): Performance's Stage clip card, the For chip, the shot's frame as the start
   // the For chip's verbs in the makers' Panels (D32: a command each)
   { id: 'gen.for.back', scope: 'generate', label: 'Back to the shot', icon: ArrowLeft, placement: ['panel'], hint: 'and stop making for it (D125)', when: () => !!useMakeFor.getState().generate, run: () => goBack('generate') },
   { id: 'gen.for.clear', scope: 'generate', label: 'Stop making for the shot (results stay in the Catalogue only)', icon: X, placement: ['panel'], when: () => !!useMakeFor.getState().generate,
@@ -433,10 +503,10 @@ export function nodeMenu(): ({ cmd: string } | typeof sepItem)[] {
 
 /** D90 (02 §5): the entries of "Make frame ▸" and "Make clip ▸" (the shot board, the Strip, the Inspector, the shot row's menu). */
 export const makeFrameItems = (): MenuItem[] => [{ cmd: 'story.shot.makeFrame', label: 'in Image' }, { cmd: 'story.shot.makeFrameStage', label: 'from the stage (the camera, Image)' }]
-export const makeClipItems = (): MenuItem[] => [{ cmd: 'story.shot.makeClip', label: 'in Animate' }, { cmd: 'story.shot.makeClipStage', label: 'on the stage (the camera, Animate)' }, sep, { cmd: 'story.shot.lipsync' }]
+export const makeClipItems = (): MenuItem[] => [{ cmd: 'story.shot.makeClip', label: 'in Animate' }, { cmd: 'story.shot.makeClipStage', label: 'on the stage (the camera, Animate)' }, { cmd: 'story.shot.makeFinal', label: 'the final shot (the camera, Animate)' }, sep, { cmd: 'story.shot.lipsync' }, sep, { cmd: 'story.shot.linkStage' }, { cmd: 'story.shot.blockOnStage' }]
 /** The right-click menu of a shot row (the shot is selected first). */
 export function shotMenu(): MenuItem[] {
   return [{ label: 'Make frame', icon: ImagePlus, items: makeFrameItems() }, { label: 'Make clip', icon: Film, items: makeClipItems() }, sep,
-    { cmd: 'story.shot.runStale' }, { cmd: 'story.shot.finalize' }, { cmd: 'story.shot.newVersion' }, sep, { cmd: 'story.shot.openStage' }, { cmd: 'story.shot.openAnimate' }, sep, { cmd: 'story.shot.release' }, { cmd: 'story.shot.delete' }, sep, { cmd: 'story.shot.new' }]
+    { cmd: 'story.shot.runStale' }, { cmd: 'story.shot.finalize' }, { cmd: 'story.shot.newVersion' }, sep, { cmd: 'story.shot.openStage' }, { cmd: 'story.shot.linkStage' }, { cmd: 'story.shot.blockOnStage' }, { cmd: 'story.shot.openAnimate' }, sep, { cmd: 'story.shot.release' }, { cmd: 'story.shot.delete' }, sep, { cmd: 'story.shot.new' }]
 }
 const sepItem = { sep: true } as const

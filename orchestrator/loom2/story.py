@@ -718,6 +718,24 @@ class _ShotMixin:
         self.save_shot(s)
         return s
 
+    def set_source(self, sid: str, vid: str, stage_id: str | None, camera_id: str | None, stage_revision: int | None) -> Shot:
+        """D125 (S11): an open version pointed at a stage camera (*Link a stage camera…*, *Block it on a stage…*, Animate's *Use this camera
+        for <shot>*), or at none; its stills and clips then come back by the camera (record_stage_result). The recipe's default template
+        follows the source (RC0: `stage` for a stage camera's shot) unless one was chosen."""
+        cur = self.shot(sid)
+        if cur is None:
+            raise KeyError(sid)
+        v = cur.version(vid)
+        if v.state != "open":
+            raise ValueError(f"{cur.name} {vid} is final — make a new version to change its source")
+        if (stage_id is None) != (camera_id is None):
+            raise ValueError("a stage source names both the stage and the camera")
+        upd = {"stage_id": stage_id, "camera_id": camera_id, "stage_revision": stage_revision if stage_id else None}
+        versions = [x.model_copy(update=upd) if x.id == vid else x for x in cur.versions]
+        s = cur.model_copy(update={"versions": versions, "revision": cur.revision + 1, "updated_at": utc_now()})
+        self.save_shot(s)
+        return s
+
     def new_shot_version(self, sid: str) -> Shot:
         """A copy of the current version's pointers (the source, the frame and the clip — no files, no takes), open, now the current one."""
         cur = self.shot(sid)

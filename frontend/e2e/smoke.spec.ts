@@ -1646,7 +1646,7 @@ test("experimental extension and lip-sync (D88): Animate's Extend ▶ continues 
   const tts = await api<{ job_ids: string[] }>('POST', `/story/flow/nodes/${node.id}/lines/0/voice`, { voice_id: voice.id })
   await jobDone(tts.job_ids[0])
   await openApp(page, { suite: 'story', tab: 'shots' })
-  await page.locator(`.story-row.shot-row[data-id="${shot.id}"]`).click()
+  await page.locator(`.shots-board tr.row[data-id="${shot.id}"] td.name`).click()                            // D125 (SP3): the board's row
   const block = page.locator('.inspector .lipsync')
   await expect(block.locator('.badge.experimental')).toBeVisible()
   await expect(block.locator('select[aria-label="lip-sync line"] option')).toContainText([`${name} node`])
@@ -1726,7 +1726,7 @@ test('makers in context (D90 · UI4): "Make frame ▸ in Image" on a Story shot 
   await page.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()
   await expect(page.locator('.panel [data-testid="for-chip"]')).toHaveCount(0)                                // opened from its tab: no chip
   await openApp(page, { suite: 'story', tab: 'shots' })                                                       // the panel keeps Klein 4B (persisted)
-  await page.locator(`.story-row.shot-row[data-id="${shot.id}"]`).click()
+  await page.locator(`.shots-board tr.row[data-id="${shot.id}"] td.name`).click()                            // D125 (SP3): the board's row
   await page.locator('.shot-board .make-row button[aria-label="Make frame"]').click()
   await page.locator('.ctx-menu button.item', { hasText: 'in Image' }).click()
   await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Image/)
@@ -2797,4 +2797,57 @@ test('the one timeline and transport (D121 AW2): Clay keys the camera on its row
   await page.locator('.stage-strip button[aria-label^="Picture-in-picture"]').click()
   await expect(pipFrame).toBeVisible()
   await page.screenshot({ path: 'node_modules/.e2e/d121-camera-chrome.png' })
+})
+
+test('the Shots board (D125 SP3): the shots in the Flow\'s order with their steps; a cell runs its step for its shot — Frame opens Image on it, Stage links a camera without a second shot, Approved marks it final; the Flow cards show the steps', async ({ page }) => {
+  test.setTimeout(150_000)
+  const tag = Date.now().toString(36)
+  type NodeLite = { id: string; shot_id: string }
+  const a = await api<NodeLite>('POST', '/story/flow/nodes', { type: 'shot', title: `Board A ${tag}`, text: 'a courier at a door' })
+  const b = await api<NodeLite>('POST', '/story/flow/nodes', { type: 'dialogue', title: `Board B ${tag}` })
+  await api('PATCH', `/story/flow/nodes/${b.id}`, { lines: [{ speaker: null, text: 'Hello.', audio_asset_id: null, audio_text: null }] })
+  const g = (await api<{ graph: { revision: number; start: string | null; edges: { from: string; port: string; to: string }[] } }>('GET', '/story/flow')).graph
+  const start = g.start ?? (await api<{ id: string }>('POST', '/story/flow/nodes', { type: 'start' })).id
+  const g2 = (await api<{ graph: { revision: number; edges: { from: string; port: string; to: string }[] } }>('GET', '/story/flow')).graph
+  await api('PUT', '/story/flow/graph', { revision: g2.revision, edges: [...g2.edges.filter((e) => e.from !== start), { from: start, port: 'out', to: a.id }, { from: a.id, port: 'out', to: b.id }] })
+  const stage = await api<{ id: string; cameras: { id: string }[] }>('POST', '/stages', { name: `Board stage ${tag}` })
+  await openApp(page, { suite: 'story', tab: 'shots' })
+  const board = page.locator('[data-testid="shots-board"]')
+  const ids = async () => board.locator('tr.row').evaluateAll((rs) => rs.map((r) => r.getAttribute('data-id')))
+  await expect.poll(async () => { const r = await ids(); return r.indexOf(a.shot_id) >= 0 && r.indexOf(a.shot_id) < r.indexOf(b.shot_id) }).toBe(true)   // the Flow's order
+  const rowA = board.locator(`tr.row[data-id="${a.shot_id}"]`), rowB = board.locator(`tr.row[data-id="${b.shot_id}"]`)
+  await expect(rowA.locator('button[data-step="frame"]')).toHaveClass(/owed/)
+  await expect(rowB.locator('button[data-step="lines"]')).toHaveClass(/done/)
+  await expect(rowB.locator('button[data-step="voice"]')).toHaveClass(/owed/)
+  // Frame: Image › Make on the shot (the For chip names it)
+  await rowA.locator('button[data-step="frame"]').click()
+  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Image/)
+  await expect(page.locator('.panel [data-testid="for-chip"]')).toContainText(`Board A ${tag}`)
+  await page.locator('.panel [data-testid="for-chip"] button[aria-label^="Back to"]').click()
+  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Story/)
+  // Stage: Link a stage camera… — the shot's version takes the camera, no second shot
+  const before = (await api<{ items: unknown[] }>('GET', '/story/shots')).items.length
+  await rowB.locator('button[data-step="stage"]').click()
+  const sheet = page.locator('.modal.link-stage')
+  await expect(sheet).toBeVisible()
+  await sheet.locator('select#link-stage').selectOption(stage.id)
+  await sheet.locator('button.primary', { hasText: 'Link' }).click()
+  type ShotLite = { versions: { stage_id: string | null; camera_id: string | null; state: string; clip_id: string | null }[] }
+  await expect.poll(async () => (await api<ShotLite>('GET', `/story/shots/${b.shot_id}`)).versions[0].camera_id).toBe(stage.cameras[0].id)
+  expect((await api<{ items: unknown[] }>('GET', '/story/shots')).items.length).toBe(before)
+  await expect(rowB.locator('button[data-step="stage"]')).toHaveClass(/done/)
+  // Approved: a clip on A (the fake engine), then the cell marks it final — at its draft size (D125 #6)
+  const caps = await api<{ defaults: { i2v: string } }>('GET', '/capabilities')
+  const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
+  const job = (await api<{ jobs: { id: string }[] }>('POST', '/jobs', { recipe: { kind: 'i2v', model_id: caps.defaults.i2v, start_asset: img, width: 832, height: 480, frames: 9, fps: 16, prompt_text: 'board' }, stage: false, origin: { suite: 'story', surface: 'for_shot', payload: { shot_id: a.shot_id, version: 'v1' } } })).jobs[0]
+  await expect.poll(async () => (await api<ShotLite>('GET', `/story/shots/${a.shot_id}`)).versions[0].clip_id, { timeout: 60_000 }).toBeTruthy()
+  await expect(rowA.locator('button[data-step="clip"]')).toHaveClass(/done/, { timeout: 15_000 })
+  expect(job.id).toBeTruthy()
+  await rowA.locator('button[data-step="approved"]').click()
+  await page.locator('.modal.ask button.primary').click()
+  await expect.poll(async () => (await api<ShotLite>('GET', `/story/shots/${a.shot_id}`)).versions[0].state).toBe('final')
+  await expect(rowA.locator('button[data-step="approved"]')).toHaveClass(/done/)
+  // the Flow: the node cards show the steps
+  await page.locator('nav.rail button[aria-label="Flow"]').click()
+  await expect(page.locator(`.flow-node[data-id="${a.id}"] .pill`, { hasText: 'approved' })).toHaveClass(/done/)
 })

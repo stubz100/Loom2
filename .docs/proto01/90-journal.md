@@ -8429,3 +8429,30 @@ WB1–WB3, *Mark final* at any size, the For context ended by *← Back* and hon
   e2e full 53/54 and open 53/54 — the D93 scenario pressed the node panel's *Make frame in Image*, now the shot's *Make frame ▾ › in
   Image*; found with it: a node picked before the shots loaded left the shot verbs disabled — the panel now selects the shot it shows. The
   Story scenarios (the flow, makers in context, D93) rerun in both variants: 3/3 each. Screenshots `proto01_UIcomp/img/sp2-*.jpg`.
+
+## 2026-10-23 22:19 — SP3 built (D125, proto01_UIcomp 04 §8): the Shots board; Link a stage camera; the stage routes in context; the next-step foot; the Flow cards' steps
+
+- **S9 · the board** (`ShotsBoard.tsx`, `board.ts`): Shots is a table of every shot against its steps — Lines · Voice · Frame · Stage ·
+  Clip · Final · Lip-sync · Approved · In cut — in the Flow's order (`flowOrder`: from the Start, a node's ports in order, a Choice's or a
+  Condition's branches as group rows *Stay or go ▸ Stay*, then *Not on a route*, then *Unbound*). `cellsOf` reads each cell's state from the
+  records (done ✓ · owed ○ · running ◐ from the queued jobs' origins · stale ! · – not on the shot's route, which is its recipe template);
+  `board.test.ts` (5). A cell is its verb: a click selects the shot and runs the step (`runStep`; *Frame* opens Image on the shot, *Voice*
+  voices its lines, *Approved* marks it final…), a row's right-click is the shot's menu. The selected row's shot page sits under the board;
+  the panel holds the filter (*All · Owes a step · Stale · Not approved*) and the legend. `loadBoard` fetches what the cells read (the
+  current versions' clips, `/finals`, `/timelines`).
+- **The next-step foot**: Story › Shots' primary is the selected shot's first owed step (*Voice its lines ▶*, *Make its frame ▶*, *Mark it
+  final ▶*…), `story.shot.next`, Ctrl+Enter (shared with Cast's Expand by dispatch, declared in `SHARED_KEYS`).
+- **S11 · Link a stage camera…** (moved here from SP4: the board's Stage and Final cells need it): `PUT /story/shots/{sid}/versions/{vid}/source`
+  points an open version at a stage camera — no second shot; the stage's stills and clips then come back to it by the camera
+  (`StoryStore.set_source`; a camera the stage lacks, an unknown stage, a final version or half a source refused; both null unlink).
+  The sheet picks the stage and camera; *A new stage for it…* is **Block it on a stage…** (a stage named after the shot, its camera
+  linked, Animate · Clay opened on it for the shot).
+- **A2 (part)**: a linked shot's *Open the stage*, *Make clip on its stage* and the new *The final shot (Animate)* open Animate on the
+  right level with the For chip on the shot (`openStageRoute`); the rest of A2 (the Stage clip card's landing) stays in SP4.
+- **The Flow cards** show the same steps as small pills under a visual node's thumbnail.
+- OpenAPI and schema.d.ts regenerated (D38); the route snapshot (`routes_d37.json`) gained the source route.
+- **Tests:** `test_shot_source_d125.py` (2); offline 532 passed; Vitest 436 + 3 skipped; typecheck and build clean; lint 0 errors (79
+  warnings). A new e2e scenario, the Shots board (the Flow's order; Frame opens Image on the shot; Stage links a camera without a second
+  shot; Approved marks it final at its draft size; the Flow's pills): it found the Approved cell running before the shot's clip had loaded,
+  so *Mark final* was still disabled — a cell now waits for the shot's details. e2e full 55/55 and open 55/55. Screenshots
+  `proto01_UIcomp/img/sp3-*.jpg`.

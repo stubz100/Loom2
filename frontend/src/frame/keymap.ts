@@ -23,6 +23,7 @@ export const SHARED_KEYS: { scope: Scope; chord: string; ids: [string, string]; 
   { scope: 'edit', chord: 'enter', ids: ['edit.crop.apply', 'edit.transform.apply'], why: 'Apply crop is disabled while a transform is open, Apply transform only while one is' },
   ...([1, 2, 3, 4] as const).map((n) => ({ scope: 'edit' as const, chord: String(n), ids: [`edit.brush.opacity.${n}`, `edit.cand.${n}`] as [string, string], why: `${n} keeps candidate ${n} while AI candidates show (10 §10), and sets the brush opacity otherwise — the two whens exclude each other` })),
   { scope: 'story', chord: 'delete', ids: ['story.flow.deleteEdge', 'story.world.remove'], byDispatch: true, why: 'each Story tab dispatches only its own commands (storyKeys.ts, D90 B2): Delete removes a World row on World, a connection on Flow' },
+  { scope: 'story', chord: 'ctrl+enter', ids: ['story.cast.expand', 'story.shot.next'], byDispatch: true, why: "each Story tab dispatches only its own commands (storyKeys.ts): Ctrl+Enter is Cast's Expand on Cast and the shot's next step on Shots (D125)" },
   { scope: 'animate', chord: 'ctrl+enter', ids: ['anim.final.render', 'anim.run'], why: "D121: each level's primary on Ctrl+Enter — the Final level's render needs the final suite, the Performance card's verb the animate suite (and the Final's key hook dispatches only anim.final.*)" },
   { scope: 'catalogue', chord: 'tab', ids: ['cat.compare.swap', 'global.focus'], byDispatch: true, why: 'Compare listens in the capture phase and stops Tab while it is open (swap); elsewhere Tab is focus mode' },
 ]

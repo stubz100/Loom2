@@ -3120,6 +3120,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/shots/{sid}/versions/{vid}/source": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Shot Source
+         * @description D125 (S11): point an open version at a stage camera (its stills and clips come back by the camera), or at none (both null).
+         */
+        put: operations["shot_source_story_shots__sid__versions__vid__source_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/shots/{sid}/versions/{vid}/take": {
         parameters: {
             query?: never;
@@ -9257,11 +9277,6 @@ export interface components {
             /** Shutting Down */
             shutting_down: boolean;
         };
-        /** SourceBody */
-        SourceBody: {
-            /** Take */
-            take?: string | null;
-        };
         /** SpawnBody */
         SpawnBody: {
             /**
@@ -10891,6 +10906,18 @@ export interface components {
             updated_at: string;
             /** Variables */
             variables: components["schemas"]["StoryVariable"][];
+        };
+        /** SourceBody */
+        loom2__routes__finals__SourceBody: {
+            /** Take */
+            take?: string | null;
+        };
+        /** SourceBody */
+        loom2__routes__story__SourceBody: {
+            /** Camera Id */
+            camera_id?: string | null;
+            /** Stage Id */
+            stage_id?: string | null;
         };
     };
     responses: never;
@@ -13205,7 +13232,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SourceBody"];
+                "application/json": components["schemas"]["loom2__routes__finals__SourceBody"];
             };
         };
         responses: {
@@ -17039,6 +17066,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunStaleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    shot_source_story_shots__sid__versions__vid__source_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["loom2__routes__story__SourceBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Shot"];
                 };
             };
             /** @description Validation Error */

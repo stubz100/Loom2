@@ -26,7 +26,8 @@ import { useLibrary } from './libraryStore'
 import { useGenerate } from '../generate/generateStore'
 import { versionName } from '../generate/sheet'
 import { CastSheet } from './CastSheet'
-import { askExpand, makeClipItems, makeFrameItems, profileMenu, rowMenu, runOnItem, shotMenu, storyItem } from './storyCommands'
+import { askExpand, makeClipItems, makeFrameItems, NEXT_LABEL, profileMenu, rowMenu, runOnItem, selectedNext, storyItem } from './storyCommands'
+import { BoardPanel, LinkStageSheet, ShotsBoard } from './ShotsBoard'
 import { flatGroups, useAlbum } from '../catalogue/albumStore'
 import { findNode } from './styleSamples'
 import { storyKey } from './storyKeys'
@@ -138,49 +139,6 @@ function CastTab() {
 // ------------------------------------------------------------------ Panel · Shots
 /** D90 (01 §11.6): a Flow node as the user knows it — its title, else its first line or its type; never the raw id. */
 const nodeName = (nodes: Record<string, FlowNode>, id: string): string => { const n = nodes[id]; return n ? n.title || (n.type === 'dialogue' ? n.lines[0]?.text?.slice(0, 30) : '') || `${NODE_LABEL[n.type]} node` : 'a Flow node' }
-const shotThumb = (s: Shot, clipsById: Record<string, { asset_id: string | null }>): string | null => {
-  const v = s.versions.find((x) => x.id === s.current)
-  if (!v) return null
-  if (v.frame_asset_id) return v.frame_asset_id
-  const c = v.clip_id ? clipsById[v.clip_id] : undefined
-  return c?.asset_id ?? null
-}
-
-function ShotsTab() {
-  const shots = useStory((s) => s.shots)
-  const shotId = useStory((s) => s.shotId)
-  const clipsById = useStory((s) => s.clipsById)
-  const flowNodes = useStory((s) => s.flowNodes)
-  const groups = new Map<string, Shot[]>()
-  for (const s of shots) { const k = s.owner_node ?? ''; groups.set(k, [...(groups.get(k) ?? []), s]) }
-  const keys = [...groups.keys()].sort((a, b) => (a === '' ? -1 : b === '' ? 1 : a.localeCompare(b)))
-  return (
-    <div className="story-panel shots-panel">
-      <div className="story-list" role="list">
-        {keys.map((k) => (
-          <div key={k || 'unbound'} className="shot-group">
-            <h4>{k ? nodeName(flowNodes, k) : 'Unbound'}<span className="n"> · {groups.get(k)!.length}</span></h4>
-            {groups.get(k)!.map((s) => {
-              const v = s.versions.find((x) => x.id === s.current)
-              const thumb = shotThumb(s, clipsById)
-              return (
-                <button key={s.id} className={`story-row shot-row${shotId === s.id ? ' active' : ''}`} role="listitem" data-id={s.id} onClick={() => sy().selectShot(s.id)}
-                  onContextMenu={(e) => { sy().selectShot(s.id); showMenu(e, shotMenu()) }}>
-                  {thumb ? <img className="pthumb" src={api.thumbUrl(thumb, 256)} alt="" /> : <span className="pthumb empty" />}
-                  <span className="pname">{s.name}<span className="muted"> · {v?.stage_id ? 'stage' : v?.clip_id ? 'clip' : 'empty'}</span></span>
-                  <span className="n">{s.current} <i className={`dot ${v?.state === 'final' ? 'tight' : 'ok'}`} title={v?.state === 'final' ? 'final' : 'open'} /></span>
-                </button>
-              )
-            })}
-          </div>
-        ))}
-        {!shots.length && <div className="empty hint">No shots yet — every Dialogue or Shot node in Flow has one <Help text={"A Dialogue or Shot node is made with its shot (D125). New shot… makes one on its own; Animate's New shot from this camera… and Make a shot from this clip… make one from a camera or a clip."} /></div>}
-      </div>
-      <div className="verbs"><CommandButton id="story.shot.new" text /></div>
-    </div>
-  )
-}
-
 // ------------------------------------------------------------------ Panel · Flow
 function FlowTab() {
   const flowNodes = useStory((s) => s.flowNodes)
@@ -221,7 +179,7 @@ export function Panel({ tab }: { tab: string }) {
   useEffect(() => { if (project?.open) { void sy().load(); void sy().loadProfiles(); void sy().loadShots(); void sy().loadFlow(); void useLibrary.getState().load(); void useGenerate.getState().loadPresets() } }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!project?.open) return <span className="hint">Open or create a project to begin.</span>
   if (tab === 'cast') return <CastTab />
-  if (tab === 'shots') return <ShotsTab />
+  if (tab === 'shots') return <BoardPanel />                                      // D125 (SP3): the board's filters and legend; the shots are the board
   if (tab === 'flow') return <FlowTab />
   if (tab === 'episode') return <SequencePanel />
   return <WorldTab />
@@ -239,6 +197,8 @@ export function PrimaryAction() {
   const shotId = useStory((s) => s.shotId)
   const shotVersionId = useStory((s) => s.shotVersionId)
   const clipsById = useStory((s) => s.clipsById)
+  const boardFinals = useStory((s) => s.boardFinals)                               // D125 (SP3): the next step reads the board's records
+  const boardCuts = useStory((s) => s.boardCuts)
   const { active: tab } = useSuiteRail()
   const play = useStory((s) => s.play)
   const flowGraph = useStory((s) => s.flowGraph)
@@ -269,11 +229,12 @@ export function PrimaryAction() {
   }
   if (tab === 'shots') {
     const s = shots.find((x) => x.id === shotId); const v = s?.versions.find((x) => x.id === (shotVersionId ?? s.current))
-    void clipsById
+    void clipsById; void boardFinals; void boardCuts
     const why = v ? sy().finalizeWhy(v) : null
+    const next = s && v ? selectedNext() : null                                      // D125 (SP3): the foot is the shot's next step
     return (
       <div>
-        <button className="primary" onClick={() => runCommand('story.shot.new')} title="An empty shot; its takes come from Stage, Animate or the board">New shot…</button>
+        <button className="primary" disabled={!next} onClick={() => runCommand('story.shot.next')} title="The first step the shot still owes (the board's first owed cell) — Ctrl+Enter">{next ? `${NEXT_LABEL[next]} ▶` : s ? 'Nothing owed ▶' : 'Pick a shot'}</button>
         <div className="estimate">{!s || !v ? <span style={{ color: 'var(--fg3)' }}>pick a shot</span> : v.state === 'final' ? <><span className="dot ok" />{v.id} final</> : why ? <span style={{ color: 'var(--fg3)' }}>{why}</span> : <><span className="dot ok" />{v.id} ready to mark final</>}</div>
       </div>
     )
@@ -749,8 +710,8 @@ export function Stage() {
   markUsed('story.world.addStyle'); markUsed('story.world.addBeat'); markUsed('story.world.addVariable'); markUsed('story.world.remove'); markUsed('story.cast.new'); markUsed('story.cast.newPlace'); markUsed('story.cast.newProp')
   if (!project?.open) return <div className="story-empty"><div>Open or create a project to begin.</div></div>
   if (tab === 'cast') return <CastPage />
-  if (tab === 'shots') return <ShotBoard />
-  if (tab === 'flow') return play ? <PlayView /> : <FlowCanvas />
+  if (tab === 'shots') return <div className="shots-stage"><ShotsBoard /><ShotBoard /><LinkStageSheet /></div>   // D125 (SP3): the board, the selected shot's page under it
+  if (tab === 'flow') return play ? <PlayView /> : <><FlowCanvas /><LinkStageSheet /></>
   if (tab === 'episode') return <SequenceStage />
   return <WorldEditor />
 }

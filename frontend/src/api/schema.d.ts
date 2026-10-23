@@ -2281,6 +2281,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/stages/{st_id}/sets/{set_id}/things": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stage Thing Keep
+         * @description D123: the mask the last find left, kept as a thing of the set (a `mask` asset, lineage `set-thing` ← the picture).
+         */
+        post: operations["stage_thing_keep_stages__st_id__sets__set_id__things_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stages/{st_id}/sets/{set_id}/things/find": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stage Thing Find
+         * @description D123: SAM 3's point prompts on the set's own document (made from its picture the first time); the mask lands as that document's
+         *     selection, which the client reads (`GET /documents/{id}/selection`) and draws on the picture. 404 / 422 as the stage, set and points are.
+         */
+        post: operations["stage_thing_find_stages__st_id__sets__set_id__things_find_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stages/{st_id}/sets/{set_id}/things/make": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stage Things Make
+         * @description D123 (SC3c-3): the things not yet made — the plate cleaned under them all (a Fill on the set's document); when it lands, the relief is
+         *     rebuilt from the clean plate at the set's lens and then a Pixal3D model is queued for each one's cut-out (stood on the relief at its
+         *     footprint when it lands) — the rebuild first, so the clean set shows within a minute or two and the models follow. The jobs take their
+         *     turns through the queue (D97). 422 with the reason: nothing to make, Pixal3D not in the variant.
+         */
+        post: operations["stage_things_make_stages__st_id__sets__set_id__things_make_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stages/{st_id}/sets/{set_id}/things/{thing_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Stage Thing Remove
+         * @description The thing leaves the list; its mask stays in the Catalogue and a prop made of it stays on the stage.
+         */
+        delete: operations["stage_thing_remove_stages__st_id__sets__set_id__things__thing_id__delete"];
+        options?: never;
+        head?: never;
+        /** Stage Thing Rename */
+        patch: operations["stage_thing_rename_stages__st_id__sets__set_id__things__thing_id__patch"];
+        trace?: never;
+    };
     "/story/flow": {
         parameters: {
             query?: never;
@@ -8898,6 +8983,31 @@ export interface components {
             /** Session Id */
             session_id: string;
         };
+        /**
+         * SetThing
+         * @description D123 (SC3c-2): a thing the author picked on a picture set's picture — SAM 3's points and the mask they found (a Catalogue `mask`
+         *     asset at the picture's size), the relief and floor it was picked on (the placement reads them), and what was made of it (SC3c-3).
+         */
+        SetThing: {
+            /** Floor Y */
+            floor_y: number | null;
+            /** Id */
+            id: string;
+            /** Mask Asset Id */
+            mask_asset_id: string;
+            /** Mesh Asset Id */
+            mesh_asset_id: string | null;
+            /** Name */
+            name: string;
+            /** Object Id */
+            object_id: string | null;
+            /** Points */
+            points: {
+                [key: string]: number;
+            }[];
+            /** Relief Asset Id */
+            relief_asset_id: string | null;
+        };
         /** Settings */
         Settings: {
             /**
@@ -9370,6 +9480,10 @@ export interface components {
             profile_id: string | null;
             /** Shadow Proxy */
             shadow_proxy: string | null;
+            /** Things */
+            things: components["schemas"]["SetThing"][];
+            /** Things Document Id */
+            things_document_id: string | null;
             transform: components["schemas"]["Transform"];
             /** Version */
             version: string | null;
@@ -9929,6 +10043,60 @@ export interface components {
             label: string;
             /** Wave */
             wave?: string | null;
+        };
+        /** ThingFindBody */
+        ThingFindBody: {
+            /** Points */
+            points: components["schemas"]["ThingPoint"][];
+        };
+        /** ThingFound */
+        ThingFound: {
+            /** Document Id */
+            document_id: string;
+            /** Job Id */
+            job_id: string;
+        };
+        /** ThingKeepBody */
+        ThingKeepBody: {
+            /**
+             * Name
+             * @default
+             */
+            name?: string;
+            /** Points */
+            points?: components["schemas"]["ThingPoint"][];
+        };
+        /** ThingModelJob */
+        ThingModelJob: {
+            /** Cutout Id */
+            cutout_id: string;
+            /** Thing Id */
+            thing_id: string;
+        };
+        /** ThingPatch */
+        ThingPatch: {
+            /** Name */
+            name: string;
+        };
+        /** ThingPoint */
+        ThingPoint: {
+            /**
+             * Label
+             * @description 1 = on the thing, 0 = not it
+             * @default 1
+             */
+            label?: number;
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+        };
+        /** ThingsMade */
+        ThingsMade: {
+            /** Clean Job Id */
+            clean_job_id: string;
+            /** Models */
+            models: components["schemas"]["ThingModelJob"][];
         };
         /** Timeline */
         Timeline: {
@@ -15085,6 +15253,180 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["PassesUpload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Stage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stage_thing_keep_stages__st_id__sets__set_id__things_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                st_id: string;
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ThingKeepBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Stage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stage_thing_find_stages__st_id__sets__set_id__things_find_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                st_id: string;
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ThingFindBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThingFound"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stage_things_make_stages__st_id__sets__set_id__things_make_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                st_id: string;
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThingsMade"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stage_thing_remove_stages__st_id__sets__set_id__things__thing_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                st_id: string;
+                set_id: string;
+                thing_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Stage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stage_thing_rename_stages__st_id__sets__set_id__things__thing_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                st_id: string;
+                set_id: string;
+                thing_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ThingPatch"];
             };
         };
         responses: {

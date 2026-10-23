@@ -13950,6 +13950,89 @@
         "title": "SessionInfo",
         "type": "object"
       },
+      "SetThing": {
+        "description": "D123 (SC3c-2): a thing the author picked on a picture set's picture — SAM 3's points and the mask they found (a Catalogue `mask`\nasset at the picture's size), the relief and floor it was picked on (the placement reads them), and what was made of it (SC3c-3).",
+        "properties": {
+          "floor_y": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Floor Y"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "mask_asset_id": {
+            "title": "Mask Asset Id",
+            "type": "string"
+          },
+          "mesh_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mesh Asset Id"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "object_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Id"
+          },
+          "points": {
+            "items": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "relief_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relief Asset Id"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "mask_asset_id",
+          "points",
+          "relief_asset_id",
+          "floor_y",
+          "mesh_asset_id",
+          "object_id"
+        ],
+        "title": "SetThing",
+        "type": "object"
+      },
       "Settings": {
         "properties": {
           "api_host": {
@@ -15245,6 +15328,24 @@
             ],
             "title": "Shadow Proxy"
           },
+          "things": {
+            "items": {
+              "$ref": "#/components/schemas/SetThing"
+            },
+            "title": "Things",
+            "type": "array"
+          },
+          "things_document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Things Document Id"
+          },
           "transform": {
             "$ref": "#/components/schemas/Transform"
           },
@@ -15288,7 +15389,9 @@
           "lens_deg",
           "plate_asset_id",
           "floor_y",
-          "plate_camera_id"
+          "plate_camera_id",
+          "things",
+          "things_document_id"
         ],
         "title": "StageObject",
         "type": "object"
@@ -16514,6 +16617,139 @@
           "label"
         ],
         "title": "TemplateStep",
+        "type": "object"
+      },
+      "ThingFindBody": {
+        "properties": {
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/ThingPoint"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Points",
+            "type": "array"
+          }
+        },
+        "required": [
+          "points"
+        ],
+        "title": "ThingFindBody",
+        "type": "object"
+      },
+      "ThingFound": {
+        "properties": {
+          "document_id": {
+            "title": "Document Id",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "document_id"
+        ],
+        "title": "ThingFound",
+        "type": "object"
+      },
+      "ThingKeepBody": {
+        "properties": {
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/ThingPoint"
+            },
+            "maxItems": 32,
+            "title": "Points",
+            "type": "array"
+          }
+        },
+        "title": "ThingKeepBody",
+        "type": "object"
+      },
+      "ThingModelJob": {
+        "properties": {
+          "cutout_id": {
+            "title": "Cutout Id",
+            "type": "string"
+          },
+          "thing_id": {
+            "title": "Thing Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thing_id",
+          "cutout_id"
+        ],
+        "title": "ThingModelJob",
+        "type": "object"
+      },
+      "ThingPatch": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ThingPatch",
+        "type": "object"
+      },
+      "ThingPoint": {
+        "properties": {
+          "label": {
+            "default": 1,
+            "description": "1 = on the thing, 0 = not it",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Label",
+            "type": "integer"
+          },
+          "x": {
+            "title": "X",
+            "type": "integer"
+          },
+          "y": {
+            "title": "Y",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "title": "ThingPoint",
+        "type": "object"
+      },
+      "ThingsMade": {
+        "properties": {
+          "clean_job_id": {
+            "title": "Clean Job Id",
+            "type": "string"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/ThingModelJob"
+            },
+            "title": "Models",
+            "type": "array"
+          }
+        },
+        "required": [
+          "clean_job_id",
+          "models"
+        ],
+        "title": "ThingsMade",
         "type": "object"
       },
       "Timeline": {
@@ -25159,6 +25395,311 @@
           }
         },
         "summary": "Stage Passes",
+        "tags": [
+          "stages"
+        ]
+      }
+    },
+    "/stages/{st_id}/sets/{set_id}/things": {
+      "post": {
+        "description": "D123: the mask the last find left, kept as a thing of the set (a `mask` asset, lineage `set-thing` ← the picture).",
+        "operationId": "stage_thing_keep_stages__st_id__sets__set_id__things_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "st_id",
+            "required": true,
+            "schema": {
+              "title": "St Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "set_id",
+            "required": true,
+            "schema": {
+              "title": "Set Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ThingKeepBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stage Thing Keep",
+        "tags": [
+          "stages"
+        ]
+      }
+    },
+    "/stages/{st_id}/sets/{set_id}/things/find": {
+      "post": {
+        "description": "D123: SAM 3's point prompts on the set's own document (made from its picture the first time); the mask lands as that document's\nselection, which the client reads (`GET /documents/{id}/selection`) and draws on the picture. 404 / 422 as the stage, set and points are.",
+        "operationId": "stage_thing_find_stages__st_id__sets__set_id__things_find_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "st_id",
+            "required": true,
+            "schema": {
+              "title": "St Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "set_id",
+            "required": true,
+            "schema": {
+              "title": "Set Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ThingFindBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThingFound"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stage Thing Find",
+        "tags": [
+          "stages"
+        ]
+      }
+    },
+    "/stages/{st_id}/sets/{set_id}/things/make": {
+      "post": {
+        "description": "D123 (SC3c-3): the things not yet made — the plate cleaned under them all (a Fill on the set's document); when it lands, the relief is\nrebuilt from the clean plate at the set's lens and then a Pixal3D model is queued for each one's cut-out (stood on the relief at its\nfootprint when it lands) — the rebuild first, so the clean set shows within a minute or two and the models follow. The jobs take their\nturns through the queue (D97). 422 with the reason: nothing to make, Pixal3D not in the variant.",
+        "operationId": "stage_things_make_stages__st_id__sets__set_id__things_make_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "st_id",
+            "required": true,
+            "schema": {
+              "title": "St Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "set_id",
+            "required": true,
+            "schema": {
+              "title": "Set Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThingsMade"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stage Things Make",
+        "tags": [
+          "stages"
+        ]
+      }
+    },
+    "/stages/{st_id}/sets/{set_id}/things/{thing_id}": {
+      "delete": {
+        "description": "The thing leaves the list; its mask stays in the Catalogue and a prop made of it stays on the stage.",
+        "operationId": "stage_thing_remove_stages__st_id__sets__set_id__things__thing_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "st_id",
+            "required": true,
+            "schema": {
+              "title": "St Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "set_id",
+            "required": true,
+            "schema": {
+              "title": "Set Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "thing_id",
+            "required": true,
+            "schema": {
+              "title": "Thing Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stage Thing Remove",
+        "tags": [
+          "stages"
+        ]
+      },
+      "patch": {
+        "operationId": "stage_thing_rename_stages__st_id__sets__set_id__things__thing_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "st_id",
+            "required": true,
+            "schema": {
+              "title": "St Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "set_id",
+            "required": true,
+            "schema": {
+              "title": "Set Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "thing_id",
+            "required": true,
+            "schema": {
+              "title": "Thing Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ThingPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stage Thing Rename",
         "tags": [
           "stages"
         ]

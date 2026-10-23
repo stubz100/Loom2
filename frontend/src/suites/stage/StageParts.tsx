@@ -31,6 +31,8 @@ import { keyedFrames as keyedFramesOf, keyframesOf, sampleCamera, sampleDoc } fr
 import { Timeline as TimelineView, TransportBar, type TLRow } from '../animate/Timeline'
 import { keyRuns, stageSpan } from '../animate/timelineMath'
 import { JOINTS, MANNEQUIN_PRESETS, POSE_NAMES, PROP_PRESETS, SET_PRESETS, type Joint } from './builders'
+import { ThingsSheet } from './ThingsSheet'
+import { useThings } from './thingsStore'
 import { StageEngine } from './engine'
 import { viewport, viewportMenu, cameraMenu } from './stageCommands'
 import { effectiveJoints, st, TEMPLATE_KINDS, useStage, type ShotState, imageSetBudget } from './stageStore'
@@ -165,6 +167,7 @@ export function ClayColumn({ tab }: { tab: string }) {
   if (!project?.open) return <span className="hint">Open or create a project to begin.</span>
   return (
     <AnimColumn suite="stage" sections={CLAY_SECTIONS} tab={tab}>
+      <ThingsSheet />{/* D123 (SC3c-2): over everything while it is open */}
       <Sec id="shot" title="Shot"><ShotHead /></Sec>
       <Sec id="scene" title="Scene"><SceneTab /></Sec>
       <Sec id="motion" title="Motion"><PosesTab /></Sec>
@@ -229,7 +232,38 @@ function ImageSetFields({ o }: { o: StageObject }) {
         <button type="button" disabled={!ok || v === o.lens_deg || !!pending} onClick={() => void st().rebuildImageSet(o.id, Math.round(v * 2) / 2)} title="Rebuild the relief with this lens (a job of seconds)">{pending ? 'Rebuilding…' : 'Rebuild with this lens'}</button>
         <button type="button" disabled={!cam} onClick={() => { if (cam) { st().selectCamera(cam.id); st().setView('camera') } }}>Look through the picture's camera</button>
       </div>
+      <SetThings o={o} />
     </>
+  )
+}
+
+/** D123 (SC3c): the things the author picked on the picture — each a row (renamed, removed), *Things in the picture…* to pick more, and
+ *  *Make the things ▶*: the plate cleaned under them, the relief rebuilt from it, each a Pixal3D model standing where it stood. */
+function SetThings({ o }: { o: StageObject }) {
+  const making = useThings((s) => s.making)
+  const mesh = useSession((s) => s.capabilities?.mesh?.model_id)
+  const things = o.things ?? []
+  const todo = things.filter((t) => !t.mesh_asset_id).length
+  const why = !mesh ? "the 3D models need Pixal3D, which this variant does not carry" : !todo ? (things.length ? 'every thing is made' : 'pick a thing first') : making.length ? 'making…' : ''
+  return (
+    <div className="set-things" aria-label="the set's things">
+      <div className="kv"><span>things</span><span>{things.length ? `${things.length} · ${things.length - todo} made` : 'none picked'}
+        <Help text="The things standing in the place (D123): pick each on the picture, then Make the things — the plate is cleaned under them (a Fill), the relief rebuilt from the clean plate at the set's lens, and each becomes a 3D model (Pixal3D, ≈ 5 min a thing) standing where it stood. Nothing is cut that you did not pick." /></span></div>
+      {things.map((t) => (
+        <div key={t.id} className="thing-row" data-thing={t.id}>
+          <span className="name">{t.name}</span>
+          <span className="hint">{t.object_id ? 'made' : 'to make'}</span>
+          <span className="spacer" />
+          <button type="button" className="quiet" title="Rename" aria-label={`Rename ${t.name}`} onClick={() => void useThings.getState().rename(o.id, t.id)}>✎</button>
+          <button type="button" className="quiet" title="Remove from the list (its prop, if made, stays)" aria-label={`Remove ${t.name}`} onClick={() => void useThings.getState().remove(o.id, t.id)}>✕</button>
+        </div>
+      ))}
+      <div className="verbs">
+        <button type="button" onClick={() => void useThings.getState().open(o.id)}>Things in the picture…</button>
+        <button type="button" className="primary" disabled={!!why} title={why || `≈ ${todo * 5 + 1} min: the clean plate, then a model of each`} onClick={() => void useThings.getState().make(o.id)}>
+          {making.length ? 'Making…' : `Make the things ▶`}</button>
+      </div>
+    </div>
   )
 }
 

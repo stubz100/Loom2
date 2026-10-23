@@ -128,6 +128,22 @@ check row here.
   | **The street, the free view** (the picture behind the relief) | **The street beyond the budget** | **The lens row** |
   | ![street free view](img/25-sc3b-street-free-view.jpg) | ![street beyond](img/25-sc3b-street-beyond-budget.jpg) | ![lens row](img/25-sc3b-room-lens-row.jpg) |
 
+- **2026-10-23 14:51 — SC3c-2 and SC3c-3 built (D123): the things picked one by one, made into models where they stood.** The set's row lists
+  its things (rename, remove), *Things in the picture…* and *Make the things ▶*. The sheet shows the picture large: a click finds a thing
+  (SAM 3's point prompt on the set's own document; a right-click or *− Not it* marks what is not), the mask is drawn over the picture, *Keep
+  as a thing* keeps it by name (a `mask` asset); kept things stay tinted. *Make* cleans the plate under them all (the Fill, the masks grown
+  14 px), rebuilds the relief from the clean plate at the set's lens (the set's picture becomes the clean plate), then models each thing's
+  cut-out with Pixal3D and stands it on the relief it was picked on (E30's footprint: the mask's front edge on the floor fitted to the
+  picture's lowest rows, scaled to that edge's width). Rig (`engine/spikes/sc3c_rig.py`, the real engine): the room at 69.2°, four
+  things found in 2–6 s each (the crate 2.0 %, the table 1.35 %, the small block 2.74 %, the big block 6.58 % of the picture), the clean
+  plate 67 s, four Pixal3D models 267–370 s each, all four stood on the relief. Found: the fitted floor rises 0.12 m a metre into the room
+  (the photograph's camera looked down ≈ 7°), so the things stand 0–0.19 m above the stage floor where the figures stand — levelling a
+  picture set by its floor (the picture camera pitched to match) is the next step.
+
+  | Through the picture camera (the clean plate, the four models) | Beyond the budget (the models in 3D) | The things over the clean picture |
+  | --- | --- | --- |
+  | ![picture camera](img/25-sc3c-picture-camera.jpg) | ![beyond](img/25-sc3c-beyond-budget.jpg) | ![the sheet](img/25-sc3c-things-sheet.jpg) |
+
 ## 4 · Checks for the author
 
 | Check | Your note |
@@ -140,5 +156,6 @@ check row here.
 | One Scene: does the grouping (figures, sets, props, stand-ins, meshes, lights, planes, cameras) read better than the flat list did, or should a kind with nothing on the stage hide its header? | |
 | SC3: *From an image…* on one of your own pictures of a place (a Klein still or an import): does the relief read as the place in the viewport, and does the Picture camera frame it as the picture did? Move the camera a little — is the budget line's warning early enough, or too fussy? | |
 | SC3: should the things in the picture be cut out and modelled automatically (one job: the cut, the clean plate, the models), or stay a choice per thing? | |
+| SC3c: *Things in the picture…* on one of your pictures — does a click find the thing you meant? Are the models (Pixal3D from one view) close enough to stand in for the things, and do they stand where the things stood? | |
 | SC3b: the figure's shadow on the relief (the room's picture-camera view) — dark enough, too dark? And the picture behind the street: does what shows through the sky and the seams read as the place, or should it be plain? | |
 | E30: the lens — MoGe read 75° from the PNG and 69° from its JPEG. Should a set from an image ask you for the lens (the Klein recipe's camera when the picture is the app's own)? | |

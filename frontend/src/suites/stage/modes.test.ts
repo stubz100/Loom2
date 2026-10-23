@@ -10,7 +10,7 @@ import { st, useStage } from './stageStore'
 
 const OBJ = (id: string, kind: StageObject['kind']): StageObject => ({ id, kind, name: id, preset: null, asset_id: null, transform: { pos: [0, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] },
   parent: null, locked: false, visible: true, colour_id: 1, pose: null, billboard: false, profile_id: null, version: null, body: null, detail: null, path: null, shadow_proxy: null, light: null,
-  lens_deg: null, plate_asset_id: null, floor_y: null, plate_camera_id: null })
+  lens_deg: null, plate_asset_id: null, floor_y: null, plate_camera_id: null, things: [], things_document_id: null })
 const DOC = { id: 'stg_1', name: 'Room', size: { w: 1280, h: 720, fps: 24 }, objects: [OBJ('fig_1', 'mannequin'), OBJ('box_1', 'prop')],
   cameras: [{ id: 'cam_1', name: 'Camera 1', pos: [0, 1.5, 5], target: [0, 1, 0], roll: 0, focal_mm: 35, sensor_mm: 36 }], active_camera: 'cam_1',
   keyframes: { camera: {}, objects: {} }, range: { start: 0, end: 12 }, passes: [], revision: 1 } as unknown as StageDoc

@@ -188,3 +188,18 @@
 .pip-frame { position: absolute; padding: 0; background: transparent; border: 1px solid var(--line2); border-radius: 2px; box-shadow: 0 2px 10px var(--shadow); cursor: pointer; z-index: 1; }
 .pip-frame:hover { border-color: var(--accent); }
 .pip-frame span { position: absolute; left: 4px; bottom: 3px; font-size: 10px; color: var(--fg2); background: color-mix(in srgb, var(--bg1) 70%, transparent); padding: 0 4px; border-radius: 2px; }
+
+/* D123 (SC3c): the set's things and the sheet that picks them on the picture */
+.set-things { margin-top: 8px; display: grid; gap: 4px; }
+.set-things .thing-row { display: flex; align-items: center; gap: 6px; padding: 2px 4px; border-radius: 4px; background: var(--bg2); }
+.set-things .thing-row .name { font-weight: 500; }
+.modal.things-sheet { width: min(1180px, 96vw); }
+.things-sheet .body { display: grid; gap: 8px; }
+.things-sheet .things-bar { display: flex; align-items: center; gap: 8px; }
+.things-sheet .things-status { color: var(--fg3); font-size: 12px; }
+.things-sheet .things-status[data-state="finding"] { color: var(--accent); }
+.things-sheet .things-pic { position: relative; line-height: 0; }
+.things-sheet .things-pic img { width: 100%; max-height: 66vh; object-fit: contain; display: block; user-select: none; }
+.things-sheet .things-pic canvas { position: absolute; left: 0; top: 0; cursor: crosshair; }
+.things-sheet .foot { display: flex; align-items: center; gap: 8px; }
+.things-sheet .foot .things-kept { color: var(--fg3); font-size: 12px; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

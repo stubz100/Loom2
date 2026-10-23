@@ -2521,6 +2521,72 @@ test('a set from an image (D120, SC3): a Bin picture becomes a relief set on the
   await expect(page.locator('.outl-row[data-row="object"]', { has: page.locator('.kind', { hasText: 'set' }) })).toHaveCount(1)
 })
 
+test('the things of a picture set (D123, SC3c): picked on the picture, kept by name, renamed; Make cleans the plate, rebuilds the relief and models each thing', async ({ page }) => {
+  test.setTimeout(150_000)
+  type JobL = { id: string; kind: string; status: string; recipe: { mode?: string; points?: { label: number }[] }; origin?: { surface?: string } | null; result: Record<string, unknown> | null }
+  const jobs = async () => (await api<{ items: JobL[] }>('GET', '/jobs')).items
+  const name = `Things ${Date.now().toString(36)}`
+  const stg = await api<{ id: string }>('POST', '/stages', { name })
+  const img = (await api<{ items: { id: string; kind: string }[] }>('GET', '/assets?folder=unprocessed&limit=40')).items.find((a) => a.kind === 'image')!
+  const made = await api<{ job_id: string }>('POST', `/stages/${stg.id}/image-set`, { asset_id: img.id, lens_deg: 70 })
+  await expect.poll(async () => (await jobs()).find((j) => j.id === made.job_id)?.status, { timeout: 30_000 }).toBe('done')
+  type SetDoc = { objects: { id: string; kind: string; preset: string | null; plate_asset_id?: string | null; asset_id: string | null; things?: { id: string; name: string; mesh_asset_id: string | null }[] }[] }
+  const theSet = async () => (await api<SetDoc>('GET', `/stages/${stg.id}`)).objects.find((o) => o.kind === 'set' && o.preset === 'image')!
+  const before = await theSet()
+  await openApp(page, { suite: 'stage' })
+  await page.locator('#anim-sec-shot .stage-picker select').selectOption({ label: name })
+  await openSection(page, 'Scene')
+  const row = page.locator('.outl-row[data-row="object"]', { has: page.locator('.kind', { hasText: 'set' }) })
+  const editor = page.locator('.row-editor.stage-insp')
+  const openRow = async () => { if (!(await editor.locator('.set-things').isVisible())) await row.locator('.name').click(); await expect(editor.locator('.set-things')).toBeVisible() }
+  await openRow()
+  await expect(editor.locator('.set-things')).toContainText('none picked')
+  await expect(editor.getByRole('button', { name: /^Make the things/ })).toBeDisabled()
+  await editor.getByRole('button', { name: 'Things in the picture…' }).click()
+  const sheet = page.locator('.modal.things-sheet')
+  await expect(sheet).toBeVisible()
+  const canvas = sheet.locator('.things-pic canvas')
+  await expect.poll(async () => (await canvas.boundingBox())?.width ?? 0).toBeGreaterThan(100)
+  const box = (await canvas.boundingBox())!
+  const status = sheet.locator('.things-status')
+  await expect(status).toHaveText('click a thing')
+  await canvas.click({ position: { x: box.width * 0.5, y: box.height * 0.6 } })                       // SAM 3 finds the thing (the fake engine's mask)
+  await expect(status).toHaveAttribute('data-state', 'found', { timeout: 30_000 })
+  await canvas.click({ position: { x: box.width * 0.1, y: box.height * 0.1 }, button: 'right' })       // a right-click: not it — found again with both points
+  await expect.poll(async () => (await jobs()).filter((j) => j.kind === 'segment' && j.origin?.surface === 'set_thing_find').map((j) => (j.recipe.points ?? []).map((p) => p.label).join(',')))
+    .toContain('1,0')
+  await expect(status).toHaveAttribute('data-state', 'found', { timeout: 30_000 })
+  await sheet.locator('input[aria-label="the thing\'s name"]').fill('Crate')
+  await sheet.getByRole('button', { name: 'Keep as a thing' }).click()
+  await expect(sheet.locator('.things-kept')).toContainText('1 kept: Crate')
+  await expect(status).toHaveText('click a thing')                                                     // the points cleared for the next one
+  await page.keyboard.press('Escape')
+  await expect(sheet).toHaveCount(0)
+  expect((await theSet()).things?.map((t) => t.name)).toEqual(['Crate'])
+  await openRow()
+  await expect(editor.locator('.thing-row')).toHaveCount(1)
+  await editor.locator('.thing-row button[aria-label="Rename Crate"]').click()                           // renamed through the dialog
+  const ask = page.locator('.modal.ask')
+  await ask.locator('input').fill('Wooden crate')
+  await ask.locator('button.primary').click()
+  await expect.poll(async () => (await theSet()).things?.[0]?.name).toBe('Wooden crate')
+  await openRow()
+  const make = editor.getByRole('button', { name: /^Make the things/ })
+  if (JSON.parse(process.env.LOOM2_E2E ?? '{}').variant === 'open') {                                  // D17 / D26: no Pixal3D — said on the button, nothing made
+    await expect(make).toBeDisabled()
+    await expect(make).toHaveAttribute('title', /Pixal3D/)
+    return
+  }
+  await expect(make).toBeEnabled()
+  await make.click()                                                                                   // the Fill, then the rebuild and the model it queues
+  await expect.poll(async () => (await theSet()).plate_asset_id, { timeout: 60_000 }).not.toBe(before.plate_asset_id)   // rebuilt from the clean plate
+  const after = await theSet()
+  expect(after.asset_id).not.toBe(before.asset_id)
+  const clean = await api<{ lineage_kind: string; parents: string[] }>('GET', `/assets/${after.plate_asset_id}`)
+  expect(clean.lineage_kind).toBe('clean-plate'); expect(clean.parents).toEqual([img.id])
+  await expect.poll(async () => (await jobs()).find((j) => j.kind === 'image_to_mesh' && j.origin?.surface === 'set_thing_model')?.status, { timeout: 60_000 }).toBe('done')
+})
+
 test('the three modes (D121, proto01_animate 26): each Animate level has its own column, rail and foot — Clay, Performance with its three cards, Final; the keys switch them', async ({ page }) => {
   await openApp(page, { suite: 'stage' })
   await page.locator('.placeholder button', { hasText: /^New stage/ }).click()

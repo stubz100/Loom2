@@ -8154,3 +8154,38 @@ The author asked for a review of the state of things, then "record all this and 
   Escape queues no job, "5 mm wide" is asked again with its reason, empty makes the set at MoGe's reading (the backdrop now checked
   against the picture's own aspect, not a landscape assumed). Vitest 424 + 3 skipped, e2e 53/53 full and 53/53 open, typecheck and build
   clean, lint 0 errors (79).
+
+## 2026-10-23 14:51 — SC3c-2 and SC3c-3 built (D123): the things of a picture set picked one by one and made into models where they stood
+
+- **Picked:** a picture set has its own Edit document (`things_document_id`, made from its picture the first time). The set's row has
+  *Things in the picture…*: a sheet with the picture large; a click is SAM 3's point prompt on that document (`POST
+  /stages/{id}/sets/{set}/things/find`, mode `points`, op `replace` — the mask lands as the document's selection and the client reads it
+  back as raw bytes), a right-click or *− Not it* adds a negative point; *Keep as a thing* (`POST …/things`) keeps the selection as a `mask`
+  asset (lineage `set-thing` ← the picture) and the set records the thing (`SetThing`: name, mask, points, the relief and floor it was
+  picked on); rename and remove (`PATCH` / `DELETE …/things/{id}`; a made thing's prop stays).
+- **Made** (`POST …/things/make`, 422 with the reason: nothing to make; Pixal3D not in the open variant): every thing not made is cut out
+  (on white, cropped with a margin; lineage `set-thing-cutout`) and their union, grown 14 px (E28b), becomes the document's selection; one
+  Fill (`set_clean`) cleans the plate. When it lands (`DocumentFinisher` → `set_things.clean_plate`) the composite is the clean plate
+  (lineage `clean-plate`), the relief is rebuilt from it in place at the set's lens (`set_rebuild`; the set's picture becomes the clean plate),
+  and then a Pixal3D model is queued for each cut-out (`set_thing_model`) — the rebuild first, so the clean set shows in a minute or two
+  and the models follow. Each model lands (`set_things.model_landed`): E30's footprint on the relief it was picked on (the mask's lowest rows,
+  a floor plane fitted to the picture's lowest rows outside every thing, the front edge's width), `model_bounds` through the GLB's node
+  transforms (D109's upright turn is a node rotation), a `mesh` prop on the stage with that transform, the thing marked made.
+- **A lens corrected after picking** moves the things not yet made onto the new relief; a rebuild from the clean plate does not (it has no
+  things in it).
+- **Rig** (`engine/spikes/sc3c_rig.py`, the real engine): bench/sets/room.jpg, the set at 69.2° in 33.1 s with the engine's start; four
+  things found by points — the crate 6.4 s (SAM 3's load) 2.0 %, the table 2.1 s 1.35 %, the small block 3.2 s 2.74 %, the big block 3.1 s
+  6.58 % of the picture; the clean plate 67 s; the four Pixal3D models 319, 268, 292 and 370 s; every one stood on the relief (the crate
+  0.64 m wide at 4.36 m, the table 0.64 m at 4.01 m, the small block 0.37 m at 2.78 m, the big block 1.08 m at 3.95 m). This run queued
+  the rebuild behind the models (1 250 s); the order was changed after it so the rebuild lands right after the Fill. Screenshots through the
+  picture camera, inside and beyond the budget, the free view, the set's row and the sheet (proto01_animate/img/25-sc3c-*.jpg).
+- **Found:** the fitted floor rises 0.12 m a metre into the room — the photograph's camera looked down about 7°, and the relief keeps it —
+  so the things stand on the relief's floor 0–0.19 m above the stage floor where the figures stand. Next: level a picture set by its
+  fitted floor (the set turned, the picture camera pitched to match).
+- **Tests:** `test_set_things_d123.py` (points, a synthetic room relief's footprint and placement, the bounds through a node rotation, keep /
+  rename / the lens moving unmade things / make on the fake engine: the Fill, the rebuild then the model it queues, the clean plate as the
+  set's picture, the prop at the box; the routes' 404 / 422; open refuses), `thingsStore.test.ts` (the find's points and mask, make following
+  the Fill's next jobs); the e2e scenario (a click and a right-click, keep, rename, make: the clean plate, the model; the open variant's
+  disabled Make with its reason); the route snapshot (five routes). Offline 508 passed, Vitest 426 + 3 skipped, e2e 54/54 full and 54/54
+  open (one open run lost its first scenario to a cold start, the rerun clean), typecheck and build clean, lint 0 errors (79), agents check
+  clean.

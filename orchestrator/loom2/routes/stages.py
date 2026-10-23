@@ -16,6 +16,7 @@ from ..origin import JobOrigin
 from ..recipes import STAGE_PASSES
 from ..schemas import Deleted, StageList
 from ..stages import Stage, StageStore, StaleStage
+from .. import set_things
 from .deps import Svc
 
 router = APIRouter(tags=["stages"])
@@ -139,6 +140,123 @@ async def stage_image_set(svc: Svc, st_id: str, body: ImageSetBody):
     except ValueError as e:
         raise HTTPException(422, str(e)) from e
     return {"job_id": jobs[0].id}
+
+
+# ---- D123 (SC3c-2): the things of a picture set, picked on its picture ------------------------------------------------------------
+class ThingPoint(BaseModel):
+    x: int
+    y: int
+    label: int = Field(1, ge=0, le=1, description="1 = on the thing, 0 = not it")
+
+
+class ThingFindBody(BaseModel):
+    points: list[ThingPoint] = Field(min_length=1, max_length=32)
+
+
+class ThingFound(BaseModel):
+    job_id: str
+    document_id: str
+
+
+class ThingKeepBody(BaseModel):
+    name: str = ""
+    points: list[ThingPoint] = Field(default_factory=list, max_length=32)
+
+
+class ThingPatch(BaseModel):
+    name: str
+
+
+def _things_error(e: Exception) -> HTTPException:
+    return HTTPException(404, f"not found: {e}") if isinstance(e, KeyError) else HTTPException(422, str(e))
+
+
+@router.post("/stages/{st_id}/sets/{set_id}/things/find", response_model=ThingFound)
+async def stage_thing_find(svc: Svc, st_id: str, set_id: str, body: ThingFindBody):
+    """D123: SAM 3's point prompts on the set's own document (made from its picture the first time); the mask lands as that document's
+    selection, which the client reads (`GET /documents/{id}/selection`) and draws on the picture. 404 / 422 as the stage, set and points are."""
+    ws, catalogue, q = svc.require_project()
+    store = StageStore(ws)
+    try:
+        od = await asyncio.to_thread(set_things.ensure_document, store, svc.require_documents(), catalogue, st_id, set_id)
+        points = set_things.check_points([p.model_dump() for p in body.points], od.doc.w, od.doc.h)
+        jobs = q.submit({"kind": "segment", "mode": "points", "points": points, "op": "replace", "document_id": od.doc.id},
+                        origin=JobOrigin(suite="stage", surface=set_things.FIND_SURFACE, ref=st_id, payload={"set_id": set_id}))
+    except (KeyError, ValueError) as e:
+        raise _things_error(e) from e
+    return {"job_id": jobs[0].id, "document_id": od.doc.id}
+
+
+@router.post("/stages/{st_id}/sets/{set_id}/things", response_model=Stage)
+async def stage_thing_keep(svc: Svc, st_id: str, set_id: str, body: ThingKeepBody):
+    """D123: the mask the last find left, kept as a thing of the set (a `mask` asset, lineage `set-thing` ← the picture)."""
+    ws, catalogue, _ = svc.require_project()
+    try:
+        st, _, rec = await asyncio.to_thread(set_things.keep_thing, StageStore(ws), svc.require_documents(), catalogue, st_id, set_id, body.name,
+                                             [p.model_dump() for p in body.points])
+    except (KeyError, ValueError) as e:
+        raise _things_error(e) from e
+    svc.hub.broadcast("asset.created", rec.model_dump())
+    svc.hub.broadcast("stage.updated", {"id": st.id, "revision": st.revision})
+    return st.model_dump()
+
+
+class ThingModelJob(BaseModel):
+    thing_id: str
+    cutout_id: str
+
+
+class ThingsMade(BaseModel):
+    clean_job_id: str
+    models: list[ThingModelJob]
+
+
+@router.post("/stages/{st_id}/sets/{set_id}/things/make", response_model=ThingsMade)
+async def stage_things_make(svc: Svc, st_id: str, set_id: str):
+    """D123 (SC3c-3): the things not yet made — the plate cleaned under them all (a Fill on the set's document); when it lands, the relief is
+    rebuilt from the clean plate at the set's lens and then a Pixal3D model is queued for each one's cut-out (stood on the relief at its
+    footprint when it lands) — the rebuild first, so the clean set shows within a minute or two and the models follow. The jobs take their
+    turns through the queue (D97). 422 with the reason: nothing to make, Pixal3D not in the variant."""
+    ws, catalogue, q = svc.require_project()
+    try:
+        prep = await asyncio.to_thread(set_things.prepare_make, StageStore(ws), svc.require_documents(), catalogue, st_id, set_id, svc.app.settings.variant)
+    except (KeyError, ValueError) as e:
+        raise _things_error(e) from e
+    for _, rec in prep["cutouts"]:
+        svc.hub.broadcast("asset.created", rec.model_dump())
+
+    def origin(surface: str, extra: dict | None = None) -> JobOrigin:
+        return JobOrigin(suite="stage", surface=surface, ref=st_id, payload={"set_id": set_id, **(extra or {})})
+    models = [{"thing_id": tid, "cutout_id": rec.id} for tid, rec in prep["cutouts"]]
+    try:
+        clean = q.submit({"kind": "inpaint", "mode": "fill", "document_id": prep["document_id"], "prompt_text": set_things.CLEAN_PROMPT, "feather": 8},
+                         origin=origin(set_things.CLEAN_SURFACE, {"cutouts": models}))[0]
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    return {"clean_job_id": clean.id, "models": models}
+
+
+@router.patch("/stages/{st_id}/sets/{set_id}/things/{thing_id}", response_model=Stage)
+async def stage_thing_rename(svc: Svc, st_id: str, set_id: str, thing_id: str, body: ThingPatch):
+    ws, _, _ = svc.require_project()
+    try:
+        st = await asyncio.to_thread(set_things.rename_thing, StageStore(ws), st_id, set_id, thing_id, body.name)
+    except (KeyError, ValueError) as e:
+        raise _things_error(e) from e
+    svc.hub.broadcast("stage.updated", {"id": st.id, "revision": st.revision})
+    return st.model_dump()
+
+
+@router.delete("/stages/{st_id}/sets/{set_id}/things/{thing_id}", response_model=Stage)
+async def stage_thing_remove(svc: Svc, st_id: str, set_id: str, thing_id: str):
+    """The thing leaves the list; its mask stays in the Catalogue and a prop made of it stays on the stage."""
+    ws, _, _ = svc.require_project()
+    try:
+        st = await asyncio.to_thread(set_things.remove_thing, StageStore(ws), st_id, set_id, thing_id)
+    except (KeyError, ValueError) as e:
+        raise _things_error(e) from e
+    svc.hub.broadcast("stage.updated", {"id": st.id, "revision": st.revision})
+    return st.model_dump()
 
 
 @router.post("/stages/{st_id}/passes", response_model=Stage)

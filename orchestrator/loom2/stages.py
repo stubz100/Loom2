@@ -54,6 +54,20 @@ class LightSpec(BaseModel):
     target: list[float] = Field(default_factory=lambda: [0.0, 1.0, 0.0])
 
 
+class SetThing(BaseModel):
+    """D123 (SC3c-2): a thing the author picked on a picture set's picture — SAM 3's points and the mask they found (a Catalogue `mask`
+    asset at the picture's size), the relief and floor it was picked on (the placement reads them), and what was made of it (SC3c-3)."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)   # D38: present in every reply → required in the schema
+    id: str = Field(default_factory=lambda: new_id("thg"))
+    name: str
+    mask_asset_id: str
+    points: list[dict[str, int]] = Field(default_factory=list)   # {x, y, label}: picture pixels; label 1 = the thing, 0 = not it
+    relief_asset_id: str | None = None             # the set's relief when it was picked (the original picture's point map)
+    floor_y: float | None = None                   # the set's floor then (its relief's frame → the stage's)
+    mesh_asset_id: str | None = None               # SC3c-3: its Pixal3D model
+    object_id: str | None = None                   # SC3c-3: the prop it stands as on the stage
+
+
 class StageObject(BaseModel):
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
     id: str
@@ -79,6 +93,8 @@ class StageObject(BaseModel):
     plate_asset_id: str | None = None              # SC3: the picture the relief was made from (the plate at the picture's camera)
     floor_y: float | None = None                   # SC3: where the relief's floor sits under the picture's camera (metres, negative); the set is raised by it
     plate_camera_id: str | None = None             # SC3: the camera that took the picture, added with the set
+    things: list[SetThing] = Field(default_factory=list)   # D123 (SC3c): the things the author picked on the picture
+    things_document_id: str | None = None          # D123: the set's own document (its picture), where SAM 3 finds them and the plate is cleaned
 
 
 class StageCamera(BaseModel):
@@ -249,7 +265,7 @@ class StageStore:
         self.save(st)
         return st
 
-    def replace_image_set(self, st_id: str, set_id: str, asset_id: str, lens_deg: float | None, floor_y: float | None) -> Stage:
+    def replace_image_set(self, st_id: str, set_id: str, asset_id: str, lens_deg: float | None, floor_y: float | None, plate_id: str | None = None) -> Stage:
         """SC3b (D120): a picture set rebuilt in place — a corrected lens gives a new relief: the set takes it, its lens and its floor, and its
         picture camera goes back to where the picture was taken (the floor's height, looking down −Z, the new lens). The old relief stays in
         the Catalogue. KeyError for a missing stage or set; ValueError for an object that is not a picture set."""
@@ -265,9 +281,37 @@ class StageStore:
         lens = float(lens_deg) if lens_deg else (obj.lens_deg or DEFAULT_LENS_DEG)
         floor = float(floor_y) if floor_y is not None and -4.0 <= floor_y <= -0.05 else (obj.floor_y if obj.floor_y is not None else -1.0)
         obj.asset_id, obj.lens_deg, obj.floor_y = asset_id, round(lens, 2), round(floor, 3)
+        if plate_id:                                                                # D123 (SC3c-3): rebuilt from the clean plate — the set's picture now
+            obj.plate_asset_id = plate_id
+        else:                                                                       # D123: the same picture at a corrected lens — the things not made yet
+            for t in obj.things:                                                    # are stood on the new relief (the clean plate's has no things in it)
+                if not t.mesh_asset_id:
+                    t.relief_asset_id, t.floor_y = asset_id, obj.floor_y
         cam = next((c for c in st.cameras if c.id == obj.plate_camera_id), None)
         if cam is not None:
             cam.pos, cam.target, cam.focal_mm, cam.roll = [0.0, round(-floor, 3), 0.0], [0.0, round(-floor, 3), -1.0], focal_mm_for(lens), 0.0
+        st.revision += 1
+        st.updated_at = utc_now()
+        check(st)
+        self.save(st)
+        return st
+
+    def picture_set(self, st_id: str, set_id: str) -> tuple[Stage, StageObject]:
+        """D123: a stage and one of its picture sets — KeyError for a missing stage or set, ValueError for an object that is not one."""
+        st = self.get(st_id)
+        if st is None:
+            raise KeyError(st_id)
+        obj = next((o for o in st.objects if o.id == set_id), None)
+        if obj is None:
+            raise KeyError(set_id)
+        if obj.kind != "set" or obj.preset != "image":
+            raise ValueError(f"{set_id} is not a picture set")
+        return st, obj
+
+    def edit_picture_set(self, st_id: str, set_id: str, fn: Any) -> Stage:
+        """D123: a server-side change to a picture set (`fn(stage, set)`), saved at a new revision (the client reloads)."""
+        st, obj = self.picture_set(st_id, set_id)
+        fn(st, obj)
         st.revision += 1
         st.updated_at = utc_now()
         check(st)

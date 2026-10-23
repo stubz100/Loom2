@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 import numpy as np
 from PIL import Image
 
-from .. import matting, native, preset_icons
+from .. import matting, native, preset_icons, set_things
 from ..clips import ClipStore, compute_identity
 from ..documents import GroupLayer, RasterLayer
 from ..edit_ai import RegionPlan, assemble_layer, combine_selection, dilate, mask_from_engine, plan_region
@@ -213,6 +213,18 @@ class DocumentFinisher:
         label = recipe.mode.replace("_", " ") if isinstance(recipe, Inpaint) else f"refine {recipe.strength:.2f}"
         # D47: a paste-back's soft edge is a layer mask (repaintable); a refine of a whole layer keeps the layer's own alpha
         await add_result_layer(q, job, od, recipe, rgba, plan.x, plan.y, label, as_mask=isinstance(recipe, Inpaint) or recipe.source == "selection")
+        if isinstance(recipe, Inpaint) and getattr(job, "origin", None) and job.origin.surface == set_things.CLEAN_SURFACE:   # D123 (SC3c-3): a picture set's plate
+            done = await asyncio.to_thread(set_things.clean_plate, q, job, od)
+            q.hub.broadcast("asset.created", done["asset"].model_dump())
+            nxt = q.submit({"kind": "image_to_set", "asset_id": done["asset"].id, "stage_id": done["stage_id"], "replace_set_id": done["set_id"], "lens_deg": done["lens_deg"]},
+                           origin=JobOrigin(suite="stage", surface=set_things.REBUILD_SURFACE, ref=done["stage_id"], payload={"set_id": done["set_id"]}))[0]
+            models = []
+            for c in (job.origin.payload or {}).get("cutouts") or []:                    # then a model of each thing's cut-out
+                models.append(q.submit({"kind": "image_to_mesh", "asset_id": c["cutout_id"]},
+                                       origin=JobOrigin(suite="stage", surface=set_things.MODEL_SURFACE, ref=done["stage_id"],
+                                                        payload={"set_id": done["set_id"], "thing_id": c["thing_id"]}))[0].id)
+            job.result.update({"clean_plate_id": done["asset"].id, "next_job_id": nxt.id, "next_job_ids": [nxt.id, *models]})
+            job.log_tail.append(f"the clean plate {done['asset'].id}; the relief rebuilt from it next ({nxt.id}), then {len(models)} model{'s' if len(models) != 1 else ''}")
 
 
 async def add_result_layer(q: Any, job: Any, od: Any, recipe: Inpaint | I2I | Upscale, rgba: np.ndarray, x: int, y: int, label: str, as_mask: bool = False) -> None:
@@ -578,6 +590,8 @@ class MeshFinisher:
         job.log_tail.append(f"mesh {rec.id}: {glb.name} ({(rec.bytes or 0) / 2**20:.1f} MiB)" + (" with its view" if view else ", no view for the thumbnail"))
         if job.origin and job.origin.surface == PROP_MODEL_SURFACE:                            # D110 (PS2): a Cast prop version's own model
             await asyncio.to_thread(_prop_model_result, q, job, rec.id)
+        if job.origin and job.origin.surface == set_things.MODEL_SURFACE:                      # D123 (SC3c-3): a picture set's thing, stood on its relief
+            await asyncio.to_thread(set_things.model_landed, q, job, rec.id)
 
 
 class SetFinisher:
@@ -612,8 +626,8 @@ class SetFinisher:
         if recipe.stage_id:
             lens_deg, floor_y = (lens or {}).get("fov_x") or recipe.lens_deg, (lens or {}).get("y_floor")
             store = StageStore(q.ws)
-            if recipe.replace_set_id:                                                  # SC3b: the set rebuilt in place (a corrected lens)
-                st = await asyncio.to_thread(store.replace_image_set, recipe.stage_id, recipe.replace_set_id, rec.id, lens_deg, floor_y)
+            if recipe.replace_set_id:                                                  # SC3b: the set rebuilt in place (a corrected lens; SC3c-3: a clean plate)
+                st = await asyncio.to_thread(store.replace_image_set, recipe.stage_id, recipe.replace_set_id, rec.id, lens_deg, floor_y, recipe.asset_id)
                 obj = next(o for o in st.objects if o.id == recipe.replace_set_id)
             else:
                 st = await asyncio.to_thread(store.add_image_set, recipe.stage_id, rec.id, recipe.asset_id, lens_deg, floor_y)

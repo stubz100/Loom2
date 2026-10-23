@@ -60,6 +60,10 @@ export const setRailTab = (suite: string, tab: string) => useRailState.getState(
   const s0 = q.get('suite'), t0 = q.get('tab')
   const [s, t] = s0 === 'animate' && t0 === 'sequence' ? ['story', 'episode'] : [s0, t0]    // 17 SY4 (D85): the Sequence tab moved to Story · Episode (one release of redirect)
   if (s && t && SUITE_DEFS[s]?.rail.some((r) => r.id === t)) useRailState.getState().setActive(s, t)
+  else if (s === 'story' && t === 'props') {                                      // D125: Props are a class of Cast — the old link opens Cast on its props
+    useRailState.getState().setActive('story', 'cast')
+    void import('../suites/story/storyStore').then((m) => m.useStory.getState().setCastFilter('prop'))
+  }
   // D71: ?suite=edit&tool=ai&ai=select[&sel=subject][&asset=<id>] — Edit with that tool / AI operation chosen (frame/openWith.ts)
   if (q.get('tool') || q.get('ai')) void import('./openWith').then((m) => { const d = m.deepLinkOf(q); if (d) void m.openWith(d.assetId, d.o) })
 }
@@ -72,12 +76,12 @@ export function useSuiteRail() {
   return { tabs, active, setActive: (tab: string) => setActive(suite, tab) }
 }
 
-/** D90: the rail the frame shows — the Story tab's six workspaces across the Story and Catalogue suites, else the suite's own tabs. */
+/** D90: the rail the frame shows — D125: the Story tab's five workspaces (World · Cast · Flow · Shots · Episode), else the suite's own tabs. */
 export function useRailEntries(): { entries: GroupRailTab[]; isActive: (e: GroupRailTab) => boolean; open: (e: GroupRailTab) => void } {
   const suite = useSession((s) => s.ui.suite)
   const active = useRailState((r) => r.active)
   const own = SUITE_DEFS[suite]?.rail ?? DEFAULT_RAIL[suite] ?? []
-  const entries = suite === 'story' || suite === 'catalogue' ? STORY_RAIL : own.map((t) => ({ ...t, suite }))
+  const entries = suite === 'story' ? STORY_RAIL : own.map((t) => ({ ...t, suite }))
   const activeOf = (s: string) => active[s] ?? (SUITE_DEFS[s]?.rail ?? DEFAULT_RAIL[s] ?? [])[0]?.id
   return {
     entries,

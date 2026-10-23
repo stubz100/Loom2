@@ -5,7 +5,7 @@ import { registerCommands, runCommand, sep, type Command, type MenuItem } from '
 import { goBack, useMakeFor } from '../../store/origin'
 import { askConfirm, askText, useSession } from '../../store/session'
 import { useAlbum } from '../catalogue/albumStore'
-import { CLASS_LABEL, latestModelJob, latestTrainJob, modelSource, sy, tabOfClass, ttsJobFor, useStory, type ProfileClass } from './storyStore'
+import { CLASS_LABEL, latestModelJob, latestTrainJob, modelSource, revealClass, sy, ttsJobFor, useStory, type ProfileClass } from './storyStore'
 import { makeClipFor, makeFrameFor, makeTarget, speakersOf } from './makeFor'
 import { runStale, staleOf } from './runStale'
 import type { Profile, Shot } from '../../api/types'
@@ -151,7 +151,7 @@ export async function addStyleSamples(id: string, assetIds: string[]): Promise<v
   } catch { /* the album verbs toast their own failures */ }
 }
 
-/** A group page in the active Catalogue pane (Story's Catalogue workspace). */
+/** A group page in the active Catalogue pane (the Catalogue tab, D125). */
 export function openGroupPage(gid: string): void {
   useSession.getState().setSuite('catalogue')
   void import('../catalogue/split').then((m) => { const sp = m.useSplit.getState(); m.openPlace(m.paneStore(sp.mode === 'single' ? 0 : sp.active).getState(), { group: gid }) })
@@ -161,7 +161,7 @@ export async function newProfile(cls: ProfileClass = 'character', hero: string |
   const name = await askText({ title: `New ${CLASS_LABEL[cls]}`, text: hero ? 'The image becomes the hero and the cover of a new reference set; @name mentions it in prompts.' : 'An empty profile: give it a hero from the Catalogue ("Make a character…" on a tile) before expanding.', placeholder: `${CLASS_LABEL[cls]} name` })
   if (!name?.trim()) return
   const p = await sy().createProfile(name.trim(), cls, hero)
-  if (p) void import('../../frame/suiteRegistry').then((m) => m.setRailTab('story', tabOfClass(cls)))   // D110: a prop opens on Props
+  if (p) { revealClass(cls); void import('../../frame/suiteRegistry').then((m) => m.setRailTab('story', 'cast')) }   // D125: Cast shows its class
 }
 
 const cmds: Command[] = [
@@ -388,7 +388,7 @@ const cmds: Command[] = [
         g.useGenerate.getState().useAsSubject(p); r.setRailTab('generate', 'prompt'); useSession.getState().setSuite('generate')
         useSession.getState().toast(`${p.name} is a subject in Image's Tree prompt — its reference set${version()?.lora ? ' and LoRA' : ''} follow`, 'info') }) } },
   { id: 'story.cast.openInStory', scope: 'story', label: 'Open in Story · Cast', icon: Users, placement: ['context'], when: () => !!profile(),
-    run: () => { const p = profile(); void import('../../frame/suiteRegistry').then((m) => { m.setRailTab('story', p ? tabOfClass(p.cls) : 'cast'); useSession.getState().setSuite('story') }) } },
+    run: () => { const p = profile(); if (p) revealClass(p.cls); void import('../../frame/suiteRegistry').then((m) => { m.setRailTab('story', 'cast'); useSession.getState().setSuite('story') }) } },
   { id: 'story.cast.delete', scope: 'story', label: 'Delete profile', icon: Trash2, placement: ['inspector', 'context'], danger: true, when: () => !!profile(),
     run: () => { const p = profile(); if (!p) return
       void askConfirm({ title: `Delete ${p.name}?`, okLabel: 'Delete', danger: true, text: 'The profile record goes; its reference sets and images stay in the album (no longer final). @mentions of it stop resolving.' }).then((ok) => { if (ok) void sy().deleteProfile() }) } },

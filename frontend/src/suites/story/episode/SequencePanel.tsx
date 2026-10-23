@@ -88,10 +88,9 @@ export function SequenceInspector() {
       <h4>Checklist <span className="hint">advisory — the export asks</span></h4>
       <ul className="seq-check">{(() => { const issues = laneChecklist(); return issues.length ? issues.map((x) => <li key={x.i} className="warn">clip {x.i + 1}: {x.what}</li>) : <li className="ok">{lane.clips.length ? 'every clip is a final shot version' : 'the lane is empty'}</li> })()}
         {(() => { const b = laneBelowFormat(); return b.count ? <li className="note" data-testid="below-format">{b.count} clip{b.count === 1 ? '' : 's'} below the format ({b.sizes.join(', ')}) <Help text={"A delivery note, not a problem: no video route renders the project format yet; Resolve scales the clips when it conforms the cut (D125)."} /></li> : null })()}</ul>
-      <h4>Export</h4>
+      <h4>Export <Help text={"Resolve conforms each clip at its own rate; the FCPXML carries a chapter marker per shot (its node's title) and markers.txt lists them; the SRT takes the nodes' Dialogue lines; the FCPXML and the EDL carry the lines' voices on an audio lane at the lines' ticks. The draft render is a CPU job: frames from the masters, dissolves blended, a clip at another rate mapped by nearest frame (not conformed)."} /></h4>
       <div className="verbs"><CommandButton id="story.episode.exportEdl" text label="EDL" /><CommandButton id="story.episode.exportFcpxml" text label="FCPXML + markers" /><CommandButton id="story.episode.exportSrt" text label="SRT" /><CommandButton id="story.episode.render" text label="Render draft" /></div>
       {lastExport && <p className="hint">last: {lastExport.path}</p>}
-      <p className="hint">Resolve conforms each clip at its own rate; the FCPXML carries a chapter marker per shot (its node's title) and `markers.txt` lists them; the SRT takes the nodes' Dialogue lines; the FCPXML and the EDL carry the lines' voices on an audio lane at the lines' ticks. The draft render is a CPU job: frames from the masters, dissolves blended, a clip at another rate mapped by nearest frame (not conformed).</p>
       {c && <>
         <h4>Clip {selected! + 1}</h4>
         <div className="kv"><span>source</span><span>{clip ? `${clip.model_id} · ${clip.frames}f @ ${clip.fps}` : `${c.source} (missing)`}</span></div>

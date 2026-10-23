@@ -17,6 +17,7 @@ import { laneTake } from './bin'
 import { at, duration, starts, tc, ticks, type Lane } from './lane'
 import { laneMenu } from './sequenceCommands'
 import { useSequence } from './sequenceStore'
+import '../../animate/animate.css'                     // the lane's and the player's rules (seq-*, anim-*): the Episode opened before Animate had none
 
 /** One Mediabunny sink per clip proxy, opened on demand and kept for the stage's life. */
 class Sinks {

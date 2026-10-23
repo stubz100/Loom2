@@ -30,7 +30,7 @@ import { askExpand, makeClipItems, makeFrameItems, profileMenu, rowMenu, runOnIt
 import { flatGroups, useAlbum } from '../catalogue/albumStore'
 import { findNode } from './styleSamples'
 import { storyKey } from './storyKeys'
-import { CLASS_LABEL, SECTIONS, inTab, latestModelJob, modelSource, modelStale, sy, tabOfClass, ttsJobFor, useStory, voiceLabel, type ProfileClass, type Section } from './storyStore'
+import { CLASS_LABEL, SECTIONS, latestModelJob, modelSource, modelStale, revealClass, sy, ttsJobFor, useStory, voiceLabel, type ProfileClass, type Section } from './storyStore'
 import { FlowCanvas } from './flow/FlowCanvas'
 import { SequenceInspector, SequencePanel } from './episode/SequencePanel'
 import { SequenceStage } from './episode/SequenceStage'
@@ -86,11 +86,12 @@ function WorldTab() {
   return (
     <div className="story-panel">
       <div className="story-list" role="list">
-        {SECTIONS.map((s) => (
+        {SECTIONS.map((s, i) => [
+          s.presets && !SECTIONS[i - 1]?.presets ? <h4 key="presets" className="presets-head">Presets<Help text={"Image's prompt-field presets and saved panels — tools of the making, kept here after the bible."} /></h4> : null,
           <button key={s.id} className={`story-row${section === s.id ? ' active' : ''}`} role="listitem" onClick={() => sy().setSection(s.id)} title={`Show the ${s.label} section`}>
             <span>{s.label}</span>{counts[s.id] !== null && <span className="n">{counts[s.id]}</span>}
-          </button>
-        ))}
+          </button>,
+        ])}
       </div>
       <h4>Add</h4>
       <div className="verbs"><CommandButton id="story.world.addStyle" text /><CommandButton id="story.world.addEntry" text /><CommandButton id="story.world.addBeat" text /><CommandButton id="story.world.addVariable" text /></div>
@@ -100,20 +101,19 @@ function WorldTab() {
 }
 
 // ------------------------------------------------------------------ Panel · Cast
-/** SY1: the profiles of the tab. D110 (PS1): Cast lists characters and places (its class filter), Props the props alone. */
-function CastTab({ scope }: { scope: 'cast' | 'props' }) {
+/** SY1: the profiles of the tab. D125 (#2): one class switch — all · characters · places · props (D110's Props tab folded back into Cast). */
+function CastTab() {
   const profiles = useStory((s) => s.profiles)
   const profileId = useStory((s) => s.profileId)
-  const stored = useStory((s) => s.castFilter)
-  const filter = scope === 'props' || stored === 'prop' ? 'all' : stored
+  const filter = useStory((s) => s.castFilter)
   const search = useStory((s) => s.castSearch)
   const q = search.trim().toLowerCase()
-  const shown = profiles.filter((p) => inTab(p, scope) && (filter === 'all' || p.cls === filter) && (!q || p.name.toLowerCase().includes(q)))
+  const shown = profiles.filter((p) => (filter === 'all' || p.cls === filter) && (!q || p.name.toLowerCase().includes(q)))
   return (
-    <div className={`story-panel cast-panel${scope === 'props' ? ' props-panel' : ''}`}>
-      {scope === 'cast' && <div className="segmented" aria-label="class">
-        {(['all', 'character', 'place'] as const).map((c) => <button key={c} className={filter === c ? 'active' : ''} onClick={() => sy().setCastFilter(c)}>{c === 'all' ? 'all' : `${CLASS_LABEL[c]}s`}</button>)}
-      </div>}
+    <div className="story-panel cast-panel">
+      <div className="segmented" aria-label="class">
+        {(['all', 'character', 'place', 'prop'] as const).map((c) => <button key={c} className={filter === c ? 'active' : ''} onClick={() => sy().setCastFilter(c)}>{c === 'all' ? 'all' : `${CLASS_LABEL[c]}s`}</button>)}
+      </div>
       <input type="search" value={search} aria-label="search profiles" placeholder="search" onChange={(e) => sy().setCastSearch(e.target.value)} />
       <div className="story-list" role="list">
         {shown.map((p) => {
@@ -127,11 +127,10 @@ function CastTab({ scope }: { scope: 'cast' | 'props' }) {
             </button>
           )
         })}
-        {!shown.length && <div className="empty hint">{profiles.some((p) => inTab(p, scope)) ? 'No profile matches.'
-          : scope === 'props' ? 'No props yet — New prop…, or "Make a prop…" on a Catalogue tile. A prop is made like a character: its images first, then its 3D model.'
-          : 'No profiles yet — "Make a character…" on a Catalogue tile, or New character…'}</div>}
+        {!shown.length && <div className="empty hint">{profiles.length ? (filter === 'prop' ? 'No props yet — New prop…' : 'No profile matches.')
+          : 'No profiles yet — New character…, or "Make a character…" on a Catalogue tile'}</div>}
       </div>
-      <div className="verbs">{scope === 'props' ? <CommandButton id="story.cast.newProp" text /> : <><CommandButton id="story.cast.new" text /><CommandButton id="story.cast.newPlace" text /></>}</div>
+      <div className="verbs"><CommandButton id="story.cast.new" text /><CommandButton id="story.cast.newPlace" text /><CommandButton id="story.cast.newProp" text /></div>
     </div>
   )
 }
@@ -221,7 +220,7 @@ export function Panel({ tab }: { tab: string }) {
   const project = useSession((s) => s.project)
   useEffect(() => { if (project?.open) { void sy().load(); void sy().loadProfiles(); void sy().loadShots(); void sy().loadFlow(); void useLibrary.getState().load(); void useGenerate.getState().loadPresets() } }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!project?.open) return <span className="hint">Open or create a project to begin.</span>
-  if (tab === 'cast' || tab === 'props') return <CastTab scope={tab} />
+  if (tab === 'cast') return <CastTab />
   if (tab === 'shots') return <ShotsTab />
   if (tab === 'flow') return <FlowTab />
   if (tab === 'episode') return <SequencePanel />
@@ -279,8 +278,8 @@ export function PrimaryAction() {
       </div>
     )
   }
-  if (tab === 'cast' || tab === 'props') {
-    const p = profiles.find((x) => x.id === profileId && inTab(x, tab)); const v = p?.versions.find((x) => x.id === (versionId ?? p.current))
+  if (tab === 'cast') {
+    const p = profiles.find((x) => x.id === profileId); const v = p?.versions.find((x) => x.id === (versionId ?? p.current))
     const reason = !p ? 'pick a profile' : !v ? 'no version' : v.state !== 'open' ? `${v.id} is final — expand a new version` : !v.hero_asset_id ? 'no hero image yet' : !caps?.model_id ? 'no model in this build' : expanding ? 'queuing…' : caps.missing.length ? `weights missing: ${caps.missing.join(', ')}` : ''
     const secs = (caps?.seconds ?? 0) * (caps?.presets.full?.cells ?? 0)
     return (
@@ -381,9 +380,9 @@ export function Strip() {
       </div>
     )
   }
-  if (tab === 'cast' || tab === 'props') {
-    const p = profiles.find((x) => x.id === profileId && inTab(x, tab))
-    if (!p) return <div className="story-strip"><span>{tab === 'props' ? 'Props' : 'Cast'}</span><span className="spacer" /><span className="hint">{tab === 'props' ? 'no prop picked' : 'no profile picked'}</span><Help text={tab === 'props' ? 'Pick a prop, or make one.' : 'Pick a profile, or make one from a Catalogue tile.'} /></div>
+  if (tab === 'cast') {
+    const p = profiles.find((x) => x.id === profileId)
+    if (!p) return <div className="story-strip"><span>Cast</span><span className="spacer" /><span className="hint">no profile picked</span><Help text={'Pick a character, a place or a prop, or make one — from a Catalogue tile, or New character / place / prop.'} /></div>
     const v = p.versions.find((x) => x.id === (versionId ?? p.current))
     return (
       <div className="story-strip">
@@ -457,19 +456,6 @@ function WorldEditor() {
         <h3>Synopsis</h3>
         <textarea rows={8} value={world.synopsis} aria-label="synopsis" placeholder="The story in a page." onChange={(e) => sy().edit({ synopsis: e.target.value })} />
       </section>
-      <section id="story-sec-styles">
-        <h3>Styles<Help text={"One per generation; click a style to edit it, drop a Catalogue image on it to make its sample; ★ marks the default Generate preselects."} /></h3>
-        <StyleGrid />
-        <div className="adder"><CommandButton id="story.world.addStyle" text /></div>
-      </section>
-      <section id="story-sec-library">
-        <h3>Library<Help text={"Every preset of Generate's prompt fields — words and a picture; click one to edit it in the Inspector, + Add puts new words in a field."} /></h3>
-        <LibraryGrid />
-      </section>
-      <section id="story-sec-panels">
-        <h3>Saved panels<Help text={"Generate's whole-panel templates, each shown by its latest result; click one for Apply, Rename and Delete."} /></h3>
-        <PanelGrid />
-      </section>
       <section id="story-sec-spine">
         <h3>Spine<Help text={"The beats in order; a Flow node is made from a beat by hand."} /></h3>
         <div className="rows">
@@ -478,6 +464,11 @@ function WorldEditor() {
         </div>
         <div className="adder"><CommandButton id="story.world.addBeat" text /></div>
       </section>
+      <section id="story-sec-styles">
+        <h3>Styles<Help text={"One per generation; click a style to edit it, drop a Catalogue image on it to make its sample; ★ marks the default Generate preselects."} /></h3>
+        <StyleGrid />
+        <div className="adder"><CommandButton id="story.world.addStyle" text /></div>
+      </section>
       <section id="story-sec-variables">
         <h3>Variables<Help text={"Bool or enum flags the Flow's conditions read."} /></h3>
         <div className="rows">
@@ -485,6 +476,15 @@ function WorldEditor() {
           {!world.variables.length && <div className="empty">No variables yet.</div>}
         </div>
         <div className="adder"><CommandButton id="story.world.addVariable" text /></div>
+      </section>
+      <h2 className="presets-head">Presets<Help text={"Image's tools, kept after the bible (D125): the prompt fields' presets and the whole-panel templates."} /></h2>
+      <section id="story-sec-library">
+        <h3>Library<Help text={"Every preset of Generate's prompt fields — words and a picture; click one to edit it in the Inspector, + Add puts new words in a field."} /></h3>
+        <LibraryGrid />
+      </section>
+      <section id="story-sec-panels">
+        <h3>Saved panels<Help text={"Generate's whole-panel templates, each shown by its latest result; click one for Apply, Rename and Delete."} /></h3>
+        <PanelGrid />
       </section>
     </div>
   )
@@ -591,7 +591,7 @@ function AnimTestSlot({ clipId }: { clipId: string | null }) {
   )
 }
 
-function CastPage({ scope }: { scope: 'cast' | 'props' }) {
+function CastPage() {
   const profiles = useStory((s) => s.profiles)
   const profileId = useStory((s) => s.profileId)
   const versionId = useStory((s) => s.versionId)
@@ -599,9 +599,10 @@ function CastPage({ scope }: { scope: 'cast' | 'props' }) {
   const candPage = useStory((s) => s.candPage)
   const picked = useStory((s) => s.picked)
   const caps = useSession((s) => s.capabilities?.story)
+  const filterIsProp = useStory((s) => s.castFilter === 'prop')
   markUsed('story.cast.addRef'); markUsed('story.cast.setHero'); markUsed('story.cast.openCandidates'); markUsed('story.cast.openGroup'); markUsed('story.cast.delete')
-  const p = profiles.find((x) => x.id === profileId && inTab(x, scope))
-  if (!p) return scope === 'props'
+  const p = profiles.find((x) => x.id === profileId)
+  if (!p) return filterIsProp
     ? <div className="story-empty"><div>Pick a prop on the left, or make one. A prop is made like a character: its look and reference images first, then its 3D model, which Animate places in the scene. <b>Make a prop…</b> on a Catalogue tile puts the image in as the hero.<div className="quick-cards"><CommandButton id="story.cast.newProp" text /></div></div></div>
     : <div className="story-empty"><div>Pick a profile on the left, or make one: <b>Make a character…</b> on a Catalogue tile puts the image in as the hero.<div className="quick-cards"><CommandButton id="story.cast.new" text /></div></div></div>
   const v = p.versions.find((x) => x.id === (versionId ?? p.current))
@@ -611,7 +612,7 @@ function CastPage({ scope }: { scope: 'cast' | 'props' }) {
   const cands = Object.values(candPage?.assets ?? {}).sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
   const open = v.state === 'open'
   return (
-    <div className="cast-page" tabIndex={0} onKeyDown={(e) => { storyKey(scope, e.nativeEvent) }}>
+    <div className="cast-page" tabIndex={0} onKeyDown={(e) => { storyKey('cast', e.nativeEvent) }}>
       <div className="cast-head">
         <div className="hero-card">{v.hero_asset_id ? <img src={api.thumbUrl(v.hero_asset_id, 512)} alt="" /> : <span className="hint">no hero yet</span>}</div>
         <div className="cast-fields">
@@ -747,7 +748,7 @@ export function Stage() {
   const play = useStory((s) => s.play)
   markUsed('story.world.addStyle'); markUsed('story.world.addBeat'); markUsed('story.world.addVariable'); markUsed('story.world.remove'); markUsed('story.cast.new'); markUsed('story.cast.newPlace'); markUsed('story.cast.newProp')
   if (!project?.open) return <div className="story-empty"><div>Open or create a project to begin.</div></div>
-  if (tab === 'cast' || tab === 'props') return <CastPage scope={tab} />
+  if (tab === 'cast') return <CastPage />
   if (tab === 'shots') return <ShotBoard />
   if (tab === 'flow') return play ? <PlayView /> : <FlowCanvas />
   if (tab === 'episode') return <SequenceStage />
@@ -755,12 +756,12 @@ export function Stage() {
 }
 
 // ------------------------------------------------------------------ Inspector
-function CastInspector({ scope }: { scope: 'cast' | 'props' }) {
+function CastInspector() {
   const profiles = useStory((s) => s.profiles)
   const profileId = useStory((s) => s.profileId)
   const versionId = useStory((s) => s.versionId)
   const picked = useStory((s) => s.picked)
-  const p = profiles.find((x) => x.id === profileId && inTab(x, scope))
+  const p = profiles.find((x) => x.id === profileId)
   if (!p) return <span className="hint">Nothing selected.</span>
   const v = p.versions.find((x) => x.id === (versionId ?? p.current))
   return (
@@ -770,7 +771,7 @@ function CastInspector({ scope }: { scope: 'cast' | 'props' }) {
         <span>name</span><input type="text" value={p.name} aria-label="profile name" onChange={(e) => sy().renameProfile(e.target.value)} />
         <span>class</span>
         <select value={p.cls} aria-label="profile class" onChange={(e) => { const cls = e.target.value as ProfileClass   // D110: a prop moves to Props, a character or place to Cast
-          void sy().patchProfile({ cls }).then(() => { if (tabOfClass(cls) !== scope) void import('../../frame/suiteRegistry').then((m) => m.setRailTab('story', tabOfClass(cls))) }) }}>{(Object.keys(CLASS_LABEL) as ProfileClass[]).map((c) => <option key={c} value={c}>{CLASS_LABEL[c]}</option>)}</select>
+          void sy().patchProfile({ cls }).then(() => revealClass(cls)) }}>{(Object.keys(CLASS_LABEL) as ProfileClass[]).map((c) => <option key={c} value={c}>{CLASS_LABEL[c]}</option>)}</select>
         <span>current</span>
         <select value={p.current} aria-label="current version" onChange={(e) => void sy().patchProfile({ current: e.target.value })}>{p.versions.map((x) => <option key={x.id} value={x.id}>{versionName(x)}</option>)}</select>
         <span>versions</span><span>{p.versions.length}</span>
@@ -1100,7 +1101,7 @@ export function Inspector() {
   const project = useSession((s) => s.project)
   const { active: tab } = useSuiteRail()
   if (!project?.open) return <span className="hint">Nothing selected.</span>
-  if (tab === 'cast' || tab === 'props') return <CastInspector scope={tab} />
+  if (tab === 'cast') return <CastInspector />
   if (tab === 'shots') return <ShotInspector />
   if (tab === 'flow') return <NodeInspector />
   if (tab === 'episode') return <SequenceInspector />

@@ -63,7 +63,7 @@ export function goToStory(place: StoryPlace): void {
     if (place.tab === 'cast') {
       if (!st.profilesLoaded) await st.loadProfiles()
       const p = m.useStory.getState().profiles.find((x) => x.id === place.id)
-      if (p && m.tabOfClass(p.cls) !== 'cast') reg.setRailTab('story', m.tabOfClass(p.cls))   // D110: a prop lives on Props
+      if (p) m.revealClass(p.cls)                                                           // D125: Cast's class switch shows it
       m.useStory.getState().selectProfile(place.id, place.version)
     }
     else if (place.tab === 'shots') { if (!st.shotsLoaded) await st.loadShots(); m.useStory.getState().selectShot(place.id, place.version) }

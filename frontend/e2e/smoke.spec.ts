@@ -22,10 +22,15 @@ test('open the project: the Catalogue grid shows tiles and their thumbnails load
   await page.screenshot({ path: 'node_modules/.e2e/project-menu.png', clip: { x: 0, y: 0, width: 1100, height: 260 } })
   await projectTab.click()
   await expect(page.locator('.menu.project-menu')).toHaveCount(0)
-  // D90 (02 §3): Story leads the tabs and holds the Catalogue (active under it); Models & engine is a sheet in ☰
-  await expect(page.locator('nav.tabs button.tab:not(.project-tab)')).toHaveText([/^Story/, /^Image/, /^Animate/])
+  // D90 (02 §3) → D125: Story leads the tabs, the Catalogue is the fourth; Models & engine is a sheet in ☰
+  await expect(page.locator('nav.tabs button.tab:not(.project-tab)')).toHaveText([/^Story/, /^Image/, /^Animate/, /^Catalogue/])
+  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Catalogue/)
+  await expect(page.locator('nav.rail button[aria-label="Places"]')).toHaveClass(/active/)
+  await page.locator('nav.tabs button.tab', { hasText: 'Story' }).click()                                 // D125: Story's rail is the order of the work
   await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Story/)
-  await expect(page.locator('nav.rail button[aria-label="Catalogue"]')).toHaveClass(/active/)
+  expect(await page.locator('nav.rail button[aria-label]').evaluateAll((bs) => bs.map((b) => b.getAttribute('aria-label')).filter((l) => ['World', 'Cast', 'Flow', 'Shots', 'Episode', 'Props', 'Catalogue', 'Places'].includes(l ?? ''))))
+    .toEqual(['World', 'Cast', 'Flow', 'Shots', 'Episode'])
+  await page.locator('nav.tabs button.tab', { hasText: 'Catalogue' }).click()
   await page.locator('button[aria-label="app menu"]').click()
   await page.locator('.menu button', { hasText: 'Models & engine' }).click()
   await expect(page.locator('.modal.models-sheet table.grid tbody tr').first()).toBeVisible()
@@ -419,7 +424,7 @@ test('a new angle (P14, D82; a sheet since D90): "New angle" on a tile opens the
   await page.locator('.insp .quick-card', { hasText: 'New angle' }).click()
   const sheet = page.locator('.modal.angle-sheet')                                                    // D90: a sheet over the Catalogue, no suite switch
   await expect(sheet).toBeVisible()
-  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Story/)
+  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Catalogue/)                // D125: the Catalogue is a tab of its own
   await expect(sheet.locator('.angle-tab .ref-slot.source img')).toBeVisible()
   await sheet.locator('.angle-pad button[aria-label="Wide"]').click()                             // D90: the moves are icons
   const go = sheet.locator('.foot button.primary', { hasText: /^New angle/ })
@@ -791,22 +796,25 @@ test('a 3D prop (P18, D84): "Make a 3D prop…" on a tile says its cost, the fak
   await page.screenshot({ path: 'node_modules/.e2e/stage-prop.png' })
 })
 
-test('a prop (D110 PS1–PS2): Story\'s Props tab lists the props (Cast no longer does); "Make the 3D model…" says its cost, the fake engine\'s GLB lands stood upright as the version\'s model, and the page shows it turning', async ({ page }) => {
+test('a prop (D110 PS1–PS2, D125): Cast\'s props class lists the props (the old Props link opens it, the characters class hides them); "Make the 3D model…" says its cost, the fake engine\'s GLB lands stood upright as the version\'s model, and the page shows it turning', async ({ page }) => {
   test.setTimeout(120_000)
   const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
   const name = `Crate ${Date.now().toString(36)}`
   const prop = await api<{ id: string; current: string }>('POST', '/story/profiles', { name, cls: 'prop', hero_asset_id: img, appearance: 'an old wooden slatted crate' })
-  await openApp(page, { suite: 'story', tab: 'props' })
-  const row = page.locator(`.props-panel .story-row.profile-row[data-id="${prop.id}"]`)
+  await openApp(page, { suite: 'story', tab: 'props' })                                                   // D125: the old link opens Cast on its props
+  const classes = page.locator('.cast-panel .segmented[aria-label="class"] button')
+  await expect(classes).toHaveText(['all', 'characters', 'places', 'props'])
+  await expect(classes.filter({ hasText: /^props$/ })).toHaveClass(/active/)
+  const row = page.locator(`.cast-panel .story-row.profile-row[data-id="${prop.id}"]`)
   await expect(row).toBeVisible()
   await row.click()
   await expect(page.locator('.cast-page h2')).toContainText(name)
   const section = page.locator('.cast-page .prop-model')
   await expect(section).toBeVisible()
   await expect(section.locator('.model-view.empty')).toBeVisible()
-  await page.locator('nav.rail button[title^="Cast"]').click()                                             // Cast keeps characters and places
-  await expect(page.locator(`.cast-panel .story-row.profile-row[data-id="${prop.id}"]`)).toHaveCount(0)
-  await page.locator('nav.rail button[title^="Props"]').click()
+  await classes.filter({ hasText: /^characters$/ }).click()                                                // the class switch hides it
+  await expect(row).toHaveCount(0)
+  await classes.filter({ hasText: /^props$/ }).click()
   await expect(page.locator('.cast-page h2')).toContainText(name)
   const make = section.locator('button', { hasText: 'Make the 3D model' })
   if (JSON.parse(process.env.LOOM2_E2E ?? '{}').variant === 'open') {                                       // Q22: no image → 3D model under open

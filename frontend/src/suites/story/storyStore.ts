@@ -14,14 +14,19 @@ export type Section = 'logline' | 'synopsis' | 'styles' | 'library' | 'panels' |
 /** A variable's id is its name; D92: a library entry's id is its `lib_` id, a saved panel's its name. */
 export type Selection = { kind: 'style' | 'beat' | 'variable' | 'entry' | 'panel'; id: string } | null
 export type ProfileClass = Profile['cls']
-export const SECTIONS: { id: Section; label: string }[] = [
-  { id: 'logline', label: 'Logline' }, { id: 'synopsis', label: 'Synopsis' }, { id: 'styles', label: 'Styles' }, { id: 'library', label: 'Library' }, { id: 'panels', label: 'Saved panels' },   // D92
-  { id: 'spine', label: 'Spine' }, { id: 'variables', label: 'Variables' },
+/** D125 (#3): the bible first — Logline · Synopsis · Spine · Styles · Variables — then Image's presets (D92's Library and saved panels) under
+ *  one heading at the end. */
+export const SECTIONS: { id: Section; label: string; presets?: true }[] = [
+  { id: 'logline', label: 'Logline' }, { id: 'synopsis', label: 'Synopsis' }, { id: 'spine', label: 'Spine' }, { id: 'styles', label: 'Styles' }, { id: 'variables', label: 'Variables' },
+  { id: 'library', label: 'Library', presets: true }, { id: 'panels', label: 'Saved panels', presets: true },
 ]
 export const CLASS_LABEL: Record<ProfileClass, string> = { character: 'character', place: 'place', prop: 'prop' }
-/** D110 (PS1): props have their own Story tab beside Cast — the rail tab a profile of a class lives on, and whether a tab shows it. */
-export const tabOfClass = (cls: ProfileClass): 'cast' | 'props' => (cls === 'prop' ? 'props' : 'cast')
-export const inTab = (p: Pick<Profile, 'cls'>, tab: string): boolean => (tab === 'props' ? p.cls === 'prop' : tab === 'cast' ? p.cls !== 'prop' : true)
+/** D110 (PS1) → D125 (#2): props are the third class of Cast (Characters · Places · Props) — every profile lives on Cast, and the class
+ *  switch shows them. When a profile of a class the switch hides is opened (a new prop, "Open in Story · Cast"), the switch moves to it. */
+export function revealClass(cls: ProfileClass): void {
+  const f = useStory.getState().castFilter
+  if (f !== 'all' && f !== cls) useStory.getState().setCastFilter(cls)
+}
 
 export interface TrainOpts { model_id: string | null; steps: number; rank: number; resolution: number; name: string; setting: string; stage: boolean }
 const DEFAULT_TRAIN: TrainOpts = { model_id: null, steps: 1000, rank: 16, resolution: 512, name: '', setting: '', stage: true }

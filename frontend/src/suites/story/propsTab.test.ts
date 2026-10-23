@@ -1,24 +1,25 @@
-// D110 (PS1): props have their own Story tab beside Cast — a profile lives on the tab of its class, and Props shares Cast's verbs.
+// D110 (PS1) → D125 (#2): props are the third class of Cast — one class switch (all · characters · places · props), the same version page
+// and verbs.
 import { describe, expect, it } from 'vitest'
-import { inTab, latestModelJob, modelSource, modelStale, tabOfClass } from './storyStore'
+import { latestModelJob, modelSource, modelStale, revealClass, useStory } from './storyStore'
 import type { Job } from '../../api/types'
 import { ownedBy } from './storyKeys'
 
-describe('the Props tab (D110 PS1)', () => {
-  it('puts a prop on Props and a character or a place on Cast', () => {
-    expect(tabOfClass('prop')).toBe('props')
-    expect(tabOfClass('character')).toBe('cast')
-    expect(tabOfClass('place')).toBe('cast')
+describe('props in Cast (D125 #2)', () => {
+  it('moves the class switch to a profile it would hide, and leaves "all" alone', () => {
+    useStory.setState({ castFilter: 'character' })
+    revealClass('prop')
+    expect(useStory.getState().castFilter).toBe('prop')
+    revealClass('prop')
+    expect(useStory.getState().castFilter).toBe('prop')
+    useStory.setState({ castFilter: 'all' })
+    revealClass('place')
+    expect(useStory.getState().castFilter).toBe('all')
   })
-  it('shows each profile on its own tab only', () => {
-    expect(inTab({ cls: 'prop' }, 'props')).toBe(true)
-    expect(inTab({ cls: 'prop' }, 'cast')).toBe(false)
-    expect(inTab({ cls: 'character' }, 'props')).toBe(false)
-    expect(inTab({ cls: 'place' }, 'cast')).toBe(true)
-  })
-  it('gives Props the Cast version page\'s commands', () => {
-    expect(ownedBy('props', { id: 'story.cast.makeAnimRef' })).toBe(true)
-    expect(ownedBy('props', { id: 'story.world.remove' })).toBe(false)
+  it('gives a prop the Cast version page\'s commands', () => {
+    expect(ownedBy('cast', { id: 'story.cast.makeAnimRef' })).toBe(true)
+    expect(ownedBy('cast', { id: 'story.cast.makeModel' })).toBe(true)
+    expect(ownedBy('cast', { id: 'story.world.remove' })).toBe(false)
   })
 })
 

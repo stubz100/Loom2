@@ -8389,3 +8389,21 @@ WB1–WB3, *Mark final* at any size, the For context ended by *← Back* and hon
   errors (79 warnings). e2e (full): 53 of 54 — the makers scenario expected the context kept after *← Back*; updated to I3 and rerun: passed;
   the final-shot scenario now checks the assembly lands as a take of the shot on the final's camera (and not as its clip). The open variant
   runs with SP1. No rig run: the change records takes; no model path changed.
+
+## 2026-10-23 21:18 — SP1 built (D125, proto01_UIcomp 04 §8): the Catalogue a top tab; Story's rail in the order of the work; Props in Cast; World the bible first
+
+- **The top bar** is Story · Image · Animate · Catalogue (Ctrl+1–4; `global.suite.catalogue` gains Ctrl+4 and the top bar as its home).
+  The Catalogue keeps its suite, scope, keys and deep links; its rail button is *Places*. `storyLast` is gone: the Story tab opens Story.
+- **Story's rail** is World · Cast · Flow · Shots · Episode (`STORY_RAIL` is the Story suite's rail; Alt+1–5 in that order, Alt+6 / Alt+7
+  gone). A new project opens on Story › World (`createProject`).
+- **Props are a class of Cast** (#2): one class switch, all · characters · places · props, the prop's page and 3D model unchanged.
+  `tabOfClass` / `inTab` are gone; `revealClass` moves the switch to a profile it would hide (a new prop, *Open in Story · Cast*, a job's
+  origin, *Make a prop…* on a tile). The old `?suite=story&tab=props` link opens Cast on its props. Clay's prop labels say *Story · Cast*.
+- **World** (#3): Logline · Synopsis · Spine · Styles · Variables, then a *Presets* heading over the Library and the Saved panels (panel and
+  editor alike).
+- **S15**: the Episode Inspector's paragraph moved behind the *Export* heading's ?.
+- **Found by the screenshots and fixed:** the Episode's lane and player rules live in `animate.css`, loaded with Animate's chunk — an
+  Episode opened before Animate drew unstyled (huge bin thumbnails, no lane). `SequenceStage.tsx` imports it itself.
+- **Tests:** Vitest 429 + 3 skipped (`propsTab.test.ts` rewritten for the class switch); typecheck and build clean; lint 0 errors (79
+  warnings). e2e full 53/54 (New angle expected the Story tab over the Catalogue — updated, rerun: passed), open 54/54. The smoke checks the four tabs and Story's five workspaces, the props class (and the
+  old link), the Catalogue tab under New angle. Screenshots `proto01_UIcomp/img/sp1-*.jpg`.

@@ -19,7 +19,6 @@ interface UiState {
   editKeepAliveMin?: number                                                     // D69: a hidden Edit / Animate stage is released after this long
   panelWidth: number; inspectorWidth: number; dismissedBanners: string[]
   panelWidths?: Record<string, number>; inspectorWidths?: Record<string, number>   // D90 (02 §3.1): dragged widths per suite; absent = the suite's default
-  storyLast?: 'story' | 'catalogue'                                            // D90: the Story tab returns to the workspace last open under it
   imageLast?: 'generate' | 'edit'                                              // D95 (IM1): the Image tab returns to the mode last open under it (Make or Edit)
   dockTab?: 'queue' | 'bin'                                                     // D95 (AN1, 04 C1): the Dock shows the render queue or the Bin
   animateLast?: 'animate' | 'stage' | 'final'                                  // D95 (AN1) → D121: the Animate tab returns to the level last open (Performance, Clay or Final)
@@ -152,7 +151,7 @@ export const useSession = create<SessionState>()(
 
       setSuite: (suite) => {
         if (suite === 'models') { get().openModels({ missing: true }); return }   // D90 (02 §7): the old routes (the Fetch buttons) open the sheet on the missing weights
-        set({ ui: { ...get().ui, suite, pick: null, ...(suite === 'story' || suite === 'catalogue' ? { storyLast: suite } : {}), ...(suite === 'generate' || suite === 'edit' ? { imageLast: suite } : {}), ...(suite === 'animate' || suite === 'stage' || suite === 'final' ? { animateLast: suite } : {}) } })
+        set({ ui: { ...get().ui, suite, pick: null, ...(suite === 'generate' || suite === 'edit' ? { imageLast: suite } : {}), ...(suite === 'animate' || suite === 'stage' || suite === 'final' ? { animateLast: suite } : {}) } })
       },
       openModels: (o = {}) => set({ modelsSheet: { tab: o.tab ?? 'roster', missing: !!o.missing } }),
       closeModels: () => set({ modelsSheet: null }),
@@ -168,6 +167,7 @@ export const useSession = create<SessionState>()(
         const project = await unwrap(http.POST('/project', { body: { path, name } }))
         set({ project, projectDialog: null })
         await get().refreshAll()
+        void import('../frame/suiteRegistry').then((m) => { m.setRailTab('story', 'world'); get().setSuite('story') })   // D125: a new project starts with its bible
         get().toast(`Created ${project.name}`, 'success')
       },
       closeProject: async () => {

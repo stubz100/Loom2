@@ -103,7 +103,7 @@ registerCommands([
           if (!name?.trim()) return
           const [m, reg] = await Promise.all([import('../story/storyStore'), import('../../frame/suiteRegistry')])
           const p = await m.useStory.getState().createProfile(name.trim(), cls, a.id)
-          if (p) { reg.setRailTab('story', m.tabOfClass(cls)); useSession.getState().setSuite('story') }   // D110: a prop opens on Props
+          if (p) { m.revealClass(cls); reg.setRailTab('story', 'cast'); useSession.getState().setSuite('story') }   // D125: a prop is a class of Cast
         }) },
   })),
   // D93 (A2): "Add to character ▸" — the selection into a Cast profile's current version (the menu entry names the profile: castTarget)

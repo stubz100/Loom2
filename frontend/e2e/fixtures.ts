@@ -63,11 +63,11 @@ export async function contextChoose(page: Page, target: Locator, label: string):
 
 /** Tiles of the Catalogue grid, and a wait until the first `n` visible thumbnails have decoded (naturalWidth > 0). */
 export const tiles = (page: Page) => page.locator('.cat-grid .tile')
-/** D90 (02 §3): the Catalogue is Story's third workspace — the Story tab, then the Catalogue on the rail (a click on the rail button of the
- *  workspace already showing folds the panel, so it is clicked only while the Places panel is not up). */
+/** D125: the Catalogue is the fourth top tab — the tab, then Places on its rail if the panel is folded (a click on the rail button of the
+ *  section already showing folds the panel, so it is clicked only while the Places panel is not up). */
 export async function openCatalogue(page: Page): Promise<void> {
-  await page.locator('nav.tabs button.tab', { hasText: 'Story' }).click()
-  const rail = page.locator('nav.rail button[aria-label="Catalogue"]')
+  await page.locator('nav.tabs button.tab', { hasText: 'Catalogue' }).click()
+  const rail = page.locator('nav.rail button[aria-label="Places"]')
   await expect(rail).toBeVisible()
   const places = page.locator('.panel .place-row').first()
   if (!(await places.isVisible().catch(() => false))) await rail.click()

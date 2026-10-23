@@ -5501,6 +5501,17 @@
       "FlowNode": {
         "description": "One node of the flow, one file (loom R139). The fields a type uses: Dialogue `lines` (+ a bound shot), Shot a bound shot, Choice\n`options`, Condition `cond`, Action `set`, Jump `target`, Comment `text`; Start and Hub carry a title. `shot_id` / `shot_version`\nare set by binding only (loom R146: sole ownership).",
         "properties": {
+          "beat_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Beat Id"
+          },
           "board_group_id": {
             "anyOf": [
               {
@@ -5670,6 +5681,7 @@
           "shot_version",
           "board_group_id",
           "place_id",
+          "beat_id",
           "speaker_versions",
           "colour",
           "revision",
@@ -10800,6 +10812,17 @@
       },
       "NodeCreate": {
         "properties": {
+          "beat_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Beat Id"
+          },
           "shot": {
             "default": true,
             "title": "Shot",
@@ -26462,6 +26485,48 @@
           }
         },
         "summary": "Flow Validate",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/flow/voice": {
+      "post": {
+        "description": "D125 (S8): Voice all lines of the episode — every Dialogue node's lines not voiced yet or changed since, one job per voice and node.\nA line without a voice (its speaker has none and none is picked) is named first; nothing is queued then.",
+        "operationId": "flow_voice_story_flow_voice_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LineVoiceBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TtsQueued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Flow Voice",
         "tags": [
           "story"
         ]

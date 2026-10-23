@@ -1,8 +1,9 @@
 // 17 (D85): the Story suite's verbs — every one has a mouse home (the panel's buttons, the editor rows' tools, the Inspector, right-click
 // menus) per D32; Delete and the arrows are accelerators. SY1 adds the Cast tab's verbs (new profile, expand, add to the reference set, lock, copy, open).
-import { ArrowDown, ArrowLeft, Box, Ruler, ArrowUp, BookOpen, BookPlus, ChevronLeft, ChevronRight, Pencil, UserRoundPlus, Users, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImageOff, ImagePlus, ImageUp, Link, ListChecks, ListPlus, Lock, MapPinPlus, Maximize, MessageSquare, Mic, PackagePlus, Palette, PersonStanding, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
+import { Workflow, ArrowDown, ArrowLeft, Box, Ruler, ArrowUp, BookOpen, BookPlus, ChevronLeft, ChevronRight, Pencil, UserRoundPlus, Users, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImageOff, ImagePlus, ImageUp, Link, ListChecks, ListPlus, Lock, MapPinPlus, Maximize, MessageSquare, Mic, PackagePlus, Palette, PersonStanding, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
 import { command, isEnabled, registerCommands, runCommand, sep, type Command, type MenuItem } from '../../frame/commands'
 import { nextOwed, readinessOf, type ReadyCell, type ReadyItem } from './castReady'
+import { linesToVoice, spineTodo } from './episodeVerbs'
 import { goBack, useMakeFor } from '../../store/origin'
 import { cellsOf, nextStep, routeOf, type Cell, type Step } from './board'
 import { askConfirm, askConfirmCheck, askText, useSession } from '../../store/session'
@@ -488,6 +489,22 @@ const cmds: Command[] = [
   { id: 'story.flow.restart', scope: 'story', label: 'Restart', icon: RotateCcw, placement: ['toolbar'], hint: 'play mode: from the Start node again', when: () => !!playing(), run: () => sy().playStart() },
   { id: 'story.flow.stop', scope: 'story', label: 'Stop playing', icon: Square, placement: ['strip'], when: () => !!sy().play, run: () => sy().playStop() },
   { id: 'story.flow.fit', scope: 'story', label: 'Fit the graph', icon: Maximize, keys: 'F', placement: ['strip', 'context'], when: () => !!sy().flowGraph && !sy().play, run: () => flowView.fit?.() },
+  // D125 (S4, S8): the verbs that work on the episode
+  { id: 'story.world.flowFromSpine', scope: 'story', label: 'Make the Flow from the spine…', icon: Workflow, hint: "a Start, then one Shot node per beat not yet made — each with its shot — in a row, connected in the spine's order",
+    placement: ['panel', 'strip', 'context'], when: () => projectOpen() && !!sy().world?.spine.length && !sy().play && (!sy().flowLoaded || spineTodo(sy().world!.spine, Object.values(sy().flowNodes)).length > 0),
+    run: async () => {
+      if (!sy().flowLoaded) await sy().loadFlow()
+      const n = spineTodo(sy().world?.spine ?? [], Object.values(sy().flowNodes)).length
+      if (!n) { useSession.getState().toast('Every beat of the spine has its node', 'info'); return }
+      const ok = await askConfirm({ title: `Make ${n} Shot node${n === 1 ? '' : 's'} from the spine?`, okLabel: 'Make them',
+        text: `${sy().flowGraph?.start ? '' : 'A Start node first, then '}one Shot node per beat not yet made, each with its shot, in a row and connected in the spine's order.` })
+      if (!ok) return
+      const made = await sy().flowFromSpine()
+      if (made) { useSession.getState().toast(`${made} Shot node${made === 1 ? '' : 's'} made from the spine`, 'success'); openStory('flow') }
+    } },
+  { id: 'story.flow.voiceEpisode', scope: 'story', label: 'Voice all lines', icon: Volume2, hint: "every Dialogue line of the episode not voiced yet or changed since — each speaker's voice, else the one picked under the lines",
+    placement: ['strip', 'panel', 'context'], when: () => linesToVoice(Object.values(sy().flowNodes)) > 0 && !!useSession.getState().capabilities?.voice?.available && !sy().play,
+    run: () => void sy().voiceEpisode() },
   { id: 'story.world.beatToNode', scope: 'story', label: 'Make a Flow node from this beat', icon: GitBranch, placement: ['inspector', 'context'], when: selBeat,
     run: () => { const s = selected(); if (s?.kind === 'beat') void sy().nodeFromBeat(s.id) } },
   // D92: subjects are Cast characters — Generate's Tree prompt with a subject card linked to the profile (its reference set and LoRA follow)
@@ -512,7 +529,7 @@ export function rowMenu(kind: NonNullable<ReturnType<typeof selected>>['kind'], 
   useStory.getState().select({ kind, id })
   const items: ({ cmd: string; label?: string } | 'sep')[] = []
   if (kind === 'style') items.push({ cmd: 'story.world.styleSample' }, { cmd: 'story.world.openStyleGroup' }, 'sep', { cmd: 'story.world.defaultStyle' })
-  if (kind === 'beat') items.push({ cmd: 'story.world.beatUp' }, { cmd: 'story.world.beatDown' }, { cmd: 'story.world.beatToNode' })
+  if (kind === 'beat') items.push({ cmd: 'story.world.beatUp' }, { cmd: 'story.world.beatDown' }, { cmd: 'story.world.beatToNode' }, { cmd: 'story.world.flowFromSpine' })
   if (kind === 'entry') items.push({ cmd: 'story.world.entryPicture' }, { cmd: 'story.world.entryEarlier' }, { cmd: 'story.world.entryLater' }, 'sep')   // D92
   if (kind === 'panel') { items.push({ cmd: 'story.world.applyPanel' }, { cmd: 'story.world.renamePanel' }, 'sep', { cmd: 'story.world.remove', label: 'Delete…' }); return items }
   items.push(kind === 'entry' ? { cmd: 'story.world.remove', label: 'Remove from the library' } : { cmd: 'story.world.remove' }, 'sep',

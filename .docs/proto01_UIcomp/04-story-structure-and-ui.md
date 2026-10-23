@@ -278,8 +278,14 @@ rig run checks that one.
 | **SP4 · The round trip** ✓ built 2026-10-23 | Image's landing and *Use as … frame*; Animate's *Stage clip* landing (the rest of A2), *Use this camera*, *Use as … clip* | I1, I2, A2, A3, A4 | 3 |
 | **SP5 · Cast readiness** ✓ built 2026-10-23 | the readiness row, *In N shots*, the next-step foot, the voice given to its character | S5 | 1–2 |
 | **SP6 · Episode** ✓ built 2026-10-23 | *Assemble from the Flow…*, *changed · Update*, *Export for Resolve ▶* | S13, S14 | 2–3 |
-| **SP7 · Episode verbs** | *Make the Flow from the spine…*, *Voice all lines (N)* | S4, S8 | 1 |
+| **SP7 · Episode verbs** ✓ built 2026-10-23 | *Make the Flow from the spine…*, *Voice all lines (N)* | S4, S8 | 1 |
 | | | | **≈ 14–18** |
+
+**As built (2026-10-23):** every wave SP0–SP7 is in (journal 21:07 → SP7). Where the ids differ from §4: *Export for Resolve ▶* is
+`story.episode.exportResolve` (one server format, `resolve`, not three calls); *Use as <shot>'s frame* is `cat.useFrame` (a Catalogue
+command of Image's results); *Use as <shot>'s clip* is `anim.useClip`; *Voice all lines (N)* is one route, `POST /story/flow/voice`; the
+Cast foot's verb is `story.cast.next`, the readiness row's Sheet item `story.cast.editSheet`; a node keeps the beat it was made from
+(`FlowNode.beat_id`) and a cut its route (`Timeline.route`).
 
 **Order:** SP0 first, on its own (bugs). Then SP1 → SP2 → SP3, because the board needs the node-is-the-shot rule. SP4 and SP5 can follow in
 either order, then SP6 and SP7.

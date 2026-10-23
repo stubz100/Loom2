@@ -3072,3 +3072,43 @@ test('the cut from the Flow (D125 SP6): Assemble from the Flow… asks at the Ch
   const out = await api<{ path: string; text: string }>('POST', `/timelines/${(await cut()).id}/export`, { format: 'resolve' })
   expect(out.text.split('\n').map((f) => f.split('.').pop()).sort()).toEqual(['edl', 'fcpxml', 'srt', 'txt'])
 })
+
+test('the episode verbs (D125 SP7): Make the Flow from the spine makes a Shot node per beat not yet made, each with its shot, connected in the spine\'s order, and has nothing to make the next time; Voice all lines (N) voices the episode\'s unvoiced lines', async ({ page }) => {
+  test.setTimeout(150_000)
+  const tag = Date.now().toString(36)
+  type Beat = { id: string; title: string; line: string }
+  type NodeLite = { id: string; type: string; title: string; beat_id: string | null; shot_id: string | null; lines: { text: string; audio_asset_id: string | null }[] }
+  type FlowLite = { nodes: NodeLite[]; graph: { edges: { from: string; port: string; to: string }[] } }
+  const w = await api<{ revision: number; spine: Beat[] }>('GET', '/story/world')
+  const beats: Beat[] = [1, 2, 3].map((i) => ({ id: `beat_${tag}_${i}`, title: `Beat ${i} ${tag}`, line: `the ${i} thing happens` }))
+  await api('PUT', '/story/world', { ...w, spine: [...w.spine, ...beats] })
+  const before = await api<FlowLite>('GET', '/story/flow')
+  const todo = [...w.spine, ...beats].filter((b) => !before.nodes.some((n) => n.beat_id === b.id)).length
+  await openApp(page, { suite: 'story', tab: 'world' })
+  // the World's foot: Make the Flow from the spine — asked with the count, then the Flow
+  await page.locator('.panel .foot button.primary', { hasText: /^Make the Flow from the spine/ }).click()
+  const dialog = page.locator('.modal.ask')
+  await expect(dialog).toContainText(`Make ${todo} Shot node${todo === 1 ? '' : 's'} from the spine?`)
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('nav.rail button.active[title^="Flow"]')).toBeVisible()
+  const after = await api<FlowLite>('GET', '/story/flow')
+  const made = beats.map((b) => after.nodes.find((n) => n.beat_id === b.id)!)
+  expect(made.map((n) => [n.type, n.title, !!n.shot_id])).toEqual(beats.map((b) => ['shot', b.title, true]))
+  expect(after.graph.edges.some((e) => e.from === made[0].id && e.to === made[1].id)).toBe(true)                // the spine's order
+  expect(after.graph.edges.some((e) => e.from === made[1].id && e.to === made[2].id)).toBe(true)
+  // nothing left to make: the World's foot has no such verb, the Spine header's is disabled
+  await page.locator('nav.rail button[title^="World"]').click()
+  await expect(page.locator('.panel .foot button.primary', { hasText: /^Make the Flow/ })).toHaveCount(0)
+  await expect(page.locator('#story-sec-spine h3 button[aria-label^="Make the Flow from the spine"]')).toBeDisabled()
+  // Voice all lines (N): a speakerless line, the fallback voice picked under a node's lines, the Flow strip's verb
+  const voice = await api<{ id: string }>('POST', '/story/voices', { name: `Episode voice ${tag}`, voice: 'af_heart' })
+  const say = await api<NodeLite>('POST', '/story/flow/nodes', { type: 'dialogue', title: `Say ${tag}` })
+  await api('PATCH', `/story/flow/nodes/${say.id}`, { lines: [{ speaker: null, text: 'Hello there.', audio_asset_id: null, audio_text: null }] })
+  await page.locator('nav.rail button[title^="Flow"]').click()
+  await page.locator(`.story-row.node-row[data-id="${say.id}"]`).click()
+  await page.locator('.inspector select[aria-label="fallback voice"]').selectOption(voice.id)
+  const verb = page.locator('.story-strip button[aria-label^="Voice all lines"]')
+  await expect(verb).toHaveText(/^Voice all lines \(\d+\)$/)
+  await verb.click()
+  await expect.poll(async () => (await api<FlowLite>('GET', '/story/flow')).nodes.find((n) => n.id === say.id)?.lines[0].audio_asset_id, { timeout: 60_000 }).toBeTruthy()
+})

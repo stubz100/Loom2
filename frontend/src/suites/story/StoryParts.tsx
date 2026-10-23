@@ -17,6 +17,7 @@ import { useSession } from '../../store/session'
 import type { Asset, Profile, Shot, ShotVersion, StoryBeat, StoryVariable, WorldStyle } from '../../api/types'
 import { coverageGrid } from './coverage'
 import { ITEM_LABEL, readinessOf, rowSummary, shotNeeds } from './castReady'
+import { spineTodo } from './episodeVerbs'
 import { ROUTE_LABEL } from './board'
 import { TrainingBlock } from './TrainingBlock'
 import { VoicesBlock } from './VoicesBlock'
@@ -29,7 +30,7 @@ import { useGenerate } from '../generate/generateStore'
 import { versionName } from '../generate/sheet'
 import { CastSheet } from './CastSheet'
 import { askExpand, castCells, castNext, ITEM_NEXT, itemCommand, makeClipItems, makeFrameItems, NEXT_LABEL, profileMenu, rowMenu, runOnItem, selectedNext, storyItem } from './storyCommands'
-import { BoardPanel, LinkStageSheet, ShotsBoard } from './ShotsBoard'
+import { BoardPanel, LinkStageSheet, ShotsBoard, VoiceAllButton } from './ShotsBoard'
 import { flatGroups, useAlbum } from '../catalogue/albumStore'
 import { findNode } from './styleSamples'
 import { storyKey } from './storyKeys'
@@ -269,7 +270,13 @@ export function PrimaryAction() {
     )
   }
   if (!world) return null
-  return <div className="estimate"><span className={`dot ${saving ? 'tight' : 'ok'}`} />{saving ? 'saving…' : `saved · revision ${world.revision}`}</div>
+  const todo = tab === 'world' ? spineTodo(world.spine, Object.values(flowNodes)).length : 0          // D125 (S4): the World's foot makes the Flow
+  return (
+    <div>
+      {todo > 0 && <button className="primary" onClick={() => runCommand('story.world.flowFromSpine')} title="A Start, then one Shot node per beat not yet made, in a row, connected in the spine's order">Make the Flow from the spine ▶</button>}
+      <div className="estimate"><span className={`dot ${saving ? 'tight' : 'ok'}`} />{saving ? 'saving…' : `saved · revision ${world.revision}`}{todo > 0 ? ` · ${todo} beat${todo === 1 ? '' : 's'} without a node` : ''}</div>
+    </div>
+  )
 }
 
 // ------------------------------------------------------------------ Strip
@@ -326,6 +333,7 @@ export function Strip() {
         <CommandRow ids={['story.flow.add.start', 'story.flow.add.hub', 'story.flow.add.dialogue', 'story.flow.add.choice', 'story.flow.add.condition', 'story.flow.add.action', 'story.flow.add.shot', 'story.flow.add.jump', 'story.flow.add.comment']} />
         <span className="spacer" />
         {problems && <span className={`hint${problems.length ? ' warn' : ''}`}>{problems.length ? `${problems.length} problem${problems.length === 1 ? '' : 's'}` : 'valid'}</span>}
+        <VoiceAllButton />
         <CommandButton id="story.flow.validate" />
         {play ? <CommandButton id="story.flow.stop" /> : <CommandButton id="story.flow.play" />}
         <CommandButton id="story.flow.fit" />
@@ -429,7 +437,7 @@ function WorldEditor() {
         <textarea rows={8} value={world.synopsis} aria-label="synopsis" placeholder="The story in a page." onChange={(e) => sy().edit({ synopsis: e.target.value })} />
       </section>
       <section id="story-sec-spine">
-        <h3>Spine<Help text={"The beats in order; a Flow node is made from a beat by hand."} /></h3>
+        <h3>Spine<Help text={"The beats in order. Make the Flow from the spine makes a Start and one Shot node per beat not yet made, each with its shot, connected in this order; a single beat's node comes from its right-click."} /><span className="spacer" /><CommandButton id="story.world.flowFromSpine" /></h3>
         <div className="rows">
           {world.spine.map((b, i) => <BeatRow key={b.id} b={b} i={i} active={selected?.kind === 'beat' && selected.id === b.id} />)}
           {!world.spine.length && <div className="empty">No beats yet.</div>}

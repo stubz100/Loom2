@@ -9,6 +9,8 @@ import { Help } from '../../frame/Help'
 import { useSession } from '../../store/session'
 import { STEPS, cellsOf, flowOrder, routeOf, ROUTE_LABEL, type Cell, type Step } from './board'
 import { runStep, shotMenu, STEP_VERB } from './storyCommands'
+import { linesToVoice } from './episodeVerbs'
+import { CommandButton } from '../../frame/CommandButton'
 import { sy, useStory, type BoardFilter } from './storyStore'
 
 const GLYPH: Record<Cell['state'], string> = { done: '✓', owed: '○', running: '◐', stale: '!', na: '–' }
@@ -109,6 +111,7 @@ export function BoardPanel() {
   return (
     <div className="story-panel board-panel">
       <div className="segmented" aria-label="filter">{F.map(([id, label]) => <button key={id} className={filter === id ? 'active' : ''} onClick={() => sy().setBoardFilter(id)}>{label}</button>)}</div>
+      <div className="verbs"><VoiceAllButton /></div>
       <h4>Legend <Help text={"A cell is its step's verb: a click does it for that shot (the maker opens on the shot). A right-click on a row is the shot's menu."} /></h4>
       <div className="board-legend">
         <span><b className="cell done">✓</b> done</span><span><b className="cell owed">○</b> owed — a click does it</span><span><b className="cell running">◐</b> running or queued</span>
@@ -116,6 +119,14 @@ export function BoardPanel() {
       </div>
     </div>
   )
+}
+
+/** D125 (S8): *Voice all lines (N)* — N counts the episode's Dialogue lines not voiced yet or changed since (the Flow strip, the Shots panel). */
+export function VoiceAllButton() {
+  const nodes = useStory((s) => s.flowNodes)
+  useStory((s) => s.play)
+  const n = linesToVoice(Object.values(nodes))
+  return <CommandButton id="story.flow.voiceEpisode" text label={n ? `Voice all lines (${n})` : 'Voice all lines'} />
 }
 
 /** D125 (S11): *Link a stage camera…* — a stage and one of its cameras for the shot's open version (its stills and clips then come back by

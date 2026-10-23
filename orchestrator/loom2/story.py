@@ -399,6 +399,7 @@ class FlowNode(BaseModel):
     shot_version: str | None = None
     board_group_id: str | None = None             # D90 (02 §4.2): the node's board — an album group (references, mood, places); its cover on the card
     place_id: str | None = None                   # D93 (C7): where — a Cast place (Dialogue / Shot nodes); Make frame links Generate's scene to it
+    beat_id: str | None = None                    # D125 (S4): the spine beat it was made from (Make the Flow from the spine skips a beat already made)
     speaker_versions: dict[str, str] = Field(default_factory=dict)   # D93 follow-up: a speaker's pinned version (profile id → version id); absent = current — Make frame uses it unless the shot's stage binds another
     colour: str | None = None
     revision: int = 0
@@ -973,7 +974,7 @@ class _FlowMixin:
         (`with_shot` False: none, for a shot bound later)."""
         if type_ not in NODE_TYPES:
             raise ValueError(f"unknown node type {type_!r}; one of {', '.join(NODE_TYPES)}")
-        fields = {k: v for k, v in fields.items() if k in ("lines", "options", "cond", "set", "target", "text", "colour")}
+        fields = {k: v for k, v in fields.items() if k in ("lines", "options", "cond", "set", "target", "text", "colour", "beat_id")}
         n = FlowNode(type=type_, title=title.strip() or {"start": "Start", "hub": "Hub", "comment": "Note"}.get(type_, ""), **fields)
         g = self.flow_graph()                                        # before the file exists, so the index does not place it twice
         self.save_node(n)

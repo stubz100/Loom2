@@ -175,6 +175,7 @@
  "POST /story/flow/nodes/{nid}/unbind",
  "POST /story/flow/nodes/{nid}/voice",
  "POST /story/flow/validate",
+ "POST /story/flow/voice",
  "POST /story/library/entries",
  "POST /story/loras/{lid}/check",
  "POST /story/profiles",

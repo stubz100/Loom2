@@ -9,6 +9,7 @@ import type { CastReadiness, Clip, Final, FlowGraph, FlowNode, FlowProblem, Grou
 import { askConfirm, useSession } from '../../store/session'
 import { useLibrary } from './libraryStore'
 import { startPlay, stepPlay, type PlayState } from './flow/play'
+import { spineEdges, spineRow, spineTodo } from './episodeVerbs'
 
 export type Section = 'logline' | 'synopsis' | 'styles' | 'library' | 'panels' | 'spine' | 'variables'
 /** A variable's id is its name; D92: a library entry's id is its `lib_` id, a saved panel's its name. */
@@ -135,6 +136,8 @@ export interface StoryState {
   deleteVoice: (id: string) => Promise<void>
   voiceLine: (nodeId: string, index: number) => Promise<void>
   voiceNode: (nodeId: string) => Promise<void>
+  /** D125 (S8): every Dialogue line of the episode not voiced yet or changed since — one request (POST /story/flow/voice). */
+  voiceEpisode: () => Promise<void>
   playLine: (assetId: string) => void
   /** D88 XL (experimental): the shot version's lip-sync options and the verb. */
   lipsyncOpts: { node_id: string | null; index: number | null; preset: 'draft' | 'fast' }
@@ -269,6 +272,8 @@ export interface StoryState {
   playStop: () => void
   /** World: a Shot node made from a beat by hand (loom R55 — never synced). */
   nodeFromBeat: (beatId: string) => Promise<void>
+  /** D125 (S4): a Start and one Shot node per beat not yet made, in a row, connected in the spine's order (asked first by the command). */
+  flowFromSpine: () => Promise<number>
 }
 
 const uid = (prefix: string) => `${prefix}_${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}`
@@ -734,6 +739,13 @@ export const useStory = create<StoryState>()((set, get) => {
         toast(`${r.lines} line${r.lines === 1 ? '' : 's'} queued in ${r.job_ids.length} job${r.job_ids.length === 1 ? '' : 's'}`, 'info')
       } catch (e) { toast(`Voice all lines: ${detail(e)}`) }
     },
+    voiceEpisode: async () => {
+      try {
+        const r = await unwrap(http.POST('/story/flow/voice', { body: { voice_id: get().voiceId, speed: 1, stage: false } }))
+        await useSession.getState().refreshAll()
+        toast(`${r.lines} line${r.lines === 1 ? '' : 's'} of the episode queued in ${r.job_ids.length} job${r.job_ids.length === 1 ? '' : 's'}`, 'info')
+      } catch (e) { toast(`Voice all lines: ${detail(e)}`) }
+    },
     setLipsyncOpts: (patch) => set({ lipsyncOpts: { ...get().lipsyncOpts, ...patch } }),
     loadAudioSecs: async (ids) => {
       const want = [...new Set(ids)].filter((id) => !(id in get().audioSecs))
@@ -993,6 +1005,28 @@ export const useStory = create<StoryState>()((set, get) => {
     },
     playNext: (option) => { const g = get().flowGraph; const p = get().play; if (!g || !p) return; set({ play: stepPlay(p, g, get().flowNodes, option) }) },
     playStop: () => set({ play: null }),
+    flowFromSpine: async () => {
+      const w = get().world
+      if (!w) return 0
+      if (!get().flowLoaded) await get().loadFlow()
+      const todo = spineTodo(w.spine, Object.values(get().flowNodes))
+      if (!todo.length) return 0
+      const g = get().flowGraph
+      const row = spineRow(g?.nodes ?? [], todo.length, !g?.start)
+      try {
+        const start = g?.start ?? (await unwrap(http.POST('/story/flow/nodes', { body: { type: 'start', title: 'Start', x: row.start!.x, y: row.start!.y } }))).id
+        const made: Record<string, string> = Object.fromEntries(Object.values(get().flowNodes).filter((n) => n.beat_id).map((n) => [n.beat_id!, n.id]))
+        for (const [i, b] of todo.entries()) {
+          const n = await unwrap(http.POST('/story/flow/nodes', { body: { type: 'shot', title: b.title, text: b.line, beat_id: b.id, x: row.beats[i].x, y: row.beats[i].y } }))
+          made[b.id] = n.id
+        }
+        const cur = await unwrap(http.GET('/story/flow'))
+        const edges = spineEdges(w.spine, todo, cur.graph.edges, made, start)
+        if (edges.length) await unwrap(http.PUT('/story/flow/graph', { body: { revision: cur.graph.revision, edges: [...cur.graph.edges, ...edges] } as never }))
+        await Promise.all([get().loadFlow(), get().loadShots()])
+        return todo.length
+      } catch (e) { toast(`Make the Flow: ${detail(e)}`); await get().loadFlow(); return 0 }
+    },
     nodeFromBeat: async (beatId) => {
       const b = get().world?.spine.find((x) => x.id === beatId); if (!b) return
       const made = await get().addNode('shot', b.title, null, { text: b.line })

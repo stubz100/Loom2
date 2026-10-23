@@ -130,7 +130,7 @@ export function FlowCanvas() {
         onEdgeContextMenu={(e, ed) => { e.preventDefault(); sy().selectEdge({ from: ed.source, port: ed.sourceHandle ?? 'out' }); showMenu(e, edgeMenu()) }}
         onNodeContextMenu={(e, n) => { e.preventDefault(); sy().selectNode(n.id); showMenu(e, nodeMenu() as MenuItem[]) }}
         onPaneContextMenu={(e) => { e.preventDefault(); sy().setAddAt(flowView.toFlow?.(e.clientX, e.clientY) ?? null)
-          showMenu(e, [{ heading: 'Add a node here' }, ...(['start', 'hub', 'dialogue', 'choice', 'condition', 'action', 'shot', 'jump', 'comment'] as const).map((t) => ({ cmd: `story.flow.add.${t}` })), sep, { cmd: 'story.flow.validate' }, { cmd: 'story.flow.play' }, { cmd: 'story.flow.fit' }]) }}>
+          showMenu(e, [{ heading: 'Add a node here' }, ...(['start', 'hub', 'dialogue', 'choice', 'condition', 'action', 'shot', 'jump', 'comment'] as const).map((t) => ({ cmd: `story.flow.add.${t}` })), sep, { cmd: 'story.flow.voiceEpisode' }, { cmd: 'story.flow.validate' }, { cmd: 'story.flow.play' }, { cmd: 'story.flow.fit' }]) }}>
         <Background gap={24} />
         <MiniMap pannable zoomable />
         <Controls showInteractive={false} />

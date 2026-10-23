@@ -5,7 +5,7 @@ import type { Asset, FlowNode, GroupPage, Profile, Shot } from '../../api/types'
 import { boardDrop, boardRefs, clipPrefill, forShot, framePrefill, lineAction, makeTarget, speakerVersion } from './makeFor'
 
 const node = (type: FlowNode['type'], extra: Partial<FlowNode> = {}): FlowNode => ({
-  schema_version: 1, id: 'node_1', type, title: '', lines: [], options: [], cond: null, set: [], target: null, text: '', shot_id: null, shot_version: null, board_group_id: null, place_id: null, speaker_versions: {}, colour: null,
+  schema_version: 1, id: 'node_1', type, title: '', lines: [], options: [], cond: null, set: [], target: null, text: '', shot_id: null, shot_version: null, board_group_id: null, place_id: null, speaker_versions: {}, colour: null, beat_id: null,
   revision: 0, created_at: '', updated_at: '', ...extra,
 })
 const version = (id: string, state: 'open' | 'final' = 'open') => ({ id, state, stage_id: null, camera_id: null, stage_revision: null, frame_asset_id: null, clip_id: null, takes: [], derived_from: null, created_at: '', finalized_at: null, recipe: null })

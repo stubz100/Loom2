@@ -2598,6 +2598,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/flow/voice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Flow Voice
+         * @description D125 (S8): Voice all lines of the episode — every Dialogue node's lines not voiced yet or changed since, one job per voice and node.
+         *     A line without a voice (its speaker has none and none is picked) is named first; nothing is queued then.
+         */
+        post: operations["flow_voice_story_flow_voice_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/library": {
         parameters: {
             query?: never;
@@ -5544,6 +5565,8 @@ export interface components {
          *     are set by binding only (loom R146: sole ownership).
          */
         FlowNode: {
+            /** Beat Id */
+            beat_id: string | null;
             /** Board Group Id */
             board_group_id: string | null;
             /** Colour */
@@ -7720,6 +7743,8 @@ export interface components {
         };
         /** NodeCreate */
         NodeCreate: {
+            /** Beat Id */
+            beat_id?: string | null;
             /**
              * Shot
              * @default true
@@ -15980,6 +16005,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FlowProblems"];
+                };
+            };
+        };
+    };
+    flow_voice_story_flow_voice_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LineVoiceBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TtsQueued"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

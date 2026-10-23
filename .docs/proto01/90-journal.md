@@ -8530,3 +8530,22 @@ WB1–WB3, *Mark final* at any size, the For context ended by *← Back* and hon
   lane's badge and the checklist, the badge updates it; Assemble again with Leave; Export for Resolve asks once and writes four files).
   Offline 534 passed; Vitest 445 + 3 skipped; typecheck and build clean; lint 0 errors (79 warnings); e2e full 58/58 and open 58/58.
   Screenshots `proto01_UIcomp/img/sp6-*.jpg` (after them, CSS only: the sheet one column, the dialog's line breaks).
+
+## 2026-10-23 23:42 — SP7 built (D125 S4, S8, proto01_UIcomp 04 §8): the verbs that work on the episode; the D125 waves complete
+
+- **S4 · Make the Flow from the spine…** (World's foot, the Spine section's header, a beat's right-click): asked first with the count; a
+  Start node when the Flow has none, then one Shot node per beat not yet made (`FlowNode.beat_id`, a new optional field the node keeps
+  through edits; `spineTodo`), each with its shot, laid out in a row under what the Flow holds (`spineRow`), connected in the spine's
+  order — the first beat after the Start, each next one after the one before, a beat made before joined in — only where an out-port is
+  still free (`spineEdges`); then the Flow opens. With every beat made, World's foot has no such verb and the header's is disabled; *Make a
+  Flow node from this beat* stays for one beat.
+- **S8 · Voice all lines (N)** (the Flow strip, the Shots panel, the canvas' right-click): N counts the episode's Dialogue lines not
+  voiced yet or changed since (`linesToVoice`; the stamp is the stripped text); `POST /story/flow/voice` voices them, one job per voice and
+  node (each speaker's voice, else the one picked under a node's lines); a line without a voice is named first and nothing is queued.
+- OpenAPI and schema.d.ts regenerated; `routes_d37.json` gained the route; the node fixtures of three Vitest files gained `beat_id`.
+- 04 §8 says how the build differs from §4's command ids (one `resolve` export, `cat.useFrame`, `anim.useClip`, one voice route, …).
+- **Tests:** `test_flow_episode_verbs_d125.py` (1), `episodeVerbs.test.ts` (4); a new e2e scenario (the World's foot makes the beats'
+  nodes, with shots, chained; nothing left to make after; a speakerless line with the picked voice voiced through the strip's verb).
+  Offline 535 passed; Vitest 449 + 3 skipped; typecheck and build clean; lint 0 errors (79 warnings); e2e full 59/59 and open 59/59.
+  Screenshots `proto01_UIcomp/img/sp7-*.jpg`. With SP7 every wave of D125's plan (SP0–SP7) is built on the fake engine. **Rig owed:**
+  04 §8's one run of the clay final shot to its take (A1 — SP0's change; no model path changed in SP1–SP7).

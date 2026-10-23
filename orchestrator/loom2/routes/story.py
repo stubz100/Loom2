@@ -1078,6 +1078,7 @@ class NodeCreate(BaseModel):
     text: str = ""
     target: str | None = None
     shot: bool = True                              # D125 (#4): a Dialogue or Shot node is made with its shot; False for one bound later
+    beat_id: str | None = None                     # D125 (S4): made from this spine beat
 
 
 class BindBody(BaseModel):
@@ -1134,7 +1135,7 @@ async def flow_node_create(svc: Svc, body: NodeCreate):
     ws, _, _ = svc.require_project()
     if body.type not in NODE_TYPES:
         raise HTTPException(422, f"unknown node type {body.type!r}; one of {', '.join(NODE_TYPES)}")
-    n = await asyncio.to_thread(StoryStore(ws).create_node, body.type, body.title, body.x, body.y, with_shot=body.shot, text=body.text, target=body.target)
+    n = await asyncio.to_thread(StoryStore(ws).create_node, body.type, body.title, body.x, body.y, with_shot=body.shot, text=body.text, target=body.target, beat_id=body.beat_id)
     if n.shot_id:
         svc.hub.broadcast("story.changed", {"kind": "shot", "id": n.shot_id, "revision": 0})
     _flow_changed(svc, n.id)
@@ -1388,6 +1389,40 @@ def _voice_jobs(ws, q, store: StoryStore, n: FlowNode, indexes: list[int], body:
         except ValueError as e:
             raise HTTPException(422, str(e))
     return {"job_ids": [j.id for j in jobs], "lines": sum(len(v) for v in groups.values()), "voice_ids": list(groups), "staged": all(j.status == "staged" for j in jobs)}
+
+
+def lines_to_voice(n: FlowNode) -> list[int]:
+    """D125 (S8): a node's lines not voiced yet, or changed since they were (the stamp is the stripped text the job spoke)."""
+    return [i for i, ln in enumerate(n.lines) if ln.text.strip() and (not ln.audio_asset_id or ln.audio_text != ln.text.strip())]
+
+
+@router.post("/story/flow/voice", response_model=TtsQueued)
+async def flow_voice(svc: Svc, body: LineVoiceBody):
+    """D125 (S8): Voice all lines of the episode — every Dialogue node's lines not voiced yet or changed since, one job per voice and node.
+    A line without a voice (its speaker has none and none is picked) is named first; nothing is queued then."""
+    ws, _, q = svc.require_project()
+    store = StoryStore(ws)
+
+    def run() -> dict:
+        nodes = [n for n in store.flow_nodes().values() if n.type == "dialogue"]
+        profiles = {p.id: p for p in store.profiles()}
+        todo = [(n, lines_to_voice(n)) for n in nodes]
+        todo = [(n, ix) for n, ix in todo if ix]
+        if not todo:
+            raise HTTPException(422, "every line is voiced")
+        missing = [f"{n.title or 'a Dialogue node'} line {i + 1}" for n, ix in todo for i in ix
+                   if not ((profiles[n.lines[i].speaker].voice_id if n.lines[i].speaker in profiles else None) or body.voice_id)]
+        if missing:
+            raise HTTPException(422, f"no voice for {', '.join(missing[:4])}{' …' if len(missing) > 4 else ''} — give the speaker one in Cast, or pick one")
+        out = {"job_ids": [], "lines": 0, "voice_ids": [], "staged": True}
+        for n, ix in todo:
+            r = _voice_jobs(ws, q, store, n, ix, body, False)
+            out["job_ids"] += r["job_ids"]
+            out["lines"] += r["lines"]
+            out["voice_ids"] = sorted(set(out["voice_ids"]) | set(r["voice_ids"]))
+            out["staged"] = out["staged"] and r["staged"]
+        return out
+    return await asyncio.to_thread(run)
 
 
 @router.post("/story/flow/nodes/{nid}/lines/{i}/voice", response_model=TtsQueued)

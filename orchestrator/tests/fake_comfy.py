@@ -68,6 +68,7 @@ class FakeComfy:
         self.object_info_delay = object_info_delay
         self.models_root: Path | None = None                              # LT2: the tree whose loras/ the enum follows (the standalone's --models-root)
         self.vram_free_gb = 12.0                                         # D69: tests set it low to see the engine.vram_pressure event
+        self.glb_for = None                                              # SC3d: a test's own GLB for a graph (graph -> bytes | None; None: the minimal one)
         self.uploads: list[tuple[str, bytes]] = []
         self.prompts: list[dict] = []
         self.histories: dict[str, dict] = {}
@@ -193,7 +194,7 @@ class FakeComfy:
             gdir = self.output_dir / gsub if gsub else self.output_dir
             gdir.mkdir(parents=True, exist_ok=True)
             gname = f"{gbase}_{sum(1 for p in gdir.glob(f'{gbase}_*.glb')) + 1:05d}_.glb"
-            (gdir / gname).write_bytes(minimal_glb())
+            (gdir / gname).write_bytes((self.glb_for(graph) if self.glb_for else None) or minimal_glb())
             outputs[save3d] = {"3d": [{"filename": gname, "subfolder": gsub, "type": "output"}]}
         preview = next((k for k, n in graph.items() if n.get("class_type") == "PreviewAny"), None)
         if preview and any(n.get("class_type") == "SDPoseKeypointExtractor" for n in graph.values()):

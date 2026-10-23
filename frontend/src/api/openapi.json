@@ -15216,6 +15216,20 @@
             ],
             "title": "Lens Deg"
           },
+          "level": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level"
+          },
           "light": {
             "anyOf": [
               {
@@ -15390,6 +15404,7 @@
           "plate_asset_id",
           "floor_y",
           "plate_camera_id",
+          "level",
           "things",
           "things_document_id"
         ],

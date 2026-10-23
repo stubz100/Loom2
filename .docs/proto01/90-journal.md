@@ -8189,3 +8189,42 @@ The author asked for a review of the state of things, then "record all this and 
   disabled Make with its reason); the route snapshot (five routes). Offline 508 passed, Vitest 426 + 3 skipped, e2e 54/54 full and 54/54
   open (one open run lost its first scenario to a cold start, the rerun clean), typecheck and build clean, lint 0 errors (79), agents check
   clean.
+
+## 2026-10-23 15:55 — SC3d built: a picture set laid level by its floor (and two older placement errors fixed)
+
+- **What SC3c's rig really found.** The 14:51 entry read the room's floor as rising 0.12 m a metre (the camera ≈ 7° down). That was the
+  plain least-squares fit's error: the picture's lowest rows hold the walls, the baseboards and the things too, and they pulled the plane.
+  The photograph agrees with the robust fit below: its verticals stay parallel and the big block's top shows as a sliver — the camera
+  looked down ≈ 2°.
+- **The floor** (`relief.floor_fit`): a seeded RANSAC over near-level planes only (within 25°: the vertical surfaces never qualify), the
+  inliers within 2 cm + 1 % of the depth, then least squares three times in a band narrowed to 2.5× the floor's median residual (≥ 1 cm).
+  Synthetic rooms pitched −8°, −3°, 0° and +5° (the box and the back wall in the lowest rows) come back within 0.02°; the plain fit had read
+  0° as −1.85° and +5° as no floor at all. The SC3c run's reliefs: the room −1.90° (residual 2.6 mm), its clean plate −0.87°; this run's clean plate −1.21°.
+- **Laid level** (`relief.levelling`, `level_of_glb`, `to_stage`): the set turned about x by the floor's pitch (the sideways tilt, ≤ 0.2°
+  here, left) and raised so the floor lands on y = 0; the picture camera stands where the relief's origin went and looks along the turned
+  −Z. `StageStore.add_image_set` / `replace_image_set` take the relief's path and apply it (the set's `transform`, `level` = pitch, the
+  tilt left, the residual); none without a relief, too little floor or a slope beyond 25° (*as it came*). The set's row shows it
+  (`[data-level]`, its ? explains). StageObject gained `level` (OpenAPI and schema.d.ts regenerated, D38).
+- **The things** (`set_things.stand`): the footprint is read on the relief the thing was picked on — its own front edge — and `carried`
+  to the set's relief as it is now by the ratio of the camera's heights over the two floors (one camera, one lens: they differ by MoGe's
+  scale), then through the set's lift and levelling. Read on the clean plate's relief instead (SC3d's first version, never committed), the
+  rows where a thing stood show what the Fill painted there — the floor behind it, or the foot of a wall — and the crate went 0.45 m back.
+  The footprint and the levelling share the one fit.
+- **The models' bounds** (`set_things.model_bounds`, the engine's mesh standing, the shadow proxy): measured from the vertices through the
+  node transforms (three's precise `Box3.setFromObject(model, true)`), not the accessors' boxes turned. D109's upright turn is a node
+  rotation of a few degrees, and the turned box overstated the Pixal3D crate as 1.13 × 0.65 × 1.10 against 0.80 × 0.50 × 0.61: every
+  turned model stood on a bottom below its own (floating 4–7 cm here), was scaled to an inflated width (smaller) and set back by an
+  inflated depth. The same box made a character mesh's shadow proxy short (`proxy.ts`).
+- **Rig** (`engine/spikes/sc3d_rig.py`, the real engine; nothing else on the GPU, the engine stopped before the WebGL screenshots, D97):
+  bench/sets/room.jpg at 69.2° laid level at −1.9° in 19.1 s with the engine's start (the camera 1.02 m up); the crate (2.0 %) and the small
+  block (2.74 %) found in 4.4 and 2.1 s; the clean plate 52 s; its relief rebuilt and laid level at −1.21° in 4 s; Pixal3D 329 and 308 s.
+  The floor on the stage by depth: 0.000 m (2.5 m), −0.002 (3.5), 0.000 (4.5), +0.017 (5.5). `--restand` stood the props again by the code
+  as it ended (no engine): the crate at 4.43 m carried ×1.016, scale 0.807, 0.002 m over the relief's floor there; the small block at
+  2.82 m, scale 0.511, 0.000 m. Through the picture camera their bases sit where the photograph's things stood (rows 0.757 and 0.93 of the
+  frame). Screenshots proto01_animate/img/25-sc3d-*.jpg.
+- **Tests:** `test_level_sc3d.py` (the pitch recovered and the floor laid on y = 0 near and far at four pitches; no floor, too steep, a poor
+  fit, no UVs left as they came; the store's transform, camera and level, kept in the file and dropped by a rebuild without a relief; a
+  footprint carried to a room read 15 % larger matches the one read there); `test_set_things_d123.py` (the make on a room taken 6° down:
+  the rebuilt set laid level, its camera pitched, the prop on the stage floor and carried ×1.0; a diamond turned 45° measures √2, not 2√2);
+  the fake engine takes a test's own GLB for a graph (`FakeComfy.glb_for`); the e2e set scenario's row reads *as it came*. Offline 515
+  passed, Vitest 426 + 3 skipped, e2e 54/54 full and 54/54 open, typecheck and build clean, lint 0 errors (79), audits clean.

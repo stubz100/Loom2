@@ -190,11 +190,12 @@ def clean_plate(q: Any, job: Any, od: Any) -> dict[str, Any]:
 
 
 def model_bounds(glb: Path) -> tuple[np.ndarray, np.ndarray]:
-    """A GLB's extent as the engine sees it: each mesh's POSITION box carried through its nodes' transforms (D109's upright turn is a node
-    rotation, so the vertices alone would miss it) — the box the engine centres and stands on the floor."""
-    from .relief import glb_read
+    """A GLB's extent as the engine sees it: every vertex carried through its nodes' transforms (D109's upright turn is a node rotation, so
+    the vertices alone would miss it; SC3d: the accessors' boxes turned would overstate it — a Pixal3D crate's 0.80 m width read 1.13) —
+    the box the engine centres and stands on the floor (three's precise box)."""
+    from .relief import accessor, glb_read
     from .tools.upright import quat_to_matrix
-    doc, _ = glb_read(glb)
+    doc, binary = glb_read(glb)
     nodes = doc.get("nodes", [])
 
     def local(nd: dict) -> np.ndarray:
@@ -215,11 +216,16 @@ def model_bounds(glb: Path) -> tuple[np.ndarray, np.ndarray]:
         if "mesh" in nd:
             for prim in doc["meshes"][nd["mesh"]].get("primitives", []):
                 acc = doc["accessors"][prim["attributes"]["POSITION"]]
-                if "min" not in acc or "max" not in acc:
+                if "bufferView" in acc:
+                    v = accessor(doc, binary, prim["attributes"]["POSITION"])
+                elif "min" in acc and "max" in acc:                              # compressed (no plain view): its box's corners
+                    c0, c1 = acc["min"], acc["max"]
+                    v = np.array([[x, y, z] for x in (c0[0], c1[0]) for y in (c0[1], c1[1]) for z in (c0[2], c1[2])], float)
+                else:
                     continue
-                c0, c1 = np.asarray(acc["min"], float), np.asarray(acc["max"], float)
-                corners = np.array([[x, y, z, 1.0] for x in (c0[0], c1[0]) for y in (c0[1], c1[1]) for z in (c0[2], c1[2])])
-                w = (m @ corners.T).T[:, :3]
+                if not len(v):
+                    continue
+                w = v @ m[:3, :3].T + m[:3, 3]
                 lo, hi = np.minimum(lo, w.min(axis=0)), np.maximum(hi, w.max(axis=0))
         for c in nd.get("children", []):
             walk(c, m)
@@ -234,9 +240,10 @@ def model_bounds(glb: Path) -> tuple[np.ndarray, np.ndarray]:
 
 def footprint(relief: Path, mask: np.ndarray, others: np.ndarray, floor_y: float | None) -> dict[str, float]:
     """E30's reading (D120): the thing's front edge on the relief — the mask's lowest rows' points in the picture's point map (the relief's
-    vertices by their UVs), on a floor plane fitted to the picture's lowest rows outside every thing (a thing's own lowest pixels float a
-    few centimetres), and the edge's width there. In the relief's frame (the picture camera at the origin looking down −Z)."""
-    from .relief import glb_read, mesh_arrays
+    vertices by their UVs), on the floor fitted to the picture's lowest rows outside every thing (`relief.floor_fit`, the plane the set is
+    laid level by; a thing's own lowest pixels float a few centimetres), and the edge's width there. In the relief's frame (the picture
+    camera at the origin looking down −Z)."""
+    from .relief import floor_fit, glb_read, mesh_arrays
     doc, binary = glb_read(relief)
     pos, uv, _ = mesh_arrays(doc, binary)
     if uv is None:
@@ -245,11 +252,9 @@ def footprint(relief: Path, mask: np.ndarray, others: np.ndarray, floor_y: float
     px = np.clip((uv[:, 0] * W).astype(int), 0, W - 1)
     py = np.clip((uv[:, 1] * H).astype(int), 0, H - 1)
     ok = np.isfinite(pos).all(axis=1)
-    floor = ok & ~others[py, px] & (py > 0.62 * H)
-    if floor.sum() >= 50:
-        A = np.c_[pos[floor, 0], pos[floor, 2], np.ones(int(floor.sum()))]
-        plane, *_ = np.linalg.lstsq(A, pos[floor, 1], rcond=None)
-        floor_at = lambda x, z: float(plane[0] * x + plane[1] * z + plane[2])  # noqa: E731
+    plane = floor_fit(pos, uv, keep=~others[py, px])                     # SC3d: the levelling's own fit, the things left out
+    if plane:
+        floor_at = lambda x, z: float(plane["a"] * x + plane["b"] * z + plane["c"])  # noqa: E731
     else:
         level = float(floor_y if floor_y is not None else np.percentile(pos[ok, 1], 2))
         floor_at = lambda x, z: level  # noqa: E731
@@ -265,22 +270,63 @@ def footprint(relief: Path, mask: np.ndarray, others: np.ndarray, floor_y: float
     fy = floor_at(fx, fz)
     width = float(np.percentile(p[bottom, 0], 95) - np.percentile(p[bottom, 0], 5))
     height = float(np.percentile(p[:, 1], 97)) - fy
-    return {"x": fx, "y": fy, "z": fz, "width": max(0.05, width), "height": max(0.05, height), "points": int(inside.sum())}
+    return {"x": fx, "y": fy, "z": fz, "width": max(0.05, width), "height": max(0.05, height), "points": int(inside.sum()), "floor": plane}
 
 
-def placement(foot: dict[str, float], lo: np.ndarray, hi: np.ndarray, floor_y: float | None) -> dict[str, Any]:
+def carried(foot: dict[str, Any], dst: dict) -> dict[str, Any]:
+    """SC3d: a footprint read on the relief the thing was picked on, carried to the set's relief as it is now (the clean plate's): one
+    camera and one lens, so the two differ by MoGe's scale — the ratio of the camera's heights over their floors — and the edge lands on
+    the new relief's floor. (Read on the clean plate's relief instead, the rows where the thing stood show what the Fill painted there —
+    the floor behind it, or the foot of a wall — and the thing goes back: the rig's crate by 0.45 m.)"""
+    from .relief import floor_height
+    k = floor_height(dst) / floor_height(foot["floor"])
+    x, z = foot["x"] * k, foot["z"] * k
+    return foot | {"x": x, "y": dst["a"] * x + dst["b"] * z + dst["c"], "z": z, "width": foot["width"] * k, "height": foot["height"] * k,
+                   "floor": dst, "carried": k}
+
+
+def placement(foot: dict[str, float], lo: np.ndarray, hi: np.ndarray, floor_y: float | None, level: dict | None = None) -> dict[str, Any]:
     """The stage transform of the model: scaled to the front edge's width, its front at the edge, standing on the floor there. The engine
-    centres a mesh on its own footprint and stands it on y = 0; the set is raised by −floor_y, so the relief's frame is the stage's raised."""
+    centres a mesh on its own footprint and stands it on y = 0; the set is raised by −floor_y and (SC3d) laid level, so the front edge goes
+    through the set's own transform (`relief.to_stage`); the turn is about x, so the stage's −z is still away from the picture camera."""
+    from .relief import to_stage
     size = hi - lo
     s = foot["width"] / max(1e-6, float(size[0]))
     lift = -(floor_y if floor_y is not None else -1.0)
-    return {"pos": [round(foot["x"], 4), round(foot["y"] + lift, 4), round(foot["z"] - float(size[2]) * s / 2, 4)], "rot": [0.0, 0.0, 0.0],
+    edge = to_stage([foot["x"], foot["y"], foot["z"]], lift, level)
+    return {"pos": [round(float(edge[0]), 4), round(float(edge[1]), 4), round(float(edge[2]) - float(size[2]) * s / 2, 4)], "rot": [0.0, 0.0, 0.0],
             "scale": [round(s, 4)] * 3}
 
 
+def stand(catalogue: Any, obj: StageObject, t: SetThing, mesh_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    """A thing's model on the stage: its footprint read on the relief it was picked on (its own front edge), carried to the set's relief
+    as it is now (SC3d: the clean plate's, once the rebuild landed — MoGe reads one room at slightly different scales from the picture
+    and its clean plate, and the prop stands in the frame of the set on the stage), then through the set's lift and levelling. Returns
+    the footprint and the transform."""
+    from .relief import floor_of_glb, levelling
+    cur = catalogue.get(obj.asset_id) if obj.asset_id else None
+    mesh = catalogue.get(mesh_id)
+    if cur is None or mesh is None:
+        raise ValueError("the set's relief, or the model, is not in the Catalogue")
+    own = catalogue.get(t.relief_asset_id) if t.relief_asset_id and t.relief_asset_id != cur.id else None
+    mask = _mask(catalogue, t.mask_asset_id)
+    others = union_mask(catalogue, obj.things)
+    cpath = catalogue.abs_path(cur)
+    dst = floor_of_glb(cpath)
+    foot = footprint(catalogue.abs_path(own), mask, others, t.floor_y) if own is not None else None
+    if foot is not None and foot["floor"] and dst:
+        foot = carried(foot, dst)
+    else:                                                                   # picked on this relief, or a floor missing on either
+        foot = footprint(cpath, mask, others, obj.floor_y)
+    lift = -(obj.floor_y if obj.floor_y is not None else -1.0)
+    level = levelling(dst, lift) if obj.level and dst else None             # the set's own levelling (the store's, from the same fit)
+    lo, hi = model_bounds(catalogue.abs_path(mesh))
+    return foot, placement(foot, lo, hi, obj.floor_y, level)
+
+
 def model_landed(q: Any, job: Any, mesh_id: str) -> None:
-    """A thing's Pixal3D model landed: stood on the relief at the thing's footprint (the relief it was picked on), a mesh on the stage,
-    the thing marked made. Never the job's failure: the model stays in the Catalogue and the library either way."""
+    """A thing's Pixal3D model landed: stood where the thing stood (`stand`), a mesh on the stage, the thing marked made. Never the job's
+    failure: the model stays in the Catalogue and the library either way."""
     st_id, payload = str(job.origin.ref or ""), job.origin.payload or {}
     set_id, thing_id = str(payload.get("set_id") or ""), str(payload.get("thing_id") or "")
     store = StageStore(q.ws)
@@ -289,15 +335,7 @@ def model_landed(q: Any, job: Any, mesh_id: str) -> None:
         t = next((x for x in obj.things if x.id == thing_id), None)
         if t is None:
             raise KeyError(thing_id)
-        relief = q.catalogue.get(t.relief_asset_id) if t.relief_asset_id else None
-        mesh = q.catalogue.get(mesh_id)
-        if relief is None or mesh is None:
-            raise ValueError("the relief it was picked on, or the model, is not in the Catalogue")
-        mask = _mask(q.catalogue, t.mask_asset_id)
-        others = union_mask(q.catalogue, obj.things)
-        foot = footprint(q.catalogue.abs_path(relief), mask, others, t.floor_y)
-        lo, hi = model_bounds(q.catalogue.abs_path(mesh))
-        tf = placement(foot, lo, hi, t.floor_y)
+        foot, tf = stand(q.catalogue, obj, t, mesh_id)
         oid = new_id("msh")
 
         def fn(st: Any, o: Any) -> None:
@@ -306,9 +344,10 @@ def model_landed(q: Any, job: Any, mesh_id: str) -> None:
                 if x.id == thing_id:
                     x.mesh_asset_id, x.object_id = mesh_id, oid
         st = store.edit_picture_set(st_id, set_id, fn)
-        job.result.update({"stage_id": st_id, "object_id": oid, "footprint": {k: round(v, 3) for k, v in foot.items()}, "transform": tf})
+        job.result.update({"stage_id": st_id, "object_id": oid, "footprint": {k: round(v, 3) for k, v in foot.items() if isinstance(v, (int, float))},
+                           "transform": tf})
         job.log_tail.append(f"{t.name} stood on the relief at x {foot['x']:.2f} z {foot['z']:.2f} (the floor {foot['y']:.2f}), {foot['width']:.2f} m wide, "
-                            f"scale {tf['scale'][0]}")
+                            f"scale {tf['scale'][0]}" + (f" (read where it was picked, carried ×{foot['carried']:.3f})" if "carried" in foot else ""))
         q.hub.broadcast("stage.updated", {"id": st.id, "revision": st.revision})
     except Exception as e:  # noqa: BLE001
         job.log_tail.append(f"the model was not placed on the stage: {e}")

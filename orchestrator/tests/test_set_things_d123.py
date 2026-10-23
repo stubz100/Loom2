@@ -18,6 +18,7 @@ from loom2.stages import StageStore
 from test_mesh_d84 import _pin_review
 
 W, H, FOV = 256, 144, 70.0                                                           # E30 ran at 1280: the 7 px erosion costs less there
+PITCH = -6.0                                                                         # SC3d: the rig's room was taken looking down ≈ 6–7°
 
 
 def _glb(path: Path, pos: np.ndarray, uv: np.ndarray | None, idx: np.ndarray, node: dict | None = None) -> None:
@@ -43,20 +44,24 @@ def _glb(path: Path, pos: np.ndarray, uv: np.ndarray | None, idx: np.ndarray, no
                      + struct.pack("<I4s", len(binary), b"BIN\0") + binary)
 
 
-def room_relief(path: Path) -> np.ndarray:
+def room_relief(path: Path, box: bool = True, pitch_deg: float = 0.0, scale: float = 1.0) -> np.ndarray:
     """MoGe's point map of a room as a relief GLB: the floor a metre under the camera, a wall 6 m away, a box (x ±0.4 m, 0.6 m tall) whose
-    front stands 3 m away. Returns the box's mask in picture pixels (what SAM 3 would find)."""
+    front stands 3 m away — the camera pitched `pitch_deg` (down when negative), the points in its own frame as MoGe gives them, at
+    MoGe's `scale`. Returns the box's mask in picture pixels (what SAM 3 would find)."""
     fx = 0.5 / math.tan(math.radians(FOV) / 2)
     fy = fx * W / H
     u, v = np.meshgrid((np.arange(W) + 0.5) / W, (np.arange(H) + 0.5) / H)
     d = np.stack([(u - 0.5) / fx, -(v - 0.5) / fy, -np.ones_like(u)], axis=-1)
-    t = np.full(u.shape, 6.0)                                                          # the back wall (z = −6)
-    t_floor = np.where(d[..., 1] < 0, -1.0 / np.minimum(d[..., 1], -1e-9), np.inf)    # the floor (y = −1)
+    c, s = math.cos(math.radians(pitch_deg)), math.sin(math.radians(pitch_deg))
+    dw = np.stack([d[..., 0], c * d[..., 1] - s * d[..., 2], s * d[..., 1] + c * d[..., 2]], axis=-1)    # the rays in the room
+    t = np.where(dw[..., 2] < 0, -6.0 / np.minimum(dw[..., 2], -1e-9), np.inf)       # the back wall (z = −6)
+    t_floor = np.where(dw[..., 1] < 0, -1.0 / np.minimum(dw[..., 1], -1e-9), np.inf)  # the floor (y = −1)
     t = np.minimum(t, t_floor)
-    at3 = d * 3.0
-    box = (np.abs(at3[..., 0]) <= 0.4) & (at3[..., 1] >= -1.0) & (at3[..., 1] <= -0.4)
-    t = np.where(box, 3.0, t)
-    pos = (d * t[..., None]).reshape(-1, 3)
+    t3 = -3.0 / np.minimum(dw[..., 2], -1e-9)
+    at3 = dw * t3[..., None]
+    hit = (np.abs(at3[..., 0]) <= 0.4) & (at3[..., 1] >= -1.0) & (at3[..., 1] <= -0.4) & box
+    t = np.where(hit, t3, t)
+    pos = (d * t[..., None]).reshape(-1, 3) * scale
     uv = np.stack([u, v], axis=-1).reshape(-1, 2)
     idx = []
     for r in range(H - 1):
@@ -64,7 +69,7 @@ def room_relief(path: Path) -> np.ndarray:
             a = r * W + c
             idx += [a, a + W, a + 1, a + 1, a + W, a + W + 1]
     _glb(path, pos, uv, np.array(idx))
-    return box
+    return hit
 
 
 def test_points_masks_and_cutout(tmp_path: Path):
@@ -88,6 +93,12 @@ def test_footprint_and_placement(tmp_path: Path):
     _glb(cube, c, None, np.array([0, 1, 2, 2, 1, 3]), {"rotation": q})
     lo, hi = set_things.model_bounds(cube)
     assert np.allclose(hi - lo, [0.5, 1.0, 2.0], atol=1e-6)
+    # SC3d: the vertices, not the accessor's box turned — a diamond turned 45° about y is √2 wide (its box turned would read 2√2)
+    gem = tmp_path / "gem.glb"
+    d = np.array([[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]], float)
+    _glb(gem, d, None, np.array([0, 2, 4, 1, 3, 5]), {"rotation": [0.0, math.sin(math.pi / 8), 0.0, math.cos(math.pi / 8)]})
+    glo, ghi = set_things.model_bounds(gem)
+    assert np.allclose(ghi - glo, [math.sqrt(2), 2.0, math.sqrt(2)], atol=1e-5)
     tf = set_things.placement(foot, lo, hi, -1.0)
     s = foot["width"] / 0.5
     assert tf["scale"] == [round(s, 4)] * 3 and tf["rot"] == [0.0, 0.0, 0.0]
@@ -104,18 +115,20 @@ def _project(tmp_path: Path, object_info: dict, monkeypatch):
     Image.new("RGB", (W, H), (200, 190, 170)).save(src)
     pic = rig.catalogue.ingest_file(src, kind="image", move=False, suite="generate")
     rpath = tmp_path / "relief.glb"
-    box = room_relief(rpath)
+    box = room_relief(rpath, pitch_deg=PITCH)
     relief = rig.catalogue.ingest_file(rpath, kind="mesh", move=False, suite="stage", parents=[pic.id], lineage_kind="image-to-set")
     store = StageStore(rig.ws)
     st = store.create("Room")
-    st = store.add_image_set(st.id, relief.id, pic.id, FOV, -1.0)
+    st = store.add_image_set(st.id, relief.id, pic.id, FOV, -1.0, rig.catalogue.abs_path(relief))     # laid level, as the finisher does
     return rig, store, st.id, st.objects[-1].id, pic, relief, box
 
 
 @pytest.mark.asyncio
 async def test_picked_kept_and_made(tmp_path: Path, object_info: dict, monkeypatch):
     """Keep reads the set's document's selection (what a find leaves) as a thing; Make cleans the plate (the Fill → the clean plate → the
-    relief rebuilt from it, the set's picture now the clean plate) and stands the thing's model on the relief at its footprint."""
+    relief rebuilt from it, the set's picture now the clean plate) and stands the thing's model on the relief at its footprint. The room's
+    camera looked down 6°: the rebuilt set is laid level (SC3d), its camera pitched, and the model stands on the stage floor, on the clean
+    relief (where the box stood, its floor)."""
     rig, store, st_id, set_id, pic, relief, box = _project(tmp_path, object_info, monkeypatch)
     try:
         od = set_things.ensure_document(store, rig.docs, rig.catalogue, st_id, set_id)
@@ -131,11 +144,15 @@ async def test_picked_kept_and_made(tmp_path: Path, object_info: dict, monkeypat
         assert set_things.rename_thing(store, st_id, set_id, thing.id, "Big crate").objects[-1].things[0].name == "Big crate"
         lensed = store.replace_image_set(st_id, set_id, "ast_relief_72", 72.0, -1.1)            # a corrected lens: the thing follows the new relief
         assert lensed.objects[-1].things[0].relief_asset_id == "ast_relief_72" and lensed.objects[-1].things[0].floor_y == -1.1
-        store.replace_image_set(st_id, set_id, relief.id, FOV, -1.0)                              # back to the real one for what follows
+        assert lensed.objects[-1].level is None and lensed.objects[-1].transform.rot == [0.0, 0.0, 0.0]          # no relief to level by
+        store.replace_image_set(st_id, set_id, relief.id, FOV, -1.0, None, rig.catalogue.abs_path(relief))      # back to the real one
         prep = set_things.prepare_make(store, rig.docs, rig.catalogue, st_id, set_id, "full")
         (tid, cut), = prep["cutouts"]
         assert tid == thing.id and cut.lineage_kind == "set-thing-cutout" and prep["coverage"] > float(box.mean())        # the Fill's region: grown
         assert (rig.docs.get(od.doc.id).selection > 127).sum() > box.sum()
+        clean_room = tmp_path / "clean.glb"
+        room_relief(clean_room, box=False, pitch_deg=PITCH)                                     # MoGe on the clean plate: the floor where the box stood
+        rig.fake.glb_for = lambda g: clean_room.read_bytes() if any(n.get("class_type") == "MoGeInference" for n in g.values()) else None
         rig.queue.load()
         await rig.queue.start()
         from loom2.origin import JobOrigin
@@ -154,11 +171,16 @@ async def test_picked_kept_and_made(tmp_path: Path, object_info: dict, monkeypat
         obj = next(x for x in st.objects if x.id == set_id)
         assert obj.plate_asset_id == j.result["clean_plate_id"] and obj.asset_id != relief.id                   # rebuilt from the clean plate
         assert rig.catalogue.get(j.result["clean_plate_id"]).lineage_kind == "clean-plate"
+        assert abs(obj.level["pitch_deg"] - PITCH) < 0.3 and obj.transform.rot[0] == pytest.approx(obj.level["pitch_deg"], abs=0.01)   # SC3d
+        assert j2.result["level"] == obj.level and any("laid level" in line for line in j2.log_tail)
+        cam = next(c for c in st.cameras if c.id == obj.plate_camera_id)
+        assert abs(cam.pos[1] - 1.0) < 0.03 and cam.target[1] - cam.pos[1] == pytest.approx(math.sin(math.radians(PITCH)), abs=0.01)   # looking down
         t = obj.things[0]
         mesh = next(x for x in st.objects if x.id == t.object_id)
         assert mesh.kind == "mesh" and mesh.name == "Big crate" and mesh.asset_id == t.mesh_asset_id == j3.result["asset_ids"][0]
         assert abs(mesh.transform.pos[0]) < 0.1 and abs(mesh.transform.pos[1]) < 0.05 and mesh.transform.pos[2] < -2.9      # at the box, on the floor
         assert j3.result["footprint"]["z"] < -2.9 and j3.result["transform"]["scale"][0] > 0
+        assert j3.result["footprint"]["carried"] == pytest.approx(1.0, abs=0.01)                                # read where it was picked
         with pytest.raises(ValueError, match="every thing is made"):
             set_things.prepare_make(store, rig.docs, rig.catalogue, st_id, set_id, "full")
         assert set_things.remove_thing(store, st_id, set_id, thing.id).objects[-1].things == [] or True

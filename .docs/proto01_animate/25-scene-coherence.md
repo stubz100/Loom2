@@ -46,6 +46,7 @@ plan: SC1 the scene outliner with the camera as an object, SC2 the preset panel 
 | **SC3 · a set from an image** (after E30's decision; the first slice built 2026-10-22, §3b) | *Set from an image…* in the Library (a Catalogue image or a Klein still of a place): the relief as a set object (its depth and clay passes from the relief, its plate the image), the cut-out things as props; the camera free within the budget E30 found (±0.25 m / ±5° / orbit ±10° for a Draft shot), the outliner saying when it leaves it. After E30 (D120): the lens shown and editable (MoGe's wobbles), the masked pixels (the sky) a backdrop at the far depth, the sheet for a smooth place and the cut where things stay (both from one MoGe run), the things' models scaled by the width of their front edge and stood on the fitted floor plane, the picture itself as the plate at every camera. | `stages.py`, `engine.ts`, `graphs.py`, `StageParts` | yes | 2 |
 
 | **SC3c · the lens first, the things one by one** (D123, after the author's answers to §4) | **SC3c-1** *From an image…* asks for the lens before the job (prefilled from a Stage still's camera or the prompt's lens; empty = MoGe reads it). **SC3c-2** *Things in the picture…* on the set's row: the picture in a sheet, a click finds a thing (SAM 3 points on the set's own document, a right-click or − marks what is not it), its mask drawn on the picture, kept under a name; the list on the row. **SC3c-3** *Make the things*: the clean plate (Fill under the union of the masks, grown), the relief rebuilt from it at the set's lens, a cut-out per thing → Pixal3D → the model stood on the relief at its footprint (E30's placement on the first relief), each a prop on the stage | `StageParts`, `stageStore`, `stages.py` (the set's things, its document), a `set_things` module (the masks, the cut-outs, the placement), the segment / inpaint / image_to_mesh / image_to_set finishers by origin | SAM 3 seconds a click; the clean plate ≈ 1 min (E28b's Fill); Pixal3D ≈ 4–6 min a thing | 3–4 |
+| **SC3d · a picture set laid level** (what SC3c's rig found) | The floor fitted to the picture's lowest rows the robust way (a seeded RANSAC over near-level planes only, then least squares in a band narrowed to the floor's own noise: the walls, the baseboards and the things in those rows are vertical and never the floor); the set turned about x and raised so that floor is the stage floor, its picture camera pitched to match (the picture still lines up through it); the things stood by the same fit on the set's relief as it is when they land (the clean plate's), through the set's transform; the row says *laid level · the camera 1.9° down* or *as it came* (too little floor, or steeper than 25°) | `relief.py`, `stages.py`, `set_things.py`, the set finisher, `StageParts` | no new job | ½ |
 
 Order: SC1 (the usability the author hit first; no GPU), SC2, E30 → SC3. Each step: its tests, a commit, a rig or headed check, and a
 check row here.
@@ -138,11 +139,28 @@ check row here.
   things found in 2–6 s each (the crate 2.0 %, the table 1.35 %, the small block 2.74 %, the big block 6.58 % of the picture), the clean
   plate 67 s, four Pixal3D models 267–370 s each, all four stood on the relief. Found: the fitted floor rises 0.12 m a metre into the room
   (the photograph's camera looked down ≈ 7°), so the things stand 0–0.19 m above the stage floor where the figures stand — levelling a
-  picture set by its floor (the picture camera pitched to match) is the next step.
+  picture set by its floor (the picture camera pitched to match) is the next step. *(SC3d, below, corrects the reading: the plain
+  least-squares fit was pulled up by the walls and baseboards in those rows — the photograph's camera looked down ≈ 2°, not 7°.)*
 
   | Through the picture camera (the clean plate, the four models) | Beyond the budget (the models in 3D) | The things over the clean picture |
   | --- | --- | --- |
   | ![picture camera](img/25-sc3c-picture-camera.jpg) | ![beyond](img/25-sc3c-beyond-budget.jpg) | ![the sheet](img/25-sc3c-things-sheet.jpg) |
+
+- **2026-10-23 15:55 — SC3d built: a picture set laid level by its floor; the things stand where, and as large as, they stood.** The floor is
+  fitted to the picture's lowest rows the robust way (only near-level planes, then a band narrowed to the floor's own noise), so the
+  walls, the baseboards and the things there no longer pull it; the set is turned about x and raised so that floor is the stage floor,
+  and its picture camera pitched to match (the picture lines up through it as before). The set's row says *laid level · the camera
+  1.2° down*, or *as it came* when the picture shows too little floor or a slope steeper than 25°. Two older errors went with it: a thing's
+  footprint is read on the picture it was picked on and carried to the clean plate's relief (read on the clean plate it went back to
+  the wall — the crate by 0.45 m), and a model is measured by its vertices, not by its box turned upright (that box made turned models
+  float 4–7 cm and stand smaller and further back). Rig (`engine/spikes/sc3d_rig.py`, the real engine): the room at 69.2° laid level
+  at −1.9° in 19 s; two things found in 4 and 2 s; the clean plate 52 s, its relief laid level at −1.21° in 4 s; the crate and the
+  small block modelled in 329 and 308 s; the floor on the stage at 0.000, −0.002, 0.000 and +0.017 m from 2.5 to 5.5 m deep; each prop
+  within 2 mm of the relief's floor under it, the crate at its own 0.80 m width.
+
+  | Through the picture camera (the clean plate, the two models, figures near and deep) | From the side (the relief's floor meets the stage's) | The set's row |
+  | --- | --- | --- |
+  | ![picture camera](img/25-sc3d-picture-camera.jpg) | ![side](img/25-sc3d-side.jpg) | ![row](img/25-sc3d-set-row.jpg) |
 
 ## 4 · Checks for the author
 
@@ -156,6 +174,7 @@ check row here.
 | One Scene: does the grouping (figures, sets, props, stand-ins, meshes, lights, planes, cameras) read better than the flat list did, or should a kind with nothing on the stage hide its header? | |
 | SC3: *From an image…* on one of your own pictures of a place (a Klein still or an import): does the relief read as the place in the viewport, and does the Picture camera frame it as the picture did? Move the camera a little — is the budget line's warning early enough, or too fussy? | |
 | SC3: should the things in the picture be cut out and modelled automatically (one job: the cut, the clean plate, the models), or stay a choice per thing? | |
+| SC3d: a picture set of yours taken looking up or down — do the figures stand on its floor through the picture camera and beside it? |  |
 | SC3c: *Things in the picture…* on one of your pictures — does a click find the thing you meant? Are the models (Pixal3D from one view) close enough to stand in for the things, and do they stand where the things stood? | |
 | SC3b: the figure's shadow on the relief (the room's picture-camera view) — dark enough, too dark? And the picture behind the street: does what shows through the sky and the seams read as the place, or should it be plain? | |
 | E30: the lens — MoGe read 75° from the PNG and 69° from its JPEG. Should a set from an image ask you for the lens (the Klein recipe's camera when the picture is the app's own)? | |

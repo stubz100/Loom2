@@ -2488,6 +2488,7 @@ test('a set from an image (D120, SC3): a Bin picture becomes a relief set on the
   const editor = page.locator('.row-editor.stage-insp')
   await expect(editor).toContainText(/° wide · Picture camera/)                                                               // the default lens: the fake's relief has no UVs
   await expect(editor.locator('[data-budget]')).toHaveAttribute('data-budget', 'within')
+  await expect(editor.locator('[data-level]')).toHaveText(/^as it came/)                                                     // SC3d: no floor to lay it level by
   await editor.locator('button', { hasText: /^Look through the picture/ }).click()
   await expect(page.locator('canvas.stage-canvas')).toBeVisible()
   type Doc = { objects: { id: string; plate_asset_id?: string | null; kind: string; preset: string | null; locked: boolean; asset_id: string | null; plate_camera_id: string | null; lens_deg: number | null; floor_y: number | null }[]; cameras: { id: string; name: string; focal_mm: number; pos: number[] }[]; active_camera: string }

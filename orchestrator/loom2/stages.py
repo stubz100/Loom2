@@ -24,6 +24,18 @@ SET_BLOCKS_V1: dict[str, list[tuple[tuple[float, float, float], tuple[float, flo
 Kind = Literal["mannequin", "set", "prop", "plane", "mesh", "light"]
 
 
+def _level(obj: "StageObject", cam: "StageCamera | None", relief_path: Path | None) -> None:
+    """SC3d: a picture set laid level by the floor fitted to its relief (`relief.level_of_glb`, at the lift the engine gives it) — the set
+    turned and raised (its transform), its picture camera where the picture was taken in that frame (pitched as the photograph's camera
+    was); without a relief, too little floor or too steep a one, as it came (the floor's lift alone)."""
+    from .relief import level_of_glb
+    level = level_of_glb(relief_path, -(obj.floor_y if obj.floor_y is not None else -1.0)) if relief_path is not None else None
+    obj.transform = Transform(pos=list(level["pos"]), rot=list(level["rot"]), scale=[1.0, 1.0, 1.0]) if level else Transform()
+    obj.level = {k: level[k] for k in ("pitch_deg", "roll_deg")} | {"residual": level["fit"]["residual"]} if level else None
+    if cam is not None and level:
+        cam.pos, cam.target = list(level["camera"]["pos"]), list(level["camera"]["target"])
+
+
 class StaleStage(ValueError):
     """A PUT based on an older revision than the document's (the API answers 409; the client reloads and re-applies)."""
 
@@ -93,6 +105,7 @@ class StageObject(BaseModel):
     plate_asset_id: str | None = None              # SC3: the picture the relief was made from (the plate at the picture's camera)
     floor_y: float | None = None                   # SC3: where the relief's floor sits under the picture's camera (metres, negative); the set is raised by it
     plate_camera_id: str | None = None             # SC3: the camera that took the picture, added with the set
+    level: dict[str, float] | None = None          # SC3d: how the picture set was laid level (pitch, the sideways tilt left, the fit's residual)
     things: list[SetThing] = Field(default_factory=list)   # D123 (SC3c): the things the author picked on the picture
     things_document_id: str | None = None          # D123: the set's own document (its picture), where SAM 3 finds them and the plate is cleaned
 
@@ -241,7 +254,7 @@ class StageStore:
         self.save(st)
         return st
 
-    def add_image_set(self, st_id: str, asset_id: str, plate_id: str, lens_deg: float | None, floor_y: float | None) -> Stage:
+    def add_image_set(self, st_id: str, asset_id: str, plate_id: str, lens_deg: float | None, floor_y: float | None, relief_path: Path | None = None) -> Stage:
         """SC3 (D120): the relief as a locked set standing on the floor (raised by the floor's depth under the picture's camera) and the
         picture's camera at that height looking down −Z with the lens, made the active one — the shot the picture already is."""
         from .relief import DEFAULT_LENS_DEG, focal_mm_for
@@ -256,6 +269,7 @@ class StageStore:
                           focal_mm=focal_mm_for(lens), sensor_mm=36.0)
         obj = StageObject(id=new_id("set"), kind="set", name=f"Picture set{suffix}", preset="image", asset_id=asset_id, plate_asset_id=plate_id,
                           lens_deg=round(lens, 2), floor_y=round(floor, 3), plate_camera_id=cam.id, locked=True, colour_id=(len(st.objects) % 12) + 1)
+        _level(obj, cam, relief_path)
         st.objects.append(obj)
         st.cameras.append(cam)
         st.active_camera = cam.id
@@ -265,7 +279,8 @@ class StageStore:
         self.save(st)
         return st
 
-    def replace_image_set(self, st_id: str, set_id: str, asset_id: str, lens_deg: float | None, floor_y: float | None, plate_id: str | None = None) -> Stage:
+    def replace_image_set(self, st_id: str, set_id: str, asset_id: str, lens_deg: float | None, floor_y: float | None, plate_id: str | None = None,
+                          relief_path: Path | None = None) -> Stage:
         """SC3b (D120): a picture set rebuilt in place — a corrected lens gives a new relief: the set takes it, its lens and its floor, and its
         picture camera goes back to where the picture was taken (the floor's height, looking down −Z, the new lens). The old relief stays in
         the Catalogue. KeyError for a missing stage or set; ValueError for an object that is not a picture set."""
@@ -290,6 +305,7 @@ class StageStore:
         cam = next((c for c in st.cameras if c.id == obj.plate_camera_id), None)
         if cam is not None:
             cam.pos, cam.target, cam.focal_mm, cam.roll = [0.0, round(-floor, 3), 0.0], [0.0, round(-floor, 3), -1.0], focal_mm_for(lens), 0.0
+        _level(obj, cam, relief_path)
         st.revision += 1
         st.updated_at = utc_now()
         check(st)

@@ -9457,6 +9457,10 @@ export interface components {
             kind: "mannequin" | "set" | "prop" | "plane" | "mesh" | "light";
             /** Lens Deg */
             lens_deg: number | null;
+            /** Level */
+            level: {
+                [key: string]: number;
+            } | null;
             light: components["schemas"]["LightSpec"] | null;
             /**
              * Locked

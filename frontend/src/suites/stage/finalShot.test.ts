@@ -5,7 +5,7 @@ import type { StageDoc, StageObject } from '../../api/types'
 import { batchCount, framesAt, planFinal } from './finalShot'
 
 const obj = (id: string, kind: StageObject['kind'], extra: Partial<StageObject> = {}): StageObject => ({ id, kind, name: id, preset: null, asset_id: null, transform: { pos: [0, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] },
-  parent: null, locked: false, visible: true, colour_id: 1, pose: null, billboard: false, profile_id: null, version: null, body: null, detail: null, path: null, shadow_proxy: null, light: null, lens_deg: null, plate_asset_id: null, floor_y: null, plate_camera_id: null, things: [], things_document_id: null, ...extra })
+  parent: null, locked: false, visible: true, colour_id: 1, pose: null, billboard: false, profile_id: null, version: null, body: null, detail: null, path: null, shadow_proxy: null, light: null, lens_deg: null, plate_asset_id: null, floor_y: null, plate_camera_id: null, level: null, things: [], things_document_id: null, ...extra })
 const doc = (objects: StageObject[], range = { start: 0, end: 48 }) => ({ objects, range }) as unknown as StageDoc
 
 describe('D111 (PS5a) planning the final', () => {

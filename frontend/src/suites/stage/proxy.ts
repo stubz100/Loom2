@@ -49,7 +49,7 @@ export function bindProxy(model: THREE.Object3D, J: Record<Joint, THREE.Object3D
   const right = J.r_shoulder.getWorldPosition(new THREE.Vector3()).sub(J.l_shoulder.getWorldPosition(new THREE.Vector3())).setY(0).normalize()
   // the model: its own transforms baked, scaled to the figure's height, its wider horizontal axis onto the figure's left-right axis
   model.updateMatrixWorld(true)
-  const box = new THREE.Box3().setFromObject(model)
+  const box = new THREE.Box3().setFromObject(model, true)                  // SC3d: its vertices (a turned box would overstate the height)
   const size = box.getSize(new THREE.Vector3()), mid = box.getCenter(new THREE.Vector3())
   const s = (topY - floorY) / Math.max(1e-6, size.y)
   const wideAxis = size.x >= size.z ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1)

@@ -534,7 +534,7 @@ export class StageEngine {
         const e = this.entries.get(id)
         if (!e || e.body !== group || this.disposed) return
         const model = gltf.scene
-        const box = new THREE.Box3().setFromObject(model)
+        const box = new THREE.Box3().setFromObject(model, true)                 // SC3d: its vertices, not its boxes turned (D109's upright turn inflates those)
         const c = box.getCenter(new THREE.Vector3())
         model.position.sub(new THREE.Vector3(c.x, box.min.y, c.z))             // centred on its footprint, standing on the floor
         model.traverse((m) => { m.userData.stageId = id; const mm = m as THREE.Mesh; if (mm.isMesh) { mm.castShadow = true; mm.receiveShadow = true } })   // D109: the model arrives after build() set the body's shadow flags

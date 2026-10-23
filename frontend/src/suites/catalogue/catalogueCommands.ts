@@ -12,6 +12,7 @@ import { activeCatalogue } from './catalogueContext'
 import { catView } from './viewKeys'
 import { allPlaced } from './placement'
 import type { JobOrigin } from '../../api/types'
+import { originFor } from '../../store/origin'
 import { selectedOrPrimary, useGenerateResults, type GroupMode } from './catalogueStore'
 import { addToCastMenu, castTarget, madeFor } from '../story/addToCast'
 import { profilesForMentions, useStory } from '../story/storyStore'
@@ -28,7 +29,7 @@ const focusField = (id: string) => setTimeout(() => document.getElementById(id)?
 /** D66: where a re-run / variations from the grid was asked for — Generate's results grid, or the Catalogue pane on screen (a group page
  *  names its group in `ref`; elsewhere `ref` is null and the payload keeps the folder, so "Go to origin" can return to it). */
 const originHere = (): JobOrigin => {
-  if (activeCatalogue.current === useGenerateResults) return { suite: 'generate', surface: 'results' }
+  if (activeCatalogue.current === useGenerateResults) return originFor('generate', { suite: 'generate', surface: 'results' })   // D125 (I4): Image's For chip
   const q = cat().q
   return { suite: 'catalogue', surface: 'group', ref: q.group_id ?? null, payload: { folder: q.folder } }
 }

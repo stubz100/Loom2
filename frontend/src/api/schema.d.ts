@@ -1239,7 +1239,8 @@ export interface paths {
         };
         /**
          * Final Lines
-         * @description D118 (AE4b): the voiced lines of the Dialogue nodes bound to the final's Story shot, each with the layer its speaker performs.
+         * @description D118 (AE4b): the voiced lines of the Dialogue nodes bound to the final's Story shot, each with the layer its speaker performs. D125
+         *     (A1): a final made without one reads the shots whose current version points at its stage and camera (where its takes go).
          */
         get: operations["final_lines_finals__fid__lines_get"];
         put?: never;
@@ -3063,7 +3064,8 @@ export interface paths {
         put?: never;
         /**
          * Shot Finalize
-         * @description The version becomes final when its clip is at the project format's size (fps is conformed at export, D27); 422 says why not.
+         * @description The version becomes final when it has its clip, at any size (D125: approval is the author's decision; the export's checklist notes
+         *     a clip below the format); 422 says why not.
          */
         post: operations["shot_finalize_story_shots__sid__versions__vid__finalize_post"];
         delete?: never;
@@ -5178,6 +5180,8 @@ export interface components {
             schema_version: number;
             /** Shot Id */
             shot_id: string | null;
+            /** Shot Version */
+            shot_version: string | null;
             /** Size */
             size: {
                 [key: string]: number;
@@ -5218,6 +5222,8 @@ export interface components {
             rate?: number;
             /** Shot Id */
             shot_id?: string | null;
+            /** Shot Version */
+            shot_version?: string | null;
             /** Size */
             size: {
                 [key: string]: number;

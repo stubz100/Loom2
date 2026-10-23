@@ -528,16 +528,33 @@ def _panel_thumb(q: JobQueue, name: str, asset_id: str) -> None:
         q.hub.broadcast("story.changed", {"kind": "panels", "revision": 0, "error": str(e)})
 
 
-def _stage_result(q: JobQueue, stage_id: str, camera_id: str, kind: str, ref_id: str, run: dict[str, Any] | None = None, skip: str | None = None) -> None:
-    """17 §3c: a stage camera's frame or clip is recorded as a take of the shots that point at the camera (their slot filled when empty)."""
+def _stage_result(q: JobQueue, stage_id: str, camera_id: str, kind: str, ref_id: str, run: dict[str, Any] | None = None, skip: str | None = None,
+                  use: bool | None = None) -> None:
+    """17 §3c: a stage camera's frame or clip is recorded as a take of the shots that point at the camera (their slot filled when empty;
+    `use` False: never by itself)."""
     from ..stages import StageStore
     from ..story import StoryStore
     try:
         st = StageStore(q.ws).get(stage_id)
-        for s in StoryStore(q.ws).record_stage_result(stage_id, camera_id, kind, ref_id, st.revision if st else None, run, skip):
+        for s in StoryStore(q.ws).record_stage_result(stage_id, camera_id, kind, ref_id, st.revision if st else None, run, skip, use=use):
             q.hub.broadcast("story.changed", {"kind": "shot", "id": s.id, "revision": s.revision})
     except Exception as e:                                                                      # never the job's failure
         q.hub.broadcast("story.changed", {"kind": "shot", "id": None, "revision": 0, "error": str(e)})
+
+
+def _final_take(q: JobQueue, f: Any, clip_id: str, use: bool | None, run: dict[str, Any] | None) -> None:
+    """D125 (A1): a final's assembled or rendered clip as a take — of the Story shot version it was made for (the For chip's; a final made
+    before D125 names no version: the shot's current one), else of the shots whose current open version points at its stage and camera, as
+    a stage clip is (17 §3c). WB2: the take needs the version — `for_shot_target` takes a shot id and a version, never one alone."""
+    if not f.shot_id:
+        _stage_result(q, f.stage_id, f.camera_id, "clip", clip_id, run, use=use)
+        return
+    version = f.shot_version
+    if not version:
+        from ..story import StoryStore
+        s = StoryStore(q.ws).shot(f.shot_id)
+        version = s.current if s else None
+    _shot_takes(q, {"shot_id": f.shot_id, "version": version}, "clip", [clip_id], use, run)
 
 
 async def identity_task(q: JobQueue, clip_id: str) -> None:
@@ -1002,8 +1019,7 @@ async def run_assemble(job: JobRecord, recipe: AssembleFinal, q: JobQueue) -> bo
     q.hub.broadcast("clip.ready", {"clip_id": rec.id, "asset_id": asset.id, "job_id": job.id, "frames": rec.frames, "fps": rec.fps, "w": rec.w, "h": rec.h,
                                    "origin": job.origin.model_dump() if job.origin else None})
     q.hub.broadcast("final.updated", {"id": f.id, "revision": f.revision})
-    if f.shot_id:                                                                   # the take on the Story shot it was made for
-        await asyncio.to_thread(_shot_takes, q, {"shot_id": f.shot_id}, "clip", [rec.id], False, _run(job, recipe, q))
+    await asyncio.to_thread(_final_take, q, f, rec.id, False, _run(job, recipe, q))      # a draft composite: a take, never the clip by itself
     return True
 
 
@@ -1096,8 +1112,7 @@ async def run_comp_render(job: JobRecord, recipe: CompRender, q: JobQueue) -> bo
     q.hub.broadcast("clip.ready", {"clip_id": rec.id, "asset_id": asset.id, "job_id": job.id, "frames": rec.frames, "fps": rec.fps, "w": rec.w, "h": rec.h,
                                    "origin": job.origin.model_dump() if job.origin else None})
     q.hub.broadcast("final.updated", {"id": f.id, "revision": f.revision})
-    if f.shot_id:                                                                   # the take on the Story shot it was made for
-        await asyncio.to_thread(_shot_takes, q, {"shot_id": f.shot_id}, "clip", [rec.id], False, _run(job, recipe, q))
+    await asyncio.to_thread(_final_take, q, f, rec.id, None, _run(job, recipe, q))       # the finished shot: it fills an empty clip slot
     return True
 
 

@@ -446,13 +446,16 @@ export const useGenerate = create<GenerateState>()(
           if (seq === anglePreviewSeq) set({ anglePreview: null, anglePreviewError: (e as ApiError).detail ?? String(e) })
         }
       },
-      generateAngle: async (origin = ANGLE_ORIGIN) => {
+      generateAngle: async (asked) => {
+        const inImage = ['generate', 'edit'].includes(useSession.getState().ui.suite)   // D125 (I4): opened inside Image, the For chip's shot gets it
+        const origin = asked ?? (inImage ? originFor('generate', ANGLE_ORIGIN) : ANGLE_ORIGIN)
         const s = useSession.getState()
         try {
           const jobs = await unwrap(http.POST('/jobs', { body: { recipe: reangleRecipe(get().angle), stage: false, origin } }))
           const batch = jobs.jobs[0] ? batchOf(jobs.jobs[0]) : null
           set({ lastBatch: batch, show: 'batch' })
-          s.toast(`Queued ${jobs.jobs.length} new angle${jobs.jobs.length > 1 ? 's' : ''}`, 'success')
+          const f = origin.surface === FOR_SHOT ? useMakeFor.getState().generate : null
+          s.toast(`Queued ${jobs.jobs.length} new angle${jobs.jobs.length > 1 ? 's' : ''}${f ? ` for ${forLabel(f)} — they land as its takes` : ''}`, 'success')
           await s.refreshAll()
           return jobs.jobs
         } catch (e) { s.toast(`New angle failed: ${(e as ApiError).detail ?? e}`, 'error'); return null }

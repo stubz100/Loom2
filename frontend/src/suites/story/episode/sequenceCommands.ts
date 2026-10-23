@@ -32,6 +32,17 @@ export function laneChecklist(): { i: number; what: string }[] {
   return out
 }
 
+/** D125 (#6): the lane's clips below the project format (beyond the video models' 32 px grid) — a delivery note under the checklist, never a
+ *  reason for the export to ask (no video route renders the format; Resolve scales them). The distinct sizes, largest first. */
+export function laneBelowFormat(): { count: number; sizes: string[] } {
+  const lane = sq().lane; const fmt = useSession.getState().project?.format
+  if (!lane || !fmt) return { count: 0, sizes: [] }
+  const byId = new Map(an().clips.map((c) => [c.id, c]))
+  const small = lane.clips.map((c) => byId.get(c.source)).filter((c): c is NonNullable<typeof c> => !!c && (Math.abs(c.w - fmt.width) > 32 || Math.abs(c.h - fmt.height) > 32))
+  const sizes = [...new Set(small.sort((a, b) => b.w * b.h - a.w * a.h).map((c) => `${c.w}×${c.h}`))]
+  return { count: small.length, sizes }
+}
+
 /** The export goes on after a look at the checklist when something on the lane is not a final shot (loom R153 kept advisory). */
 async function exportChecked(format: 'edl' | 'fcpxml' | 'srt'): Promise<void> {
   const issues = laneChecklist()

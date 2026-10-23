@@ -808,12 +808,9 @@ export const useStory = create<StoryState>()((set, get) => {
     },
     finalizeWhy: (v) => {
       if (v.state === 'final') return null
-      if (!v.clip_id) return 'no clip yet — animate the shot (Animate: Performance, or a stage clip in Clay) and use the result as its clip'
-      const c = get().clipsById[v.clip_id]
-      const fmt = useSession.getState().project?.format
-      if (!c) return `clip ${v.clip_id} is not loaded`
-      if (fmt && (Math.abs(c.w - fmt.width) > 32 || Math.abs(c.h - fmt.height) > 32)) return `Draft ${c.w}×${c.h} — the format is ${fmt.width}×${fmt.height}; render Full in Animate`   // within the video grids (11 §3c)
-      return null
+      if (!v.clip_id) return 'no clip yet — Make clip ▸, then use a take as its clip'
+      if (!get().clipsById[v.clip_id]) return `clip ${v.clip_id} is not loaded`
+      return null                                                         // D125 (#6): any size — a clip below the format is the export checklist's note
     },
     shotStale: (v) => {
       if (!v.stage_id || v.stage_revision === null || v.stage_revision === undefined) return false

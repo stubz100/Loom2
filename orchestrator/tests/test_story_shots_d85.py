@@ -1,5 +1,5 @@
 """17 (D85) · SY2 Shots: shot records with versions (a stage camera and / or a clip as the source, takes, the frame and the one clip), the
-finalize gate (the project format's size), copies, the stage link (a camera's frame / clip becomes a take of the shots pointing at it),
+finalize rule (a clip, at any size since D125), copies, the stage link (a camera's frame / clip becomes a take of the shots pointing at it),
 the routes end to end and the finisher hook on the fake engine."""
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from loom2.api import create_app  # noqa: E402
 from loom2.clips import ClipStore  # noqa: E402
 from loom2.config import AppState  # noqa: E402
 from loom2.stages import StageStore  # noqa: E402
-from loom2.story import Shot, ShotVersion, StaleShot, StoryStore, check_shot, finalize_reason  # noqa: E402
+from loom2.story import Shot, ShotVersion, StaleShot, StoryStore, below_format, check_shot, finalize_reason  # noqa: E402
 from loom2.workspace import Workspace  # noqa: E402
 
 from test_groups_d34 import _png  # noqa: E402
@@ -42,10 +42,10 @@ def test_invariants_and_the_gate():
     assert "no clip yet" in finalize_reason(v, None, None, 1920, 1080)
     v = ShotVersion(id="v1", clip_id="clp")
     assert finalize_reason(v, None, None, 1920, 1080) == "clip clp is gone"
-    assert finalize_reason(v, 1024, 576, 1920, 1080) == "Draft 1024×576 — the format is 1920×1080; render Full in Animate"
+    assert finalize_reason(v, 1024, 576, 1920, 1080) is None                     # D125: any size — approval is the author's decision
     assert finalize_reason(v, 1920, 1080, 1920, 1080) is None
-    assert finalize_reason(v, 1920, 1088, 1920, 1080) is None and finalize_reason(v, 1920, 1056, 1920, 1080) is None   # the models' grids; the export crops
-    assert finalize_reason(v, 1280, 704, 1920, 1080) is not None
+    assert below_format(1024, 576, 1920, 1080) and below_format(1280, 704, 1920, 1080)   # the export's delivery note
+    assert not below_format(1920, 1088, 1920, 1080) and not below_format(1920, 1056, 1920, 1080)   # the models' grids; the export crops
     assert finalize_reason(ShotVersion(id="v1", state="final"), None, None, 1920, 1080) is None
 
 
@@ -76,10 +76,8 @@ def test_store_create_take_copy_finalize_delete(tmp_path: Path):
         st.patch_shot(s.id, {"revision": s.revision, "name": "x"})
     with pytest.raises(ValueError):
         st.patch_shot(s.id, {"revision": s2.revision, "versions": [{"id": "v1", "stage_id": None}]})     # a camera without its stage
-    # finalize: the gate reads the clip's size against the format
-    with pytest.raises(ValueError, match="Draft 640×360"):
-        st.finalize_shot(s.id, "v1", (640, 360), (1920, 1080))
-    s3 = st.finalize_shot(s.id, "v1", (1920, 1080), (1920, 1080))
+    # finalize: D125 (#6) any size — a draft clip is markable (the export's checklist notes the size)
+    s3 = st.finalize_shot(s.id, "v1", (640, 360), (1920, 1080))
     assert s3.version().state == "final" and s3.version().finalized_at
     assert st.finalize_shot(s.id, "v1", (1920, 1080), (1920, 1080)).revision == s3.revision                      # twice is a no-op
     with pytest.raises(ValueError, match="final"):
@@ -122,14 +120,12 @@ def test_routes_shots(tmp_path: Path):
         s = cl.post("/story/shots", json={"name": "Gate", "stage_id": stg["id"], "camera_id": cam, "frame_asset_id": img}).json()
         assert s["versions"][0]["stage_revision"] == stg["revision"] and s["versions"][0]["frame_asset_id"] == img and s["versions"][0]["takes"][0]["id"] == img
         assert cl.get("/story/shots").json()["items"][0]["id"] == s["id"] and cl.get(f"/story/shots/{s['id']}").json()["name"] == "Gate"
-        # a take: a draft clip; finalize refused with the reason; a full-size clip; finalize ok
+        # a take: a draft clip, then a full-size one used; finalize ok (D125: at any size — the draft would pass too, as the store test shows)
         small = _clip(ws, tmp_path, 640, 360)
         r = cl.post(f"/story/shots/{s['id']}/versions/v1/take", json={"kind": "clip", "id": small.id})
         assert r.status_code == 200 and r.json()["versions"][0]["clip_id"] == small.id
         assert cl.post(f"/story/shots/{s['id']}/versions/v1/take", json={"kind": "clip", "id": "clp_nope"}).status_code == 422
         assert cl.post(f"/story/shots/{s['id']}/versions/v1/take", json={"kind": "image", "id": "ast_nope"}).status_code == 422
-        r = cl.post(f"/story/shots/{s['id']}/versions/v1/finalize")
-        assert r.status_code == 422 and "640×360" in r.json()["detail"] and "1920×1080" in r.json()["detail"]
         big = _clip(ws, tmp_path, 1920, 1080)
         cl.post(f"/story/shots/{s['id']}/versions/v1/take", json={"kind": "clip", "id": big.id, "use": True})
         r = cl.post(f"/story/shots/{s['id']}/versions/v1/finalize")

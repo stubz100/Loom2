@@ -326,17 +326,24 @@ def check_shot(s: Shot) -> None:
 FORMAT_GRID = 32                                  # the video models' size grids (Wan ×16, LTX ×32, 11 §3c): a Full clip is 1920×1088 or 1920×1056
 
 
+def below_format(clip_w: int, clip_h: int, fmt_w: int, fmt_h: int) -> bool:
+    """A clip smaller than the project format beyond the video models' grid (11 §3c: LTX Full is 1920×1088 → 1080, the export crops) —
+    D125: a delivery note of the export's checklist, not a reason to refuse *Mark final*."""
+    return abs(clip_w - fmt_w) > FORMAT_GRID or abs(clip_h - fmt_h) > FORMAT_GRID
+
+
 def finalize_reason(v: ShotVersion, clip_w: int | None, clip_h: int | None, fmt_w: int, fmt_h: int) -> str | None:
-    """Why the version cannot be finalized, or None (17 §3c: a clip at the project format's size — within the video models' grid, the
-    export crops or scales the last pixels (11 §3c: LTX Full is 1920×1088 → 1080); fps is conformed at export, D27)."""
+    """Why the version cannot be marked final, or None. D125 (#6): approval is the author's decision at any size — the version needs its
+    clip, and a clip below the project format is the export checklist's note (`below_format`), not a refusal: no video route renders the
+    format (Wan HD 1280×720, LTX HD 1280×704, finals at the pose-driven model's size), so the old size gate left nothing to approve. fps
+    is conformed at export (D27). `fmt_w` / `fmt_h` stay in the signature for the callers."""
+    del fmt_w, fmt_h
     if v.state == "final":
         return None
     if not v.clip_id:
-        return "no clip yet — animate the shot (Stage · Shot or Animate) and use the result as its clip"
+        return "no clip yet — Make clip ▸, then use a take as its clip"
     if clip_w is None or clip_h is None:
         return f"clip {v.clip_id} is gone"
-    if abs(clip_w - fmt_w) > FORMAT_GRID or abs(clip_h - fmt_h) > FORMAT_GRID:
-        return f"Draft {clip_w}×{clip_h} — the format is {fmt_w}×{fmt_h}; render Full in Animate"
     return None
 
 
@@ -804,15 +811,16 @@ class _ShotMixin:
         return True
 
     def record_stage_result(self, stage_id: str, camera_id: str, kind: str, ref_id: str, stage_revision: int | None,
-                            run: dict[str, Any] | None = None, skip: str | None = None) -> list[Shot]:
+                            run: dict[str, Any] | None = None, skip: str | None = None, use: bool | None = None) -> list[Shot]:
         """A stage camera's result (ST3's frame, ST4's clip) becomes a take of every shot whose current open version points at that
         camera — and its frame / clip when that slot is still empty (17 §3c: ST4's "Story L3 link"). RC0: with `run` ({recipe, job_id,
-        seconds}), the job is recorded on the version's recipe too."""
+        seconds}), the job is recorded on the version's recipe too. `use` False: a take that never fills the slot by itself (a final's
+        assembly, D125)."""
         out = []
         for s in self.shots():
             v = s.version()
             if v.state == "open" and v.stage_id == stage_id and v.camera_id == camera_id and s.id != skip:   # skip: the shot the job was made for records it itself
-                s = self.add_take(s.id, v.id, kind, ref_id, use=None, stage_revision=stage_revision)
+                s = self.add_take(s.id, v.id, kind, ref_id, use=use, stage_revision=stage_revision)
                 if run is not None:
                     s = self.record_run(s.id, v.id, run["recipe"], outputs=[ref_id], job_id=run.get("job_id"), seconds=run.get("seconds"),
                                         stage_id=stage_id, stage_revision=stage_revision) or s

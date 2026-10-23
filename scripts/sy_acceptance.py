@@ -2,7 +2,7 @@
 coverage cell on D78's clay model, Klein 9B) → the candidates on the version's page with their cells → ≥ 25 added to the reference set
 with every shot-size row covered → Lock (the album refuses) → `@Mara` resolves to the locked version with the hero first, and a Generate
 job with the mention records the stamp. SY2 (item 3): a stage with a camera → "New shot from this camera" → the camera's clay frame
-arrives on the shot's v1 as its frame (the finisher's link) → a draft clip is refused by the gate with the reason, a Full-size clip
+arrives on the shot's v1 as its frame (the finisher's link) → a draft clip is no longer refused (D125: any size), a Full-size clip
 (1920×1080 → the model's grid) used as the clip is accepted → final → the stage moved → stale. SY5 (17 §12, the alpha): `world` (item 1:
 two styles, a Generate job with style B stamps `style_id` and appends the fragment), `durability` inside SY1 (item 6: the orchestrator
 killed mid-Expand and relaunched → the queue resumes paused with the rest queued, the records reopen at their revisions, release →
@@ -352,7 +352,7 @@ def sy1(cdp, hero, caps, a, check, rows, failures, proc: dict | None = None) -> 
 
 
 def sy2(cdp, hero, check, rows, failures, ctx: dict | None = None) -> None:
-    """17 §12 item 3: a stage camera → a shot; the clay frame lands on it; the gate refuses a draft clip and accepts a Full one; stale after a move."""
+    """17 §12 item 3: a stage camera → a shot; the clay frame lands on it; a draft clip is markable (D125: any size), a Full one is marked final; stale after a move."""
     fmt = api("GET", "/project")["format"]
     st = api("POST", "/stages", {"name": "SY2 gate"})
     cam = {**st["cameras"][0], "name": "Camera 1", "pos": [0.4, 1.5, 4.2], "target": [0.0, 1.0, 0.0], "focal_mm": 35}
@@ -381,7 +381,7 @@ def sy2(cdp, hero, check, rows, failures, ctx: dict | None = None) -> None:
     frame = j["result"]["asset_ids"][0]
     s2 = api("GET", f"/story/shots/{shot['id']}")
     check(s2["versions"][0]["frame_asset_id"] == frame and [t["id"] for t in s2["versions"][0]["takes"]] == [frame], "the frame landed on the shot's v1 as its frame and first take (the finisher's link)")
-    # a draft clip → used as the clip → the gate refuses with the reason; a Full-size LTX clip → accepted
+    # a draft clip → used as the clip → nothing refuses it (D125: any size); a Full-size LTX clip → marked final
     i2v = api("GET", "/capabilities")["defaults"]["i2v"]
     rows_local: dict = {"shot": shot["id"], "frame": frame}
     for label, (w, h), frames in (("draft", (1024, 576), 25), ("full", (fmt["width"], fmt["height"]), 25)):
@@ -402,15 +402,11 @@ def sy2(cdp, hero, check, rows, failures, ctx: dict | None = None) -> None:
         cdp.eval(f"window.__loom2Story.useTake('clip', {json.dumps(clip['id'])}).then(() => true)", timeout=30)
         s3 = api("GET", f"/story/shots/{shot['id']}")
         check(s3["versions"][0]["clip_id"] == clip["id"], f"the {label} clip is the version's clip")
-        code = status_of("POST", f"/story/shots/{shot['id']}/versions/v1/finalize")
-        if label == "draft":
-            check(code == 422, f"finalize refused at {clip['w']}×{clip['h']} (422)")
-            try:
-                api("POST", f"/story/shots/{shot['id']}/versions/v1/finalize")
-            except urllib.error.HTTPError as e:
-                msg = e.read().decode("utf-8")
-                check("render Full" in msg and f"{fmt['width']}×{fmt['height']}" in msg, f"the reason names the format: {msg[:120]}")
+        if label == "draft":                                                  # D125 (#6): not marked here — the Full clip is, below
+            check(cdp.wait_for("!!document.querySelector('.story-strip button[aria-label^=\"Mark final\"]:not([disabled])')", timeout=20, settle=0.5),
+                  f"Mark final is offered at {clip['w']}×{clip['h']} (D125: any size)")
         else:
+            code = status_of("POST", f"/story/shots/{shot['id']}/versions/v1/finalize")
             check(code == 200, f"finalize accepted at {clip['w']}×{clip['h']} (the format {fmt['width']}×{fmt['height']} within the model's grid)")
             s4 = api("GET", f"/story/shots/{shot['id']}")
             check(s4["versions"][0]["state"] == "final" and s4["versions"][0]["clip_id"] == clip["id"], "v1 final with the Full clip")

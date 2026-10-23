@@ -96,6 +96,7 @@ class Final(BaseModel):
     size: dict[str, int]                           # the layers' size: {w, h} (the pose-driven model's, Draft first, D18)
     frames: int                                    # frames per sequence at the rate
     shot_id: str | None = None                     # the Story shot it is made for (its take lands there, PS5e)
+    shot_version: str | None = None                # D125 (A1): that shot's version (the For chip's); None in a final made before it — the current one
     layers: list[FinalLayer] = Field(default_factory=list)
     processing: list[ProcessingLayer] = Field(default_factory=list)   # D118 (AE4e): the passes over the stack below a layer
     clip_id: str | None = None                     # PS5e: the assembled shot

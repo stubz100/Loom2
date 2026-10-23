@@ -310,7 +310,7 @@ const cmds: Command[] = [
   { id: 'story.shot.makeClipStage', scope: 'story', label: 'Make clip on the stage (Animate)', icon: Shapes, placement: ['strip', 'inspector', 'context'], when: () => !!shotTarget()?.stage_id,
     run: () => { const v = shotTarget(); if (v?.stage_id) openStageAt(v.stage_id, v.camera_id, shotSpeakers(shot())) } },   // D95 (AN1, UX0 #21): the speakers bound for the clip too
   // the For chip's verbs in the makers' Panels (D32: a command each)
-  { id: 'gen.for.back', scope: 'generate', label: 'Back to the shot', icon: ArrowLeft, placement: ['panel'], when: () => !!useMakeFor.getState().generate, run: () => goBack('generate') },
+  { id: 'gen.for.back', scope: 'generate', label: 'Back to the shot', icon: ArrowLeft, placement: ['panel'], hint: 'and stop making for it (D125)', when: () => !!useMakeFor.getState().generate, run: () => goBack('generate') },
   { id: 'gen.for.clear', scope: 'generate', label: 'Stop making for the shot (results stay in the Catalogue only)', icon: X, placement: ['panel'], when: () => !!useMakeFor.getState().generate,
     run: () => useMakeFor.getState().set('generate', null) },
   // RC0 (D96): Run stale — the shown version in Story, the For chip's version in Animate (the recipe list under it shows the button)
@@ -318,7 +318,7 @@ const cmds: Command[] = [
     when: () => { const s = shot(); const v = shotVersion(); return !!s && v?.state === 'open' && staleOf(s.id, v.id) > 0 }, run: () => { const s = shot(); const v = shotVersion(); if (s && v) void runStale(s.id, v.id) } },
   { id: 'anim.for.runStale', scope: 'animate', label: 'Run stale steps…', icon: RotateCcw, hint: 'the plan and its cost first; the results become the frame and clip', placement: ['panel'],
     when: () => { const f = useMakeFor.getState().animate; return !!f && staleOf(f.shot_id, f.version) > 0 }, run: () => { const f = useMakeFor.getState().animate; if (f) void runStale(f.shot_id, f.version) } },
-  { id: 'anim.for.back', scope: 'animate', label: 'Back to the shot', icon: ArrowLeft, placement: ['panel'], when: () => !!useMakeFor.getState().animate, run: () => goBack('animate') },
+  { id: 'anim.for.back', scope: 'animate', label: 'Back to the shot', icon: ArrowLeft, placement: ['panel'], hint: 'and stop making for it (D125)', when: () => !!useMakeFor.getState().animate, run: () => goBack('animate') },
   { id: 'anim.for.clear', scope: 'animate', label: 'Stop making for the shot (clips stay in the Catalogue only)', icon: X, placement: ['panel'], when: () => !!useMakeFor.getState().animate,
     run: () => useMakeFor.getState().set('animate', null) },
   { id: 'story.shot.openAnimate', scope: 'story', label: 'Open in Animate', icon: Film, placement: ['strip', 'inspector', 'context'], when: () => !!shotVersion()?.clip_id,

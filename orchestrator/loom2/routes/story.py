@@ -1018,7 +1018,8 @@ async def shot_run_stale(svc: Svc, sid: str, vid: str, body: RunStaleBody):
 
 @router.post("/story/shots/{sid}/versions/{vid}/finalize", response_model=Shot)
 async def shot_finalize(svc: Svc, sid: str, vid: str):
-    """The version becomes final when its clip is at the project format's size (fps is conformed at export, D27); 422 says why not."""
+    """The version becomes final when it has its clip, at any size (D125: approval is the author's decision; the export's checklist notes
+    a clip below the format); 422 says why not."""
     ws, _, _ = svc.require_project()
     store = StoryStore(ws)
     s = await asyncio.to_thread(store.shot, sid)

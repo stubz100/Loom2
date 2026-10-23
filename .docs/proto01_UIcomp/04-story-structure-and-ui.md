@@ -271,7 +271,7 @@ rig run checks that one.
 
 | Wave | Content | Items | Days |
 | --- | --- | --- | --- |
-| **SP0 · Fixes** | the final shot reaches its shot (WB1, WB2), the refusal's wording (WB3), *← Back* ends the context, the chip honoured | A1, I3, I4 | 1 |
+| **SP0 · Fixes** ✓ built 2026-10-23 | the final shot reaches its shot (WB1, WB2), the refusal's wording (WB3), *← Back* ends the context, the chip honoured; *Mark final* at any size (S12, moved here from SP3) | A1, I3, I4, S12 | 1 |
 | **SP1 · The rail and World** | the rail's order and divider, Props as a class of Cast, World's sections, a new project on World, the Episode's ? | S1, S2, S3, S15 | 1 |
 | **SP2 · The node is the shot** | a visual node makes its shot; the shared node-and-shot panel; the place carried forward | S6, S7, S10 | 2–3 |
 | **SP3 · The board** | the board, its cells and states, the shot page under it, the next-step foot, *Mark final* at any size | S9, S12 | 3–4 |

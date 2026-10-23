@@ -42,6 +42,7 @@ class FinalCreate(BaseModel):
     size: dict[str, int]
     frames: int
     shot_id: str | None = None
+    shot_version: str | None = None                # D125 (A1): the version it is made for; None: the shot's current one
     layers: list[FinalLayerIn] = Field(default_factory=list)
 
 
@@ -84,6 +85,17 @@ async def final_create(svc: Svc, body: FinalCreate):
     for x in body.layers:
         if x.kind not in LAYER_PASSES:
             raise HTTPException(422, f"layer {x.id}: a layer is a plate, a figure, a prop or the shadows")
+    if body.shot_id:                                                       # D125 (A1): made for a Story shot — its open version takes the final's clips
+        from ..story import StoryStore
+        shot = await asyncio.to_thread(StoryStore(ws).shot, body.shot_id)
+        if shot is None:
+            raise HTTPException(422, f"shot {body.shot_id} not found")
+        v = next((x for x in shot.versions if x.id == (body.shot_version or shot.current)), None)
+        if v is None:
+            raise HTTPException(422, f"{shot.name} has no version {body.shot_version}")
+        if v.state != "open":
+            raise HTTPException(422, f"{shot.name} {v.id} is final — make a new version for another take")
+        body = body.model_copy(update={"shot_version": v.id})
     passes = {x.id: {name: [_blob(ws, sha) for sha in shas] for name, shas in x.passes.items()} for x in body.layers}
     keypoints = {x.id: x.keypoints for x in body.layers if x.keypoints is not None}
     method = DEFAULT_METHOD | ({"plate": "picture"} if picture_plate(st) else {})
@@ -758,19 +770,24 @@ async def composition_mask_from_content(svc: Svc, fid: str, lid: str, body: Mask
 
 @router.get("/finals/{fid}/lines", response_model=FinalLines)
 async def final_lines(svc: Svc, fid: str):
-    """D118 (AE4b): the voiced lines of the Dialogue nodes bound to the final's Story shot, each with the layer its speaker performs."""
+    """D118 (AE4b): the voiced lines of the Dialogue nodes bound to the final's Story shot, each with the layer its speaker performs. D125
+    (A1): a final made without one reads the shots whose current version points at its stage and camera (where its takes go)."""
     from ..story import StoryStore
     ws, cat, _ = svc.require_project()
     f = await asyncio.to_thread(FinalStore(ws).get, fid)
     if f is None:
         raise HTTPException(404, "final not found")
-    if not f.shot_id:
-        return {"items": []}
     store = StoryStore(ws)
+    if f.shot_id:
+        shots = {f.shot_id}
+    else:
+        shots = {s.id for s in await asyncio.to_thread(store.shots) if s.version().stage_id == f.stage_id and s.version().camera_id == f.camera_id}
+    if not shots:
+        return {"items": []}
     nodes = await asyncio.to_thread(store.flow_nodes)
     items = []
     for n in sorted(nodes.values(), key=lambda x: x.id):
-        if n.type != "dialogue" or n.shot_id != f.shot_id:
+        if n.type != "dialogue" or n.shot_id not in shots:
             continue
         for i, ln in enumerate(n.lines):
             if not ln.audio_asset_id:

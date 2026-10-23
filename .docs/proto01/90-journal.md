@@ -8368,3 +8368,24 @@ Otherwise, your proposal is solid, we should start implementing it." **D125** re
 becomes Story · Image · Animate · Catalogue (Ctrl+1–4) and Story's rail World · Cast · Flow · Shots · Episode (supersedes D90's "the
 Catalogue under Story"); Props become a class of Cast (amends D110's Props tab). 04 and 00 updated. The build starts with SP0 (the fixes
 WB1–WB3, *Mark final* at any size, the For context ended by *← Back* and honoured by Re-run / Variations / New angle), then SP1 → SP7.
+
+## 2026-10-23 21:07 — SP0 built (D125, proto01_UIcomp 04 §8): the final shot reaches its Story shot; Mark final at any size; the For context ends on Back
+
+- **A1 · WB1, WB2** (the final shot never reached its shot): *Make the final shot…* now carries the For chip's shot **and version**
+  (`finalShot.ts` → `POST /finals` `shot_id`, `shot_version`; `Final.shot_version`, a final made before it reads the shot's current
+  version). The create route checks the shot (unknown, missing version, a final version → 422). The assembly and the render go through
+  `finishers._final_take`: with a shot, a take of that version (`for_shot_target` gets both ids — the missing version was WB2); without one,
+  a take of the shots whose current open version points at the final's stage and camera, as a stage clip is (`record_stage_result` gained
+  `use`). The assembly is a take that never fills the slot by itself; the render fills an empty clip slot. `GET /finals/{fid}/lines` reads
+  the same shots, so *Attach a line…* and the Final's *Lip-sync* pass find the shot's voiced lines. The confirm says where the takes go.
+- **#6 / S12 · WB3**: `finalize_reason` refuses only a missing clip — any size is markable (`below_format` keeps the grid rule for the
+  export's note); the client's `finalizeWhy` matches and the old "render Full in Animate" wording is gone. The Episode's checklist lists
+  "N clips below the format (832×480, …)" as a muted delivery note under its ?, never a reason for the export to ask.
+- **I3**: *← Back to <shot>* ends the For context (`origin.goBack`), in Image and Animate. **I4**: Re-run and Variations from Image's
+  results (`catalogueCommands.originHere`) and New angle asked inside Image (`generateAngle`) carry the For chip's origin.
+- OpenAPI and schema.d.ts regenerated (D38). `scripts/sy_acceptance.py`: the draft clip is no longer expected to be refused.
+- **Tests:** `test_final_takes_d125.py` (5: the take on the version made for, the pre-D125 final, the camera fallback, any size, the create
+  route and the lines), `test_story_shots_d85.py` updated; offline 526 passed; Vitest 430 + 3 skipped; typecheck and build clean; lint 0
+  errors (79 warnings). e2e (full): 53 of 54 — the makers scenario expected the context kept after *← Back*; updated to I3 and rerun: passed;
+  the final-shot scenario now checks the assembly lands as a take of the shot on the final's camera (and not as its clip). The open variant
+  runs with SP1. No rig run: the change records takes; no model path changed.

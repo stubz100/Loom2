@@ -6,12 +6,13 @@ import { useEffect } from 'react'
 import { api } from '../../../api/client'
 import { CommandButton, CommandRow } from '../../../frame/CommandButton'
 import { beginDrag } from '../../../frame/drag'
+import { Help } from '../../../frame/Help'
 import { useSession } from '../../../store/session'
 import { useAnimate } from '../../animate/animateStore'
 import { duration, ticks } from './lane'
 import { useSequence } from './sequenceStore'
 import { useStory } from '../storyStore'
-import { binItem, laneChecklist } from './sequenceCommands'
+import { binItem, laneBelowFormat, laneChecklist } from './sequenceCommands'
 import { markUsed, runCommand } from '../../../frame/commands'
 import { shotRows } from './bin'
 
@@ -85,7 +86,8 @@ export function SequenceInspector() {
       <div className="kv"><span>duration</span><span>{duration(lane)} ticks · {(duration(lane) / current.fps).toFixed(2)} s · {lane.clips.length} clip{lane.clips.length === 1 ? '' : 's'}</span></div>
       <div className="verbs"><CommandRow ids={['story.episode.rename', 'story.episode.delete']} /></div>
       <h4>Checklist <span className="hint">advisory — the export asks</span></h4>
-      <ul className="seq-check">{(() => { const issues = laneChecklist(); return issues.length ? issues.map((x) => <li key={x.i} className="warn">clip {x.i + 1}: {x.what}</li>) : <li className="ok">{lane.clips.length ? 'every clip is a final shot version' : 'the lane is empty'}</li> })()}</ul>
+      <ul className="seq-check">{(() => { const issues = laneChecklist(); return issues.length ? issues.map((x) => <li key={x.i} className="warn">clip {x.i + 1}: {x.what}</li>) : <li className="ok">{lane.clips.length ? 'every clip is a final shot version' : 'the lane is empty'}</li> })()}
+        {(() => { const b = laneBelowFormat(); return b.count ? <li className="note" data-testid="below-format">{b.count} clip{b.count === 1 ? '' : 's'} below the format ({b.sizes.join(', ')}) <Help text={"A delivery note, not a problem: no video route renders the project format yet; Resolve scales the clips when it conforms the cut (D125)."} /></li> : null })()}</ul>
       <h4>Export</h4>
       <div className="verbs"><CommandButton id="story.episode.exportEdl" text label="EDL" /><CommandButton id="story.episode.exportFcpxml" text label="FCPXML + markers" /><CommandButton id="story.episode.exportSrt" text label="SRT" /><CommandButton id="story.episode.render" text label="Render draft" /></div>
       {lastExport && <p className="hint">last: {lastExport.path}</p>}

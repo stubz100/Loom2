@@ -909,6 +909,9 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   await expect(page.locator('.final-section li[data-kind="figure"] button', { hasText: 'Re-take' })).toBeVisible()
   const matteJob = (await api<{ items: { id: string; kind: string; status: string }[] }>('GET', '/jobs')).items.find((j) => fig.job_ids.includes(j.id) && j.kind === 'matte_sequence')
   expect(matteJob?.status).toBe('done')                                                                    // PS5d: SAM 3 on the layer's frames, by itself
+  // D125 (A1, WB1/WB2): a Story shot on the final's camera — the final was made without the For chip, so its clips follow the camera
+  const finCam = (await api<{ camera_id: string }>('GET', `/finals/${fin.id}`)).camera_id
+  const linked = await api<{ id: string }>('POST', '/story/shots', { name: `Final link ${Date.now().toString(36)}`, stage_id: stage.id, camera_id: finCam })
   // PS5e: the assembly — the layers composited into a clip on the final
   await expect(page.locator('.panel .foot button.primary')).toHaveText(/^Assemble/)                          // D121: the next step, in the foot too
   await page.locator('.final-section .final-foot button', { hasText: 'Assemble the shot' }).click()
@@ -916,6 +919,9 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   await expect.poll(async () => (await api<Done>('GET', `/finals/${fin.id}`)).clip_id, { timeout: 60_000 }).toBeTruthy()
   const done = await api<Done>('GET', `/finals/${fin.id}`)
   expect(done.assembly?.frames).toBe(9)
+  type ShotLite = { versions: { clip_id: string | null; takes: { kind: string; id: string }[] }[] }
+  await expect.poll(async () => (await api<ShotLite>('GET', `/story/shots/${linked.id}`)).versions[0].takes.map((t) => t.id), { timeout: 15_000 }).toContain(done.clip_id)
+  expect((await api<ShotLite>('GET', `/story/shots/${linked.id}`)).versions[0].clip_id).toBeNull()        // the assembly is a take, never the clip by itself
   const clip = await api<{ frames: number; fps: number }>('GET', `/clips/${done.clip_id}`)
   expect([`${clip.frames}@${clip.fps}`]).toContain(done.assembly?.conform ? '13@24' : '9@16')                // RIFE when the local tool is there (D27)
   await expect(page.locator('.final-section [data-play]')).toBeVisible()
@@ -1289,7 +1295,7 @@ test('a cast (17 / SY1, D85): "Make a character…" on a tile opens Story · Cas
   expect(ident.status).toMatch(/weights missing/)
 })
 
-test('a shot (17 / SY2, D85): "New shot from this camera" in Stage makes a Story shot whose frame arrives from the camera\'s generate; "Make a shot from this clip" in Animate makes another; Finalize is refused at draft size with the reason and accepted at the format', async ({ page }) => {
+test('a shot (17 / SY2, D85): "New shot from this camera" in Stage makes a Story shot whose frame arrives from the camera\'s generate; "Make a shot from this clip" in Animate makes another; Mark final is offered at a draft size (D125) and marks the version at the format', async ({ page }) => {
   test.setTimeout(150_000)
   const name = `Gate ${Date.now().toString(36)}`
   await openApp(page, { suite: 'stage' })
@@ -1366,9 +1372,9 @@ test('a shot (17 / SY2, D85): "New shot from this camera" in Stage makes a Story
   const clip = await api<{ id: string; w: number; h: number; frames: number }>('GET', `/clips/${clipId}`)
   const fmt = (await api<{ format: { width: number; height: number } }>('GET', '/project')).format
   await expect(page.locator('.shot-board .shot-player video')).toBeVisible()
-  await expect(page.locator('.panel .foot .estimate')).toContainText(`Draft ${clip.w}×${clip.h} — the format is ${fmt.width}×${fmt.height}`)
-  await expect(page.locator('.story-strip button[aria-label^="Mark final"]')).toBeDisabled()
-  await expect(api('POST', `/story/shots/${shot2.id}/versions/v1/finalize`)).rejects.toThrow(/422/)
+  expect(clip.w).toBeLessThan(fmt.width)
+  await expect(page.locator('.panel .foot .estimate')).toContainText(/ready to mark final/)          // D125 (#6): any size — approval is the author's decision
+  await expect(page.locator('.story-strip button[aria-label^="Mark final"]')).toBeEnabled()
   // a clip at the format (the fake engine, nine frames) used as the clip → Finalize through the strip → final
   const fullClip = await submit(fmt.width, fmt.height)
   type Hook = { useTake: (kind: 'image' | 'clip', id: string) => Promise<void> }
@@ -1737,13 +1743,12 @@ test('makers in context (D90 · UI4): "Make frame ▸ in Image" on a Story shot 
   expect(job.origin?.surface).toBe('for_shot')
   expect(job.origin?.payload).toMatchObject({ shot_id: shot.id, version: 'v1', node_id: node.id })
   expect(job.recipe.refs?.[0]?.asset_id).toBe(copy)
-  // ← Back: Story · Shots on the shot, its takes on the board; ✕ ends the context (Generate works as from its tab)
+  // ← Back: Story · Shots on the shot, its takes on the board — and (D125, I3) the context ends: Image works as from its tab again
   await chip.locator('button[aria-label^="Back to"]').click()
   await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Story/)
   await expect(page.locator('.story-strip b')).toHaveText(name)
   await expect(page.locator('.shot-board .take-card')).toHaveCount(count)
   await openImage(page, 'Make')
-  await chip.locator('button[aria-label^="Stop making for the shot"]').click()
   await expect(chip).toHaveCount(0)
 })
 

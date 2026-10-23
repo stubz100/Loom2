@@ -4627,6 +4627,17 @@
             ],
             "title": "Shot Id"
           },
+          "shot_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shot Version"
+          },
           "size": {
             "additionalProperties": {
               "type": "integer"
@@ -4659,6 +4670,7 @@
           "size",
           "frames",
           "shot_id",
+          "shot_version",
           "layers",
           "processing",
           "clip_id",
@@ -4737,6 +4749,17 @@
               }
             ],
             "title": "Shot Id"
+          },
+          "shot_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shot Version"
           },
           "size": {
             "additionalProperties": {
@@ -22766,7 +22789,7 @@
     },
     "/finals/{fid}/lines": {
       "get": {
-        "description": "D118 (AE4b): the voiced lines of the Dialogue nodes bound to the final's Story shot, each with the layer its speaker performs.",
+        "description": "D118 (AE4b): the voiced lines of the Dialogue nodes bound to the final's Story shot, each with the layer its speaker performs. D125\n(A1): a final made without one reads the shots whose current version points at its stage and camera (where its takes go).",
         "operationId": "final_lines_finals__fid__lines_get",
         "parameters": [
           {
@@ -27811,7 +27834,7 @@
     },
     "/story/shots/{sid}/versions/{vid}/finalize": {
       "post": {
-        "description": "The version becomes final when its clip is at the project format's size (fps is conformed at export, D27); 422 says why not.",
+        "description": "The version becomes final when it has its clip, at any size (D125: approval is the author's decision; the export's checklist notes\na clip below the format); 422 says why not.",
         "operationId": "shot_finalize_story_shots__sid__versions__vid__finalize_post",
         "parameters": [
           {

@@ -9,6 +9,7 @@ import { api, http, sha256Hex, unwrap, type ApiError } from '../../api/client'
 import type { Composition, Final, StageDoc, StageObject } from '../../api/types'
 import { useComposition } from '../animate/compositionStore'
 import { askConfirm, useSession } from '../../store/session'
+import { forLabel, useMakeFor } from '../../store/origin'
 import { sampleDoc } from './anim'
 import { st, type SequenceRenderer } from './stageStore'
 
@@ -57,7 +58,7 @@ function passesOf(l: PlanLayer): { name: string; kind: 'depth' | 'clay' | 'pose'
   return [{ name: 'beauty', kind: 'beauty', keep: 'self' }, { name: 'depth', kind: 'depth', keep: 'self' }]
 }
 
-export interface MakeOptions { rate: Rate; name: string; shotId?: string | null; size?: [number, number]; onProgress?: (done: number, total: number, what: string) => void }
+export interface MakeOptions { rate: Rate; name: string; shotId?: string | null; shotVersion?: string | null; size?: [number, number]; onProgress?: (done: number, total: number, what: string) => void }
 
 /** Render every layer's passes and make the final (no confirm: the command asks; the dev hook and the rig call this). */
 export async function makeFinal(opts: MakeOptions): Promise<Final> {
@@ -95,7 +96,7 @@ export async function makeFinal(opts: MakeOptions): Promise<Final> {
   }
   return unwrap(http.POST('/finals', { body: {
     name: opts.name, stage_id: doc.id, camera_id: cam.id, stage_revision: doc.revision, range: { start: doc.range.start, end: doc.range.end }, rate: opts.rate,
-    size: { w, h }, frames: plan.times.length, shot_id: opts.shotId ?? null,
+    size: { w, h }, frames: plan.times.length, shot_id: opts.shotId ?? null, shot_version: opts.shotId ? opts.shotVersion ?? null : null,
     layers: plan.layers.map((l) => ({ id: l.id, kind: l.kind, name: l.name, object_id: l.object_id, profile_id: l.profile_id, version: l.version,
       passes: layers[l.id].passes, keypoints: (layers[l.id].keypoints ?? null) as never })) } }))
 }
@@ -339,15 +340,18 @@ export const useFinals = create<FinalsState>((set, get) => ({
     const figures = plan.layers.filter((l) => l.kind === 'figure').length, props = plan.layers.filter((l) => l.kind === 'prop').length
     const [w, h] = finalSize()
     const picture = hasPictureSet(doc)
+    const forShot = useMakeFor.getState().animate           // D125 (A1, WB1): made for the For chip's shot version, its takes land there
     const ok = await askConfirm({ title: 'Make the final shot?', okLabel: 'Split into layers',
       text: `The scene through ${st().activeCamera()?.name ?? 'the camera'}, frames ${doc.range.start}–${doc.range.end} at ${rate} fps: ${plan.times.length} frames at ${w}×${h}. ` +
         `${plan.layers.length} layers — the plate, ${figures} figure${figures === 1 ? '' : 's'}, ${props} prop${props === 1 ? '' : 's'} and the shadows. Stage renders their passes here (a minute or two)` +
-        (picture ? ', and the plate from the picture set\'s picture; the other layers are made next.' : '; the layers are made from them next.') })
+        (picture ? ', and the plate from the picture set\'s picture; the other layers are made next.' : '; the layers are made from them next.') +
+        (forShot ? ` The finished shot becomes a take of ${forLabel(forShot)}.` : ' Its clips become takes of the shots that use this camera.') })
     if (!ok) return null
     set({ making: { done: 0, total: 1, what: 'starting' } })
     try {
       const n = get().finals.filter((f) => f.stage_id === doc.id).length + 1
-      let f = await makeFinal({ rate, name: `Final ${n}`, onProgress: (done, total, what) => set({ making: { done, total, what } }) })
+      let f = await makeFinal({ rate, name: `Final ${n}`, shotId: forShot?.shot_id ?? null, shotVersion: forShot?.version ?? null,
+        onProgress: (done, total, what) => set({ making: { done, total, what } }) })
       set({ finals: [f, ...get().finals] })
       if (picturePlated(f)) {                                                  // SC3e: the plate is the picture — rendered now, no job to wait for
         set({ making: { done: 0, total: f.frames, what: 'the plate from the picture' } })

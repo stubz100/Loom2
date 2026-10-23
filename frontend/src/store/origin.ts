@@ -72,10 +72,13 @@ export function goToStory(place: StoryPlace): void {
   })
 }
 
-/** The chip's "← Back": the shot version the maker works for. */
+/** The chip's "← Back": the shot version the maker works for. D125 (I3): going back ends the context, so later work in the maker is not
+ *  silently a take of that shot; the shot's Make ▸ sets it again. */
 export function goBack(maker: Maker): void {
   const f = useMakeFor.getState()[maker]
-  if (f) goToStory({ tab: 'shots', id: f.shot_id, version: f.version })
+  if (!f) return
+  useMakeFor.getState().set(maker, null)
+  goToStory({ tab: 'shots', id: f.shot_id, version: f.version })
 }
 
 /** False for jobs without an origin (queued before D66) and for jobs submitted through the API by a script (no suite to go to). */

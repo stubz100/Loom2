@@ -8103,3 +8103,31 @@ The author asked for a review of the state of things, then "record all this and 
   | ![Train a LoRA on this album](img/d122-album-train-sheet.jpg) | ![Cast candidates](img/d122-cast-candidates.jpg) |
   | ![a candidate's menu](img/d122-cast-candidate-menu.jpg) | ![Animate's Clips](img/d122-animate-clips.jpg) |
   | ![Models · Trained](img/d122-models-trained.jpg) | ![Image with Lumina 2](img/d122-generate-lumina2.jpg) |
+
+## 2026-10-23 09:45 — SC3b built (D120, proto01_animate 25 §3b): the lens corrected in place, the figures' shadows on the relief, the picture behind it
+
+- **The lens, editable:** the set's row (`ImageSetFields`) has the lens as a number field and *Rebuild with this lens* (MoGe's reading
+  wobbles, E30). `ImageToSet.replace_set_id` names the set; the route checks it is a picture set of the stage (422 otherwise) and keeps the
+  old relief's kind unless the body names one; `SetFinisher` calls `StageStore.replace_image_set`: the same set takes the new relief, lens
+  and floor, its picture camera goes back to where the picture was taken (the floor's height, looking down −Z, the new focal, roll 0); the
+  old relief stays in the Catalogue. The first slice's "a lens field before the job" is this: the rebuild takes seconds, so the field sits
+  where the reading shows; whether to ask before the job stays the author's check (25 §4).
+- **Shadows on the relief:** the relief receives shadows (the lit passes' override material shows them in the clay); a shadow-only copy
+  (`ShadowMaterial`, polygon-offset over the picture) shows them in the viewport and the beauty pass.
+- **The picture behind it** (D120: the masked pixels as a backdrop): a plane textured with the picture just behind the relief's farthest
+  point, filling the picture camera's view there (the lens, the picture's aspect); unlit, no shadows, an empty bounding box so it never
+  enters the set's box, the framing or a pick; `hideBackdrops` keeps it out of the clay, depth, normal, mask and pose passes, the
+  sequences but beauty, and PS5b's projection.
+- **Rig** (`engine/spikes/sc3b_rig.py`, new: a private orchestrator on the real engine, the set made, rebuilt, a figure, a light and two
+  cameras added, the engine stopped before the browser rendered — D97): bench/sets/room.jpg → 36.1 s with the engine's start (69.16°, the
+  floor 0.938 m), the rebuild at 75° 2.0 s (74.96°, 0.917 m; the same set, a new relief, the camera 26.1 → 23.5 mm); bench/sets/street.jpg
+  → 18.1 s (76.17°), the rebuild at 70° 3.0 s (69.95°), its backdrop 39.4 m out. Screenshots through the picture camera, inside and beyond
+  the budget, the free view and the lens row (headless Edge, the e2e build against the rig's orchestrator); the light's shadow, measured as
+  the picture-camera view with the light's shadows on against off, darkens 3.9 % of the room's frame by more than 12 grey levels.
+- **Tests:** `test_image_set_sc3.py` — the store's rebuild (the camera reset after the author moved it, the fallbacks, a non-picture set,
+  a missing one), the rebuild job on the fake engine (the same set, a new relief, the focal, nothing added, the old relief kept), the
+  route's 422 and the kept relief kind; the e2e's set scenario — the relief's shadow copies and its backdrop (the stage hook
+  `imageSetLayers`), the lens field disabled until changed, 75° rebuilt in place. Offline 503 passed, Vitest 420 + 3 skipped, e2e 53/53 full
+  (a first run lost one scenario to Windows' `ERR_NO_BUFFER_SPACE` after the rig's connections; it passed alone and the next full run
+  was clean) and 53/53 open, typecheck and build clean, lint 0 errors (79), settings audit (280), model literals and agents check clean.
+- **Next:** SC3c (the things cut out and modelled in one job) waits for the author's check in 25 §4 — automatic, or a choice per thing.

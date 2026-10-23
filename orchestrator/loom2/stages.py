@@ -249,6 +249,31 @@ class StageStore:
         self.save(st)
         return st
 
+    def replace_image_set(self, st_id: str, set_id: str, asset_id: str, lens_deg: float | None, floor_y: float | None) -> Stage:
+        """SC3b (D120): a picture set rebuilt in place — a corrected lens gives a new relief: the set takes it, its lens and its floor, and its
+        picture camera goes back to where the picture was taken (the floor's height, looking down −Z, the new lens). The old relief stays in
+        the Catalogue. KeyError for a missing stage or set; ValueError for an object that is not a picture set."""
+        from .relief import DEFAULT_LENS_DEG, focal_mm_for
+        st = self.get(st_id)
+        if st is None:
+            raise KeyError(st_id)
+        obj = next((o for o in st.objects if o.id == set_id), None)
+        if obj is None:
+            raise KeyError(set_id)
+        if obj.kind != "set" or obj.preset != "image":
+            raise ValueError(f"{set_id} is not a picture set")
+        lens = float(lens_deg) if lens_deg else (obj.lens_deg or DEFAULT_LENS_DEG)
+        floor = float(floor_y) if floor_y is not None and -4.0 <= floor_y <= -0.05 else (obj.floor_y if obj.floor_y is not None else -1.0)
+        obj.asset_id, obj.lens_deg, obj.floor_y = asset_id, round(lens, 2), round(floor, 3)
+        cam = next((c for c in st.cameras if c.id == obj.plate_camera_id), None)
+        if cam is not None:
+            cam.pos, cam.target, cam.focal_mm, cam.roll = [0.0, round(-floor, 3), 0.0], [0.0, round(-floor, 3), -1.0], focal_mm_for(lens), 0.0
+        st.revision += 1
+        st.updated_at = utc_now()
+        check(st)
+        self.save(st)
+        return st
+
     def set_passes(self, st_id: str, entry: dict[str, Any], group_id: str | None) -> Stage:
         """ST3: record the passes rendered for one camera (replacing that camera's earlier entry) and the stage's album page; a server-side
         change, so the revision moves — the client takes the returned document."""

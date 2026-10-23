@@ -212,14 +212,23 @@ function StageEditor() {
  *  whether the active camera is still within the budget E30 measured. */
 function ImageSetFields({ o }: { o: StageObject }) {
   const current = useStage((s) => s.current)
+  const pending = useStage((s) => s.pendingSet)
+  const [lens, setLens] = useState(o.lens_deg != null ? String(o.lens_deg) : '')     // keyed by the lens (ObjectEditor): a rebuild resets it
   if (!current) return null
   const cam = current.cameras.find((c) => c.id === o.plate_camera_id)
   const b = imageSetBudget(current, o)
+  const v = Number(lens)
+  const ok = lens.trim() !== '' && Number.isFinite(v) && v >= 20 && v <= 150
   return (
     <>
-      <div className="kv"><span>lens</span><span>{o.lens_deg ?? '—'}° wide · {cam?.name ?? 'no picture camera'} <Help text="The horizontal field of view MoGe read from the picture (E30: it wobbles by a few degrees between a PNG and its JPEG). The picture's camera stands where the picture was taken — at the height of its floor — with this lens; it is the shot the picture already is." /></span></div>
+      <div className="kv"><span>lens</span><span className="lens-field">
+        <input type="number" min={20} max={150} step={0.5} value={lens} aria-label="the picture's lens" onChange={(e) => setLens(e.target.value)} />° wide · {cam?.name ?? 'no picture camera'}
+        <Help text="The horizontal field of view the relief is built with: MoGe reads it from the picture, and the reading wobbles by a few degrees (E30: 75° from a PNG, 69° from its JPEG). When you know the lens, type it and Rebuild — seconds; the set and its camera take the new relief, the old one stays in the Catalogue." /></span></div>
       <div className="kv"><span>budget</span><span className={b.within ? 'ok' : 'warn'} data-budget={b.within ? 'within' : 'beyond'}>{b.text} <Help text="E30 (D120): a relief holds for small moves. Within ±0.25 m and ±5° of the picture's camera, or an orbit of ±10° about the picture's depth, nothing tears inside the picture and its edge stays under a tenth of the frame. Beyond, the edge comes into the frame (the plate shows it) and what was hidden behind things opens up." /></span></div>
-      <div className="verbs"><button type="button" disabled={!cam} onClick={() => { if (cam) { st().selectCamera(cam.id); st().setView('camera') } }}>Look through the picture's camera</button></div>
+      <div className="verbs">
+        <button type="button" disabled={!ok || v === o.lens_deg || !!pending} onClick={() => void st().rebuildImageSet(o.id, Math.round(v * 2) / 2)} title="Rebuild the relief with this lens (a job of seconds)">{pending ? 'Rebuilding…' : 'Rebuild with this lens'}</button>
+        <button type="button" disabled={!cam} onClick={() => { if (cam) { st().selectCamera(cam.id); st().setView('camera') } }}>Look through the picture's camera</button>
+      </div>
     </>
   )
 }
@@ -238,7 +247,7 @@ function ObjectEditor({ o }: { o: StageObject }) {
       {o.kind === 'mannequin' && <FigureCharacter o={o} />}
       {o.kind === 'mesh' && <MeshProp o={o} />}
       {o.kind === 'light' && <LightControls o={o} />}
-      {o.kind === 'set' && o.preset === 'image' && <ImageSetFields o={o} />}
+      {o.kind === 'set' && o.preset === 'image' && <ImageSetFields key={`${o.id}:${o.lens_deg}`} o={o} />}
       {o.kind === 'mannequin' && <div className="kv"><span>pose</span><span><select value={o.pose?.preset ?? 'stand'} onChange={(e) => st().applyPose(o.id, e.target.value)}>{POSE_NAMES.map((p) => <option key={p} value={p}>{p}</option>)}</select> <span className="hint">(Pose, over the viewport, poses the joints)</span></span></div>}
       {o.kind === 'plane' && <div className="kv"><span>faces camera</span><input type="checkbox" checked={o.billboard} onChange={(e) => st().updateObject(o.id, { billboard: e.target.checked })} /></div>}
       <div className="kv"><span>parent</span><select value={o.parent ?? ''} onChange={(e) => st().updateObject(o.id, { parent: e.target.value || null })}><option value="">— none —</option>{current.objects.filter((x) => x.id !== o.id).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></div>
@@ -769,7 +778,7 @@ function Viewport() {
     useStage.setState({ passRenderer: (cam, w, h) => engine.renderPasses(cam, w, h), sequenceRenderer: (fr, w, h, kind, restore, on) => engine.renderSequence(fr, w, h, kind, restore, on),
       plateProjector: (fr, w, h, plate, proj, aspect, restore, on) => engine.renderProjected(fr, w, h, plate, proj, aspect, restore, on) })   // ST3 / ST4, D111
     viewport.handPreset = (id, side, preset) => engine.handPreset(id, side, preset)                                   // CA1
-    if (DEV_HOOKS) Object.assign(devHook(), { screenOf: (at: string) => engine.screenOf(at as Joint), cameraScreen: (id: string) => engine.cameraScreen(id), gizmoMode: () => engine.gizmoMode(), pipRect: () => engine.pipRect(),
+    if (DEV_HOOKS) Object.assign(devHook(), { screenOf: (at: string) => engine.screenOf(at as Joint), cameraScreen: (id: string) => engine.cameraScreen(id), gizmoMode: () => engine.gizmoMode(), pipRect: () => engine.pipRect(), imageSetLayers: (id: string) => engine.imageSetLayers(id),
       frameTime: (n: number, on: boolean) => { const was = useStage.getState().pip; engine.setPip(on); const t = engine.measureFrame(n); engine.setPip(was); return t }, meshes: () => ({ loaded: [...engine.meshesLoaded], failed: Object.fromEntries(engine.meshesFailed) }) })   // the smoke test aims the mouse at joints and handles; P18 asks which props loaded
     const ro = new ResizeObserver(() => { const r = host.getBoundingClientRect(); engine.resize(Math.round(r.width), Math.round(r.height)); setRect({ ...engine.frameRect() }); setPipRect(engine.pipRect()) })
     ro.observe(host)

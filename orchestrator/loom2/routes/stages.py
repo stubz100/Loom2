@@ -103,7 +103,8 @@ class ImageSetBody(BaseModel):
     """SC3 (D120): a set from a Catalogue image — MoGe's relief of the picture, the picture's camera beside it."""
     asset_id: str
     lens_deg: float | None = Field(None, ge=20, le=150, description="the picture's horizontal field of view in degrees when known; None = MoGe's own reading")
-    relief: Literal["cut", "sheet"] = "cut"
+    relief: Literal["cut", "sheet"] | None = Field(None, description="cut at depth jumps or one sheet; None = cut, or the rebuilt set's own")
+    replace_set_id: str | None = Field(None, description="SC3b: rebuild this picture set in place (a corrected lens) instead of adding one")
 
 
 class ImageSetQueued(BaseModel):
@@ -124,8 +125,16 @@ async def stage_image_set(svc: Svc, st_id: str, body: ImageSetBody):
     a = catalogue.get(body.asset_id)
     if a is None or a.kind != "image":
         raise HTTPException(422, "a set is made from a Catalogue image")
+    relief = body.relief or "cut"
+    if body.replace_set_id:                                                       # SC3b: a rebuild — the set must be a picture set of this stage
+        obj = next((o for o in st.objects if o.id == body.replace_set_id), None)
+        if obj is None or obj.kind != "set" or obj.preset != "image":
+            raise HTTPException(422, f"{body.replace_set_id} is not a picture set of this stage")
+        old = catalogue.get(obj.asset_id) if obj.asset_id else None
+        relief = body.relief or ((old.params.get("recipe") or {}).get("relief") if old else None) or "cut"
     try:
-        jobs = svc.queue.submit({"kind": "image_to_set", "asset_id": body.asset_id, "lens_deg": body.lens_deg, "relief": body.relief, "stage_id": st_id},
+        jobs = svc.queue.submit({"kind": "image_to_set", "asset_id": body.asset_id, "lens_deg": body.lens_deg, "relief": relief, "stage_id": st_id,
+                                 "replace_set_id": body.replace_set_id},
                                 origin=JobOrigin(suite="stage", surface=IMAGE_SET_SURFACE, ref=st_id, payload={"asset_id": body.asset_id}))
     except ValueError as e:
         raise HTTPException(422, str(e)) from e

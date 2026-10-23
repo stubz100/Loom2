@@ -6300,10 +6300,14 @@ export interface components {
             lens_deg?: number | null;
             /**
              * Relief
-             * @default cut
-             * @enum {string}
+             * @description cut at depth jumps or one sheet; None = cut, or the rebuilt set's own
              */
-            relief?: "cut" | "sheet";
+            relief?: ("cut" | "sheet") | null;
+            /**
+             * Replace Set Id
+             * @description SC3b: rebuild this picture set in place (a corrected lens) instead of adding one
+             */
+            replace_set_id?: string | null;
         };
         /** ImageSetQueued */
         ImageSetQueued: {

@@ -7660,13 +7660,32 @@
             "title": "Lens Deg"
           },
           "relief": {
-            "default": "cut",
-            "enum": [
-              "cut",
-              "sheet"
+            "anyOf": [
+              {
+                "enum": [
+                  "cut",
+                  "sheet"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
             ],
-            "title": "Relief",
-            "type": "string"
+            "description": "cut at depth jumps or one sheet; None = cut, or the rebuilt set's own",
+            "title": "Relief"
+          },
+          "replace_set_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "SC3b: rebuild this picture set in place (a corrected lens) instead of adding one",
+            "title": "Replace Set Id"
           }
         },
         "required": [

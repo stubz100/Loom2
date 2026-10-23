@@ -574,7 +574,10 @@ export class StageEngine {
   }
   /** SC3 (D120): a picture of a place as its relief (E30) — the GLB in the picture camera's frame (that camera at the origin looking down
    *  −Z), raised so the relief's floor meets the stage floor; unlit, since the picture is already lit (it is the plate); it casts no shadow
-   *  (a shell around everything would darken the whole set) and, as a MeshBasic surface, catches none yet. A wire floor stands in until it loads. */
+   *  (a shell around everything would darken the whole set). SC3b: it catches the figures' shadows — in the lit passes (the clay takes the
+   *  relief's shape) and, through a shadow-only copy of the relief over the picture, in the viewport and the beauty pass; and the picture
+   *  itself stands as a backdrop at the far depth, so what MoGe masked (the sky) and the seams a move opens show the picture, not the dark
+   *  (D120: the masked pixels as a backdrop). A wire floor stands in until it loads. */
   private buildImageSet(o: StageObject): THREE.Object3D {
     const group = new THREE.Group()
     const lift = -(o.floor_y ?? -1)
@@ -587,21 +590,76 @@ export class StageEngine {
       if (!e || e.body !== group || this.disposed) return
       const model = gltf.scene
       model.position.y = lift
+      const surfaces: THREE.Mesh[] = []
       model.traverse((m) => {
         m.userData.stageId = id
         const mm = m as THREE.Mesh
         if (!mm.isMesh) return
         const was = mm.material as THREE.MeshStandardMaterial
         mm.material = new THREE.MeshBasicMaterial({ map: was.map ?? null, color: was.map ? 0xffffff : 0x9a9a9a, side: THREE.DoubleSide })
-        mm.castShadow = false; mm.receiveShadow = false; mm.userData.unlit = true
+        mm.castShadow = false; mm.receiveShadow = true; mm.userData.unlit = true      // SC3b: the lit passes' override material shows the shadows
+        surfaces.push(mm)
       })
+      for (const mm of surfaces) {                                                    // SC3b: the shadow-only copy over the picture
+        const c = new THREE.Mesh(mm.geometry, this.catcherMat)
+        c.position.copy(mm.position); c.quaternion.copy(mm.quaternion); c.scale.copy(mm.scale)
+        c.receiveShadow = true; c.castShadow = false; c.renderOrder = 1
+        Object.assign(c.userData, { stageId: id, unlit: true, catcher: true })
+        mm.parent?.add(c)
+      }
       group.remove(stub)
       group.add(model)
+      if (o.plate_asset_id) this.attachBackdrop(id, group, model, o.plate_asset_id, o.lens_deg ?? 60, lift)
       this.meshesLoaded.add(id)
       if (this.selectedId === id) this.selection.setFromObject(e.holder)
       this.dirty = true
     }).catch((err: unknown) => { this.meshesFailed.set(id, String(err)); this.dirty = true })
     return group
+  }
+  /** SC3b: shadows only, over a picture set's relief (transparent elsewhere); drawn just in front of the relief it copies. */
+  private catcherMat = new THREE.ShadowMaterial({ opacity: 0.42, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1, depthWrite: false })
+  /** SC3b (D120): the picture as a backdrop just behind the relief's farthest point, filling the picture camera's view at that depth (the
+   *  lens and the picture's aspect) — what MoGe masked (the sky) and a seam a move opens show the picture. Out of the set's bounds and
+   *  picking (an empty bounding box), unlit, no shadows; the clay, depth, normal and mask passes leave it out (hideBackdrops). */
+  private attachBackdrop(id: string, group: THREE.Group, model: THREE.Object3D, plateId: string, lensDeg: number, lift: number): void {
+    new THREE.TextureLoader().loadAsync(api.assetUrl(plateId)).then((tex) => {
+      const e = this.entries.get(id)
+      if (!e || e.body !== group || this.disposed) { tex.dispose(); return }
+      tex.colorSpace = THREE.SRGBColorSpace
+      const img = tex.image as { width: number; height: number }
+      const box = new THREE.Box3().setFromObject(model)                              // the relief in the set's own frame (the picture camera at y = lift)
+      const far = Math.max(2, -box.min.z) * 1.02
+      const hfov = rad(Math.min(150, Math.max(20, lensDeg)))
+      const w = 2 * far * Math.tan(hfov / 2), h = w * (img.height / Math.max(1, img.width))
+      const geo = new THREE.PlaneGeometry(w, h)
+      geo.boundingBox = new THREE.Box3()                                              // empty: never in the set's box, the framing or a pick
+      const backdrop = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex }))
+      backdrop.position.set(0, lift, -far)
+      Object.assign(backdrop.userData, { stageId: id, unlit: true, backdrop: true })
+      group.add(backdrop)
+      this.dirty = true
+    }).catch((err: unknown) => this.hooks.onDetailError?.(id, `the picture behind the set: ${err instanceof Error ? err.message : String(err)}`))
+  }
+  /** SC3b: the picture sets' backdrops out of a pass (they belong to the viewport and the beauty pass); returns the undo. */
+  private hideBackdrops(): () => void {
+    const hidden: THREE.Object3D[] = []
+    for (const e of this.entries.values()) e.body.traverse((c) => { if (c.userData.backdrop && c.visible) { c.visible = false; hidden.push(c) } })
+    return () => { for (const c of hidden) c.visible = true }
+  }
+  /** SC3b, for the tests: what a picture set's relief carries (its surfaces, their shadow copies, the backdrop and its size). */
+  imageSetLayers(id: string): { surfaces: number; catchers: number; backdrop: { w: number; h: number; z: number } | null } | null {
+    const e = this.entries.get(id)
+    if (!e || e.doc.preset !== 'image') return null
+    let surfaces = 0, catchers = 0
+    let backdrop: { w: number; h: number; z: number } | null = null
+    e.body.traverse((c) => {
+      const m = c as THREE.Mesh
+      if (!m.isMesh) return
+      if (c.userData.catcher) catchers++
+      else if (c.userData.backdrop) { const g = m.geometry as THREE.PlaneGeometry; backdrop = { w: +g.parameters.width.toFixed(3), h: +g.parameters.height.toFixed(3), z: +c.position.z.toFixed(3) } }
+      else if (c.userData.unlit && m.material instanceof THREE.MeshBasicMaterial && (m.material as THREE.MeshBasicMaterial).wireframe !== true) surfaces++
+    })
+    return { surfaces, catchers, backdrop }
   }
   /** E23d (D105): the figure's shadow proxy — a mesh asset bound to its joints, seen by the light only; the dummy then casts nothing. */
   private attachProxy(e: Entry, assetId: string): void {
@@ -674,6 +732,7 @@ export class StageEngine {
     const r = this.passRenderer(w, h)
     const camera = this.shotCamera(cam, w / h)
     const restore = this.hideHelpers(camera)
+    const showBackdrops = this.hideBackdrops()                                       // SC3b: the picture behind a set is the viewport's and the beauty's
     const swapped: [THREE.Mesh, THREE.Material | THREE.Material[]][] = []
     try {
       this.scene.updateMatrixWorld(true)
@@ -698,7 +757,7 @@ export class StageEngine {
       return { size: { w, h }, blobs: blobs as Record<PassName, Blob>, keypoints, legend }
     } finally {
       for (const [mesh, mat] of swapped) mesh.material = mat
-      restore()
+      restore(); showBackdrops()
       r.dispose(); r.forceContextLoss()
       this.dirty = true
     }
@@ -723,6 +782,7 @@ export class StageEngine {
         this.sync(doc)
         const camera = this.shotCamera(cam, w / h)
         restore(); restore = this.hideHelpers(camera)
+        if (kind !== 'beauty') { const helpers = restore, back = this.hideBackdrops(); restore = () => { back(); helpers() } }   // SC3b
         this.scene.updateMatrixWorld(true)
         const kp = this.keypoints(camera, w, h)
         keypoints.push(kp)
@@ -773,6 +833,7 @@ export class StageEngine {
         this.sync(doc)
         const camera = this.shotCamera(cam, w / h)
         restore(); restore = this.hideHelpers(camera)
+        { const helpers = restore, back = this.hideBackdrops(); restore = () => { back(); helpers() } }   // SC3b: PS5b's own backdrop sphere holds the far
         this.scene.updateMatrixWorld(true)
         blobs.push(await this.shotWith(r, camera, mat, 0x000000))
         onProgress?.(i + 1, frames.length)

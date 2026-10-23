@@ -15,7 +15,7 @@ from loom2.models import registry
 from loom2.recipes import ImageToSet, parse_recipe, warm_group
 from loom2.relief import DEFAULT_LENS_DEG, focal_mm_for, lens_of_glb
 from loom2.roster import ROSTER_BY_ID
-from loom2.stages import StageStore
+from loom2.stages import StageObject, StageStore
 
 from test_mesh_d84 import _pin_review
 
@@ -107,6 +107,27 @@ def test_store_adds_the_set_and_the_picture_camera(tmp_path: Path):
     assert st3.objects[-1].name == "Picture set 2" and st3.objects[-1].lens_deg == DEFAULT_LENS_DEG and st3.objects[-1].floor_y == -1.0 and st3.cameras[-1].pos[1] == 1.0
     with pytest.raises(KeyError):
         store.add_image_set("stg_missing", "a", "b", None, None)
+    # SC3b: a rebuild in place — the same set takes the new relief, lens and floor; its camera goes back to where the picture was taken
+    first = st2.objects[-1]
+    cam_id = first.plate_camera_id
+    moved = store.get(st.id)
+    next(c for c in moved.cameras if c.id == cam_id).pos = [0.4, 1.2, 0.3]                       # the author moved it about
+    store.save(moved)
+    st4 = store.replace_image_set(st.id, first.id, "ast_relief2", 75.0, -1.21)
+    again = next(o for o in st4.objects if o.id == first.id)
+    pcam = next(c for c in st4.cameras if c.id == cam_id)
+    assert again.asset_id == "ast_relief2" and again.lens_deg == 75.0 and again.floor_y == -1.21 and again.plate_asset_id == "ast_pic"
+    assert pcam.pos == [0.0, 1.21, 0.0] and pcam.target == [0.0, 1.21, -1.0] and pcam.focal_mm == focal_mm_for(75.0) and pcam.roll == 0.0
+    assert len([o for o in st4.objects if o.preset == "image"]) == 2 and len(st4.cameras) == len(st3.cameras)   # nothing added
+    st5 = store.replace_image_set(st.id, first.id, "ast_relief3", None, None)                        # no reading: the set keeps its lens and floor
+    assert next(o for o in st5.objects if o.id == first.id).lens_deg == 75.0 and next(o for o in st5.objects if o.id == first.id).floor_y == -1.21
+    cur = store.get(st.id)
+    cur.objects.append(StageObject(id="box_1", kind="prop", name="Box"))
+    store.save(cur)
+    with pytest.raises(ValueError, match="not a picture set"):
+        store.replace_image_set(st.id, "box_1", "a", None, None)
+    with pytest.raises(KeyError):
+        store.replace_image_set(st.id, "set_missing", "a", None, None)
 
 
 async def test_set_job_end_to_end_on_the_fake_engine(tmp_path: Path, object_info: dict, monkeypatch):
@@ -134,6 +155,15 @@ async def test_set_job_end_to_end_on_the_fake_engine(tmp_path: Path, object_info
         obj = st2.objects[-1]
         assert obj.preset == "image" and obj.asset_id == a.id and obj.plate_asset_id == pic.id and obj.lens_deg == 72.0 and obj.floor_y == -1.0 and obj.locked
         assert st2.active_camera == obj.plate_camera_id and st2.cameras[-1].focal_mm == focal_mm_for(72.0)
+        # SC3b: the lens corrected — the job rebuilds the same set in place; the first relief stays in the Catalogue
+        job2 = rig.queue.submit({"kind": "image_to_set", "asset_id": pic.id, "stage_id": st.id, "lens_deg": 80.0, "replace_set_id": obj.id})[0]
+        j2 = await rig.wait(job2.id, timeout=60)
+        assert j2.status == "done", (j2.error, j2.log_tail[-5:])
+        st3 = StageStore(rig.ws).get(st.id)
+        again = next(o for o in st3.objects if o.id == obj.id)
+        assert j2.result["set_id"] == obj.id and again.asset_id == j2.result["asset_ids"][0] != a.id and again.lens_deg == 80.0
+        assert len(st3.objects) == len(st2.objects) and len(st3.cameras) == len(st2.cameras) and rig.catalogue.get(a.id) is not None
+        assert next(c for c in st3.cameras if c.id == obj.plate_camera_id).focal_mm == focal_mm_for(80.0)
     finally:
         await rig.close()
 
@@ -159,4 +189,24 @@ def test_route_queues_the_job_or_refuses(tmp_path: Path, monkeypatch):
         assert r.status_code == 200, r.text
         j = cl.get(f"/jobs/{r.json()['job_id']}").json()
         assert j["recipe"]["kind"] == "image_to_set" and j["recipe"]["stage_id"] == st["id"] and j["recipe"]["relief"] == "sheet" and j["recipe"]["lens_deg"] == 65
-        assert j["origin"]["surface"] == "image_set" and j["origin"]["ref"] == st["id"]
+        assert j["origin"]["surface"] == "image_set" and j["origin"]["ref"] == st["id"] and j["recipe"]["replace_set_id"] is None
+        # SC3b: a rebuild names a picture set of this stage, and keeps the set's relief kind unless the body says another
+        assert cl.post(f"/stages/{st['id']}/image-set", json={"asset_id": pic["id"], "replace_set_id": "set_nope"}).status_code == 422
+        from loom2.stages import StageStore as _Store
+        from loom2.workspace import Workspace as _Ws
+        store = _Store(_Ws.open(tmp_path / "proj"))
+        relief = cl.post("/assets/import", json={"paths": [str(src)]}).json()["items"][0]                 # a stand-in for the relief asset
+        doc = store.add_image_set(st["id"], relief["id"], pic["id"], 70.0, -1.0)
+        set_id = doc.objects[-1].id
+        cat = app_catalogue(cl)                                                                             # the relief's recipe said "sheet"
+        rec = cat.get(relief["id"])
+        cat._index(rec.model_copy(update={"params": {**rec.params, "recipe": {"relief": "sheet"}}}))
+        r2 = cl.post(f"/stages/{st['id']}/image-set", json={"asset_id": pic["id"], "lens_deg": 74, "replace_set_id": set_id})
+        assert r2.status_code == 200, r2.text
+        j2 = cl.get(f"/jobs/{r2.json()['job_id']}").json()
+        assert j2["recipe"]["replace_set_id"] == set_id and j2["recipe"]["relief"] == "sheet" and j2["recipe"]["lens_deg"] == 74
+
+
+def app_catalogue(cl):
+    """The open project's Catalogue behind a TestClient (the app's services)."""
+    return cl.app.state.services.catalogue

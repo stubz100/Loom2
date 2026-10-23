@@ -610,9 +610,14 @@ class SetFinisher:
         job.result["relief"] = lens
         job.log_tail.append(f"relief {rec.id}: {glb.name} ({(rec.bytes or 0) / 2**20:.1f} MiB)")
         if recipe.stage_id:
-            st = await asyncio.to_thread(StageStore(q.ws).add_image_set, recipe.stage_id, rec.id, recipe.asset_id,
-                                         (lens or {}).get("fov_x") or recipe.lens_deg, (lens or {}).get("y_floor"))
-            obj = st.objects[-1]
+            lens_deg, floor_y = (lens or {}).get("fov_x") or recipe.lens_deg, (lens or {}).get("y_floor")
+            store = StageStore(q.ws)
+            if recipe.replace_set_id:                                                  # SC3b: the set rebuilt in place (a corrected lens)
+                st = await asyncio.to_thread(store.replace_image_set, recipe.stage_id, recipe.replace_set_id, rec.id, lens_deg, floor_y)
+                obj = next(o for o in st.objects if o.id == recipe.replace_set_id)
+            else:
+                st = await asyncio.to_thread(store.add_image_set, recipe.stage_id, rec.id, recipe.asset_id, lens_deg, floor_y)
+                obj = st.objects[-1]
             job.result["stage_id"], job.result["set_id"], job.result["camera_id"] = st.id, obj.id, obj.plate_camera_id
             q.hub.broadcast("stage.updated", {"id": st.id, "revision": st.revision})
             job.log_tail.append(f"on stage {st.id}: {obj.name} with its camera {obj.plate_camera_id} (lens {obj.lens_deg}°, the floor {obj.floor_y} m under it)")

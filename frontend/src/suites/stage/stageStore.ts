@@ -205,6 +205,8 @@ interface StageState {
   addObject: (kind: Kind, preset?: string | null, pos?: number[], assetId?: string | null) => string | null
   setFromImage: (assetId: string) => Promise<void>            // SC3 (D120): a Catalogue image → MoGe's relief as a locked set with the picture's camera (a job; the stage reloads when it lands)
   pendingSet: string | null                                   // SC3: the image → set job in flight for the open stage
+  /** SC3b (D120): the picture set rebuilt in place with a corrected lens (MoGe's reading wobbles); the stage reloads when it lands. */
+  rebuildImageSet: (setId: string, lensDeg: number) => Promise<void>
   updateObject: (id: string, patch: Partial<StageObject>) => void
   /** D110 (PS4): the sky light's strength (null = the default: 0.85 under lights, 1.1 without). */
   setAmbient: (v: number | null) => void
@@ -664,6 +666,16 @@ export const useStage = create<StageState>()((set, get) => ({
       useSession.getState().toast('Making a set from the picture — a few seconds once MoGe is loaded; the stage reloads with it', 'info')
     } catch (e) { useSession.getState().toast(`Set from an image failed: ${(e as ApiError).detail ?? e}`, 'error') }
   },
+  rebuildImageSet: async (setId, lensDeg) => {
+    const cur = get().current
+    const o = cur?.objects.find((x) => x.id === setId)
+    if (!cur || !o?.plate_asset_id) return
+    try {
+      const r = await unwrap(http.POST('/stages/{st_id}/image-set', { params: { path: { st_id: cur.id } }, body: { asset_id: o.plate_asset_id, lens_deg: lensDeg, relief: null, replace_set_id: setId } }))
+      set({ pendingSet: r.job_id })
+      useSession.getState().toast(`Rebuilding ${o.name} at ${lensDeg}° — seconds once MoGe is loaded; the stage reloads with it`, 'info')
+    } catch (e) { useSession.getState().toast(`Rebuild the set failed: ${(e as ApiError).detail ?? e}`, 'error') }
+  },
   updateObject: (id, patch) => get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id ? { ...o, ...patch } : o)) }), 'edit'),
   setAmbient: (v) => get().apply((d) => ({ ...d, ambient: v }), 'ambient'),
   addLight: (at) => {
@@ -780,7 +792,8 @@ useSession.subscribe((s, prev) => {
   if (j.status === 'done') {
     const r = j.result as { stage_id?: string; relief?: { fov_x?: number } | null } | null
     if (cur && r?.stage_id === cur.id) void useStage.getState().open(cur.id)
-    s.toast(r?.relief?.fov_x ? `The set is on the stage with its camera — the picture's lens reads ${r.relief.fov_x}°` : 'The set is on the stage with its camera', 'success')
+    const rebuilt = !!(j.recipe as { replace_set_id?: string | null }).replace_set_id                   // SC3b: a rebuild in place
+    s.toast(rebuilt ? `The set is rebuilt${r?.relief?.fov_x ? ` — its lens ${r.relief.fov_x}°` : ''}` : r?.relief?.fov_x ? `The set is on the stage with its camera — the picture's lens reads ${r.relief.fov_x}°` : 'The set is on the stage with its camera', 'success')
   } else s.toast(`Set from an image ${j.status}: ${j.error ?? ''}`, 'error')
 })
 

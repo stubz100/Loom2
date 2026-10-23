@@ -110,6 +110,22 @@ check row here.
   its handle under Move / Rotate / Scale (Select hides the gizmo); a click that starts on a gizmo handle is the gizmo's, never a pick (it
   picked the figure's body and dropped the joint); selecting the same figure again keeps its joint.
 
+- **2026-10-23 09:45 — SC3b built: the lens corrected in place, the figures' shadows on the relief, the picture behind it.** The set's row
+  has the lens as a field and *Rebuild with this lens*: the job names the set it rebuilds (`replace_set_id`), the same set takes the new
+  relief, lens and floor, its picture camera goes back to where the picture was taken with the new focal, and the old relief stays in
+  the Catalogue (the relief kind kept). The relief catches the figures' shadows — in the lit passes (the clay takes its shape) and through a
+  shadow-only copy over the picture in the viewport and the beauty pass — and the picture stands as a backdrop just behind the relief's
+  farthest point (what MoGe masked, the sky, and the seams a move opens show the picture); the clay, depth, normal and mask passes leave
+  the backdrop out. Rig (`engine/spikes/sc3b_rig.py`, the real engine): the room 36.1 s with the engine's start, the rebuild at 75° 2.0 s;
+  the street 18.1 s, the rebuild at 70° 3.0 s; the light's shadow darkens 3.9 % of the room's picture-camera view. Left, waiting for the
+  checks below: SC3c, the things cut out and modelled in one job (and whether the lens is asked for before the job).
+
+  | The room through the picture camera (a figure, the light's shadow) | Inside the budget | Beyond it |
+  | --- | --- | --- |
+  | ![picture camera](img/25-sc3b-room-picture-camera.jpg) | ![inside](img/25-sc3b-room-inside-budget.jpg) | ![beyond](img/25-sc3b-room-beyond-budget.jpg) |
+  | **The street, the free view** (the picture behind the relief) | **The street beyond the budget** | **The lens row** |
+  | ![street free view](img/25-sc3b-street-free-view.jpg) | ![street beyond](img/25-sc3b-street-beyond-budget.jpg) | ![lens row](img/25-sc3b-room-lens-row.jpg) |
+
 ## 4 · Checks for the author
 
 | Check | Your note |
@@ -122,4 +138,5 @@ check row here.
 | One Scene: does the grouping (figures, sets, props, stand-ins, meshes, lights, planes, cameras) read better than the flat list did, or should a kind with nothing on the stage hide its header? | |
 | SC3: *From an image…* on one of your own pictures of a place (a Klein still or an import): does the relief read as the place in the viewport, and does the Picture camera frame it as the picture did? Move the camera a little — is the budget line's warning early enough, or too fussy? | |
 | SC3: should the things in the picture be cut out and modelled automatically (one job: the cut, the clean plate, the models), or stay a choice per thing? | |
+| SC3b: the figure's shadow on the relief (the room's picture-camera view) — dark enough, too dark? And the picture behind the street: does what shows through the sky and the seams read as the place, or should it be plain? | |
 | E30: the lens — MoGe read 75° from the PNG and 69° from its JPEG. Should a set from an image ask you for the lens (the Klein recipe's camera when the picture is the app's own)? | |

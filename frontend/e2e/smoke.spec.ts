@@ -2475,12 +2475,34 @@ test('a set from an image (D120, SC3): a Bin picture becomes a relief set on the
   await expect(editor.locator('[data-budget]')).toHaveAttribute('data-budget', 'within')
   await editor.locator('button', { hasText: /^Look through the picture/ }).click()
   await expect(page.locator('canvas.stage-canvas')).toBeVisible()
-  type Doc = { objects: { kind: string; preset: string | null; locked: boolean; asset_id: string | null; plate_camera_id: string | null; lens_deg: number | null; floor_y: number | null }[]; cameras: { id: string; name: string; focal_mm: number; pos: number[] }[]; active_camera: string }
+  type Doc = { objects: { id: string; kind: string; preset: string | null; locked: boolean; asset_id: string | null; plate_camera_id: string | null; lens_deg: number | null; floor_y: number | null }[]; cameras: { id: string; name: string; focal_mm: number; pos: number[] }[]; active_camera: string }
   const doc = (await api<{ items: (Doc & { name: string })[] }>('GET', '/stages')).items.find((s) => s.name === 'Relief test')!
   const set = doc.objects.find((o) => o.kind === 'set')!
   expect(set.preset).toBe('image'); expect(set.locked).toBe(true); expect(set.asset_id).toBeTruthy(); expect(set.lens_deg).toBe(60); expect(set.floor_y).toBe(-1)
   const pc = doc.cameras.find((c) => c.id === set.plate_camera_id)!
   expect(pc.name).toBe('Picture camera'); expect(pc.pos[1]).toBe(1); expect(doc.active_camera).toBe(pc.id)
+  // SC3b: the relief catches the figures' shadows (a shadow-only copy over the picture) and the picture stands behind it, at its far depth
+  type Layers = { surfaces: number; catchers: number; backdrop: { w: number; h: number; z: number } | null }
+  const setId = set.id
+  const layers = () => page.evaluate((id) => (window as unknown as { __loom2Stage: { imageSetLayers: (i: string) => Layers | null } }).__loom2Stage.imageSetLayers(id), setId)
+  await expect.poll(async () => { const l = await layers(); return !!l?.backdrop && l.catchers === l.surfaces && l.surfaces > 0 }, { timeout: 15_000 }).toBe(true)
+  const l0 = (await layers())!
+  expect(l0.backdrop!.z).toBeLessThan(0); expect(l0.backdrop!.w).toBeGreaterThan(l0.backdrop!.h)                       // behind the picture camera, the picture's shape
+  // the lens corrected and the set rebuilt in place: the same set, a new relief, the camera's focal following
+  await row.locator('.name').click()                                                                                       // its row again (Look through selected the camera)
+  const lensField = page.locator('.row-editor.stage-insp input[aria-label="the picture\'s lens"]')
+  await expect(lensField).toHaveValue('60')
+  const rebuild = page.locator('.row-editor.stage-insp button', { hasText: /^Rebuild with this lens/ })
+  await expect(rebuild).toBeDisabled()                                                                                      // nothing to change yet
+  await lensField.fill('75')
+  await rebuild.click()
+  const stageDoc = async () => (await api<{ items: (Doc & { name: string })[] }>('GET', '/stages')).items.find((s) => s.name === 'Relief test')!
+  await expect.poll(async () => (await stageDoc()).objects.find((o) => o.id === setId)?.lens_deg, { timeout: 30_000 }).toBe(75)
+  const doc2 = await stageDoc()
+  const set2 = doc2.objects.find((o) => o.id === setId)!
+  expect(doc2.objects.filter((o) => o.kind === 'set')).toHaveLength(1); expect(set2.asset_id).not.toBe(set.asset_id)
+  expect(doc2.cameras.find((c) => c.id === set.plate_camera_id)!.focal_mm).toBeLessThan(pc.focal_mm)                    // a wider lens, a shorter focal
+  await expect(page.locator('.outl-row[data-row="object"]', { has: page.locator('.kind', { hasText: 'set' }) })).toHaveCount(1)
 })
 
 test('the three modes (D121, proto01_animate 26): each Animate level has its own column, rail and foot — Clay, Performance with its three cards, Final; the keys switch them', async ({ page }) => {

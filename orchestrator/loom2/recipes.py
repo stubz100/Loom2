@@ -392,6 +392,7 @@ class ImageToSet(BaseModel):
     relief: Literal["cut", "sheet"] = "cut"        # cut at depth jumps (honest holes behind things) or one sheet (smears instead; a smooth place)
     decimation: int = Field(2, ge=1, le=4)         # the point map's vertex stride (2: a 1280×720 picture is ≈ 230k vertices, 10 MB)
     stage_id: str | None = None                    # the stage the set lands on, with the picture's camera, when the job finishes
+    replace_set_id: str | None = None              # SC3b: the picture set this job rebuilds in place (a corrected lens): its relief, lens and floor, its camera following
 
 
 class Render(BaseModel):

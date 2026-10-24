@@ -8783,3 +8783,13 @@ export in a process that sets it first (`run` with `prefs.set`, then `file.expor
 - Tests: `test_cuts_ce3.py` (2), `cut.test.ts` +1, the tracks e2e scenario's sound steps. Offline 552 passed; settings audit clean; OpenAPI
   current; Vitest 457 + 3 skipped; typecheck, lint (0 errors, 79 warnings) and build clean; e2e full 62/62 and open 62/62. Screenshots
   `proto01_animate/img/30-ce3-*.jpg`.
+
+## 2026-10-24 13:23 — D127: every audio track a channel strip (gain, a VST3 chain, width, volume, pan); Settings › Audio
+
+The author, after CE3: the loudness target and the tracks' default gain belong in the general Settings; each audio track has volume
+(−∞…+18 dB), gain (−36…+36 dB), pan (100 % L…C…100 % R) and width (0…200 %, past 100 % the Side boosted and the Mid slightly attenuated),
+and a chain of VST3 effects. Checked first: FilmCraft's fader runs −96…+15 dB, its Amplify −96…+24 dB, its Stereo Width 0–200 % with the
+Mid untouched, and it hosts no plugins (its ROADMAP: owner decision needed); the VST 3 SDK is MIT since 3.8 (October 2025), Spotify's
+Pedalboard GPLv3. Four questions (proto01_animate 30 §16), every recommendation taken: loom2's own VST3 host (a C++ sidecar on the MIT SDK),
+defaults per track role (dialogue, music, effects), the requested ranges exactly (a second FilmCraft stage past its limits), the width law
+patched (the Mid attenuated). A track with plugins is printed onto a hidden companion track. Waves AU1–AU4; AU1 starts now.

@@ -1,6 +1,6 @@
 # 30 · RC4's study — FilmCraft for the cut editor
 
-Status: **study, 2026-10-24; answered the same day → D126 (§10); CE1 built (§11); CE2 built (§13); CE3 built (§15); CE4 next.** D96 planned RC4 as "FilmCraft reviewed as 03 reviewed EffectCraft
+Status: **study, 2026-10-24; answered the same day → D126 (§10); CE1 built (§11); CE2 built (§13); CE3 built (§15); D127 (§16): the channel strip and VST3 chains, building; CE4 after.** D96 planned RC4 as "FilmCraft reviewed as 03 reviewed EffectCraft
 (what to reuse, how), then the multi-track cut editor that replaces the single-lane Episode" ([05](05-flow-nodes-as-shot-recipes.md)
 §6), with O6 (a scene grade and shot-match in the cut, [06](06-continuity-across-shots.md)) attached. RC1–RC3 are built
 ([28](28-recipe-graph.md), [29](29-movie-render.md)); this is the study, measured where it could be (§3, the probe E32).
@@ -389,3 +389,34 @@ loudness measured).
 ![A sound selected: its gain, ducking and fades; a line by its words](img/30-ce3-sound.jpg)
 ![A sound's right-click](img/30-ce3-sound-menu.jpg)
 ![An audio track's header](img/30-ce3-track-menu.jpg)
+
+## 16. D127 · the channel strip and VST3 chains (2026-10-24)
+
+The author, after CE3: the loudness target and the tracks' default gain belong in the general Settings; every audio track has four
+settings — **volume** −∞…+18 dB, **gain** −36…+36 dB, **pan** 100 % left…centre…100 % right, **width** 0 % (mono)…100 % (stereo)…200 %
+(the Side boosted and the Mid slightly attenuated) — and **a chain of VST3 effects**.
+
+**What FilmCraft has** (764723f): a track's fader (`volume_db`, −96…+15 dB) and pan (−100…+100); `mixer.addInsert` / `setInsert` /
+`removeInsert` on a track's strip, pre- or post-fader, with its built-in effects — *Amplify* (gain −96…+24 dB) and *Stereo Width*
+(0–200 %: the Side scaled, the Mid untouched); **no plugin hosting** (its ROADMAP: VST3 / AU / OpenFX "owner decision needed").
+**Licences:** the VST 3 SDK has been MIT since 3.8 (Steinberg, October 2025); Spotify's Pedalboard is GPLv3 (its JUCE core GPL /
+commercial).
+
+**The four questions, answered (every recommendation):** loom2's own VST3 host · defaults per track role · the requested ranges exactly ·
+the width law with the Mid attenuated.
+
+**The strip, in order:** gain (Amplify, pre-fader; a second Amplify past +24) → the plugin chain (loom2's host) → width (Stereo Width,
+patched) → volume (the fader; a post-fader Amplify past +15; −96 shown as −∞) → pan (the track's pan). In the project: the fader and the pan
+on the track, the stages as inserts, the chain and the roles in the sequence's metadata.
+
+**Printing:** FilmCraft cannot run a plugin, so a track with a chain is *printed* — its audio after the gain, alone (a working copy of the
+project, the other tracks muted, the strip's later stages neutral) is rendered by FilmCraft, run through the chain by loom2's host, and placed
+on a hidden companion track carrying the width, volume and pan; the source track keeps its clips and edits and is muted in the mix. A print is
+stale when the track's clips, its gain or its chain change; the mix, the movie and the exports print first.
+
+| Wave | Content |
+| --- | --- |
+| **AU1 · Settings and roles** | Settings › Audio: the loudness target (moved from Settings › FilmCraft) and each role's four defaults (dialogue, music, effects); a new cut's A1–A3 named and set as those roles; a track's role from its header |
+| **AU2 · the strip** | the four settings on every audio track (the track's Inspector and header: sliders with numbers), stored as the fader, the pan and the inserts; the width patch (`engine/patches/filmcraft/`, the build script, a new pin); measured on the rig |
+| **AU3 · the host** | `engine/vsthost/` — a C++ host on the VST 3 SDK (the SDK fetched at a pinned tag by the build script), `scan`, `render` (a chain over a WAV, offline), `editor` (a plugin's window, its state saved); pinned like FilmCraft; tests with the SDK's own sample plugins |
+| **AU4 · chains and printing** | a track's chain in the Inspector (add from the scanned plugins, reorder, bypass, open the editor, remove); printing (the companion track, staleness, before the mix, the movie and the exports); the rig with the SDK's samples and one of the author's plugins |

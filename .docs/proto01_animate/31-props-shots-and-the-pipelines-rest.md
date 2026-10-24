@@ -294,3 +294,26 @@ Klein stills along the path, on the set by construction) and D130 as accepted.
 
 ![CA3 at F24: the set's clay (top) and the generated plate (bottom) at frames 0, 32, 64, 96, 120 — the set's travel against the plate's](img/31-ca3-drift.jpg)
 ![The plate's row: the method chip and its menu](img/31-ca3-plate-row.jpg)
+
+### 4e. E35 — the plate as Klein stills chained along the path (D131, the author's scheme)
+
+Q26 answered (2026-10-24): each still made from its own frame's clay pass (Stage's clay method: the room where the set is) with the stills
+just before it as its references (frame 10 from 9, 8 and 7: the room's look carried forward, not pulled back to the first frame). Two arms
+on CA3's F16 run — the same set, path, first still, prompt and seed as the generated plate:
+
+| arm | stills | between them |
+| --- | --- | --- |
+| A · every frame | 80 (each from its clay and the three before it) | — |
+| B · keyframes | 10 (every 8th frame, each from its clay and the three keyframes before it) | each keyframe projected along the path by Stage, a frame blending the two around it by distance |
+
+Measured as CA3 (the travel against the set's clay, the step frame to frame, the time) beside the first still projected alone and CA3's
+generated plate; contact sheet the set · projected · generated · A · B.
+
+**Measured (2026-10-24, journal 23:08):** neither arm turns the room — every still keeps the first frame's layout (travel 0 px against the
+set's 124; the projection 123, CA3's generated plate 142). A costs 80 stills (1974 s) and decays by frame 20; B costs 10 (235 s) and shows
+its keyframes' projections crossing. E35b changed the note to ask for the look and not the layout, with three references and with one:
+still 0 px. Klein's clay method returns its reference's view and drops its own frame's clay whatever the prompt says. → Q27: stop here,
+or E35c *project and fill* (the earlier keyframe projected into the new view, only the unseen areas filled by Klein's inpaint).
+
+![E35: the set · projected · generated (CA3) · A every frame · B keyframes + projection, at frames 0, 20, 40, 60, 80](img/31-e35-sheet.jpg)
+![E35b: the keyframes against the set's clay — as run, the look-not-layout note with three references and with one](img/31-e35b-keyframes.jpg)

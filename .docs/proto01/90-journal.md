@@ -9097,3 +9097,39 @@ patched (the Mid attenuated). A track with plugins is printed onto a hidden comp
   routes_d37 +1. Offline 586 passed, settings audit, agents_check and model_literals_check clean, Vitest 470 + 3 skipped, typecheck, lint
   (0 errors, 79 warnings) and build clean, e2e full 64/64 and open 64/64. Screenshots img/31-ca3-plate-row.jpg,
   img/31-ca3-make-confirm.jpg.
+
+## 2026-10-24 22:21 — Q26 answered → D131: the large-move plate as Klein stills chained along the path (spike E35, proto01_animate 31 §4e)
+
+- **The author:** run (b), but each still's references are the frames just before it, not the first frame (frame 10 from 9, 8 and 7;
+  Klein takes four images — the frame's clay as image 1 and three references).
+- **E35** (`engine/spikes/e35_chain.py`, `e35_browser.cjs`) on a copy of CA3's F16 run: A every frame a still from its clay and the three
+  stills before it (80 Klein shots, the first frame CA3's still, one seed); B a keyframe every 8th frame from its clay and the three
+  keyframes before it, Stage projecting each keyframe along the path and a frame between two keyframes blending their projections by its
+  distance to each (10 Klein shots). Each reference noted as the same room a moment earlier. Measured as CA3: the room's travel against
+  the set's clay (px of 256, every 8 frames), the step frame to frame, the time; beside the first still projected alone and CA3's
+  generated plate (142 / 124, 32 apart). D130 stays held until it measures.
+
+## 2026-10-24 23:08 — E35 and E35b: chained Klein stills copy their references' layout; D131's scheme does not hold → Q27 (proto01_animate 31 §4e)
+
+- **E35** (`engine/spikes/e35_chain.py`, `e35_browser.cjs`, on a copy of CA3's F16 run — the same set, path, first still, prompt and
+  seed): the room's travel against the set's clay (px of 256, every 8 frames) and the step frame to frame —
+
+  | | travel | apart at most | step | Klein |
+  | --- | --- | --- | --- | --- |
+  | the set (clay) | 124 | — | 0.14 | — |
+  | the first still projected (PS5b) | 123 | 4 | 3.67 | — |
+  | generated along the path (CA3) | 142 | 32 | 4.30 | — |
+  | A · every frame from its clay and the three stills before it | 0 | 124 | 0.92 | 80 stills, 1974 s (23.4 s each) |
+  | B · every 8th frame so, projected between and blended | 0 | 124 | 4.81 | 10 stills, 235 s |
+
+  Every still keeps the first frame's layout: Klein's clay method, given a still of nearly the same view, returns that view and drops its
+  own frame's clay (img/31-e35-sheet.jpg). The dense chain also decays — washed out, blotched with colour by frame 20, as copies of
+  copies do; B's blend shows two windows where its keyframes' projections cross.
+- **E35b** (`engine/spikes/e35b_notes.py`, the keyframe chain again): E35's note asked to "keep its walls … exactly", so the note was
+  changed to ask for the look and not the layout ("take its materials, colours and light from it, not its layout — the walls, the floor
+  and their corners are where image 1 puts them"; the compiled prompt checked: image 1 the frame's clay, image 2 the reference) — with
+  three references and with one (12.5 s a still): the travel is 0 in both, the look drifts from the first still by 13.5 and 16.7 levels
+  over 80 frames (img/31-e35b-keyframes.jpg). The reference wins over image 1 whatever the prompt says.
+- **D131 measured: it does not hold.** The plate stays projected (D130 held, generated on request). Q27 asks the author for the next step:
+  stop here, or a spike E35c — *project and fill*: each keyframe the one before it projected into its view (the layout from pixels, so a
+  reference cannot move it) and only what no earlier still saw filled by Klein's inpaint with the earlier keyframe as its reference.

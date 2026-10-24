@@ -135,6 +135,7 @@ def _stage(svc: Services, variant: str) -> dict:
         missing = [ROSTER_BY_ID[x].name for x, hh in healths.items() if hh in ("missing", "retired")]
         clip = {"model_id": spec.id, "label": spec.label, "health": "missing" if missing else ("verified" if all(h == "verified" for h in healths.values()) else "present"),
                 "missing": missing, "seconds": spec.recipes.guide_seconds, "kinds": ["depth", "pose"], "fps": spec.geometry.fps, "frame_step": spec.geometry.frame_step,
+                "size_mult": spec.recipes.guide_size_mult or spec.geometry.size_mult,
                 "size": list(spec.geometry.size or []), "approx_gb": round(sum((ROSTER_BY_ID[x].approx_gb or 0) for x in needs), 1)}
         break
     animate = None

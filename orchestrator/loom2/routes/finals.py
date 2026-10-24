@@ -100,7 +100,8 @@ async def final_create(svc: Svc, body: FinalCreate):
     passes = {x.id: {name: [_blob(ws, sha) for sha in shas] for name, shas in x.passes.items()} for x in body.layers}
     keypoints = {x.id: x.keypoints for x in body.layers if x.keypoints is not None}
     method = DEFAULT_METHOD | ({"plate": "picture"} if picture_plate(st) else {})
-    data = body.model_dump(exclude={"layers"}) | {"layers": [FinalLayer(id=x.id, kind=x.kind, name=x.name, object_id=x.object_id, method=x.method or method[x.kind],  # type: ignore[arg-type]
+    pick = {x.id: method[x.kind] if x.kind == "plate" and method["plate"] == "picture" else x.method or method[x.kind] for x in body.layers}   # CA3: the client's plate method, a picture set's first
+    data = body.model_dump(exclude={"layers"}) | {"layers": [FinalLayer(id=x.id, kind=x.kind, name=x.name, object_id=x.object_id, method=pick[x.id],  # type: ignore[arg-type]
                                                                         profile_id=x.profile_id, version=x.version).model_dump() for x in body.layers]}
     from ..shot_graph import stage_stamps
     data["stamps"] = stage_stamps(st, body.camera_id)                        # RC1: an edit marks only the layers it touches
@@ -164,13 +165,37 @@ class PlateBody(BaseModel):
 class PlateQueued(BaseModel):
     job_id: str
     pass_asset_id: str
+    scene_plate: str | None = None                 # O4 (D130): the scene's first plate, put first among the still's references
+
+
+def _scene_plate(ws, f: Final) -> str | None:
+    """O4 (D130, RC2f): the scene's first plate — a Shot in a scene takes the plate still of the first Shot before it in the scene (the
+    Flow's order) that has one, so a scene's Shots are one place; None outside a scene or for the scene's first Shot."""
+    from ..story import StoryStore
+    if not f.shot_id:
+        return None
+    story = StoryStore(ws)
+    nodes = story.flow_nodes()
+    for sc in story.scenes():
+        shots = [nodes[nid].shot_id for nid in sc["node_ids"] if nid in nodes and nodes[nid].shot_id]
+        if f.shot_id not in shots:
+            continue
+        finals = FinalStore(ws).list()                                      # the newest first: a Shot's plate made again replaces its first
+        for sid in shots[:shots.index(f.shot_id)]:
+            for x in finals:
+                plate = next((y for y in x.layers if y.id == "plate"), None)
+                if x.shot_id == sid and x.id != f.id and plate is not None and plate.still_asset_id:
+                    return plate.still_asset_id
+        return None
+    return None
 
 
 @router.post("/finals/{fid}/plate", response_model=PlateQueued)
 async def final_plate(svc: Svc, fid: str, body: PlateBody):
     """PS5b: the plate's still — the bare set's lit clay at frame 0 (from the final's plate pass) as a Stage shot's image 1 (Klein, the clay
     method), the lead first so the model draws no people or objects (they are layers). Stage then projects it along the camera path."""
-    from ..finals import FINAL_PLATE_SURFACE, PLATE_LEAD
+    from ..finals import FINAL_PLATE_SURFACE, PLATE_LEAD, plate_method_check
+    from ..models import registry
     from ..origin import JobOrigin
     ws, cat, _ = svc.require_project()
     if svc.queue is None:
@@ -179,8 +204,16 @@ async def final_plate(svc: Svc, fid: str, body: PlateBody):
     f = await asyncio.to_thread(store.get, fid)
     if f is None:
         raise HTTPException(404, "final not found")
-    if any(x.id == "plate" and x.method == "picture" for x in f.layers):                    # SC3e
+    plate = next(x for x in f.layers if x.id == "plate")
+    if plate.method == "picture":                                                            # SC3e
         raise HTTPException(422, "the plate is the set's picture: Stage renders it through the relief (no Klein still)")
+    if plate.method == "generated":                                                          # CA3: refused now, not after the still
+        try:
+            plate_method_check("generated", f.frames)
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+        if not any(s.recipes.guide_lora and registry.offered(s, svc.app.settings.variant) for s in registry.video_specs()):
+            raise HTTPException(422, "no video model with a depth guide in this build (LTX-2.3 and its IC-LoRA) — project the plate (its row's right-click)")
     src = store.pass_dir(fid, "plate", "clay") / "0000.png"
     if not src.is_file():
         raise HTTPException(422, "the plate's clay pass is missing")
@@ -191,16 +224,63 @@ async def final_plate(svc: Svc, fid: str, body: PlateBody):
     fmt = ws.load().format
     h = 720
     w = max(64, round(h * fmt.width / fmt.height / 16) * 16)
+    first = await asyncio.to_thread(_scene_plate, ws, f)                    # O4: the scene's first plate leads the references
+    refs = ([{"asset_id": first, "note": "the same place as this picture: its walls, floor, light and materials"}] if first else []) + \
+        [r for r in body.refs if r.get("asset_id") != first]
     recipe = {"kind": "stage_shot", "stage_id": f.stage_id, "camera_id": f.camera_id, "passes": {"clay": rec.id}, "method": "clay", "empty": True,
-              "prompt_text": f"{PLATE_LEAD} {body.prompt_text.strip()}".strip(), "refs": body.refs, "seeds": [body.seed], "width": w, "height": h}
+              "prompt_text": f"{PLATE_LEAD} {body.prompt_text.strip()}".strip(), "refs": refs, "seeds": [body.seed], "width": w, "height": h}
     try:
-        jobs = svc.queue.submit(recipe, origin=JobOrigin(suite="stage", surface=FINAL_PLATE_SURFACE, ref=fid))
+        jobs = svc.queue.submit(recipe, origin=JobOrigin(suite="stage", surface=FINAL_PLATE_SURFACE, ref=fid, payload={"prompt": body.prompt_text.strip()}))
     except ValueError as e:
         raise HTTPException(422, str(e))
     await svc.queue.flush()
-    f = await asyncio.to_thread(store.update_layer, fid, "plate", status="queued", error=None, job_ids=[*next(x for x in f.layers if x.id == "plate").job_ids, jobs[0].id])
+    f = await asyncio.to_thread(store.update_layer, fid, "plate", status="queued", error=None, clip_id=None, frames_done=0, job_ids=[*plate.job_ids, jobs[0].id])
     svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
-    return {"job_id": jobs[0].id, "pass_asset_id": rec.id}
+    return {"job_id": jobs[0].id, "pass_asset_id": rec.id, "scene_plate": first}
+
+
+class PlateMethodBody(BaseModel):
+    method: Literal["projected", "generated"]
+    prompt_text: str = ""                          # what the place is (the Shot tab's prompt): a still already made is generated along the path with it
+
+
+@router.put("/finals/{fid}/layers/plate/method", response_model=Final)
+async def final_plate_method(svc: Svc, fid: str, body: PlateMethodBody):
+    """CA3 (D130): the plate projected (PS5b: the still cast along the path by Stage, no GPU job) or generated along the path (LTX-2.3 from the
+    still on the bare set's depth). A still already made is kept: projected, Stage projects it when the stage is open; generated, its clip is
+    queued now. Without a still the method waits for *Make the plate*."""
+    from ..engine.finishers import queue_plate_path
+    from ..finals import plate_method_check
+    ws, _, _ = svc.require_project()
+    store = FinalStore(ws)
+    f = await asyncio.to_thread(store.get, fid)
+    if f is None:
+        raise HTTPException(404, "final not found")
+    f = await asyncio.to_thread(_reconcile, svc, store, f)
+    plate = next(x for x in f.layers if x.id == "plate")
+    if plate.method == "picture":
+        raise HTTPException(422, "the plate is the set's picture (SC3e): it is neither projected nor generated")
+    if plate.status in ("queued", "running") and not (plate.status == "running" and plate.method == "projected" and plate.still_asset_id):
+        raise HTTPException(409, "the plate is being made — wait for it, or cancel its job")
+    try:
+        plate_method_check(body.method, f.frames)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    still = plate.still_asset_id
+    f = await asyncio.to_thread(store.update_layer, fid, "plate", method=body.method, error=None, clip_id=None,
+                                **({"status": "running", "frames_done": 0} if still and body.method == "projected" else {} if still else {"status": "passes"}))
+    if still and body.method == "generated":
+        if svc.queue is None:
+            raise HTTPException(409, "no queue")
+        try:
+            await queue_plate_path(svc.queue, fid, still, body.prompt_text)
+        except ValueError as e:
+            f = await asyncio.to_thread(store.update_layer, fid, "plate", method=plate.method)
+            raise HTTPException(422, str(e))
+        await svc.queue.flush()
+        f = await asyncio.to_thread(store.get, fid)
+    svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
+    return f.model_dump()
 
 
 class FramesBody(BaseModel):

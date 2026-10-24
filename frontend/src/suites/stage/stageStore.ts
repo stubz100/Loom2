@@ -52,12 +52,12 @@ export interface RenderedPasses { size: { w: number; h: number }; blobs: Record<
 export interface PassesEntry { camera_id: string; revision: number; size: { w: number; h: number }; assets: Record<string, string>; keypoints: unknown[]; legend: Record<string, unknown>; rendered_at?: string }
 export const DEFAULT_SHOT: ShotState = { method: 'clay', prompt_text: '', refs: [], count: 1, tier: 'draft', use_as_is: false }
 const snap16 = (v: number) => Math.max(16, Math.round(v / 16) * 16)
-const snap32 = (v: number) => Math.max(32, Math.round(v / 32) * 32)
+const snapTo = (v: number, m: number) => Math.max(m, Math.round(v / m) * m)
 // ---- ST4 (16 §8): keyframes and the clip ----
 export type GuideKind = 'depth' | 'pose'
 /** CN4 (19 §3d): how the stage becomes a clip — LTX-2.3's IC-LoRA on a pass sequence (ST4), or Wan2.2 Animate performing the pose pass. */
 export type ClipMethod = 'guided' | 'animate'
-type ClipCaps = { model_id: string; label: string; health: string; seconds?: number | null; kinds: string[]; fps?: number | null; frame_step?: number | null; size: number[]; frames_max?: number | null; figures_max?: number | null }
+type ClipCaps = { model_id: string; label: string; health: string; seconds?: number | null; kinds: string[]; fps?: number | null; frame_step?: number | null; size: number[]; size_mult?: number | null; frames_max?: number | null; figures_max?: number | null }
 /** A rendered pass sequence recorded under a camera's passes entry (`guides[kind]`). */
 export interface GuideEntry { asset_id: string; frames: number; fps: number; size: { w: number; h: number }; range: { start: number; end: number }; revision: number; rendered_at?: string }
 /** D111 (PS5b): the plate projected along the camera path (engine.renderProjected). */
@@ -392,7 +392,8 @@ export const useStage = create<StageState>()((set, get) => ({
     const aspect = cur ? cur.size.w / Math.max(1, cur.size.h) : 16 / 9
     const base = get().clipCaps()?.size
     const h = base && base.length === 2 ? base[1] : 576
-    return get().clipMethod === 'animate' ? [snap16(h * aspect), snap16(h)] : [snap32(h * aspect), snap32(h)]   // Wan's grid is 16, LTX's 32
+    const m = get().clipCaps()?.size_mult ?? 64                     // CA3: the guided clip's grid (LTX's IC-LoRA: 64 — its latent is halved)
+    return get().clipMethod === 'animate' ? [snap16(h * aspect), snap16(h)] : [snapTo(h * aspect, m), snapTo(h, m)]   // Wan's grid is 16
   },
   renderGuide: async () => {
     const s = useSession.getState()

@@ -6276,6 +6276,17 @@
             "title": "Batches",
             "type": "array"
           },
+          "clip_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clip Id"
+          },
           "error": {
             "anyOf": [
               {
@@ -6332,6 +6343,7 @@
           "method": {
             "enum": [
               "projected",
+              "generated",
               "picture",
               "move",
               "rendered",
@@ -6457,6 +6469,7 @@
           "status",
           "error",
           "still_asset_id",
+          "clip_id",
           "frames_done",
           "job_ids",
           "seed",
@@ -12841,6 +12854,28 @@
         "title": "PlateBody",
         "type": "object"
       },
+      "PlateMethodBody": {
+        "properties": {
+          "method": {
+            "enum": [
+              "projected",
+              "generated"
+            ],
+            "title": "Method",
+            "type": "string"
+          },
+          "prompt_text": {
+            "default": "",
+            "title": "Prompt Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "method"
+        ],
+        "title": "PlateMethodBody",
+        "type": "object"
+      },
       "PlateQueued": {
         "properties": {
           "job_id": {
@@ -12850,6 +12885,17 @@
           "pass_asset_id": {
             "title": "Pass Asset Id",
             "type": "string"
+          },
+          "scene_plate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scene Plate"
           }
         },
         "required": [
@@ -14853,6 +14899,17 @@
               }
             ],
             "title": "Guide Seconds"
+          },
+          "guide_size_mult": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guide Size Mult"
           },
           "i2i": {
             "default": false,
@@ -25117,6 +25174,59 @@
           }
         },
         "summary": "Composition Sync",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
+    "/finals/{fid}/layers/plate/method": {
+      "put": {
+        "description": "CA3 (D130): the plate projected (PS5b: the still cast along the path by Stage, no GPU job) or generated along the path (LTX-2.3 from the\nstill on the bare set's depth). A still already made is kept: projected, Stage projects it when the stage is open; generated, its clip is\nqueued now. Without a still the method waits for *Make the plate*.",
+        "operationId": "final_plate_method_finals__fid__layers_plate_method_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlateMethodBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Final"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Final Plate Method",
         "tags": [
           "finals"
         ]

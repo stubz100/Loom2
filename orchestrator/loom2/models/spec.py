@@ -84,6 +84,7 @@ class Recipes(Strict):
     stage_cfg: float | None = None
     guide_lora: str | None = None                  # P13 ST4 (D76): the IC-LoRA a video model takes a pass sequence through (I2V.guide)
     guide_seconds: float | None = None             # E11's measured seconds for a guided Draft clip (121 frames at 1024×576)
+    guide_size_mult: int | None = None             # CA3 (rig 2026-10-24): a guided clip's size grid when the IC-LoRA works on a coarser latent than the model
     animate: bool = False                          # CN4 (D87, E19): a pose-driven clip model — I2V with the Stage's pose pass as the guide, the start
                                                    # image as the character's reference; not an I2V model of the Animate suite
     guide_figures: int | None = None               # CN4: the most figures a pose pass may hold (E19: two small runners failed)

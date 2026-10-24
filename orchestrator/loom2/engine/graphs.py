@@ -119,7 +119,9 @@ def i2v_params(recipe: I2V) -> dict[str, Any]:
     if recipe.preset not in presets:
         raise CompileError(f"{spec.label} has no preset {recipe.preset!r} ({', '.join(presets)})")
     mult, policy = geo.size_mult, recipe.size_policy
-    w, h = snap(recipe.width, mult, mult * 8, policy, "width"), snap(recipe.height, mult, mult * 8, policy, "height")
+    if recipe.guide and spec.recipes.guide_size_mult:                  # CA3: the IC-LoRA's latent is halved (reference_downscale_factor 2) — ×64 on LTX
+        mult = spec.recipes.guide_size_mult
+    w, h = snap(recipe.width, mult, geo.size_mult * 8, policy, "width"), snap(recipe.height, mult, geo.size_mult * 8, policy, "height")
     step = geo.frame_step or 1
     try:
         frames = snap(recipe.frames - 1, step, step, policy, "frames") + 1    # 4n+1 (Wan) / 8n+1 (LTX)

@@ -19,11 +19,14 @@ from .workspace import Workspace
 FINAL_SCHEMA_VERSION = 1
 FINAL_PLATE_SURFACE = "final_plate"               # PS5b: origin.surface of the plate's Stage shot; ref = the final's id
 FINAL_LAYER_SURFACE = "final_layer"               # PS5c: origin.surface of a character layer's batch; ref = the final, payload {layer, batch, batches, seed}
+FINAL_PLATE_PATH_SURFACE = "final_plate_path"     # CA3 (D130): origin.surface of the plate generated along the path; ref = the final's id
 BATCH, CARRY = 77, 5                              # E23a W1: 77-frame batches, the last 5 frames carried into the next (72 new)
 CHARACTER_TAIL = "moving exactly as the pose shows. Plain studio background, static camera."
 PLATE_LEAD = "The room is empty: there are no people and no objects in it, only the bare walls and floor."   # E28: a plate without the lead grew people
+PLATE_PATH_TAIL = "The camera moves slowly through the place; nothing in it moves."   # CA3: E34's clip prompt ended on the camera's move
+PLATE_PATH_MAX = 257                               # CA3: LTX-2.3's longest clip (I2V.frames) — a longer plate is projected
 LayerKind = Literal["plate", "figure", "prop", "shadows"]
-LayerMethod = Literal["projected", "picture", "move", "rendered", "drawn", "stage"]
+LayerMethod = Literal["projected", "generated", "picture", "move", "rendered", "drawn", "stage"]
 LayerStatus = Literal["passes", "queued", "running", "done", "failed"]
 MAX_FRAMES = 721                                   # 30 s at 24 fps (D96: ≈ 30 s a Shot, a warning beyond)
 # the passes each kind of layer brings from Stage (PS5a); a pass with one frame is a still (the plate's frame-0 render)
@@ -57,11 +60,12 @@ class FinalLayer(BaseModel):
     status: LayerStatus = "passes"
     error: str | None = None
     still_asset_id: str | None = None              # PS5b: the plate's still (a Klein Stage shot of the bare set at frame 0); SC3e: the set's picture
+    clip_id: str | None = None                     # CA3 (D130): the plate generated along the path — its LTX clip (frames resized and trimmed into frames/)
     frames_done: int = 0                           # the layer's own sequence on disk (`frames/`): the projected plate, a character's performance …
     job_ids: list[str] = Field(default_factory=list)   # the jobs that made (or make) the layer
     seed: int = 0                                  # PS5c: a character layer's performance seed (a re-take takes another)
     reference_asset_id: str | None = None          # PS5c: the animation reference placed where the figure starts (E23c: no ghost)
-    guide_asset_id: str | None = None              # PS5c: the pose sequence as one video
+    guide_asset_id: str | None = None              # PS5c: the pose sequence as one video; CA3: the plate's depth sequence
     batches: list[dict[str, Any]] = Field(default_factory=list)   # PS5c: [{k, job_id, clip_id}] in order
     takes: list[dict[str, Any]] = Field(default_factory=list)     # D118 (AE4a): the layer's passes — [{id, preset, strength, model_id, job_id, frames, seed, made_at}]
     source: str | None = None                                      # D118: the take the layer shows (its frames under passes/<id>/), None = the original frames
@@ -119,6 +123,14 @@ def frames_at(start: int, end: int, rate: int) -> list[float]:
     return [round(start + i * step, 4) for i in range(n)]
 
 
+def plate_method_check(method: str, frames: int) -> None:
+    """The plate is projected (PS5b), generated along the path (CA3, D130: at most LTX's longest clip) or a picture set's picture (SC3e)."""
+    if method not in ("projected", "generated", "picture"):
+        raise ValueError(f"the plate is projected, generated along the path or a picture set's picture (not {method!r})")
+    if method == "generated" and frames > PLATE_PATH_MAX:
+        raise ValueError(f"a plate generated along the path is at most {PLATE_PATH_MAX} frames (LTX-2.3's longest clip); this final has {frames} — project it")
+
+
 def check(f: Final) -> None:
     if not 2 <= f.frames <= MAX_FRAMES:
         raise ValueError(f"a final has 2 to {MAX_FRAMES} frames (it has {f.frames})")
@@ -133,6 +145,8 @@ def check(f: Final) -> None:
     for x in f.layers:
         if x.kind in ("figure", "prop") and not x.object_id:
             raise ValueError(f"layer {x.id}: a {x.kind} layer names its Stage object")
+        if x.kind == "plate":
+            plate_method_check(x.method, f.frames)
         for name in LAYER_PASSES[x.kind]:
             if x.passes.get(name) not in (f.frames,):
                 raise ValueError(f"layer {x.id}: its {name} pass has {x.passes.get(name, 0)} frames, the final {f.frames}")
@@ -240,6 +254,49 @@ def place_reference(ref: Path, kp: list[list[float]] | None, w: int, h: int, out
     out.parent.mkdir(parents=True, exist_ok=True)
     Image.fromarray(np.clip(canvas, 0, 255).astype(np.uint8)).save(out)
     return True
+
+
+def plate_path_frames(n: int) -> int:
+    """CA3 (D130): the clip a plate generated along the path is — the final's frames on LTX's 8k + 1 grid (trimmed back to n after)."""
+    return n + (-(n - 1) % 8)
+
+
+def plate_path_size(f: "Final", height: int, mult: int = 64) -> tuple[int, int]:
+    """CA3: the clip's size — the video model's height (E34 measured 1024 × 576) at the final's aspect, on the guided clip's grid (LTX's
+    IC-LoRA: ×64, the rig's 992 × 576 was refused); the frames are resized to the final's size when they land."""
+    h = max(128, height - height % mult)
+    w = max(128, round(h * f.size["w"] / f.size["h"] / mult) * mult)
+    return w, h
+
+
+def plate_path_guide(depth: list[Path], w: int, h: int, n: int, out: Path, fps: int) -> None:
+    """CA3: the plate's depth pass (the bare set through every frame's camera) as the clip's guide — each frame at the clip's size, the
+    last held to n frames (LTX's grid), one near-lossless video (stages.encode_guide)."""
+    from PIL import Image
+
+    from .stages import encode_guide
+    tmp = out.parent / "_guide"
+    shutil.rmtree(tmp, ignore_errors=True)
+    tmp.mkdir(parents=True)
+    paths = []
+    for i, src in enumerate(depth):
+        with Image.open(src) as im:
+            im.convert("RGB").resize((w, h), Image.LANCZOS).save(tmp / f"{i:04d}.png")
+        paths.append(tmp / f"{i:04d}.png")
+    paths += [paths[-1]] * (n - len(paths))
+    try:
+        encode_guide(paths, out, fps)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def plate_path_recipe(f: "Final", model_id: str, still_id: str, guide_id: str, prompt: str, size: tuple[int, int], seed: int) -> dict[str, Any]:
+    """CA3 (D130, E34): the plate generated along the path — LTX-2.3 from the plate's still, the bare set's depth through the IC-LoRA from
+    frame 0 (Stage's guided method), at the final's rate, Draft."""
+    place = prompt.strip().rstrip(".")
+    return {"kind": "i2v", "model_id": model_id, "start_asset": still_id, "prompt_text": f"{PLATE_LEAD} {place + '. ' if place else ''}{PLATE_PATH_TAIL}",
+            "frames": plate_path_frames(f.frames), "fps": f.rate, "width": size[0], "height": size[1], "preset": "draft", "seeds": [seed],
+            "guide": {"asset_id": guide_id, "kind": "depth", "strength": 1.0}}
 
 
 def character_recipe(f: "Final", layer: "FinalLayer", model_id: str, prompt: str, batch: dict[str, int], clip_id: str | None) -> dict[str, Any]:

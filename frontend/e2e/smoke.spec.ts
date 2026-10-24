@@ -1106,6 +1106,8 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   await page.locator('.final-section button', { hasText: /^Make the final shot/ }).click()
   await expect(dialog).toContainText(/4 layers/)
   await expect(dialog).toContainText(/9 frames/)
+  await expect(dialog).toContainText(/The plate is its still projected along the path: the camera moves little/)   // CA3: the camera's travel advises
+  await page.screenshot({ path: 'node_modules/.e2e/ca3-make-confirm.png' })
   await dialog.locator('button.primary').click()
   await expect(page.locator('.final-section .final-row')).toBeVisible({ timeout: 60_000 })
   type Fin = { id: string; frames: number; rate: number; stage_id: string; layers: { id: string; kind: string; method: string; passes: Record<string, number>; keypoints: boolean; status: string }[] }
@@ -1132,6 +1134,24 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   expect(pf.status).toBe(200)
   await expect(page.locator('.final-section li[data-kind="plate"] .status')).toHaveText(/done · 9 frames/)
   await expect(page.locator('.final-section li[data-kind="plate"] img.still')).toBeVisible()
+  // CA3 (D130): the plate's method on its row — generated along the path from the same still (LTX-2.3 on the bare set's depth, the fake engine)
+  const chip = page.locator('.final-section li[data-kind="plate"] .plate-method')
+  await expect(chip).toHaveText(/projected/)                                                              // the camera does not move: projected
+  await chip.click()
+  if (env().variant === 'open') {                                                                           // D26: LTX-2.3 is full-only — offered, not runnable
+    await expect(page.locator('.ctx-menu button.item', { hasText: /^Generate it along the path \(no depth-guided video model here\)$/ })).toBeDisabled()
+    await page.mouse.click(1100, 700)
+  } else {
+    await page.locator('.ctx-menu button.item', { hasText: /^Generate it along the path$/ }).click()
+    type Gen = Lay & { method: string; clip_id: string | null }
+    await expect.poll(async () => { const p = await plateOf() as Gen; return `${p.method} ${p.status} ${p.frames_done} ${!!p.clip_id}` }, { timeout: 60_000 }).toBe('generated done 9 true')
+    const ltxId = (await plateOf()).job_ids.at(-1)
+    const ltx = (await api<{ items: { id: string; recipe: { kind: string; guide?: { kind: string } | null; start_asset: string; frames: number } }[] }>('GET', '/jobs')).items.find((j) => j.id === ltxId)!
+    expect(ltx.recipe.kind).toBe('i2v'); expect(ltx.recipe.guide?.kind).toBe('depth'); expect(ltx.recipe.start_asset).toBe(plate.still_asset_id); expect(ltx.recipe.frames).toBe(9)
+    await expect(chip).toHaveText(/along the path/)
+    await expect(page.locator('.final-section li[data-kind="plate"] .status')).toHaveText(/done · 9 frames/)
+    await page.screenshot({ path: 'node_modules/.e2e/ca3-plate-method.png' })
+  }
   // CA4: the batch plan before the performance — one batch owed, its cost; the final's line offers to stage the performances
   await expect(page.locator('.final-section li[data-kind="figure"] [data-batch="0"]')).toHaveClass(/b-owed/)
   await expect(page.locator('.final-section [data-plan] .hint')).toContainText(/owe ≈ \d+ min/)

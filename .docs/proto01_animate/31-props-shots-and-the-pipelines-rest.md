@@ -147,7 +147,7 @@ A part shows a *linked · N Shots* badge with its users; the Catalogue's *Duplic
 | **CA4 · the plan with its cost** ✓ built 2026-10-24 (§4b) | each character layer's batches (77 frames, 5 carried) with the frames each covers and its minutes from the measured runs; the shot's total; *Stage the runs* (the queue's *staged* jobs, released by *Run staged*) for an overnight start | no | 1 |
 | **CA5 · re-take from a batch** ✓ built 2026-10-24 (§4b) | *Re-take from this batch* on a layer's batch: that batch and the ones after it again with a new seed, the batches before kept (the carried frames come from the kept batch) | yes (rig) | 1–2 |
 | **HP1 · in the hand** ✓ built 2026-10-24 (§2a) | D129, §2 | rig check | 2 |
-| **CA3 · the plate for large moves** | spike **E34** first: the depth-guided plate video — LTX-2.3's IC-LoRA union control (Stage's guided method already loads it) with the plate still as the first frame and the bare set's depth along the camera path as the control; measured on an orbit and a long dolly against the projection (stretch, the still's match at frame 1, seconds, VRAM). If it holds: the final's plate gets a method (*projected* for small moves, *generated along the path* for large ones, chosen by the camera's travel), its frames a plate layer like the projection's; and O4 (RC2f's plate): a Shot's Klein plate made with its scene's first plate as a reference, so the room reads the same from another camera | yes (spike, then rig) | 3–4 |
+| **CA3 · the plate for large moves** ✓ built 2026-10-24 (§4d), its automatic choice held (Q26) | spike **E34** first: the depth-guided plate video — LTX-2.3's IC-LoRA union control (Stage's guided method already loads it) with the plate still as the first frame and the bare set's depth along the camera path as the control; measured on an orbit and a long dolly against the projection (stretch, the still's match at frame 1, seconds, VRAM). If it holds: the final's plate gets a method (*projected* for small moves, *generated along the path* for large ones, chosen by the camera's travel), its frames a plate layer like the projection's; and O4 (RC2f's plate): a Shot's Klein plate made with its scene's first plate as a reference, so the room reads the same from another camera | yes (spike, then rig) | 3–4 |
 | **E33** | D128's open image → 3D (§1), downloads asked for first | yes | 1–2 |
 
 D102 retired CA5's W3 (a per-frame refine at a seam made the hold worse); A6's healing patch stays for regions.
@@ -249,3 +249,48 @@ the path, and the depth sequence of the same path guides an LTX-2.3 clip that st
 
 **→ D130:** a large move's plate is generated along the path; a small move keeps the projection. CA3 builds it (the plate's method chosen by
 the camera's travel, switchable on the plate's row) with O4 (the scene's first plate as the still's reference).
+
+### 4d. CA3 as built (2026-10-24) — and why its automatic choice is held (Q26)
+
+- **The method:** the plate layer is *projected* (PS5b) or *generated along the path* (`finals.py` `generated`). Generated: when the plate's
+  Klein still lands, the final's plate depth pass becomes the guide (each frame at the clip's size, the last held to LTX's 8k + 1 frames,
+  catalogued beside the final's passes) and LTX-2.3 is queued from the still on it at the final's rate (Draft, the IC-LoRA union on the
+  depth, `queue_plate_path`); the clip's frames, resized to the final's size and trimmed to its count, are the plate's own. A final longer
+  than LTX's longest clip (257 frames) or a build without the guided model (the `open` variant) is projected.
+- **Its row:** a *projected ▾ / along the path ▾* chip on the plate's row and the same two items on its right-click (*Generate it along the
+  path*, *Project the still instead* / *Project the plate again*); a still already made is kept (`PUT /finals/{fid}/layers/plate/method`).
+- **The camera's travel** (`finalShot.ts` `cameraTravel`): the most the view turns, the most the camera swings about the first frame's
+  target, how much more it sees (its distance over its focal length); a move past 12° or 15 % is large. *Make the final shot…* says it.
+- **O4:** a Shot's plate still in a scene takes the still of the first Shot before it in the scene (the Flow's order) that has one as its
+  first reference (`_scene_plate`); the response and the toast say so.
+- **The rig's fix (2026-10-24):** a guided LTX clip is on a 64 grid, not 32 — the IC-LoRA halves the latent again (the engine refused
+  992 × 576, latent 31 × 18). `guide_size_mult = 64` in the LTX spec; the compiler snaps a guided clip to it, the plate is sized on it,
+  `/capabilities` gives Stage's guided clips the same grid.
+
+**The rig (`scripts/ca3_acceptance.py`, E34's 50° orbit on the A1 room; `engine/spikes/e34b_track.py`).** The method, the guide, the
+frames and the start hold — the camera's travel advises *generated* (the camera turns 50°), the clip runs on the depth at the final's rate
+on LTX's grid (81 frames at 16 fps 112 s, 121 at 24 fps 152 s, at 1024 × 576; the still 36 s), the plate has the final's frames at its
+size, its first frame is the still (2.1–2.4 levels). **The path does not:** the room in the plate travels sideways further and earlier
+than the set (phase correlation every 8 frames against the set's clay, px of 256):
+
+| run | the set | the plate | apart at most |
+| --- | --- | --- | --- |
+| E34 (the still from an empty prompt: grey, close to the clay) | 122 | 118 | ≈ 5 |
+| F16, "… daylight from the tall window" | 124 | 142 | 32 |
+| F24, the same prompt | 122 | 171 | 52 |
+| F24, no window in the prompt | 122 | 151 | 29 |
+| E34b: the same still and seed, the negative without "static" | 122 | 149 | 27 |
+| E34b: the same, Quality (20 steps, 246 s) | 122 | 146 | 24 |
+
+The plate moves from frame 0 at an even pace while the camera eases in, and overshoots by 18–40 %; on the window prompt a second window
+grew as the wall turned (img/31-ca3-drift.jpg). A figure standing on the floor is placed by the set, so it would slide against the room by
+up to a fifth of the frame. The first rig check (the end as sharp as the start) is dropped as a measure: E34's streaked projection kept
+26.5 → 24.0 and this run's clean plate fell 328 → 168 (a sharp still's floor planks fill its first frame); sharpness is recorded, the path
+is checked.
+
+**Held (Q26):** the camera's travel advises, the plate stays projected (`AUTO_GENERATE = false` in `finalShot.ts`), *Generate it along the
+path* on the plate's row makes it; Q26 asks the author between generated on request only, a spike E35 (the plate projected from several
+Klein stills along the path, on the set by construction) and D130 as accepted.
+
+![CA3 at F24: the set's clay (top) and the generated plate (bottom) at frames 0, 32, 64, 96, 120 — the set's travel against the plate's](img/31-ca3-drift.jpg)
+![The plate's row: the method chip and its menu](img/31-ca3-plate-row.jpg)

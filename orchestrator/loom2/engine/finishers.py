@@ -34,7 +34,7 @@ from ..recipes import I2I, I2V, TTS, AssembleFinal, CompRender, ImageToMesh, Ima
 from ..roster import ROSTER_BY_ID
 from ..fsio import utc_now
 from ..body import Body
-from ..finals import FINAL_LAYER_SURFACE, FINAL_PLATE_SURFACE
+from ..finals import FINAL_LAYER_SURFACE, FINAL_PLATE_PATH_SURFACE, FINAL_PLATE_SURFACE
 from ..story import BODY_FIT_SURFACE, FOR_SHOT, PROP_MODEL_SURFACE, body_fit_origin
 from ..timelines import TimelineStore, at, duration, starts
 from ..tools import facesim
@@ -103,7 +103,9 @@ class AssetFinisher:
         job.result["asset_ids"] = [a.id for a in assets]
         plate = job.origin is not None and job.origin.surface == FINAL_PLATE_SURFACE
         if plate and assets:                                                                    # D111 (PS5b): the final's plate still
-            await asyncio.to_thread(_final_plate_result, q, str(job.origin.ref or ""), assets[0].id)
+            method = await asyncio.to_thread(_final_plate_result, q, str(job.origin.ref or ""), assets[0].id)
+            if method == "generated":                                                           # CA3 (D130): generated along the path from it
+                await _plate_path_or_fail(q, job, str(job.origin.ref or ""), assets[0].id, str((job.origin.payload or {}).get("prompt") or ""))
         if isinstance(recipe, StageShot) and assets and not plate:                              # 17 §3c: the frame of every shot pointing at this camera
             mine = job.origin.payload.get("shot_id") if job.origin and job.origin.surface == FOR_SHOT and job.origin.payload else None
             await asyncio.to_thread(_stage_result, q, recipe.stage_id, recipe.camera_id, "image", assets[0].id, _run(job, recipe, q), mine)
@@ -310,6 +312,8 @@ class ClipFinisher:
             await asyncio.to_thread(_shot_takes, q, {"shot_id": job.origin.ref, "version": (job.origin.payload or {}).get("version")}, "clip", [rec.id], False, _run(job, recipe, q))
         if job.origin and job.origin.surface == FINAL_LAYER_SURFACE and job.origin.ref:   # D111 (PS5c): a character layer's batch
             await _final_layer_batch(q, job, recipe, rec.id)
+        if job.origin and job.origin.surface == FINAL_PLATE_PATH_SURFACE and job.origin.ref:   # CA3 (D130): the plate generated along the path
+            await asyncio.to_thread(_final_plate_path, q, job, rec.id)
         if job.origin and job.origin.surface == "anim_test" and job.origin.ref:   # CA0: the reference's test animation → the version's
             await asyncio.to_thread(_anim_test_result, q, job.origin.ref, job.origin.payload or {}, rec.id)
         if job.origin and job.origin.surface == FOR_SHOT:                     # D90 (02 §5): Animate for a shot version → its takes
@@ -483,14 +487,110 @@ async def _final_layer_batch(q: JobQueue, job: JobRecord, recipe: I2V, clip_id: 
             pass
 
 
-def _final_plate_result(q: JobQueue, fid: str, asset_id: str) -> None:
-    """D111 (PS5b): the plate's still on its final — the layer waits for Stage to project it (status running). Never the job's failure."""
+def _final_plate_result(q: JobQueue, fid: str, asset_id: str) -> str | None:
+    """D111 (PS5b): the plate's still on its final — the layer waits for Stage to project it (status running), or, generated along the path
+    (CA3), for its clip (queued next by the caller). Returns the plate's method. Never the job's failure."""
     from ..finals import FinalStore
     try:
-        f = FinalStore(q.ws).update_layer(fid, "plate", still_asset_id=asset_id, status="running")
+        store = FinalStore(q.ws)
+        f = store.get(fid)
+        method = next((x.method for x in f.layers if x.id == "plate"), None) if f else None
+        f = store.update_layer(fid, "plate", still_asset_id=asset_id, status="queued" if method == "generated" else "running", clip_id=None)
         q.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
+        return method
     except Exception as e:  # noqa: BLE001
         q.hub.broadcast("final.updated", {"id": fid, "revision": 0, "error": f"plate not set: {e}"})
+        return None
+
+
+async def queue_plate_path(q: JobQueue, fid: str, still_id: str, prompt: str) -> JobRecord:
+    """CA3 (D130, E34): the plate generated along the path — the final's plate depth pass encoded as the guide (catalogued beside the
+    final's other passes), LTX-2.3 queued from the plate's still on it (Stage's guided method); the plate layer waits on the clip. Raises
+    ValueError when it cannot run (no guided model in this build, a final too long, the depth pass missing)."""
+    from ..finals import FinalStore, plate_method_check, plate_path_frames, plate_path_guide, plate_path_recipe, plate_path_size
+    store = FinalStore(q.ws)
+    f = await asyncio.to_thread(store.get, fid)
+    layer = next((x for x in f.layers if x.id == "plate"), None) if f else None
+    if f is None or layer is None:
+        raise ValueError(f"the final {fid} or its plate is gone")
+    plate_method_check("generated", f.frames)
+    spec = next((s for s in registry.video_specs() if s.recipes.guide_lora and registry.offered(s, q.app.settings.variant)), None)
+    if spec is None:
+        raise ValueError("no video model with a depth guide in this build (LTX-2.3 and its IC-LoRA) — project the plate")
+    depth = sorted(store.pass_dir(fid, "plate", "depth").glob("*.png"))
+    if len(depth) != f.frames:
+        raise ValueError("the plate's depth pass is missing")
+    w, h = plate_path_size(f, (spec.geometry.size or [1024, 576])[1], spec.recipes.guide_size_mult or spec.geometry.size_mult)
+    n = plate_path_frames(f.frames)
+    out = store.folder(fid) / "plate" / "depth.mp4"
+    await asyncio.to_thread(plate_path_guide, depth, w, h, n, out, f.rate)
+    g = await asyncio.to_thread(q.catalogue.ingest_file, out, kind="video", move=False, suite="stage", lineage_kind="stage-pass",
+                                origin=JobOrigin(suite="stage", surface=FINAL_PLATE_PATH_SURFACE, ref=fid), params={"final_id": fid, "layer": "plate", "pass": "depth-sequence"},
+                                frames=n, fps=float(f.rate), w=w, h=h)
+    g = await asyncio.to_thread(q.catalogue.make_thumbs, g, depth[0])
+    job = q.submit(plate_path_recipe(f, spec.id, still_id, g.id, prompt, (w, h), layer.seed),
+                   origin=JobOrigin(suite="stage", surface=FINAL_PLATE_PATH_SURFACE, ref=fid, payload={"layer": "plate"}))[0]
+    f = await asyncio.to_thread(store.update_layer, fid, "plate", status="queued", error=None, still_asset_id=still_id, guide_asset_id=g.id, clip_id=None,
+                                frames_done=0, job_ids=[*layer.job_ids, job.id])
+    q.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
+    return job
+
+
+async def _plate_path_or_fail(q: JobQueue, job: JobRecord, fid: str, still_id: str, prompt: str) -> None:
+    """The still landed on a plate generated along the path: its clip is queued — a plate that cannot be generated fails, not the job."""
+    from ..finals import FinalStore
+    try:
+        nxt = await queue_plate_path(q, fid, still_id, prompt)
+        job.log_tail.append(f"the plate generated along the path: {nxt.id} queued")
+    except Exception as e:  # noqa: BLE001
+        job.log_tail.append(f"the plate along the path: {e}")
+        try:
+            f = await asyncio.to_thread(FinalStore(q.ws).update_layer, fid, "plate", status="failed", error=str(e))
+            q.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def _final_plate_path(q: JobQueue, job: JobRecord, clip_id: str) -> None:
+    """CA3 (D130): the plate's clip landed — its frames at the final's size, trimmed to the final's count (LTX's 8k + 1 grid), are the
+    plate's own; the layer is done. A clip of a plate made again meanwhile is not used. A failure fails the layer, not the job."""
+    from ..finals import FinalStore
+    fid = str(job.origin.ref)
+    store = FinalStore(q.ws)
+    try:
+        f = store.get(fid)
+        layer = next((x for x in f.layers if x.id == "plate"), None) if f else None
+        if f is None or layer is None:
+            raise ValueError(f"the final {fid} or its plate is gone")
+        if not layer.job_ids or layer.job_ids[-1] != job.id:
+            job.log_tail.append("the plate was made again meanwhile; this clip is not used")
+            return
+        clips = ClipStore(q.ws)
+        clip = clips.get(clip_id)
+        if clip is None or clip.frames < f.frames:
+            raise ValueError(f"the clip has {clip.frames if clip else 0} frames, the final {f.frames}")
+        tmp = store.folder(fid) / "plate" / "_path"
+        shutil.rmtree(tmp, ignore_errors=True)
+        tmp.mkdir(parents=True)
+        try:
+            files = []
+            for i in range(f.frames):
+                with Image.open(clips.frame_path(clip_id, i)) as im:
+                    im.convert("RGB").resize((f.size["w"], f.size["h"]), Image.LANCZOS).save(tmp / f"{i:04d}.png")
+                files.append(tmp / f"{i:04d}.png")
+            store.update_layer(fid, "plate", clip_id=clip_id)
+            f = store.set_frames(fid, "plate", files, "done")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        job.log_tail.append(f"the plate: {f.frames} frames generated along the path at {f.size['w']}×{f.size['h']}")
+        q.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
+    except Exception as e:  # noqa: BLE001
+        job.log_tail.append(f"the plate: {e}")
+        try:
+            f = store.update_layer(fid, "plate", status="failed", error=str(e))
+            q.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def _anim_ref_result(q: JobQueue, pid: str | None, payload: dict, asset_id: str) -> tuple[str, str] | None:

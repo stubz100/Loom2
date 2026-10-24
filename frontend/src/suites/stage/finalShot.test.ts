@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setBackend } from '../../api/client'
 import type { Final, StageDoc, StageObject } from '../../api/types'
 import { useSession } from '../../store/session'
-import { batchCount, framesAt, hasPictureSet, nextFinalStep, picturePlate, planFinal, useFinals } from './finalShot'
+import { AUTO_GENERATE, batchCount, cameraTravel, framesAt, hasPictureSet, nextFinalStep, picturePlate, planFinal, plateChoice, useFinals } from './finalShot'
 import { useStage } from './stageStore'
 
 const obj = (id: string, kind: StageObject['kind'], extra: Partial<StageObject> = {}): StageObject => ({ id, kind, name: id, preset: null, asset_id: null, transform: { pos: [0, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] },
@@ -86,5 +86,32 @@ describe('SC3e the plate of a picture set', () => {
     expect(nextFinalStep('stg_1')).toMatchObject({ label: 'Rendering the plate…', run: null })
     useFinals.setState({ finals: [{ ...final, layers: [{ ...final.layers[0], method: 'projected' }] } as unknown as Final], projecting: null })
     expect(nextFinalStep('stg_1').label).toBe('Make the plate ▶')
+  })
+})
+
+describe('CA3 (D130) the plate by the camera’s travel', () => {
+  const cam = { id: 'cam', name: 'Camera', pos: [0, 1.6, 4], target: [0, 1.2, 0], focal_mm: 35, sensor_mm: 36, roll: 0 }
+  const moving = (to: Partial<typeof cam>) => ({ id: 's', objects: [], cameras: [cam], active_camera: 'cam', range: { start: 0, end: 120 }, size: { w: 1920, h: 1080, fps: 24 },
+    keyframes: { camera: { cam: [{ frame: 0, ease: 'linear', pos: cam.pos, target: cam.target, focal_mm: 35 }, { frame: 120, ease: 'linear', pos: to.pos ?? cam.pos, target: to.target ?? cam.target, focal_mm: to.focal_mm ?? 35 }] }, objects: {} } }) as unknown as StageDoc
+  const times = framesAt(0, 120, 16)
+  it('measures the turn, the orbit and how much more the camera sees', () => {
+    const still = cameraTravel(moving({}), 'cam', times)
+    expect(still).toEqual({ turn: 0, orbit: 0, widen: 1 })
+    const a = (50 * Math.PI) / 180                                                    // E34's move: 50° about the target, a quarter closer
+    const orbit = cameraTravel(moving({ pos: [4 * 0.75 * Math.sin(a), 1.6 * 0.75 + 1.2 * 0.25, 4 * 0.75 * Math.cos(a)] }), 'cam', times)
+    expect(orbit.orbit).toBeGreaterThan(45); expect(orbit.widen).toBeCloseTo(1, 5)
+    const pan = cameraTravel(moving({ target: [1.5, 1.2, 0] }), 'cam', times)
+    expect(pan.turn).toBeGreaterThan(20); expect(pan.orbit).toBe(0)
+    expect(cameraTravel(moving({ pos: [0, 1.6, 6] }), 'cam', times).widen).toBeGreaterThan(1.4)     // pulling back
+    expect(cameraTravel(moving({ focal_mm: 24 }), 'cam', times).widen).toBeGreaterThan(1.4)          // zooming out
+    expect(cameraTravel(moving({ pos: [0, 1.6, 3] }), 'cam', times).widen).toBe(1)                    // pushing in shows nothing new
+  })
+  it('advises a large move generated along the path and a small one, a long one or one without the model projected', () => {
+    const large = plateChoice({ turn: 50, orbit: 50, widen: 1 }, 81, true)                           // D130 held: advised, not made (AUTO_GENERATE off)
+    expect(large).toMatchObject({ method: AUTO_GENERATE ? 'generated' : 'projected', advice: 'generated' }); expect(large.why).toMatch(/^the camera turns 50°/)
+    expect(plateChoice({ turn: 0, orbit: 0, widen: 1.3 }, 81, true)).toMatchObject({ advice: 'generated' }); expect(plateChoice({ turn: 0, orbit: 0, widen: 1.3 }, 81, true).why).toMatch(/^the camera sees 30% more/)
+    expect(plateChoice({ turn: 8, orbit: 5, widen: 1.05 }, 81, true)).toEqual({ method: 'projected', advice: 'projected', why: 'the camera moves little' })
+    expect(plateChoice({ turn: 50, orbit: 50, widen: 1 }, 300, true).advice).toBe('projected')
+    expect(plateChoice({ turn: 50, orbit: 50, widen: 1 }, 81, false).why).toMatch(/no video model/)
   })
 })

@@ -9,7 +9,7 @@ graph = "ltx23"
 roles.te = { default = "gemma3-12b-fp8" }
 roles.vae = "ltx23-video-vae"
 roles.extra = { projection = "ltx23-text-projection", audio_vae = "ltx23-audio-vae" }
-recipes = { i2v = true, flf = true, beats = true, guide_lora = "ltx23-ic-lora-union", guide_seconds = 147.0, extend_lead = 9 }   # ST4 / D76: the Stage clip method (E11: 147 s = 1.22× plain, the pose followed 4/5)
+recipes = { i2v = true, flf = true, beats = true, guide_lora = "ltx23-ic-lora-union", guide_seconds = 147.0, guide_size_mult = 64, extend_lead = 9 }   # ST4 / D76: the Stage clip method (E11: 147 s = 1.22× plain, the pose followed 4/5)
 geometry = { size_mult = 32, frame_step = 8, fps = 24, frames = 121, size = [1024, 576], tiers = { draft = [1024, 576], hd = [1280, 704], portrait = [576, 1024], square = [640, 640] } }
 estimates = { vram_gb = 14.0 }
 

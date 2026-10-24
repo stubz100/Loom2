@@ -9062,3 +9062,38 @@ patched (the Mid attenuated). A track with plugins is printed onto a hidden comp
   the clip 186 s at 1024 × 576. Contact sheet img/31-e34-sheet.jpg (the author's look owed).
 - **D130:** a large move's plate is generated along the path, a small move keeps the projection; CA3 builds it with O4 (the scene's first
   plate as the still's reference).
+
+## 2026-10-24 22:11 — CA3 built; its rig holds D130's automatic choice → Q26 (proto01_animate 31 §4d)
+
+- **Built:** the plate layer's method *generated along the path* beside *projected* (`finals.py`: `generated`, `plate_method_check`,
+  `plate_path_frames/size/guide/recipe`; `finishers.py`: `queue_plate_path` when the plate's still lands, `_final_plate_path` when its
+  clip lands — the frames resized to the final's size and trimmed to its count); `PUT /finals/{fid}/layers/plate/method` (a still already
+  made is kept: projected → Stage projects it, generated → its clip queued now); the plate's row a *projected ▾ / along the path ▾* chip
+  and the same items on its right-click (disabled with the reason under `open` and past 257 frames); `cameraTravel` / `plateChoice` in
+  `finalShot.ts` (a turn or swing past 12°, or 15 % more seen, is a large move; *Make the final shot…* says it). O4: the plate still of a
+  Shot in a scene takes the still of the first Shot before it in the scene that has one as its first reference (`_scene_plate`).
+- **The rig's first fix:** a guided LTX clip is on a 64 grid — the IC-LoRA halves the latent again; the engine refused 992 × 576 (latent
+  31 × 18). `guide_size_mult = 64` in the LTX spec (`ModelRecipes.guide_size_mult`), the compiler snaps a guided clip to it, the plate is
+  sized on it, `/capabilities.stage.clip.size_mult` gives Stage's own guided clips the same grid (16:9 stays 1024 × 576).
+- **The rig** (`scripts/ca3_acceptance.py`, E34's 50° orbit on a copy of the A1 project, Vite and the real engine, one job at a time):
+  the camera's travel advises generated (the camera turns 50°); the clip runs on the depth at the final's rate on LTX's grid (81 frames at
+  16 fps in 112 s, 121 at 24 fps in 152 s, 1024 × 576; the Klein still 36 s); the plate has the final's frames at its size; its first frame
+  is the still (2.1–2.4 levels). **It does not hold the path:** the room's sideways travel against the set's clay pass (phase correlation
+  every 8 frames, px of 256) — E34 122 / 118 (≈ 5 apart), F16 window prompt 124 / 142 (32), F24 window prompt 122 / 171 (52), F24 no
+  window 122 / 151 (29); `engine/spikes/e34b_track.py` on the last one's still, guide and seed: the negative without "static" 149 (27),
+  Quality 20 steps 146 (24, 246 s). The plate moves from frame 0 at an even pace while the camera eases in and overshoots by 18–40 %; on
+  the window prompt a second window grew as the wall turned (img/31-ca3-drift.jpg). The depth guides are the same signal as E34's
+  (values, size, frames); E34's still, from an empty prompt, was grey and close to the clay — the one sample that held the path.
+- **A check replaced:** the first rig check (the end as sharp as the start) is not a measure of smearing — E34's streaked projection kept
+  26.5 → 24.0, this run's clean plate fell 328 → 168 (a sharp still's floor planks fill its first frame); sharpness is recorded, the
+  path is checked (≤ 10 % of the width apart at every step). The rig stands at 4/5 on every run, the path failing.
+- **Held (D130 → Q26):** a figure on the floor is placed by the set, so it would slide against such a plate by up to a fifth of the frame.
+  The camera's travel advises, the plate stays projected (`AUTO_GENERATE = false`), *Generate it along the path* on its row makes it. Q26
+  asks the author: generated on request only (as now), a spike E35 (the plate projected from several Klein stills along the path, on the
+  set by construction), or D130 as accepted.
+- Tests: `test_plate_path_ca3.py` (4: the grid and the method check; the still landing → the clip on the depth guide → the frames; the
+  row's method switch; the long final refused, O4's first plate; the guided ×64 snap), `finalShot.test.ts` (+2: the travel, the advice),
+  the final-shot e2e (the confirm's advice, the row's chip → generated along the path on the fake engine; under `open` the item disabled);
+  routes_d37 +1. Offline 586 passed, settings audit, agents_check and model_literals_check clean, Vitest 470 + 3 skipped, typecheck, lint
+  (0 errors, 79 warnings) and build clean, e2e full 64/64 and open 64/64. Screenshots img/31-ca3-plate-row.jpg,
+  img/31-ca3-make-confirm.jpg.

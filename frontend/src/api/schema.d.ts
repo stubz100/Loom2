@@ -1124,6 +1124,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/finals/{fid}/layers/plate/method": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Final Plate Method
+         * @description CA3 (D130): the plate projected (PS5b: the still cast along the path by Stage, no GPU job) or generated along the path (LTX-2.3 from the
+         *     still on the bare set's depth). A still already made is kept: projected, Stage projects it when the stage is open; generated, its clip is
+         *     queued now. Without a still the method waits for *Make the plate*.
+         */
+        put: operations["final_plate_method_finals__fid__layers_plate_method_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/finals/{fid}/layers/{lid}/frames": {
         parameters: {
             query?: never;
@@ -6554,6 +6576,8 @@ export interface components {
             batches: {
                 [key: string]: unknown;
             }[];
+            /** Clip Id */
+            clip_id: string | null;
             /** Error */
             error: string | null;
             /**
@@ -6581,7 +6605,7 @@ export interface components {
              * Method
              * @enum {string}
              */
-            method: "projected" | "picture" | "move" | "rendered" | "drawn" | "stage";
+            method: "projected" | "generated" | "picture" | "move" | "rendered" | "drawn" | "stage";
             /** Name */
             name: string;
             /** Object Id */
@@ -9233,12 +9257,27 @@ export interface components {
              */
             seed?: number;
         };
+        /** PlateMethodBody */
+        PlateMethodBody: {
+            /**
+             * Method
+             * @enum {string}
+             */
+            method: "projected" | "generated";
+            /**
+             * Prompt Text
+             * @default
+             */
+            prompt_text?: string;
+        };
         /** PlateQueued */
         PlateQueued: {
             /** Job Id */
             job_id: string;
             /** Pass Asset Id */
             pass_asset_id: string;
+            /** Scene Plate */
+            scene_plate?: string | null;
         };
         /** Pose */
         Pose: {
@@ -10012,6 +10051,8 @@ export interface components {
             guide_lora?: string | null;
             /** Guide Seconds */
             guide_seconds?: number | null;
+            /** Guide Size Mult */
+            guide_size_mult?: number | null;
             /**
              * I2I
              * @default false
@@ -14896,6 +14937,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Composition"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    final_plate_method_finals__fid__layers_plate_method_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlateMethodBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Final"];
                 };
             };
             /** @description Validation Error */

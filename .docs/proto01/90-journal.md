@@ -8926,3 +8926,4 @@ patched (the Mid attenuated). A track with plugins is printed onto a hidden comp
   the readiness row owes a prop's model in any shot it is in. Tests: test_props_d128.py (the `open` build: no make, the import works; a
   bad file, a png and a character refused; a quoted path; the Catalogue's import), castReady.test.ts +1; offline 563 passed, Vitest
   (Story) 97, typecheck and lint clean.
+- PM1's screenshots: img/31-pm1-before.jpg, img/31-pm1-imported.jpg (the E28 project's Chest, its Pixal3D spike mesh imported as a GLB).

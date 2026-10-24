@@ -89,11 +89,12 @@ def test_used_run_and_templates():
     v = ShotVersion(id="v1")
     out = recipe_state(v, _reader(_Story()))
     assert out["template"] == "i2v" and [(s["id"], s["state"]) for s in out["steps"]] == [("frame", "missing"), ("clip", "missing")]
-    # the clay templates name every step; those of later waves are planned, not missing
+    # the clay templates name every step; RC1: their waves are built (the route reads them from its graph), the start still waits for W3
     v = v.model_copy(update={"recipe": add_run(None, "clay1", "frame", [], RecipeRun(kind="t2i", outputs=["a1"]))})
     v.recipe.template = "clay1"
     rows = {s["id"]: s for s in recipe_state(v, _reader(_Story()))["steps"]}
-    assert rows["frame"]["state"] == "fresh" and rows["plate"]["state"] == "planned" and rows["plate"]["wave"] == "CA3"
+    assert rows["frame"]["state"] == "fresh" and rows["plate"]["state"] == "missing" and rows["plate"]["wave"] is None
+    assert [t.wave for t in TEMPLATES["clay1"].steps if t.id == "frame"] == ["CA5 (W3)"]
     assert set(TEMPLATES) == {"i2v", "stage", "clay1", "clay2", "dialogue"}
     # the run whose output is used decides, else the last; the history is capped
     r = None
@@ -115,7 +116,8 @@ def test_the_coverage_of_05_s3_reaches_the_typed_recipes():
             missing = [n for n in names if n not in fields]
             assert not missing, f"{kind} · {part}: {missing} are not fields of the recipe"
     runnable = {t.id for tpl in TEMPLATES.values() for t in tpl.steps if t.wave is None}
-    assert runnable == {"frame", "clip", "lipsync"}
+    from loom2.shot_graph import CLAY_STEPS                                     # RC1: the clay steps' parts live in the final's records
+    assert runnable - set(CLAY_STEPS) == {"frame", "clip", "lipsync"}
 
 
 @pytest.mark.asyncio

@@ -71,20 +71,22 @@ class Template(BaseModel):
     steps: list[TemplateStep]
 
 
-_CLAY = [TemplateStep(id="character", label="Character", wave="CA0"), TemplateStep(id="anim_ref", label="Animation reference", inputs=["character"], wave="CA0"),
-         TemplateStep(id="motion", label="Motion", wave="CA1"), TemplateStep(id="camera", label="Camera", wave="CA1"),
-         TemplateStep(id="plate", label="Plate", inputs=["camera"], wave="CA3"),
-         TemplateStep(id="frame", label="Start still", inputs=["anim_ref", "motion", "camera"]),
-         TemplateStep(id="performance", label="Performance (layers)", inputs=["frame", "plate", "motion"], wave="CA5"),
-         TemplateStep(id="composition", label="Composition", inputs=["performance", "plate"], wave="CA6"),
-         TemplateStep(id="finish", label="Finish", inputs=["composition"], wave="AE4"), TemplateStep(id="take", label="Take", inputs=["finish"], wave="AE5")]
+# RC1 (proto01_animate 28): the clay waves are built (CA0–CA1, PS1–PS5, AE1–AE5); a clay version's states come from its graph (shot_graph).
+# The start still stays planned: the clay route performs from the animation references, and the stills come with CA5's W3 repair.
+_CLAY = [TemplateStep(id="character", label="Character"), TemplateStep(id="anim_ref", label="Animation reference", inputs=["character"]),
+         TemplateStep(id="motion", label="Motion"), TemplateStep(id="camera", label="Camera"),
+         TemplateStep(id="plate", label="Plate", inputs=["camera"]),
+         TemplateStep(id="frame", label="Start still", inputs=["anim_ref", "motion", "camera"], wave="CA5 (W3)"),
+         TemplateStep(id="performance", label="Performance (layers)", inputs=["anim_ref", "plate", "motion"]),
+         TemplateStep(id="composition", label="Composition", inputs=["performance", "plate"]),
+         TemplateStep(id="finish", label="Finish", inputs=["composition"]), TemplateStep(id="take", label="Take", inputs=["finish"])]
 
 TEMPLATES: dict[str, Template] = {t.id: t for t in [
     Template(id="i2v", label="Image to video", hint="a frame, then a performance from it",
              steps=[TemplateStep(id="frame", label="Frame"), TemplateStep(id="clip", label="Performance", inputs=["frame"])]),
     Template(id="stage", label="From the stage", hint="the stage's camera: a still from its passes, then a clip guided by its depth",
              steps=[TemplateStep(id="frame", label="Start still (the stage)"), TemplateStep(id="clip", label="Performance (the stage's guide)", inputs=["frame"])]),
-    Template(id="clay1", label="Clay, one character", hint="the clay pipeline (01, 02) — its steps arrive with waves CA0–CA6 and AE4–AE5", steps=_CLAY),
+    Template(id="clay1", label="Clay, one character", hint="the clay pipeline (01, 02): the final shot made on the stage — the plate, a layer per character, the composition", steps=_CLAY),
     Template(id="clay2", label="Clay, two characters", hint="as Clay, one character, a layer per character", steps=_CLAY),
     Template(id="dialogue", label="Dialogue with voice", hint="the lines voiced, a frame, a performance, and lip-sync (experimental)",
              steps=[TemplateStep(id="voice", label="Lines and voice", wave="RC2"), TemplateStep(id="frame", label="Frame"),

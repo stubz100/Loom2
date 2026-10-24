@@ -83,6 +83,7 @@
  "GET /story/recipe-templates",
  "GET /story/shots",
  "GET /story/shots/{sid}",
+ "GET /story/shots/{sid}/graph",
  "GET /story/shots/{sid}/recipe",
  "GET /story/voices",
  "GET /story/voices/{vid}",

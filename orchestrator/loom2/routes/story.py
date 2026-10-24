@@ -21,6 +21,7 @@ from ..library import Library, LibraryStore, StaleLibrary
 from ..schemas import Deleted, ProfileAdded, LibraryChange, LibraryRemoved, Expanded, FlowOut, FlowProblems, LipsyncQueued, LoraCheckQueued, LoraRecordList, LoraRecordOut, NodeShot, ProfileList, ShotList, TrainQueued, TtsQueued, VoiceList, VoiceRecordOut
 from ..stages import StageStore, encode_guide
 from ..shot_recipe import TEMPLATES, StampReader, Template, recipe_state, rerun_recipe, stale_plan, used_run
+from ..shot_graph import ShotGraph, clay_rows, final_for, shot_graph
 from ..story import FOR_SHOT, NODE_TYPES, CastUse, cast_uses, body_fit_origin, model_source, prop_model_origin, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
 from ..voices import VoiceRecord, VoiceStore, check_voice
 from .deps import Svc
@@ -994,7 +995,53 @@ async def shot_recipe(svc: Svc, sid: str, version: str | None = None):
         raise HTTPException(404, str(e.args[0]))
     reader = StampReader(stages=StageStore(ws), groups=svc.groups, story=store)
     out = await asyncio.to_thread(recipe_state, v, reader)
+    if out["template"].startswith("clay"):                                       # RC1: a clay version's steps live in its final, stage and Cast
+        g = await asyncio.to_thread(_graph, svc, ws, store, s, v, out)
+        out = {**out, "steps": clay_rows(out["steps"], g)}
+        out["stale"] = sum(1 for r in out["steps"] if r["state"] == "stale")
     return {"shot_id": s.id, "version": v.id, **out}
+
+
+def _graph(svc, ws, store: StoryStore, s, v, rc0: dict) -> ShotGraph:
+    """RC1: the version's graph from its records (the final made for it, its stage, the Cast, the node that binds it, the queue)."""
+    from ..clips import ClipStore
+    from ..compositions import CompositionStore
+    from ..finals import FinalStore
+    stage = StageStore(ws).get(v.stage_id) if v.stage_id else None
+    fin = final_for(s.id, v, FinalStore(ws).list())
+    if stage is None and fin is not None:
+        stage = StageStore(ws).get(fin.stage_id)
+    comp = CompositionStore(ws).get(fin) if fin is not None else None
+    nodes = store.flow_nodes()
+    node = next((n for n in nodes.values() if n.shot_id == s.id), None) or (nodes.get(s.owner_node) if s.owner_node else None)
+    clips = ClipStore(ws)
+
+    def clip_asset(cid: str) -> str | None:
+        c = clips.get(cid)
+        return c.asset_id if c else None
+    jobs = list(svc.queue.jobs.values()) if svc.queue else []
+    return shot_graph(s, v, rc0=rc0, node=node, profiles={p.id: p for p in store.profiles()}, stage=stage, final=fin, composition=comp,
+                      clip_asset=clip_asset, jobs=jobs)
+
+
+@router.get("/story/shots/{sid}/graph", response_model=ShotGraph, response_model_by_alias=True)
+async def shot_recipe_graph(svc: Svc, sid: str, version: str | None = None):
+    """RC1 (D96, proto01_animate 28): a shot version's recipe as a graph — one node per thing it is made of (characters, their animation
+    references, the stage's camera and motion, RC0's steps, the final's plate and layers, the composition, the finish, the take), the edges
+    where a step reads another, each done, stale (with why), owed, running or none; stale spreads along the edges."""
+    ws, _, _ = svc.require_project()
+    store = StoryStore(ws)
+    s = await asyncio.to_thread(store.shot, sid)
+    if s is None:
+        raise HTTPException(404, "shot not found")
+    try:
+        v = s.version(version)
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0]))
+    reader = StampReader(stages=StageStore(ws), groups=svc.groups, story=store)
+    rc0 = await asyncio.to_thread(recipe_state, v, reader)
+    g = await asyncio.to_thread(_graph, svc, ws, store, s, v, rc0)
+    return g.model_dump(by_alias=True)
 
 
 @router.put("/story/shots/{sid}/versions/{vid}/template", response_model=Shot)

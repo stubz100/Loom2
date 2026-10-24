@@ -5957,6 +5957,112 @@
         "title": "GitInfo",
         "type": "object"
       },
+      "GraphEdge": {
+        "properties": {
+          "from": {
+            "title": "From",
+            "type": "string"
+          },
+          "to": {
+            "title": "To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ],
+        "title": "GraphEdge",
+        "type": "object"
+      },
+      "GraphNode": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "ref": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Ref",
+            "type": "object"
+          },
+          "seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seconds"
+          },
+          "state": {
+            "default": "done",
+            "enum": [
+              "done",
+              "stale",
+              "owed",
+              "running",
+              "none"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "sub": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sub"
+          },
+          "thumb": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumb"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "label",
+          "sub",
+          "state",
+          "reasons",
+          "thumb",
+          "ref",
+          "seconds"
+        ],
+        "title": "GraphNode",
+        "type": "object"
+      },
       "GroupChanged": {
         "properties": {
           "ids": {
@@ -14499,6 +14605,69 @@
           "name"
         ],
         "title": "ShotCreate",
+        "type": "object"
+      },
+      "ShotGraph": {
+        "properties": {
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/GraphEdge"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "final_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Final Id"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/GraphNode"
+            },
+            "title": "Nodes",
+            "type": "array"
+          },
+          "owed": {
+            "default": 0,
+            "title": "Owed",
+            "type": "integer"
+          },
+          "route": {
+            "title": "Route",
+            "type": "string"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          },
+          "stale": {
+            "default": 0,
+            "title": "Stale",
+            "type": "integer"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "shot_id",
+          "version",
+          "route",
+          "final_id",
+          "nodes",
+          "edges",
+          "stale",
+          "owed"
+        ],
+        "title": "ShotGraph",
         "type": "object"
       },
       "ShotList": {
@@ -27965,6 +28134,65 @@
           }
         },
         "summary": "Shot Patch",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/shots/{sid}/graph": {
+      "get": {
+        "description": "RC1 (D96, proto01_animate 28): a shot version's recipe as a graph — one node per thing it is made of (characters, their animation\nreferences, the stage's camera and motion, RC0's steps, the final's plate and layers, the composition, the finish, the take), the edges\nwhere a step reads another, each done, stale (with why), owed, running or none; stale spreads along the edges.",
+        "operationId": "shot_recipe_graph_story_shots__sid__graph_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "title": "Sid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShotGraph"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Shot Recipe Graph",
         "tags": [
           "story"
         ]

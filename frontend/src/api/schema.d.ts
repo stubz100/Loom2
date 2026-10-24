@@ -3060,6 +3060,28 @@ export interface paths {
         patch: operations["shot_patch_story_shots__sid__patch"];
         trace?: never;
     };
+    "/story/shots/{sid}/graph": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Shot Recipe Graph
+         * @description RC1 (D96, proto01_animate 28): a shot version's recipe as a graph — one node per thing it is made of (characters, their animation
+         *     references, the stage's camera and motion, RC0's steps, the final's plate and layers, the composition, the finish, the take), the edges
+         *     where a step reads another, each done, stale (with why), owed, running or none; stale spreads along the edges.
+         */
+        get: operations["shot_recipe_graph_story_shots__sid__graph_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/shots/{sid}/recipe": {
         parameters: {
             query?: never;
@@ -5728,6 +5750,40 @@ export interface components {
             sha: string;
         } & {
             [key: string]: unknown;
+        };
+        /** GraphEdge */
+        GraphEdge: {
+            /** From */
+            from: string;
+            /** To */
+            to: string;
+        };
+        /** GraphNode */
+        GraphNode: {
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Reasons */
+            reasons: string[];
+            /** Ref */
+            ref: {
+                [key: string]: string;
+            };
+            /** Seconds */
+            seconds: number | null;
+            /**
+             * State
+             * @default done
+             * @enum {string}
+             */
+            state: "done" | "stale" | "owed" | "running" | "none";
+            /** Sub */
+            sub: string | null;
+            /** Thumb */
+            thumb: string | null;
         };
         /** GroupChanged */
         GroupChanged: {
@@ -9288,6 +9344,31 @@ export interface components {
             name: string;
             /** Stage Id */
             stage_id?: string | null;
+        };
+        /** ShotGraph */
+        ShotGraph: {
+            /** Edges */
+            edges: components["schemas"]["GraphEdge"][];
+            /** Final Id */
+            final_id: string | null;
+            /** Nodes */
+            nodes: components["schemas"]["GraphNode"][];
+            /**
+             * Owed
+             * @default 0
+             */
+            owed: number;
+            /** Route */
+            route: string;
+            /** Shot Id */
+            shot_id: string;
+            /**
+             * Stale
+             * @default 0
+             */
+            stale: number;
+            /** Version */
+            version: string;
         };
         /** ShotList */
         ShotList: {
@@ -17034,6 +17115,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Shot"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    shot_recipe_graph_story_shots__sid__graph_get: {
+        parameters: {
+            query?: {
+                version?: string | null;
+            };
+            header?: never;
+            path: {
+                sid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShotGraph"];
                 };
             };
             /** @description Validation Error */

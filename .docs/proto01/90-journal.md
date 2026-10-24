@@ -8566,3 +8566,28 @@ WB1–WB3, *Mark final* at any size, the For context ended by *← Back* and hon
   `--disable-backgrounding-occluded-windows --disable-renderer-backgrounding --disable-background-timer-throttling` (PS5's rig has the same
   exposure; it ran in daytime with the window visible).
 - With this, D125's plan owes no rig run; the author's click-through stays owed.
+
+## 2026-10-24 05:09 — RC1 planned (proto01_animate 28) and RC1a built: the Shot's recipe as a graph, from the records
+
+- **The plan** ([28](../proto01_animate/28-recipe-graph.md)): D96's RC1 after D125 — the graph built on the server from the records,
+  opened in Animate (a *Graph* pill beside the modes), in the Flow in place, on the shot page and from the Catalogue (C4); waves RC1a–RC1d.
+  Why now: a clay final shot's work lives in its final, stage and Cast, so RC0's recipe of the A1 rig's shot was empty and its template
+  still called the built waves *planned*.
+- **RC1a · the graph record** (`loom2/shot_graph.py`, `GET /story/shots/{sid}/graph`): one node per thing the shot is made of — each Cast
+  character (the node's speakers, the stage's bound figures; a Cast prop likewise) with its hero, on the clay route its animation
+  reference; the node's place; a Dialogue's lines (voiced / changed / not); the stage, its camera and each figure's motion; RC0's frame,
+  clip and lip-sync steps; the final's plate and a layer per figure or Cast prop (a stand-in prop and the shadows are passes, not parts);
+  the composition (assembled, composed, its edits); the finish (passes on layers and processing layers); the take (the version's clip).
+  Each node is done, stale (with why), owed, running (its job queued or running, a layer's own status) or none (optional and unused);
+  stale spreads along the edges and through an unused node ("after <node>"). The final read is the one made for the version (a final made
+  before A1 counts for every version of its shot), else the newest on its stage camera made for no other shot. The stage moved on since
+  the final makes the plate and the layers stale; a render behind its composition, or a processing layer whose layers changed, the take.
+- The clay template's waves are cleared (built); the start still stays planned (`CA5 (W3)`: the clay route performs from the animation
+  references). RC0's list of a clay version reads its states from the graph (`clay_rows`), so the Shot section and the shot page agree.
+- **Against the A1 rig's records** (no GPU): route clay2, 14 nodes — Mara and Ines, their animation references, the stage, the camera, both
+  motions, the plate, both layers, the composition, the finish (no pass), the take — all done, 18 edges as W6 and C4 draw them.
+- OpenAPI and schema.d.ts regenerated; `routes_d37.json` gained the route.
+- **Tests:** `test_shot_graph_rc1.py` (4: an image-to-video shot with its speakers, place and lines, a stale frame spreading, a running
+  job; a clay final shot's nodes and edges, the stage moved on, a render behind its composition and a stale processing layer, RC0's clay
+  rows; the final a version reads; the route), `test_shot_recipe_rc0.py` updated for the cleared waves. Offline 539 passed; settings audit
+  clean.

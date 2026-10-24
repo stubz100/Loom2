@@ -230,3 +230,22 @@ touches, a journal entry and a local commit.
   seed continuing the kept batch's clip (W1's carried 5 frames) on the layer's placed reference and pose guide, the rest chained, the layer
   stitched and matted again. *Re-take the whole layer* stays beside it. D102 retired W3 (a per-frame refine at a seam); A6's healing patch
   stays for regions.
+
+### 4c. E34 — the plate for a large camera move (2026-10-24) → D130
+
+`engine/spikes/e34_plate.py` (with `e34_browser.cjs`): the A1 room as a bare stage (the set and its light), the camera orbiting 50° about its
+target and closing in a quarter over 5 s (121 frames at 24 fps); Stage makes the final, the plate's Klein still (PS5b) is projected along
+the path, and the depth sequence of the same path guides an LTX-2.3 clip that starts from the same still (Stage's guided method).
+
+| | projected (PS5b) | generated along the path (CA3) |
+| --- | --- | --- |
+| frame 0 against the still | the still itself | 1.9 levels apart |
+| sharpness (Laplacian variance) start → end | 26.5 → 24.0 | 28.1 → 176.7 |
+| step frame to frame (median) | 1.37 | 2.82 |
+| the walls the still never saw | smeared into streaks from frame 60 | drawn: the set's window comes into view |
+| cost | Stage, seconds, no GPU job | 186 s at 1024 × 576 (LTX-2.3, Draft) |
+
+![E34: projected (top) against generated along the path (bottom) at frames 0, 30, 60, 90, 120](img/31-e34-sheet.jpg)
+
+**→ D130:** a large move's plate is generated along the path; a small move keeps the projection. CA3 builds it (the plate's method chosen by
+the camera's travel, switchable on the plate's row) with O4 (the scene's first plate as the still's reference).

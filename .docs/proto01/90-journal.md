@@ -9051,3 +9051,14 @@ patched (the Mid attenuated). A track with plugins is printed onto a hidden comp
   back on the hand, who can hold), a new e2e scenario (into the right hand from the outliner's right-click, up with the waving hand, the
   Inspector's held row, taken out where it stands). Offline 582 passed, settings audit and agents_check clean, Vitest 468 + 3 skipped,
   typecheck, lint (0 errors, 79 warnings) and build clean, e2e full 64/64 and open 64/64. Screenshot img/31-hp1-held.jpg.
+
+## 2026-10-24 21:06 — E34: the plate for a large camera move → D130 (proto01_animate 31 §4c)
+
+- **Ran** `engine/spikes/e34_plate.py` on a copy of the A1 project: the room as a bare stage, the camera orbiting 50° and closing in a quarter
+  over 5 s (121 f at 24); the Klein still projected along the path (PS5b) against an LTX-2.3 clip from the same still guided by the bare
+  set's depth along the path (Stage's guided method, the IC-LoRA union control).
+- **Measured:** the clip starts on the still (1.9 levels apart); the projection's sharpness 26.5 → 24.0 (the walls it never saw smeared into
+  streaks from frame 60), the clip's 28.1 → 176.7 (the set's window drawn as it comes into view); the step frame to frame 1.37 against 2.82;
+  the clip 186 s at 1024 × 576. Contact sheet img/31-e34-sheet.jpg (the author's look owed).
+- **D130:** a large move's plate is generated along the path, a small move keeps the projection; CA3 builds it with O4 (the scene's first
+  plate as the still's reference).

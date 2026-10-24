@@ -2924,6 +2924,160 @@
         "title": "CutEdited",
         "type": "object"
       },
+      "CutEffect": {
+        "description": "AU4: a VST3 effect in an audio track's chain (its state a file of loom2's host, relative to the cut's folder; none: its defaults).",
+        "properties": {
+          "bundle": {
+            "title": "Bundle",
+            "type": "string"
+          },
+          "bypass": {
+            "default": false,
+            "title": "Bypass",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "uid": {
+            "default": "",
+            "title": "Uid",
+            "type": "string"
+          },
+          "vendor": {
+            "default": "",
+            "title": "Vendor",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "bundle",
+          "uid",
+          "name",
+          "vendor",
+          "bypass",
+          "state"
+        ],
+        "title": "CutEffect",
+        "type": "object"
+      },
+      "CutFx": {
+        "properties": {
+          "bypass": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bypass"
+          },
+          "fx": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fx"
+          },
+          "op": {
+            "enum": [
+              "add",
+              "remove",
+              "move",
+              "bypass"
+            ],
+            "title": "Op",
+            "type": "string"
+          },
+          "plugin": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plugin"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "to": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To"
+          },
+          "track": {
+            "title": "Track",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "track",
+          "op"
+        ],
+        "title": "CutFx",
+        "type": "object"
+      },
+      "CutFxEditor": {
+        "properties": {
+          "fx": {
+            "title": "Fx",
+            "type": "string"
+          },
+          "track": {
+            "title": "Track",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "track",
+          "fx"
+        ],
+        "title": "CutFxEditor",
+        "type": "object"
+      },
       "CutItem": {
         "description": "One clip on a track, as the editor shows it (frames at the cut's rate; the source in seconds).",
         "properties": {
@@ -3396,6 +3550,13 @@
       },
       "CutTrack": {
         "properties": {
+          "chain": {
+            "items": {
+              "$ref": "#/components/schemas/CutEffect"
+            },
+            "title": "Chain",
+            "type": "array"
+          },
           "enabled": {
             "default": true,
             "title": "Enabled",
@@ -3444,6 +3605,16 @@
             "title": "Pan",
             "type": "number"
           },
+          "printed": {
+            "default": "none",
+            "enum": [
+              "none",
+              "current",
+              "stale"
+            ],
+            "title": "Printed",
+            "type": "string"
+          },
           "role": {
             "anyOf": [
               {
@@ -3490,6 +3661,8 @@
           "pan",
           "width",
           "role",
+          "chain",
+          "printed",
           "items",
           "transitions"
         ],
@@ -30388,6 +30561,112 @@
           }
         },
         "summary": "Timeline Frame",
+        "tags": [
+          "timelines"
+        ]
+      }
+    },
+    "/timelines/{tl_id}/fx": {
+      "post": {
+        "description": "AU4 (D127): an audio track's chain of VST3 effects — add one, remove, move, bypass (one change of the cut; the track prints again\nbefore the next mix, movie or export).",
+        "operationId": "timeline_fx_timelines__tl_id__fx_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tl_id",
+            "required": true,
+            "schema": {
+              "title": "Tl Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CutFx"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CutEdited"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Timeline Fx",
+        "tags": [
+          "timelines"
+        ]
+      }
+    },
+    "/timelines/{tl_id}/fx/editor": {
+      "post": {
+        "description": "AU4 (D127): the effect's own editor in a window of loom2's host; answers when the author closes it, its state kept with the cut\n(one change; no base revision — the cut may change while the window is open).",
+        "operationId": "timeline_fx_editor_timelines__tl_id__fx_editor_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tl_id",
+            "required": true,
+            "schema": {
+              "title": "Tl Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CutFxEditor"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CutEdited"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Timeline Fx Editor",
         "tags": [
           "timelines"
         ]

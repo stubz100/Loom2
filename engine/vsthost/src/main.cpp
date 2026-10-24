@@ -7,7 +7,8 @@
 //   loom2-vsthost params <bundle> <uid> <state|->                an effect's parameters (id, title, units, steps, value, as shown)
 //   loom2-vsthost state <bundle> <uid> <state|-> <out> [id=v…]   its state with parameters set (normalised 0…1) — tests and scripts
 //   loom2-vsthost render <chain.tsv> <in.wav> <out.wav>          a WAV through a chain, offline: one line per effect, tab-separated
-//                                                                <bundle> <uid> <state|-> <bypass 0|1>; each effect's latency taken off
+//                                                                <bundle> <uid> <state|-> <bypass 0|1>; each effect's latency taken off;
+//                                                                a line `@gain <dB>` scales the signal there (in float: a print's gain)
 //   loom2-vsthost editor <bundle> <uid> <state|-> <out> [title]  the effect's own editor in a window; its state written when it closes
 #include "host.h"
 
@@ -16,6 +17,7 @@
 
 #include <windows.h>
 
+#include <cmath>
 #include <cstdio>
 #include <fstream>
 #include <sstream>
@@ -140,6 +142,14 @@ int render (const std::wstring& chainFile, const std::wstring& inWav, const std:
 		std::stringstream ss (line);
 		for (std::string c; std::getline (ss, c, '\t');)
 			cols.push_back (c);
+		if (cols.size () >= 2 && cols[0] == "@gain")
+		{
+			const float g = float (std::pow (10.0, std::stod (cols[1]) / 20.0));
+			for (size_t i = 0; i < audio.frames (); ++i)
+				audio.l[i] *= g, audio.r[i] *= g;
+			o += std::string (k++ ? ", " : "") + "{\"gain_db\": " + cols[1] + "}";
+			continue;
+		}
 		if (cols.size () < 4)
 			return fail ("a chain line is <bundle> <uid> <state|-> <bypass>: " + line);
 		if (cols[3] == "1")

@@ -8844,3 +8844,25 @@ patched (the Mid attenuated). A track with plugins is printed onto a hidden comp
 - Tests: offline 558 passed (test_vsthost_au3.py 3 on tests/fake_vsthost.py; the OpenAPI export now pins LOOM2_VSTHOST_CLI too — the
   contract test caught the env default), settings audit clean, agents_check clean (engine/vsthost/AGENTS.md), Vitest 459 + 3 skipped,
   typecheck, lint (0 errors, 79 warnings) and build clean, e2e full 63/63 and open 63/63 (the fake host with two fake effects). Next AU4.
+
+## 2026-10-24 15:22 — AU4 built (D127 done): a track's chain of VST3 effects and its print
+
+- **Chain** in `loom2.chains` (POST /timelines/{id}/fx add / remove / move / bypass; one change each): the Inspector lists the effects
+  (on / bypassed, its window, earlier, later, away — commands on the effect), *Add an effect…* opens the installed list (EffectPicker:
+  search, Scan again, failures behind a ?); the header says "1 fx". The effect's window (POST …/fx/editor) writes a new state file per edit
+  (fx/<id>-<n>.vststate) so the cut's undo takes settings back; no base revision while the window is open; it opens centred on the monitor
+  under the mouse (the first screenshot found it top-left under the author's overlay).
+- **Printing** (Cuts.sync_prints, before the page's mix, the movie and the FCPXML / EDL): the track alone at unity by FilmCraft in a process
+  of its own (`run`: other tracks muted, strip neutral, a custom range to its last sound + 8 s; the project byte-identical — probed), then
+  its gain in float and its chain by the host, placed on a hidden companion; the source into a muted submix; the companion mirrors width,
+  volume, pan and mute without printing again; current while its key and file hold. FCPXML / EDL with prints: a process deletes the printed
+  sources first. `_place` hands FilmCraft the track id (loom2's A-numbers skip companions).
+- **Found**: AGain Sample Accurate's processor starts its gain at 0 (its controller says 1.0) → a silent print; the host now hands a default
+  effect's controller values to its processor in the first block. The fake FilmCraft's `wave` probe refused float WAVs (soundfile now). The
+  page did not refresh after a mix that printed (it reloads the tracks now; a failed print is a toast).
+- **Rig** au_acceptance.py 25/25 on the final host: the impulse at 0.5 s heard only at 1.500 s at 0.401 through AGain + ADelay (print +
+  mix 0.22 s), companion hidden, pan mirrored without a print, FCPXML names the print not the source, the movie's loudest at 1.500 s, a bypass
+  prints again; plus AU1–AU3's 19.
+- Tests: offline 560 passed (test_cuts_au4.py 2), settings audit, OpenAPI, agents_check and the host's pin clean, Vitest 459 + 3 skipped,
+  typecheck, lint (0 errors, 79 warnings) and build clean, e2e full 63/63 and open 63/63 (the tracks scenario adds, opens, bypasses an
+  effect and waits for the print; re-run in both variants after the page's mix change). Screenshots img/30-au4-*.jpg. D127 done.

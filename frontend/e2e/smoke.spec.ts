@@ -500,7 +500,7 @@ test('a sequence (P17, D83 — in Story · Episode since 17 SY4): a fake-engine 
   const mv = await api<{ kind: string; lineage_kind: string | null; parents: string[]; params: { movie?: boolean } }>('GET', `/assets/${mj.result.asset_ids![0]}`)
   expect([mv.kind, mv.lineage_kind, mv.params.movie, mv.parents.length]).toEqual(['video', 'render', true, 1])
 })
-test("the cut's tracks (CE2–CE3, D126): a FilmCraft cut shows its every track and FilmCraft's frame; the razor cuts a take, the right-click sets its speed, undo and redo are the cut's own, a ripple trim closes up, a track is renamed from its header; a sound's gain and fade from its right-click, the cut's mix in the viewer; D127: the audio tracks' roles, a strip set from a header and from the Inspector's sliders", async ({ page }) => {
+test("the cut's tracks (CE2–CE3, D126): a FilmCraft cut shows its every track and FilmCraft's frame; the razor cuts a take, the right-click sets its speed, undo and redo are the cut's own, a ripple trim closes up, a track is renamed from its header; a sound's gain and fade from its right-click, the cut's mix in the viewer; D127: the audio tracks' roles, a strip set from a header and from the Inspector's sliders, an effect added, edited, bypassed and printed", async ({ page }) => {
   test.setTimeout(120_000)
   // a take from the fake engine, on a new cut's V1 (through the API: the bins' + is the sequence scenario's)
   const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
@@ -603,6 +603,28 @@ test("the cut's tracks (CE2–CE3, D126): a FilmCraft cut shows its every track 
   await ti.getByLabel("the track's role").selectOption('effects')
   await expect.poll(async () => (await api<Strip>('GET', `/timelines/${tl.id}/tracks`)).audio[0], { timeout: 10_000 }).toMatchObject({ name: 'Effects', role: 'effects', gain_db: -3 })
   await expect(page.locator('.cut-head.selected')).toContainText('Effects')
+  // AU4: an effect on the sound's track from the Inspector's list (the fake host's two), its window, a bypass; the track prints before the mix
+  type Fx = { audio: { chain: { name: string; state: string | null; bypass: boolean }[]; printed: string }[] }
+  const fxOf = async () => (await api<Fx>('GET', `/timelines/${tl.id}/tracks`)).audio[1]
+  const soundHead = page.locator('.cut-row', { has: page.locator('.cut-clip.k-sound') }).locator('.cut-head')
+  await soundHead.click()
+  await ti.getByRole('button', { name: 'Add an effect…' }).click()
+  const picker = page.getByTestId('fx-picker')
+  await expect(picker.locator('.fx-list li')).toHaveCount(2, { timeout: 15_000 })
+  await picker.getByLabel('find an effect').fill('tape')
+  await expect(picker.locator('.fx-list li')).toHaveCount(1)
+  await picker.locator('.fx-list button', { hasText: 'Tape Gain' }).click()
+  await expect(ti.getByTestId('fx-chain')).toContainText('Tape Gain')
+  await ti.getByRole('button', { name: 'Tape Gain window' }).click()
+  await expect.poll(async () => (await fxOf()).chain[0]?.state ?? '', { timeout: 10_000 }).toMatch(/^fx\//)
+  await ti.getByLabel('Tape Gain on').click()                                                    // the box follows the cut's answer
+  await expect.poll(async () => (await fxOf()).chain[0]?.bypass, { timeout: 10_000 }).toBe(true)
+  await expect(ti.getByLabel('Tape Gain on')).not.toBeChecked()
+  await ti.getByLabel('Tape Gain on').click()
+  await expect(ti.getByLabel('Tape Gain on')).toBeChecked()
+  await expect(soundHead).toContainText('1 fx')
+  await expect.poll(async () => (await fxOf()).printed, { timeout: 20_000 }).toBe('current')        // the page's mix printed it
+  await expect(page.getByTestId('cut-mix')).toHaveAttribute('src', /^blob:/, { timeout: 15_000 })
 })
 
 test("Settings › Audio (D127): the loudness target and a track role's strip are set in the general Settings and saved", async ({ page }) => {

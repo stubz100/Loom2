@@ -3,7 +3,7 @@
 // and the toast says so). Project data lives here and on disk, never in component state.
 import { create } from 'zustand'
 import { ApiError, http, unwrap } from '../../../api/client'
-import type { Clip, CutEdited, CutTracks, Job, Timeline, TimelineClipIn, TrackRole, TrackStrip } from '../../../api/types'
+import type { Clip, CutEdited, CutTracks, Job, Timeline, TimelineClipIn, TrackRole, TrackStrip, VstPlugin, VstPluginList } from '../../../api/types'
 import { useSession } from '../../../store/session'
 import { DEV_HOOKS } from '../../../devHooks'
 import { append, at, duration, move, remove, setOverlap, starts, trim, type Lane, type LaneClip, chainIn } from './lane'
@@ -77,6 +77,15 @@ interface SequenceState {
   /** D127: an audio track's strip (what changes; the rest stays) and its role (Settings › Audio's strip for it). */
   cutStrip: (track: number, change: Partial<TrackStrip>) => Promise<boolean>
   cutRole: (track: number, role: TrackRole | null) => Promise<boolean>
+  /** AU4: an audio track's chain — add an effect, remove, move, bypass — and an effect's own editor (it answers when its window closes). */
+  cutFx: (track: number, change: { op: 'add' | 'remove' | 'move' | 'bypass'; plugin?: Pick<VstPlugin, 'bundle' | 'uid' | 'name' | 'vendor'>; fx?: string; to?: number; bypass?: boolean }) => Promise<boolean>
+  cutFxEditor: (track: number, fx: string) => Promise<void>
+  fxOpen: string | null                   // the effect whose window is open
+  fxPicker: number | null                 // the track the effect list is open for
+  fxPlugins: VstPluginList | null         // the installed effects (loaded when the list first opens; the server keeps the scan)
+  fxScanning: boolean
+  /** The list opens for `track` (none: closes); the installed effects are fetched the first time, or scanned again on `rescan`. */
+  setFxPicker: (track: number | null, rescan?: boolean) => void
   setTool: (tool: CutTool) => void
   selectClip: (id: number | null) => void
   selectTrack: (id: number | null) => void
@@ -137,7 +146,7 @@ async function cutCall(get: () => SequenceState, set: (p: Partial<SequenceState>
 
 export const useSequence = create<SequenceState>()((set, get) => ({
   timelines: [], current: null, lane: null, selected: null, playhead: 0, playing: false, pxPerFrame: 3, undo: [], redo: [], saving: false, lastExport: null, assembleFor: null,
-  tracks: null, tool: 'select', selClip: null, selTrack: null, cutBusy: false,
+  tracks: null, tool: 'select', selClip: null, selTrack: null, cutBusy: false, fxOpen: null, fxPicker: null, fxPlugins: null, fxScanning: false,
 
   load: async () => {
     try { set({ timelines: (await unwrap(http.GET('/timelines'))).items }) } catch { set({ timelines: [] }) }
@@ -238,6 +247,22 @@ export const useSequence = create<SequenceState>()((set, get) => ({
   },
   cutStrip: (track, change) => cutCall(get, set, (id, revision) => unwrap(http.POST('/timelines/{tl_id}/strip', { params: { path: { tl_id: id } }, body: { revision, track, ...change } }))),
   cutRole: (track, role) => cutCall(get, set, (id, revision) => unwrap(http.POST('/timelines/{tl_id}/role', { params: { path: { tl_id: id } }, body: { revision, track, role } }))),
+  cutFx: (track, change) => cutCall(get, set, (id, revision) => unwrap(http.POST('/timelines/{tl_id}/fx', { params: { path: { tl_id: id } }, body: { revision, track, ...change } }))),
+  cutFxEditor: async (track, fx) => {
+    const cur = get().current
+    if (!cur?.file || get().fxOpen) return
+    set({ fxOpen: fx })                                                       // the window is the author's: no busy state, other edits go on
+    try { applyCut(await unwrap(http.POST('/timelines/{tl_id}/fx/editor', { params: { path: { tl_id: cur.id } }, body: { track, fx } })), set, get) }
+    catch (e) { useSession.getState().toast(`${(e as ApiError).detail ?? e}`, 'error') }
+    finally { set({ fxOpen: null }) }
+  },
+  setFxPicker: (track, rescan = false) => {
+    set({ fxPicker: track })
+    if (track === null || get().fxScanning || (get().fxPlugins && !rescan)) return
+    set({ fxScanning: true })
+    void unwrap(http.GET('/audio/plugins', { params: { query: { rescan } } })).then((r) => set({ fxPlugins: r }))
+      .catch((e) => set({ fxPlugins: { available: false, plugins: [], failed: [], error: String((e as ApiError).detail ?? e) } })).finally(() => set({ fxScanning: false }))
+  },
   setTool: (tool) => set({ tool }),
   selectClip: (id) => {                                                       // a take on V1 is the lane's clip too (Update, the Inspector)
     const k = id === null ? -1 : (get().lane?.clips.findIndex((c) => c.id === String(id)) ?? -1)

@@ -125,11 +125,14 @@ class VstHost:
         state_out.parent.mkdir(parents=True, exist_ok=True)
         return self._run(["editor", bundle, uid, str(state_in) if state_in else "-", str(state_out), title], None)
 
-    def render(self, chain: list[dict], wav_in: Path, wav_out: Path) -> dict:
-        """`wav_in` through the chain ([{bundle, uid, state: Path | None, bypass}], in order) into `wav_out` (stereo float at the same rate)."""
+    def render(self, chain: list[dict], wav_in: Path, wav_out: Path, gain_db: float = 0.0) -> dict:
+        """`wav_in` through the chain ([{bundle, uid, state: Path | None, bypass}], in order) into `wav_out` (stereo float at the same rate);
+        `gain_db` first, in float (AU4: a print's gain — FilmCraft's WAV is 16-bit, so the gain is not baked into it)."""
         wav_out.parent.mkdir(parents=True, exist_ok=True)
         tsv = wav_out.with_suffix(".chain.tsv")
-        tsv.write_text("".join(f"{e['bundle']}\t{e['uid']}\t{e.get('state') or '-'}\t{1 if e.get('bypass') else 0}\n" for e in chain), encoding="utf-8")
+        lines = [f"@gain\t{gain_db:g}\n"] if gain_db else []
+        lines += [f"{e['bundle']}\t{e['uid']}\t{e.get('state') or '-'}\t{1 if e.get('bypass') else 0}\n" for e in chain]
+        tsv.write_text("".join(lines), encoding="utf-8")
         try:
             return self._run(["render", str(tsv), str(wav_in), str(wav_out)], self.settings.render_timeout_s)
         finally:

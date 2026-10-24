@@ -1,6 +1,6 @@
 # 30 · RC4's study — FilmCraft for the cut editor
 
-Status: **study, 2026-10-24; answered the same day → D126 (§10); CE1 built (§11); CE2 built (§13); CE3 built (§15); D127 (§16): the channel strip and VST3 chains — AU1 built (§17), AU2 built (§18), AU3 built (§19), AU4 next; CE4 after.** D96 planned RC4 as "FilmCraft reviewed as 03 reviewed EffectCraft
+Status: **study, 2026-10-24; answered the same day → D126 (§10); CE1 built (§11); CE2 built (§13); CE3 built (§15); D127 (§16): the channel strip and VST3 chains — AU1 built (§17), AU2 built (§18), AU3 built (§19), AU4 built (§20) — D127 done; CE4 next.** D96 planned RC4 as "FilmCraft reviewed as 03 reviewed EffectCraft
 (what to reuse, how), then the multi-track cut editor that replaces the single-lane Episode" ([05](05-flow-nodes-as-shot-recipes.md)
 §6), with O6 (a scene grade and shot-match in the cut, [06](06-continuity-across-shots.md)) attached. RC1–RC3 are built
 ([28](28-recipe-graph.md), [29](29-movie-render.md)); this is the study, measured where it could be (§3, the probe E32).
@@ -419,7 +419,7 @@ stale when the track's clips, its gain or its chain change; the mix, the movie a
 | **AU1 · Settings and roles** ✓ built 2026-10-24 (§17) | Settings › Audio: the loudness target (moved from Settings › FilmCraft) and each role's four defaults (dialogue, music, effects); a new cut's A1–A3 named and set as those roles; a track's role from its header |
 | **AU2 · the strip** ✓ built 2026-10-24 (§18) | the four settings on every audio track (the track's Inspector and header: sliders with numbers), stored as the fader, the pan and the inserts; the width patch (`engine/patches/filmcraft/`, the build script, a new pin); measured on the rig |
 | **AU3 · the host** ✓ built 2026-10-24 (§19) | `engine/vsthost/` — a C++ host on the VST 3 SDK (the SDK fetched at a pinned tag by the build script), `scan`, `render` (a chain over a WAV, offline), `editor` (a plugin's window, its state saved); pinned like FilmCraft; tests with the SDK's own sample plugins |
-| **AU4 · chains and printing** | a track's chain in the Inspector (add from the scanned plugins, reorder, bypass, open the editor, remove); printing (the companion track, staleness, before the mix, the movie and the exports); the rig with the SDK's samples and one of the author's plugins |
+| **AU4 · chains and printing** ✓ built 2026-10-24 (§20) | a track's chain in the Inspector (add from the scanned plugins, reorder, bypass, open the editor, remove); printing (the companion track, staleness, before the mix, the movie and the exports); the rig with the SDK's samples and one of the author's plugins |
 
 ## 17. AU1 as built (2026-10-24)
 
@@ -502,3 +502,46 @@ stale when the track's clips, its gain or its chain change; the mix, the movie a
   effects; the offline suite never runs a built host (`LOOM2_VSTHOST_CLI` in conftest).
 
 ![Kilohearts' kHs Gain in loom2's host window (the rig)](img/30-au3-editor.jpg)
+
+## 20. AU4 as built (2026-10-24) — D127 done
+
+- **A track's chain** (`loom2.chains` on the sequence; `POST /timelines/{id}/fx` add / remove / move / bypass, one change of the cut each):
+  the Inspector lists the track's effects in order — on / bypassed, the effect's own window, earlier, later, away (each a command on the
+  effect) — and *Add an effect…* (the Inspector and the header's right-click) opens the list of installed effects (`EffectPicker.tsx`:
+  searchable by name, maker and kind; *Scan again*; the bundles that did not load behind a ?). The header says `… · 1 fx` (and *to print*).
+- **The effect's window** (`POST /timelines/{id}/fx/editor`): loom2's host opens the plug-in's own editor; when the author closes it, its
+  state is a new file of the cut's (`fx/<id>-<n>.vststate`) and the chain points at it — one change, so the cut's undo takes the settings
+  back; no base revision (the author may go on editing while the window is open).
+- **Printing** (`Cuts.sync_prints`, before the page's mix, the movie and the FCPXML / EDL): a track with an effect on is rendered alone at
+  unity by FilmCraft in a process of its own on the saved project (the other tracks muted, its strip neutral, a custom range to its last
+  sound + 8 s of tail within the cut; the project file untouched — probed: byte for byte), then its gain (in float: FilmCraft's WAV is
+  16-bit, so a large gain is not baked in) and its chain by the host, and placed on a companion track the cut does not show; the source plays
+  into a muted submix (*loom2 · printed sources*), the companion carries the source's width, volume, pan and mute (kept in step without
+  printing again). A print is current while its key (the track's clips, media, gain and other pre-fader effects, the active chain with its
+  state files, the span, the rate) is unchanged and its file is there; an undo that brings back an older cut prints again. The FCPXML / EDL of
+  a cut with prints is exported by a process of its own with the printed sources deleted, so the print stands for its source. `_place` now
+  hands FilmCraft the track's id (loom2's A-numbers leave the companions out, FilmCraft's do not).
+- **The effect's window** opens centred on the monitor under the mouse (the first screenshot found it at Windows' default place, under the
+  author's always-on-top overlay); the page reloads the tracks after a mix that printed (it showed *prints before the next mix* until then),
+  and a print that cannot be made is said in a toast (the picture plays on).
+- **Found on the rig**: the SDK's AGain Sample Accurate on its defaults printed **silence** — its processor starts its gain at 0 while its
+  controller shows 1.0; the host now hands a default effect's controller values to its processor in the first block (read-only and
+  program-change parameters left out); the fake FilmCraft read WAVs with the stdlib's `wave`, which refuses float — a print is float.
+- **Rig** (`scripts/au_acceptance.py --parts print`, 6/6, the real FilmCraft and host, AGain then ADelay — its default a 1 s delay, all wet — on
+  the music track, an impulse at 0.5 s): the page's mix has it only at **1.500 s at 0.401** (the role's −6 dB), nothing before (the source
+  silent in its bus), print and mix in 0.22 s; the companion not shown, the print current; pan 100 % L reaches the print without printing
+  again (the right silent, 0.13 s); the FCPXML names the print and not the source's file; **the movie** (a 2 s take at 24 fps) has its
+  loudest at 1.500 s; ADelay bypassed prints again (the impulse back at 0.500 s). The whole script: 25/25.
+- Tests: `test_cuts_au4.py` (2) on the fakes (add from the list, the editor's state, the print heard at −12.04 dB in all — the role's −6 and
+  the effect's 0.5 —, the companion hidden and the bus muted, pan and mute mirrored without a new print, the FCPXML, bypass, undo, remove;
+  without the host the mix says so); the fake FilmCraft gained submixes, routing, `sequence.deleteTrack`, a custom range and float WAVs; the
+  tracks e2e scenario adds an effect from the list (the fake host's two), opens its window, bypasses it and waits for the print.
+
+**D127 is done** (AU1–AU4). Left for later: the host is not DPI-aware (Windows scales a plug-in's window); a plug-in that wants a side-chain
+gets none; an effect's tail past the cut's end is cut; FilmCraft's own Essential Sound width follows the patched law too.
+
+![Add an effect: the author's 301 effects, found by "reverb"](img/30-au4-picker.jpg)
+![The chain in the Inspector: kHs Reverb on the music, printed](img/30-au4-chain.jpg)
+![The track's block](img/30-au4-inspector.jpg)
+![kHs Reverb's own window, opened from the Inspector by loom2's host](img/30-au4-window.jpg)
+![Settings › Audio with the VST3 folders](img/30-au4-settings.jpg)

@@ -49,10 +49,13 @@ def main(argv: list[str]) -> int:
                 st["gain"] = float(v)
         Path(argv[4]).write_text(json.dumps(st), encoding="utf-8")
         return answer({"ok": True, "name": "Gain"})
-    if cmd == "editor":
+    if cmd == "editor":                                              # `edit.json` in the bundle: what the author turns in the window
         bundle(argv[1])
         st = load_state(argv[3])
         st["edited"] = True
+        edit = Path(argv[1]) / "edit.json"
+        if edit.is_file():
+            st.update(json.loads(edit.read_text(encoding="utf-8")))
         Path(argv[4]).write_text(json.dumps(st), encoding="utf-8")
         return answer({"ok": True, "name": "Gain"})
     if cmd == "render":
@@ -63,6 +66,10 @@ def main(argv: list[str]) -> int:
         effects = []
         for line in Path(argv[1]).read_text(encoding="utf-8").splitlines():
             if not line.strip():
+                continue
+            if line.startswith("@gain\t"):
+                data = data * 10 ** (float(line.split("\t")[1]) / 20)
+                effects.append({"gain_db": float(line.split("\t")[1])})
                 continue
             b, uid, state, bypass = line.split("\t")
             if bypass == "1":

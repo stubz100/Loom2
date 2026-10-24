@@ -1442,9 +1442,13 @@ async def run_movie_filmcraft(job: JobRecord, recipe: Render, q: JobQueue, tl: A
     project = store.export_dir(tl.id) / tl.file
     t0 = time.time()
     name_of, _, audio_of = await asyncio.to_thread(story_lookup, q.ws, q.catalogue)
-    synced = await asyncio.to_thread(Cuts(q.ws, fc, audio_of, name_of).sync_lines, tl)     # a line voiced since the cut was made is in the movie
+    cuts = Cuts(q.ws, fc, audio_of, name_of, host=getattr(q, "vsthost", None))
+    synced = await asyncio.to_thread(cuts.sync_lines, tl)                              # a line voiced since the cut was made is in the movie
     if synced:
         job.log_tail.append(f"movie (FilmCraft): {synced} spoken line(s) brought onto A1")
+    printed = await asyncio.to_thread(cuts.sync_prints, tl)                            # AU4 (D127): a track with effects is heard through its print
+    if printed:
+        job.log_tail.append(f"movie (FilmCraft): {printed} track(s) printed through their effects")
     conformed: list[str] = []
     if tl.fps == 24 and rife_binary() is not None:
         await asyncio.to_thread(fc.open, project)

@@ -6,6 +6,8 @@
 
 #include <windows.h>
 
+#include <algorithm>
+
 using namespace Steinberg;
 using namespace Steinberg::Vst;
 
@@ -114,8 +116,15 @@ bool runEditor (Plugin& p, const std::wstring& title, std::string& err)
 	const DWORD style = STYLE | (host.resizable ? WS_THICKFRAME | WS_MAXIMIZEBOX : 0);
 	RECT rc {0, 0, size.getWidth (), size.getHeight ()};
 	AdjustWindowRectEx (&rc, style, FALSE, 0);
-	host.hwnd = CreateWindowExW (0, wc.lpszClassName, title.c_str (), style, CW_USEDEFAULT, CW_USEDEFAULT, rc.right - rc.left,
-	                             rc.bottom - rc.top, nullptr, nullptr, wc.hInstance, nullptr);
+	// centred on the monitor under the mouse — where the author just clicked in loom2
+	POINT at {};
+	GetCursorPos (&at);
+	MONITORINFO mi {sizeof (mi)};
+	GetMonitorInfoW (MonitorFromPoint (at, MONITOR_DEFAULTTOPRIMARY), &mi);
+	const int w = rc.right - rc.left, h = rc.bottom - rc.top;
+	const int x = mi.rcWork.left + std::max (0L, (mi.rcWork.right - mi.rcWork.left - w) / 2);
+	const int y = mi.rcWork.top + std::max (0L, (mi.rcWork.bottom - mi.rcWork.top - h) / 2);
+	host.hwnd = CreateWindowExW (0, wc.lpszClassName, title.c_str (), style, x, y, w, h, nullptr, nullptr, wc.hInstance, nullptr);
 	if (!host.hwnd)
 	{
 		err = "the editor's window was not made";

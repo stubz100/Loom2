@@ -53,6 +53,7 @@ class Services:
             groups = await asyncio.to_thread(GroupStore, ws, catalogue)    # D34: the album pages; migrates collections once
             queue.groups = groups                                           # D73: @mentions resolve against them
             queue.filmcraft = self.filmcraft                                # CE1 (D126): the movie conforms a FilmCraft cut's takes through the session
+            queue.vsthost = self.vsthost                                    # AU4 (D127): the movie prints a track's effects first
             if groups.migrated:
                 catalogue.recovery.append(f"{groups.migrated} collection{'s' if groups.migrated != 1 else ''} became groups on the Album page.")
             await queue.start()

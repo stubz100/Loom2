@@ -22,6 +22,14 @@ D127 (30 §16): every audio track has a channel strip — gain, width, volume, p
 pan on the track, the gain as pre-fader Amplify inserts, the width as a Stereo Width insert after the other pre-fader effects, the volume
 past the fader's +15 dB as a post-fader Amplify; a neutral stage is no insert) and read back from it (`strip_of`); a track's role
 (dialogue, music, effects) rides in the sequence's `loom2.roles`. A new cut's A1–A3 are the three roles with Settings › Audio's strips.
+
+AU4 (30 §16): an audio track's chain of VST3 effects rides in the sequence's `loom2.chains` (each effect's state a file of loom2's host in
+`timelines/<id>/fx/`, a new file per edit so the cut's undo takes it back). FilmCraft cannot run a plug-in, so a track with an effect on is
+*printed* (`Cuts.sync_prints`, before the page's mix, the movie and the exports): its sound alone at unity — the other tracks muted, its
+strip neutral — is exported by FilmCraft in a process of its own (the project untouched), run through its gain and chain by loom2's host,
+and placed on a companion track (`loom2.prints`) that carries the source's width, volume, pan and mute; the source plays into a muted
+submix. A print is current while its key — the track's clips, media, gain and other pre-fader effects, the chain and the span — is the
+same and its file is there. The companions are not shown (`tracks()` leaves them out).
 """
 from __future__ import annotations
 
@@ -34,7 +42,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .clips import ClipRecord, ClipStore
 from .config import TRACK_ROLES, AudioSettings, TrackStrip
 from .filmcraft import TICK, TIMEBASES, FilmCraft, prefs, ticks
-from .fsio import atomic_copy
+from .fsio import atomic_copy, new_id
 from .timelines import Timeline, TimelineClip, duration, line_spans, starts
 from .timelines import ticks as lane_ticks
 from .workspace import Workspace
@@ -48,6 +56,8 @@ FADER_MAX_DB = 15.0                                # its fader reaches +15 dB: p
 SILENT_DB = -96.0                                  # its fader's floor renders silence (−∞)
 MAX_INSERTS = 5                                    # its effect slots on a track
 STRIP_EFFECTS = ("amplify", "stereo_width")        # the inserts a strip is made of (the author's other track effects stay where they are)
+TAIL_S = 8.0                                       # AU4: a print runs this far past its track's last sound (an effect's tail), within the cut
+PRINT_BUS = "loom2 · printed sources"              # the muted submix a printed track plays into
 
 
 class CutError(ValueError):
@@ -143,6 +153,54 @@ def roles(doc: dict) -> dict[int, str]:
     except json.JSONDecodeError:
         return {}
     return {int(k): v for k, v in raw.items() if v in TRACK_ROLES and str(k).isdigit()}
+
+
+def _meta_json(doc: dict, key: str) -> dict:
+    _, seq_item, _ = sequence(doc)
+    try:
+        raw = json.loads(seq_item.get("metadata", {}).get(key) or "{}")
+    except json.JSONDecodeError:
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def chains(doc: dict) -> dict[int, list[dict]]:
+    """AU4: the audio tracks' effect chains (track id → [{id, bundle, uid, name, vendor, bypass, state}] in order), from `loom2.chains`."""
+    return {int(k): v for k, v in _meta_json(doc, "loom2.chains").items() if str(k).isdigit() and isinstance(v, list)}
+
+
+def prints(doc: dict) -> dict[int, dict]:
+    """AU4: the printed tracks (source id → {track: the companion's id, key, file}), from `loom2.prints`."""
+    return {int(k): v for k, v in _meta_json(doc, "loom2.prints").items() if str(k).isdigit() and isinstance(v, dict) and "track" in v}
+
+
+def active(chain: list[dict]) -> list[dict]:
+    return [e for e in chain if not e.get("bypass")]
+
+
+def _end(t: dict) -> int:
+    return max((ti["start"] + ti["duration"] for ti in t.get("items", [])), default=0)
+
+
+def print_span(seq: dict, t: dict, companions: set[int]) -> float:
+    """The seconds a print of `t` covers: to its last sound and an effect's tail, within the cut (the companions not counted)."""
+    cut = max((_end(x) for x in seq["video_tracks"] + seq["audio_tracks"] if x["id"] not in companions), default=0)
+    return round(min(cut, _end(t) + TAIL_S * TICK) / TICK, 6)
+
+
+def print_key(doc: dict, t: dict, chain: list[dict], companions: set[int]) -> str:
+    """What a print of `t` depends on: its clips and transitions, their media, its gain and other pre-fader effects, the active chain (a
+    new state file is a new edit), the span and the rate. The width, volume, pan and mute are the companion's, never printed."""
+    import hashlib
+    its = items(doc)
+    _, _, seq = sequence(doc)
+    media = {str(ti["item"]): ((its.get(str(ti["item"]), {}).get("kind", {}) or {}).get("Media", {}).get("media", {}).get("File") or {}).get("path")
+             for ti in t.get("items", []) if isinstance(its.get(str(ti["item"]), {}).get("kind"), dict)}
+    pre = [e for e in t.get("effects") or [] if not e.get("post_fader") and e.get("effect") != "stereo_width"]
+    body = {"items": t.get("items", []), "transitions": t.get("transitions", []), "media": media, "pre": pre,
+            "chain": [[e["bundle"], e.get("uid", ""), e.get("state")] for e in active(chain)], "span": print_span(seq, t, companions),
+            "rate": seq["settings"].get("sample_rate")}
+    return hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
 
 
 def _param(e: dict, name: str, default: float) -> float:
@@ -251,6 +309,18 @@ class CutTransition(BaseModel):
     to: int | None = None
 
 
+class CutEffect(BaseModel):
+    """AU4: a VST3 effect in an audio track's chain (its state a file of loom2's host, relative to the cut's folder; none: its defaults)."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    id: str
+    bundle: str
+    uid: str = ""
+    name: str
+    vendor: str = ""
+    bypass: bool = False
+    state: str | None = None
+
+
 class CutTrack(BaseModel):
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
     id: int
@@ -264,6 +334,8 @@ class CutTrack(BaseModel):
     pan: float = 0.0
     width: float = 100.0
     role: Literal["dialogue", "music", "effects"] | None = None   # D127: the track's role (its defaults come from Settings › Audio)
+    chain: list[CutEffect] = Field(default_factory=list)          # AU4: its VST3 effects in order
+    printed: Literal["none", "current", "stale"] = "none"         # AU4: no effect on / its print matches it / it prints before the next mix
     items: list[CutItem] = Field(default_factory=list)
     transitions: list[CutTransition] = Field(default_factory=list)
 
@@ -307,6 +379,8 @@ def tracks(doc: dict) -> CutTracks:
     sid, _, seq = sequence(doc)
     st = seq["settings"]
     role = roles(doc)
+    chain_of, printed = chains(doc), prints(doc)
+    companions = {v["track"] for v in printed.values()}
     fps = int(round(st["frame_rate"]["num"] / max(1, st["frame_rate"].get("den", 1))))
 
     def f(t: int) -> float:
@@ -330,11 +404,16 @@ def tracks(doc: dict) -> CutTracks:
         trans = [CutTransition(id=x["id"], effect=_effect(x), start=f(x["start"]), duration=f(x["duration"]), **{"from": x.get("from")}, to=x.get("to"))
                  for x in t.get("transitions", [])]
         sound = strip_of(t).model_dump() if kind == "audio" else {}
+        chain = chain_of.get(t["id"], []) if kind == "audio" else []
+        state = "none"
+        if active(chain):
+            pr = printed.get(t["id"]) or {}
+            state = "current" if pr.get("key") == print_key(doc, t, chain, companions) and pr.get("file") and Path(pr["file"]).is_file() else "stale"
         return CutTrack(id=t["id"], kind=kind, name=t.get("name", ""), locked=bool(t.get("locked")), muted=bool(t.get("muted")),  # type: ignore[arg-type]
                         enabled=t.get("enabled", True) is not False, items=out, transitions=trans, role=role.get(t["id"]) if kind == "audio" else None,  # type: ignore[arg-type]
-                        **sound)
+                        chain=[CutEffect.model_validate(e) for e in chain], printed=state, **sound)  # type: ignore[arg-type]
     video = [one(t, "video") for t in seq.get("video_tracks", [])]
-    audio = [one(t, "audio") for t in seq.get("audio_tracks", [])]
+    audio = [one(t, "audio") for t in seq.get("audio_tracks", []) if t["id"] not in companions]
     end = max([i.start + i.duration for tr in video + audio for i in tr.items] or [0.0])
     return CutTracks(sequence=sid, fps=fps, w=int(st["width"]), h=int(st["height"]), duration=round(end, 3), video=video, audio=audio)
 
@@ -357,8 +436,10 @@ class Cuts:
     node's title or its shot's name) — loom2 keeps the sequence's chapter markers on V1's named takes after every change (`_markers`)."""
 
     def __init__(self, ws: Workspace, fc: FilmCraft, audio_of: Callable[[TimelineClip], list[dict | None]] | None = None,
-                 name_of: Callable[[TimelineClip], str | None] | None = None, audio: Callable[[], AudioSettings] | None = None) -> None:
+                 name_of: Callable[[TimelineClip], str | None] | None = None, audio: Callable[[], AudioSettings] | None = None,
+                 host: Any = None) -> None:
         self.ws, self.fc, self.audio_of, self.name_of = ws, fc, audio_of, name_of
+        self.host = host                                    # AU4: loom2's VST3 host (loom2.vsthost.VstHost) — the prints need it
         self.audio = audio or AudioSettings                 # D127: Settings › Audio (the track roles' strips), read when a cut is made
 
     def available(self) -> bool:
@@ -540,6 +621,192 @@ class Cuts:
             return {"track": track, "role": role}
         return self.changing(tl, run)
 
+    # ---- AU4: a track's chain of VST3 effects and its print ------------------------------------------------------------------------
+    def _set_chains(self, seq_id: int, ch: dict[int, list[dict]]) -> None:
+        self.fc.batch([{"id": "metadata.set", "params": {"item": seq_id, "fields": {"loom2.chains": json.dumps({str(k): v for k, v in ch.items() if v})}}}])
+
+    def fx(self, tl: Timeline, track: int, op: str, plugin: dict | None = None, fx: str | None = None, to: int | None = None,
+           bypass: bool | None = None) -> dict:
+        """The audio track's chain changed: `add` an effect (`plugin`: bundle, uid, name, vendor; at `to`, else last), `remove`, `move` to
+        `to`, `bypass` on or off — one change of the cut (undoable)."""
+        def run(p: Path) -> dict:
+            doc = read(p)
+            self._audio_track(doc, track)
+            seq_id = sequence(doc)[0]
+            ch = chains(doc)
+            chain = ch.get(track, [])
+            if op == "add":
+                if not plugin or not plugin.get("bundle"):
+                    raise CutError("adding an effect needs its bundle and class")
+                e = {"id": new_id("fx"), "bundle": plugin["bundle"], "uid": plugin.get("uid") or "", "name": plugin.get("name") or Path(plugin["bundle"]).stem,
+                     "vendor": plugin.get("vendor") or "", "bypass": False, "state": None}
+                chain.insert(len(chain) if to is None else max(0, min(int(to), len(chain))), e)
+            else:
+                k = next((i for i, e in enumerate(chain) if e["id"] == fx), None)
+                if k is None:
+                    raise CutError(f"the track has no effect {fx}")
+                if op == "remove":
+                    chain.pop(k)
+                elif op == "move":
+                    e = chain.pop(k)
+                    chain.insert(max(0, min(int(to or 0), len(chain))), e)
+                elif op == "bypass":
+                    chain[k]["bypass"] = bool(bypass)
+                else:
+                    raise CutError(f"`{op}` is not a chain change (add, remove, move, bypass)")
+            ch[track] = chain
+            self._set_chains(seq_id, ch)
+            self.fc.save()
+            return {"track": track, "chain": chain}
+        return self.changing(tl, run)
+
+    def fx_editor(self, tl: Timeline, track: int, fx: str) -> dict:
+        """The effect's own editor (loom2's host, a window); when the author closes it, its state is a new file of the cut's (one change,
+        undoable). No time limit and no base revision: the cut may change meanwhile."""
+        if self.host is None:
+            raise CutError("the effects need loom2's VST3 host (scripts/build_vsthost.py)")
+        p = self.path(tl.id)
+        doc = read(p)
+        t = self._audio_track(doc, track)
+        e = next((x for x in chains(doc).get(track, []) if x["id"] == fx), None)
+        if e is None:
+            raise CutError(f"the track has no effect {fx}")
+        folder = p.parent / "fx"
+        n = 1 + max((int(f.stem.rsplit("-", 1)[-1]) for f in folder.glob(f"{fx}-*.vststate") if f.stem.rsplit("-", 1)[-1].isdigit()), default=0)
+        out = folder / f"{fx}-{n}.vststate"
+        self.host.editor(e["bundle"], e.get("uid") or "", p.parent / e["state"] if e.get("state") else None, out,
+                         f"{e['name']} — {t.get('name', '')} · {tl.name} (loom2)")
+        rel = out.relative_to(p.parent).as_posix()
+
+        def run(p: Path) -> dict:
+            doc = read(p)
+            ch = chains(doc)
+            for x in ch.get(track, []):
+                if x["id"] == fx:
+                    x["state"] = rel
+            self._set_chains(sequence(doc)[0], ch)
+            self.fc.save()
+            return {"track": track, "fx": fx, "state": rel}
+        return self.changing(tl, run)
+
+    def sync_prints(self, tl: Timeline) -> int:
+        """Print every audio track with an effect on whose print is not current; take away the prints of tracks with none (or gone), their
+        source back to the Mix; keep each companion's width, volume, pan and mute the source's. Returns the tracks printed. Not a change of
+        the cut's (a print follows from it): no snapshot, the revision as it is."""
+        p = self.path(tl.id)
+        if not tl.file or not p.is_file():
+            return 0
+        self.fc.open(p)
+        doc = read(p)
+        seq_id, _, seq = sequence(doc)
+        ch, pr = chains(doc), prints(doc)
+        by_id = {t["id"]: t for t in seq["audio_tracks"]}
+        steps: list[dict] = []
+        for src in list(pr):
+            if src not in by_id or not active(ch.get(src, [])):
+                if pr[src]["track"] in by_id:
+                    steps.append({"id": "sequence.deleteTrack", "params": {"track": pr[src]["track"]}})
+                if src in by_id:
+                    steps.append({"id": "mixer.setStrip", "params": {"strip": src, "output": None}})
+                del pr[src]
+        companions = {v["track"] for v in pr.values()}
+        todo = [t for t in seq["audio_tracks"] if t["id"] not in companions and active(ch.get(t["id"], []))]
+        if not steps and not todo and not pr:
+            return 0
+        if steps:
+            self.fc.batch(steps)
+        printed = 0
+        for t in todo:
+            chain = ch[t["id"]]
+            key = print_key(doc, t, chain, companions)
+            cur = pr.get(t["id"]) or {}
+            if cur.get("key") == key and cur.get("file") and Path(cur["file"]).is_file() and cur.get("track") in by_id:
+                continue
+            if self.host is None or not self.host.available():
+                raise CutError("a track's effects print through loom2's VST3 host, which is not built here (scripts/build_vsthost.py)")
+            wav = self._print(p, tl, seq, t, chain, key, companions)
+            pr[t["id"]] = self._place_print(p, t, wav, key, cur.get("track") if cur.get("track") in by_id else None)
+            companions = {v["track"] for v in pr.values()}
+            if cur.get("file") and cur["file"] != str(wav):
+                Path(cur["file"]).unlink(missing_ok=True)
+            printed += 1
+        self.fc.batch([{"id": "metadata.set", "params": {"item": seq_id, "fields": {"loom2.prints": json.dumps({str(k): v for k, v in pr.items()})}}}])
+        self._mirror_prints(p)
+        self.fc.save()
+        return printed
+
+    def _bus(self, seq: dict) -> int:
+        """The muted submix printed tracks play into (made once)."""
+        bus = next((s["id"] for s in seq.get("submix_tracks", []) if s.get("name") == PRINT_BUS), None)
+        if bus is None:
+            bus = int(self.fc.batch([{"id": "mixer.addSubmix", "params": {"name": PRINT_BUS}}])[0]["id"])
+        self.fc.batch([{"id": "mixer.setStrip", "params": {"strip": bus, "muted": True}}])
+        return bus
+
+    def _print(self, p: Path, tl: Timeline, seq: dict, t: dict, chain: list[dict], key: str, companions: set[int]) -> Path:
+        """The track's sound alone at unity — FilmCraft's export in a process of its own on the saved project (the other tracks muted, the
+        track's strip neutral, back to the Mix) — then its gain and chain by loom2's host. Returns the print's WAV."""
+        import subprocess
+        import tempfile
+        from .filmcraft import export_argv
+        self.fc.save()
+        out = p.parent / "prints" / f"{t['id']}-{key[:12]}.wav"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=out.parent) as tmp:
+            src = Path(tmp) / "source.wav"
+            steps = [{"id": "prefs.set", "params": {"values": prefs(tl.fps)}}]
+            steps += [{"id": "mixer.setStrip", "params": {"strip": x["id"], "muted": True}} for x in seq["audio_tracks"] if x["id"] != t["id"]]
+            steps += [{"id": "mixer.setStrip", "params": {"strip": t["id"], "muted": False, "output": None}}, *strip_steps(t, TrackStrip())]
+            steps.append({"id": "file.exportMedia", "params": {"path": str(src), "format": "wav", "wait": True, "range": "custom", "startSeconds": 0,
+                                                              "endSeconds": max(1.0 / tl.fps, print_span(seq, t, companions))}})
+            script = Path(tmp) / "print.jsonl"
+            script.write_text("".join(json.dumps(s) + "\n" for s in steps), encoding="utf-8")
+            r = subprocess.run(export_argv(self.fc.settings, self.fc.app, p, script), capture_output=True, text=True, encoding="utf-8", errors="replace",
+                               timeout=self.fc.settings.timeout_s, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            if r.returncode != 0 or not src.is_file():
+                raise CutError(f"FilmCraft did not render the track's sound for its print: {(r.stdout + r.stderr).strip().splitlines()[-1:] or r.returncode}")
+            fx = [{"bundle": e["bundle"], "uid": e.get("uid") or "", "state": p.parent / e["state"] if e.get("state") else None} for e in active(chain)]
+            self.host.render(fx, src, out, gain_db=strip_of(t).gain_db)
+        return out
+
+    def _place_print(self, p: Path, t: dict, wav: Path, key: str, companion: int | None) -> dict:
+        """The print on its companion track (made once, after the cut's tracks), its old print gone, the source into the muted bus."""
+        self.fc.save()
+        doc = read(p)
+        _, _, seq = sequence(doc)
+        if companion is None:
+            companion = int(self.fc.batch([{"id": "sequence.addTracks", "params": {"video": 0, "audio": 1}}])[0]["audio"][0])
+            self.fc.batch([{"id": "timeline.setTrack", "params": {"track": companion, "name": f"{t.get('name', '')} · print"}}])
+        else:
+            old = next((x for x in seq["audio_tracks"] if x["id"] == companion), {"items": []})
+            if old["items"]:
+                self.fc.batch([{"id": "edit.clear", "params": {"clips": [ti["id"] for ti in old["items"]]}}])
+            gone = [int(k) for k, it in items(doc).items() if it.get("metadata", {}).get("loom2.print") == str(t["id"])]
+            if gone:
+                self.fc.batch([{"id": "project.delete", "params": {"items": gone}}])
+        item = int(self.fc.batch([{"id": "file.import", "params": {"paths": [str(wav)]}}])[0]["items"][0])
+        self.fc.batch([{"id": "metadata.set", "params": {"item": item, "fields": {"loom2.print": str(t["id"])}}},
+                       {"id": "timeline.place", "params": {"item": item, "track": companion, "time": 0, "insert": False, "video": False}},
+                       {"id": "mixer.setStrip", "params": {"strip": t["id"], "output": self._bus(seq)}}])
+        return {"track": companion, "key": key, "file": str(wav)}
+
+    def _mirror_prints(self, p: Path) -> None:
+        """Each companion carries its source's width, volume and pan (its gain is in the print) and its mute."""
+        self.fc.save()
+        doc = read(p)
+        _, _, seq = sequence(doc)
+        by_id = {t["id"]: t for t in seq["audio_tracks"]}
+        steps: list[dict] = []
+        for src, v in prints(doc).items():
+            s, c = by_id.get(src), by_id.get(v["track"])
+            if s is None or c is None:
+                continue
+            want = strip_of(s)
+            steps += strip_steps(c, TrackStrip.model_construct(gain_db=0.0, volume_db=want.volume_db, pan=want.pan, width=want.width))
+            steps.append({"id": "mixer.setStrip", "params": {"strip": c["id"], "muted": bool(s.get("muted"))}})
+        if steps:
+            self.fc.batch(steps)
+
     def _remove_transition(self, doc: dict, tid: int) -> dict:
         """FilmCraft (764723f) has no command to delete a transition: the clip it leads into is lifted (the orphan goes with it) and
         placed back where it was, with its attributes (motion, opacity, effects) copied over and its speed set again."""
@@ -595,7 +862,7 @@ class Cuts:
                 item = int(r[0]["items"][0])
                 self.fc.batch([{"id": "metadata.set", "params": {"item": item, "fields": {"loom2.asset": src["asset_id"]}}}])
             av = {"video": False} if src.get("kind") == "audio" else {"audio": False}
-        r = self.fc.batch([{"id": "timeline.place", "params": {"item": item, "track": track, "time": ticks(frame, tl.fps), "insert": bool(insert), **av}}])
+        r = self.fc.batch([{"id": "timeline.place", "params": {"item": item, "track": tr.id, "time": ticks(frame, tl.fps), "insert": bool(insert), **av}}])
         self._markers(p)
         return {"clips": r[0]["clips"], "item": item}
 
@@ -636,6 +903,7 @@ class Cuts:
         if out.is_file():
             return out
         self._open(tl, change=False)
+        self.sync_prints(tl)                                # AU4: a track with effects is heard through its print
         out.parent.mkdir(parents=True, exist_ok=True)
         part = out.with_name(f"{tl.revision}.part.wav")
         self.fc.command("file.exportMedia", {"path": str(part), "format": "wav", "wait": True, **({"loudnessLufs": loudness} if loudness is not None else {})})
@@ -646,11 +914,29 @@ class Cuts:
         return out
 
     def interchange(self, tl: Timeline, fmt: str, out: Path) -> str:
-        """FilmCraft's own FCPXML or EDL of the cut (everything the project holds), written to `out`."""
-        self._open(tl, change=False)
+        """FilmCraft's own FCPXML or EDL of the cut (everything the project holds), written to `out`. AU4: the prints stand for their
+        sources — a process of its own deletes the printed sources before it exports (the project untouched)."""
+        import subprocess
+        import tempfile
+        from .filmcraft import export_argv
+        p = self._open(tl, change=False)
+        self.sync_prints(tl)
         out.parent.mkdir(parents=True, exist_ok=True)
         part = out.with_name(out.name + ".part")
-        self.fc.command("file.exportInterchange", {"format": fmt, "path": str(part)})
+        printed = prints(read(p))
+        if not printed:
+            self.fc.command("file.exportInterchange", {"format": fmt, "path": str(part)})
+        else:
+            with tempfile.TemporaryDirectory(dir=out.parent) as tmp:
+                steps = [{"id": "prefs.set", "params": {"values": prefs(tl.fps)}}]
+                steps += [{"id": "sequence.deleteTrack", "params": {"track": src}} for src in printed]
+                steps.append({"id": "file.exportInterchange", "params": {"format": fmt, "path": str(part)}})
+                script = Path(tmp) / "interchange.jsonl"
+                script.write_text("".join(json.dumps(s) + "\n" for s in steps), encoding="utf-8")
+                r = subprocess.run(export_argv(self.fc.settings, self.fc.app, p, script), capture_output=True, text=True, encoding="utf-8",
+                                   errors="replace", timeout=self.fc.settings.timeout_s, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                if r.returncode != 0 or not part.is_file():
+                    raise CutError(f"FilmCraft did not export the cut with its prints: {(r.stdout + r.stderr).strip().splitlines()[-1:] or r.returncode}")
         part.replace(out)
         return out.read_text(encoding="utf-8")
 

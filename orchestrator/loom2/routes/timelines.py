@@ -36,7 +36,7 @@ def _store(svc, ws, cat=None) -> TimelineStore:
     """The cuts' store with the FilmCraft session's writer (CE1): changes go into a cut's project when FilmCraft is built."""
     from ..cuts import Cuts
     name_of, _, audio_of = _story_lookup(ws, cat)
-    return TimelineStore(ws, Cuts(ws, svc.filmcraft, audio_of, name_of, lambda: svc.app.settings.audio))
+    return TimelineStore(ws, Cuts(ws, svc.filmcraft, audio_of, name_of, lambda: svc.app.settings.audio, svc.vsthost))
 
 
 @router.get("/timelines", response_model=TimelineList)
@@ -299,6 +299,35 @@ async def timeline_strip(svc: Svc, tl_id: str, body: CutStrip):
 async def timeline_role(svc: Svc, tl_id: str, body: CutRole):
     """D127: an audio track's role — named after it, its strip set to the role's in Settings › Audio; none clears the role."""
     return await _cut_call(svc, tl_id, body.revision, lambda store, tl, ws, cat: [store.cuts.role(tl, body.track, body.role)])
+
+
+class CutFx(BaseModel):
+    revision: int | None = None
+    track: int                                     # an audio track's id
+    op: Literal["add", "remove", "move", "bypass"]
+    plugin: dict[str, str] | None = None           # add: {bundle, uid, name, vendor} as GET /audio/plugins lists it
+    fx: str | None = None                          # remove / move / bypass: the effect's id in the chain
+    to: int | None = None                          # add / move: its place in the chain (add: last when none)
+    bypass: bool | None = None
+
+
+class CutFxEditor(BaseModel):
+    track: int
+    fx: str
+
+
+@router.post("/timelines/{tl_id}/fx", response_model=CutEdited, response_model_by_alias=True)
+async def timeline_fx(svc: Svc, tl_id: str, body: CutFx):
+    """AU4 (D127): an audio track's chain of VST3 effects — add one, remove, move, bypass (one change of the cut; the track prints again
+    before the next mix, movie or export)."""
+    return await _cut_call(svc, tl_id, body.revision, lambda store, tl, ws, cat: [store.cuts.fx(tl, body.track, body.op, body.plugin, body.fx, body.to, body.bypass)])
+
+
+@router.post("/timelines/{tl_id}/fx/editor", response_model=CutEdited, response_model_by_alias=True)
+async def timeline_fx_editor(svc: Svc, tl_id: str, body: CutFxEditor):
+    """AU4 (D127): the effect's own editor in a window of loom2's host; answers when the author closes it, its state kept with the cut
+    (one change; no base revision — the cut may change while the window is open)."""
+    return await _cut_call(svc, tl_id, None, lambda store, tl, ws, cat: [store.cuts.fx_editor(tl, body.track, body.fx)])
 
 
 class CutUndo(BaseModel):

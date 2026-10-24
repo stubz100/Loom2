@@ -128,7 +128,18 @@ bool Plugin::load (const std::string& path, const std::string& uid, std::string&
 bool Plugin::loadState (const std::wstring& file, std::string& err)
 {
 	if (file.empty () || file == L"-")
+	{
+		// the plug-in's defaults: its controller's values handed to its processor in the first block — a processor may start elsewhere
+		// (the SDK's own AGain Sample Accurate starts its gain at 0 while its controller shows 1.0: a print of it was silent)
+		const int32 n = controller ? controller->getParameterCount () : 0;
+		for (int32 i = 0; i < n; ++i)
+		{
+			ParameterInfo info {};
+			if (controller->getParameterInfo (i, info) == kResultOk && !(info.flags & (ParameterInfo::kIsReadOnly | ParameterInfo::kIsProgramChange)))
+				pending[info.id] = controller->getParamNormalized (info.id);
+		}
 		return true;
+	}
 	std::ifstream f (file, std::ios::binary);
 	char magic[4] {};
 	std::vector<char> comp, ctrl;

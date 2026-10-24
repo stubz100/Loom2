@@ -24,7 +24,6 @@ import json
 import re
 import struct
 import sys
-import wave
 import zlib
 from pathlib import Path
 
@@ -80,7 +79,11 @@ class Fake:
             if k >= len(tracks):
                 raise Refused(f"no track {ref}")
             return tracks[k]
-        for t in s["video_tracks"] + s["audio_tracks"]:
+        if isinstance(ref, str) and re.fullmatch(r"S\d+", ref):              # AU4: a submix by its ref
+            subs = s.setdefault("submix_tracks", [])
+            if int(ref[1:]) - 1 < len(subs):
+                return subs[int(ref[1:]) - 1]
+        for t in s["video_tracks"] + s["audio_tracks"] + s.get("submix_tracks", []):
             if t["id"] == ref:
                 return t
         raise Refused(f"no track {ref}")
@@ -110,8 +113,9 @@ class Fake:
             return {"name": path.name, "kind": "Image Sequence", "duration": n * TICK // rate, "frames": n,
                     "video": {"width": w, "height": h, "frame_rate": {"num": rate, "den": 1}}, "audio_streams": []}
         if path.suffix.lower() == ".wav":
-            with wave.open(str(path)) as w:
-                sr, frames, ch = w.getframerate(), w.getnframes(), w.getnchannels()
+            import soundfile as sf                                     # AU4: a print is a float WAV (the stdlib's wave reads PCM only)
+            info = sf.info(str(path))
+            sr, frames, ch = info.samplerate, info.frames, info.channels
             return {"name": path.name, "kind": "AudioOnly", "duration": frames * TICK // sr, "video": None,
                     "audio_streams": [{"sample_rate": sr, "channels": ch, "codec": "PCM"}]}
         import av
@@ -270,8 +274,8 @@ class Fake:
             it["metadata"].update(p.get("fields") or {p["field"]: p["value"]})
             return {"item": int(p["item"]), "metadata": it["metadata"], "changed": True}
         if cid == "file.exportMedia":
-            if p.get("format") == "wav":                               # CE3: the cut's mix
-                return self.export_wav(Path(p["path"]))
+            if p.get("format") == "wav":                               # CE3: the cut's mix (AU4: a custom range's end)
+                return self.export_wav(Path(p["path"]), float(p["endSeconds"]) if p.get("range") == "custom" and p.get("endSeconds") is not None else None)
             if p.get("format") == "png":                               # a PNG sequence: frame000.png … beside `path`, at `scale`
                 return self.export_png(Path(p["path"]), float(p.get("scale", 1.0)))
             return self.export(Path(p["path"]))
@@ -291,15 +295,37 @@ class Fake:
 
     def editor(self, cid: str, p: dict):
         # D127: a track's strip — the fader and pan (FilmCraft's clamps), its inserts (Amplify −96…+24 dB, Stereo Width 0–200 %), at most 5
+        if cid == "mixer.addSubmix":                                        # AU4: the muted bus of the printed sources
+            subs = self.sequence().setdefault("submix_tracks", [])
+            sid = self.new_id()
+            subs.append({"id": sid, "kind": "Audio", "name": p.get("name") or f"Submix {len(subs) + 1}", "items": [], "transitions": [], "muted": False,
+                         "volume_db": 0.0, "pan": 0.0, "effects": [], "mixer": {"output": None}})
+            return {"id": sid, "ref": f"S{len(subs)}"}
+        if cid == "mixer.deleteSubmix":
+            sid = self.track(p["strip"])["id"]
+            s = self.sequence()
+            s["submix_tracks"] = [x for x in s.get("submix_tracks", []) if x["id"] != sid]
+            return None
+        if cid == "sequence.deleteTrack":
+            tid = self.track(p["track"])["id"]
+            s = self.sequence()
+            s["video_tracks"] = [x for x in s["video_tracks"] if x["id"] != tid]
+            s["audio_tracks"] = [x for x in s["audio_tracks"] if x["id"] != tid]
+            return None
         if cid == "mixer.setStrip":
             t = self.track(p["strip"])
+            if "muted" in p:
+                t["muted"] = bool(p["muted"])
+            if "output" in p:
+                out = p["output"]
+                t.setdefault("mixer", {})["output"] = None if out in (None, "Mix", "mix") else self.track(out)["id"]
             if "volumeDb" in p:
                 t["volume_db"] = min(15.0, max(-96.0, float(p["volumeDb"])))
             if "pan" in p:
                 t["pan"] = min(100.0, max(-100.0, float(p["pan"])))
             if "name" in p:
                 t["name"] = p["name"]
-            return {"ref": p["strip"], "volumeDb": t["volume_db"], "pan": t["pan"]}
+            return {"ref": p["strip"], "volumeDb": t.get("volume_db", 0.0), "pan": t.get("pan", 0.0)}
         if cid == "mixer.addInsert":
             t = self.track(p["strip"])
             fx = t.setdefault("effects", [])
@@ -536,14 +562,15 @@ class Fake:
         f = round(seconds * s["settings"]["frame_rate"]["num"])
         return png(max(1, round(w * scale)), max(1, round(h * scale)), (f % 256, len(s["video_tracks"][0]["items"]) % 256, 128))
 
-    def mixdown(self, sr: int = 48000):
+    def mixdown(self, sr: int = 48000, end_s: float | None = None):
         """Stereo, every audio track through its strip in FilmCraft's order: clip gain → pre-fader inserts → fader → post-fader inserts →
         pan (balance). The Stereo Width law is D127's patched one (past 100 % the Mid is lowered up to 3 dB)."""
         import numpy as np
         import soundfile as sf
         s = self.sequence()
         end = max([ti["start"] + ti["duration"] for t in s["video_tracks"] + s["audio_tracks"] for ti in t["items"]] or [0])
-        audio = np.zeros((int(round(end / TICK * sr)) + 1, 2), dtype=np.float32)
+        audio = np.zeros((int(round(end / TICK * sr)) + 1 if end_s is None else int(round(end_s * sr)), 2), dtype=np.float32)
+        muted_bus = {x["id"] for x in s.get("submix_tracks", []) if x.get("muted")}
 
         def insert(buf, e):
             v = e["params"].get("gain" if e["effect"] == "amplify" else "width", {}).get("value", {}).get("Float")
@@ -554,7 +581,7 @@ class Fake:
             m = m * (10 ** (-3 * (w - 1) / 20) if w > 1 else 1.0)
             return np.stack([m + side, m - side], axis=1)
         for t in s["audio_tracks"]:
-            if t.get("muted"):
+            if t.get("muted") or (t.get("mixer") or {}).get("output") in muted_bus:
                 continue
             buf = np.zeros_like(audio)
             for ti in t["items"]:
@@ -583,9 +610,9 @@ class Fake:
             audio += buf
         return audio, sr
 
-    def export_wav(self, out: Path) -> dict:
+    def export_wav(self, out: Path, end_s: float | None = None) -> dict:
         import soundfile as sf
-        audio, sr = self.mixdown()
+        audio, sr = self.mixdown(end_s=end_s)
         out.parent.mkdir(parents=True, exist_ok=True)
         sf.write(str(out), audio, sr, subtype="PCM_16")
         return {"path": str(out), "result": {"frames": len(audio)}}

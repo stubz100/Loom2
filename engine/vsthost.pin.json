@@ -6,7 +6,7 @@
     "licence": "MIT (LICENSE.txt, Steinberg Media Technologies GmbH, 2026)"
   },
   "binary": "loom2-vsthost.exe",
-  "sha256": "fae4229cb36f21ce3ae895309e459548f9f7e2e00fb665d5ea8a63c170267daf",
-  "bytes": 693248,
-  "source": "9f79dd0e3511fe1e0c4b0d490674516a1d8bac229511e853275a42c0fd5b44c9"
+  "sha256": "fd6cfd950e9f9e74e7c26ce020ea6beea361be7204c75bd477e2d8ebbe864c16",
+  "bytes": 707072,
+  "source": "0dd7770b3e17a5f7a5237e986028d548f7d5bfd8205d177b98fa009ce3abc36c"
 }

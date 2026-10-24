@@ -9,6 +9,7 @@ import type { CutItem, CutTrack, CutTracks } from '../../../api/types'
 import { CommandRow } from '../../../frame/CommandButton'
 import { showMenu } from '../../../frame/ContextMenu'
 import { useDropTarget, type DragPayload } from '../../../frame/drag'
+import { useSession } from '../../../store/session'
 import { useAnimate } from '../../animate/animateStore'
 import { useStory } from '../storyStore'
 import { storyKey } from '../storyKeys'
@@ -71,9 +72,15 @@ function useCutMix(tlId: string, revision: number): string | null {
       const b = getBackend()
       if (!b) return
       void fetch(`${baseUrl()}/timelines/${tlId}/mix`, { headers: { 'X-Loom-Token': b.token } }).then(async (res) => {
-        if (!res.ok || gone) return
+        if (gone) return
+        if (!res.ok) {                                                     // AU4: a print that could not be made is said (the picture plays on)
+          if (res.status === 422) useSession.getState().toast(`The cut's sound: ${((await res.json().catch(() => null)) as { detail?: string } | null)?.detail ?? res.status}`, 'error')
+          return
+        }
         made = URL.createObjectURL(await res.blob())
-        if (gone) URL.revokeObjectURL(made); else setUrl(made)
+        if (gone) { URL.revokeObjectURL(made); return }
+        setUrl(made)
+        if (useSequence.getState().tracks?.audio.some((t) => t.printed === 'stale')) void useSequence.getState().loadTracks()   // AU4: the mix printed them
       }).catch(() => { /* the picture plays without it */ })
     }, 250)
     return () => { gone = true; window.clearTimeout(timer); if (made) URL.revokeObjectURL(made) }
@@ -137,7 +144,8 @@ function TrackRow({ cut, track, ppf, len, drag, onDown, frameAt, changed }: { cu
   }, (p) => { const v = rule(p).verdict; return v.ok ? { ...v, label: `${v.label} · ${trackRef(cut, track)}` } : v })
   const target = drag && drag.grip === 'body' && drag.toTrack === track.id
   const role = !video && track.role ? ROLE_NAMES[track.role] : null                     // D127: an audio track's role and its strip away from neutral
-  const strip = video ? '' : stripLabel(track)
+  const on = video ? 0 : track.chain.filter((e) => !e.bypass).length                   // AU4: the effects on
+  const strip = video ? '' : [stripLabel(track), on ? `${on} fx${track.printed === 'stale' ? ' · to print' : ''}` : ''].filter(Boolean).join(' · ')
   const picked = useSequence((s) => s.selTrack === track.id)
   return (
     <div className={`cut-row${video ? ' v' : ' a'}${track.locked ? ' locked' : ''}${track.muted ? ' muted' : ''}${target ? ' target' : ''}`} data-track={track.id}>

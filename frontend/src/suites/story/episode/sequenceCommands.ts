@@ -1,6 +1,6 @@
 // P17 (D83): the Sequence tab's verbs — every one has a mouse home (the lane's context menu, the Inspector, the transport) per D32;
 // undo / redo take Ctrl+Z / Ctrl+Shift+Z in the Animate scope (the clip player has no undo of its own).
-import { ArrowLeft, ArrowLeftRight, ArrowRight, ArrowRightLeft, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, Columns2, FileDown, Film, FolderOpen, Gauge, Lock, Mic, MousePointer2, Music, MoveHorizontal, Pause, Pencil, Play, Plus, Redo2, RefreshCw, Scissors, SkipBack, SlidersHorizontal, Sparkles, SkipForward, Snowflake, SplitSquareHorizontal, SquareDashed, Tag, Trash2, Undo2, UnfoldHorizontal, Volume2, VolumeX, Workflow, ZoomIn, ZoomOut } from 'lucide-react'
+import { AppWindow, ArrowDown, ArrowLeft, ArrowLeftRight, ArrowRight, ArrowRightLeft, ArrowUp, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, Columns2, FileDown, Film, FolderOpen, Gauge, Lock, Mic, MousePointer2, MoveHorizontal, Music, Pause, Pencil, Play, Plug, Plus, Redo2, RefreshCw, Scissors, SkipBack, SkipForward, SlidersHorizontal, Snowflake, Sparkles, SplitSquareHorizontal, SquareDashed, Tag, ToggleLeft, Trash2, Undo2, UnfoldHorizontal, Volume2, VolumeX, Workflow, ZoomIn, ZoomOut } from 'lucide-react'
 import { registerCommands, sep, type MenuItem } from '../../../frame/commands'
 import { askConfirm, askText, useSession } from '../../../store/session'
 import { useAnimate } from '../../animate/animateStore'
@@ -21,6 +21,10 @@ const hasSel = () => hasSeq() && !isCut() && sq().selected !== null && !!sq().la
 const selCut = () => { const t = sq().tracks, id = sq().selClip; return t && id !== null ? findItem(t, id) : null }
 /** CE2: the cut's length in frames (a FilmCraft cut: its tracks; today's: its lane). */
 export const cutLength = (): number => (isCut() ? Math.ceil(sq().tracks?.duration ?? 0) : sq().lane ? duration(sq().lane!) : 0)
+/** AU4: the effect a chain row's button is about (commands take no arguments; the row sets this first). */
+export const fxItem: { id?: string } = {}
+const selFx = () => { const tr = selTrack(); return tr && fxItem.id ? tr.chain.find((e) => e.id === fxItem.id) ?? null : null }
+const fxIndex = () => { const tr = selTrack(); return tr && fxItem.id ? tr.chain.findIndex((e) => e.id === fxItem.id) : -1 }
 /** CE2: the track a header's click or right-click selected (D127: the store's, so the Inspector's strip and the menu agree). */
 const selTrack = () => { const t = sq().tracks, id = sq().selTrack; return t && id !== null ? [...t.video, ...t.audio].find((x) => x.id === id) ?? null : null }
 const an = () => useAnimate.getState()
@@ -245,6 +249,19 @@ registerCommands([
     hint: role ? `named ${ROLE_NAMES[role]}, its gain, volume, pan and width set to the role's in Settings › Audio` : 'the role cleared; the strip stays',
     when: () => audioTrack() && !sq().cutBusy && selTrack()!.role !== role, run: () => { const tr = selTrack(); if (tr) void sq().cutRole(tr.id, role) },
   })),
+  // AU4 (30 §16): a track's chain of VST3 effects — loom2's own host runs them; the track prints before the mix, the movie and the exports
+  { id: 'story.cut.track.addEffect', scope: 'story', label: 'Add an effect…', icon: Plug, placement: ['context', 'inspector'], hint: 'a VST3 effect from your folders, after the others; loom2 prints the track through its effects before the mix, the movie and the exports',
+    when: () => audioTrack() && !sq().cutBusy, run: () => { const tr = selTrack(); if (tr) sq().setFxPicker(tr.id) } },
+  { id: 'story.cut.fx.edit', scope: 'story', label: "Open the effect's window", icon: AppWindow, placement: ['inspector'], hint: 'its own editor in a window of loom2\'s host; its settings are kept when you close the window',
+    when: () => !!selFx() && !sq().fxOpen, run: () => { const tr = selTrack(), e = selFx(); if (tr && e) void sq().cutFxEditor(tr.id, e.id) } },
+  { id: 'story.cut.fx.bypass', scope: 'story', label: 'Bypass / use the effect', icon: ToggleLeft, placement: ['inspector'], when: () => !!selFx() && !sq().cutBusy,
+    run: () => { const tr = selTrack(), e = selFx(); if (tr && e) void sq().cutFx(tr.id, { op: 'bypass', fx: e.id, bypass: !e.bypass }) } },
+  { id: 'story.cut.fx.up', scope: 'story', label: 'Earlier in the chain', icon: ArrowUp, placement: ['inspector'], when: () => fxIndex() > 0 && !sq().cutBusy,
+    run: () => { const tr = selTrack(), e = selFx(); if (tr && e) void sq().cutFx(tr.id, { op: 'move', fx: e.id, to: fxIndex() - 1 }) } },
+  { id: 'story.cut.fx.down', scope: 'story', label: 'Later in the chain', icon: ArrowDown, placement: ['inspector'], when: () => fxIndex() >= 0 && fxIndex() < (selTrack()?.chain.length ?? 0) - 1 && !sq().cutBusy,
+    run: () => { const tr = selTrack(), e = selFx(); if (tr && e) void sq().cutFx(tr.id, { op: 'move', fx: e.id, to: fxIndex() + 1 }) } },
+  { id: 'story.cut.fx.remove', scope: 'story', label: 'Remove the effect', icon: Trash2, placement: ['inspector'], danger: true, when: () => !!selFx() && !sq().cutBusy,
+    run: () => { const tr = selTrack(), e = selFx(); if (tr && e) void sq().cutFx(tr.id, { op: 'remove', fx: e.id }) } },
   { id: 'story.cut.track.resetRole', scope: 'story', label: "Reset to its role's settings", icon: RefreshCw, placement: ['context', 'inspector'], hint: "gain, volume, pan and width as the role's in Settings › Audio",
     when: () => audioTrack() && !sq().cutBusy && !!selTrack()!.role, run: () => { const tr = selTrack(); if (tr?.role) void sq().cutRole(tr.id, tr.role) } },
   { id: 'story.cut.track.duck', scope: 'story', label: 'Duck the track under the dialogue', icon: VolumeX, placement: ['context', 'inspector'],
@@ -273,7 +290,7 @@ export function cutClipMenu(): MenuItem[] {
 /** CE2: a track header's right-click (the track selected by the caller); D127: an audio track's strip and role. */
 export function cutTrackMenu(): MenuItem[] {
   const strip: MenuItem[] = audioTrack() ? [{ cmd: 'story.cut.track.gain' }, { cmd: 'story.cut.track.volume' }, { cmd: 'story.cut.track.pan' }, { cmd: 'story.cut.track.width' },
-    { label: 'Role', icon: Tag, items: [...TRACK_ROLES.map((r) => ({ cmd: `story.cut.track.role.${r}` })), { cmd: 'story.cut.track.role.none' }] }, { cmd: 'story.cut.track.resetRole' }, sep] : []
+    { label: 'Role', icon: Tag, items: [...TRACK_ROLES.map((r) => ({ cmd: `story.cut.track.role.${r}` })), { cmd: 'story.cut.track.role.none' }] }, { cmd: 'story.cut.track.resetRole' }, { cmd: 'story.cut.track.addEffect' }, sep] : []
   return [{ cmd: 'story.cut.track.rename' }, { cmd: 'story.cut.track.lock' }, { cmd: 'story.cut.track.mute' }, sep, ...strip, { cmd: 'story.cut.track.duck' }, sep,
     { cmd: 'story.cut.evenDialogue' }, sep, { cmd: 'story.cut.addVideoTrack' }, { cmd: 'story.cut.addAudioTrack' }]
 }

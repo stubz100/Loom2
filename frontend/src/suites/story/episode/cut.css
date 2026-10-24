@@ -44,6 +44,17 @@
 .cut-play { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); pointer-events: none; z-index: 10; }
 .cut-clip .seq-changed { position: absolute; right: 6px; bottom: 3px; z-index: 2; padding: 0 6px; min-height: 0; font-size: 10.5px; line-height: 16px; border-radius: 8px; border: 1px solid var(--accent); background: var(--bg1); color: var(--accent); cursor: pointer; }
 .cut-clip .seq-changed:hover { background: var(--accent); color: #fff; }
+/* AU4: the track's chain of effects and the effect list */
+.track-insp .fx-chain { list-style: none; margin: 2px 0 6px; padding: 0; }
+.track-insp .fx-chain li { display: flex; align-items: center; gap: 6px; padding: 2px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
+.track-insp .fx-chain li.off label { color: var(--fg3); text-decoration: line-through; }
+.track-insp .fx-chain .spacer { flex: 1; }
+.track-insp .fx-chain button.icon { padding: 2px; min-height: 0; }
+.fx-picker { width: min(560px, 92vw); }
+.fx-picker .body input[type=text] { width: 100%; box-sizing: border-box; }
+.fx-picker .fx-list { list-style: none; margin: 8px 0; padding: 0; max-height: 46vh; overflow: auto; }
+.fx-picker .fx-list li button { display: block; width: 100%; text-align: left; padding: 4px 6px; border-radius: 4px; }
+.fx-picker .fx-list li button:hover { background: var(--bg2); }
 /* D127 (AU2): a track in the Inspector — the strip's sliders with their numbers */
 .track-insp .strip-ctl > span:last-child { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .track-insp .strip-ctl input[type=range] { flex: 1; min-width: 80px; accent-color: var(--accent); }

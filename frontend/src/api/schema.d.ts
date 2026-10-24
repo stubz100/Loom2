@@ -3438,6 +3438,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/timelines/{tl_id}/fx": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Timeline Fx
+         * @description AU4 (D127): an audio track's chain of VST3 effects — add one, remove, move, bypass (one change of the cut; the track prints again
+         *     before the next mix, movie or export).
+         */
+        post: operations["timeline_fx_timelines__tl_id__fx_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/timelines/{tl_id}/fx/editor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Timeline Fx Editor
+         * @description AU4 (D127): the effect's own editor in a window of loom2's host; answers when the author closes it, its state kept with the cut
+         *     (one change; no base revision — the cut may change while the window is open).
+         */
+        post: operations["timeline_fx_editor_timelines__tl_id__fx_editor_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/timelines/{tl_id}/mix": {
         parameters: {
             query?: never;
@@ -4776,6 +4818,64 @@ export interface components {
             tracks: components["schemas"]["CutTracks"];
         };
         /**
+         * CutEffect
+         * @description AU4: a VST3 effect in an audio track's chain (its state a file of loom2's host, relative to the cut's folder; none: its defaults).
+         */
+        CutEffect: {
+            /** Bundle */
+            bundle: string;
+            /**
+             * Bypass
+             * @default false
+             */
+            bypass: boolean;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** State */
+            state: string | null;
+            /**
+             * Uid
+             * @default
+             */
+            uid: string;
+            /**
+             * Vendor
+             * @default
+             */
+            vendor: string;
+        };
+        /** CutFx */
+        CutFx: {
+            /** Bypass */
+            bypass?: boolean | null;
+            /** Fx */
+            fx?: string | null;
+            /**
+             * Op
+             * @enum {string}
+             */
+            op: "add" | "remove" | "move" | "bypass";
+            /** Plugin */
+            plugin?: {
+                [key: string]: string;
+            } | null;
+            /** Revision */
+            revision?: number | null;
+            /** To */
+            to?: number | null;
+            /** Track */
+            track: number;
+        };
+        /** CutFxEditor */
+        CutFxEditor: {
+            /** Fx */
+            fx: string;
+            /** Track */
+            track: number;
+        };
+        /**
          * CutItem
          * @description One clip on a track, as the editor shows it (frames at the cut's rate; the source in seconds).
          */
@@ -4931,6 +5031,8 @@ export interface components {
         };
         /** CutTrack */
         CutTrack: {
+            /** Chain */
+            chain: components["schemas"]["CutEffect"][];
             /**
              * Enabled
              * @default true
@@ -4967,6 +5069,12 @@ export interface components {
              * @default 0
              */
             pan: number;
+            /**
+             * Printed
+             * @default none
+             * @enum {string}
+             */
+            printed: "none" | "current" | "stale";
             /** Role */
             role: ("dialogue" | "music" | "effects") | null;
             /** Transitions */
@@ -18590,6 +18698,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    timeline_fx_timelines__tl_id__fx_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tl_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CutFx"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CutEdited"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    timeline_fx_editor_timelines__tl_id__fx_editor_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tl_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CutFxEditor"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CutEdited"];
                 };
             };
             /** @description Validation Error */

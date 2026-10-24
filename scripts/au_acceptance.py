@@ -15,6 +15,10 @@ as mixed). Parts:
             impulse by 12000 samples, the two in a chain in order, a bypassed one skipped; a sample with no editor says so
     editor  one of the author's own effects (Kilohearts' free kHs Gain): its editor opened by the host in a window of its own, a screenshot,
             the window closed as the author would (WM_CLOSE), its state written and read back; its default passes the sound unchanged
+    print   a chain on a track and its print (AU4), on the real FilmCraft and host: AGain then ADelay (its default: 1 s, all wet) on the
+            music track; an impulse at 0.5 s is heard in the page's mix only at 1.5 s at the role's −6 dB (the source in its muted bus, the
+            print on its companion); the pan reaches the print without printing again; a bypass prints again (the impulse back at 0.5 s);
+            the FCPXML names the print, not the source; the movie (a 2 s take at 24 fps) carries the print; the print's time
 
 CPU only (FilmCraft); no GPU job may run beside it all the same (D97: the rig's checks take turns). Results: engine/spikes/out/au/results.json.
 
@@ -49,7 +53,7 @@ from loom2.config import AppState  # noqa: E402
 OUT = ROOT / "engine" / "spikes" / "out" / "au"
 SR = 48000
 LEVEL = -60.0                                                       # each side's tone, dBFS (+48 dB of strip stays below full scale)
-PARTS = ("roles", "strip", "width", "host", "editor")
+PARTS = ("roles", "strip", "width", "host", "editor", "print")
 TOOLS = ROOT / "engine" / "tools" / "vsthost"
 GAIN_UID, KHS_GAIN = "C18D3C1E719E4E29924D3ECAA5E4DA18", Path("C:/Program Files/Common Files/VST3/Kilohearts/kHs Gain.vst3")
 
@@ -171,6 +175,96 @@ def host_checks(parts: tuple[str, ...], check, res: dict, src: Path) -> None:
                   f"{len(ps['params'])} parameters ({', '.join(f'{a} {b}' for a, b in res['khs_params'][:3])}); level {lv:+.2f} dB")
 
 
+def print_checks(check, res: dict) -> None:
+    """AU4: a chain printed on the real FilmCraft and host, heard in the page's mix, the FCPXML and the movie."""
+    from PIL import Image
+    from loom2.clips import ClipStore
+    from loom2.workspace import Workspace
+    state = OUT / "print-state"
+    AppState(state).update_settings({"engine": {"python": str(OUT / "missing.exe"), "health_timeout_s": 1}, "mounted_model_trees": [],
+                                     "audio": {"loudness_lufs": None}, "vsthost": {"folders": [str(TOOLS / "test-plugins")]}})
+    imp = np.zeros((3 * SR, 2), np.float32)
+    imp[SR // 2] = 0.8
+    wav = OUT / "impulse.wav"
+    sf.write(str(wav), imp, SR, subtype="FLOAT")
+    app = create_app(state)
+    svc = app.state.services
+    with TestClient(app, headers={"X-Loom-Token": svc.app.token}) as cl:
+        assert cl.post("/project", json={"path": str(OUT / "print-proj"), "name": "AU4", "size_cap_gb": 10}).status_code == 200
+        ws = Workspace(OUT / "print-proj")
+        frames = []
+        for i in range(48):
+            f = OUT / "frames" / f"f{i:03d}.png"
+            f.parent.mkdir(parents=True, exist_ok=True)
+            Image.new("RGB", (320, 180), (30 + i * 4, 60, 120)).save(f)
+            frames.append(f)
+        cs = ClipStore(ws)
+        clip = cs.encode_proxy(cs.create(frames, model_id="wan22-i2v-high-fp8", prompt="au4", seed=1, fps=24, start_asset_id="ast_x"))
+        sound = svc.catalogue.ingest_file(wav, kind="audio", move=False, suite="import")
+        tl = cl.post("/timelines", json={"name": "Print", "fps": 24, "w": 320, "h": 180}).json()
+        tl = cl.put(f"/timelines/{tl['id']}", json={**tl, "clips": [{"id": "x", "clip_id": clip.id, "in": 0, "out": 48}], "overlaps": [0]}).json()
+        base = f"/timelines/{tl['id']}"
+        r = cl.post(f"{base}/place", json={"revision": tl["revision"], "asset_id": sound.id, "track": "A2", "frame": 0}).json()
+        a2 = r["tracks"]["audio"][1]["id"]
+        found = {p["name"]: p for p in cl.get("/audio/plugins").json()["plugins"]}
+        for name in ("AGain Sample Accurate", "ADelay"):
+            pl = found[name]
+            r = cl.post(f"{base}/fx", json={"track": a2, "op": "add", "plugin": {k: pl[k] for k in ("bundle", "uid", "name", "vendor")}})
+            assert r.status_code == 200, r.text
+        assert r.json()["tracks"]["audio"][1]["printed"] == "stale"
+
+        def mix() -> tuple[np.ndarray, float]:
+            t0 = time.perf_counter()
+            m = cl.get(f"{base}/mix")
+            assert m.status_code == 200, m.text
+            pcm, _ = sf.read(io.BytesIO(m.content), dtype="float32", always_2d=True)
+            return pcm, time.perf_counter() - t0
+
+        def peak(pcm: np.ndarray, c: int = 0) -> tuple[float, float]:
+            k = int(np.argmax(np.abs(pcm[:, c])))
+            return k / SR, float(pcm[k, c])
+        pcm, first = mix()
+        at, v = peak(pcm)
+        early = float(np.max(np.abs(pcm[: int(1.2 * SR)])))
+        res["print_s"] = round(first, 2)
+        check("the print in the mix: the delay's 1 s at the role's −6 dB, the source silent", abs(at - 1.5) < 1e-3 and abs(v - 0.4) < 0.01 and early < 1e-4,
+              f"peak {v:.3f} at {at:.4f} s, before 1.2 s {early:.1e}; mix with the print {first:.2f} s")
+        tracks = cl.get(f"{base}/tracks").json()
+        check("the companion not shown, the print current", len(tracks["audio"]) == 3 and tracks["audio"][1]["printed"] == "current", f"{len(tracks['audio'])} audio tracks")
+        rev = cl.get(base).json()["revision"]
+        cl.post(f"{base}/strip", json={"revision": rev, "track": a2, "pan": -100})
+        pcm, again = mix()
+        check("the pan reaches the print without printing again", float(np.max(np.abs(pcm[:, 1]))) < 1e-4 and abs(peak(pcm)[0] - 1.5) < 1e-3 and again < first,
+              f"right {float(np.max(np.abs(pcm[:, 1]))):.1e}, left peak at {peak(pcm)[0]:.4f} s; {again:.2f} s")
+        source_name = Path(cl.get(f"{base}/tracks").json()["audio"][1]["items"][0]["media_path"]).name   # the Catalogue's name for the impulse
+        fcpxml = cl.post(f"{base}/export", json={"format": "fcpxml"})
+        text = fcpxml.json().get("text", "") if fcpxml.status_code == 200 else fcpxml.text
+        check("the FCPXML names the print, not the source", fcpxml.status_code == 200 and "prints" in text and source_name not in text,
+              f"{fcpxml.status_code}; {len(text)} chars; {source_name} {'absent' if source_name not in text else 'present'}")
+        job = cl.post(f"{base}/render", json={"movie": True}).json()["jobs"][0]
+        cl.post("/queue/unpause")
+        t0 = time.time()
+        while time.time() - t0 < 300:
+            j = cl.get(f"/jobs/{job['id']}").json()
+            if j["status"] in ("done", "failed", "cancelled"):
+                break
+            time.sleep(0.3)
+        ok = j["status"] == "done"
+        if ok:
+            import av
+            with av.open(str(ws.path / j["result"]["path"]) if not Path(j["result"]["path"]).is_absolute() else j["result"]["path"]) as c:
+                s = np.concatenate([f.to_ndarray().reshape(-1, f.to_ndarray().shape[-1]) if f.to_ndarray().ndim > 1 else f.to_ndarray() for f in c.decode(audio=0)], axis=-1)
+            mono = np.abs(s[0] if s.ndim > 1 else s)
+            sr_movie = 48000
+            at_m = int(np.argmax(mono)) / sr_movie
+            check("the movie carries the print", abs(at_m - 1.5) < 0.03, f"its loudest at {at_m:.3f} s ({j['status']})")
+        else:
+            check("the movie carries the print", False, j.get("error") or j["status"])
+        cl.post(f"{base}/fx", json={"track": a2, "op": "bypass", "fx": cl.get(f"{base}/tracks").json()["audio"][1]["chain"][1]["id"], "bypass": True})
+        pcm, _ = mix()
+        check("a bypass prints again", abs(peak(pcm)[0] - 0.5) < 1e-3, f"peak at {peak(pcm)[0]:.4f} s")
+
+
 def main() -> int:
     parts = PARTS
     if "--parts" in sys.argv:
@@ -276,6 +370,8 @@ def main() -> int:
                       f"440 Hz {got[0]:+.2f} / 660 Hz in {got[1]:+.2f} dB (want {want[0]:+.2f} / {want[1]:+.2f})")
     if "host" in parts or "editor" in parts:
         host_checks(parts, check, res, src)
+    if "print" in parts:
+        print_checks(check, res)
     res["checks"] = [{"name": n, "ok": ok, "detail": d} for n, ok, d in checks]
     (OUT / "results.json").write_text(json.dumps(res, indent=1), encoding="utf-8")
     n_ok = sum(ok for _, ok, _ in checks)

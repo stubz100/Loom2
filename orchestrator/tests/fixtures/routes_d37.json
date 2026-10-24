@@ -204,6 +204,8 @@
  "POST /timelines",
  "POST /timelines/{tl_id}/edit",
  "POST /timelines/{tl_id}/export",
+ "POST /timelines/{tl_id}/fx",
+ "POST /timelines/{tl_id}/fx/editor",
  "POST /timelines/{tl_id}/place",
  "POST /timelines/{tl_id}/redo",
  "POST /timelines/{tl_id}/render",

@@ -278,7 +278,19 @@ class Fake:
                 return self.export_wav(Path(p["path"]), float(p["endSeconds"]) if p.get("range") == "custom" and p.get("endSeconds") is not None else None)
             if p.get("format") == "png":                               # a PNG sequence: frame000.png … beside `path`, at `scale`
                 return self.export_png(Path(p["path"]), float(p.get("scale", 1.0)))
-            return self.export(Path(p["path"]))
+            out = self.export(Path(p["path"]))
+            side = p.get("captionSidecar")                             # CE5: the captions beside the movie (the burn-in and the codec: the real one's)
+            tracks = [ct for ct in self.sequence().get("caption_tracks", []) if ct.get("enabled", True) and ct["captions"]]
+            if side and tracks:
+                def tc(t: int, sep: str) -> str:
+                    ms = round(t * 1000 / TICK)
+                    return f"{ms // 3600000:02d}:{ms // 60000 % 60:02d}:{ms // 1000 % 60:02d}{sep}{ms % 1000:03d}"
+                caps = sorted(tracks[0]["captions"], key=lambda c: c["start"])
+                sep = "," if side == "srt" else "."
+                body = "".join(f"{n}\n{tc(c['start'], sep)} --> {tc(c['start'] + c['duration'], sep)}\n{c['text']}\n\n" for n, c in enumerate(caps, 1))
+                Path(p["path"]).with_suffix(f".{side}").write_text(("WEBVTT\n\n" if side == "vtt" else "") + body, encoding="utf-8")
+            out["burned"] = bool(p.get("burnCaptions"))
+            return out
         raise Refused(f"unknown command `{cid}`")
 
     # ---- CE2: the editor's commands, as the real ones do them (the probe on 764723f) ---------------------------------------------------
@@ -365,8 +377,111 @@ class Fake:
             return {"clip": int(p["clip"]), "distanceBefore": 0.6, "distanceAfter": 0.2}
         return NotImplemented
 
+    # ---- CE5: captions and the author's markers, as the real ones (the probe on 764723f) --------------------------------------------
+    def caption_track(self, ref) -> dict:
+        tracks = self.sequence().setdefault("caption_tracks", [])
+        for k, ct in enumerate(tracks):
+            if ref in (ct["id"], f"C{k + 1}"):
+                return ct
+        if ref is None and tracks:
+            return tracks[0]
+        raise Refused(f"no caption track {ref}")
+
+    def find_caption(self, cid: int) -> tuple[dict, dict]:
+        for ct in self.sequence().get("caption_tracks", []):
+            for c in ct["captions"]:
+                if c["id"] == cid:
+                    return ct, c
+        raise Refused(f"no caption {cid}")
+
+    def captions(self, cid: str, p: dict):
+        if not (cid.startswith("captions.") or cid in ("markers.add", "markers.edit")):
+            return NotImplemented
+        s = self.sequence()
+        if cid == "captions.newTrack":
+            tid = self.new_id()
+            s.setdefault("caption_tracks", []).append({"id": tid, "name": p.get("name", "Subtitle"), "format": p.get("format", "Subtitle"),
+                                                       "language": p.get("language", "en"), "enabled": True, "locked": False,
+                                                       "style": {"size": 32.0, "background": True, "anchor": "Bottom"}, "captions": []})
+            return {"track": tid}
+        if cid == "captions.deleteTrack":
+            tid = self.caption_track(p["track"])["id"]
+            s["caption_tracks"] = [x for x in s["caption_tracks"] if x["id"] != tid]
+            return None
+        if cid == "captions.add":
+            if not s.get("caption_tracks"):
+                self.captions("captions.newTrack", {})
+            ct = self.caption_track(p.get("track"))
+            start = int(p["time"]) if "time" in p else round(float(p.get("seconds", 0.0)) * TICK)
+            c = {"id": self.new_id(), "start": start, "duration": round(float(p.get("durationSeconds", 3.0)) * TICK), "text": p.get("text", ""),
+                 "speaker": None, "cue_id": None, "settings": ""}
+            ct["captions"].append(c)
+            return {"caption": c["id"]}
+        if cid == "captions.setText":
+            _, c = self.find_caption(int(p["caption"]))
+            if "text" in p:
+                c["text"] = p["text"]
+            if "speaker" in p:
+                c["speaker"] = p["speaker"]
+            return None
+        if cid == "captions.setTimes":
+            _, c = self.find_caption(int(p["caption"]))
+            a = round(float(p["startSeconds"]) * TICK) if "startSeconds" in p else c["start"]
+            b = round(float(p["endSeconds"]) * TICK) if "endSeconds" in p else c["start"] + c["duration"]
+            c["start"], c["duration"] = a, max(1, b - a)
+            return None
+        if cid == "captions.move":
+            for k in p.get("captions") or []:
+                _, c = self.find_caption(int(k))
+                c["start"] = max(0, c["start"] + self.delta(p))
+            return None
+        if cid == "captions.trim":
+            _, c = self.find_caption(int(p["caption"]))
+            d = self.delta(p)
+            if p["edge"] == "in":
+                c["start"], c["duration"] = c["start"] + d, max(1, c["duration"] - d)
+            else:
+                c["duration"] = max(1, c["duration"] + d)
+            return None
+        if cid == "captions.delete":
+            gone = set(p.get("captions") or [])
+            for ct in s.get("caption_tracks", []):
+                ct["captions"] = [c for c in ct["captions"] if c["id"] not in gone]
+            return None
+        if cid == "captions.setStyle":
+            st = self.caption_track(p["track"])["style"]
+            for k in ("size", "background", "font", "outline"):
+                if k in p:
+                    st[k] = p[k]
+            if "anchor" in p:
+                st["anchor"] = str(p["anchor"]).capitalize()
+            return None
+        if cid == "captions.setTrack":
+            ct = self.caption_track(p["track"])
+            for k in ("name", "enabled", "locked"):
+                if k in p:
+                    ct[k] = p[k]
+            return None
+        if cid == "markers.add":
+            mid = self.new_id()
+            s["markers"].append({"id": mid, "start": int(p.get("time", 0)), "duration": 0, "name": p.get("name", ""), "comment": p.get("comment", ""),
+                                 "kind": "Comment", "color": p.get("color", "Green")})
+            return {"marker": mid}
+        if cid == "markers.edit":
+            m = next((x for x in s["markers"] if x["id"] == int(p["marker"])), None)
+            if m is None:
+                raise Refused("markers.edit: no such marker")
+            for k in ("name", "comment", "color"):
+                if k in p:
+                    m[k] = p[k]
+            return None
+        return NotImplemented
+
     def editor(self, cid: str, p: dict):
         c = self.colour(cid, p)
+        if c is not NotImplemented:
+            return c
+        c = self.captions(cid, p)
         if c is not NotImplemented:
             return c
         # D127: a track's strip — the fader and pan (FilmCraft's clamps), its inserts (Amplify −96…+24 dB, Stereo Width 0–200 %), at most 5

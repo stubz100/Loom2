@@ -138,7 +138,11 @@ export function SequenceInspector() {
   const tracks = useSequence((s) => s.tracks)
   const selClip = useSequence((s) => s.selClip)
   const selTrack = useSequence((s) => s.selTrack)
+  const selCaption = useSequence((s) => s.selCaption)
+  const delivery = useSequence((s) => s.delivery)
   if (!current || !lane) return <span className="hint">No cut open.</span>
+  const capSel = current.file && tracks && selCaption !== null ? tracks.captions.flatMap((ct) => ct.captions).find((c) => c.id === selCaption) ?? null : null   // CE5
+  const hasCaptions = !!tracks?.captions.some((ct) => ct.enabled && ct.captions.length)
   const trackSel = current.file && tracks && selTrack !== null ? [...tracks.video, ...tracks.audio].find((x) => x.id === selTrack) ?? null : null   // D127
   const cutSel = current.file && tracks && selClip !== null ? findItem(tracks, selClip) : null      // CE2: the clip selected on a FilmCraft cut's tracks
   const movie = lastMovie(jobs, current.id)                                                       // RC3: the newest movie job of this cut
@@ -162,6 +166,17 @@ export function SequenceInspector() {
       {changes > 0 && <div className="verbs"><CommandButton id="story.episode.updateAll" text label={`Update ${changes} changed clip${changes === 1 ? '' : 's'}`} /></div>}
       <h4>Export <Help text={"Export for Resolve writes the FCPXML (a chapter marker per shot — its node's title — and the lines' voices on an audio lane), the EDL, the SRT (the nodes' Dialogue lines) and markers.txt into one folder named after the cut; Resolve conforms each clip at its own rate. One file at a time is still there. The draft render is a CPU job: frames from the masters, dissolves blended, a clip at another rate mapped by nearest frame (not conformed). The movie is the finished file: the cut's size (each clip fitted, bars where its shape differs), a 16 fps clip conformed to 24 by RIFE when the tool is installed, the voiced lines mixed where the exports place them; an MP4 (H.264 + AAC) beside the Resolve export and a video in the Catalogue."} /></h4>
       <div className="verbs"><CommandButton id="story.episode.exportResolve" text /><CommandButton id="story.episode.renderMovie" text label="Render the movie" /><CommandButton id="story.episode.render" text label="Render draft" /></div>
+      {current.file && <div className="kv delivery" data-testid="delivery"><span>movie as <Help text={"The movie FilmCraft renders: H.264 (.mp4) to watch and share, or ProRes 422 HQ (.mov) to finish in Resolve; the captions burned into the picture and / or written beside it as SubRip or WebVTT (Captions from the lines makes them)"} /></span>
+        <span>
+          <select aria-label="the movie's format" value={delivery.format} onChange={(e) => useSequence.getState().setDelivery({ format: e.target.value as 'h264' | 'prores' })}>
+            <option value="h264">H.264 · to watch</option><option value="prores">ProRes 422 HQ · to finish</option>
+          </select>
+          <label className="chk" title={hasCaptions ? 'the captions drawn into the picture' : 'no captions yet: Captions from the lines makes them'}><input type="checkbox" aria-label="captions burned in" disabled={!hasCaptions}
+            checked={delivery.burn && hasCaptions} onChange={(e) => useSequence.getState().setDelivery({ burn: e.target.checked })} /> captions burned in</label>
+          <select aria-label="captions beside it" value={hasCaptions ? delivery.file ?? '' : ''} disabled={!hasCaptions} onChange={(e) => useSequence.getState().setDelivery({ file: (e.target.value || null) as 'srt' | 'vtt' | null })}>
+            <option value="">no caption file</option><option value="srt">+ captions as SRT</option><option value="vtt">+ captions as WebVTT</option>
+          </select>
+        </span></div>}
       <div className="verbs one-file"><span className="hint">one file</span><CommandButton id="story.episode.exportEdl" text label="EDL" /><CommandButton id="story.episode.exportFcpxml" text label="FCPXML + markers" /><CommandButton id="story.episode.exportSrt" text label="SRT" /></div>
       {lastExport && <p className="hint">last: {lastExport.path}</p>}
       {movie && <div className="kv seq-movie" data-testid="seq-movie"><span>movie</span><span>{movie.status === 'running' ? `rendering ${Math.round(movie.progress * 100)}%`
@@ -180,6 +195,11 @@ export function SequenceInspector() {
         {isVideo(tracks, cutSel.track) && <GradeControls cut={tracks} track={cutSel.track} item={cutSel.item} />}
       </>}
       {trackSel && tracks && <TrackInspector cut={tracks} track={trackSel} />}
+      {capSel && tracks && <>
+        <h4>Caption <span className="hint">C1 · {tc(Math.round(capSel.start), tracks.fps)} for {Math.round(capSel.duration)} frames</span></h4>
+        <p className="cap-text" data-testid="caption-text">{capSel.text}</p>
+        <div className="verbs"><CommandRow ids={['story.cut.caption.edit', 'story.cut.caption.delete', 'story.cut.caption.add', 'story.cut.captions.make']} /></div>
+      </>}
       {c && !current.file && <>
         <h4>Clip {selected! + 1}</h4>
         <div className="kv"><span>source</span><span>{clip ? `${clip.model_id} · ${clip.frames}f @ ${clip.fps}` : `${c.source} (missing)`}</span></div>

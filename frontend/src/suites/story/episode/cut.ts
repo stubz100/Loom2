@@ -134,6 +134,24 @@ export function evenDialogueSteps(t: CutTracks): Step[] {
 /** A gain or volume in dB as the editor writes it (−6 dB, +3 dB, 0 dB). */
 export const db = (v: number): string => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(Math.round(v * 10) / 10)} dB`
 
+// ---- CE5 (proto01_animate 30 §5): captions and markers ------------------------------------------------------------------------------
+/** A caption dragged: its body moves it, an edge trims it (FilmCraft keeps a caption a frame long at least). */
+export function captionStep(cap: { id: number; duration: number }, grip: Grip, dFrames: number): Step | null {
+  const d = Math.round(dFrames)
+  if (!d) return null
+  if (grip === 'body') return { id: 'captions.move', params: { captions: [cap.id], deltaFrames: d } }
+  const lim = Math.floor(cap.duration) - 1
+  const dd = grip === 'in' ? Math.min(d, lim) : Math.max(d, -lim)
+  return dd ? { id: 'captions.trim', params: { caption: cap.id, edge: grip, deltaFrames: dd } } : null
+}
+/** The caption track's looks (FilmCraft's track style): loom2's names for a few settings. */
+export const CAPTION_STYLES: Record<string, { label: string; style: Record<string, unknown> }> = {
+  subtitles: { label: 'Subtitles (bottom, on a box)', style: { size: 42, background: true, anchor: 'bottom', outline: 0 } },
+  large: { label: 'Large (bottom, on a box)', style: { size: 60, background: true, anchor: 'bottom', outline: 0 } },
+  top: { label: 'At the top', style: { size: 42, background: true, anchor: 'top', outline: 0 } },
+  clean: { label: 'Clean (an outline, no box)', style: { size: 42, background: false, anchor: 'bottom', outline: 2 } },
+}
+
 // ---- CE4 (proto01_animate 30 §5, O6): colour --------------------------------------------------------------------------------------
 /** The grade's sliders: Lumetri's values and ranges (the server's cuts.GRADE_PARAMS), their neutral and step. */
 export const GRADE_SLIDERS: { key: string; label: string; range: [number, number]; neutral: number; step: number }[] = [

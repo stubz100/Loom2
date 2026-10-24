@@ -5,7 +5,7 @@
 // keeps the cut: what is drawn is the server's last reply.
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { api, baseUrl, getBackend } from '../../../api/client'
-import type { CutItem, CutTrack, CutTracks } from '../../../api/types'
+import type { CutCaption, CutCaptionTrack, CutItem, CutTrack, CutTracks } from '../../../api/types'
 import { CommandRow } from '../../../frame/CommandButton'
 import { showMenu } from '../../../frame/ContextMenu'
 import { useDropTarget, type DragPayload } from '../../../frame/drag'
@@ -16,9 +16,9 @@ import { storyKey } from '../storyKeys'
 import { laneTake } from './bin'
 import { laneChanges, type LaneChange } from './assemble'
 import { runCommand } from '../../../frame/commands'
-import { CUT_TOOLS, db, dragStep, gradeLabel, gripAt, itemLabel, razorStep, ROLE_NAMES, stripLabel, trackDrop, trackRef, type Grip } from './cut'
+import { captionStep, CUT_TOOLS, db, dragStep, gradeLabel, gripAt, itemLabel, razorStep, ROLE_NAMES, stripLabel, trackDrop, trackRef, type Grip } from './cut'
 import { tc } from './lane'
-import { cutClipMenu, cutLength, cutSpaceMenu, cutTrackMenu } from './sequenceCommands'
+import { captionMenu, captionTrackMenu, cutClipMenu, cutLength, cutSpaceMenu, cutTrackMenu, markerItem, markerMenu } from './sequenceCommands'
 import { useSequence } from './sequenceStore'
 import '../../animate/animate.css'
 import './cut.css'
@@ -166,6 +166,52 @@ function TrackRow({ cut, track, ppf, len, drag, onDown, frameAt, changed }: { cu
   )
 }
 
+/** CE5: the caption track as a row above the pictures — a caption selected by a click, moved by its body, trimmed by its edges (each one
+ *  FilmCraft command); its header's right-click adds, remakes, hides and styles them. */
+function CaptionRow({ cut, ct, ppf, len, frameAt }: { cut: CutTracks; ct: CutCaptionTrack; ppf: number; len: number; frameAt: (x: number) => number }) {
+  const sel = useSequence((s) => s.selCaption)
+  const [drag, setDrag] = useState<{ id: number; grip: Grip; dx: number } | null>(null)
+  const down = (e: ReactPointerEvent, cap: CutCaption) => {
+    if (e.button !== 0) return
+    e.stopPropagation()
+    const sq = useSequence.getState()
+    sq.selectCaption(cap.id)
+    const box = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const grip = gripAt(e.clientX - box.left, box.width), x0 = e.clientX
+    let dx = 0
+    const move = (ev: PointerEvent) => { dx = ev.clientX - x0; setDrag({ id: cap.id, grip, dx }) }
+    const up = () => {
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up)
+      setDrag(null)
+      if (Math.abs(dx) < 3) { sq.togglePlay(false); sq.setPlayhead(Math.round(frameAt(x0))); return }
+      const st = captionStep(cap, grip, dx / ppf)
+      if (st) void sq.cutEdit([st])
+    }
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up)
+  }
+  return (
+    <div className={`cut-row c${ct.enabled ? '' : ' muted'}`} data-captions={ct.id}>
+      <div className="cut-head" title={`C1 · ${ct.name}${ct.enabled ? '' : ' (hidden)'} — right-click: add a caption, from the lines, show / hide, style`}
+        onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); showMenu(e, captionTrackMenu()) }}>
+        <span className="line"><span className="ref">C1</span><span className="name">{ct.name}</span>{!ct.enabled && <i title="hidden">∅</i>}</span>
+        <span className="cut-strip">{ct.captions.length} caption{ct.captions.length === 1 ? '' : 's'}</span>
+      </div>
+      <div className="cut-lane" style={{ width: len * ppf }}>
+        {ct.captions.map((c) => {
+          let left = c.start * ppf, w = Math.max(2, c.duration * ppf)
+          if (drag?.id === c.id) { if (drag.grip === 'body') left += drag.dx; else if (drag.grip === 'in') { left += drag.dx; w -= drag.dx } else w += drag.dx }
+          return (
+            <div key={c.id} className={`cut-cap${sel === c.id ? ' selected' : ''}`} data-caption={c.id} style={{ left, width: Math.max(2, w) }} title={`${c.text} · ${tc(Math.round(c.start), cut.fps)} for ${Math.round(c.duration)} f`}
+              onPointerDown={(e) => down(e, c)} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); useSequence.getState().selectCaption(c.id); showMenu(e, captionMenu()) }}>
+              <b>{c.text}</b>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function CutTracksView({ cut }: { cut: CutTracks }) {
   const ppf = useSequence((s) => s.pxPerFrame)
   const playhead = useSequence((s) => s.playhead)
@@ -220,7 +266,13 @@ function CutTracksView({ cut }: { cut: CutTracks }) {
       onPointerDown={(e) => { if ((e.target as HTMLElement).classList.contains('cut-lane')) { useSequence.getState().selectClip(null); scrub(e) } }}>
       <div className="cut-ruler" style={{ width: HEAD + len * ppf }} onPointerDown={scrub}>
         {marks.map((f) => <div key={f} className="tick" style={{ left: HEAD + f * ppf }}><span>{tc(f, cut.fps)}</span></div>)}
+        {cut.markers.map((m) => (                                            // CE5: loom2's chapters (a shot's name) and the author's markers
+          <i key={m.id} className={`cut-marker${m.kind === 'Chapter' ? ' chapter' : ''}`} data-marker={m.id} style={{ left: HEAD + m.frame * ppf }}
+            title={`${m.name}${m.comment ? ` — ${m.comment}` : ''} · ${tc(Math.round(m.frame), cut.fps)}${m.kind === 'Chapter' ? ' · the shot\'s chapter (loom2 keeps it)' : ' — right-click: rename, delete'}`}
+            onContextMenu={m.kind === 'Chapter' ? undefined : (e) => { e.preventDefault(); e.stopPropagation(); markerItem.id = m.id; showMenu(e, markerMenu()) }} />
+        ))}
       </div>
+      {cut.captions.map((ct) => <CaptionRow key={ct.id} cut={cut} ct={ct} ppf={ppf} len={len} frameAt={frameAt} />)}
       {rows.map((t) => <TrackRow key={t.id} cut={cut} track={t} ppf={ppf} len={len} drag={drag} onDown={onDown} frameAt={frameAt} changed={changed} />)}
       <div className="cut-play" style={{ left: HEAD + playhead * ppf }} />
     </div>

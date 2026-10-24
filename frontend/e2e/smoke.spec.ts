@@ -500,7 +500,7 @@ test('a sequence (P17, D83 — in Story · Episode since 17 SY4): a fake-engine 
   const mv = await api<{ kind: string; lineage_kind: string | null; parents: string[]; params: { movie?: boolean } }>('GET', `/assets/${mj.result.asset_ids![0]}`)
   expect([mv.kind, mv.lineage_kind, mv.params.movie, mv.parents.length]).toEqual(['video', 'render', true, 1])
 })
-test("the cut's tracks (CE2–CE3, D126): a FilmCraft cut shows its every track and FilmCraft's frame; the razor cuts a take, the right-click sets its speed, undo and redo are the cut's own, a ripple trim closes up, a track is renamed from its header; a sound's gain and fade from its right-click, the cut's mix in the viewer; D127: the audio tracks' roles, a strip set from a header and from the Inspector's sliders, an effect added, edited, bypassed and printed; CE4: a preset, a scene's grade, a value, a look, a match, a reset", async ({ page }) => {
+test("the cut's tracks (CE2–CE3, D126): a FilmCraft cut shows its every track and FilmCraft's frame; the razor cuts a take, the right-click sets its speed, undo and redo are the cut's own, a ripple trim closes up, a track is renamed from its header; a sound's gain and fade from its right-click, the cut's mix in the viewer; D127: the audio tracks' roles, a strip set from a header and from the Inspector's sliders, an effect added, edited, bypassed and printed; CE4: a preset, a scene's grade, a value, a look, a match, a reset; CE5: a caption added, edited and moved, a marker, the movie as ProRes with its captions", async ({ page }) => {
   test.setTimeout(120_000)
   // a take from the fake engine, on a new cut's V1 (through the API: the bins' + is the sequence scenario's)
   const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
@@ -651,6 +651,47 @@ test("the cut's tracks (CE2–CE3, D126): a FilmCraft cut shows its every track 
   await expect(takes.nth(1)).toContainText('matched')
   await contextChoose(page, takes.nth(1), 'Reset its colour')
   await expect.poll(async () => (await col()).video[0].items[1].grade, { timeout: 10_000 }).toBeNull()
+  // CE5: a caption at the playhead (the caption row), edited and moved; a marker on the ruler; the movie as ProRes with the captions beside it
+  type Cap = { captions: { name: string; captions: { id: number; text: string; start: number }[] }[]; markers: { id: number; name: string; kind: string }[] }
+  const capOf = () => api<Cap>('GET', `/timelines/${tl.id}/tracks`)
+  await page.keyboard.press('Home')
+  const space = page.locator('.cut-tracks')
+  await space.click({ button: 'right', position: { x: 600, y: 8 } })
+  await page.locator('.ctx-menu button.item', { hasText: /^Add a caption at the playhead…$/ }).click()
+  await page.locator('.modal.ask input').fill('Over here.')
+  await page.locator('.modal.ask button.primary').click()
+  const cap = page.locator('.cut-cap')
+  await expect(cap).toHaveCount(1)
+  await expect(cap).toContainText('Over here.')
+  await contextChoose(page, cap, 'Edit the caption…')
+  await page.locator('.modal.ask input').fill('Over there.')
+  await page.locator('.modal.ask button.primary').click()
+  await expect(cap).toContainText('Over there.')
+  await expect(page.getByTestId('caption-text')).toHaveText('Over there.')
+  const cb = (await cap.boundingBox())!
+  await page.mouse.move(cb.x + cb.width / 2, cb.y + cb.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(cb.x + cb.width / 2 + 30, cb.y + cb.height / 2, { steps: 4 })
+  await page.mouse.up()
+  await expect.poll(async () => (await capOf()).captions[0].captions[0].start, { timeout: 10_000 }).toBeGreaterThan(0)
+  await space.click({ button: 'right', position: { x: 600, y: 8 } })
+  await page.locator('.ctx-menu button.item', { hasText: /^Add a marker at the playhead…$/ }).click()
+  await page.locator('.modal.ask input').fill('check the light')
+  await page.locator('.modal.ask button.primary').click()
+  await expect(page.locator('.cut-marker:not(.chapter)')).toHaveCount(1)
+  await contextChoose(page, page.locator('.cut-marker:not(.chapter)'), 'Delete the marker')
+  await expect(page.locator('.cut-marker:not(.chapter)')).toHaveCount(0)
+  const del = page.getByTestId('delivery')
+  await del.getByLabel("the movie's format").selectOption('prores')
+  await del.getByRole('checkbox', { name: 'captions burned in' }).check()
+  await del.getByLabel('captions beside it').selectOption('srt')
+  type MovieJob = { id: string; status: string; recipe: { delivery?: string; burn_captions?: boolean; captions_file?: string | null }; result: { path?: string; captions_file?: string | null } }
+  const jobsBefore = (await api<{ items: MovieJob[] }>('GET', '/jobs')).items.map((j) => j.id)
+  await page.getByRole('button', { name: 'Render the movie' }).click()
+  await expect.poll(async () => (await api<{ items: MovieJob[] }>('GET', '/jobs')).items.find((j) => !jobsBefore.includes(j.id))?.status, { timeout: 60_000 }).toBe('done')
+  const movie = (await api<{ items: MovieJob[] }>('GET', '/jobs')).items.find((j) => !jobsBefore.includes(j.id))!
+  expect(movie.result.path).toMatch(/\.mov$/)
+  expect(movie.result.captions_file).toMatch(/\.srt$/)
 })
 
 test("Settings › Audio (D127): the loudness target and a track role's strip are set in the general Settings and saved", async ({ page }) => {

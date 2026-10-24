@@ -1,6 +1,6 @@
 # 30 · RC4's study — FilmCraft for the cut editor
 
-Status: **study, 2026-10-24; answered the same day → D126 (§10); CE1 built (§11); CE2 built (§13); CE3 built (§15); D127 (§16): the channel strip and VST3 chains — AU1 built (§17), AU2 built (§18), AU3 built (§19), AU4 built (§20) — D127 done; CE4 built (§21); CE5 next.** D96 planned RC4 as "FilmCraft reviewed as 03 reviewed EffectCraft
+Status: **study, 2026-10-24; answered the same day → D126 (§10); CE1 built (§11); CE2 built (§13); CE3 built (§15); D127 (§16): the channel strip and VST3 chains — AU1 built (§17), AU2 built (§18), AU3 built (§19), AU4 built (§20) — D127 done; CE4 built (§21); CE5 built (§22) — D126's cut editor is built.** D96 planned RC4 as "FilmCraft reviewed as 03 reviewed EffectCraft
 (what to reuse, how), then the multi-track cut editor that replaces the single-lane Episode" ([05](05-flow-nodes-as-shot-recipes.md)
 §6), with O6 (a scene grade and shot-match in the cut, [06](06-continuity-across-shots.md)) attached. RC1–RC3 are built
 ([28](28-recipe-graph.md), [29](29-movie-render.md)); this is the study, measured where it could be (§3, the probe E32).
@@ -230,7 +230,7 @@ into the cut's folder and the Catalogue as RC3. RC3's render stays where FilmCra
 | **CE2 · tracks** | the five tracks (V1 shots, V2 inserts and titles, A1 dialogue, A2 music, A3 effects; more by `+`); the edits as commands (move, trim, roll, slip, slide, razor, ripple delete, transitions, speed, freeze); the viewer's frames from the session | 4–5 |
 | **CE3 · sound** | the lines as A1 clips (placed as today, then moved by hand), music and effects from the Catalogue, gain and volume keys, ducking, loudness; sound in the page | 2 |
 | **CE4 · colour** ✓ built 2026-10-24 (§21) | *Grade the scene* (an adjustment layer over a scene group's shots), *Match to…*, presets and looks | 2 |
-| **CE5 · captions and delivery** | the caption track from the lines, burn-in, H.264 / ProRes presets, the Resolve folder from the project | 1–2 |
+| **CE5 · captions and delivery** ✓ built 2026-10-24 (§22) | the caption track from the lines, burn-in, H.264 / ProRes presets, the Resolve folder from the project | 1–2 |
 
 ## 11. CE1 as built (2026-10-24)
 
@@ -579,3 +579,37 @@ gets none; an effect's tail past the cut's end is cut; FilmCraft's own Essential
 ![The scene's grade selected: the Grade track, the viewer graded, the colour block](img/30-ce4-scene.jpg)
 ![The colour block](img/30-ce4-inspector.jpg)
 ![A take's right-click: Grade its scene, Match its colour to ▸, Reset its colour](img/30-ce4-menu.jpg)
+
+## 22. CE5 as built (2026-10-24) — the cut editor's plan done
+
+- **FilmCraft's captions and markers, probed first** (764723f): a caption track and its captions by `captions.*` (each caption with its own
+  id, the track a style: size, box, anchor, outline), FilmCraft's viewer drawing them (`RenderOptions.captions`), an SRT out of them, and
+  the export's `burnCaptions` and `captionSidecar` (srt / vtt beside the movie). Markers: `markers.add` (a comment marker), `markers.edit`
+  by id, but **no delete by id** (`clearCurrent` takes every marker at the playhead).
+- ***Captions from the lines*** (`POST /timelines/{id}/captions`; the Inspector, the tracks' right-click): the cut's caption track *Lines*,
+  each Dialogue line where the SRT lays it — a voiced line where its clip sits on the audio tracks, the others across their shot
+  (`cuts.line_cues`, shared with the SRT) — subtitles at the bottom on a box; made again, the track is replaced after a question (the cut's
+  undo brings the edits back). The **caption row** sits above the pictures: a caption selected by a click (its text in the Inspector),
+  moved by its body, trimmed by its edges, *Edit the caption…*, *Delete*, *Add a caption at the playhead…*; the header's right-click
+  shows / hides them and picks a style (*Subtitles*, *Large*, *At the top*, *Clean*). The SRT export is the caption track's when there is one.
+- **The author's markers**: *Add a marker at the playhead…* (the space's right-click, the toolbar), flags on the ruler (loom2's chapters
+  grey, the author's in the accent), a flag's right-click renames or deletes it. loom2's chapter rebuild after every change keeps them
+  (FilmCraft clears markers all at once, so they are added back); a deletion clears and re-adds the others. markers.txt lists both.
+- **Delivery** (the Inspector's *movie as*; the render recipe's `delivery`, `burn_captions`, `captions_file`): H.264 (.mp4) to watch or
+  ProRes 422 HQ (.mov) to finish, the captions burned in and / or beside it as SRT or WebVTT (FilmCraft's export writes them; loom2 puts
+  them beside the movie in the cut's folder).
+- **Rig** (`scripts/ce5_acceptance.py`, 8/8, the real FilmCraft on the A1 project, a Dialogue node with two lines, the first voiced):
+  two captions — the voiced one exactly where its clip sits (0 + 34 frames), the other across its shot; FilmCraft's viewer draws them
+  (6.7 levels in the bottom band, 0.00 above; none when hidden); a caption edited and moved, the SRT the caption track's; the author's marker
+  kept through a change with the chapter rebuilt, renamed, in markers.txt (`warmer light — too dark here`) and FilmCraft's FCPXML, removed;
+  **burned in**: 7.3 levels in the caption's band, 0.39 above it, 0.00 on a frame without a caption (5.9 s / 4.4 s for the two movies);
+  **ProRes 422 HQ** .mov (codec prores, 166 MB for 9.4 s, 5.4 s) with the SRT and WebVTT beside it.
+- Tests: `test_cuts_ce5.py` (captions from the lines, edited, the SRT from them, made again; the author's marker added, kept, renamed, in
+  markers.txt, removed; a ProRes movie with the captions burned in and beside it), the fake FilmCraft's captions, markers and delivery (its
+  caption handler first took every command and broke CE3's tests — it answers caption and marker commands only); `cut.test.ts` +1; the
+  tracks e2e: a caption added from the space's right-click, edited, dragged; a marker added and deleted; the movie as ProRes with an SRT.
+
+![The movie with the captions burned in (the rig)](img/30-ce5-burned.jpg)
+![The caption row above the pictures, a caption selected, the viewer drawing it; an author's marker on the ruler](img/30-ce5-captions.jpg)
+![The caption track's right-click and its styles](img/30-ce5-caption-menu.jpg)
+![The movie's delivery](img/30-ce5-delivery.jpg)

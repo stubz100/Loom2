@@ -1,6 +1,6 @@
 // P17 (D83): the Sequence tab's verbs — every one has a mouse home (the lane's context menu, the Inspector, the transport) per D32;
 // undo / redo take Ctrl+Z / Ctrl+Shift+Z in the Animate scope (the clip player has no undo of its own).
-import { AppWindow, ArrowDown, ArrowLeft, ArrowLeftRight, ArrowRight, ArrowRightLeft, ArrowUp, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, Columns2, FileDown, Film, FolderOpen, Gauge, Lock, Mic, MousePointer2, MoveHorizontal, Music, Palette, Pause, Pencil, Play, Plug, Plus, Redo2, RefreshCw, RotateCcw, Scissors, SkipBack, SkipForward, SlidersHorizontal, Snowflake, Sparkles, SplitSquareHorizontal, SquareDashed, Tag, ToggleLeft, Trash2, Undo2, UnfoldHorizontal, Volume2, VolumeX, Workflow, ZoomIn, ZoomOut } from 'lucide-react'
+import { AppWindow, ArrowDown, ArrowLeft, ArrowLeftRight, ArrowRight, ArrowRightLeft, ArrowUp, Bookmark, Captions, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, Columns2, Eye, FileDown, Film, FolderOpen, Gauge, Lock, Mic, MousePointer2, MoveHorizontal, Music, Palette, Pause, Pencil, Play, Plug, Plus, Redo2, RefreshCw, RotateCcw, Scissors, SkipBack, SkipForward, SlidersHorizontal, Snowflake, Sparkles, SplitSquareHorizontal, SquareDashed, Tag, ToggleLeft, Trash2, Undo2, UnfoldHorizontal, Volume2, VolumeX, Workflow, ZoomIn, ZoomOut } from 'lucide-react'
 import { registerCommands, sep, type MenuItem } from '../../../frame/commands'
 import { askConfirm, askText, useSession } from '../../../store/session'
 import { useAnimate } from '../../animate/animateStore'
@@ -8,7 +8,7 @@ import { useStory } from '../storyStore'
 import { assembleLane, laneChanges, routeLabel, routePicks, updateClip, walkRoute } from './assemble'
 import { duration, ticks } from './lane'
 import { isCut, lastMovie, useSequence } from './sequenceStore'
-import { CUT_TOOLS, dialogueOf, itemLabel, duckSteps, evenDialogueSteps, fadeStep, findItem, gainStep, isVideo, panLabel, ROLE_NAMES, STRIP, stripValue, ticksOf, trackRef, transitionInto, transitionStep, TRACK_ROLES, volumeLabel, widthLabel, type CutTool } from './cut'
+import { CAPTION_STYLES, CUT_TOOLS, dialogueOf, itemLabel, duckSteps, evenDialogueSteps, fadeStep, findItem, gainStep, isVideo, panLabel, ROLE_NAMES, STRIP, stripValue, ticksOf, trackRef, transitionInto, transitionStep, TRACK_ROLES, volumeLabel, widthLabel, type CutTool } from './cut'
 import type { TrackRole, TrackStrip } from '../../../api/types'
 import { revealPath } from '../../../shell/tauri'
 
@@ -21,6 +21,11 @@ const hasSel = () => hasSeq() && !isCut() && sq().selected !== null && !!sq().la
 const selCut = () => { const t = sq().tracks, id = sq().selClip; return t && id !== null ? findItem(t, id) : null }
 /** CE2: the cut's length in frames (a FilmCraft cut: its tracks; today's: its lane). */
 export const cutLength = (): number => (isCut() ? Math.ceil(sq().tracks?.duration ?? 0) : sq().lane ? duration(sq().lane!) : 0)
+/** CE5: the marker a ruler flag's right-click is about (commands take no arguments; the flag sets this first). */
+export const markerItem: { id?: number } = {}
+const selMarker = () => { const t = sq().tracks; return t && markerItem.id !== undefined ? t.markers.find((m) => m.id === markerItem.id && m.kind !== 'Chapter') ?? null : null }
+const selCaption = () => { const t = sq().tracks, id = sq().selCaption; return t && id !== null ? t.captions.flatMap((ct) => ct.captions).find((c) => c.id === id) ?? null : null }
+const captionTrack = () => sq().tracks?.captions[0] ?? null
 /** AU4: the effect a chain row's button is about (commands take no arguments; the row sets this first). */
 export const fxItem: { id?: string } = {}
 const selFx = () => { const tr = selTrack(); return tr && fxItem.id ? tr.chain.find((e) => e.id === fxItem.id) ?? null : null }
@@ -273,6 +278,38 @@ registerCommands([
     when: () => cutSel() && sq().tracks!.video[0]?.id === selCut()!.track.id && selCut()!.item.kind === 'take', run: () => { const s = selCut(); if (s) void sq().cutGradeScene(s.item.id) } },
   { id: 'story.cut.grade.reset', scope: 'story', label: 'Reset its colour', icon: RotateCcw, placement: ['inspector', 'context'], when: () => cutSel() && !!selCut()!.item.grade,
     run: () => { const s = selCut(); if (s) void sq().cutGrade(s.item.id, { reset: true }) } },
+  // CE5 (30 §5): captions — made from the lines, edited by FilmCraft's commands — and the author's markers beside loom2's chapters
+  { id: 'story.cut.captions.make', scope: 'story', label: 'Captions from the lines', icon: Captions, placement: ['inspector', 'context'],
+    hint: "a caption track from the Dialogue lines, timed as the SRT lays them (a voiced line where its clip sits); burned in or written beside the movie when you render it",
+    when: () => isCut() && !sq().cutBusy,
+    run: () => {
+      const ct = captionTrack()
+      const ask = ct && ct.name === 'Lines' && ct.captions.length ? askConfirm({ title: 'Make the captions again from the lines?', text: 'Your edits to the captions are replaced (the cut\'s undo brings them back).', okLabel: 'Make them again' }) : Promise.resolve(true)
+      void ask.then((ok) => { if (ok) void sq().cutCaptions() })
+    } },
+  { id: 'story.cut.caption.add', scope: 'story', label: 'Add a caption at the playhead…', icon: Captions, placement: ['context'], when: () => isCut() && !sq().cutBusy,
+    run: () => void askText({ title: 'A caption at the playhead', text: 'Two seconds long; drag its edges to fit.', placeholder: 'what is said' }).then((v) => {
+      if (v?.trim()) void sq().cutEdit([{ id: 'captions.add', params: { ...(captionTrack() ? { track: captionTrack()!.id } : {}), text: v.trim(), time: ticksOf(sq().playhead, sq().tracks!.fps), durationSeconds: 2 } }])
+    }) },
+  { id: 'story.cut.caption.edit', scope: 'story', label: 'Edit the caption…', icon: Pencil, placement: ['inspector', 'context'], when: () => !!selCaption() && !sq().cutBusy,
+    run: () => { const c = selCaption(); if (c) void askText({ title: 'The caption', initial: c.text }).then((v) => { if (v !== null && v.trim()) void sq().cutEdit([{ id: 'captions.setText', params: { caption: c.id, text: v.trim() } }]) }) } },
+  { id: 'story.cut.caption.delete', scope: 'story', label: 'Delete the caption', icon: Trash2, placement: ['inspector', 'context'], danger: true, when: () => !!selCaption() && !sq().cutBusy,
+    run: () => { const c = selCaption(); if (c) void sq().cutEdit([{ id: 'captions.delete', params: { captions: [c.id] } }]) } },
+  { id: 'story.cut.captions.toggle', scope: 'story', label: 'Show / hide the captions', icon: Eye, placement: ['context'], hint: 'hidden captions are neither in the viewer nor burned into the movie',
+    when: () => !!captionTrack() && !sq().cutBusy, run: () => { const ct = captionTrack(); if (ct) void sq().cutEdit([{ id: 'captions.setTrack', params: { track: ct.id, enabled: !ct.enabled } }]) } },
+  ...Object.entries(CAPTION_STYLES).map(([key, { label, style }]) => ({
+    id: `story.cut.captions.style.${key}`, scope: 'story' as const, label, icon: Captions, placement: ['context'] as ['context'], when: () => !!captionTrack() && !sq().cutBusy,
+    run: () => { const ct = captionTrack(); if (ct) void sq().cutEdit([{ id: 'captions.setStyle', params: { track: ct.id, ...style } }]) },
+  })),
+  { id: 'story.cut.marker.add', scope: 'story', label: 'Add a marker at the playhead…', icon: Bookmark, placement: ['context', 'toolbar'], hint: 'a note on the cut, kept beside the shots\' chapters; in markers.txt and the FCPXML',
+    when: () => isCut() && !sq().cutBusy,
+    run: () => void askText({ title: 'A marker at the playhead', placeholder: 'what to remember here' }).then((v) => {
+      if (v?.trim()) void sq().cutEdit([{ id: 'markers.add', params: { target: 'program', time: ticksOf(sq().playhead, sq().tracks!.fps), name: v.trim() } }])
+    }) },
+  { id: 'story.cut.marker.rename', scope: 'story', label: 'Rename the marker…', icon: Pencil, placement: ['context'], when: () => !!selMarker() && !sq().cutBusy,
+    run: () => { const m = selMarker(); if (m) void askText({ title: 'The marker', initial: m.name }).then((v) => { if (v?.trim()) void sq().cutEdit([{ id: 'markers.edit', params: { target: 'program', marker: m.id, name: v.trim() } }]) }) } },
+  { id: 'story.cut.marker.delete', scope: 'story', label: 'Delete the marker', icon: Trash2, placement: ['context'], danger: true, when: () => !!selMarker() && !sq().cutBusy,
+    run: () => { const m = selMarker(); if (m) void sq().cutEdit([{ id: 'loom2.removeMarker', params: { marker: m.id } }]) } },
   { id: 'story.cut.addVideoTrack', scope: 'story', label: 'Add a video track', icon: Plus, placement: ['context', 'toolbar'], when: () => isCut() && !sq().cutBusy,
     run: () => edit1('sequence.addTracks', { video: 1, audio: 0 }) },
   { id: 'story.cut.addAudioTrack', scope: 'story', label: 'Add an audio track', icon: Volume2, placement: ['context', 'toolbar'], when: () => isCut() && !sq().cutBusy,
@@ -305,9 +342,22 @@ export function cutTrackMenu(): MenuItem[] {
     { cmd: 'story.cut.evenDialogue' }, sep, { cmd: 'story.cut.addVideoTrack' }, { cmd: 'story.cut.addAudioTrack' }]
 }
 
+/** CE5: a caption's right-click (selected by the caller), the caption track's header and an author's marker on the ruler. */
+export function captionMenu(): MenuItem[] {
+  return [{ cmd: 'story.cut.caption.edit' }, { cmd: 'story.cut.caption.delete' }, sep, { cmd: 'story.cut.caption.add' }, { cmd: 'story.cut.captions.make' }, sep, { cmd: 'story.episode.undo' }, { cmd: 'story.episode.redo' }]
+}
+export function captionTrackMenu(): MenuItem[] {
+  return [{ cmd: 'story.cut.caption.add' }, { cmd: 'story.cut.captions.make' }, { cmd: 'story.cut.captions.toggle' },
+    { label: 'Style', icon: Captions, items: Object.keys(CAPTION_STYLES).map((k) => ({ cmd: `story.cut.captions.style.${k}` })) }]
+}
+export function markerMenu(): MenuItem[] {
+  return [{ cmd: 'story.cut.marker.rename' }, { cmd: 'story.cut.marker.delete' }, sep, { cmd: 'story.cut.marker.add' }]
+}
+
 /** CE2: the tracks' empty space. */
 export function cutSpaceMenu(): MenuItem[] {
-  return [{ cmd: 'story.episode.play' }, { cmd: 'story.episode.home' }, { cmd: 'story.episode.end' }, sep, { cmd: 'story.cut.addVideoTrack' }, { cmd: 'story.cut.addAudioTrack' }, sep,
+  return [{ cmd: 'story.episode.play' }, { cmd: 'story.episode.home' }, { cmd: 'story.episode.end' }, sep, { cmd: 'story.cut.marker.add' }, { cmd: 'story.cut.caption.add' }, { cmd: 'story.cut.captions.make' }, sep,
+    { cmd: 'story.cut.addVideoTrack' }, { cmd: 'story.cut.addAudioTrack' }, sep,
     { cmd: 'story.episode.exportResolve' }, { label: 'Export one file', icon: FileDown, items: [{ cmd: 'story.episode.exportEdl' }, { cmd: 'story.episode.exportFcpxml' }, { cmd: 'story.episode.exportSrt' }] },
     { cmd: 'story.episode.render' }, { cmd: 'story.episode.renderMovie' }, sep, { cmd: 'story.episode.reassemble' }, { cmd: 'story.episode.updateAll' }, sep,
     { cmd: 'story.episode.rename' }, { cmd: 'story.episode.delete' }, sep, { cmd: 'story.episode.undo' }, { cmd: 'story.episode.redo' }]

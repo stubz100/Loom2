@@ -403,6 +403,9 @@ class Render(BaseModel):
     timeline_id: str
     seeds: list[int] = Field(default_factory=lambda: [0])
     movie: bool = False                            # RC3 (D96, proto01_animate 29): the finished movie — RIFE-conformed, at the cut's size, the voice lane mixed in, an MP4 in the cut's folder
+    delivery: Literal["h264", "prores"] = "h264"   # CE5 (a FilmCraft cut's movie): H.264 to watch (.mp4) or ProRes 422 HQ to finish (.mov)
+    burn_captions: bool = False                    # CE5: the caption track burned into the picture
+    captions_file: Literal["srt", "vtt"] | None = None   # CE5: the captions written beside the movie
 
 
 class TrainLora(BaseModel):

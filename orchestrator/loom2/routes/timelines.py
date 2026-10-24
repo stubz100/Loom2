@@ -95,6 +95,9 @@ async def timeline_delete(svc: Svc, tl_id: str):
 
 class TimelineRender(BaseModel):
     movie: bool = False                            # RC3 (proto01_animate 29): the movie (conformed, the cut's size, the voice lane, an MP4) instead of the draft
+    delivery: Literal["h264", "prores"] = "h264"   # CE5 (a FilmCraft cut): H.264 to watch or ProRes 422 HQ to finish
+    burn_captions: bool = False                    # CE5: the caption track burned in
+    captions_file: Literal["srt", "vtt"] | None = None   # CE5: the captions beside the movie
 
 
 @router.post("/timelines/{tl_id}/render", response_model=JobsSubmitted)
@@ -113,7 +116,9 @@ async def timeline_render(svc: Svc, tl_id: str, body: TimelineRender | None = No
     if missing:
         raise HTTPException(422, f"clips missing from the project: {', '.join(missing)}")
     try:
-        jobs = queue.submit({"kind": "render", "timeline_id": tl_id, "movie": bool(body and body.movie)}, origin=JobOrigin(suite="animate", surface="sequence", ref=tl_id))
+        delivery = body.model_dump(include={"delivery", "burn_captions", "captions_file"}) if body and body.movie else {}
+        jobs = queue.submit({"kind": "render", "timeline_id": tl_id, "movie": bool(body and body.movie), **delivery},
+                            origin=JobOrigin(suite="animate", surface="sequence", ref=tl_id))
     except ValueError as e:
         raise HTTPException(422, str(e))
     return {"jobs": [j.model_dump() for j in jobs]}
@@ -393,6 +398,20 @@ async def timeline_grade_scene(svc: Svc, tl_id: str, body: CutGradeScene):
             pid = nodes[node_id].place_id if node_id in nodes else None
             return (pid, places.get(pid, "")) if pid else (None, "")
         return [store.cuts.grade_scene(tl, body.clip, place_of)]
+    return await _cut_call(svc, tl_id, body.revision, run)
+
+
+class CutCaptions(BaseModel):
+    revision: int | None = None
+
+
+@router.post("/timelines/{tl_id}/captions", response_model=CutEdited, response_model_by_alias=True)
+async def timeline_captions(svc: Svc, tl_id: str, body: CutCaptions):
+    """CE5: *Captions from the lines* — the cut's caption track made from the Dialogue lines (timed as the SRT lays them); the track
+    loom2 made before is replaced."""
+    def run(store, tl, ws, cat):
+        _, lines_of, _ = _story_lookup(ws, cat)
+        return [store.cuts.captions_from_lines(tl, lines_of)]
     return await _cut_call(svc, tl_id, body.revision, run)
 
 

@@ -3400,6 +3400,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/timelines/{tl_id}/captions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Timeline Captions
+         * @description CE5: *Captions from the lines* — the cut's caption track made from the Dialogue lines (timed as the SRT lays them); the track
+         *     loom2 made before is replaced.
+         */
+        post: operations["timeline_captions_timelines__tl_id__captions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/timelines/{tl_id}/edit": {
         parameters: {
             query?: never;
@@ -4892,6 +4913,62 @@ export interface components {
             /** Shots */
             shots: string[];
         };
+        /**
+         * CutCaption
+         * @description CE5: one caption (frames at the cut's rate).
+         */
+        CutCaption: {
+            /** Duration */
+            duration: number;
+            /** Id */
+            id: number;
+            /** Speaker */
+            speaker: string | null;
+            /** Start */
+            start: number;
+            /**
+             * Text
+             * @default
+             */
+            text: string;
+        };
+        /** CutCaptionTrack */
+        CutCaptionTrack: {
+            /**
+             * Anchor
+             * @default bottom
+             */
+            anchor: string;
+            /**
+             * Background
+             * @default true
+             */
+            background: boolean;
+            /** Captions */
+            captions: components["schemas"]["CutCaption"][];
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Id */
+            id: number;
+            /**
+             * Name
+             * @default
+             */
+            name: string;
+            /**
+             * Size
+             * @default 42
+             */
+            size: number;
+        };
+        /** CutCaptions */
+        CutCaptions: {
+            /** Revision */
+            revision?: number | null;
+        };
         /** CutEdit */
         CutEdit: {
             /** Revision */
@@ -5092,6 +5169,41 @@ export interface components {
             /** Start */
             start: number;
         };
+        /**
+         * CutMarker
+         * @description CE5: a sequence marker — loom2's chapters (one per named shot, rebuilt after every change) and the author's own.
+         */
+        CutMarker: {
+            /**
+             * Color
+             * @default
+             */
+            color: string;
+            /**
+             * Comment
+             * @default
+             */
+            comment: string;
+            /**
+             * Duration
+             * @default 0
+             */
+            duration: number;
+            /** Frame */
+            frame: number;
+            /** Id */
+            id: number;
+            /**
+             * Kind
+             * @default Comment
+             */
+            kind: string;
+            /**
+             * Name
+             * @default
+             */
+            name: string;
+        };
         /** CutPlace */
         CutPlace: {
             /** Asset Id */
@@ -5238,12 +5350,16 @@ export interface components {
         CutTracks: {
             /** Audio */
             audio: components["schemas"]["CutTrack"][];
+            /** Captions */
+            captions: components["schemas"]["CutCaptionTrack"][];
             /** Duration */
             duration: number;
             /** Fps */
             fps: number;
             /** H */
             h: number;
+            /** Markers */
+            markers: components["schemas"]["CutMarker"][];
             /**
              * Redo
              * @default 0
@@ -11228,6 +11344,19 @@ export interface components {
         };
         /** TimelineRender */
         TimelineRender: {
+            /**
+             * Burn Captions
+             * @default false
+             */
+            burn_captions?: boolean;
+            /** Captions File */
+            captions_file?: ("srt" | "vtt") | null;
+            /**
+             * Delivery
+             * @default h264
+             * @enum {string}
+             */
+            delivery?: "h264" | "prores";
             /**
              * Movie
              * @default false
@@ -18755,6 +18884,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Deleted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    timeline_captions_timelines__tl_id__captions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tl_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CutCaptions"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CutEdited"];
                 };
             };
             /** @description Validation Error */

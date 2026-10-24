@@ -35,6 +35,11 @@ CE4 (30 §5, O6): colour. A clip's grade is its Lumetri effect (FilmCraft's): a 
 and a match to another shot (`lumetri.applyMatch`: FilmCraft solves the colour wheels toward a reference frame). *Grade the scene* puts an
 adjustment layer on the cut's top *Grade* track over the run of shots at the same place as the chosen one (the Flow's scene groups come
 with RC2; until then a scene is the place) — a clip the author trims like any other, its own Lumetri the scene's grade.
+
+CE5 (30 §5): captions and markers. *Captions from the lines* makes the cut's caption track (FilmCraft's, `captions.*`) from the Dialogue
+lines where the SRT lays them (a voiced line where its clip sits); the author edits the captions by FilmCraft's commands; the movie burns
+them in or writes them beside it, and the SRT export is the caption track when there is one. The author's own markers (comment markers)
+live beside loom2's chapter markers: the chapters are rebuilt after every change, the author's kept.
 """
 from __future__ import annotations
 
@@ -66,6 +71,8 @@ GRADE_PARAMS = {                                   # CE4: the grade values loom2
     "highlights": (-100.0, 100.0), "shadows": (-100.0, 100.0), "whites": (-100.0, 100.0), "blacks": (-100.0, 100.0),
     "saturation": (0.0, 200.0), "vibrance": (-100.0, 100.0), "faded_film": (0.0, 100.0), "look_intensity": (0.0, 200.0),
 }
+CAPTION_TRACK = "Lines"                            # CE5: the caption track made from the lines
+CAPTION_STYLE = {"size": 42, "background": True, "anchor": "bottom"}   # its first look: subtitles at the bottom, on a box
 GRADE_TRACK = "Grade"                              # CE4: the top video track the scene grades sit on
 TAIL_S = 8.0                                       # AU4: a print runs this far past its track's last sound (an effect's tail), within the cut
 PRINT_BUS = "loom2 · printed sources"              # the muted submix a printed track plays into
@@ -376,6 +383,39 @@ class CutTrack(BaseModel):
     transitions: list[CutTransition] = Field(default_factory=list)
 
 
+class CutCaption(BaseModel):
+    """CE5: one caption (frames at the cut's rate)."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    id: int
+    start: float
+    duration: float
+    text: str = ""
+    speaker: str | None = None
+
+
+class CutCaptionTrack(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    id: int
+    name: str = ""
+    enabled: bool = True                            # shown in the viewer and burned in when asked
+    size: float = 42.0
+    anchor: str = "bottom"
+    background: bool = True
+    captions: list[CutCaption] = Field(default_factory=list)
+
+
+class CutMarker(BaseModel):
+    """CE5: a sequence marker — loom2's chapters (one per named shot, rebuilt after every change) and the author's own."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    id: int
+    frame: float
+    duration: float = 0.0
+    name: str = ""
+    comment: str = ""
+    kind: str = "Comment"                           # "Chapter" (loom2's) or the author's ("Comment" …)
+    color: str = ""
+
+
 class CutTracks(BaseModel):
     """CE2: a FilmCraft cut's every track, read from its project."""
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
@@ -386,6 +426,8 @@ class CutTracks(BaseModel):
     duration: float
     video: list[CutTrack] = Field(default_factory=list)
     audio: list[CutTrack] = Field(default_factory=list)
+    captions: list[CutCaptionTrack] = Field(default_factory=list)   # CE5
+    markers: list[CutMarker] = Field(default_factory=list)
     undo: int = 0                                   # the cut's changes it can undo / redo (its project's snapshots)
     redo: int = 0
 
@@ -452,7 +494,16 @@ def tracks(doc: dict) -> CutTracks:
     video = [one(t, "video") for t in seq.get("video_tracks", [])]
     audio = [one(t, "audio") for t in seq.get("audio_tracks", []) if t["id"] not in companions]
     end = max([i.start + i.duration for tr in video + audio for i in tr.items] or [0.0])
-    return CutTracks(sequence=sid, fps=fps, w=int(st["width"]), h=int(st["height"]), duration=round(end, 3), video=video, audio=audio)
+    caps = []
+    for ct in seq.get("caption_tracks") or []:
+        style = ct.get("style") or {}
+        caps.append(CutCaptionTrack(id=ct["id"], name=ct.get("name", ""), enabled=ct.get("enabled", True) is not False, size=float(style.get("size", 42.0)),
+                                    anchor=str(style.get("anchor", "Bottom")).lower(), background=bool(style.get("background", True)),
+                                    captions=[CutCaption(id=c["id"], start=f(c["start"]), duration=f(c["duration"]), text=c.get("text", ""), speaker=c.get("speaker"))
+                                              for c in sorted(ct.get("captions") or [], key=lambda c: c["start"])]))
+    marks = [CutMarker(id=m["id"], frame=f(m["start"]), duration=f(m.get("duration", 0)), name=m.get("name", ""), comment=m.get("comment", ""),
+                       kind=str(m.get("kind", "Comment")), color=str(m.get("color", ""))) for m in sorted(seq.get("markers") or [], key=lambda m: m["start"])]
+    return CutTracks(sequence=sid, fps=fps, w=int(st["width"]), h=int(st["height"]), duration=round(end, 3), video=video, audio=audio, captions=caps, markers=marks)
 
 
 # CE2: the FilmCraft commands the Episode's editor may run on a cut (never a file command: the cut's own file is FilmCraft's to write)
@@ -463,8 +514,12 @@ EDIT_COMMANDS = frozenset({
     "clip.speedDuration", "clip.frameHold", "clip.insertFrameHoldSegment", "clip.enable", "clip.rename",
     # CE3: sound — a clip's gain, the dialogue / music types FilmCraft ducks by, the ducking itself, the dialogue's loudness, volume keys
     "clip.audioGain", "essentialSound.setType", "essentialSound.generateDucking", "essentialSound.autoMatch", "clipMixer.set",
+    # CE5: captions (the track's own and the author's edits) and the author's markers (loom2 keeps the chapters)
+    "captions.add", "captions.setText", "captions.setTimes", "captions.trim", "captions.move", "captions.delete", "captions.split",
+    "captions.merge", "captions.setStyle", "captions.setTrack", "markers.add", "markers.edit",
 })
 REMOVE_TRANSITION = "loom2.removeTransition"      # FilmCraft has no command for it (764723f): the clip lifted and placed again, its attributes kept
+REMOVE_MARKER = "loom2.removeMarker"              # CE5: nor for a marker by its id (clearCurrent takes every marker at the playhead): the rest re-added
 
 
 class Cuts:
@@ -608,7 +663,7 @@ class Cuts:
     def edit(self, tl: Timeline, steps: list[dict]) -> list[Any]:
         """Run the editor's steps — FilmCraft commands from EDIT_COMMANDS, or loom2's removal of a transition — and save."""
         for st in steps:
-            if st.get("id") not in EDIT_COMMANDS and st.get("id") != REMOVE_TRANSITION:
+            if st.get("id") not in EDIT_COMMANDS and st.get("id") not in (REMOVE_TRANSITION, REMOVE_MARKER):
                 raise CutError(f"`{st.get('id')}` is not an editor command")
         def run(p: Path) -> list[Any]:
             results: list[Any] = []
@@ -616,6 +671,9 @@ class Cuts:
                 if st["id"] == REMOVE_TRANSITION:
                     self.fc.save()                                    # the removal reads the project as it stands
                     results.append(self._remove_transition(read(p), int(st.get("params", {}).get("transition", 0))))
+                elif st["id"] == REMOVE_MARKER:
+                    self.fc.save()
+                    results.append(self._remove_marker(read(p), int(st.get("params", {}).get("marker", 0))))
                 else:
                     results.extend(self.fc.batch([{"id": st["id"], "params": st.get("params") or {}}]))
             self._markers(p)
@@ -1007,18 +1065,63 @@ class Cuts:
     def _markers(self, p: Path) -> None:
         """Save, then put the sequence's chapter markers on V1's named takes (a take's start; FilmCraft keeps no marker on a clip by
         command, and a sequence marker does not follow a clip that moves) and save again — FilmCraft's FCPXML carries them to Resolve.
-        The cut's markers are loom2's: hand-set markers come with the editor's marker tools (CE5)."""
+        CE5: the author's own markers (any kind but Chapter) are kept — FilmCraft clears markers all at once, so they are added back."""
         self.fc.save()
         if self.name_of is None:
             return
-        cut = tracks(read(p))
+        doc = read(p)
+        cut = tracks(doc)
         steps: list[dict] = [{"id": "markers.clearAll", "params": {"target": "program"}}]
         for i, start, _ in runs(cut):
             name = self.name_of(_as_clip(i))
             if name:
                 steps.append({"id": "markers.addChapter", "params": {"time": ticks(start, cut.fps), "name": name}})
+        steps += self._readd(sequence(doc)[2].get("markers") or [])
         self.fc.batch(steps)
         self.fc.save()
+
+    @staticmethod
+    def _readd(markers: list[dict], skip: int | None = None) -> list[dict]:
+        """The author's markers (not loom2's chapters) as the commands that put them back."""
+        out = []
+        for m in markers:
+            if m.get("kind") == "Chapter" or m.get("id") == skip:
+                continue
+            frames = {"durationFrames": round(m["duration"] * 24 / TICK)} if m.get("duration") else {}
+            out.append({"id": "markers.add", "params": {"target": "program", "time": m["start"], "name": m.get("name", ""), "comment": m.get("comment", ""),
+                                                        **({"color": m["color"]} if m.get("color") else {}), **frames}})
+        return out
+
+    def _remove_marker(self, doc: dict, mid: int) -> dict:
+        """An author's marker away: every marker cleared and the others put back (the chapters come back with `_markers`)."""
+        marks = sequence(doc)[2].get("markers") or []
+        if not any(m.get("id") == mid for m in marks):
+            raise CutError(f"the cut has no marker {mid}")
+        self.fc.batch([{"id": "markers.clearAll", "params": {"target": "program"}}, *self._readd(marks, skip=mid)])
+        return {"removed": mid}
+
+    # ---- CE5: captions from the lines --------------------------------------------------------------------------------------------
+    def captions_from_lines(self, tl: Timeline, lines_of: Callable[[TimelineClip], list[str]]) -> dict:
+        """The cut's caption track from the Dialogue lines, timed as the SRT lays them (a voiced line where its clip sits on the audio
+        tracks): the track loom2 made before is replaced (the author's edits on it go — the client asks first), another caption track
+        is left alone. One change of the cut."""
+        def run(p: Path) -> dict:
+            doc = read(p)
+            seq_id, seq_item, seq = sequence(doc)
+            cut = tracks(doc)
+            cues = line_cues(cut, lines_of)
+            mine = json.loads(seq_item.get("metadata", {}).get("loom2.captiontrack") or "null")
+            if any(ct["id"] == mine for ct in seq.get("caption_tracks") or []):
+                self.fc.batch([{"id": "captions.deleteTrack", "params": {"track": mine}}])
+            track = int(self.fc.batch([{"id": "captions.newTrack", "params": {"format": "Subtitle", "name": CAPTION_TRACK, "language": "en"}}])[0]["track"])
+            steps: list[dict] = [{"id": "metadata.set", "params": {"item": seq_id, "fields": {"loom2.captiontrack": json.dumps(track)}}},
+                                 {"id": "captions.setStyle", "params": {"track": track, **CAPTION_STYLE}}]
+            steps += [{"id": "captions.add", "params": {"track": track, "text": text, "seconds": round(a / cut.fps, 4),
+                                                        "durationSeconds": round(max(1, b - a) / cut.fps, 4)}} for a, b, text in cues]
+            self.fc.batch(steps)
+            self._markers(p)
+            return {"track": track, "captions": len(cues)}
+        return self.changing(tl, run)
 
     def frame(self, tl: Timeline, seconds: float, side: int) -> bytes:
         self._open(tl, change=False)
@@ -1199,10 +1302,9 @@ def runs(cut: CutTracks) -> list[tuple[CutItem, float, float]]:
     return out
 
 
-def cut_srt(cut: CutTracks, lines_of: Callable[[TimelineClip], list[str]]) -> str:
-    """CE2: the SubRip of a FilmCraft cut — each shot's lines across where its run sits on V1 (laid evenly, as the lane's SRT), a voiced
-    line where its clip sits on A1."""
-    from .timelines import srt_tc
+def line_cues(cut: CutTracks, lines_of: Callable[[TimelineClip], list[str]]) -> list[tuple[float, float, str]]:
+    """Each shot's lines across where its run sits on V1 (laid evenly, as the lane's SRT), a voiced line where its clip sits on the audio
+    tracks — (start, end, text) in frames, in time order."""
     voiced = {(i.node_id, i.line): (i.start, i.start + i.duration) for t in cut.audio for i in t.items if i.kind == "line"}
     cues: list[tuple[float, float, str]] = []
     for i, start, end in runs(cut):
@@ -1212,16 +1314,33 @@ def cut_srt(cut: CutTracks, lines_of: Callable[[TimelineClip], list[str]]) -> st
         for (a0, b0), (k, text) in zip(line_spans(round(end - start), len(said)), said):
             a, b = voiced.get((i.node_id, k), (start + a0, start + b0))
             cues.append((a, b, text))
+    return sorted(cues, key=lambda x: x[0])
+
+
+def srt_of(cues: list[tuple[float, float, str]], fps: int) -> str:
+    from .timelines import srt_tc
     out: list[str] = []
-    for n, (a, b, text) in enumerate(sorted(cues, key=lambda x: x[0]), 1):
-        out += [str(n), f"{srt_tc(round(a), cut.fps)} --> {srt_tc(max(round(a) + 1, round(b)), cut.fps)}", text, ""]
+    for n, (a, b, text) in enumerate(cues, 1):
+        out += [str(n), f"{srt_tc(round(a), fps)} --> {srt_tc(max(round(a) + 1, round(b)), fps)}", text, ""]
     return "\n".join(out)
 
 
+def cut_srt(cut: CutTracks, lines_of: Callable[[TimelineClip], list[str]]) -> str:
+    """CE2: the SubRip of a FilmCraft cut — its lines (`line_cues`). CE5: the caption track's captions when the cut has them (the
+    author's edits are the subtitles)."""
+    caps = next((ct for ct in cut.captions if ct.enabled and ct.captions), None)
+    if caps is not None:
+        return srt_of([(c.start, c.start + c.duration, c.text) for c in caps.captions], cut.fps)
+    return srt_of(line_cues(cut, lines_of), cut.fps)
+
+
 def cut_markers(cut: CutTracks, name_of: Callable[[TimelineClip], str | None]) -> str:
-    """CE2: the markers sidecar of a FilmCraft cut — a line per named shot (a run of V1) at its start (`HH:MM:SS:FF<TAB>name`)."""
+    """CE2: the markers sidecar of a FilmCraft cut — a line per named shot (a run of V1) at its start (`HH:MM:SS:FF<TAB>name`); CE5: the
+    author's markers too (`name — comment`), all in time order."""
     from .timelines import tc
-    out = [f"{tc(round(start), cut.fps)}\t{name}" for i, start, _ in runs(cut) if (name := name_of(_as_clip(i)))]
+    rows = [(start, name) for i, start, _ in runs(cut) if (name := name_of(_as_clip(i)))]
+    rows += [(m.frame, m.name + (f" — {m.comment}" if m.comment else "")) for m in cut.markers if m.kind != "Chapter"]
+    out = [f"{tc(round(a), cut.fps)}\t{n}" for a, n in sorted(rows, key=lambda r: r[0])]
     return "\n".join(out) + ("\n" if out else "")
 
 

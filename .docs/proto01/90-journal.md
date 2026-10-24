@@ -8886,3 +8886,23 @@ patched (the Mid attenuated). A track with plugins is printed onto a hidden comp
 - Tests: offline 561 passed (test_cuts_ce4.py; the fake's presets stack as the real ones), settings audit, OpenAPI, agents_check clean,
   Vitest 459 + 3 skipped, typecheck, lint (0 errors, 79 warnings) and build clean, e2e full 63/63 and open 63/63 (the tracks scenario's
   colour steps). Screenshots img/30-ce4-*.jpg. Next CE5 (captions and delivery).
+
+## 2026-10-24 16:41 — CE5 built (D126 done): captions from the lines, the author's markers, the movie's delivery
+
+- **Probed first** (764723f): `captions.*` (a track with a style; captions by id), FilmCraft's viewer draws captions, the export's
+  `burnCaptions` and `captionSidecar`; `markers.add` / `markers.edit` by id but no delete by id (`clearCurrent` takes every marker at the
+  playhead).
+- **Built**: `POST …/captions` (*Captions from the lines*: the track *Lines*, each line where the SRT lays it — `cuts.line_cues` shared
+  with the SRT; made again after a question); the caption row above the pictures (select, move, trim, edit, delete, add at the playhead;
+  the header: show / hide, styles); the SRT export from the caption track when there is one; the author's markers (add at the playhead,
+  flags on the ruler, rename, delete via `loom2.removeMarker`) kept through loom2's chapter rebuild and in markers.txt; delivery on the
+  render recipe (`delivery` h264 / prores, `burn_captions`, `captions_file` srt / vtt) and in the Inspector (*movie as*).
+- **Found**: the fake FilmCraft's new caption handler first took every command (it read the sequence before the command's name) and
+  broke CE3's tests — it answers caption and marker commands only now.
+- **Rig** scripts/ce5_acceptance.py 8/8 (A1, a Dialogue node, the first line voiced): two captions, the voiced one exactly on its clip;
+  the viewer draws them (6.7 levels in the bottom band, 0.00 above; none hidden); edit + move reach the SRT; the author's marker kept,
+  renamed, in markers.txt and the FCPXML, removed; burned in 7.3 levels in the band, 0.00 on a frame without a caption; ProRes 422 HQ .mov
+  (codec prores, 166 MB / 9.4 s, 5.4 s) with SRT and WebVTT beside it.
+- Tests: offline 562 passed (test_cuts_ce5.py), settings audit (295), OpenAPI, agents_check clean, Vitest 460 + 3 skipped, typecheck, lint
+  (0 errors, 79 warnings) and build clean, e2e full 63/63 and open 63/63 (the tracks scenario's caption, marker and delivery steps).
+  Screenshots img/30-ce5-*.jpg. D126's plan (CE1–CE5) is built.

@@ -2943,6 +2943,116 @@
         "title": "CoverageCaps",
         "type": "object"
       },
+      "CutCaption": {
+        "description": "CE5: one caption (frames at the cut's rate).",
+        "properties": {
+          "duration": {
+            "title": "Duration",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "speaker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker"
+          },
+          "start": {
+            "title": "Start",
+            "type": "number"
+          },
+          "text": {
+            "default": "",
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "start",
+          "duration",
+          "text",
+          "speaker"
+        ],
+        "title": "CutCaption",
+        "type": "object"
+      },
+      "CutCaptionTrack": {
+        "properties": {
+          "anchor": {
+            "default": "bottom",
+            "title": "Anchor",
+            "type": "string"
+          },
+          "background": {
+            "default": true,
+            "title": "Background",
+            "type": "boolean"
+          },
+          "captions": {
+            "items": {
+              "$ref": "#/components/schemas/CutCaption"
+            },
+            "title": "Captions",
+            "type": "array"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          },
+          "size": {
+            "default": 42.0,
+            "title": "Size",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "enabled",
+          "size",
+          "anchor",
+          "background",
+          "captions"
+        ],
+        "title": "CutCaptionTrack",
+        "type": "object"
+      },
+      "CutCaptions": {
+        "properties": {
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          }
+        },
+        "title": "CutCaptions",
+        "type": "object"
+      },
       "CutEdit": {
         "properties": {
           "revision": {
@@ -3484,6 +3594,55 @@
         "title": "CutItem",
         "type": "object"
       },
+      "CutMarker": {
+        "description": "CE5: a sequence marker — loom2's chapters (one per named shot, rebuilt after every change) and the author's own.",
+        "properties": {
+          "color": {
+            "default": "",
+            "title": "Color",
+            "type": "string"
+          },
+          "comment": {
+            "default": "",
+            "title": "Comment",
+            "type": "string"
+          },
+          "duration": {
+            "default": 0.0,
+            "title": "Duration",
+            "type": "number"
+          },
+          "frame": {
+            "title": "Frame",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "default": "Comment",
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "frame",
+          "duration",
+          "name",
+          "comment",
+          "kind",
+          "color"
+        ],
+        "title": "CutMarker",
+        "type": "object"
+      },
       "CutPlace": {
         "properties": {
           "asset_id": {
@@ -3897,6 +4056,13 @@
             "title": "Audio",
             "type": "array"
           },
+          "captions": {
+            "items": {
+              "$ref": "#/components/schemas/CutCaptionTrack"
+            },
+            "title": "Captions",
+            "type": "array"
+          },
           "duration": {
             "title": "Duration",
             "type": "number"
@@ -3908,6 +4074,13 @@
           "h": {
             "title": "H",
             "type": "integer"
+          },
+          "markers": {
+            "items": {
+              "$ref": "#/components/schemas/CutMarker"
+            },
+            "title": "Markers",
+            "type": "array"
           },
           "redo": {
             "default": 0,
@@ -3943,6 +4116,8 @@
           "duration",
           "video",
           "audio",
+          "captions",
+          "markers",
           "undo",
           "redo"
         ],
@@ -18591,6 +18766,35 @@
       },
       "TimelineRender": {
         "properties": {
+          "burn_captions": {
+            "default": false,
+            "title": "Burn Captions",
+            "type": "boolean"
+          },
+          "captions_file": {
+            "anyOf": [
+              {
+                "enum": [
+                  "srt",
+                  "vtt"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captions File"
+          },
+          "delivery": {
+            "default": "h264",
+            "enum": [
+              "h264",
+              "prores"
+            ],
+            "title": "Delivery",
+            "type": "string"
+          },
           "movie": {
             "default": false,
             "title": "Movie",
@@ -30635,6 +30839,59 @@
           }
         },
         "summary": "Timeline Put",
+        "tags": [
+          "timelines"
+        ]
+      }
+    },
+    "/timelines/{tl_id}/captions": {
+      "post": {
+        "description": "CE5: *Captions from the lines* — the cut's caption track made from the Dialogue lines (timed as the SRT lays them); the track\nloom2 made before is replaced.",
+        "operationId": "timeline_captions_timelines__tl_id__captions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tl_id",
+            "required": true,
+            "schema": {
+              "title": "Tl Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CutCaptions"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CutEdited"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Timeline Captions",
         "tags": [
           "timelines"
         ]

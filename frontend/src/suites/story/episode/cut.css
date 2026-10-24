@@ -63,3 +63,14 @@
 .track-insp .strip-ctl > span:last-child { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .track-insp .strip-ctl input[type=range] { flex: 1; min-width: 80px; accent-color: var(--accent); }
 .track-insp .strip-val { flex: 0 0 auto; min-width: 104px; text-align: right; font: var(--mono); font-size: 11px; }
+/* CE5: the caption row and the ruler's markers */
+.cut-row.c { height: 28px; }
+.cut-cap { position: absolute; top: 3px; bottom: 3px; border: 1px solid var(--line2); border-radius: 4px; overflow: hidden; box-sizing: border-box; cursor: grab;
+  background: color-mix(in srgb, #ddd 22%, var(--bg3, #333)); }
+.cut-cap.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); z-index: 3; }
+.cut-cap b { position: absolute; left: 6px; top: 2px; font-size: 10.5px; font-weight: 500; color: var(--fg); white-space: nowrap; pointer-events: none; }
+.cut-marker { position: absolute; top: 0; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 9px solid var(--accent);
+  transform: translateX(-5px); z-index: 6; cursor: context-menu; }
+.cut-marker.chapter { border-top-color: var(--fg3); cursor: default; }
+.seq-insp .delivery > span:last-child { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.seq-insp .cap-text { margin: 2px 0 6px; padding: 6px 8px; background: var(--bg2); border-radius: 4px; font-size: 12px; }

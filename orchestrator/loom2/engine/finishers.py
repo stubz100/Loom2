@@ -1486,9 +1486,17 @@ async def run_movie_filmcraft(job: JobRecord, recipe: Render, q: JobQueue, tl: A
     tmp = q.ws.temp_dir / f"movie-{job.id}"
     shutil.rmtree(tmp, ignore_errors=True)
     tmp.mkdir(parents=True)
-    part, script = tmp / "movie.mp4", tmp / "export.jsonl"
+    ext = ".mov" if recipe.delivery == "prores" else ".mp4"          # CE5: the delivery — H.264 to watch, ProRes 422 HQ to finish
+    part, script = tmp / f"movie{ext}", tmp / "export.jsonl"
     lufs = q.app.settings.audio.loudness_lufs                        # CE3: the movie normalised (D127: Settings › Audio › loudness)
-    script.write_text(export_script(part, "h264", tl.fps, **({"loudnessLufs": lufs} if lufs is not None else {})), encoding="utf-8")
+    extra: dict = {"loudnessLufs": lufs} if lufs is not None else {}
+    if recipe.delivery == "prores":
+        extra["proresProfile"] = "hq"
+    if recipe.burn_captions:
+        extra["burnCaptions"] = True
+    if recipe.captions_file:
+        extra["captionSidecar"] = recipe.captions_file
+    script.write_text(export_script(part, recipe.delivery, tl.fps, **extra), encoding="utf-8")
     argv = export_argv(q.app.settings.filmcraft, q.app, project, script)
     log_path = q.app.logs_dir / f"movie-{job.id}.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1511,8 +1519,12 @@ async def run_movie_filmcraft(job: JobRecord, recipe: Render, q: JobQueue, tl: A
     slug = slugify(tl.name, "sequence")
     folder = store.export_dir(tl.id) / slug
     folder.mkdir(parents=True, exist_ok=True)
-    out = folder / f"{slug}.mp4"
+    out = folder / f"{slug}{ext}"
     part.replace(out)
+    side = None
+    if recipe.captions_file and part.with_suffix(f".{recipe.captions_file}").is_file():   # FilmCraft writes the captions beside its export
+        side = folder / f"{slug}.{recipe.captions_file}"
+        part.with_suffix(f".{recipe.captions_file}").replace(side)
     secs = round(time.time() - t0, 1)
     placed = len(cut_lines(await asyncio.to_thread(read, project)))
 
@@ -1535,7 +1547,8 @@ async def run_movie_filmcraft(job: JobRecord, recipe: Render, q: JobQueue, tl: A
     asset = await asyncio.to_thread(q.catalogue.make_thumbs, asset, first_png)
     q.hub.broadcast("asset.created", asset.model_dump())
     job.result.update({"asset_ids": [asset.id], "path": out.relative_to(q.ws.path).as_posix(), "lines": placed, "revision": tl.revision, "file": str(out),
-                       "engine": "filmcraft", "loudness_lufs": lufs})
+                       "engine": "filmcraft", "loudness_lufs": lufs, "delivery": recipe.delivery, "burn_captions": recipe.burn_captions,
+                       "captions_file": side.relative_to(q.ws.path).as_posix() if side else None})
     shutil.rmtree(tmp, ignore_errors=True)
     return True
 

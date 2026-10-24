@@ -90,6 +90,13 @@ interface SequenceState {
   cutGrade: (clip: number, change: { preset?: string; look?: string; look_file?: string; values?: Record<string, number>; match?: number; reset?: boolean }) => Promise<boolean>
   cutGradeScene: (clip: number) => Promise<boolean>
   looks: ColourLooks | null                 // FilmCraft's presets and looks (loaded when a video clip is first selected)
+  /** CE5: a caption selected on the caption row; captions made from the lines; the movie's delivery (H.264 or ProRes, captions burned in
+   *  or beside it), the next render's. */
+  selCaption: number | null
+  selectCaption: (id: number | null) => void
+  cutCaptions: () => Promise<boolean>
+  delivery: { format: 'h264' | 'prores'; burn: boolean; file: 'srt' | 'vtt' | null }
+  setDelivery: (patch: Partial<SequenceState['delivery']>) => void
   setTool: (tool: CutTool) => void
   selectClip: (id: number | null) => void
   selectTrack: (id: number | null) => void
@@ -130,6 +137,7 @@ function applyCut(r: CutEdited, set: (p: Partial<SequenceState>) => void, get: (
     playhead: Math.min(get().playhead, Math.max(0, Math.ceil(r.tracks.duration) - 1)) })
   if (get().selClip !== null && ![...r.tracks.video, ...r.tracks.audio].some((tr) => tr.items.some((i) => i.id === get().selClip))) set({ selClip: null })
   if (get().selTrack !== null && ![...r.tracks.video, ...r.tracks.audio].some((tr) => tr.id === get().selTrack)) set({ selTrack: null })
+  if (get().selCaption !== null && !r.tracks.captions.some((ct) => ct.captions.some((c) => c.id === get().selCaption))) set({ selCaption: null })
 }
 
 /** CE2: one of the editor's calls — the cut's revision as its base; a stale base reloads the cut, FilmCraft's refusal is said as it is. */
@@ -151,6 +159,7 @@ async function cutCall(get: () => SequenceState, set: (p: Partial<SequenceState>
 export const useSequence = create<SequenceState>()((set, get) => ({
   timelines: [], current: null, lane: null, selected: null, playhead: 0, playing: false, pxPerFrame: 3, undo: [], redo: [], saving: false, lastExport: null, assembleFor: null,
   tracks: null, tool: 'select', selClip: null, selTrack: null, cutBusy: false, fxOpen: null, fxPicker: null, fxPlugins: null, fxScanning: false, looks: null,
+  selCaption: null, delivery: { format: 'h264', burn: false, file: null },
 
   load: async () => {
     try { set({ timelines: (await unwrap(http.GET('/timelines'))).items }) } catch { set({ timelines: [] }) }
@@ -229,7 +238,8 @@ export const useSequence = create<SequenceState>()((set, get) => ({
     if (!cur) return
     const s = useSession.getState()
     try {
-      await unwrap(http.POST('/timelines/{tl_id}/render', { params: { path: { tl_id: cur.id } }, body: { movie } }))
+      const d = get().delivery                                                  // CE5: a FilmCraft cut's movie as the Inspector says
+      await unwrap(http.POST('/timelines/{tl_id}/render', { params: { path: { tl_id: cur.id } }, body: { movie, ...(movie && cur.file ? { delivery: d.format, burn_captions: d.burn, captions_file: d.file } : {}) } }))
       s.toast(movie ? 'Movie queued — an MP4 in the cut\'s folder and the Catalogue when it is done (CPU, no engine)'
         : 'Draft render queued — the clip lands in the Clips bin when it is done (CPU, no engine)', 'success')
       await s.refreshAll()
@@ -278,13 +288,16 @@ export const useSequence = create<SequenceState>()((set, get) => ({
     if (ok && made !== null) get().selectClip(made)
     return ok
   },
+  selectCaption: (id) => set({ selCaption: id, ...(id !== null ? { selClip: null, selTrack: null, selected: null } : {}) }),
+  cutCaptions: () => cutCall(get, set, (id, revision) => unwrap(http.POST('/timelines/{tl_id}/captions', { params: { path: { tl_id: id } }, body: { revision } }))),
+  setDelivery: (patch) => set({ delivery: { ...get().delivery, ...patch } }),
   setTool: (tool) => set({ tool }),
   selectClip: (id) => {                                                       // a take on V1 is the lane's clip too (Update, the Inspector)
     const k = id === null ? -1 : (get().lane?.clips.findIndex((c) => c.id === String(id)) ?? -1)
-    set({ selClip: id, selected: k >= 0 ? k : null, ...(id !== null ? { selTrack: null } : {}) })
+    set({ selClip: id, selected: k >= 0 ? k : null, ...(id !== null ? { selTrack: null, selCaption: null } : {}) })
     if (id !== null && !get().looks) void unwrap(http.GET('/colour/looks')).then((looks) => set({ looks })).catch(() => { /* FilmCraft not built: no grade lists */ })   // CE4
   },
-  selectTrack: (id) => set({ selTrack: id, ...(id !== null ? { selClip: null, selected: null } : {}) }),
+  selectTrack: (id) => set({ selTrack: id, ...(id !== null ? { selClip: null, selected: null, selCaption: null } : {}) }),
 }))
 
 export const seqActive = (): boolean => !!useSequence.getState().current

@@ -82,3 +82,14 @@ describe('the strip sliders (D127)', () => {
     expect([detent('gain_db', 0.4), detent('gain_db', -0.6), detent('pan', -2), detent('width', 97), detent('width', 90)]).toEqual([0, -0.6, 0, 100, 90])
   })
 })
+
+describe('captions (CE5)', () => {
+  it('move by the body, trim by an edge, a caption a frame long at least', async () => {
+    const { captionStep } = await import('./cut')
+    const cap = { id: 7, duration: 10 }
+    expect(captionStep(cap, 'body', 5.4)).toEqual({ id: 'captions.move', params: { captions: [7], deltaFrames: 5 } })
+    expect(captionStep(cap, 'in', 30)).toEqual({ id: 'captions.trim', params: { caption: 7, edge: 'in', deltaFrames: 9 } })
+    expect(captionStep(cap, 'out', -30)).toEqual({ id: 'captions.trim', params: { caption: 7, edge: 'out', deltaFrames: -9 } })
+    expect(captionStep(cap, 'body', 0.2)).toBeNull()
+  })
+})

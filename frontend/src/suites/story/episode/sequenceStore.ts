@@ -67,6 +67,7 @@ interface SequenceState {
   tracks: CutTracks | null
   tool: CutTool
   selClip: number | null                  // a clip on the tracks (FilmCraft's id)
+  selTrack: number | null                 // D127: a track (its header clicked): the Inspector shows its strip; a clip's selection clears it
   cutBusy: boolean
   loadTracks: () => Promise<void>
   cutEdit: (steps: Step[]) => Promise<boolean>
@@ -78,6 +79,7 @@ interface SequenceState {
   cutRole: (track: number, role: TrackRole | null) => Promise<boolean>
   setTool: (tool: CutTool) => void
   selectClip: (id: number | null) => void
+  selectTrack: (id: number | null) => void
 }
 
 /** CE2: the open cut is a FilmCraft project (edited by commands, its tracks read from it). */
@@ -114,6 +116,7 @@ function applyCut(r: CutEdited, set: (p: Partial<SequenceState>) => void, get: (
   set({ current: r.timeline, lane: laneOf(r.timeline), tracks: r.tracks, timelines: get().timelines.map((t) => (t.id === r.timeline.id ? r.timeline : t)),
     playhead: Math.min(get().playhead, Math.max(0, Math.ceil(r.tracks.duration) - 1)) })
   if (get().selClip !== null && ![...r.tracks.video, ...r.tracks.audio].some((tr) => tr.items.some((i) => i.id === get().selClip))) set({ selClip: null })
+  if (get().selTrack !== null && ![...r.tracks.video, ...r.tracks.audio].some((tr) => tr.id === get().selTrack)) set({ selTrack: null })
 }
 
 /** CE2: one of the editor's calls — the cut's revision as its base; a stale base reloads the cut, FilmCraft's refusal is said as it is. */
@@ -134,7 +137,7 @@ async function cutCall(get: () => SequenceState, set: (p: Partial<SequenceState>
 
 export const useSequence = create<SequenceState>()((set, get) => ({
   timelines: [], current: null, lane: null, selected: null, playhead: 0, playing: false, pxPerFrame: 3, undo: [], redo: [], saving: false, lastExport: null, assembleFor: null,
-  tracks: null, tool: 'select', selClip: null, cutBusy: false,
+  tracks: null, tool: 'select', selClip: null, selTrack: null, cutBusy: false,
 
   load: async () => {
     try { set({ timelines: (await unwrap(http.GET('/timelines'))).items }) } catch { set({ timelines: [] }) }
@@ -148,10 +151,10 @@ export const useSequence = create<SequenceState>()((set, get) => ({
     } catch (e) { useSession.getState().toast(`New cut failed: ${(e as ApiError).detail ?? e}`, 'error'); return null }
   },
   open: async (id) => {
-    if (!id) { set({ current: null, lane: null, selected: null, playhead: 0, playing: false, undo: [], redo: [], tracks: null, selClip: null }); return }
+    if (!id) { set({ current: null, lane: null, selected: null, playhead: 0, playing: false, undo: [], redo: [], tracks: null, selClip: null, selTrack: null }); return }
     try {
       const tl = await unwrap(http.GET('/timelines/{tl_id}', { params: { path: { tl_id: id } } }))
-      set({ current: tl, lane: laneOf(tl), selected: null, playhead: 0, playing: false, undo: [], redo: [], tracks: null, selClip: null,
+      set({ current: tl, lane: laneOf(tl), selected: null, playhead: 0, playing: false, undo: [], redo: [], tracks: null, selClip: null, selTrack: null,
         timelines: get().timelines.some((t) => t.id === tl.id) ? get().timelines.map((t) => (t.id === tl.id ? tl : t)) : [tl, ...get().timelines] })
       if (tl.file) await get().loadTracks()
     } catch (e) { useSession.getState().toast(`Open cut failed: ${(e as ApiError).detail ?? e}`, 'error') }
@@ -238,8 +241,9 @@ export const useSequence = create<SequenceState>()((set, get) => ({
   setTool: (tool) => set({ tool }),
   selectClip: (id) => {                                                       // a take on V1 is the lane's clip too (Update, the Inspector)
     const k = id === null ? -1 : (get().lane?.clips.findIndex((c) => c.id === String(id)) ?? -1)
-    set({ selClip: id, selected: k >= 0 ? k : null })
+    set({ selClip: id, selected: k >= 0 ? k : null, ...(id !== null ? { selTrack: null } : {}) })
   },
+  selectTrack: (id) => set({ selTrack: id, ...(id !== null ? { selClip: null, selected: null } : {}) }),
 }))
 
 export const seqActive = (): boolean => !!useSequence.getState().current

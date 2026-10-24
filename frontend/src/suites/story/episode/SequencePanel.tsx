@@ -13,6 +13,7 @@ import { duration, ticks } from './lane'
 import { lastMovie, useSequence } from './sequenceStore'
 import { db, findItem, isVideo, itemLabel, stripLabel, trackRef, transitionInto } from './cut'
 import { tc } from './lane'
+import { TrackInspector } from './StripControls'
 import { useStory } from '../storyStore'
 import { binItem, laneBelowFormat, laneChecklist } from './sequenceCommands'
 import { markUsed, runCommand } from '../../../frame/commands'
@@ -135,7 +136,9 @@ export function SequenceInspector() {
   const jobs = useSession((s) => s.jobs)
   const tracks = useSequence((s) => s.tracks)
   const selClip = useSequence((s) => s.selClip)
+  const selTrack = useSequence((s) => s.selTrack)
   if (!current || !lane) return <span className="hint">No cut open.</span>
+  const trackSel = current.file && tracks && selTrack !== null ? [...tracks.video, ...tracks.audio].find((x) => x.id === selTrack) ?? null : null   // D127
   const cutSel = current.file && tracks && selClip !== null ? findItem(tracks, selClip) : null      // CE2: the clip selected on a FilmCraft cut's tracks
   const movie = lastMovie(jobs, current.id)                                                       // RC3: the newest movie job of this cut
   const ch = laneChanges(lane, shots)                                                           // D125 (S13): a newer approved take
@@ -174,6 +177,7 @@ export function SequenceInspector() {
         <div className="verbs"><CommandRow ids={isVideo(tracks, cutSel.track) ? ['story.cut.speed', 'story.cut.freeze', 'story.cut.dissolveIn', 'story.cut.dissolveOut', 'story.cut.removeTransition', 'story.episode.openClip', 'story.cut.lift', 'story.cut.rippleDelete']
           : ['story.cut.gain', 'story.cut.fadeIn', 'story.cut.fadeOut', 'story.cut.duck', 'story.cut.evenDialogue', 'story.cut.removeTransition', 'story.cut.lift', 'story.cut.rippleDelete']} /></div>
       </>}
+      {trackSel && tracks && <TrackInspector cut={tracks} track={trackSel} />}
       {c && !current.file && <>
         <h4>Clip {selected! + 1}</h4>
         <div className="kv"><span>source</span><span>{clip ? `${clip.model_id} · ${clip.frames}f @ ${clip.fps}` : `${c.source} (missing)`}</span></div>

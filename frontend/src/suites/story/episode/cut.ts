@@ -160,3 +160,17 @@ export function stripValue(key: keyof TrackStrip, text: string | null): number |
   const [lo, hi] = STRIP[key]
   return Math.min(hi, Math.max(lo, n))
 }
+/** The volume slider's taper (0…1 of its travel): the bottom quarter is −96 (−∞)…−30 dB, the rest −30…+18 — a fader's resolution where
+ *  a mix lives. Snapped to 0.5 dB and to 0 dB within 0.5 dB. */
+export function faderDb(pos: number): number {
+  const p = Math.min(1, Math.max(0, pos))
+  const v = p <= 0.25 ? -96 + (p / 0.25) * 66 : -30 + ((p - 0.25) / 0.75) * 48
+  const r = Math.round(v * 2) / 2
+  return Math.abs(r) <= 0.5 ? 0 : r
+}
+export const faderPos = (v: number): number => (v <= -30 ? (Math.max(-96, v) + 96) / 66 * 0.25 : 0.25 + (Math.min(18, v) + 30) / 48 * 0.75)
+/** A strip slider's value with its detents: gain to 0 dB within 0.5 dB, pan to the centre within 3, width to 100 % within 4. */
+export function detent(key: 'gain_db' | 'pan' | 'width', v: number): number {
+  const [at, near] = key === 'gain_db' ? [0, 0.5] : key === 'pan' ? [0, 3] : [100, 4]
+  return Math.abs(v - at) <= near ? at : v
+}

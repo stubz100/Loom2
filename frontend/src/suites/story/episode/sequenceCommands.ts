@@ -21,9 +21,8 @@ const hasSel = () => hasSeq() && !isCut() && sq().selected !== null && !!sq().la
 const selCut = () => { const t = sq().tracks, id = sq().selClip; return t && id !== null ? findItem(t, id) : null }
 /** CE2: the cut's length in frames (a FilmCraft cut: its tracks; today's: its lane). */
 export const cutLength = (): number => (isCut() ? Math.ceil(sq().tracks?.duration ?? 0) : sq().lane ? duration(sq().lane!) : 0)
-/** CE2: the track a header's right-click is about (commands take no arguments; the menu sets this first). */
-export const trackItem: { id?: number } = {}
-const selTrack = () => { const t = sq().tracks; return t && trackItem.id !== undefined ? [...t.video, ...t.audio].find((x) => x.id === trackItem.id) ?? null : null }
+/** CE2: the track a header's click or right-click selected (D127: the store's, so the Inspector's strip and the menu agree). */
+const selTrack = () => { const t = sq().tracks, id = sq().selTrack; return t && id !== null ? [...t.video, ...t.audio].find((x) => x.id === id) ?? null : null }
 const an = () => useAnimate.getState()
 type BinClip = Parameters<ReturnType<typeof useSequence.getState>['addClip']>[0]
 /** D90 (01 §11.2): the bin entry the + was pressed on (commands take no arguments; the button sets this first, a run clears it). */
@@ -216,11 +215,11 @@ registerCommands([
     run: () => { const s = selCut(); if (s) edit1('edit.rippleDelete', { clips: [s.item.id] }) } },
   { id: 'story.cut.rename', scope: 'story', label: 'Rename the clip…', icon: Pencil, placement: ['context'], when: cutSel,
     run: () => { const s = selCut(); if (s) void askText({ title: 'Rename the clip', initial: s.item.name }).then((n) => { if (n?.trim()) edit1('clip.rename', { clip: s.item.id, name: n.trim() }) }) } },
-  { id: 'story.cut.track.rename', scope: 'story', label: 'Rename the track…', icon: Pencil, placement: ['context'], when: () => isCut() && !!selTrack(),
+  { id: 'story.cut.track.rename', scope: 'story', label: 'Rename the track…', icon: Pencil, placement: ['context', 'inspector'], when: () => isCut() && !!selTrack(),
     run: () => { const tr = selTrack(); if (tr) void askText({ title: 'Rename the track', initial: tr.name }).then((n) => { if (n?.trim()) edit1('timeline.setTrack', { track: tr.id, name: n.trim() }) }) } },
-  { id: 'story.cut.track.lock', scope: 'story', label: 'Lock / unlock the track', icon: Lock, placement: ['context'], when: () => isCut() && !!selTrack(),
+  { id: 'story.cut.track.lock', scope: 'story', label: 'Lock / unlock the track', icon: Lock, placement: ['context', 'inspector'], when: () => isCut() && !!selTrack(),
     run: () => { const tr = selTrack(); if (tr) edit1('timeline.setTrack', { track: tr.id, locked: !tr.locked }) } },
-  { id: 'story.cut.track.mute', scope: 'story', label: 'Mute / unmute the track', icon: VolumeX, placement: ['context'], when: () => isCut() && !!selTrack(),
+  { id: 'story.cut.track.mute', scope: 'story', label: 'Mute / unmute the track', icon: VolumeX, placement: ['context', 'inspector'], when: () => isCut() && !!selTrack(),
     run: () => { const tr = selTrack(); if (tr) edit1('timeline.setTrack', { track: tr.id, muted: !tr.muted }) } },
   // CE3 (proto01_animate 30 §14): sound — each a FilmCraft command on the clip or the track
   { id: 'story.cut.gain', scope: 'story', label: 'Gain…', icon: Volume2, placement: ['inspector', 'context'], when: () => cutSel() && !isVideo(sq().tracks!, selCut()!.track),
@@ -236,7 +235,7 @@ registerCommands([
     when: () => isCut() && !!sq().tracks && dialogueOf(sq().tracks!).length > 0 && !sq().cutBusy, run: () => void sq().cutEdit(evenDialogueSteps(sq().tracks!)) },
   // D127 (30 §16): an audio track's strip — gain, volume, pan, width — and its role (Settings › Audio's strip for it)
   ...STRIP_ASKS.map(([key, label, icon, title, shown]) => ({
-    id: `story.cut.track.${key === 'gain_db' ? 'gain' : key === 'volume_db' ? 'volume' : key}`, scope: 'story' as const, label, icon, placement: ['context'] as ['context'],
+    id: `story.cut.track.${key === 'gain_db' ? 'gain' : key === 'volume_db' ? 'volume' : key}`, scope: 'story' as const, label, icon, placement: ['context', 'inspector'] as ['context', 'inspector'],
     when: () => audioTrack() && !sq().cutBusy,
     run: () => { const tr = selTrack(); if (tr) void askText({ title: `${tr.name}: ${title}`, text: `now ${shown(tr[key])}`, initial: String(tr[key] <= STRIP.volume_db[0] && key === 'volume_db' ? '-inf' : tr[key]), placeholder: String(STRIP[key].join(' … ')) })
       .then((v) => { const n = stripValue(key, v); if (n !== null) void sq().cutStrip(tr.id, { [key]: n }) }) },
@@ -246,7 +245,9 @@ registerCommands([
     hint: role ? `named ${ROLE_NAMES[role]}, its gain, volume, pan and width set to the role's in Settings › Audio` : 'the role cleared; the strip stays',
     when: () => audioTrack() && !sq().cutBusy && selTrack()!.role !== role, run: () => { const tr = selTrack(); if (tr) void sq().cutRole(tr.id, role) },
   })),
-  { id: 'story.cut.track.duck', scope: 'story', label: 'Duck the track under the dialogue', icon: VolumeX, placement: ['context'],
+  { id: 'story.cut.track.resetRole', scope: 'story', label: "Reset to its role's settings", icon: RefreshCw, placement: ['context', 'inspector'], hint: "gain, volume, pan and width as the role's in Settings › Audio",
+    when: () => audioTrack() && !sq().cutBusy && !!selTrack()!.role, run: () => { const tr = selTrack(); if (tr?.role) void sq().cutRole(tr.id, tr.role) } },
+  { id: 'story.cut.track.duck', scope: 'story', label: 'Duck the track under the dialogue', icon: VolumeX, placement: ['context', 'inspector'],
     when: () => isCut() && !!selTrack() && !isVideo(sq().tracks!, selTrack()!) && selTrack()!.items.some((i) => i.kind !== 'line') && dialogueOf(sq().tracks!).length > 0,
     run: () => { const tr = selTrack(); if (tr) void sq().cutEdit(duckSteps(sq().tracks!, tr.items)) } },
   { id: 'story.cut.addVideoTrack', scope: 'story', label: 'Add a video track', icon: Plus, placement: ['context', 'toolbar'], when: () => isCut() && !sq().cutBusy,
@@ -269,10 +270,10 @@ export function cutClipMenu(): MenuItem[] {
     { cmd: 'story.cut.rename' }, { cmd: 'story.episode.openClip' }, sep, { cmd: 'story.cut.lift' }, { cmd: 'story.cut.rippleDelete' }, sep, { cmd: 'story.episode.undo' }, { cmd: 'story.episode.redo' }]
 }
 
-/** CE2: a track header's right-click (the track set by the caller in `trackItem`); D127: an audio track's strip and role. */
+/** CE2: a track header's right-click (the track selected by the caller); D127: an audio track's strip and role. */
 export function cutTrackMenu(): MenuItem[] {
   const strip: MenuItem[] = audioTrack() ? [{ cmd: 'story.cut.track.gain' }, { cmd: 'story.cut.track.volume' }, { cmd: 'story.cut.track.pan' }, { cmd: 'story.cut.track.width' },
-    { label: 'Role', icon: Tag, items: [...TRACK_ROLES.map((r) => ({ cmd: `story.cut.track.role.${r}` })), { cmd: 'story.cut.track.role.none' }] }, sep] : []
+    { label: 'Role', icon: Tag, items: [...TRACK_ROLES.map((r) => ({ cmd: `story.cut.track.role.${r}` })), { cmd: 'story.cut.track.role.none' }] }, { cmd: 'story.cut.track.resetRole' }, sep] : []
   return [{ cmd: 'story.cut.track.rename' }, { cmd: 'story.cut.track.lock' }, { cmd: 'story.cut.track.mute' }, sep, ...strip, { cmd: 'story.cut.track.duck' }, sep,
     { cmd: 'story.cut.evenDialogue' }, sep, { cmd: 'story.cut.addVideoTrack' }, { cmd: 'story.cut.addAudioTrack' }]
 }

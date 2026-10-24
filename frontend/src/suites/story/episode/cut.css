@@ -13,6 +13,7 @@
 .cut-row.target .cut-lane { outline: 1px dashed var(--accent); }
 .cut-head { position: sticky; left: 0; z-index: 5; flex: 0 0 104px; width: 104px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; padding: 0 6px;
   background: var(--bg1); border: 1px solid var(--line); border-radius: 4px 0 0 4px; font-size: 11px; color: var(--fg2); cursor: context-menu; overflow: hidden; }
+.cut-head.selected { border-color: var(--accent); color: var(--fg); background: color-mix(in srgb, var(--accent) 14%, var(--bg1)); }
 .cut-head .ref { font: var(--mono); font-size: 10px; color: var(--fg3); }
 .cut-head .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
 .cut-head i { font-style: normal; font-size: 10px; }
@@ -43,3 +44,7 @@
 .cut-play { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); pointer-events: none; z-index: 10; }
 .cut-clip .seq-changed { position: absolute; right: 6px; bottom: 3px; z-index: 2; padding: 0 6px; min-height: 0; font-size: 10.5px; line-height: 16px; border-radius: 8px; border: 1px solid var(--accent); background: var(--bg1); color: var(--accent); cursor: pointer; }
 .cut-clip .seq-changed:hover { background: var(--accent); color: #fff; }
+/* D127 (AU2): a track in the Inspector — the strip's sliders with their numbers */
+.track-insp .strip-ctl > span:last-child { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.track-insp .strip-ctl input[type=range] { flex: 1; min-width: 80px; accent-color: var(--accent); }
+.track-insp .strip-val { flex: 0 0 auto; min-width: 104px; text-align: right; font: var(--mono); font-size: 11px; }

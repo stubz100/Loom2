@@ -17,7 +17,7 @@ import { laneChanges, type LaneChange } from './assemble'
 import { runCommand } from '../../../frame/commands'
 import { CUT_TOOLS, db, dragStep, gripAt, itemLabel, razorStep, ROLE_NAMES, stripLabel, trackDrop, trackRef, type Grip } from './cut'
 import { tc } from './lane'
-import { cutClipMenu, cutLength, cutSpaceMenu, cutTrackMenu, trackItem } from './sequenceCommands'
+import { cutClipMenu, cutLength, cutSpaceMenu, cutTrackMenu } from './sequenceCommands'
 import { useSequence } from './sequenceStore'
 import '../../animate/animate.css'
 import './cut.css'
@@ -138,10 +138,12 @@ function TrackRow({ cut, track, ppf, len, drag, onDown, frameAt, changed }: { cu
   const target = drag && drag.grip === 'body' && drag.toTrack === track.id
   const role = !video && track.role ? ROLE_NAMES[track.role] : null                     // D127: an audio track's role and its strip away from neutral
   const strip = video ? '' : stripLabel(track)
+  const picked = useSequence((s) => s.selTrack === track.id)
   return (
     <div className={`cut-row${video ? ' v' : ' a'}${track.locked ? ' locked' : ''}${track.muted ? ' muted' : ''}${target ? ' target' : ''}`} data-track={track.id}>
-      <div className="cut-head" title={`${trackRef(cut, track)} · ${track.name}${role ? ` (${role.toLowerCase()})` : ''}${strip ? ` · ${strip}` : ''} — right-click: ${video ? 'rename, lock, mute, add a track' : 'gain, volume, pan, width, role, rename, lock, mute'}`}
-        onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); trackItem.id = track.id; showMenu(e, cutTrackMenu()) }}>
+      <div className={`cut-head${picked ? ' selected' : ''}`} title={`${trackRef(cut, track)} · ${track.name}${role ? ` (${role.toLowerCase()})` : ''}${strip ? ` · ${strip}` : ''} — click: ${video ? 'the track' : 'its settings'} in the Inspector · right-click: ${video ? 'rename, lock, mute, add a track' : 'gain, volume, pan, width, role, rename, lock, mute'}`}
+        onClick={() => useSequence.getState().selectTrack(track.id)}
+        onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); useSequence.getState().selectTrack(track.id); showMenu(e, cutTrackMenu()) }}>
         <span className="line">
           <span className="ref">{trackRef(cut, track)}</span><span className="name">{track.name}</span>
           {role && role !== track.name && <i title="the track's role">{role.toLowerCase()}</i>}{track.locked && <i title="locked">🔒</i>}{track.muted && <i title="muted">∅</i>}

@@ -1,6 +1,6 @@
 # 30 · RC4's study — FilmCraft for the cut editor
 
-Status: **study, 2026-10-24; answered the same day → D126 (§10); CE1 built (§11); CE2 built (§13); CE3 built (§15); D127 (§16): the channel strip and VST3 chains — AU1 built (§17), AU2 next; CE4 after.** D96 planned RC4 as "FilmCraft reviewed as 03 reviewed EffectCraft
+Status: **study, 2026-10-24; answered the same day → D126 (§10); CE1 built (§11); CE2 built (§13); CE3 built (§15); D127 (§16): the channel strip and VST3 chains — AU1 built (§17), AU2 built (§18), AU3 next; CE4 after.** D96 planned RC4 as "FilmCraft reviewed as 03 reviewed EffectCraft
 (what to reuse, how), then the multi-track cut editor that replaces the single-lane Episode" ([05](05-flow-nodes-as-shot-recipes.md)
 §6), with O6 (a scene grade and shot-match in the cut, [06](06-continuity-across-shots.md)) attached. RC1–RC3 are built
 ([28](28-recipe-graph.md), [29](29-movie-render.md)); this is the study, measured where it could be (§3, the probe E32).
@@ -417,7 +417,7 @@ stale when the track's clips, its gain or its chain change; the mix, the movie a
 | Wave | Content |
 | --- | --- |
 | **AU1 · Settings and roles** ✓ built 2026-10-24 (§17) | Settings › Audio: the loudness target (moved from Settings › FilmCraft) and each role's four defaults (dialogue, music, effects); a new cut's A1–A3 named and set as those roles; a track's role from its header |
-| **AU2 · the strip** | the four settings on every audio track (the track's Inspector and header: sliders with numbers), stored as the fader, the pan and the inserts; the width patch (`engine/patches/filmcraft/`, the build script, a new pin); measured on the rig |
+| **AU2 · the strip** ✓ built 2026-10-24 (§18) | the four settings on every audio track (the track's Inspector and header: sliders with numbers), stored as the fader, the pan and the inserts; the width patch (`engine/patches/filmcraft/`, the build script, a new pin); measured on the rig |
 | **AU3 · the host** | `engine/vsthost/` — a C++ host on the VST 3 SDK (the SDK fetched at a pinned tag by the build script), `scan`, `render` (a chain over a WAV, offline), `editor` (a plugin's window, its state saved); pinned like FilmCraft; tests with the SDK's own sample plugins |
 | **AU4 · chains and printing** | a track's chain in the Inspector (add from the scanned plugins, reorder, bypass, open the editor, remove); printing (the companion track, staleness, before the mix, the movie and the exports); the rig with the SDK's samples and one of the author's plugins |
 
@@ -451,3 +451,25 @@ stale when the track's clips, its gain or its chain change; the mix, the movie a
 ![An audio track's right-click: the strip and Role](img/30-au1-track-menu.jpg)
 ![Pan… with its range and how it reads now](img/30-au1-pan.jpg)
 ![Settings › Audio](img/30-au1-settings.jpg)
+
+## 18. AU2 as built (2026-10-24)
+
+- **The width law** (`engine/patches/filmcraft/0001-stereo-width-mid.patch`, 9 lines in FilmCraft's `essential.rs` with its test moved to
+  the new law; to be offered upstream): past 100 % the mid's gain is 10^(−0.15 (w − 1)) — −3 dB at 200 %, −1.5 dB at 150 % — the side as
+  before. `scripts/build_filmcraft.py` applies the folder's patches to the clean checkout at the pin, builds, takes them off again; the pin
+  records each patch's sha256 (`--check` holds the folder and the pin to each other). The binary's hash moved (bc0dedd3…), its size did not.
+  FilmCraft's own Essential Sound "Stereo Width" uses the same effect, so it follows the law too.
+- **The track in the Inspector** (`StripControls.tsx`): a click on a header selects the track (a clip's selection clears it; the header
+  shows it); an audio track shows its role (a list), gain, volume, pan and width as sliders with their values — FilmCraft takes a value when
+  the slider is let go (or the key released), the changes queued one after another so keys pressed meanwhile are not lost (the first
+  screenshot dropped them: the slider was disabled while FilmCraft answered); the value runs the typed ask; a double-click puts back the
+  role's setting. The volume's slider has a fader's taper (the bottom quarter −∞…−30 dB, the rest −30…+18), gain, pan and width detents at
+  0 dB, the centre and 100 %. *Reset to its role's settings* in the Inspector and the header's menu. A video track shows its verbs.
+- **Rig** (`scripts/au_acceptance.py`, now 12/12 with `width`): on the patched FilmCraft, 440 Hz left / 660 Hz right — width 200 %: the left
+  side's own tone +2.62 dB and the right's leaking in at −3.81 dB (the law: +2.63 / −3.79; FilmCraft's own would give +3.52 / −6.02); 150 %:
+  +1.36 / −9.65 (law +1.37 / −9.65). The other ten checks unchanged.
+- Tests: `cut.test.ts` +1 (the taper and the detents); the tracks e2e scenario's Inspector steps (a header's click, the width slider's End
+  key committed, the role from its list). The fake's mixdown already followed the law (AU1).
+
+![A track in the Inspector: role, gain, volume, pan, width](img/30-au2-inspector.jpg)
+![The strip](img/30-au2-strip.jpg)

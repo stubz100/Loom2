@@ -3,6 +3,9 @@
   "commit": "764723f439f96241443dc7a698f486cb4f9ef6e2",
   "version": "0.5.0",
   "binary": "filmcraft-cli.exe",
-  "sha256": "11d9498a83c9efcd20b0cc8c84010d79c2dfab294e2dc6e91ee965302a7a6fc2",
-  "bytes": 34621952
+  "sha256": "bc0dedd3949a3a4a8b1c15ace32990bab162d8b6612cbdda29f5423057ee00ce",
+  "bytes": 34621952,
+  "patches": {
+    "0001-stereo-width-mid.patch": "fb10d2116fabf34c863caed50d8f524777d4edf5c9928790a8a7adcfd15496b5"
+  }
 }

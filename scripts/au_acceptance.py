@@ -7,6 +7,9 @@ as mixed). Parts:
             given to a track names it and sets its strip
     strip   gain +30 dB and volume +18 dB — past FilmCraft's +24 / +15 by a second stage — heard as +48 dB; volume −∞ is silence; pan
             100 % left leaves the right side silent and the left as it was; width 0 % makes both sides one; undo is the cut's; a change's time
+    width   the author's law past 100 % (the patched FilmCraft, engine/patches/filmcraft): the left side at 200 % is 1.354 L − 0.646 R (the
+            mid 3 dB down, the side doubled) — 440 Hz +2.63 dB and the right's 660 Hz in at −3.80 dB; at 150 % +1.37 / −9.65 dB (FilmCraft's
+            own law would give +3.52 / −6.02 at 200 %)
 
 CPU only (FilmCraft); no GPU job may run beside it all the same (D97: the rig's checks take turns). Results: engine/spikes/out/au/results.json.
 
@@ -41,7 +44,14 @@ from loom2.config import AppState  # noqa: E402
 OUT = ROOT / "engine" / "spikes" / "out" / "au"
 SR = 48000
 LEVEL = -60.0                                                       # each side's tone, dBFS (+48 dB of strip stays below full scale)
-PARTS = ("roles", "strip")
+PARTS = ("roles", "strip", "width")
+
+
+def law(w: float) -> tuple[float, float]:
+    """The left side's two tones at width `w` (1 = 100 %), in dB against the source: (L's own, R's leaking in)."""
+    import math
+    g = 10 ** (-0.15 * (w - 1)) if w > 1 else 1.0
+    return 20 * math.log10(abs(g / 2 + w / 2)), 20 * math.log10(abs(g / 2 - w / 2))
 
 
 def band(x: np.ndarray, hz: float, t0: float = 0.4, t1: float = 1.6) -> float:
@@ -145,6 +155,18 @@ def main() -> int:
             check("undo is the cut's", r["tracks"]["audio"][1]["width"] == 100.0 and r["tracks"]["audio"][1]["pan"] == -100.0, str({k: r["tracks"]["audio"][1][k] for k in ("pan", "width")}))
             res["change_ms_median"] = float(np.median(res["change_ms"]))
             check("a strip change is quick", res["change_ms_median"] < 500, f"median {res['change_ms_median']:.0f} ms over {len(res['change_ms'])}")
+        if "width" in parts:
+            call("strip", {"track": a2, **neutral})
+            ref = mix()
+            r0 = (band(ref[:, 0], 440), band(ref[:, 1], 660))
+            for w in (200, 150):
+                call("strip", {"track": a2, **neutral, "width": w})
+                pcm = mix()
+                got = (band(pcm[:, 0], 440) - r0[0], band(pcm[:, 0], 660) - r0[1])
+                want = law(w / 100)
+                res[f"width{w}_left_db"] = [round(x, 2) for x in got]
+                check(f"width {w} %: the author's law", all(abs(a - b) < 0.1 for a, b in zip(got, want)),
+                      f"440 Hz {got[0]:+.2f} / 660 Hz in {got[1]:+.2f} dB (want {want[0]:+.2f} / {want[1]:+.2f})")
     res["checks"] = [{"name": n, "ok": ok, "detail": d} for n, ok, d in checks]
     (OUT / "results.json").write_text(json.dumps(res, indent=1), encoding="utf-8")
     n_ok = sum(ok for _, ok, _ in checks)

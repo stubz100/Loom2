@@ -1,0 +1,48 @@
+loom2 D127 (proto01_animate 30 §16): FilmCraft's Stereo Width past 100 % lowers the mid as the side grows (−3 dB at 200 %),
+so a wider image keeps its centre's level — the author's width law. Applied by scripts/build_filmcraft.py on the pinned commit;
+offered upstream.
+
+diff --git a/crates/audio-dsp/src/effects/essential.rs b/crates/audio-dsp/src/effects/essential.rs
+index 4c46902..a265999 100644
+--- a/crates/audio-dsp/src/effects/essential.rs
++++ b/crates/audio-dsp/src/effects/essential.rs
+@@ -457,7 +457,8 @@ impl AudioEffect for SpeechEnhance {
+ 
+ // ---------------------------------------------------------------------------------------------
+ 
+-/// Stereo width by mid/side scaling: 0 % = mono, 100 % = unchanged, 200 % = side doubled.
++/// Stereo width by mid/side scaling: 0 % = mono, 100 % = unchanged, 200 % = side doubled. Past 100 % the mid is lowered as
++/// the side grows — by 3 dB at 200 % — so the image widens without the centre getting louder with it.
+ /// Only the first two channels are processed; mono input passes through.
+ pub struct StereoWidth {
+     pv: ParamValues,
+@@ -480,6 +481,11 @@ impl StereoWidth {
+     }
+ }
+ 
++/// The mid's gain at a width (1.0 = 100 %): unity up to 100 %, then down 3 dB per 100 % of width.
++fn mid_gain(w: f32) -> f32 {
++    if w > 1.0 { 10f32.powf(-0.15 * (w - 1.0)) } else { 1.0 }
++}
++
+ impl AudioEffect for StereoWidth {
+     param_plumbing!("stereo_width");
+     fn reset(&mut self) {
+@@ -498,7 +504,7 @@ impl AudioEffect for StereoWidth {
+         let (l, r) = (&mut l[0], &mut rest[0]);
+         for i in 0..n {
+             let w = self.width.tick();
+-            let m = 0.5 * (l[i] + r[i]);
++            let m = 0.5 * (l[i] + r[i]) * mid_gain(w);
+             let s = 0.5 * (l[i] - r[i]) * w;
+             l[i] = m + s;
+             r[i] = m - s;
+@@ -720,7 +726,7 @@ mod tests {
+         let (l, r) = run(200.0);
+         for i in 0..l.len() {
+             let (m, s) = (0.5 * (l0[i] + r0[i]), 0.5 * (l0[i] - r0[i]));
+-            assert!((0.5 * (l[i] + r[i]) - m).abs() < 1e-6);
++            assert!((0.5 * (l[i] + r[i]) - m * 0.707_945_8).abs() < 1e-6); // the mid 3 dB down at 200 %
+             assert!((0.5 * (l[i] - r[i]) - 2.0 * s).abs() < 1e-6);
+         }
+         // mono passes through

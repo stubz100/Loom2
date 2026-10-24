@@ -73,3 +73,12 @@ describe('the channel strip (D127)', () => {
     expect(dialogueOf(t).map((i) => i.id)).toEqual([12, 30])
   })
 })
+
+describe('the strip sliders (D127)', () => {
+  it('give the volume a fader taper and the others their detents', async () => {
+    const { detent, faderDb, faderPos } = await import('./cut')
+    expect([faderDb(0), faderDb(0.25), faderDb(1), faderDb(faderPos(0)), faderDb(faderPos(-6)), faderDb(faderPos(12.5))]).toEqual([-96, -30, 18, 0, -6, 12.5])
+    expect(faderPos(-96)).toBe(0)
+    expect([detent('gain_db', 0.4), detent('gain_db', -0.6), detent('pan', -2), detent('width', 97), detent('width', 90)]).toEqual([0, -0.6, 0, 100, 90])
+  })
+})

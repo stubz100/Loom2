@@ -8812,3 +8812,17 @@ patched (the Mid attenuated). A track with plugins is printed onto a hidden comp
 - Tests: offline 555 passed (test_cuts_au1.py 3; the fake's mixdown stereo through the strip), settings audit clean (AudioSettings and
   TrackStrip audited), Vitest 458 + 3 skipped, typecheck, lint (0 errors, 79 warnings) and build clean, e2e full 63/63 and open 63/63 (+ a
   Settings › Audio scenario; the tracks scenario's strip and role steps). Screenshots proto01_animate/img/30-au1-*.jpg. Next: AU2.
+
+## 2026-10-24 14:15 — AU2 built (D127): the width law patched into FilmCraft; a track's strip in the Inspector
+
+- **Width law**: engine/patches/filmcraft/0001-stereo-width-mid.patch — past 100 % the mid × 10^(−0.15 (w − 1)) (−3 dB at 200 %), FilmCraft's
+  own test moved to it (`cargo test -p filmcraft-audio-dsp stereo_width` ok); scripts/build_filmcraft.py applies the patches on the clean
+  pinned checkout, builds, reverts them, pins each patch's sha256 (`--check` compares the folder with the pin). Rebuilt: sha256 bc0dedd3…
+  (size unchanged), the checkout clean at 764723f. To offer upstream.
+- **Inspector**: a header's click selects the track; the role list and four sliders (volume on a fader taper, detents at 0 dB / centre /
+  100 %), committed on release and queued (the first screenshot showed keys lost while the slider was disabled during FilmCraft's answer:
+  fixed), the value runs the typed ask, a double-click restores the role's value; *Reset to its role's settings*.
+- **Rig** au_acceptance.py 12/12 on the patched binary: width 200 % → +2.62 / −3.81 dB (law +2.63 / −3.79), 150 % → +1.36 / −9.65 (law
+  +1.37 / −9.65); the AU1 checks unchanged (a strip change 36 ms median).
+- Tests: offline 555 passed, Vitest 459 + 3 skipped, typecheck, lint (0 errors, 79 warnings) and build clean, e2e full 63/63 and open 63/63
+  (the tracks scenario's Inspector steps re-run after the queue fix: full and open pass). Screenshots img/30-au2-*.jpg. Next AU3 (the host).

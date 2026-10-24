@@ -500,7 +500,7 @@ test('a sequence (P17, D83 — in Story · Episode since 17 SY4): a fake-engine 
   const mv = await api<{ kind: string; lineage_kind: string | null; parents: string[]; params: { movie?: boolean } }>('GET', `/assets/${mj.result.asset_ids![0]}`)
   expect([mv.kind, mv.lineage_kind, mv.params.movie, mv.parents.length]).toEqual(['video', 'render', true, 1])
 })
-test("the cut's tracks (CE2–CE3, D126): a FilmCraft cut shows its every track and FilmCraft's frame; the razor cuts a take, the right-click sets its speed, undo and redo are the cut's own, a ripple trim closes up, a track is renamed from its header; a sound's gain and fade from its right-click, the cut's mix in the viewer; D127: the audio tracks' roles and a strip set from a header", async ({ page }) => {
+test("the cut's tracks (CE2–CE3, D126): a FilmCraft cut shows its every track and FilmCraft's frame; the razor cuts a take, the right-click sets its speed, undo and redo are the cut's own, a ripple trim closes up, a track is renamed from its header; a sound's gain and fade from its right-click, the cut's mix in the viewer; D127: the audio tracks' roles, a strip set from a header and from the Inspector's sliders", async ({ page }) => {
   test.setTimeout(120_000)
   // a take from the fake engine, on a new cut's V1 (through the API: the bins' + is the sequence scenario's)
   const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
@@ -591,6 +591,18 @@ test("the cut's tracks (CE2–CE3, D126): a FilmCraft cut shows its every track 
   await page.locator('.ctx-menu .ctx-menu button.item', { hasText: /^Music$/ }).click()
   await expect.poll(async () => (await api<Strip>('GET', `/timelines/${tl.id}/tracks`)).audio[2], { timeout: 10_000 }).toMatchObject({ name: 'Music', role: 'music', gain_db: -6, volume_db: 0, pan: 0 })
   await expect(page.locator('.cut-head', { hasText: 'Music' })).toHaveCount(2)
+  // AU2: a header's click shows the track in the Inspector — a slider let go is FilmCraft's value, the role from its list
+  await page.locator('.cut-head', { hasText: 'Dialogue' }).click()
+  const ti = page.getByTestId('track-inspector')
+  await expect(ti).toContainText('dialogue track')
+  const width = ti.getByLabel('Dialogue width')
+  await width.focus()
+  await page.keyboard.press('End')                                                             // the slider's far end, committed on the key's release
+  await expect.poll(async () => (await api<Strip & { audio: { width: number }[] }>('GET', `/timelines/${tl.id}/tracks`)).audio[0].width, { timeout: 10_000 }).toBe(200)
+  await expect(ti.locator('.strip-val').nth(3)).toHaveText('200 %')
+  await ti.getByLabel("the track's role").selectOption('effects')
+  await expect.poll(async () => (await api<Strip>('GET', `/timelines/${tl.id}/tracks`)).audio[0], { timeout: 10_000 }).toMatchObject({ name: 'Effects', role: 'effects', gain_db: -3 })
+  await expect(page.locator('.cut-head.selected')).toContainText('Effects')
 })
 
 test("Settings › Audio (D127): the loudness target and a track role's strip are set in the general Settings and saved", async ({ page }) => {

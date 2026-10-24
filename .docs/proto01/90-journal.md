@@ -9210,3 +9210,30 @@ patched (the Mid attenuated). A track with plugins is printed onto a hidden comp
   the end. The method holds; what varies is what Klein paints, and its prompt decides it.
 - **Q29:** build PF1 with placement by need at 8 % and the Fill's prompt the place's surfaces (the author's place prompt under a lead that
   asks to continue them and add nothing), a prompt spike first, or leave it.
+
+## 2026-10-25 01:05 — E33: `open`'s image → 3D is TripoSR → D134 (proto01_animate 31 §1)
+
+- **Licences** (D17 / D26): TripoSR MIT (code and weights, Stability AI + Tripo; no territorial or commercial terms), its encoder
+  facebook/dino-vitb16 Apache 2.0, rembg's u2net Apache 2.0 (the product would use BiRefNet, as Pixal3D's graph does). TRELLIS (v1) MIT
+  but not runnable here: `setup.sh` installs spconv, nvdiffrast, diffoctreerast and the Gaussian rasteriser as CUDA builds, its HIP branch
+  targets MI300 under Linux, nothing for Windows. TRELLIS.2 (E14) needs DINOv3, full-only.
+- **Ran** (`engine/spikes/e33_mesh.py`): TripoSR's checkout at 107cefd in `engine/tools/e33/` (gitignored) with its own venv (uv, Python
+  3.11, torch 2.13.0+rocm10.0.0 as voices / lip-sync; trimesh 5.2 for NumPy 2); torchmcubes (a C++ build) replaced by PyMCubes behind its
+  name; the mesh turned y-up as TripoSR's own viewer turns it (`to_gradio_3d_orientation` — the first score without it, the meshes lying
+  on their side, read 0.34–0.73), decimated to 50k with the vertex colours carried by the nearest vertex. Downloads: TripoSR and DINO
+  into `F:\HF_HOME` (the machine's), u2net into `engine/tools/e33/u2net`.
+- **Scored as E14** (`e14.run.mjs` with `E14_OUT=e33`; BiRefNet cut-outs; Pixal3D's and TRELLIS.2's E14 meshes beside — their IoU
+  reproduces E14's exactly):
+
+  | | IoU per prop | ≥ 0.85 | triangles | warm | cold | peak |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | TripoSR | 0.958, 0.915, 0.931, 0.79, 0.926 | 4/5 | 50k (raw 61–173k) | 4.2 s | 14.6 s | 2.4 GB |
+  | Pixal3D (`full`) | 0.982, 0.953, 0.987, 0.926, 0.899 | 5/5 | 46–50k | 243 s | 361 s | — |
+  | TRELLIS.2 | 0.849, 0.46, 0.864, 0.74, 0.70 | 1/5 | 44–50k | 99 s | 146 s | — |
+
+  The sheet (img/31-e33-sheet.jpg): TripoSR's lantern, chest and boat whole with plausible backs, the wheel thin in profile (its spokes
+  under the 256³ grid), the compass's brass pale — vertex colours, softer than Pixal3D's baked textures. (The colour score — the median
+  colour of the lit front view against the cut-out, ΔE — does not separate the methods: lighting dominates it; not used.)
+- **D134:** TripoSR is `open`'s image → 3D (the plan's rule); the build (OM1: a tool venv and setup script, a mesh job beside Pixal3D's,
+  stood upright, its weights in the roster) is the author's to schedule. No loser's weights to delete (TRELLIS v1 never fetched; TRELLIS.2's
+  transformer went in E14). Checks on this and E35d's changes: offline 586 passed, agents_check and model_literals_check clean, Vitest 470 + 3 skipped, typecheck, lint (0 errors, 79 warnings) and build clean, e2e full 64/64 and open 64/64.

@@ -26,6 +26,13 @@ Stable Fast 3D's community licence and Hunyuan3D's EU exclusion keep them out. M
 rig on the props of the A1 project against Pixal3D's results (silhouette IoU from six views, the texture's colour error, seconds, peak
 VRAM). The winner becomes `open`'s image → 3D, the losers' weights deleted (house rule 1).
 
+**E33 measured (2026-10-25, journal 01:05) → D134: TripoSR.** On E14's five bench props, scored as E14: IoU 0.958 / 0.915 / 0.931 / 0.79 /
+0.926 (4/5 ≥ 0.85, the wheel's thin spokes below), 50k triangles after decimation, 4.2 s warm, 14.6 s cold, 2.4 GB — Pixal3D 5/5 in 243 s,
+TRELLIS.2 1/5 in 99 s. Vertex colours, softer than a baked texture. TRELLIS (v1) does not run on ROCm under Windows (CUDA-only sparse
+convolution and rasterisers). The build (OM1) is the author's to schedule.
+
+![E33: the source, TripoSR, Pixal3D and TRELLIS.2 (front, right, back) for E14's five props](img/31-e33-sheet.jpg)
+
 ## 2. D129 — a held prop is its own model in the hand
 
 E28's P3 (a prop drawn inside its holder's Wan Animate layer from a reference holding it) is dropped. A held prop is D109's 3D model
@@ -148,7 +155,7 @@ A part shows a *linked · N Shots* badge with its users; the Catalogue's *Duplic
 | **CA5 · re-take from a batch** ✓ built 2026-10-24 (§4b) | *Re-take from this batch* on a layer's batch: that batch and the ones after it again with a new seed, the batches before kept (the carried frames come from the kept batch) | yes (rig) | 1–2 |
 | **HP1 · in the hand** ✓ built 2026-10-24 (§2a) | D129, §2 | rig check | 2 |
 | **CA3 · the plate for large moves** ✓ built 2026-10-24 (§4d), its automatic choice held (Q26) | spike **E34** first: the depth-guided plate video — LTX-2.3's IC-LoRA union control (Stage's guided method already loads it) with the plate still as the first frame and the bare set's depth along the camera path as the control; measured on an orbit and a long dolly against the projection (stretch, the still's match at frame 1, seconds, VRAM). If it holds: the final's plate gets a method (*projected* for small moves, *generated along the path* for large ones, chosen by the camera's travel), its frames a plate layer like the projection's; and O4 (RC2f's plate): a Shot's Klein plate made with its scene's first plate as a reference, so the room reads the same from another camera | yes (spike, then rig) | 3–4 |
-| **E33** | D128's open image → 3D (§1), downloads asked for first | yes | 1–2 |
+| **E33** ✓ measured 2026-10-25 → D134 (TripoSR) | D128's open image → 3D (§1), downloads asked for first | yes | 1–2 |
 
 D102 retired CA5's W3 (a per-frame refine at a seam made the hold worse); A6's healing patch stays for regions.
 

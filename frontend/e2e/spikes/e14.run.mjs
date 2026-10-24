@@ -2,7 +2,7 @@
 // public/spikes/e14/ (gitignored), renders them in Edge through spikes.html#e14 (Vite dev on 127.0.0.1:1420, WebGL2) and writes
 // engine/spikes/out/e14/views/<tag>_{front,right,back,left}.png, <tag>_sil_<yaw>.png and views.json (triangle counts);
 // engine/spikes/e14_mesh.py score does the silhouette IoU and the sheets (and runs this itself unless --no-render).
-//   node e2e/spikes/e14.run.mjs            (from frontend/)
+//   node e2e/spikes/e14.run.mjs            (from frontend/; E14_OUT=e33 for E33's meshes)
 import { chromium } from '@playwright/test'
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const repo = resolve(here, '..', '..', '..')
-const outDir = join(repo, 'engine', 'spikes', 'out', 'e14')
+const outDir = join(repo, 'engine', 'spikes', 'out', process.env.E14_OUT || 'e14')        // E33 scores its meshes here too (E14_OUT=e33)
 const meshes = JSON.parse(readFileSync(join(outDir, 'meshes.json'), 'utf-8')) // [{tag, path}]
 const pub = join(repo, 'frontend', 'public', 'spikes', 'e14')
 mkdirSync(pub, { recursive: true })

@@ -8648,3 +8648,38 @@ D96's RC3 is complete: SP6 (D125) had built the cut from the Flow, the *changed*
   lineage; RIFE faked so the test never takes the card); `sequenceStore.test.ts` +1 (the movie state); the sequence e2e scenario renders the
   movie from the Inspector. Offline 542 passed; settings audit clean; Vitest 452 + 3 skipped; typecheck and build clean; lint 0 errors
   (79 warnings); e2e full 61/61 and open 61/61. Screenshots `proto01_animate/img/29-rc3-*.jpg`.
+
+## 2026-10-24 08:05 — RC4's study (proto01_animate 30): FilmCraft for the cut editor; probe E32; FC1 fixed (the FCPXML dissolve)
+
+D96's RC4 begins with the study it planned: FilmCraft (`F:\source\repos\filmcraft`, v0.5.0, `764723f`, 2026-10-10) reviewed as 03 §5
+reviewed EffectCraft, and measured where it could be.
+
+- **What it is:** a clean-room Premiere Pro in pure Rust (43 crates, ≈ 322k lines, 848 commits in 10 days; MIT OR Apache-2.0, no GPL /
+  FFmpeg; alpha by its own ROADMAP — ≈ 87 % of the features, ≈ 50–60 % ready; no CI test gate). Premiere's model (tracks of items,
+  transitions, effects, markers; integer ticks); ≈ 650 commands through `Session::execute`; every headless path CPU; H.264 / ProRes /
+  DNxHR export with loudness and burned-in captions; Lumetri, **shot match** and **adjustment layers** (O6); mixer and ducking;
+  FCPXML / EDL / OTIO / AAF interchange; `filmcraft-cli` (exec, run, import, export, render, mcp). Limits for loom2: a 16 fps clip on a
+  24 fps sequence repeats frames (loom2 keeps RIFE), time remapping not rendered, FCPXML import ignores spatial conform.
+- **Probe E32** (CPU only, hardware decoding off, scratch data): the CLI in release in 2 min 31 s (34.6 MB). The A1 cut from RC3:
+  - loom2's Resolve FCPXML imported (4 media linked, no warnings) but **the dissolve was lost**: loom2 wrote the next clip overlapping the
+    previous one on the spine; FilmCraft moved it to V2 and made the dissolve a fade-out (and Resolve reads the same file) → **FC1**;
+  - **built by commands** (`file.newSequence`, `file.import`, `timeline.place` ×4, `sequence.applyVideoTransition`,
+    `clip.scaleToFrameSize`) the cut is loom2's lane exactly (225 frames, the dissolve 109 + 12 on the cut at 115), and its H.264 export
+    **matches RC3's movie** (mean difference 1.5 / 4.1 / 0.4 levels on frames 48 / 114 / 160, the sound identical) in **3.1–3.8 s**
+    (RC3: 10.7 s); ProRes 3.2 s; with a shot-match and a graded adjustment layer 6.6 s;
+  - frames: cold (a process each) 100–160 ms; **one warm `mcp` session** 10 ms at ½ (p90 25; 100 fps playing), 4 ms at ¼; with the
+    match and the grade 15 ms at ½ (68 fps), 6 ms at ¼;
+  - `lumetri.applyMatch` headless: 0.24 s, distance 0.052 → 0.036; a preset on an adjustment layer grades both shots.
+- **FC1 fixed** (`timelines.to_fcpxml`): the spine's clips end to end — the cut in the overlap's middle, each clip trimmed to it and the
+  rest its handle under the transition, the transition where the lane's dissolve is; a line in a given-up head rides the clip before;
+  a clip's length on the sequence's grid (the lane's ticks). Re-exported, the A1 cut imports into FilmCraft as one track with the
+  dissolve between the clips, the structure the commands built. The defect dates from P17 (D83) and the E13 spike: the author's Resolve
+  check (owed since 2026-10-15) should use a fresh export.
+- **The proposal (30 §4–§7):** F2 — the cut edited inside Story · Episode on FilmCraft's engine, as D114 did for the composition with
+  EffectCraft: loom2's cut document grown to tracks stays the truth and the `.fcproj` is built from it by commands; a warm session for the
+  edits and the viewer's frames; the movie by FilmCraft's export as a CPU job (RC3's render the fallback); RIFE before FilmCraft;
+  hardware decoding off (D97). First version: V1 shots, V2 inserts and titles, A1 dialogue, A2 music, A3 effects; trims, transitions;
+  ducking and loudness; *Grade the scene* and *Match to…* (O6); captions from the lines. Waves CE1–CE5, ≈ 12–15 days. Five questions
+  for the author (30 §9).
+- Tests: `test_timeline_d83.py` (the mixed-rate assertion on the lane's grid; a new FC1 test: the spine end to end, the dissolve on the
+  cut, a line in a given-up head on the clip before). Offline 543 passed. Pictures `proto01_animate/img/30-fc-probe-*.jpg`.

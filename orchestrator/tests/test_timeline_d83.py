@@ -63,7 +63,23 @@ def test_exports_match_the_parity_fixture():
     assert 'offset="108/24s" duration="12/24s"' in xml and 'duration="256/24s"' in xml and '<format id="f24"' in xml
     mixed = Timeline(id="tl_m", name="Mixed", fps=24, clips=[TimelineClip(id="w", clip_id="clp_w", fps=16, **{"in": 0, "out": 81})], overlaps=[0])
     xml2 = to_fcpxml(mixed, "Mixed", lambda cid: (cid, "file:///w.mp4", 81, 16))
-    assert '<format id="f16"' in xml2 and '<format id="f24"' in xml2 and 'duration="81/16s" format="f16"' in xml2   # the clip keeps its rate
+    assert '<format id="f16"' in xml2 and '<format id="f24"' in xml2 and 'duration="122/24s" format="f16"' in xml2  # the clip keeps its rate; its length is the lane's
+
+
+def test_fcpxml_spine_clips_end_to_end_with_the_dissolve_on_the_cut():
+    """FC1 (proto01_animate 30 §3a): the spine's clips abut — the cut in the overlap's middle, each clip trimmed to it, the dissolve over
+    the handles — so an importer keeps one track and the dissolve (loom2 wrote the second clip overlapping the first until 2026-10-24)."""
+    import re
+    xml = to_fcpxml(PARITY, "Parity", lambda cid: (cid, f"file:///x/{cid}.mp4", 120, 24))
+    clips = re.findall(r'<asset-clip ref="a\d" name="[^"]+" offset="(\d+)/24s" start="(\d+)/24s" duration="(\d+)/24s"', xml)
+    assert clips == [("0", "0", "114"), ("114", "16", "94"), ("208", "0", "48")]                      # 108 + 12/2 = the cut; b from source 10 + 6
+    assert sum(int(d) for _, _, d in clips) == duration(PARITY)
+    assert '<transition name="Cross Dissolve" offset="108/24s" duration="12/24s"/>' in xml            # the lane's dissolve, straddling the cut
+    # a line laid at the head of the second clip falls in the head it gives up: it rides the first clip at the same tick
+    cues = {"b": [{"name": "l.wav", "src": "file:///p/l.wav", "duration_s": 1.0}]}
+    xml3 = to_fcpxml(PARITY, "Parity", lambda cid: (cid, f"file:///x/{cid}.mp4", 120, 24), audio_of=lambda c: cues.get(c.id, []))
+    first = xml3.split("</asset-clip>")[0]
+    assert '<asset-clip ref="au0" lane="-1" offset="108/24s"' in first                               # tick 108 on clip a (its source 108)
 
 
 def test_store_put_revision_and_delete(tmp_path: Path):

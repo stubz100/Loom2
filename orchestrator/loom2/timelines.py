@@ -274,9 +274,11 @@ def _esc(x: str) -> str:
 def to_fcpxml(tl: Timeline, title: str, media: Callable[[str], tuple[str, str, int, int]], name_of: Callable[[TimelineClip], str | None] | None = None,
               audio_of: Callable[[TimelineClip], list[AudioCue | None]] | None = None) -> str:
     """FCPXML 1.10: a format per frame rate, one asset per clip (`media(clip_id)` → name, src URL, frames, fps), a spine of
-    asset-clips with a cross dissolve where clips overlap; `name_of` gives a chapter marker at a clip's head (loom R158 — Resolve reads them);
+    asset-clips end to end with a cross dissolve on the cut where the lane overlaps two clips (FC1, proto01_animate 30 §3a: the cut in the
+    overlap's middle, each clip trimmed to it and the rest its handle under the transition — clips overlapping on a spine are not FCPXML,
+    and an importer moves the second to another track); `name_of` gives a marker at a clip's head (loom R158 — Resolve reads them);
     `audio_of` (CN2, 19 §3b) gives a clip's spoken lines ({name, src, duration_s} or None per line, in the SRT's order) — each a
-    connected audio clip on lane −1 at its line's tick: the audio lane."""
+    connected audio clip on lane −1 at its line's tick, on the spine clip seen at that tick: the audio lane."""
     def t(fr: int, fps: int) -> str:
         return f"{fr}/{fps}s"
 
@@ -292,17 +294,20 @@ def to_fcpxml(tl: Timeline, title: str, media: Callable[[str], tuple[str, str, i
     audio_assets: list[str] = []
     audio_ids: dict[str, int] = {}
     s = starts(tl)
-    spine: list[str] = []
+    n = len(tl.clips)
+    heads = [(tl.overlaps[i] // 2 if i > 0 else 0) for i in range(n)]              # the head each clip gives up to the dissolve into it
+    cuts = [s[i] + heads[i] for i in range(n)] + [duration(tl)]                     # spine clip i plays lane ticks [cuts[i], cuts[i + 1])
+    children: list[list[str]] = [[] for _ in range(n)]
+
+    def src_frame(j: int, tick: int) -> int:
+        """Clip j's source frame at lane tick `tick` (the lane's mapping, in the clip's own frames)."""
+        c = tl.clips[j]
+        return c.in_ + round((tick - s[j]) * infos[c.clip_id][3] / tl.fps)
     for i, c in enumerate(tl.clips):
-        name, _, _, fps = infos[c.clip_id]
-        k = clip_ids.index(c.clip_id)
-        ov = tl.overlaps[i] if i > 0 else 0
-        if ov > 0:
-            spine.append(f'            <transition name="Cross Dissolve" offset="{t(s[i], tl.fps)}" duration="{t(ov, tl.fps)}"/>')
+        fps = infos[c.clip_id][3]
         marker = name_of(c) if name_of else None
-        children: list[str] = []
         if marker:
-            children.append(f'                <marker start="{t(c.in_, fps)}" duration="{t(1, fps)}" value="{_esc(marker)}"/>')
+            children[i].append(f'                <marker start="{t(src_frame(i, cuts[i]), fps)}" duration="{t(1, fps)}" value="{_esc(marker)}"/>')
         cues = audio_of(c) if audio_of else []
         for (a0, _), cue in zip(line_spans(ticks(tl, c), len(cues)), cues):
             if not cue:
@@ -312,14 +317,20 @@ def to_fcpxml(tl: Timeline, title: str, media: Callable[[str], tuple[str, str, i
                 audio_ids[src] = len(audio_ids)
                 audio_assets.append(f'    <asset id="au{audio_ids[src]}" name="{_esc(str(cue["name"]))}" start="0s" duration="{ms(cue["duration_s"])}" hasAudio="1" '
                                     f'audioSources="1" audioChannels="1"><media-rep kind="original-media" src="{_esc(src)}"/></asset>')
-            rel = round(a0 * fps / tl.fps)                                          # the line's tick in the clip's own frames
-            children.append(f'                <asset-clip ref="au{audio_ids[src]}" lane="-1" offset="{t(c.in_ + rel, fps)}" name="{_esc(str(cue["name"]))}" '
-                            f'start="0s" duration="{ms(cue["duration_s"])}" audioRole="dialogue"/>')
-        head = (f'            <asset-clip ref="a{k}" name="{_esc(name)}" offset="{t(s[i], tl.fps)}" start="{t(c.in_, fps)}" '
-                f'duration="{t(c.length, fps)}" format="f{fps}" tcFormat="NDF"')
-        if children:
+            at_tick = s[i] + a0
+            j = max(k for k in range(n) if cuts[k] <= at_tick) if at_tick >= cuts[0] else 0   # a line in a clip's given-up head rides the clip before
+            children[j].append(f'                <asset-clip ref="au{audio_ids[src]}" lane="-1" offset="{t(src_frame(j, at_tick), infos[tl.clips[j].clip_id][3])}" '
+                               f'name="{_esc(str(cue["name"]))}" start="0s" duration="{ms(cue["duration_s"])}" audioRole="dialogue"/>')
+    spine: list[str] = []
+    for i, c in enumerate(tl.clips):
+        name, _, _, fps = infos[c.clip_id]
+        if i > 0 and tl.overlaps[i] > 0:
+            spine.append(f'            <transition name="Cross Dissolve" offset="{t(s[i], tl.fps)}" duration="{t(tl.overlaps[i], tl.fps)}"/>')
+        head = (f'            <asset-clip ref="a{clip_ids.index(c.clip_id)}" name="{_esc(name)}" offset="{t(cuts[i], tl.fps)}" start="{t(src_frame(i, cuts[i]), fps)}" '
+                f'duration="{t(cuts[i + 1] - cuts[i], tl.fps)}" format="f{fps}" tcFormat="NDF"')
+        if children[i]:
             spine.append(head + ">")
-            spine.extend(children)
+            spine.extend(children[i])
             spine.append("            </asset-clip>")
         else:
             spine.append(head + "/>")

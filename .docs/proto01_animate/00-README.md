@@ -39,6 +39,7 @@ character image as an input of wan-animate and create very precise movement and 
 | [27](27-testing-modes.md) | **Trying Animate's three modes** (for the author) | UX9 of D121: Clay (the Shot head's stage picker and stepper, Render passes in the foot, the pose pill, the camera pill and the PiP), the one timeline (the range, keys on rows dragged and removed, the same keys at every level), Performance's three cards with their verbs and a clip's details under its row, Final's Shot · Layers · Output and its foot |
 | [28](28-recipe-graph.md) | **RC1 — the Shot's recipe graph** | D96's graph built from the records (the clay route from its final, stage and Cast): nodes, states, stale along the edges; Animate's Graph pill, the Flow in place, the shot page, the Catalogue's *Show its recipe*; waves RC1a–RC1d |
 | [29](29-movie-render.md) | **RC3's rest — the movie render** (built) | the Episode's movie: the draft render's frames conformed by RIFE, at the cut's size, with the voice lane mixed in, an MP4 in the cut's folder and a Catalogue video |
+| [30](30-filmcraft-study.md) | **RC4's study — FilmCraft for the cut editor** | FilmCraft v0.5.0 reviewed as 03 reviewed EffectCraft; the probe E32 (its CLI built, loom2's cut rebuilt by commands matches RC3's movie, warm frames 10–15 ms at ½, shot-match and a scene grade headless); FC1 fixed (the FCPXML dissolve); the route F2 (inside Story · Episode on FilmCraft's engine), a first version, waves CE1–CE5 ≈ 12–15 days; five questions |
 
 Background reading, in this order:
 

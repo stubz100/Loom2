@@ -8,20 +8,27 @@ fake, orchestrator/tests/fake_effectcraft.py). The process and its requests are 
 from __future__ import annotations
 
 import base64
+import json
 from pathlib import Path
 from typing import Any
 
 from .mcp_session import PROTOCOL, McpSession, McpSessionError, cli_head
+from .recipes import RenderSettings
 
 __all__ = ["PROTOCOL", "EffectCraft", "EffectCraftError", "cli_head", "render_argv"]
 
 
-def render_argv(settings, project: Path, comp: str, out_pattern: Path) -> list[str]:
-    """`effectcraft-cli render`: the composition at Best and Full as a PNG sequence (E27's R2, equal to the preview to 0/255)."""
+def render_argv(settings, project: Path, comp: str, out_pattern: Path, rs: RenderSettings | None = None) -> list[str]:
+    """AE5: the composition as a PNG sequence through EffectCraft's render queue (`run renderQueue.add … renderQueue.render`, which waits)
+    with the final's render settings — quality, resolution, motion blur and frame blending (the composition's switches or off), the working
+    colour depth, the alpha; proxies never used. AE1's defaults are E27's R2 (Best, Full: equal to the preview to 0/255)."""
     if not Path(settings.cli).is_file():
         raise ValueError(f"EffectCraft is not built: {settings.cli} is missing (scripts/build_effectcraft.py)")
-    return [*cli_head(settings), "render", "--project", str(project), "--comp", comp, "--out", str(out_pattern), "--format", "png", "--quality", "best",
-            "--resolution", "full", "--channels", "rgb"]
+    rs = rs or RenderSettings()
+    item = {"comp": comp, "output": str(out_pattern), "format": "png", "quality": rs.quality, "resolution": rs.resolution, "channels": "rgba" if rs.alpha else "rgb",
+            "colorDepth": str(rs.depth), "motionBlur": "current" if rs.motion_blur == "comp" else "offForAll",
+            "frameBlending": "current" if rs.frame_blending == "comp" else "offForAll", "proxyUse": "none", "timeSpan": "comp"}
+    return [*cli_head(settings), "run", "renderQueue.add", json.dumps(item), "renderQueue.render", "{}", "--project", str(project)]
 
 
 class EffectCraftError(McpSessionError):

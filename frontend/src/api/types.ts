@@ -12,6 +12,7 @@ export type HealthInfo = S['HealthInfo']
 export type VersionInfo = S['VersionInfo']
 export type Capabilities = S['Capabilities']
 export type Final = S['Final']                          // D111 (PS5): the final shot
+export type RenderSettings = S['RenderSettings']        // AE5: the finished shot's render settings and output modules
 export type FinalLayer = S['FinalLayer']
 export type Composition = S['Composition']              // AE1 (D114): the final's EffectCraft composition
 export type TeOption = S['TeOption']                    // D31

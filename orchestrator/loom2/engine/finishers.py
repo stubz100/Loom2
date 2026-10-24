@@ -1031,7 +1031,7 @@ async def run_comp_render(job: JobRecord, recipe: CompRender, q: JobQueue) -> bo
     does not move, so the composition stays fresh) and a take on the Story shot the final was made for."""
     from ..compositions import CompositionStore
     from ..effectcraft import render_argv
-    from ..final_assembly import conform_24, mix_audio
+    from ..final_assembly import conform_24, conform_24_alpha, mix_audio, write_prores
     from ..finals import FinalStore
     from ..fsio import utc_now
     from ..trainer import _kill
@@ -1049,7 +1049,8 @@ async def run_comp_render(job: JobRecord, recipe: CompRender, q: JobQueue) -> bo
     tmp = q.ws.temp_dir / f"comp-render-{job.id}"
     shutil.rmtree(tmp, ignore_errors=True)
     (tmp / "f16").mkdir(parents=True)
-    argv = render_argv(q.app.settings.effectcraft, cs.ecproj(f.id), c.comp, tmp / "f16" / "f_[####].png")
+    rs = recipe.settings                                               # AE5: the final's render settings, as the route copied them
+    argv = render_argv(q.app.settings.effectcraft, cs.ecproj(f.id), c.comp, tmp / "f16" / "f_[####].png", rs)
     env = {**os.environ, "RAYON_NUM_THREADS": str(q.app.settings.effectcraft.threads), "WGPU_BACKEND": "vulkan"}
     log_path = q.app.logs_dir / f"comp-render-{job.id}.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1078,14 +1079,20 @@ async def run_comp_render(job: JobRecord, recipe: CompRender, q: JobQueue) -> bo
         raise ValueError(f"the render wrote {len(paths)} frames, the final has {f.frames}")
     render_s = round(time.time() - t0, 1)
     fps = f.rate
-    conformed = await asyncio.to_thread(conform_24, tmp / "f16", tmp / "f24", f.frames) if f.rate == 16 else None
+    for stray in (x for x in (tmp / "f16").iterdir() if x.suffix.lower() != ".png"):   # a render log or the like: RIFE reads every file in the folder
+        stray.unlink()
+    conform = conform_24_alpha if rs.alpha else conform_24
+    conformed = await asyncio.to_thread(conform, tmp / "f16", tmp / "f24", f.frames) if f.rate == 16 else None
     if conformed:
         paths, fps = conformed, 24
-    job.log_tail.append(f"composition rendered: {f.frames} frames in {render_s} s (revision {c.revision})" + (f"; conformed to {len(paths)} at 24 fps" if conformed else ""))
+    job.log_tail.append(f"composition rendered: {f.frames} frames in {render_s} s (revision {c.revision}; {rs.quality}, {rs.resolution}, "
+                        f"{rs.depth}-bit{', alpha' if rs.alpha else ''}{', no motion blur' if rs.motion_blur == 'off' else ''}"
+                        f"{', no frame blending' if rs.frame_blending == 'off' else ''})" + (f"; conformed to {len(paths)} at 24 fps" if conformed else ""))
     q.progress(job, "writing the master")
     previous = await asyncio.to_thread(clips.get, f.clip_id) if f.clip_id else None
     parents = [previous.asset_id] if previous and previous.asset_id else []
-    stats = {"frames": f.frames, "render_s": render_s, "composition_revision": c.revision, "effectcraft": c.effectcraft, "conform": "RIFE v4.6 to 24 fps (D27)" if conformed else None}
+    stats = {"frames": f.frames, "render_s": render_s, "composition_revision": c.revision, "effectcraft": c.effectcraft, "conform": "RIFE v4.6 to 24 fps (D27)" if conformed else None,
+             "settings": rs.model_dump()}
     rec = await asyncio.to_thread(clips.create, paths, job_id=job.id, batch_id=job.batch_id, model_id="composition", preset="best", prompt=f.name, seed=job.seed, fps=fps,
                                   start_asset_id=parents[0] if parents else "", beats=[], params={"recipe": recipe.model_dump(), "final_id": f.id, "render": stats},
                                   timings={"render_s": render_s})
@@ -1104,6 +1111,11 @@ async def run_comp_render(job: JobRecord, recipe: CompRender, q: JobQueue) -> bo
     asset = await asyncio.to_thread(q.catalogue.make_thumbs, asset, clips.frame_path(rec.id, 0))
     rec.asset_id = asset.id
     clips.save(rec)
+    if rs.prores:                                                      # AE5: the ProRes 4444 beside the master, from its frames
+        q.progress(job, "writing the ProRes 4444")
+        pr = await asyncio.to_thread(write_prores, [clips.frame_path(rec.id, i) for i in range(rec.frames)], clips.dir(rec.id) / "master_4444.mov", float(rec.fps), rs.alpha)
+        job.result["prores"] = str(pr["path"].relative_to(q.ws.path)).replace("\\", "/")
+        job.log_tail.append(f"ProRes 4444 beside the master: {pr['frames']} frames, {pr['bytes'] // 1024} KiB{' with its alpha' if rs.alpha else ''}")
     shutil.rmtree(tmp, ignore_errors=True)
     await asyncio.to_thread(cs.set_render, f.id, rec.id, c.revision, job.id)
     f = await asyncio.to_thread(store.set_clip, f.id, rec.id)

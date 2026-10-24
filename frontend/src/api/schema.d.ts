@@ -1332,6 +1332,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/finals/{fid}/render": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Final Render Settings
+         * @description AE5: the finished shot's render settings and output modules (the next render uses them; the final's revision stays).
+         */
+        put: operations["final_render_settings_finals__fid__render_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/groups": {
         parameters: {
             query?: never;
@@ -6436,6 +6456,7 @@ export interface components {
              * @enum {integer}
              */
             rate: 16 | 24;
+            render: components["schemas"]["RenderSettings"];
             /**
              * Revision
              * @default 0
@@ -10119,6 +10140,54 @@ export interface components {
         Released: {
             /** Released */
             released: string[];
+        };
+        /**
+         * RenderSettings
+         * @description AE5 (03 §AE5): the finished shot's render settings and output modules — EffectCraft's render queue item (quality, resolution, motion
+         *     blur, frame blending, the working colour depth; proxies never used) and what is written: the PNG master always (the take's clip, its
+         *     H.264 proxy beside it), with its alpha kept (straight) or not, and a ProRes 4444 beside it on request. The defaults are AE1's render.
+         */
+        RenderSettings: {
+            /**
+             * Alpha
+             * @default false
+             */
+            alpha?: boolean;
+            /**
+             * Depth
+             * @default 8
+             * @enum {integer}
+             */
+            depth?: 8 | 16 | 32;
+            /**
+             * Frame Blending
+             * @default comp
+             * @enum {string}
+             */
+            frame_blending?: "comp" | "off";
+            /**
+             * Motion Blur
+             * @default comp
+             * @enum {string}
+             */
+            motion_blur?: "comp" | "off";
+            /**
+             * Prores
+             * @default false
+             */
+            prores?: boolean;
+            /**
+             * Quality
+             * @default best
+             * @enum {string}
+             */
+            quality?: "best" | "draft";
+            /**
+             * Resolution
+             * @default full
+             * @enum {string}
+             */
+            resolution?: "full" | "half" | "third" | "quarter";
         };
         /** Restored */
         Restored: {
@@ -15094,6 +15163,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FinalAndComposition"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    final_render_settings_finals__fid__render_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenderSettings"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Final"];
                 };
             };
             /** @description Validation Error */

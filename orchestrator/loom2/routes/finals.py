@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from ..compositions import Composition, CompositionStore
 from ..effectcraft import EffectCraftError
 from ..finals import LAYER_PASSES, Final, FinalLayer, FinalStore
+from ..recipes import RenderSettings
 from ..schemas import Deleted
 from ..stages import StageStore
 from .deps import Svc
@@ -681,6 +682,18 @@ async def composition_frame(svc: Svc, fid: str, t: float = 0.0, side: int = 0, b
     return Response(content=png, media_type="image/png", headers={"Cache-Control": "no-store"})
 
 
+@router.put("/finals/{fid}/render", response_model=Final)
+async def final_render_settings(svc: Svc, fid: str, body: RenderSettings):
+    """AE5: the finished shot's render settings and output modules (the next render uses them; the final's revision stays)."""
+    ws, _, _ = svc.require_project()
+    try:
+        f = await asyncio.to_thread(FinalStore(ws).set_render, fid, body)
+    except KeyError:
+        raise HTTPException(404, "final not found")
+    svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
+    return f.model_dump()
+
+
 @router.post("/finals/{fid}/composition/render", response_model=JobQueued)
 async def composition_render(svc: Svc, fid: str):
     """The finished shot: the composition rendered by `effectcraft-cli render` as a CPU job — a clip that becomes the final's clip and a
@@ -692,7 +705,7 @@ async def composition_render(svc: Svc, fid: str):
     if await asyncio.to_thread(cs.get, f) is None:
         raise HTTPException(404, "the final has no composition yet")
     try:
-        jobs = svc.queue.submit({"kind": "comp_render", "final_id": fid}, origin=JobOrigin(suite="stage", surface="comp_render", ref=fid))
+        jobs = svc.queue.submit({"kind": "comp_render", "final_id": fid, "settings": f.render.model_dump()}, origin=JobOrigin(suite="stage", surface="comp_render", ref=fid))
     except ValueError as e:
         raise HTTPException(422, str(e))
     await svc.queue.flush()

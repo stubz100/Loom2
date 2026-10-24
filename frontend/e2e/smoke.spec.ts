@@ -1333,8 +1333,17 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   await editor.locator('.verbs button[title^="Remove the processing layer"]').click()
   await expect(page.locator('#anim-sec-layers li[data-processing="true"]')).toHaveCount(0, { timeout: 15_000 })
   await settled()
+  // AE5: the render settings and output modules in the Output section — half the size, a ProRes 4444 beside the master
+  const out = page.locator('#anim-sec-output [data-render-settings]')
+  await out.getByLabel('render resolution').selectOption('half')
+  await out.getByRole('checkbox', { name: 'ProRes 4444 beside it' }).click()
+  await expect.poll(async () => (await api<{ render: { resolution: string; prores: boolean } }>('GET', `/finals/${fin.id}`)).render, { timeout: 10_000 }).toMatchObject({ resolution: 'half', prores: true })
   await page.locator('.panel .foot button.primary', { hasText: /^Render the finished shot/ }).click()          // D121: the Final level's foot
   await expect.poll(async () => (await api<Comp>('GET', `/finals/${fin.id}/composition`)).clip_id, { timeout: 60_000 }).toBeTruthy()
+  type RenderJob = { kind: string; status: string; recipe: { final_id: string; settings: { resolution: string; prores: boolean } }; result: { prores?: string } }
+  const rj = (await api<{ items: RenderJob[] }>('GET', '/jobs')).items.find((j) => j.kind === 'comp_render' && j.recipe.final_id === fin.id && j.status === 'done')!
+  expect(rj.recipe.settings).toMatchObject({ resolution: 'half', prores: true })
+  expect(rj.result.prores).toMatch(/master_4444\.mov$/)
   const finished = await api<Done>('GET', `/finals/${fin.id}`)
   expect(finished.clip_id).toBe((await api<Comp>('GET', `/finals/${fin.id}/composition`)).clip_id)                // the finished shot is the final's clip
   await expect(page.locator('#anim-sec-output [data-render-state]')).toHaveText(/rendered at revision \d+/, { timeout: 15_000 })   // the revision the render saw (the edits above moved it)

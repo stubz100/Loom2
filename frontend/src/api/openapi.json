@@ -6072,6 +6072,9 @@
             "title": "Rate",
             "type": "integer"
           },
+          "render": {
+            "$ref": "#/components/schemas/RenderSettings"
+          },
           "revision": {
             "default": 0,
             "title": "Revision",
@@ -6150,6 +6153,7 @@
           "clip_id",
           "assembly",
           "assembled_at",
+          "render",
           "revision",
           "created_at",
           "updated_at"
@@ -15131,6 +15135,71 @@
           "released"
         ],
         "title": "Released",
+        "type": "object"
+      },
+      "RenderSettings": {
+        "description": "AE5 (03 §AE5): the finished shot's render settings and output modules — EffectCraft's render queue item (quality, resolution, motion\nblur, frame blending, the working colour depth; proxies never used) and what is written: the PNG master always (the take's clip, its\nH.264 proxy beside it), with its alpha kept (straight) or not, and a ProRes 4444 beside it on request. The defaults are AE1's render.",
+        "properties": {
+          "alpha": {
+            "default": false,
+            "title": "Alpha",
+            "type": "boolean"
+          },
+          "depth": {
+            "default": 8,
+            "enum": [
+              8,
+              16,
+              32
+            ],
+            "title": "Depth",
+            "type": "integer"
+          },
+          "frame_blending": {
+            "default": "comp",
+            "enum": [
+              "comp",
+              "off"
+            ],
+            "title": "Frame Blending",
+            "type": "string"
+          },
+          "motion_blur": {
+            "default": "comp",
+            "enum": [
+              "comp",
+              "off"
+            ],
+            "title": "Motion Blur",
+            "type": "string"
+          },
+          "prores": {
+            "default": false,
+            "title": "Prores",
+            "type": "boolean"
+          },
+          "quality": {
+            "default": "best",
+            "enum": [
+              "best",
+              "draft"
+            ],
+            "title": "Quality",
+            "type": "string"
+          },
+          "resolution": {
+            "default": "full",
+            "enum": [
+              "full",
+              "half",
+              "third",
+              "quarter"
+            ],
+            "title": "Resolution",
+            "type": "string"
+          }
+        },
+        "title": "RenderSettings",
         "type": "object"
       },
       "Restored": {
@@ -25466,6 +25535,59 @@
           }
         },
         "summary": "Final Processing Remove",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
+    "/finals/{fid}/render": {
+      "put": {
+        "description": "AE5: the finished shot's render settings and output modules (the next render uses them; the final's revision stays).",
+        "operationId": "final_render_settings_finals__fid__render_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenderSettings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Final"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Final Render Settings",
         "tags": [
           "finals"
         ]

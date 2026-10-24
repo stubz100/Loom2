@@ -243,6 +243,67 @@ def rife_binary() -> Path | None:
     return next(iter(sorted(root.glob("rife-ncnn-vulkan-*/rife-ncnn-vulkan.exe"))), None)
 
 
+def conform_24_alpha(src: Path, dst: Path, n16: int) -> list[Path] | None:
+    """AE5: F16 to 24 fps keeping the alpha — RIFE reads and writes RGB, so the colour and the alpha (as a grey picture) are conformed in two
+    runs and put back together; None without the binary. RIFE shifts a flat grey by a few levels (the AE5 rig: an opaque 255 came back 250),
+    so an opaque sequence keeps 255 without a second run, and the alpha's near-ends are snapped back (≤ 8 → 0, ≥ 247 → 255)."""
+    srcs = sorted(src.glob("*.png"))
+    opaque = all(Image.open(p).convert("RGBA").getchannel("A").getextrema()[0] == 255 for p in srcs)
+    col, alp = dst.parent / f"{dst.name}-rgb-in", dst.parent / f"{dst.name}-a-in"
+    for d in (col, alp):
+        shutil.rmtree(d, ignore_errors=True)
+        d.mkdir(parents=True)
+    for i, p in enumerate(srcs):
+        im = Image.open(p).convert("RGBA")
+        im.convert("RGB").save(col / f"{i:06d}.png")
+        im.getchannel("A").convert("RGB").save(alp / f"{i:06d}.png")
+    c = conform_24(col, dst.parent / f"{dst.name}-rgb", n16)
+    a = (c if opaque else conform_24(alp, dst.parent / f"{dst.name}-a", n16)) if c is not None else None
+    if c is None or a is None:
+        return None
+    shutil.rmtree(dst, ignore_errors=True)
+    dst.mkdir(parents=True)
+    out = []
+    for i, (pc, pa) in enumerate(zip(c, a)):
+        im = Image.open(pc).convert("RGB")
+        if opaque:
+            im.putalpha(255)
+        else:
+            al = np.asarray(Image.open(pa).convert("L")).copy()
+            al[al <= 8], al[al >= 247] = 0, 255
+            im.putalpha(Image.fromarray(al))
+        q = dst / f"{i:06d}.png"
+        im.save(q)
+        out.append(q)
+    for d in (col, alp, dst.parent / f"{dst.name}-rgb", dst.parent / f"{dst.name}-a"):
+        shutil.rmtree(d, ignore_errors=True)
+    return out
+
+
+def write_prores(frames: list[Path], dst: Path, fps: float, alpha: bool) -> dict[str, Any]:
+    """AE5: a ProRes 4444 (10-bit 4:4:4, `prores_ks` profile 4444) of the master's frames at its rate, with their alpha when `alpha`."""
+    import av
+    from fractions import Fraction
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dst.with_name(dst.stem + ".part" + dst.suffix)
+    first = Image.open(frames[0])
+    w, h = first.size
+    with av.open(str(tmp), "w", format="mov") as c:
+        s = c.add_stream("prores_ks", rate=Fraction(fps).limit_denominator(1001))
+        s.width, s.height = w, h
+        s.pix_fmt = "yuva444p10le" if alpha else "yuv444p10le"
+        s.options = {"profile": "4", "vendor": "apl0"}
+        for p in frames:
+            im = Image.open(p).convert("RGBA" if alpha else "RGB")
+            for pkt in s.encode(av.VideoFrame.from_ndarray(np.asarray(im), format="rgba" if alpha else "rgb24")):
+                c.mux(pkt)
+        for pkt in s.encode():
+            c.mux(pkt)
+    from .fsio import replace
+    replace(tmp, dst)
+    return {"path": dst, "frames": len(frames), "w": w, "h": h, "fps": fps, "alpha": alpha, "bytes": dst.stat().st_size}
+
+
 def conform_24(src: Path, dst: Path, n16: int) -> list[Path] | None:
     """F16 to 24 fps with RIFE v4.6 (E9: ≈ 2 s for 81 → 121 frames; D102: F16 then RIFE), or None without the binary."""
     import shutil

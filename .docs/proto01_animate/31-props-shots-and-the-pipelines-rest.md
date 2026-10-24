@@ -131,7 +131,7 @@ A part shows a *linked · N Shots* badge with its users; the Catalogue's *Duplic
 
 | Wave | Content | GPU | Days |
 | --- | --- | --- | --- |
-| **AE5 · the output** | the finished shot's **render settings** (quality, resolution, frame rate, motion blur, frame blending, colour depth; proxy use off) and **output modules** (the PNG master always; ProRes 4444 with alpha beside it; the H.264 proxy) on the final, shown in the Final mode's foot and the render's Inspector; `comp_render` runs EffectCraft's render queue with them (`renderQueue.add` takes every one) | no (CPU, D113) | 1–2 |
+| **AE5 · the output** ✓ built 2026-10-24 (§4a) | the finished shot's **render settings** (quality, resolution, frame rate, motion blur, frame blending, colour depth; proxy use off) and **output modules** (the PNG master always; ProRes 4444 with alpha beside it; the H.264 proxy) on the final, shown in the Final mode's foot and the render's Inspector; `comp_render` runs EffectCraft's render queue with them (`renderQueue.add` takes every one) | no (CPU, D113) | 1–2 |
 | **CA4 · the plan with its cost** | each character layer's batches (77 frames, 5 carried) with the frames each covers and its minutes from the measured runs; the shot's total; *Stage the runs* (the queue's *staged* jobs, released by *Run staged*) for an overnight start | no | 1 |
 | **CA5 · re-take from a batch** | *Re-take from this batch* on a layer's batch: that batch and the ones after it again with a new seed, the batches before kept (the carried frames come from the kept batch) | yes (rig) | 1–2 |
 | **HP1 · in the hand** | D129, §2 | rig check | 2 |
@@ -187,3 +187,20 @@ touches, a journal entry and a local commit.
   (−44.7 levels) and not her (0.00).
 - **The plate:** a picture set's plate is the stage's (linked with it); a Klein plate is its camera's, so linking it across cameras means
   using the scene's first plate as a reference — O4, built with CA3 (§4).
+
+### 4a. AE5 as built (2026-10-24)
+
+- **The settings** (`RenderSettings`, kept on the final — `PUT /finals/{fid}/render`, its revision unmoved — and copied into the render
+  job's recipe): quality (Best / Draft), resolution (Full, Half, Third, Quarter), motion blur and frame blending (the composition's own
+  switches, or off for every layer), the working colour depth (8, 16 or 32 bits); proxies never used. The defaults are AE1's render.
+- **The outputs:** the PNG master always (the take, its H.264 proxy beside it); *keep the alpha* (straight; at F16 RIFE conforms the colour
+  and the alpha as a grey picture apart — an opaque sequence keeps 255 without the second run, RIFE's drift at the ends snapped back); *a
+  ProRes 4444 beside the master* (`master_4444.mov` in the clip's folder, PyAV's `prores_ks` 4444, 10-bit 4:4:4, with the alpha when kept, at
+  the master's rate — 24 fps after the conform). EffectCraft's own ProRes module would write the composition's rate (16 fps at F16), so
+  the file is made from the conformed master instead.
+- **The render** goes through EffectCraft's render queue (`effectcraft-cli run renderQueue.add … renderQueue.render`, which waits), the
+  only way to its motion-blur, frame-blending and depth switches (the `render` command has no flags for them).
+- **Where:** Animate › Final › *Output*: *Render settings* and *Output* under the render state; the foot renders with them.
+- **Rig** (`scripts/ae5_acceptance.py`, 7/7, the real EffectCraft on the A1 final): the default render equals AE1's `render` frame for frame
+  (0 levels; 121 f @ 24 after RIFE, 5.0 s); Draft at half with the alpha and a ProRes: 416×240, an RGBA master opaque 255…255 through the
+  conform, a ProRes 4444 with alpha of 121 frames (16.8 MB), 6.5 s.

@@ -239,6 +239,7 @@
  "PUT /documents/{doc_id}/layers/{lid}/pixels",
  "PUT /documents/{doc_id}/selection",
  "PUT /finals/{fid}/layers/{lid}/frames",
+ "PUT /finals/{fid}/render",
  "PUT /project/animate-presets",
  "PUT /project/presets",
  "PUT /project/stage-templates",

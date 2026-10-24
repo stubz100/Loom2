@@ -105,6 +105,7 @@ RECEIVERS: dict[str, tuple[tuple[str, ...], list[str] | None]] = {
     "ExtendFrom": (("ext",), ["queue.py"]),                        # D88 XE: `ext = recipe.extend_from` in _check_extend
     "AnimateChain": (("chain",), None),                             # D111 (PS5c): `chain = recipe.chain` in the Wan Animate graph and prepare_i2v
     "PassStep": (("step",), None),                                  # D118 (AE4c): `step = recipe.step` in prepare_face_pass, build_face_pass and the face finisher
+    "RenderSettings": (("rs",), ["effectcraft.py", "engine/finishers.py"]),   # AE5: `rs = recipe.settings` in run_comp_render, the render queue item in render_argv
 }
 
 

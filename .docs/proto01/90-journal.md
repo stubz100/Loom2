@@ -8994,3 +8994,24 @@ patched (the Mid attenuated). A track with plugins is printed onto a hidden comp
 - Tests: test_linked_rc2f.py (3: the cast, the stage, the grade on the fake), cut.test.ts (`underSceneGrade`), the tracks e2e's *Make its
   grade independent*; routes_d37 +3. Screenshots img/31-rc2f-*.jpg. Offline 575 passed, settings audit and agents_check clean, Vitest 465 + 3 skipped, typecheck,
   lint (0 errors, 79 warnings) and build clean, e2e full 63/63 and open 63/63. RC2 (a–f) is built.
+
+## 2026-10-24 20:18 — AE5 built: the finished shot's render settings and output modules (proto01_animate 31 §4a)
+
+- **Settings** (`RenderSettings` on the final, `PUT /finals/{fid}/render` without moving its revision, copied into the render job's
+  recipe): quality, resolution, motion blur and frame blending (the composition's switches or off for all), the working depth (8 / 16 /
+  32 bits); proxies never used; the defaults are AE1's render. Animate › Final › *Output* shows them (`RenderSettingsBlock.tsx`).
+- **Outputs:** the PNG master always (the take, its H.264 proxy); *keep the alpha* (straight; at F16 RIFE conforms the colour and the
+  alpha as a grey picture apart, an opaque sequence keeps 255 without the second run, RIFE's ±5-level drift at the ends snapped back);
+  *ProRes 4444 beside the master* (`master_4444.mov` in the clip's folder, PyAV prores_ks 4444 10-bit 4:4:4, with the alpha, at the
+  master's 24 fps — EffectCraft's own ProRes module writes the composition's 16 fps, so it is not used).
+- **The render** is EffectCraft's render queue now (`run renderQueue.add … renderQueue.render`, which waits) — the `render` command has
+  no flags for motion blur, frame blending or depth. The fake EffectCraft answers `run`.
+- **Found:** RIFE crashed (0xC0000005) on the e2e's render: the fake had written its sidecar JSON into the frames' folder and RIFE reads
+  every file there — the fake writes it beside the folder, and the render removes anything that is not a frame before the conform.
+- **Rig** (`scripts/ae5_acceptance.py`, 7/7, the real EffectCraft on the A1 final): the default render equals AE1's `render` at frame 0
+  (0 levels; 121 f @ 24, 5.0 s); Draft at half with the alpha and a ProRes: 416×240, an RGBA master 255…255 through the conform, a ProRes
+  4444 with alpha of 121 frames (16.8 MB), 6.5 s.
+- Tests: test_render_ae5.py (4: the settings to the render and the ProRes, the alpha through a stand-in conform, an opaque alpha, the route),
+  the final-shot e2e sets half + ProRes and reads the job's recipe and result; routes_d37 +1; settings audit +8 fields (RenderSettings
+  read as `rs`). Offline 579 passed, settings audit and agents_check clean, Vitest 465 + 3 skipped, typecheck, lint (0 errors, 79
+  warnings) and build clean, e2e full 63/63 and open 63/63. Screenshot img/31-ae5-output.jpg.

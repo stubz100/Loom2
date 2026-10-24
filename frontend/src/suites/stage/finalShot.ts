@@ -6,7 +6,7 @@
 import { useEffect } from 'react'
 import { create } from 'zustand'
 import { api, http, sha256Hex, unwrap, type ApiError } from '../../api/client'
-import type { Composition, Final, StageDoc, StageObject } from '../../api/types'
+import type { Composition, Final, RenderSettings, StageDoc, StageObject } from '../../api/types'
 import { useComposition } from '../animate/compositionStore'
 import { askConfirm, useSession } from '../../store/session'
 import { forLabel, useMakeFor } from '../../store/origin'
@@ -181,6 +181,8 @@ interface FinalsState {
   load: () => Promise<void>
   /** AE1: write the composition from the layers and the assembly (again: the edits dropped, after a confirm). */
   compose: (id: string) => Promise<void>
+  /** AE5: the finished shot's render settings and output modules (the next render uses them). */
+  setRender: (id: string, patch: Partial<RenderSettings>) => Promise<void>
   /** AP1: the composition at Animate's Final level. */
   openFinal: (id: string) => void
   /** AE1: render the composition into the finished shot (effectcraft-cli on the CPU) — the final's clip. */
@@ -212,6 +214,16 @@ const replace = (list: Final[], f: Final) => list.map((x) => (x.id === f.id ? f 
 
 export const useFinals = create<FinalsState>((set, get) => ({
   finals: [], making: null, projecting: null, awaiting: {}, compositions: {},
+  setRender: async (id, patch) => {
+    const f = get().finals.find((x) => x.id === id)
+    if (!f) return
+    const body = { ...f.render, ...patch }
+    set({ finals: get().finals.map((x) => (x.id === id ? { ...x, render: body } : x)) })                // at once; the server's answer follows
+    try {
+      const next = await unwrap(http.PUT('/finals/{fid}/render', { params: { path: { fid: id } }, body }))
+      set({ finals: get().finals.map((x) => (x.id === id ? next : x)) })
+    } catch (e) { useSession.getState().toast(`Render settings: ${String((e as ApiError).detail ?? e)}`) }
+  },
   compose: async (id) => {
     const f = get().finals.find((x) => x.id === id)
     if (!f) return

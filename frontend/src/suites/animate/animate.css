@@ -237,3 +237,5 @@
 .final-pick .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .final-pick .meta { color: var(--fg3); font-size: 11px; }
 .final-output .verbs { display: flex; gap: 6px; margin-top: 6px; }
+.final-output .render-settings h4 { margin: 10px 0 4px; }
+.final-output .render-settings .chk { display: flex; align-items: center; gap: 6px; margin: 3px 0; }

@@ -13,6 +13,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from .fsio import atomic_write_json, new_id, read_json, utc_now
+from .recipes import RenderSettings
 from .workspace import Workspace
 
 FINAL_SCHEMA_VERSION = 1
@@ -103,6 +104,7 @@ class Final(BaseModel):
     clip_id: str | None = None                     # PS5e: the assembled shot
     assembly: dict[str, Any] | None = None         # PS5e: what the assembly did (offsets, occlusions, time, the conform)
     assembled_at: str | None = None
+    render: RenderSettings = Field(default_factory=RenderSettings)   # AE5: the finished shot's render settings and output modules
     revision: int = 0
     created_at: str = Field(default_factory=utc_now)
     updated_at: str = Field(default_factory=utc_now)
@@ -435,6 +437,16 @@ class FinalStore:
             raise KeyError(fid)
         f.clip_id, f.assembly, f.assembled_at = clip_id, stats, utc_now()
         f.revision += 1
+        f.updated_at = utc_now()
+        self.save(f)
+        return f
+
+    def set_render(self, fid: str, settings: RenderSettings) -> Final:
+        """AE5: the render settings — the record's revision stays (they change what the next render writes, not what the shot is made of)."""
+        f = self.get(fid)
+        if f is None:
+            raise KeyError(fid)
+        f.render = settings
         f.updated_at = utc_now()
         self.save(f)
         return f

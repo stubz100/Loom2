@@ -488,11 +488,25 @@ class AssembleFinal(BaseModel):
     seeds: list[int] = Field(default_factory=lambda: [0])
 
 
+class RenderSettings(BaseModel):
+    """AE5 (03 §AE5): the finished shot's render settings and output modules — EffectCraft's render queue item (quality, resolution, motion
+    blur, frame blending, the working colour depth; proxies never used) and what is written: the PNG master always (the take's clip, its
+    H.264 proxy beside it), with its alpha kept (straight) or not, and a ProRes 4444 beside it on request. The defaults are AE1's render."""
+    quality: Literal["best", "draft"] = "best"
+    resolution: Literal["full", "half", "third", "quarter"] = "full"
+    motion_blur: Literal["comp", "off"] = "comp"           # as the composition's switches (the layers that ask for it), or off for all
+    frame_blending: Literal["comp", "off"] = "comp"
+    depth: Literal[8, 16, 32] = 8                          # bits per channel while compositing; the PNG master is 8-bit, the ProRes 12-bit
+    alpha: bool = False                                    # the master and the ProRes keep the alpha (where the layers leave the frame open)
+    prores: bool = False                                   # a ProRes 4444 beside the master, at the master's rate (24 fps after RIFE at F16)
+
+
 class CompRender(BaseModel):
-    """AE1 (proto01_animate 20 §2, D114): the finished shot — the final's composition rendered by the pinned `effectcraft-cli render` (Best,
-    Full, a PNG sequence, on the CPU) into a clip: the final's clip, and a take on its Story shot."""
+    """AE1 (proto01_animate 20 §2, D114): the finished shot — the final's composition rendered by the pinned `effectcraft-cli` (a PNG
+    sequence, on the CPU) into a clip: the final's clip, and a take on its Story shot. AE5: with the final's render settings."""
     kind: Literal["comp_render"] = "comp_render"
     final_id: str
+    settings: RenderSettings = Field(default_factory=RenderSettings)
     seeds: list[int] = Field(default_factory=lambda: [0])
 
 

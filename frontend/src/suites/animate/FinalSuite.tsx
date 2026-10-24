@@ -12,6 +12,7 @@ import { DEFAULT_RAIL } from '../../frame/railTabs'
 import type { SuiteDef } from '../../frame/suiteRegistry'
 import { useSession } from '../../store/session'
 import { rendering, useFinals, useFinalsPoll } from '../stage/finalShot'
+import { RenderSettingsBlock } from './RenderSettingsBlock'
 import { ShotHead } from '../stage/ShotStepper'
 import { st, useStage } from '../stage/stageStore'
 import { AnimColumn, Sec } from './column'
@@ -64,7 +65,8 @@ function OutputSection() {
       <div className="kv"><span>shot</span><span>{final.frames} frames at {final.rate} fps · {final.size.w}×{final.size.h}</span></div>
       <div className="kv"><span>composition</span><span>{comp ? `revision ${comp.revision}${comp.stale ? ' · stale: the final changed' : ''}` : 'none'}</span></div>
       <div className="kv"><span>render</span><span data-render-state>{busy ? 'rendering…' : comp?.clip_id ? `rendered at revision ${comp.rendered_revision}` : 'not rendered yet'}
-        <Help text="effectcraft-cli renders the composition at Best and Full on the CPU (RIFE to 24 fps at F16); the clip becomes the final's and a take on its shot." /></span></div>
+        <Help text="effectcraft-cli renders the composition on the CPU with the settings below (RIFE to 24 fps at F16); the clip becomes the final's and a take on its shot." /></span></div>
+      {f && <RenderSettingsBlock f={f} />}
       <div className="verbs">
         {f?.clip_id && <button type="button" className="quiet" data-play onClick={() => useFinals.getState().play(fid)} title="The final's clip in the Performance player">Play ▶</button>}
         {f?.assembled_at && <button type="button" className="quiet" onClick={() => void useFinals.getState().compose(fid)} title="Write the composition afresh from the layers and the assembly (the edits are dropped)">Make the composition again</button>}
@@ -125,7 +127,7 @@ function FinalFoot() {
   const reason = !fid ? 'open a final in the Shot section' : !comp ? 'no composition yet' : busy ? 'rendering…' : null
   return (
     <div>
-      <button className="primary" disabled={!!reason} onClick={() => runCommand('anim.final.render')} title="effectcraft-cli renders the composition at Best and Full on the CPU; the clip becomes the final's and a take on its shot (Ctrl+Enter)">
+      <button className="primary" disabled={!!reason} onClick={() => runCommand('anim.final.render')} title="effectcraft-cli renders the composition on the CPU with the Output section's settings; the clip becomes the final's and a take on its shot (Ctrl+Enter)">
         {busy ? 'Rendering…' : c?.clip_id ? 'Render again ▶' : 'Render the finished shot ▶'}</button>
       <div className="estimate">{reason ? <span style={{ color: 'var(--fg3)' }}>{reason}</span> : <span>{c?.clip_id ? `rendered at revision ${c.rendered_revision} · now at ${c.revision}` : `revision ${c?.revision ?? 0} · on the CPU`}</span>}</div>
     </div>

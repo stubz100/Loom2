@@ -648,5 +648,51 @@ def render(argv: list[str]) -> int:
     return 0
 
 
+def png_rgba(w: int, h: int, rgba: tuple[int, int, int, int]) -> bytes:
+    raw = b"".join(b"\x00" + bytes(rgba) * w for _ in range(h))
+
+    def chunk(t: bytes, d: bytes) -> bytes:
+        return struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d) & 0xFFFFFFFF)
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
+
+
+def run(argv: list[str]) -> int:
+    """AE5: `run renderQueue.add <json> renderQueue.render <json> --project P` — the item's frames as the real render queue writes them (its
+    resolution, its channels: every other frame half transparent when the alpha is kept), and the item beside their folder (`render-item.json`)."""
+    project = argv[argv.index("--project") + 1] if "--project" in argv else None
+    cmds = [a for a in argv if not a.startswith("--") and a != project]
+    f = Fake()
+    if project:
+        f.load(project)
+    item = None
+    for cid, raw in zip(cmds[0::2], cmds[1::2]):
+        params = json.loads(raw)
+        if cid == "renderQueue.add":
+            item = params
+        elif cid == "renderQueue.render":
+            if item is None:
+                print("renderQueue.render: the queue is empty", file=sys.stderr)
+                return 1
+            c = f.comp(item.get("comp"))
+            scale = {"full": 1, "half": 2, "third": 3, "quarter": 4}[item.get("resolution", "full")]
+            w, h = c["width"] // scale, c["height"] // scale
+            out = item["output"]
+            k = out.find("[")
+            width = out[k + 1:out.index("]", k)].count("#")
+            n = int(round(c["duration"] * c["frameRate"]))
+            for i in range(n):
+                path = Path(out[:k] + str(i).zfill(width) + out[out.index("]", k) + 1:])
+                path.parent.mkdir(parents=True, exist_ok=True)
+                colour = (i % 256, f.p["revision"] % 256, 128)
+                path.write_bytes(png_rgba(w, h, (*colour, 255 if i % 2 == 0 else 128)) if item.get("channels") == "rgba" else png(w, h, colour))
+            (Path(out).parent.parent / "render-item.json").write_text(json.dumps(item), encoding="utf-8")   # beside the frames' folder: RIFE reads every file in it
+        else:
+            print(f"run: unknown command {cid}", file=sys.stderr)
+            return 1
+    print(json.dumps({"results": [{"status": "Done"}]}))
+    return 0
+
+
 if __name__ == "__main__":
-    sys.exit(serve(sys.argv[2:]) if len(sys.argv) > 1 and sys.argv[1] == "mcp" else render(sys.argv[2:]) if len(sys.argv) > 1 and sys.argv[1] == "render" else 2)
+    sub = sys.argv[1] if len(sys.argv) > 1 else ""
+    sys.exit(serve(sys.argv[2:]) if sub == "mcp" else render(sys.argv[2:]) if sub == "render" else run(sys.argv[2:]) if sub == "run" else 2)

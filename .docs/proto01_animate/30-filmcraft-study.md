@@ -65,8 +65,12 @@ Reviewed 2026-10-24 at `F:\source\repos\filmcraft` (v0.5.0, `764723f`, 2026-10-1
 
 ## 3. The probe (E32, measured 2026-10-24)
 
-`filmcraft-cli` built in release from the checkout into a scratch target (2 min 31 s, 34.6 MB), hardware decoding off, a scratch data
-folder. The input is the A1 rig's cut from RC3's measurement: the composition (121 f @ 24) dissolving over 12 ticks into Mara's
+`filmcraft-cli` built in release from the checkout into a scratch target (2 min 31 s, 34.6 MB), a scratch data folder. **Decoding:** the
+CLI decodes in hardware by default (Media Foundation on the card), and a `prefs.set` lasts only for its process; the first render, export
+and session runs had used it. The figures below are re-measured with `playback.hardwareDecoding = off` in each process (software decoding,
+CPU only) — the session numbers came out the same, and the parity too.
+
+The input is the A1 rig's cut from RC3's measurement: the composition (121 f @ 24) dissolving over 12 ticks into Mara's
 performance (77 f @ 16), two voiced lines on the first, at 1920×1080 @ 24.
 
 **a · loom2's Resolve FCPXML, imported.** One sequence, 4 media linked, nothing offline, no warnings; the lines on A1 at 0 and 60 as
@@ -93,17 +97,17 @@ them, the same level).
 
 | | loom2's movie (RC3) | FilmCraft export |
 | --- | --- | --- |
-| H.264 + AAC, 225 frames at 1080p | 10.7 s (RIFE conform + x264 CRF 18) | **3.1–3.8 s** (7.8 MB) |
-| ProRes 422 + PCM | — | 3.2 s (66 MB) |
+| H.264 + AAC, 225 frames at 1080p | 10.7 s (RIFE conform + x264 CRF 18) | **3.8 s** (17.6 MB) |
+| ProRes 422 + PCM | — | 4.2 s (142 MB) |
 | with a shot-match and a graded adjustment layer | — | 6.6 s |
 
-**c · frames for the viewer.** One process a frame (cold): 100–160 ms at any size. **One warm `filmcraft-cli mcp` session** (the way
+**c · frames for the viewer.** One process a frame (cold, hardware decoding): 100–160 ms at any size. **One warm `filmcraft-cli mcp` session** (the way
 `effectcraft.py` drives EffectCraft), `render_frame` as PNG:
 
 | | ½ (960×540) scrub | ½ play | ¼ scrub | ¼ play |
 | --- | --- | --- | --- | --- |
-| the plain cut | 10 ms (p90 25) | 10 ms → 100 fps | 4 ms | 4 ms |
-| + shot-match on one clip + a scene grade (adjustment layer, *Golden Dusk*) | 15 ms (p90 29) | 15 ms → 68 fps | 6 ms | 5 ms |
+| the plain cut | 10 ms (p90 20) | 10 ms → 98 fps | 4 ms | 4 ms |
+| + shot-match on one clip + a scene grade (adjustment layer, *Golden Dusk*) | 15 ms (p90 25) | 15 ms → 67 fps | 6 ms | 6 ms |
 
 **d · O6 headless.** `lumetri.applyMatch` on Mara's clip against frame 48 of the composition: 0.24 s for the whole run, distance
 0.052 → 0.036, an editable grade. An adjustment layer over the cut with a preset grades both shots.

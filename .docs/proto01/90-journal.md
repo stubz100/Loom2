@@ -8700,3 +8700,18 @@ The author: "1) a 2) b 3) all 4) yes, in the first version 5) filmcraft's export
   is not built.
 - Plan (30 §10): CE1 the engine and the cut file (4 days: every existing Episode verb on the project first), CE2 tracks, CE3 sound, CE4
   colour, CE5 captions and delivery. CE1 starts now.
+
+## 2026-10-24 08:17 — Correction to the 08:05 entry (probe E32): hardware decoding was on for its render, export and session runs
+
+The 08:05 entry says the probe ran "CPU only, hardware decoding off". Only the import run had it off: `filmcraft-cli` decodes in hardware
+by default (Media Foundation on the card), `--data-dir` loads no preferences, and a `prefs.set` lasts only for its process. So the
+render, export and session runs decoded the H.264 proxies on the card (briefly, with nothing else on it: no two GPU workloads overlapped).
+Re-measured with `playback.hardwareDecoding = off` in each process:
+
+- the session's frames: the plain cut 10 ms at ½ (p90 20, 98 fps playing), 4 ms at ¼; with the match and the grade 15 ms (p90 25, 67 fps),
+  6 ms — the same as before;
+- the exports: H.264 **3.8 s (17.6 MB)**, ProRes **4.2 s (142 MB)**, graded 6.6 s; parity with RC3's movie unchanged (1.53 / 4.08 / 0.42).
+  The 08:05 entry's "3.1 s" and "7.8 MB" were the export made before `clip.scaleToFrameSize` (mostly black frames), not the parity export.
+
+proto01_animate 30 §3 now gives these figures. For CE1: loom2's session sets the preference at every start and the movie job runs the
+export in a process that sets it first (`run` with `prefs.set`, then `file.exportMedia`).

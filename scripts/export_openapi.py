@@ -4,7 +4,7 @@ schema.d.ts from it; CI runs both and fails when either file differs from the co
     orchestrator/.venv/Scripts/python.exe scripts/export_openapi.py            # write
     orchestrator/.venv/Scripts/python.exe scripts/export_openapi.py --check    # exit 1 when the committed file is stale
 
-The document must not depend on the machine: defaults read from the environment (LOOM2_VARIANT, LOOM2_MODELS, HF_HOME, LOOM2_FILMCRAFT_CLI) are
+The document must not depend on the machine: defaults read from the environment (LOOM2_VARIANT, LOOM2_MODELS, HF_HOME, LOOM2_FILMCRAFT_CLI, LOOM2_VSTHOST_CLI) are
 pinned before `loom2` is imported, and the checkout path inside defaults (the engine's python / main paths) becomes `<repo>`.
 """
 from __future__ import annotations
@@ -22,7 +22,7 @@ OUT = REPO / "frontend" / "src" / "api" / "openapi.json"
 
 def render() -> str:
     os.environ["LOOM2_VARIANT"] = "full"
-    for name in ("LOOM2_MODELS", "HF_HOME", "LOOM2_FILMCRAFT_CLI"):
+    for name in ("LOOM2_MODELS", "HF_HOME", "LOOM2_FILMCRAFT_CLI", "LOOM2_VSTHOST_CLI"):
         os.environ.pop(name, None)
     sys.path.insert(0, str(REPO / "orchestrator"))
     from loom2.api import create_app   # noqa: E402 — after the environment is pinned

@@ -27,7 +27,7 @@ export function SettingsModal() {
     setBusy(true)
     try {
       await s.saveSettings({ models_root: draft.models_root, mounted_model_trees: draft.mounted_model_trees, vram_budget_gb: draft.vram_budget_gb, hf_home: draft.hf_home,
-        thumbnail_sizes: draft.thumbnail_sizes, log_level: draft.log_level, samples: draft.samples, motion: draft.motion, audio: draft.audio, engine: { flags: draft.engine.flags, restart_every_jobs: draft.engine.restart_every_jobs, port: draft.engine.port, health_timeout_s: draft.engine.health_timeout_s,
+        thumbnail_sizes: draft.thumbnail_sizes, log_level: draft.log_level, samples: draft.samples, motion: draft.motion, audio: draft.audio, vsthost: { folders: draft.vsthost.folders }, engine: { flags: draft.engine.flags, restart_every_jobs: draft.engine.restart_every_jobs, port: draft.engine.port, health_timeout_s: draft.engine.health_timeout_s,
           stall_timeout_s: draft.engine.stall_timeout_s, reserve_vram_gb: draft.engine.reserve_vram_gb, vram_headroom_gb: draft.engine.vram_headroom_gb } })
       s.openSettings(false)
     } finally { setBusy(false) }
@@ -107,6 +107,9 @@ export function SettingsModal() {
               </div>
             </Fragment>
           ))}
+          <label>VST3 folders <Help text={"Your own folders of VST3 effects, `;` separated, beside the system's (C:\\Program Files\\Common Files\\VST3) — loom2's own host scans them once and again when a bundle changes"} /></label>
+          <input type="text" aria-label="VST3 folders" value={draft.vsthost.folders.join(';')} placeholder="none — the system's folder only"
+            onChange={(e) => set({ vsthost: { ...draft.vsthost, folders: e.target.value.split(';').map((x) => x.trim()).filter(Boolean) } })} />
           <h4 id="settings-keyboard">Keyboard</h4>
           <KeyboardSettings />
           <h4>Licences</h4>

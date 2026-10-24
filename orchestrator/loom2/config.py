@@ -95,6 +95,17 @@ class FilmCraftSettings(BaseModel):
     timeout_s: float = 120.0    # a request past this kills the session (the movie's export is a job of its own, never sent through it)
 
 
+class VstHostSettings(BaseModel):
+    """D127 (AU3): loom2's own VST3 host — the pinned `loom2-vsthost` (engine/vsthost.pin.json, built by scripts/build_vsthost.py into
+    engine/tools/vsthost/, never in git), one process per request (loom2/vsthost.py). A `.py` runs under the orchestrator's interpreter (the
+    tests' fake)."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    cli: str = os.environ.get("LOOM2_VSTHOST_CLI") or str(REPO_ROOT / "engine" / "tools" / "vsthost" / "loom2-vsthost.exe")   # the env: the offline suite keeps it unbuilt
+    folders: list[str] = Field(default_factory=list)   # the author's own VST3 folders, beside the system's (C:/Program Files/Common Files/VST3)
+    scan_timeout_s: float = 30.0       # one bundle's scan, an effect's parameters or state; past it the process is stopped (a plug-in that hangs)
+    render_timeout_s: float = 600.0    # a chain over a track's whole audio
+
+
 # D127 (proto01_animate 30 §16): the ranges of an audio track's four settings — the author's, past FilmCraft's own limits by a second stage
 STRIP_GAIN_DB = (-36.0, 36.0)
 STRIP_VOLUME_DB = (-96.0, 18.0)            # −96 is FilmCraft's silent fader floor, shown as −∞
@@ -234,6 +245,7 @@ class Settings(BaseModel):
     effectcraft: EffectCraftSettings = Field(default_factory=EffectCraftSettings)   # AE1 (D114): the animation editor's engine
     filmcraft: FilmCraftSettings = Field(default_factory=FilmCraftSettings)         # CE1 (D126): the cut editor's engine
     audio: AudioSettings = Field(default_factory=AudioSettings)                     # D127: the loudness target and the track roles' strips
+    vsthost: VstHostSettings = Field(default_factory=VstHostSettings)               # D127 (AU3): loom2's own VST3 host
 
     @model_validator(mode="before")
     @classmethod

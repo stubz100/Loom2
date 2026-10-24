@@ -1,6 +1,6 @@
 # 30 · RC4's study — FilmCraft for the cut editor
 
-Status: **study, 2026-10-24; answered the same day → D126 (§10); CE1 built (§11); CE2 built (§13); CE3 built (§15); D127 (§16): the channel strip and VST3 chains — AU1 built (§17), AU2 built (§18), AU3 next; CE4 after.** D96 planned RC4 as "FilmCraft reviewed as 03 reviewed EffectCraft
+Status: **study, 2026-10-24; answered the same day → D126 (§10); CE1 built (§11); CE2 built (§13); CE3 built (§15); D127 (§16): the channel strip and VST3 chains — AU1 built (§17), AU2 built (§18), AU3 built (§19), AU4 next; CE4 after.** D96 planned RC4 as "FilmCraft reviewed as 03 reviewed EffectCraft
 (what to reuse, how), then the multi-track cut editor that replaces the single-lane Episode" ([05](05-flow-nodes-as-shot-recipes.md)
 §6), with O6 (a scene grade and shot-match in the cut, [06](06-continuity-across-shots.md)) attached. RC1–RC3 are built
 ([28](28-recipe-graph.md), [29](29-movie-render.md)); this is the study, measured where it could be (§3, the probe E32).
@@ -418,7 +418,7 @@ stale when the track's clips, its gain or its chain change; the mix, the movie a
 | --- | --- |
 | **AU1 · Settings and roles** ✓ built 2026-10-24 (§17) | Settings › Audio: the loudness target (moved from Settings › FilmCraft) and each role's four defaults (dialogue, music, effects); a new cut's A1–A3 named and set as those roles; a track's role from its header |
 | **AU2 · the strip** ✓ built 2026-10-24 (§18) | the four settings on every audio track (the track's Inspector and header: sliders with numbers), stored as the fader, the pan and the inserts; the width patch (`engine/patches/filmcraft/`, the build script, a new pin); measured on the rig |
-| **AU3 · the host** | `engine/vsthost/` — a C++ host on the VST 3 SDK (the SDK fetched at a pinned tag by the build script), `scan`, `render` (a chain over a WAV, offline), `editor` (a plugin's window, its state saved); pinned like FilmCraft; tests with the SDK's own sample plugins |
+| **AU3 · the host** ✓ built 2026-10-24 (§19) | `engine/vsthost/` — a C++ host on the VST 3 SDK (the SDK fetched at a pinned tag by the build script), `scan`, `render` (a chain over a WAV, offline), `editor` (a plugin's window, its state saved); pinned like FilmCraft; tests with the SDK's own sample plugins |
 | **AU4 · chains and printing** | a track's chain in the Inspector (add from the scanned plugins, reorder, bypass, open the editor, remove); printing (the companion track, staleness, before the mix, the movie and the exports); the rig with the SDK's samples and one of the author's plugins |
 
 ## 17. AU1 as built (2026-10-24)
@@ -473,3 +473,32 @@ stale when the track's clips, its gain or its chain change; the mix, the movie a
 
 ![A track in the Inspector: role, gain, volume, pan, width](img/30-au2-inspector.jpg)
 ![The strip](img/30-au2-strip.jpg)
+
+## 19. AU3 as built (2026-10-24)
+
+- **The SDK**: Steinberg's VST 3 SDK `v3.8.1_build_84` (3cdf9ca5, 11 Aug 2026; LICENSE.txt: MIT, Steinberg Media Technologies GmbH),
+  fetched shallow by `scripts/build_vsthost.py` into `engine/tools/vst3sdk` with only base, cmake, pluginterfaces and public.sdk (no VSTGUI);
+  pinned in `engine/vsthost.pin.json` (the tag, the commit, the binary's hash and the host source's hash — CI's `--check` holds the pin to
+  `engine/vsthost/CMakeLists.txt` and `src/`).
+- **The host** (`engine/vsthost/`, ≈ 700 lines of C++ on the SDK's hosting classes; `loom2-vsthost.exe`, 693 KB, static runtime): `paths`,
+  `scan`, `params`, `state`, `render`, `editor`, each one line of JSON. Rendering is offline 32-bit float with the main buses stereo, any
+  side-chain off, the plug-in's latency taken off, the output as long as the input; the editor is the plug-in's own view in a Win32 window,
+  its edits (`performEdit`) handed to the processor in one silent block before the state (component + controller, `L2VS`) is written.
+  Two first builds failed on the build, not the host: the SDK's libraries use the static runtime (the host's target now too), and MSBuild
+  took the native flags for a project when several targets were built in one call (one call per target now; the gain sample's target is
+  `again-sample-accurate`).
+- **loom2's side** (`loom2/vsthost.py`, Settings › Audio › VST3 folders, `GET /audio/plugins`): one process per request in the
+  orchestrator's job object, a crash said as "the plug-in host stopped without an answer (exit code …) — a plug-in crashed; loom2 is fine";
+  the scan per bundle, kept by path and modification time in `vst-scan.json`, instruments left out, a failed bundle listed with its reason.
+- **Rig** (`scripts/au_acceptance.py --parts host,editor`, 7/7, plus the AU1–AU2 parts): the author's 314 bundles scanned, one process each,
+  in 63 s (99 s cold the first time) — 304 effects, **no failure**, the kept scan 0.44 s; AGain Sample Accurate at 0.5 is the input × 0.5
+  sample for sample (max error 0); ADelay at 0.25 s moves an impulse from 100 to 12100; the two in a chain in order (0.500 at 12100), a
+  bypassed third skipped; the samples (built without VSTGUI) say they have no editor; **Kilohearts' kHs Gain** — one of the author's own —
+  opened in the host's window (screenshot), closed by WM_CLOSE as the author would after 2.2 s, its state (554 B) written, read back
+  (2083 parameters: Bypass Off, Gain +0.00 dB …) and its default passing the sound at +0.00 dB. Known: the host is not DPI-aware yet, so
+  Windows scales a plug-in's window (soft at 150 %).
+- Tests: `test_vsthost_au3.py` (3) on `tests/fake_vsthost.py` (the scan with an instrument and a crashing bundle, the cache and a rescan,
+  state / params / editor, a chain with a bypass, a crash in a render, the route); the e2e's orchestrator runs the fake with two fake
+  effects; the offline suite never runs a built host (`LOOM2_VSTHOST_CLI` in conftest).
+
+![Kilohearts' kHs Gain in loom2's host window (the rig)](img/30-au3-editor.jpg)

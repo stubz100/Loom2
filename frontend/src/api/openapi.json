@@ -15206,6 +15206,9 @@
             "default": 16.0,
             "title": "Vram Budget Gb",
             "type": "number"
+          },
+          "vsthost": {
+            "$ref": "#/components/schemas/VstHostSettings"
           }
         },
         "required": [
@@ -15229,7 +15232,8 @@
           "motion",
           "effectcraft",
           "filmcraft",
-          "audio"
+          "audio",
+          "vsthost"
         ],
         "title": "Settings",
         "type": "object"
@@ -19550,6 +19554,141 @@
         "title": "VramPressureEvent",
         "type": "object"
       },
+      "VstFailed": {
+        "properties": {
+          "bundle": {
+            "title": "Bundle",
+            "type": "string"
+          },
+          "error": {
+            "title": "Error",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bundle",
+          "error"
+        ],
+        "title": "VstFailed",
+        "type": "object"
+      },
+      "VstHostSettings": {
+        "description": "D127 (AU3): loom2's own VST3 host — the pinned `loom2-vsthost` (engine/vsthost.pin.json, built by scripts/build_vsthost.py into\nengine/tools/vsthost/, never in git), one process per request (loom2/vsthost.py). A `.py` runs under the orchestrator's interpreter (the\ntests' fake).",
+        "properties": {
+          "cli": {
+            "default": "<repo>\\engine\\tools\\vsthost\\loom2-vsthost.exe",
+            "title": "Cli",
+            "type": "string"
+          },
+          "folders": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Folders",
+            "type": "array"
+          },
+          "render_timeout_s": {
+            "default": 600.0,
+            "title": "Render Timeout S",
+            "type": "number"
+          },
+          "scan_timeout_s": {
+            "default": 30.0,
+            "title": "Scan Timeout S",
+            "type": "number"
+          }
+        },
+        "required": [
+          "cli",
+          "folders",
+          "scan_timeout_s",
+          "render_timeout_s"
+        ],
+        "title": "VstHostSettings",
+        "type": "object"
+      },
+      "VstPlugin": {
+        "properties": {
+          "bundle": {
+            "title": "Bundle",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "sub": {
+            "default": "",
+            "title": "Sub",
+            "type": "string"
+          },
+          "uid": {
+            "title": "Uid",
+            "type": "string"
+          },
+          "vendor": {
+            "default": "",
+            "title": "Vendor",
+            "type": "string"
+          },
+          "version": {
+            "default": "",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bundle",
+          "uid",
+          "name",
+          "vendor",
+          "version",
+          "sub"
+        ],
+        "title": "VstPlugin",
+        "type": "object"
+      },
+      "VstPluginList": {
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "failed": {
+            "items": {
+              "$ref": "#/components/schemas/VstFailed"
+            },
+            "title": "Failed",
+            "type": "array"
+          },
+          "plugins": {
+            "items": {
+              "$ref": "#/components/schemas/VstPlugin"
+            },
+            "title": "Plugins",
+            "type": "array"
+          }
+        },
+        "required": [
+          "available",
+          "plugins",
+          "failed",
+          "error"
+        ],
+        "title": "VstPluginList",
+        "type": "object"
+      },
       "World": {
         "properties": {
           "created_at": {
@@ -21155,6 +21294,50 @@
         "summary": "Asset Thumbnail",
         "tags": [
           "assets"
+        ]
+      }
+    },
+    "/audio/plugins": {
+      "get": {
+        "description": "The installed effects (instruments left out), scanned in a process per bundle; `rescan` scans every bundle again.",
+        "operationId": "audio_plugins_audio_plugins_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "rescan",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Rescan",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VstPluginList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Audio Plugins",
+        "tags": [
+          "audio"
         ]
       }
     },

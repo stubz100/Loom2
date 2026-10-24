@@ -23,6 +23,7 @@
  "GET /assets/tags",
  "GET /assets/{asset_id}",
  "GET /assets/{asset_id}/file",
+ "GET /audio/plugins",
  "GET /blobs/{sha}",
  "GET /capabilities",
  "GET /clips",

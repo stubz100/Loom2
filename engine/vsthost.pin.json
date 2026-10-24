@@ -1,0 +1,12 @@
+{
+  "sdk": {
+    "repository": "https://github.com/steinbergmedia/vst3sdk",
+    "tag": "v3.8.1_build_84",
+    "commit": "3cdf9ca5d1f5b1b21e0a86832aa4abe55607bd96",
+    "licence": "MIT (LICENSE.txt, Steinberg Media Technologies GmbH, 2026)"
+  },
+  "binary": "loom2-vsthost.exe",
+  "sha256": "fae4229cb36f21ce3ae895309e459548f9f7e2e00fb665d5ea8a63c170267daf",
+  "bytes": 693248,
+  "source": "9f79dd0e3511fe1e0c4b0d490674516a1d8bac229511e853275a42c0fd5b44c9"
+}

@@ -98,6 +98,11 @@ def main() -> int:
     settings["lipsync"] = {**settings["lipsync"], "python": sys.executable, "run": str(tests / "fake_lipsync.py"), "checkout": str(lipsync.parent)}
     settings["effectcraft"] = {**settings["effectcraft"], "cli": str(tests / "fake_effectcraft.py")}         # AE1: the fake session stands in for effectcraft-cli
     settings["filmcraft"] = {**settings["filmcraft"], "cli": str(tests / "fake_filmcraft.py")}             # CE1 (D126): the fake stands in for filmcraft-cli: cuts are FilmCraft projects
+    vst3 = state / "vst3"                                                                     # D127 (AU3): the fake host and two fake effects stand in for loom2-vsthost
+    for name, uid, sub in (("Room Verb", "A1" * 16, "Fx|Reverb"), ("Tape Gain", "B2" * 16, "Fx|Dynamics")):
+        (vst3 / f"{name}.vst3").mkdir(parents=True, exist_ok=True)
+        (vst3 / f"{name}.vst3" / "fake.json").write_text(json.dumps({"classes": [{"uid": uid, "name": name, "vendor": "Fake Audio", "version": "1.0", "sub": sub}]}), encoding="utf-8")
+    settings["vsthost"] = {**settings["vsthost"], "cli": str(tests / "fake_vsthost.py"), "folders": [str(vst3)]}
     settings["hf_home"] = str(state / "hf")
     motion = models / "motion" / "test"                                                      # CA1: the library's test rig stands in for the starter set
     motion.mkdir(parents=True, exist_ok=True)

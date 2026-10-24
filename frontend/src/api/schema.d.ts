@@ -231,6 +231,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/audio/plugins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Audio Plugins
+         * @description The installed effects (instruments left out), scanned in a process per bundle; `rescan` scans every bundle again.
+         */
+        get: operations["audio_plugins_audio_plugins_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/blobs/{sha}": {
         parameters: {
             query?: never;
@@ -9782,6 +9802,7 @@ export interface components {
              * @default 16
              */
             vram_budget_gb: number;
+            vsthost: components["schemas"]["VstHostSettings"];
         };
         /**
          * SheetColour
@@ -11590,6 +11611,73 @@ export interface components {
              */
             type: "engine.vram_pressure";
         };
+        /** VstFailed */
+        VstFailed: {
+            /** Bundle */
+            bundle: string;
+            /** Error */
+            error: string;
+        };
+        /**
+         * VstHostSettings
+         * @description D127 (AU3): loom2's own VST3 host — the pinned `loom2-vsthost` (engine/vsthost.pin.json, built by scripts/build_vsthost.py into
+         *     engine/tools/vsthost/, never in git), one process per request (loom2/vsthost.py). A `.py` runs under the orchestrator's interpreter (the
+         *     tests' fake).
+         */
+        VstHostSettings: {
+            /**
+             * Cli
+             * @default <repo>\engine\tools\vsthost\loom2-vsthost.exe
+             */
+            cli: string;
+            /** Folders */
+            folders: string[];
+            /**
+             * Render Timeout S
+             * @default 600
+             */
+            render_timeout_s: number;
+            /**
+             * Scan Timeout S
+             * @default 30
+             */
+            scan_timeout_s: number;
+        };
+        /** VstPlugin */
+        VstPlugin: {
+            /** Bundle */
+            bundle: string;
+            /** Name */
+            name: string;
+            /**
+             * Sub
+             * @default
+             */
+            sub: string;
+            /** Uid */
+            uid: string;
+            /**
+             * Vendor
+             * @default
+             */
+            vendor: string;
+            /**
+             * Version
+             * @default
+             */
+            version: string;
+        };
+        /** VstPluginList */
+        VstPluginList: {
+            /** Available */
+            available: boolean;
+            /** Error */
+            error: string | null;
+            /** Failed */
+            failed: components["schemas"]["VstFailed"][];
+            /** Plugins */
+            plugins: components["schemas"]["VstPlugin"][];
+        };
         /** World */
         World: {
             /** Created At */
@@ -12146,6 +12234,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AssetRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    audio_plugins_audio_plugins_get: {
+        parameters: {
+            query?: {
+                rescan?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VstPluginList"];
                 };
             };
             /** @description Validation Error */

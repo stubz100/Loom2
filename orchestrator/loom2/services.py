@@ -19,6 +19,7 @@ from .roster import Roster
 from .tools.fetch import FetchJob
 from .effectcraft import EffectCraft
 from .filmcraft import FilmCraft
+from .vsthost import VstHost
 from .workspace import Workspace
 
 
@@ -30,6 +31,7 @@ class Services:
         self.engine = EngineSupervisor(self.app, on_state=lambda s: self.hub.broadcast("engine.state", s))
         self.effectcraft = EffectCraft(self.app)                            # AE1 (D114): the animation editor's engine, started on first use
         self.filmcraft = FilmCraft(self.app)                                # CE1 (D126): the cut editor's engine, started on first use
+        self.vsthost = VstHost(self.app)                                    # D127 (AU3): loom2's own VST3 host, one process per request
         self.ws: Workspace | None = None
         self.catalogue: Catalogue | None = None
         self.queue: JobQueue | None = None

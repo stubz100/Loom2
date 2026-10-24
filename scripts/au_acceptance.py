@@ -10,6 +10,11 @@ as mixed). Parts:
     width   the author's law past 100 % (the patched FilmCraft, engine/patches/filmcraft): the left side at 200 % is 1.354 L − 0.646 R (the
             mid 3 dB down, the side doubled) — 440 Hz +2.63 dB and the right's 660 Hz in at −3.80 dB; at 150 % +1.37 / −9.65 dB (FilmCraft's
             own law would give +3.52 / −6.02 at 200 %)
+    host    loom2's own VST3 host (AU3, engine/vsthost, the pinned build): every installed bundle scanned, one process each (the time, the
+            failures), the scan kept; the SDK's sample effects — AGain at 0.5 is −6.02 dB sample for sample, ADelay at 0.25 s moves an
+            impulse by 12000 samples, the two in a chain in order, a bypassed one skipped; a sample with no editor says so
+    editor  one of the author's own effects (Kilohearts' free kHs Gain): its editor opened by the host in a window of its own, a screenshot,
+            the window closed as the author would (WM_CLOSE), its state written and read back; its default passes the sound unchanged
 
 CPU only (FilmCraft); no GPU job may run beside it all the same (D97: the rig's checks take turns). Results: engine/spikes/out/au/results.json.
 
@@ -44,7 +49,9 @@ from loom2.config import AppState  # noqa: E402
 OUT = ROOT / "engine" / "spikes" / "out" / "au"
 SR = 48000
 LEVEL = -60.0                                                       # each side's tone, dBFS (+48 dB of strip stays below full scale)
-PARTS = ("roles", "strip", "width")
+PARTS = ("roles", "strip", "width", "host", "editor")
+TOOLS = ROOT / "engine" / "tools" / "vsthost"
+GAIN_UID, KHS_GAIN = "C18D3C1E719E4E29924D3ECAA5E4DA18", Path("C:/Program Files/Common Files/VST3/Kilohearts/kHs Gain.vst3")
 
 
 def law(w: float) -> tuple[float, float]:
@@ -62,6 +69,106 @@ def band(x: np.ndarray, hz: float, t0: float = 0.4, t1: float = 1.6) -> float:
     spec = np.abs(np.fft.rfft(seg * w)) / (np.sum(w) / 2)
     f = np.fft.rfftfreq(len(seg), 1 / SR)
     return float(20 * np.log10(np.sqrt(np.sum(spec[(f > hz - 20) & (f < hz + 20)] ** 2)) + 1e-12))
+
+
+def host_checks(parts: tuple[str, ...], check, res: dict, src: Path) -> None:
+    """AU3: the real host through loom2's runner (loom2/vsthost.py)."""
+    import subprocess
+    from loom2.vsthost import VstHost, VstHostError
+    app = AppState(OUT / "host-state")
+    app.update_settings({"vsthost": {"folders": [str(TOOLS / "test-plugins")]}})
+    host = VstHost(app)
+    pin = subprocess.run([sys.executable, str(ROOT / "scripts" / "build_vsthost.py"), "--check"], capture_output=True, text=True)
+    check("the pinned host", pin.returncode == 0 and "matches its pin" in pin.stdout, pin.stdout.strip())
+    gain_b, delay_b = str(TOOLS / "test-plugins" / "again-sample-accurate.vst3"), str(TOOLS / "test-plugins" / "adelay.vst3")
+    if "host" in parts:
+        t0 = time.perf_counter()
+        found = host.plugins()
+        t1 = time.perf_counter()
+        host.plugins()
+        t2 = time.perf_counter()
+        names = {p["name"] for p in found["plugins"]}
+        res["scan"] = {"effects": len(found["plugins"]), "failed": len(found["failed"]), "seconds": round(t1 - t0, 1), "kept_s": round(t2 - t1, 2),
+                       "failures": found["failed"][:10]}
+        check("every installed bundle scanned, one process each", {"AGain Sample Accurate", "ADelay"} <= names and len(found["plugins"]) > 2,
+              f"{len(found['plugins'])} effects, {len(found['failed'])} failed, {t1 - t0:.1f} s (kept {t2 - t1:.2f} s)")
+        st_g, st_d = OUT / "fx" / "gain.vststate", OUT / "fx" / "delay.vststate"
+        host.state(gain_b, GAIN_UID, None, st_g, {1: 0.5})
+        host.state(delay_b, "", None, st_d, {100: 0.25})
+        out = OUT / "fx" / "gain.wav"
+        host.render([{"bundle": gain_b, "uid": GAIN_UID, "state": st_g}], src, out)
+        x, _ = sf.read(str(src), dtype="float32", always_2d=True)
+        y, _ = sf.read(str(out), dtype="float32", always_2d=True)
+        diff = float(np.max(np.abs(y - 0.5 * x)))
+        check("AGain at 0.5: −6.02 dB, sample for sample", diff < 1e-6, f"max |out − 0.5 in| {diff:.1e}")
+        imp = np.zeros((SR, 2), np.float32)
+        imp[100] = 1.0
+        sf.write(str(OUT / "fx" / "imp.wav"), imp, SR, subtype="FLOAT")
+        chain = [{"bundle": gain_b, "uid": GAIN_UID, "state": st_g}, {"bundle": delay_b, "uid": "", "state": st_d},
+                 {"bundle": gain_b, "uid": GAIN_UID, "state": st_g, "bypass": True}]
+        r = host.render(chain, OUT / "fx" / "imp.wav", OUT / "fx" / "chain.wav")
+        z, _ = sf.read(str(OUT / "fx" / "chain.wav"), dtype="float32", always_2d=True)
+        nz = np.nonzero(np.abs(z[:, 0]) > 1e-4)[0]
+        check("a chain in order: the gain, the delay (0.25 s), a bypassed one skipped",
+              list(nz) == [12100] and abs(float(z[12100, 0]) - 0.5) < 1e-6 and r["effects"][2] == {"bypassed": True},
+              f"impulse at {list(nz)[:3]} = {float(z[nz[0], 0]) if len(nz) else 0:.3f}; {r['effects']}")
+        try:
+            host.editor(gain_b, GAIN_UID, None, OUT / "fx" / "e.vststate", "AGain")
+            check("a sample with no editor says so", False, "an editor opened")
+        except VstHostError as e:
+            check("a sample with no editor says so", "no editor" in str(e), str(e))
+    if "editor" in parts:
+        if not KHS_GAIN.exists():
+            check("the author's effect's editor", False, f"{KHS_GAIN} is not installed")
+            return
+        import ctypes
+        import threading
+        from ctypes import wintypes
+        from PIL import ImageGrab
+        user32 = ctypes.windll.user32
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)              # the window's rectangle in the screen's own pixels, as the grab takes them
+        title = "kHs Gain — AU acceptance (loom2)"
+        shot: dict = {}
+
+        def close_it() -> None:
+            hwnd = 0
+            for _ in range(200):
+                hwnd = user32.FindWindowW("loom2-vsthost-editor", title)
+                if hwnd:
+                    break
+                time.sleep(0.1)
+            if not hwnd:
+                return
+            time.sleep(2.0)                                         # the editor paints
+            rect = wintypes.RECT()
+            user32.GetWindowRect(hwnd, ctypes.byref(rect))
+            shot["size"] = (rect.right - rect.left, rect.bottom - rect.top)
+            ImageGrab.grab(bbox=(rect.left, rect.top, rect.right, rect.bottom), all_screens=True).convert("RGB").save(
+                ROOT / ".docs" / "proto01_animate" / "img" / "30-au3-editor.jpg", quality=88)
+            user32.PostMessageW(hwnd, 0x0010, 0, 0)                  # WM_CLOSE: as the author closes it
+        th = threading.Thread(target=close_it)
+        th.start()
+        st = OUT / "fx" / "khs.vststate"
+        t0 = time.perf_counter()
+        try:
+            host.editor(str(KHS_GAIN), "", None, st, title)
+            ok, why = st.is_file() and st.stat().st_size > 12, f"state {st.stat().st_size if st.is_file() else 0} B"
+        except VstHostError as e:
+            ok, why = False, str(e)
+        th.join()
+        check("the author's effect: its editor opened and closed, its state written", ok and "size" in shot,
+              f"{why}; window {shot.get('size')}; {time.perf_counter() - t0:.1f} s")
+        if ok:
+            ps = host.params(str(KHS_GAIN), "", st)
+            out = OUT / "fx" / "khs.wav"
+            host.render([{"bundle": str(KHS_GAIN), "uid": "", "state": st}], src, out)
+            x, _ = sf.read(str(src), dtype="float32", always_2d=True)
+            y, _ = sf.read(str(out), dtype="float32", always_2d=True)
+            n = min(len(x), len(y))
+            lv = 20 * np.log10(np.sqrt(np.mean(y[SR // 2:n] ** 2)) / np.sqrt(np.mean(x[SR // 2:n] ** 2)))
+            res["khs_params"] = [(q["title"], q["shown"]) for q in ps["params"]][:8]
+            check("its state reads back and its default passes the sound", len(ps["params"]) > 0 and abs(lv) < 0.1,
+                  f"{len(ps['params'])} parameters ({', '.join(f'{a} {b}' for a, b in res['khs_params'][:3])}); level {lv:+.2f} dB")
 
 
 def main() -> int:
@@ -167,6 +274,8 @@ def main() -> int:
                 res[f"width{w}_left_db"] = [round(x, 2) for x in got]
                 check(f"width {w} %: the author's law", all(abs(a - b) < 0.1 for a, b in zip(got, want)),
                       f"440 Hz {got[0]:+.2f} / 660 Hz in {got[1]:+.2f} dB (want {want[0]:+.2f} / {want[1]:+.2f})")
+    if "host" in parts or "editor" in parts:
+        host_checks(parts, check, res, src)
     res["checks"] = [{"name": n, "ok": ok, "detail": d} for n, ok, d in checks]
     (OUT / "results.json").write_text(json.dumps(res, indent=1), encoding="utf-8")
     n_ok = sum(ok for _, ok, _ in checks)

@@ -8826,3 +8826,21 @@ patched (the Mid attenuated). A track with plugins is printed onto a hidden comp
   +1.37 / −9.65); the AU1 checks unchanged (a strip change 36 ms median).
 - Tests: offline 555 passed, Vitest 459 + 3 skipped, typecheck, lint (0 errors, 79 warnings) and build clean, e2e full 63/63 and open 63/63
   (the tracks scenario's Inspector steps re-run after the queue fix: full and open pass). Screenshots img/30-au2-*.jpg. Next AU3 (the host).
+
+## 2026-10-24 14:41 — AU3 built (D127): loom2's own VST3 host — a C++ sidecar on the MIT VST 3 SDK
+
+- **SDK** v3.8.1_build_84 (3cdf9ca5, 2026-08-11, LICENSE.txt MIT) fetched shallow into engine/tools/vst3sdk (base, cmake, pluginterfaces,
+  public.sdk; no VSTGUI) by scripts/build_vsthost.py; CMake 4.2 + VS 2022, x64 Release, static runtime; pin engine/vsthost.pin.json (tag,
+  commit, binary hash, the host source's hash; CI --check). Build fixes on the way: the runtime library to match the SDK's (/MT), one
+  cmake --build per target (MSBuild read the native flags as a project), the gain sample's target is again-sample-accurate.
+- **Host** engine/vsthost (≈ 700 lines; loom2-vsthost.exe 693 KB): paths / scan / params / state / render / editor, one JSON line each;
+  offline stereo float rendering, latency taken off; the plug-in's own editor in a Win32 window, its performEdit changes given to the
+  processor in a silent block before the state (L2VS: component + controller) is written. Not DPI-aware yet.
+- **loom2** loom2/vsthost.py (one process per request in the job object; a crash said with its exit code, "loom2 is fine"), the scan per
+  bundle kept in vst-scan.json by path and mtime, instruments left out; Settings › Audio › VST3 folders; GET /audio/plugins.
+- **Rig** au_acceptance.py 19/19: 314 bundles (the author's 312 and the two samples) scanned in 62 s (99 s on the very first scan), 304 effects,
+  0 failed, kept 0.45 s; AGain × 0.5 exact; ADelay 0.25 s → 12000 samples; a chain in order with a bypass skipped; kHs Gain's own editor
+  opened and closed (WM_CLOSE) in 2.2 s, its state 554 B read back, default +0.00 dB.
+- Tests: offline 558 passed (test_vsthost_au3.py 3 on tests/fake_vsthost.py; the OpenAPI export now pins LOOM2_VSTHOST_CLI too — the
+  contract test caught the env default), settings audit clean, agents_check clean (engine/vsthost/AGENTS.md), Vitest 459 + 3 skipped,
+  typecheck, lint (0 errors, 79 warnings) and build clean, e2e full 63/63 and open 63/63 (the fake host with two fake effects). Next AU4.

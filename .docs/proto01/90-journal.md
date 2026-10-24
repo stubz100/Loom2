@@ -8591,3 +8591,35 @@ WB1–WB3, *Mark final* at any size, the For context ended by *← Back* and hon
   job; a clay final shot's nodes and edges, the stage moved on, a render behind its composition and a stale processing layer, RC0's clay
   rows; the final a version reads; the route), `test_shot_recipe_rc0.py` updated for the cleared waves. Offline 539 passed; settings audit
   clean.
+
+## 2026-10-24 05:59 — RC1b–RC1d built (proto01_animate 28): the recipe graph in Animate, Story and the Catalogue; per-part staleness
+
+- **RC1b · the view and Animate's Graph:** `RecipeGraph` (@xyflow/react) draws the server's graph in columns by the longest path from a
+  source (W6: the characters on the left, the take on the right), one card per node with its picture, state badge (done · stale · owed ·
+  running · –) and first reason; a stale chain's edges are amber; ↻ reads it again; a story.changed for the shot or a job starting or
+  ending refetches it. **Graph** is a pill beside *Clay · Performance · Final* (`anim.level.graph`, key 4): the For chip's shot's graph over
+  the viewer of whichever mode is on, the mode's column kept; *Run stale steps…* and *Close the graph* on its strip. A node opens where it
+  is made (`graph.targetOf`, `openTarget`): Story › Cast (a character, an animation reference), the Flow (the lines), Clay's Scene, Motion
+  (the figure selected) and Camera — the shot's stage opened first —, Performance's Final shot card (the plate, a layer), Final's Layers
+  (the composition, the finish) and Output (the take), Image (the frame).
+- **RC1c · Story and the Catalogue:** *Open its recipe* on a Dialogue or Shot node (Inspector, right-click) shows the graph in place of
+  the Flow's canvas, with *The Flow* and *Open the graph in Animate*; the shot page under the board has a **Recipe** section; *Open the
+  graph in Animate* (the shot's menu, the Inspector) sets the For chip and turns the Graph on; *Show its recipe* (C4) on a Catalogue
+  image or clip that is a take of a shot opens Story › Shots on it.
+- **RC1d · on the A1 rig's records** (no GPU; screenshots `proto01_animate/img/28-rc1-*.jpg` with its real pictures): the graph as W6
+  and C4 draw it. A copy of the project with Ines moved 30 cm: the plate, both layers, the composition and the take stale. That showed the
+  stage's revision was too coarse for W6's rule (an edit stales only what depends on it), so:
+  - **a final stamps what it read of its stage, part by part** (`Final.stamps`, `stage_stamps`: the camera with its keys, the set — sets,
+    lights, ambient —, each figure or prop with its keys; names, locks and mask colours excluded): a figure moved or re-keyed stales its
+    layer only (then the composition and the take), the camera every layer and the plate, the set the plate; a final made before falls
+    back to the stage's revision;
+  - **a final made for a version puts it on the clay route** (its template set when it had none); for an older version the route, RC0's
+    list and the board read clay where a final was made for its shot (A1's shot showed "stage clip" with a start still owed);
+  - **a final's clip stamps the stage revision it read** on the version (the shot's *stale* chip agrees with the graph from now on).
+- OpenAPI and schema.d.ts regenerated.
+- **Tests:** `graph.test.ts` (2: the columns, each node's place); `test_shot_graph_rc1.py` +1 (a layer stale only with its own parts);
+  `test_finals_d111` (a final carries its stamps), `test_final_takes_d125` (the clay template set; the clip stamps the revision); two e2e
+  scenarios — Animate's Graph (the For chip's shot's character, camera, motion, clip and take; the motion opens Clay › Motion with the
+  figure selected; the graph stays until its pill) and Story and the Catalogue (the Flow in place and back, the shot page's Recipe, a
+  clip's *Show its recipe*, *Open the graph in Animate*). Offline 540 passed; Vitest 451 + 3 skipped; typecheck and build clean; lint 0
+  errors (79 warnings); e2e full 61/61 and open 61/61.

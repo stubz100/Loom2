@@ -994,12 +994,27 @@ async def shot_recipe(svc: Svc, sid: str, version: str | None = None):
     except KeyError as e:
         raise HTTPException(404, str(e.args[0]))
     reader = StampReader(stages=StageStore(ws), groups=svc.groups, story=store)
+    v = await asyncio.to_thread(_clay_if_final, ws, s, v)
     out = await asyncio.to_thread(recipe_state, v, reader)
     if out["template"].startswith("clay"):                                       # RC1: a clay version's steps live in its final, stage and Cast
         g = await asyncio.to_thread(_graph, svc, ws, store, s, v, out)
         out = {**out, "steps": clay_rows(out["steps"], g)}
         out["stale"] = sum(1 for r in out["steps"] if r["state"] == "stale")
     return {"shot_id": s.id, "version": v.id, **out}
+
+
+def _clay_if_final(ws, s, v):
+    """RC1: a version with no template whose shot has a final shot made for it reads as the clay route (a final made before the final
+    shot set the template itself)."""
+    if v.recipe and v.recipe.template:
+        return v
+    from ..finals import FinalStore
+    from ..shot_recipe import ShotRecipe
+    f = final_for(s.id, v, FinalStore(ws).list())
+    if f is None or f.shot_id != s.id:
+        return v
+    clay = "clay2" if sum(1 for x in f.layers if x.kind == "figure") > 1 else "clay1"
+    return v.model_copy(update={"recipe": (v.recipe or ShotRecipe()).model_copy(update={"template": clay})})
 
 
 def _graph(svc, ws, store: StoryStore, s, v, rc0: dict) -> ShotGraph:
@@ -1039,6 +1054,7 @@ async def shot_recipe_graph(svc: Svc, sid: str, version: str | None = None):
     except KeyError as e:
         raise HTTPException(404, str(e.args[0]))
     reader = StampReader(stages=StageStore(ws), groups=svc.groups, story=store)
+    v = await asyncio.to_thread(_clay_if_final, ws, s, v)
     rc0 = await asyncio.to_thread(recipe_state, v, reader)
     g = await asyncio.to_thread(_graph, svc, ws, store, s, v, rc0)
     return g.model_dump(by_alias=True)

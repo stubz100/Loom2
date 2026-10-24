@@ -1,13 +1,17 @@
-import { useEffect, useRef } from 'react'
+import { lazy, Suspense, useEffect, useRef } from 'react'
 import { useSession } from '../store/session'
 import { StageActive, useStageKeep } from './stageKeep'
 import { SUITE_DEFS, useSuite } from './suiteRegistry'
+
+const AnimateGraph = lazy(() => import('../suites/story/recipe/AnimateGraph'))   // RC1: Animate's Graph over the mode's viewer
+const ANIMATE_MODES = ['stage', 'animate', 'final']
 
 /** The active suite's Stage, plus every visited keep-alive Stage kept mounted but hidden (D69). */
 export function Stage() {
   const suite = useSuite()
   const mounted = useStageKeep((s) => s.mounted)
   const keepMin = useSession((s) => s.ui.editKeepAliveMin ?? 10)
+  const graph = useSession((s) => !!s.ui.graph) && ANIMATE_MODES.includes(suite.id)
   const prev = useRef(suite.id)
   useEffect(() => {
     const k = useStageKeep.getState()
@@ -34,6 +38,7 @@ export function Stage() {
           </div>
         )
       })}
+      {graph && <Suspense fallback={null}><AnimateGraph /></Suspense>}
     </section>
   )
 }

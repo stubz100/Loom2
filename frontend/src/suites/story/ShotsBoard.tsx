@@ -7,7 +7,7 @@ import { runCommand } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import { Help } from '../../frame/Help'
 import { useSession } from '../../store/session'
-import { STEPS, cellsOf, flowOrder, routeOf, ROUTE_LABEL, type Cell, type Step } from './board'
+import { STEPS, cellsOf, flowOrder, madeFinal, routeOf, ROUTE_LABEL, type Cell, type Step } from './board'
 import { runStep, shotMenu, STEP_VERB } from './storyCommands'
 import { linesToVoice } from './episodeVerbs'
 import { CommandButton } from '../../frame/CommandButton'
@@ -71,7 +71,7 @@ export function ShotsBoard() {
                   onContextMenu={(e) => { sy().selectShot(r.shot.id); showMenu(e, shotMenu()) }}>
                   <td className="name">
                     {thumb ? <img src={api.thumbUrl(thumb, 256)} alt="" /> : <span className="ph" />}
-                    <span><b>{r.shot.name}</b><span className="route" title="its route — the recipe template (the Inspector changes it)">{ROUTE_LABEL[routeOf(r.v)] ?? routeOf(r.v)}</span></span>
+                    <span><b>{r.shot.name}</b><span className="route" title="its route — the recipe template (the Inspector changes it)">{ROUTE_LABEL[routeOf(r.v, madeFinal(r.shot.id, finals))] ?? routeOf(r.v, madeFinal(r.shot.id, finals))}</span></span>
                   </td>
                   {STEPS.map((s) => {
                     const c = r.cells[s.id]

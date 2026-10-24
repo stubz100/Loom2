@@ -1,6 +1,6 @@
 // Animate commands (11 §9, 07 §3c, D32): one definition each for the transport buttons, the strip, the inspector verbs,
 // the right-click menus and the keys. Keys are accelerators for buttons that exist anyway.
-import { ArrowLeftRight, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, Columns2, Download, Eye, Film, Layers, Pause, Play, Repeat, RotateCcw, Scissors, Shuffle, SkipBack, SkipForward, Sparkles, SquareX, StepBack, StepForward, Trash, X } from 'lucide-react'
+import { Workflow, ArrowLeftRight, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, Columns2, Download, Eye, Film, Layers, Pause, Play, Repeat, RotateCcw, Scissors, Shuffle, SkipBack, SkipForward, Sparkles, SquareX, StepBack, StepForward, Trash, X } from 'lucide-react'
 import { command, isEnabled, registerCommands, runCommand, sep, setReach, type Command, type MenuItem } from '../../frame/commands'
 import { http, unwrap, type ApiError } from '../../api/client'
 import { askText, useSession } from '../../store/session'
@@ -52,6 +52,8 @@ registerCommands([
   // AE1 / AP1 (D114): the Final level — the composition's frames; its own transport (the clip player's keys stay the clip's)
   { id: 'anim.level.performance', scope: 'animate', label: 'Animate · Performance', keys: '2', placement: ['strip'], run: () => useSession.getState().setSuite('animate') },
   { id: 'anim.level.final', scope: 'animate', label: 'Animate · Final', keys: '3', placement: ['strip'], run: () => useSession.getState().setSuite('final') },
+  // RC1 (D96, proto01_animate 28): the Graph — the For chip's shot's recipe over the viewer, in whichever mode is on
+  { id: 'anim.level.graph', scope: 'animate', label: "Animate · Graph (the shot's recipe)", icon: Workflow, keys: '4', placement: ['strip'], run: () => { const s = useSession.getState(); s.setUi({ graph: !s.ui.graph }) } },
   // D121 (AW3): the Shot stepper's steps — each opens the level and card where the step's verb is (the foot); the frame's is stage.frame.make
   { id: 'anim.step.passes', scope: 'animate', label: 'The passes (Animate · Clay)', icon: Layers, placement: ['panel'], run: () => useSession.getState().setSuite('stage') },
   { id: 'anim.step.clip', scope: 'animate', label: "The stage's clip (Performance · Stage clip)", icon: Clapperboard, placement: ['panel'], run: () => { useAnimRoute.getState().set('clip'); useSession.getState().setSuite('animate') } },

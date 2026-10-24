@@ -3112,3 +3112,93 @@ test('the episode verbs (D125 SP7): Make the Flow from the spine makes a Shot no
   await verb.click()
   await expect.poll(async () => (await api<FlowLite>('GET', '/story/flow')).nodes.find((n) => n.id === say.id)?.lines[0].audio_asset_id, { timeout: 60_000 }).toBeTruthy()
 })
+
+test('the recipe graph in Animate (RC1b): Graph shows the For chip\'s shot as its parts — the character bound on the stage, the camera, the figure\'s motion, the clip, the take — and a node opens where it is made (the motion: Clay › Motion on the figure)', async ({ page }) => {
+  test.setTimeout(120_000)
+  const tag = Date.now().toString(36)
+  type NodeLite = { id: string; shot_id: string }
+  type StageLite = { id: string; cameras: { id: string }[] }
+  type JobLite = { id: string; status: string }
+  const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
+  const mara = await api<{ id: string }>('POST', '/story/profiles', { name: `Gm ${tag}`, cls: 'character', hero_asset_id: img, appearance: 'a courier' })
+  const st = await api<StageLite>('POST', '/stages', { name: `Graph ${tag}` })
+  const fig = `fig_${tag}`
+  await api('PUT', `/stages/${st.id}`, { ...st, objects: [{ id: fig, kind: 'mannequin', preset: 'adult', name: 'Walker', profile_id: mara.id }],
+    keyframes: { camera: {}, objects: { [fig]: [{ frame: 0, transform: { pos: [0, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] } }, { frame: 24, transform: { pos: [1, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] } }] } } })
+  const n = await api<NodeLite>('POST', '/story/flow/nodes', { type: 'shot', title: `Graph ${tag}` })
+  await api('PUT', `/story/shots/${n.shot_id}/versions/v1/source`, { stage_id: st.id, camera_id: st.cameras[0].id })
+  const caps = await api<{ defaults: { i2v: string } }>('GET', '/capabilities')
+  const job = (await api<{ jobs: { id: string }[] }>('POST', '/jobs', { recipe: { kind: 'i2v', model_id: caps.defaults.i2v, start_asset: img, width: 832, height: 480, frames: 9, fps: 16, prompt_text: 'graph' },
+    stage: false, origin: { suite: 'story', surface: 'for_shot', payload: { shot_id: n.shot_id, version: 'v1' } } })).jobs[0]
+  await expect.poll(async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.id === job.id)?.status, { timeout: 60_000 }).toBe('done')
+  // the graph record
+  type G = { route: string; nodes: { id: string; state: string }[]; edges: { from: string; to: string }[] }
+  const g = await api<G>('GET', `/story/shots/${n.shot_id}/graph`)
+  const state = Object.fromEntries(g.nodes.map((x) => [x.id, x.state]))
+  expect(state[`character:${mara.id}`]).toBe('done')
+  expect(state[`motion:${fig}`]).toBe('done')
+  expect([state['step:clip'], state.take, state.camera]).toEqual(['done', 'done', 'done'])
+  expect(g.edges).toContainEqual({ from: 'step:clip', to: 'take' })
+  // Story › Shots → the Clip cell opens Animate for the shot (the For chip) → Graph
+  await openApp(page, { suite: 'story', tab: 'shots' })
+  await page.locator(`.shots-board tr.row[data-id="${n.shot_id}"] button[data-step="clip"]`).click()
+  await expect(page.locator('.animate-levels button.active')).toHaveText('Performance')
+  await page.locator('button.graph-pill').click()
+  const graph = page.locator('[data-testid="animate-graph"]')
+  await expect(graph).toBeVisible()
+  await expect(graph.locator('.recipe-strip')).toContainText(`Graph ${tag}`)
+  for (const id of [`character:${mara.id}`, 'camera', `motion:${fig}`, 'step:clip', 'take']) await expect(graph.locator(`.recipe-node[data-id="${id}"]`)).toBeVisible()
+  await expect(graph.locator(`.recipe-node[data-id="motion:${fig}"] .badge`)).toHaveText('done')
+  // the motion opens Clay's Motion on its figure; the graph stays over the viewer until its pill turns it off
+  await graph.locator(`.recipe-node[data-id="motion:${fig}"]`).click()
+  await expect(page.locator('.animate-levels button.active')).toHaveText('Clay')
+  await expect(page.locator('nav.rail button.active[title^="Motion"]')).toBeVisible()
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __loom2Stage: { state: () => { selected: string | null } } }).__loom2Stage.state().selected)).toBe(fig)
+  await expect(graph).toBeVisible()
+  await page.locator('button.graph-pill').click()
+  await expect(graph).toHaveCount(0)
+})
+
+test('the recipe graph in Story and the Catalogue (RC1c): Open its recipe shows the node\'s shot in place of the Flow\'s canvas, the shot page has a Recipe section, a take\'s Show its recipe opens its shot, and Open the graph in Animate turns Animate\'s Graph on', async ({ page }) => {
+  test.setTimeout(120_000)
+  const tag = Date.now().toString(36)
+  type NodeLite = { id: string; shot_id: string }
+  type JobLite = { id: string; status: string; result: { clip_id?: string } }
+  const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
+  const n = await api<NodeLite>('POST', '/story/flow/nodes', { type: 'shot', title: `Rec ${tag}`, x: 4000, y: 4000 })
+  const caps = await api<{ defaults: { i2v: string } }>('GET', '/capabilities')
+  const job = (await api<{ jobs: { id: string }[] }>('POST', '/jobs', { recipe: { kind: 'i2v', model_id: caps.defaults.i2v, start_asset: img, width: 832, height: 480, frames: 9, fps: 16, prompt_text: 'recipe' },
+    stage: false, origin: { suite: 'story', surface: 'for_shot', payload: { shot_id: n.shot_id, version: 'v1' } } })).jobs[0]
+  await expect.poll(async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.id === job.id)?.status, { timeout: 60_000 }).toBe('done')
+  const clipId = (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.id === job.id)!.result.clip_id!
+  const clipAsset = (await api<{ asset_id: string }>('GET', `/clips/${clipId}`)).asset_id
+  // the Flow: the node's Open its recipe, in place of the canvas; The Flow brings the canvas back
+  await openApp(page, { suite: 'story', tab: 'flow' })
+  await page.locator(`.story-row.node-row[data-id="${n.id}"]`).click()
+  await page.locator('.inspector button[title^="Open its recipe"]').click()
+  const pane = page.locator('[data-testid="flow-recipe"]')
+  await expect(pane).toBeVisible()
+  await expect(page.locator('[data-testid="flow-canvas"]')).toHaveCount(0)
+  for (const id of ['step:frame', 'step:clip', 'take']) await expect(pane.locator(`.recipe-node[data-id="${id}"]`)).toBeVisible()
+  await expect(pane.locator('.recipe-node[data-id="step:clip"] .badge')).toHaveText('done')
+  await expect(pane.locator('.recipe-node[data-id="step:frame"] .badge')).toHaveText('owed')
+  await pane.locator('.recipe-strip button[title^="The Flow"]').click()
+  await expect(page.locator('[data-testid="flow-canvas"]')).toBeVisible()
+  // the shot page: its Recipe section
+  await page.locator('nav.rail button[title^="Shots"]').click()
+  await page.locator(`.shots-board tr.row[data-id="${n.shot_id}"] td.name`).click()
+  await expect(page.locator('.shot-recipe .recipe-node[data-id="take"]')).toBeVisible()
+  // the Catalogue: the clip's Show its recipe opens its shot
+  await openCatalogue(page)
+  const tile = page.locator(`.cat-grid .tile[data-id="${clipAsset}"]`)
+  await expect(tile).toBeVisible({ timeout: 15_000 })
+  await contextChoose(page, tile, 'Show its recipe')
+  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Story/)
+  await expect(page.locator(`.shots-board tr.row.sel[data-id="${n.shot_id}"]`)).toBeVisible()
+  // Open the graph in Animate: the For chip on the shot and the Graph on
+  await page.locator(`.shots-board tr.row[data-id="${n.shot_id}"] td.name`).click({ button: 'right' })
+  await page.locator('.ctx-menu button.item', { hasText: 'Open the graph in Animate' }).click()
+  await expect(page.locator('[data-testid="animate-graph"]')).toBeVisible()
+  await expect(page.locator('[data-testid="animate-graph"] .recipe-strip')).toContainText(`Rec ${tag}`)
+  await page.locator('button.graph-pill').click()
+})

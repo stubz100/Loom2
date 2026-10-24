@@ -82,6 +82,8 @@ a { color: var(--accent); }
 .col-sec-head { position: sticky; top: -12px; z-index: 2; display: flex; align-items: center; gap: 6px; margin: 0 0 8px; padding: 6px 0 4px; background: var(--bg1);
   font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--fg2); }
 .animate-levels { margin-right: 8px; }                                                      /* D95 (AN1): Clay | Performance */
+.graph-pill { margin-right: 8px; padding: 2px 10px; min-height: 24px; font-size: 12px; border-radius: 12px; border: 1px solid var(--line2); background: transparent; color: var(--fg2); }   /* RC1: Animate's Graph */
+.graph-pill.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--fg); }
 /* RC0 (D96): a shot version's recipe — the steps in order, their state */
 .recipe { margin: 6px 0 8px; padding: 4px 6px; border: 1px solid var(--line2); border-radius: var(--radius); background: var(--bg2); }
 .recipe-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }

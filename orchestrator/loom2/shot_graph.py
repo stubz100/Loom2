@@ -48,6 +48,30 @@ class ShotGraph(BaseModel):
     owed: int = 0
 
 
+def _fp(v: Any) -> str:
+    import hashlib
+    import json
+    return hashlib.sha1(json.dumps(v, sort_keys=True, default=str).encode("utf-8")).hexdigest()[:16]
+
+
+_QUIET = {"name", "locked", "colour_id"}                                      # an object's fields that change nothing it renders
+
+
+def stage_stamps(stage: Any, camera_id: str) -> dict[str, str]:
+    """What a final read of its stage, part by part, when it was made (UX0 W6: an edit marks what depends on it): `camera` (the camera and
+    its keys), `set` (the sets, lights and the ambient — the plate's world) and `object:<id>` for each figure and prop (its transform,
+    pose, path, binding and keys). A layer goes stale when its own object or the camera changes, the plate when the set or the camera does."""
+    keys = stage.keyframes or {}
+    cam = next((c for c in stage.cameras if c.id == camera_id), None)
+    out = {"camera": _fp([cam.model_dump(exclude={"name"}) if cam else None, (keys.get("camera") or {}).get(camera_id)])}
+    world = [o.model_dump(exclude=_QUIET) for o in stage.objects if o.kind in ("set", "light")]
+    out["set"] = _fp([world, getattr(stage, "ambient", None)])
+    for o in stage.objects:
+        if o.kind in ("mannequin", "prop", "mesh", "plane"):
+            out[f"object:{o.id}"] = _fp([o.model_dump(exclude=_QUIET), (keys.get("objects") or {}).get(o.id)])
+    return out
+
+
 def final_for(shot_id: str, version: Any, finals: Iterable[Any]) -> Any | None:
     """The final shot a version's graph reads: the newest made for this shot version (a final made before A1 names no version: it counts for
     every version of its shot), else the newest on the version's stage camera that names no other shot."""
@@ -158,8 +182,23 @@ def shot_graph(shot: Any, version: Any, *, rc0: dict[str, Any], node: Any | None
     # ---- the final shot: the plate, a layer per figure or Cast prop, the composition, the finish ----
     head = "step:lipsync" if "step:lipsync" in nodes and rows.get("lipsync", {}).get("state") == "fresh" else "step:clip"
     if final is not None:
-        moved = stage is not None and stage.id == final.stage_id and stage.revision > final.stage_revision
+        here = stage is not None and stage.id == final.stage_id
+        stamped = bool(getattr(final, "stamps", None)) and here
+        now = stage_stamps(stage, final.camera_id) if stamped else {}
+        moved = here and not stamped and stage.revision > final.stage_revision      # a final made before RC1's stamps: the stage's revision
         why_moved = [f"the stage moved on (revision {final.stage_revision} → {stage.revision})"] if moved else []
+
+        def why_stale(lay: Any) -> list[str]:
+            """What changed since the final that this layer read (per part when the final has stamps, else the whole stage)."""
+            if not stamped:
+                return why_moved
+            out = ["the camera moved"] if now.get("camera") != final.stamps.get("camera") else []
+            if lay.kind == "plate":
+                return out + (["the set changed"] if now.get("set") != final.stamps.get("set") else [])
+            key = f"object:{lay.object_id}"
+            if lay.object_id and key in final.stamps and now.get(key) != final.stamps[key]:
+                out.append(f"{lay.name} is gone from the stage" if key not in now else f"{lay.name} moved or was re-keyed")
+            return out
         busy = {j.id for j in active}
         for lay in final.layers:
             if lay.kind not in ("plate", "figure") and not (lay.kind == "prop" and lay.profile_id):
@@ -168,7 +207,8 @@ def shot_graph(shot: Any, version: Any, *, rc0: dict[str, Any], node: Any | None
             if running:
                 st, why = "running", []
             elif lay.status == "done":
-                st, why = ("stale", why_moved) if moved else ("done", [])
+                why = why_stale(lay)
+                st = "stale" if why else "done"
             elif lay.status == "failed":
                 st, why = "owed", [lay.error or "its job failed"]
             else:

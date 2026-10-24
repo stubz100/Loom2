@@ -12,7 +12,9 @@ export type CellState = 'done' | 'owed' | 'running' | 'stale' | 'na'
 export interface Cell { state: CellState; text?: string }
 
 /** The shot's route — its recipe template (RC0), else the default RC0 picks: a stage camera's shot is `stage`, any other `i2v`. */
-export const routeOf = (v: Pick<ShotVersion, 'recipe' | 'stage_id'>): string => v.recipe?.template ?? (v.stage_id ? 'stage' : 'i2v')
+export const routeOf = (v: Pick<ShotVersion, 'recipe' | 'stage_id'>, madeFinal = false): string => v.recipe?.template ?? (madeFinal ? 'clay1' : v.stage_id ? 'stage' : 'i2v')
+/** RC1: a final shot made for the shot puts a version without a template on the clay route (a final made before RC1 did not set it). */
+export const madeFinal = (shotId: string, finals: Pick<Final, 'shot_id'>[]): boolean => finals.some((f) => f.shot_id === shotId)
 export const ROUTE_LABEL: Record<string, string> = { i2v: 'image to video', stage: 'stage clip', clay1: 'clay final shot', clay2: 'clay final shot', dialogue: 'dialogue + lip-sync' }
 /** The steps a route owes (04 §2.4); every route also owes Approved and In cut, a Dialogue node's shot its Lines and Voice. */
 const OWED: Record<string, Step[]> = { i2v: ['frame', 'clip'], stage: ['stage', 'frame', 'clip'], clay1: ['stage', 'final'], clay2: ['stage', 'final'], dialogue: ['voice', 'frame', 'clip', 'lipsync'] }
@@ -66,7 +68,7 @@ export interface CellInput {
 
 /** Every step's cell for a shot's version (04 §2.4). */
 export function cellsOf(s: Shot, v: ShotVersion, node: FlowNode | null, x: CellInput): Record<Step, Cell> {
-  const route = routeOf(v)
+  const route = routeOf(v, madeFinal(s.id, x.finals))
   const busy = x.busy(s.id)
   const owed = (step: Step): Cell => (busy.has(step) ? { state: 'running' } : owes(route, node, step) ? { state: 'owed' } : { state: 'na' })
   const cells = {} as Record<Step, Cell>

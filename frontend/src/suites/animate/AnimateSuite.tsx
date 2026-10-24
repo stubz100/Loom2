@@ -4,7 +4,7 @@
 // D121 (proto01_animate 26 §5.3): this suite is Animate's Performance level, a mode of its own — its column (Shot · Performance · Clips ·
 // Selection), the player, and the foot that follows the Performance card (Image to video · Stage clip · Final shot). Clay is the stage
 // suite (StageParts.ClayColumn), Final the final suite (FinalSuite.tsx).
-import { AnimateLevels } from '../../frame/AnimateLevels'
+import { AnimateLevels, GraphPill } from '../../frame/AnimateLevels'
 import { Help } from '../../frame/Help'
 import { useStageActive } from '../../frame/stageKeep'
 import { X } from 'lucide-react'
@@ -364,7 +364,7 @@ function Strip() {
   const clip = useAnimate((s) => s.clips.find((c) => c.id === s.current))
   return (
     <>
-      <AnimateLevels />{/* D95 (AN1): Animate's viewer levels */}
+      <AnimateLevels /><GraphPill />{/* D95 (AN1): Animate's viewer levels */}
       <CommandRow ids={['anim.view.player', 'anim.view.compare']} active={`anim.view.${view}`} />
       <CommandButton id="anim.view.filmstrip" active={filmTrack} />
       <span className="spacer" />

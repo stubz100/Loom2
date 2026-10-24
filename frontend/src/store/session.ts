@@ -23,6 +23,7 @@ interface UiState {
   dockTab?: 'queue' | 'bin'                                                     // D95 (AN1, 04 C1): the Dock shows the render queue or the Bin
   animateLast?: 'animate' | 'stage' | 'final'                                  // D95 (AN1) → D121: the Animate tab returns to the level last open (Performance, Clay or Final)
   pick?: BinPick | null                                                        // a pick started from a panel (the author, 2026-10-22): the Bin's tiles show its button top right
+  graph?: boolean                                                              // RC1 (D96): Animate's Graph — the shot's recipe over the mode's viewer
 }
 
 /** A pick started from a panel's button ("Add image plane…", "Set from an image…"): the Bin verb it stands for, the command whose icon the

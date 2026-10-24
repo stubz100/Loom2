@@ -5310,6 +5310,10 @@ export interface components {
             stage_id: string;
             /** Stage Revision */
             stage_revision: number;
+            /** Stamps */
+            stamps: {
+                [key: string]: string;
+            };
             /** Updated At */
             updated_at: string;
         };

@@ -4741,6 +4741,13 @@
             "title": "Stage Revision",
             "type": "integer"
           },
+          "stamps": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Stamps",
+            "type": "object"
+          },
           "updated_at": {
             "title": "Updated At",
             "type": "string"
@@ -4759,6 +4766,7 @@
           "frames",
           "shot_id",
           "shot_version",
+          "stamps",
           "layers",
           "processing",
           "clip_id",

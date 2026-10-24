@@ -31,6 +31,7 @@ import { versionName } from '../generate/sheet'
 import { CastSheet } from './CastSheet'
 import { askExpand, castCells, castNext, ITEM_NEXT, itemCommand, makeClipItems, makeFrameItems, NEXT_LABEL, profileMenu, rowMenu, runOnItem, selectedNext, storyItem } from './storyCommands'
 import { BoardPanel, LinkStageSheet, ShotsBoard, VoiceAllButton } from './ShotsBoard'
+import { FlowRecipe, ShotRecipe } from './recipe/StoryRecipe'
 import { flatGroups, useAlbum } from '../catalogue/albumStore'
 import { findNode } from './styleSamples'
 import { storyKey } from './storyKeys'
@@ -694,6 +695,7 @@ function ShotBoard() {
         <div className="counts">{why ? <span className="hint">{why}</span> : v.state === 'final' ? <span>final · the clip the Flow and the Episode bind</span> : <span>ready to mark final</span>}</div>
         <div className="make-row"><MakeMenus /><Help text={v.state === 'open' ? 'Generate or Animate open for this version; what they make comes back here as takes.' : 'Final: make a new version for more takes.'} /></div>
       </section>
+      <ShotRecipe shotId={s.id} version={v.id} />{/* RC1 (proto01_animate 28) */}
       <section>
         <h3>Takes <Help text={"Everything tried for this version · ✓ use makes one the frame or the clip."} /></h3>
         {!v.takes.length && <div className="empty">No takes yet.</div>}
@@ -742,11 +744,12 @@ export function Stage() {
   const project = useSession((s) => s.project)
   const { active: tab } = useSuiteRail()
   const play = useStory((s) => s.play)
+  const flowRecipe = useStory((s) => s.flowRecipe)                                  // RC1: the node's recipe in place of the canvas
   markUsed('story.world.addStyle'); markUsed('story.world.addBeat'); markUsed('story.world.addVariable'); markUsed('story.world.remove'); markUsed('story.cast.new'); markUsed('story.cast.newPlace'); markUsed('story.cast.newProp')
   if (!project?.open) return <div className="story-empty"><div>Open or create a project to begin.</div></div>
   if (tab === 'cast') return <CastPage />
   if (tab === 'shots') return <div className="shots-stage"><ShotsBoard /><ShotBoard /><LinkStageSheet /></div>   // D125 (SP3): the board, the selected shot's page under it
-  if (tab === 'flow') return play ? <PlayView /> : <><FlowCanvas /><LinkStageSheet /></>
+  if (tab === 'flow') return play ? <PlayView /> : <>{flowRecipe ? <FlowRecipe /> : <FlowCanvas />}<LinkStageSheet /></>
   if (tab === 'episode') return <SequenceStage />
   return <WorldEditor />
 }
@@ -843,7 +846,7 @@ function ShotFields({ s, n }: { s: Shot; n?: FlowNode }) {
       {v && <ShotVersionFields v={v} clip={clip} stage={stage} />}
       {v && <RecipeSteps shotId={s.id} version={v.id} editable={v.state === 'open'} run="story.shot.runStale" />}{/* RC0 (D96) */}
       {v && v.state === 'open' && <LipsyncBlock v={v} ownerNode={s.owner_node ?? null} />}
-      <div className="verbs">{n ? <CommandButton id="story.flow.openShot" text /> : null}<CommandButton id="story.shot.release" text /><CommandButton id="story.shot.delete" text /></div>
+      <div className="verbs">{n ? <CommandButton id="story.flow.openShot" text /> : null}{n ? <CommandButton id="story.flow.recipe" text /> : null}<CommandButton id="story.shot.graphInAnimate" text /><CommandButton id="story.shot.release" text /><CommandButton id="story.shot.delete" text /></div>
     </>
   )
 }

@@ -4,7 +4,7 @@
 // rendered and from which revision. Keys: Final's reach (animateCommands.ts) — its own commands, the mode keys, the Shot head's and the one
 // transport (the composition's here); Performance's player keys stay off.
 import { useEffect } from 'react'
-import { AnimateLevels } from '../../frame/AnimateLevels'
+import { AnimateLevels, GraphPill } from '../../frame/AnimateLevels'
 import { handleKeysAt, markUsed, runCommand } from '../../frame/commands'
 import { inField } from '../../frame/fieldKeys'
 import { Help } from '../../frame/Help'
@@ -106,7 +106,7 @@ function FinalStrip() {
   const final = useComposition((s) => s.final)
   return (
     <>
-      <AnimateLevels />
+      <AnimateLevels /><GraphPill />
       <span className="spacer" />
       {final && <span className="hint" data-final-name>{final.name} · {final.size.w}×{final.size.h} @ {final.rate} fps</span>}
     </>

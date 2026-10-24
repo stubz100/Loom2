@@ -97,6 +97,7 @@ class Final(BaseModel):
     frames: int                                    # frames per sequence at the rate
     shot_id: str | None = None                     # the Story shot it is made for (its take lands there, PS5e)
     shot_version: str | None = None                # D125 (A1): that shot's version (the For chip's); None in a final made before it — the current one
+    stamps: dict[str, str] = Field(default_factory=dict)          # RC1: what it read of its stage, part by part (shot_graph.stage_stamps); empty before RC1
     layers: list[FinalLayer] = Field(default_factory=list)
     processing: list[ProcessingLayer] = Field(default_factory=list)   # D118 (AE4e): the passes over the stack below a layer
     clip_id: str | None = None                     # PS5e: the assembled shot

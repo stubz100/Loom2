@@ -418,7 +418,8 @@ async def _chain(q: JobQueue, payload: dict) -> None:
         q.hub.broadcast("story.changed", {"kind": "shot", "id": t[0], "revision": 0, "error": f"Run stale stopped: {e}"})
 
 
-def _shot_takes(q: JobQueue, payload: dict, kind: str, ids: list[str], use: bool | None, run: dict[str, Any] | None = None) -> None:
+def _shot_takes(q: JobQueue, payload: dict, kind: str, ids: list[str], use: bool | None, run: dict[str, Any] | None = None,
+                stage_revision: int | None = None) -> None:
     """Results recorded as takes of a shot version (payload {shot_id, version}): D88 XL's talking clip with `use=False` (never the version's
     clip until the author picks it); D90 (02 §5) a frame or clip made for the shot with `use=None` (it fills an empty slot, as a stage
     camera's result does). Never the job's failure: a version finalized meanwhile, or a shot deleted, leaves the results in the Catalogue."""
@@ -429,7 +430,7 @@ def _shot_takes(q: JobQueue, payload: dict, kind: str, ids: list[str], use: bool
             raise ValueError("the origin names no shot version")
         store = StoryStore(q.ws)
         for ref in ids:
-            s = store.add_take(t[0], t[1], kind, ref, use=use)
+            s = store.add_take(t[0], t[1], kind, ref, use=use, stage_revision=stage_revision)   # RC1: a final's clip stamps the stage it read
         if run is not None:                                                                     # RC0: the job, as a run of the version's step
             s = store.record_run(t[0], t[1], run["recipe"], outputs=ids, job_id=run.get("job_id"), seconds=run.get("seconds")) or s
         q.hub.broadcast("story.changed", {"kind": "shot", "id": s.id, "revision": s.revision})
@@ -554,7 +555,7 @@ def _final_take(q: JobQueue, f: Any, clip_id: str, use: bool | None, run: dict[s
         from ..story import StoryStore
         s = StoryStore(q.ws).shot(f.shot_id)
         version = s.current if s else None
-    _shot_takes(q, {"shot_id": f.shot_id, "version": version}, "clip", [clip_id], use, run)
+    _shot_takes(q, {"shot_id": f.shot_id, "version": version}, "clip", [clip_id], use, run, stage_revision=f.stage_revision)
 
 
 async def identity_task(q: JobQueue, clip_id: str) -> None:

@@ -1,0 +1,36 @@
+/* RC1 (D96, proto01_animate 28): the shot's recipe graph — cards with a picture and a state, in columns from the characters to the take */
+.recipe-graph { position: relative; width: 100%; height: 100%; min-height: 0; background: var(--bg0); }
+.recipe-graph.empty { display: grid; place-items: center; }
+.recipe-graph .recipe-again { position: absolute; top: 8px; right: 8px; z-index: 5; }
+.recipe-node { display: flex; flex-direction: column; background: var(--bg1); border: 1px solid var(--line2); border-radius: var(--radius); font-size: 12px; color: var(--fg);
+  box-shadow: 0 1px 2px rgba(0,0,0,.3); overflow: hidden; cursor: pointer; box-sizing: border-box; }
+.recipe-node:hover { border-color: var(--fg3); }
+.recipe-node.picked { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.recipe-node.stale { border-color: color-mix(in srgb, var(--warn, #c7a23a) 60%, var(--line2)); }
+.recipe-node.owed { border-style: dashed; }
+.recipe-node.none { opacity: .7; }
+.recipe-node .head { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-bottom: 1px solid var(--line2); }
+.recipe-node .head .lbl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.recipe-node .badge { flex: none; padding: 0 6px; border-radius: 8px; font-size: 10.5px; line-height: 16px; background: var(--bg3); color: var(--fg2); }
+.recipe-node .badge.done { background: color-mix(in srgb, var(--ok, #4caf50) 22%, transparent); color: var(--ok, #4caf50); }
+.recipe-node .badge.stale { background: color-mix(in srgb, var(--warn, #c7a23a) 25%, transparent); color: var(--warn, #c7a23a); }
+.recipe-node .badge.owed { background: none; border: 1px solid var(--line2); color: var(--fg2); line-height: 14px; }
+.recipe-node .badge.running { background: color-mix(in srgb, var(--info, #58a6ff) 22%, transparent); color: var(--info, #58a6ff); }
+.recipe-node .pic { flex: 1; min-height: 0; display: grid; place-items: center; background: var(--media-bg, #0b0b0b); }
+.recipe-node .pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.recipe-node .pic .ph { color: var(--fg3); font-size: 11px; text-transform: lowercase; }
+.recipe-node .sub { padding: 3px 8px 4px; color: var(--fg2); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 15px; }
+.recipe-node.stale .sub { color: var(--warn, #c7a23a); }
+.recipe-graph .react-flow__handle { opacity: 0; pointer-events: none; }
+.recipe-graph .react-flow__edge.stale path { stroke: var(--warn, #c7a23a); }
+/* Animate's Graph over the mode's viewer (the mode's column stays); the Flow's in-place graph; both with their strip on top */
+.recipe-overlay { position: absolute; inset: 0; z-index: 6; display: flex; flex-direction: column; background: var(--bg0); }
+.recipe-pane { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--bg0); }
+.recipe-strip { display: flex; align-items: center; gap: 10px; padding: 6px 12px; border-bottom: 1px solid var(--line); font-size: 12.5px; color: var(--fg2); }
+.recipe-strip b { color: var(--fg); }
+.recipe-strip .spacer { flex: 1; }
+.recipe-strip .warn { color: var(--warn, #c7a23a); }
+.recipe-body { flex: 1; min-height: 0; }
+.recipe-empty { flex: 1; display: grid; place-items: center; color: var(--fg2); text-align: center; padding: 24px; }
+/* the shot page's Recipe section */
+.shot-recipe .recipe-box { height: 460px; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }

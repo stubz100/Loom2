@@ -45,6 +45,7 @@ def test_the_take_lands_on_the_shot_version_it_was_made_for(tmp_path: Path):
     _final_take(q, _final(shot_id=s.id, shot_version="v1"), "clp_render", None, None)     # the render fills the empty clip slot
     v = st.shot(s.id).version("v1")
     assert [t.id for t in v.takes] == ["clp_asm", "clp_render"] and v.clip_id == "clp_render"
+    assert v.stage_revision == _final().stage_revision                                     # RC1: the clip stamps the stage it read
     assert not [e for e in q.hub.events if e[1].get("error")]
 
 
@@ -97,6 +98,8 @@ def test_the_create_route_checks_the_shot_and_the_lines_follow_it(tmp_path: Path
         r = cl.post("/finals", json={**body, "shot_id": shot["id"]}, headers=H)
         assert r.status_code == 200, r.text
         assert r.json()["shot_id"] == shot["id"] and r.json()["shot_version"] == "v1"           # no version given: the shot's current one
+        tpl = cl.get(f"/story/shots/{shot['id']}", headers=H).json()["versions"][0]["recipe"]["template"]
+        assert tpl == "clay1"                                                                    # RC1: a version made by a final shot is on the clay route
         assert cl.post("/finals", json={**body, "shot_id": "sht_nope"}, headers=H).status_code == 422
         assert cl.post("/finals", json={**body, "shot_id": shot["id"], "shot_version": "v9"}, headers=H).status_code == 422
         # the lines: a Dialogue node bound to the shot, a voiced line (the audio asset stands in) — the final made for the shot lists it

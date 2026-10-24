@@ -57,6 +57,7 @@ def test_routes(tmp_path: Path):
         r = cl.post("/finals", json=body, headers=H)
         assert r.status_code == 200, r.text
         f = r.json()
+        assert {"camera", "set"} <= set(f["stamps"])                             # RC1: what it read of the stage, part by part (no object here)
         assert {x["id"]: x["method"] for x in f["layers"]} == {"plate": "projected", "shadows": "stage", "fig_m": "move", "chest": "rendered"}
         assert all(x["status"] == "passes" for x in f["layers"]) and [x["keypoints"] for x in f["layers"]] == [False, False, True, False]
         assert f["layers"][2]["passes"] == {"pose": 3, "depth": 3}

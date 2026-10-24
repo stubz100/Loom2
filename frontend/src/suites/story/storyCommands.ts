@@ -417,7 +417,7 @@ const cmds: Command[] = [
   // RC0 (D96): Run stale — the shown version in Story, the For chip's version in Animate (the recipe list under it shows the button)
   { id: 'story.shot.runStale', scope: 'story', label: 'Run stale steps…', icon: RotateCcw, hint: 'the plan and its cost first; the results become the frame and clip', placement: ['inspector', 'context'],
     when: () => { const s = shot(); const v = shotVersion(); return !!s && v?.state === 'open' && staleOf(s.id, v.id) > 0 }, run: () => { const s = shot(); const v = shotVersion(); if (s && v) void runStale(s.id, v.id) } },
-  { id: 'anim.for.runStale', scope: 'animate', label: 'Run stale steps…', icon: RotateCcw, hint: 'the plan and its cost first; the results become the frame and clip', placement: ['panel'],
+  { id: 'anim.for.runStale', scope: 'animate', label: 'Run stale steps…', icon: RotateCcw, hint: 'the plan and its cost first; the results become the frame and clip', placement: ['panel', 'strip'],   // RC1: the Graph's strip too
     when: () => { const f = useMakeFor.getState().animate; return !!f && staleOf(f.shot_id, f.version) > 0 }, run: () => { const f = useMakeFor.getState().animate; if (f) void runStale(f.shot_id, f.version) } },
   { id: 'anim.for.back', scope: 'animate', label: 'Back to the shot', icon: ArrowLeft, placement: ['panel'], hint: 'and stop making for it (D125)', when: () => !!useMakeFor.getState().animate, run: () => goBack('animate') },
   { id: 'anim.for.clear', scope: 'animate', label: 'Stop making for the shot (clips stay in the Catalogue only)', icon: X, placement: ['panel'], when: () => !!useMakeFor.getState().animate,
@@ -458,6 +458,14 @@ const cmds: Command[] = [
     run: () => { const n = node(); if (!n?.place_id) return; const ids = placeTargets(); ids.forEach((id) => void sy().patchNode(id, { place_id: n.place_id }))
       useSession.getState().toast(`${ids.length} node${ids.length === 1 ? '' : 's'} at the same place`, 'info') } },
   { id: 'story.flow.unbind', scope: 'story', label: 'Unbind from its node', icon: Unlink, placement: ['inspector', 'context'], when: () => !!node()?.shot_id && !sy().play, run: () => { const n = node(); if (n) void sy().unbindShot(n.id) } },
+  // RC1 (proto01_animate 28): a node's shot as its recipe graph, in place of the canvas; the same graph in Animate
+  { id: 'story.flow.recipe', scope: 'story', label: 'Open its recipe', icon: Workflow, hint: "the shot's recipe as a graph, here in place of the canvas — what it is made of, what is stale",
+    placement: ['inspector', 'context'], when: () => !!node()?.shot_id && !sy().play, run: () => { const n = node(); if (n) sy().setFlowRecipe(n.id) } },
+  { id: 'story.flow.recipeClose', scope: 'story', label: 'The Flow', icon: ArrowLeft, hint: 'back to the canvas', placement: ['strip'], when: () => !!sy().flowRecipe, run: () => sy().setFlowRecipe(null) },
+  { id: 'story.shot.graphInAnimate', scope: 'story', label: 'Open the graph in Animate', icon: Workflow, hint: "Animate's Graph on this shot (its For chip set): a node opens where it is made",
+    placement: ['strip', 'inspector', 'context'], when: () => !!shot() && !!shotVersion(),
+    run: () => { const s = shot(); const v = shotVersion(); if (!s || !v) return
+      useMakeFor.getState().set('animate', forShot(s, v)); const ses = useSession.getState(); ses.setUi({ graph: true }); ses.setSuite('animate') } },
   { id: 'story.flow.openShot', scope: 'story', label: 'Open the shot', icon: Link, placement: ['inspector', 'context'], when: () => !!node()?.shot_id,
     run: () => { const n = node(); if (!n?.shot_id) return; const sid = n.shot_id, v = n.shot_version; void import('../../frame/suiteRegistry').then((m) => { m.setRailTab('story', 'shots'); sy().selectShot(sid, v) }) } },
   // D90 (02 §4.2, §5): a node's board (an album group) and Make ▸ for its shot (the board's images as Generate's references)
@@ -542,7 +550,7 @@ export function edgeMenu(): { cmd: string }[] { return [{ cmd: 'story.flow.delet
 
 /** The right-click menu of a Flow node (the node is selected first). */
 export function nodeMenu(): ({ cmd: string } | typeof sepItem)[] {
-  return [{ cmd: 'story.flow.makeFrame' }, { cmd: 'story.flow.makeClip' }, sepItem, { cmd: 'story.flow.newShot' }, { cmd: 'story.flow.openShot' }, { cmd: 'story.flow.unbind' }, { cmd: 'story.flow.placeForward' }, sepItem,
+  return [{ cmd: 'story.flow.makeFrame' }, { cmd: 'story.flow.makeClip' }, sepItem, { cmd: 'story.flow.newShot' }, { cmd: 'story.flow.openShot' }, { cmd: 'story.flow.recipe' }, { cmd: 'story.flow.unbind' }, { cmd: 'story.flow.placeForward' }, sepItem,
     { cmd: 'story.flow.openBoard' }, { cmd: 'story.flow.clearBoard' }, sepItem, { cmd: 'story.flow.voiceAll' }, sepItem, { cmd: 'story.flow.duplicate' }, { cmd: 'story.flow.delete' }]
 }
 
@@ -552,6 +560,6 @@ export const makeClipItems = (): MenuItem[] => [{ cmd: 'story.shot.makeClip', la
 /** The right-click menu of a shot row (the shot is selected first). */
 export function shotMenu(): MenuItem[] {
   return [{ label: 'Make frame', icon: ImagePlus, items: makeFrameItems() }, { label: 'Make clip', icon: Film, items: makeClipItems() }, sep,
-    { cmd: 'story.shot.runStale' }, { cmd: 'story.shot.finalize' }, { cmd: 'story.shot.newVersion' }, sep, { cmd: 'story.shot.openStage' }, { cmd: 'story.shot.linkStage' }, { cmd: 'story.shot.blockOnStage' }, { cmd: 'story.shot.openAnimate' }, sep, { cmd: 'story.shot.release' }, { cmd: 'story.shot.delete' }, sep, { cmd: 'story.shot.new' }]
+    { cmd: 'story.shot.runStale' }, { cmd: 'story.shot.graphInAnimate' }, { cmd: 'story.shot.finalize' }, { cmd: 'story.shot.newVersion' }, sep, { cmd: 'story.shot.openStage' }, { cmd: 'story.shot.linkStage' }, { cmd: 'story.shot.blockOnStage' }, { cmd: 'story.shot.openAnimate' }, sep, { cmd: 'story.shot.release' }, { cmd: 'story.shot.delete' }, sep, { cmd: 'story.shot.new' }]
 }
 const sepItem = { sep: true } as const

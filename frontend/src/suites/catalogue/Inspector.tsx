@@ -205,7 +205,7 @@ function DetailsBody({ a }: { a: Asset }) {
 
 // ---------------------------------------------------------------- the panel
 function actionsMore(a: Asset): MenuItem[] {
-  return [{ cmd: 'cat.loupe' }, { cmd: 'cat.reveal' }, { label: 'Copy prompt', icon: Copy, run: () => { void navigator.clipboard?.writeText(a.prompt_json ? JSON.stringify(a.prompt_json, null, 2) : a.prompt_text ?? ''); useSession.getState().toast('Prompt copied', 'success') } },
+  return [{ cmd: 'cat.loupe' }, { cmd: 'cat.showRecipe' }, { cmd: 'cat.reveal' }, { label: 'Copy prompt', icon: Copy, run: () => { void navigator.clipboard?.writeText(a.prompt_json ? JSON.stringify(a.prompt_json, null, 2) : a.prompt_text ?? ''); useSession.getState().toast('Prompt copied', 'success') } },
     { sep: true }, ...(a.trashed_at ? [{ cmd: 'cat.restore' }, { cmd: 'cat.purge' }] : [{ cmd: 'cat.trash' }])]
 }
 

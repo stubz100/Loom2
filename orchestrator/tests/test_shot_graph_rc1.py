@@ -156,3 +156,34 @@ def test_the_route(tmp_path: Path):
         assert {x["id"] for x in g["nodes"]} >= {"plate", "composition", "take"} and all(x["state"] == "owed" for x in g["nodes"] if x["id"] in ("plate", "composition"))
         rec = cl.get(f"/story/shots/{n['shot_id']}/recipe").json()
         assert {s["id"]: s["state"] for s in rec["steps"]}["plate"] == "missing" and {s["id"]: s["wave"] for s in rec["steps"]}["frame"] == "CA5 (W3)"
+
+
+def test_a_layer_goes_stale_only_with_its_own_parts():
+    """UX0 W6: an edit marks what depends on it — with the final's stamps, a figure moved stales her layer (then the composition and the
+    take), not the other's nor the plate; the camera moved stales the plate and every layer; a renamed figure changes nothing."""
+    from loom2.shot_graph import stage_stamps
+    v = ShotVersion(id="v1", stage_id="stg_1", camera_id="cam_1", clip_id="clp_render")
+    shot = Shot(id="sht_c", name="Mara comes in", versions=[v], current="v1")
+    comp = Composition(final_id="fin_1", effectcraft="0.12.0", final_revision=3, revision=0, clip_id="clp_render", rendered_revision=0)
+    rc0 = _rc0("stage", frame=("missing", []), clip=("missing", []))
+    st0 = _stage(5)
+    f = _final(stamps=stage_stamps(st0, "cam_1"))
+    graph = lambda st: _by(shot_graph(shot, v, rc0=rc0, node=None, profiles=PROFILES, stage=st, final=f, composition=comp, clip_asset=asset))  # noqa: E731
+    st = st0.model_copy(deep=True)
+    st.revision = 6
+    st.objects[1].transform.pos = [0.3, 0.0, 0.0]                                    # Ines moved
+    n = graph(st)
+    assert n["layer:fig_i"].state == "stale" and n["layer:fig_i"].reasons == ["Ines moved or was re-keyed"]
+    assert n["layer:fig_m"].state == "done" and n["plate"].state == "done"
+    assert n["composition"].state == "stale" and n["composition"].reasons == ["after ines layer"] and n["take"].state == "stale"
+    st = st0.model_copy(deep=True)
+    st.keyframes["objects"]["fig_m"].append({"t": 80})                               # Mara re-keyed
+    n = graph(st)
+    assert n["layer:fig_m"].state == "stale" and n["layer:fig_i"].state == "done"
+    st = st0.model_copy(deep=True)
+    st.cameras[0].focal_mm = 50                                                      # the camera moved
+    n = graph(st)
+    assert n["plate"].reasons == ["the camera moved"] and n["layer:fig_m"].state == "stale" and n["layer:fig_i"].state == "stale"
+    st = st0.model_copy(deep=True)
+    st.objects[0].name = "Mara (hero)"; st.revision = 9                              # a name changes nothing rendered
+    assert all(x.state != "stale" for x in graph(st).values())

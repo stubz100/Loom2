@@ -1,6 +1,6 @@
 # 28 · RC1 — the Shot's recipe graph
 
-Status: **plan, 2026-10-24; building.** D96 accepted RC1 on 2026-10-18 ([05](05-flow-nodes-as-shot-recipes.md) §6: "a Shot's recipe drawn
+Status: **built 2026-10-24 (RC1a–RC1d), journal 05:09 and after.** D96 accepted RC1 on 2026-10-18 ([05](05-flow-nodes-as-shot-recipes.md) §6: "a Shot's recipe drawn
 with `@xyflow/react`, in the Flow (in place) and in Animate (the *Graph* view); states, *Run stale*, a step opens its section in Animate;
 C4's lineage view becomes this graph"). The wireframes are UX0's W6 ([03-ux0-review](../proto01_UI/03-ux0-review.md) §W6) and C4
 ([04](04-catalogue-for-making.md) §C4). D125 (proto01_UIcomp) kept RC1 as planned; it built RC2's interface and RC3's cut without them.
@@ -28,14 +28,17 @@ Built on the server from the records, on request; nothing is stored (as RC0's st
 | **motion** | figure with keys on the stage | — | keyed | — | Animate › Clay › Motion, the figure |
 | **camera** | the version's camera | — | linked | — | Animate › Clay › Camera |
 | **frame**, **clip**, **lip-sync** | RC0 step | its output | a run counts | RC0's reasons | Image (frame), Animate › Performance (clip) |
-| **plate** | the final | its still | still and frames made | the stage moved since the final | Animate › Performance › Final shot |
-| **layer** | final layer of a figure or a prop | its first frame (the last batch's clip) | done | the stage moved since the final | Animate › Performance › Final shot |
+| **plate** | the final | its still | still and frames made | the camera moved or the set changed since the final | Animate › Performance › Final shot |
+| **layer** | final layer of a figure or a Cast prop | the last batch's clip | done | its figure or prop moved or was re-keyed, or the camera moved | Animate › Performance › Final shot |
 | **composition** | the final | the assembly | assembled and composed | the final changed since (`Composition.stale`) | Animate › Final › Layers |
 | **finish** | the final | — | a pass on a layer or a processing layer | a processing layer's layers changed | Animate › Final › Layers |
 | **take** | the version | the version's clip | the version has a clip | the render saw an older composition revision | Story › Shots, the shot |
 
 **The final** is the one made for this shot version (A1), else the newest on its stage and camera. **States:** done, stale (with why),
 owed (the route needs it, nothing made), running (a job of it queued or running), none (optional and not used — a finish with no pass).
+**What a final read** is stamped when it is made (`Final.stamps`, `shot_graph.stage_stamps`): the camera with its keys, the set (the
+sets, lights and ambient) and each figure or prop with its keys — so an edit marks only what depends on it (W6: Mara's motion stales her
+layer, not Ines's). A final made before the stamps falls back to the stage's revision (any edit stales the plate and every layer).
 **Edges** follow what a step reads: character → anim ref → its figure's layer; motion → its figure's layer; camera → plate and layers;
 plate and layers → composition → finish → take; for the image-to-video routes, characters and place → frame → clip → take; lines →
 lip-sync. **Stale spreads** along the edges as in RC0 ("after <step>").
@@ -59,12 +62,24 @@ Shot section in Animate and the shot page agree with it.
 
 | Wave | Content | Checks |
 | --- | --- | --- |
-| **RC1a · The graph record** | `shot_graph` (pure) and its route; the final found for a version; states and reasons; stale along the edges; the clay template's waves cleared, the clay steps in RC0's list read from it | pytest: an i2v shot, a dialogue shot, a clay shot from a final (each node and edge, a stage edit making the plate and layers stale, a render behind its composition) |
-| **RC1b · The view and Animate's Graph** | `RecipeGraph` (@xyflow/react, ranked columns like W6, a picture and a badge per node), the Graph pill and key 4, a node opening its mode and section, Run stale on the strip | Vitest (the ranks, the node → section map); e2e: the A1-like shot on the fake engine — Graph shows its nodes, a click opens Clay › Motion on the figure |
-| **RC1c · Story and the Catalogue** | the Flow in place, the shot page's graph, *Show its recipe* | e2e: each place opens the same graph; screenshots |
-| **RC1d · Rig** | the A1 project's real final, its graph and a stage edit making the plate and layers stale | the graph against the rig's records |
+| **RC1a · The graph record** ✓ | `shot_graph` (pure) and its route; the final found for a version; states and reasons; stale along the edges; the clay template's waves cleared, the clay steps in RC0's list read from it | pytest: an i2v shot, a dialogue shot, a clay shot from a final (each node and edge, a stage edit making the plate and layers stale, a render behind its composition) |
+| **RC1b · The view and Animate's Graph** ✓ | `RecipeGraph` (@xyflow/react, ranked columns like W6, a picture and a badge per node), the Graph pill and key 4, a node opening its mode and section, Run stale on the strip | Vitest (the ranks, the node → section map); e2e: the A1-like shot on the fake engine — Graph shows its nodes, a click opens Clay › Motion on the figure |
+| **RC1c · Story and the Catalogue** ✓ | the Flow in place, the shot page's graph, *Show its recipe* | e2e: each place opens the same graph; screenshots |
+| **RC1d · Rig** ✓ | the A1 project's real final, its graph and a stage edit making the plate and layers stale | the graph against the rig's records |
 
 About 4–5 days, as 05 §6 sized it. No GPU until RC1d's look at a real final (no new job).
+
+## 4b. As built
+
+- **Per part, not per stage:** a final made from now on stamps what it read of its stage (`Final.stamps`); A1's final, made before, falls
+  back to the stage's revision (any edit stales the plate and every layer).
+- **A final made for a version puts it on the clay route** (its template set when it had none); a version made before reads as clay where
+  a final was made for its shot (the board, RC0's list, the graph agree).
+- **A final's clip stamps the stage revision it read** on the version, so the shot's *stale* chip agrees with the graph (A1's version,
+  linked at revision 1 and taken at 3, still shows the chip: it was made before).
+- **The characters of an image-to-video shot** are the node's speakers and the stage's bound figures; subjects mentioned in Image's
+  prompt are not read yet (their runs keep the mentions unstamped, RC0).
+- Screenshots on the A1 rig's real project: `img/28-rc1-*.jpg`.
 
 ## 5. Not in RC1
 

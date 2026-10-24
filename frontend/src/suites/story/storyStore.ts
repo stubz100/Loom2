@@ -226,6 +226,9 @@ export interface StoryState {
   setLinkFor: (f: { shotId: string; version: string } | null) => void
   linkStage: (shotId: string, version: string, stageId: string | null, cameraId: string | null) => Promise<boolean>
   setCastSearch: (s: string) => void
+  /** RC1 (proto01_animate 28): the Flow shows this node's shot as its recipe graph, in place of the canvas (null: the canvas). */
+  flowRecipe: string | null
+  setFlowRecipe: (nodeId: string | null) => void
   /** D125 (S5, SP5): each profile's shots and each version's reference count (GET /story/cast/uses) — Cast's readiness reads them. */
   castUses: Record<string, CastReadiness>
   loadCastUses: () => Promise<void>
@@ -394,7 +397,7 @@ export const useStory = create<StoryState>()((set, get) => {
     world: null, loading: false, saving: false, section: 'logline', selected: null,
     profiles: [], profilesLoaded: false, profileId: null, versionId: null, refPage: null, candPage: null, pagesFor: null,
     loras: [], trainOpts: DEFAULT_TRAIN, voices: [], voiceId: null, voiceForm: false, lipsyncOpts: { node_id: null, index: null, preset: 'draft' }, audioSecs: {},
-    castFilter: 'all', castSearch: '', castUses: {}, picked: [], expanding: false, busy: false, boardFinals: [], boardCuts: [], boardFilter: 'all', linkFor: null,
+    castFilter: 'all', castSearch: '', castUses: {}, flowRecipe: null, picked: [], expanding: false, busy: false, boardFinals: [], boardCuts: [], boardFilter: 'all', linkFor: null,
     shots: [], shotsLoaded: false, shotId: null, shotVersionId: null, clipsById: {}, stagesLite: [],
     flowNodes: {}, flowGraph: null, flowLoaded: false, nodeId: null, problems: null, play: null, addAt: null, edge: null,
     load: async () => {
@@ -811,6 +814,7 @@ export const useStory = create<StoryState>()((set, get) => {
       } catch (e) { toast(`Link: ${detail(e)}`); return false }
     },
     setCastSearch: (castSearch) => set({ castSearch }),
+    setFlowRecipe: (flowRecipe) => set({ flowRecipe }),
     loadCastUses: async () => {
       try { const r = await unwrap(http.GET('/story/cast/uses')); set({ castUses: Object.fromEntries(r.items.map((x) => [x.profile_id, x])) }) } catch { /* the row shows what it has */ }
     },

@@ -101,10 +101,21 @@ async def final_create(svc: Svc, body: FinalCreate):
     method = DEFAULT_METHOD | ({"plate": "picture"} if picture_plate(st) else {})
     data = body.model_dump(exclude={"layers"}) | {"layers": [FinalLayer(id=x.id, kind=x.kind, name=x.name, object_id=x.object_id, method=x.method or method[x.kind],  # type: ignore[arg-type]
                                                                         profile_id=x.profile_id, version=x.version).model_dump() for x in body.layers]}
+    from ..shot_graph import stage_stamps
+    data["stamps"] = stage_stamps(st, body.camera_id)                        # RC1: an edit marks only the layers it touches
     try:
         f = await asyncio.to_thread(FinalStore(ws).create, data, passes, keypoints)
     except ValueError as e:
         raise HTTPException(422, str(e))
+    if f.shot_id and f.shot_version:                                     # RC1: a version made by a final shot is on the clay route
+        from ..story import StoryStore
+        store = StoryStore(ws)
+        shot = await asyncio.to_thread(store.shot, f.shot_id)
+        v = next((x for x in shot.versions if x.id == f.shot_version), None) if shot else None
+        if v is not None and not (v.recipe and v.recipe.template):
+            clay = "clay2" if sum(1 for x in f.layers if x.kind == "figure") > 1 else "clay1"
+            await asyncio.to_thread(store.set_template, f.shot_id, f.shot_version, clay)
+            svc.hub.broadcast("story.changed", {"kind": "shot", "id": f.shot_id, "revision": 0})
     svc.hub.broadcast("final.updated", {"id": f.id, "revision": f.revision})
     return f.model_dump()
 

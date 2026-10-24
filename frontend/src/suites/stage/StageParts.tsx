@@ -5,7 +5,7 @@
 // which images are a figure's (the preview's `ref_list`) and how each figure is said in the prompt.
 // D121 (proto01_animate 26 §5.2): the Clay level is a mode of its own — its column (Shot · Scene · Motion · Camera), its foot (Render passes ▶),
 // the viewport with the pose pill; the stage's frame form (`ShotTab`) is Image › From a stage's, the stage clip (`StageClipCard`) Performance's.
-import { AnimateLevels } from '../../frame/AnimateLevels'
+import { AnimateLevels, GraphPill } from '../../frame/AnimateLevels'
 import { Help } from '../../frame/Help'
 import { Aperture, Bookmark, Box, Camera, Eye, EyeOff, Frame, LayoutTemplate, Lock, LockOpen, PersonStanding, User, Video } from 'lucide-react'
 import { PresetPanel } from '../../frame/PresetPanel'
@@ -48,7 +48,7 @@ const num = (v: number) => +v.toFixed(2)
 function devHook(): Record<string, unknown> {
   const w = window as unknown as { __loom2Stage?: Record<string, unknown> }
   w.__loom2Stage ??= { open: (id: string) => st().open(id), setShot: (p: Partial<ShotState>) => st().setShot(p), renderPasses: () => st().renderPasses(),
-    generateShot: () => st().generateShot(), state: () => ({ current: st().current, shot: st().shot, passes: st().passesEntry(), guide: st().guideEntry(), frame: st().frame }), screenOf: () => null,
+    generateShot: () => st().generateShot(), state: () => ({ current: st().current, shot: st().shot, passes: st().passesEntry(), guide: st().guideEntry(), frame: st().frame, selected: st().selected }), screenOf: () => null,
     // ST4: the clip path
     setFrame: (f: number) => st().setFrame(f), keyCamera: () => st().keyCamera(), setRange: (a: number, b: number) => st().setRange(a, b), setGuideKind: (k: 'depth' | 'pose') => st().setGuideKind(k),
     renderGuide: () => st().renderGuide(), setShotStart: (id: string | null) => st().setShotStart(id), animateShot: () => st().animateShot(),
@@ -656,11 +656,11 @@ export function Strip() {
   const guides = useStage((s) => s.guides)
   const pip = useStage((s) => s.pip)
   const current = useStage((s) => s.current)
-  if (!current) return <div className="stage-strip-wrap"><div className="stage-strip"><AnimateLevels /></div></div>
+  if (!current) return <div className="stage-strip-wrap"><div className="stage-strip"><AnimateLevels /><GraphPill /></div></div>
   return (
     <div className="stage-strip-wrap">
       <div className="stage-strip">
-        <AnimateLevels />{/* D95 (AN1): Animate's viewer levels */}
+        <AnimateLevels /><GraphPill />{/* D95 (AN1): Animate's viewer levels */}
         <CommandButton id="stage.guides" active={guides} />
         <CommandButton id="stage.view.pip" active={pip} />{/* D121 (AW4); the view switch is the camera pill over the viewport */}
         <CommandButton id="stage.frameAll" />

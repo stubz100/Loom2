@@ -1,7 +1,7 @@
 // Catalogue commands (08 §3/§6, 07 §3c): one definition each; the grid keys, the strip icons, the inspector verbs
 // and the right-click menus (tile, grid, group header, loupe) all read from here. They act on whichever
 // catalogue store instance is on screen (the Catalogue itself or Generate's results).
-import { ArrowLeftRight, Wand2, Box, Clapperboard, ImageUp, ImagePlus, Inbox as InboxIcon, MapPin, Package, UserRound, ChevronLeft, Eraser, ImageUpscale, Orbit, ChevronRight, Columns2, Copy, Expand, GitBranch, ExternalLink, Film, FolderInput, FolderPlus, Image, Images, Inbox, Layers, ListTree, Pencil, Pin, PinOff, RotateCcw, Search, Shrink, Shuffle, SquareCheck, SquareX, Tag, Trash, Undo, Upload, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { Workflow, ArrowLeftRight, Wand2, Box, Clapperboard, ImageUp, ImagePlus, Inbox as InboxIcon, MapPin, Package, UserRound, ChevronLeft, Eraser, ImageUpscale, Orbit, ChevronRight, Columns2, Copy, Expand, GitBranch, ExternalLink, Film, FolderInput, FolderPlus, Image, Images, Inbox, Layers, ListTree, Pencil, Pin, PinOff, RotateCcw, Search, Shrink, Shuffle, SquareCheck, SquareX, Tag, Trash, Undo, Upload, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { ApiError, http, unwrap } from '../../api/client'
 import { registerCommands, sep, type MenuItem } from '../../frame/commands'
 import { openWith } from '../../frame/openWith'
@@ -52,6 +52,13 @@ registerCommands([
   // D125 (I2): the result becomes the For chip's shot version's frame where it is picked (the tile's ✓, its right-click, the Inspector)
   { id: 'cat.useFrame', scope: 'catalogue', label: "Use as the shot's frame", icon: Clapperboard, placement: ['context', 'inspector'], hint: "Image is making for a shot (the For chip): this image becomes that version's frame",
     when: () => { const a = primary(); return !!forFrame() && a?.kind === 'image' && !a.trashed_at }, run: () => { const f = forFrame(); const a = primary(); if (f && a) void useStory.getState().takeFor(f, 'image', a.id) } },
+  // C4 (RC1, proto01_animate 28): from a take to its shot's recipe graph (Story › Shots on the shot, its Recipe section)
+  { id: 'cat.showRecipe', scope: 'catalogue', label: 'Show its recipe', icon: Workflow, hint: 'the shot this image or clip is a take of, its recipe as a graph (Story › Shots)', placement: ['context', 'inspector'],
+    when: () => { const a = primary(); return !!a && (a.kind === 'image' || a.kind === 'video') && !a.trashed_at },
+    run: () => { const a = primary(); if (!a) return
+      void import('../story/recipe/openTarget').then(async (m) => { const at = await m.shotOfAsset(a)
+        if (!at) { useSession.getState().toast('Not a take of any shot', 'info'); return }
+        m.openTarget({ kind: 'shots' }, at.shotId, at.version) }) } },
   { id: 'cat.pin', scope: 'catalogue', label: 'Pin for compare', icon: Pin, keys: 'C', placement: ['context', 'inspector', 'strip'], when: () => !!cat().primary, run: () => cat().togglePin(cat().primary!) },
   { id: 'cat.compare', scope: 'catalogue', label: 'Open compare', icon: Columns2, keys: 'Shift+C', placement: ['context', 'strip'], when: () => cat().compare.length >= 2, run: () => cat().setCompareOpen(true) },
   { id: 'cat.unpinAll', scope: 'catalogue', label: 'Unpin all', icon: PinOff, placement: ['context', 'strip'], when: () => cat().compare.length > 0, run: () => cat().clearCompare() },
@@ -172,7 +179,7 @@ export function tileMenu(): MenuItem[] {
     ...(forFrame() && !clipTile() ? [{ cmd: 'cat.useFrame', label: frameUseLabel() }, sep] : []),
     { cmd: 'cat.loupe' }, { cmd: 'cat.edit' }, sep,
     moveToMenu(), { cmd: 'cat.toUnprocessed' }, { cmd: 'cat.duplicate' }, { cmd: 'cat.showBatch' }, { cmd: 'cat.lineage' }, sep,
-    { cmd: 'cat.tag' }, sep,
+    { cmd: 'cat.tag' }, { cmd: 'cat.showRecipe' }, sep,
     { cmd: 'cat.reference' }, { cmd: 'cat.loadInGenerate' }, { cmd: 'cat.rerun' }, { cmd: 'cat.variations' }, { cmd: 'cat.animate' }, { cmd: 'cat.animateEnd' }, ...(clipTile() ? [{ cmd: 'cat.start.shot' }] : []), sep,
     ...(clipTile() || inTrash() ? [] : [addToCharacterMenu()]),
     ...(clipTile() ? [] : [{ label: 'Start from this image', icon: Image, items: [{ cmd: 'cat.start.removeBg' }, { cmd: 'cat.start.upscale' }, { cmd: 'cat.start.angle' }, { cmd: 'cat.start.mesh' }, sep, { cmd: 'cat.start.character' }, { cmd: 'cat.start.place' }, { cmd: 'cat.start.prop' }] } as MenuItem, sep]),

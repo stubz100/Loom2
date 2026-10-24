@@ -2,7 +2,7 @@
 // (the animate suite: the clip a model made) and, since AE1 / AP1 (D114), Final (the composition of a final shot, scrubbed and played) —
 // at the start of the viewer strip. D121 (26 §5): each level is a mode — a suite of its own (stage · animate · final) with its own column,
 // strip, viewer and foot — so the switch is the mode's pill (ArtCraft's Build | Record). The registry's commands (D32) do the switching, so
-// the palette and remapped keys (1 · 2 · 3) reach them — the same three commands at every mode (anim.level.*, each mode's reach). Graph (the Shot's recipe, RC1) joins when it is built.
+// the palette and remapped keys (1 · 2 · 3) reach them — the same commands at every mode (anim.level.*, each mode's reach). RC1: Graph — the shot's recipe over the viewer of whichever mode is on (4).
 import { useSession } from '../store/session'
 import { markUsed, runCommand } from './commands'
 
@@ -17,4 +17,11 @@ export function AnimateLevels() {
       <button type="button" className={fin ? 'active' : ''} aria-pressed={fin} onClick={() => runCommand('anim.level.final')} title="Final: finish the shot's composition — layers, masks, effects, passes, the render (3)">Final</button>
     </span>
   )
+}
+
+/** RC1: the Graph pill beside the modes — the shot's recipe over the viewer (the mode's column stays). */
+export function GraphPill() {
+  const graph = useSession((s) => !!s.ui.graph)
+  markUsed('anim.level.graph')
+  return <button type="button" className={`graph-pill${graph ? ' active' : ''}`} aria-pressed={graph} onClick={() => runCommand('anim.level.graph')} title="Graph: the shot's recipe — what it is made of, what is stale; a node opens where it is made (4)">Graph</button>
 }

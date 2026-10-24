@@ -8737,3 +8737,27 @@ export in a process that sets it first (`run` with `prefs.set`, then `file.expor
 - Tests: `test_cuts_ce1.py` (5: the session, the round trip, the routes with conversion and read-only, the lines, the movie);
   `fake_filmcraft.py`. Offline 548 passed; settings audit clean; OpenAPI current; Vitest 452 + 3 skipped; typecheck, lint (0 errors, 79
   warnings) and build clean; e2e full 61/61 and open 61/61 on the fake. No UI change in CE1 (the Episode looks the same).
+
+## 2026-10-24 10:17 — CE2 built (proto01_animate 30 §12–§13, D126): the Episode edits a FilmCraft cut's every track; rig 13/13
+
+- **Probe first** (the real binary on a copy of CE1's A1 cut): track names, transitions replacing each other, ripple trim, roll, slip,
+  slide, razor (the dissolve follows the new piece), moves across tracks, speed, freeze, added tracks, undo and FilmCraft's own FCPXML /
+  EDL all behave as Premiere's; a ripple delete is refused when a sync-locked dialogue clip is in the way; **FilmCraft has no command to
+  delete a transition** (764723f) — loom2 lifts the clip it leads into and places it back with its attributes copied.
+- **Server:** `cuts.tracks()` and `GET /timelines/{id}/tracks`; `POST …/edit` (a whitelist of FilmCraft's commands + `loom2.removeTransition`),
+  `/place` (a take with its shot's stamps, a Catalogue picture / video on a video track, a sound on an audio track), `/replace` (*Update* in
+  place), `/undo`, `/redo`, `GET …/frame`. **The cut's undo is loom2's**: a snapshot of the project before every change (50 kept), any
+  change one step, a refused change rolled back — FilmCraft's in-session undo had counted loom2's marker steps as edits (the first test
+  undid markers instead of the speed). loom2 keeps one chapter marker per named shot (a razored take stays one shot) after every change, so
+  FilmCraft's FCPXML carries them. A FilmCraft cut's FCPXML / EDL are FilmCraft's, its SRT and markers.txt from the project; a line voiced
+  after the cut was made is brought onto A1 before an export or the movie (a re-voiced line swapped in place). The draft is FilmCraft's PNG
+  export; a rename leaves V1 alone; FilmCraft's refusal is shown in its own words.
+- **Client:** the tracks view for a FilmCraft cut (`CutStage.tsx`, `cut.ts`): FilmCraft's frame at the playhead, the tools (Select V,
+  Ripple B, Roll N, Slip Y, Slide U, Razor C) on the transport, every track as a row with takes, pictures, sounds and lines, transitions,
+  the *changed* badge; a drag is one edit when it ends; a clip's, a track header's and the space's right-click menus; drops place takes,
+  pictures and sounds; the Inspector's clip block. The Episode now owns the `story.cut.*` keys. Found on the way: the client kept its own
+  lane after an Assemble (not FilmCraft's clip ids) — *Update* and the badges need the server's.
+- **Checks:** offline 549 + `test_cuts_ce2.py` (2) → 550 passed; Vitest 456 + 3 skipped (`cut.test.ts` 4); typecheck, lint (0 errors, 79
+  warnings) and build clean; e2e full 62/62 and open 62/62 (a new tracks scenario; four Episode scenarios moved onto the tracks); rig
+  `scripts/ce2_acceptance.py` 13/13 on the real FilmCraft (edits round-trip in 23–29 ms, frames over HTTP 7.8 ms at ½, the draft 2.8 s),
+  `scripts/ce1_acceptance.py` re-run 14/14. Screenshots on A1's records: `proto01_animate/img/30-ce2-*.jpg`.

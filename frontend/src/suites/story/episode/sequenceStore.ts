@@ -3,10 +3,11 @@
 // and the toast says so). Project data lives here and on disk, never in component state.
 import { create } from 'zustand'
 import { ApiError, http, unwrap } from '../../../api/client'
-import type { Clip, Job, Timeline, TimelineClipIn } from '../../../api/types'
+import type { Clip, CutEdited, CutTracks, Job, Timeline, TimelineClipIn } from '../../../api/types'
 import { useSession } from '../../../store/session'
 import { DEV_HOOKS } from '../../../devHooks'
 import { append, at, duration, move, remove, setOverlap, starts, trim, type Lane, type LaneClip, chainIn } from './lane'
+import { endOf, type CutTool, type Step } from './cut'
 
 export type ExportFormat = 'edl' | 'fcpxml' | 'srt' | 'resolve'          // D125 (S14): resolve = the three and markers.txt in one folder named after the cut
 
@@ -62,7 +63,22 @@ interface SequenceState {
   /** P17 slice 2: the draft render as a CPU job; the clip lands in the bin and the Catalogue when it is done. */
   /** P17's draft (a silent clip) or, RC3, the movie (`movie`: an MP4 with the voice lane in the cut's folder and the Catalogue). */
   render: (movie?: boolean) => Promise<void>
+  // ---- CE2 (D126, proto01_animate 30 §12): a FilmCraft cut's tracks and the editor's changes, each a FilmCraft command on the server
+  tracks: CutTracks | null
+  tool: CutTool
+  selClip: number | null                  // a clip on the tracks (FilmCraft's id)
+  cutBusy: boolean
+  loadTracks: () => Promise<void>
+  cutEdit: (steps: Step[]) => Promise<boolean>
+  cutPlace: (body: { clip_id?: string; asset_id?: string; shot_id?: string | null; shot_version?: string | null; node_id?: string | null; track: string | number; frame: number }) => Promise<boolean>
+  cutReplace: (clip: number, take: { clip_id: string; shot_id?: string | null; shot_version?: string | null; node_id?: string | null }) => Promise<boolean>
+  cutUndo: (redo?: boolean) => Promise<void>
+  setTool: (tool: CutTool) => void
+  selectClip: (id: number | null) => void
 }
+
+/** CE2: the open cut is a FilmCraft project (edited by commands, its tracks read from it). */
+export const isCut = (): boolean => !!useSequence.getState().current?.file
 
 let saveTimer: number | null = null
 let saveSeq = 0
@@ -74,7 +90,13 @@ async function save(get: () => SequenceState, set: (p: Partial<SequenceState>) =
   set({ saving: true })
   try {
     const next = await unwrap(http.PUT('/timelines/{tl_id}', { params: { path: { tl_id: current.id } }, body: { ...current, clips: clipsOf(lane), overlaps: lane.overlaps } }))
-    if (seq === saveSeq && get().current?.id === current.id) set({ current: next, timelines: get().timelines.map((t) => (t.id === next.id ? next : t)) })
+    if (seq === saveSeq && get().current?.id === current.id) {
+      set({ current: next, timelines: get().timelines.map((t) => (t.id === next.id ? next : t)) })
+      if (next.file) {                                                           // CE2: an Assemble (or a cut's first change) rewrote V1 — its lane is
+        set({ lane: laneOf(next) })                                              // the server's now (FilmCraft's clip ids: Update and the badges need them)
+        await get().loadTracks()
+      }
+    }
   } catch (e) {
     const err = e as ApiError
     if (err.status === 409) {                                                  // the document moved under us: take the server's, drop the edit
@@ -84,8 +106,32 @@ async function save(get: () => SequenceState, set: (p: Partial<SequenceState>) =
   } finally { if (seq === saveSeq) set({ saving: false }) }
 }
 
+/** CE2: a reply of the editor's routes — the record, the lane it shows and the tracks, together. */
+function applyCut(r: CutEdited, set: (p: Partial<SequenceState>) => void, get: () => SequenceState): void {
+  set({ current: r.timeline, lane: laneOf(r.timeline), tracks: r.tracks, timelines: get().timelines.map((t) => (t.id === r.timeline.id ? r.timeline : t)),
+    playhead: Math.min(get().playhead, Math.max(0, Math.ceil(r.tracks.duration) - 1)) })
+  if (get().selClip !== null && ![...r.tracks.video, ...r.tracks.audio].some((tr) => tr.items.some((i) => i.id === get().selClip))) set({ selClip: null })
+}
+
+/** CE2: one of the editor's calls — the cut's revision as its base; a stale base reloads the cut, FilmCraft's refusal is said as it is. */
+async function cutCall(get: () => SequenceState, set: (p: Partial<SequenceState>) => void, call: (id: string, revision: number) => Promise<CutEdited>): Promise<boolean> {
+  const cur = get().current
+  if (!cur?.file) return false
+  set({ cutBusy: true })
+  try {
+    applyCut(await call(cur.id, cur.revision), set, get)
+    return true
+  } catch (e) {
+    const err = e as ApiError
+    if (err.status === 409) { useSession.getState().toast('The cut changed elsewhere — reloaded; your last change was not made', 'error'); await get().open(cur.id) }
+    else useSession.getState().toast(`${err.detail ?? e}`, 'error')
+    return false
+  } finally { set({ cutBusy: false }) }
+}
+
 export const useSequence = create<SequenceState>()((set, get) => ({
   timelines: [], current: null, lane: null, selected: null, playhead: 0, playing: false, pxPerFrame: 3, undo: [], redo: [], saving: false, lastExport: null, assembleFor: null,
+  tracks: null, tool: 'select', selClip: null, cutBusy: false,
 
   load: async () => {
     try { set({ timelines: (await unwrap(http.GET('/timelines'))).items }) } catch { set({ timelines: [] }) }
@@ -99,10 +145,12 @@ export const useSequence = create<SequenceState>()((set, get) => ({
     } catch (e) { useSession.getState().toast(`New cut failed: ${(e as ApiError).detail ?? e}`, 'error'); return null }
   },
   open: async (id) => {
-    if (!id) { set({ current: null, lane: null, selected: null, playhead: 0, playing: false, undo: [], redo: [] }); return }
+    if (!id) { set({ current: null, lane: null, selected: null, playhead: 0, playing: false, undo: [], redo: [], tracks: null, selClip: null }); return }
     try {
       const tl = await unwrap(http.GET('/timelines/{tl_id}', { params: { path: { tl_id: id } } }))
-      set({ current: tl, lane: laneOf(tl), selected: null, playhead: 0, playing: false, undo: [], redo: [], timelines: get().timelines.some((t) => t.id === tl.id) ? get().timelines.map((t) => (t.id === tl.id ? tl : t)) : [tl, ...get().timelines] })
+      set({ current: tl, lane: laneOf(tl), selected: null, playhead: 0, playing: false, undo: [], redo: [], tracks: null, selClip: null,
+        timelines: get().timelines.some((t) => t.id === tl.id) ? get().timelines.map((t) => (t.id === tl.id ? tl : t)) : [tl, ...get().timelines] })
+      if (tl.file) await get().loadTracks()
     } catch (e) { useSession.getState().toast(`Open cut failed: ${(e as ApiError).detail ?? e}`, 'error') }
   },
   rename: async (name) => {
@@ -131,11 +179,13 @@ export const useSequence = create<SequenceState>()((set, get) => ({
     saveTimer = window.setTimeout(() => { saveTimer = null; void save(get, set) }, 300)
     void label
   },
-  undoEdit: () => { const u = get().undo; if (!u.length || !get().lane) return; set({ lane: u[u.length - 1], undo: u.slice(0, -1), redo: [...get().redo, get().lane!] }); if (saveTimer) window.clearTimeout(saveTimer); saveTimer = window.setTimeout(() => { saveTimer = null; void save(get, set) }, 300) },
-  redoEdit: () => { const r = get().redo; if (!r.length || !get().lane) return; set({ lane: r[r.length - 1], redo: r.slice(0, -1), undo: [...get().undo, get().lane!] }); if (saveTimer) window.clearTimeout(saveTimer); saveTimer = window.setTimeout(() => { saveTimer = null; void save(get, set) }, 300) },
+  undoEdit: () => { if (isCut()) { void get().cutUndo(); return } const u = get().undo; if (!u.length || !get().lane) return; set({ lane: u[u.length - 1], undo: u.slice(0, -1), redo: [...get().redo, get().lane!] }); if (saveTimer) window.clearTimeout(saveTimer); saveTimer = window.setTimeout(() => { saveTimer = null; void save(get, set) }, 300) },
+  redoEdit: () => { if (isCut()) { void get().cutUndo(true); return } const r = get().redo; if (!r.length || !get().lane) return; set({ lane: r[r.length - 1], redo: r.slice(0, -1), undo: [...get().undo, get().lane!] }); if (saveTimer) window.clearTimeout(saveTimer); saveTimer = window.setTimeout(() => { saveTimer = null; void save(get, set) }, 300) },
 
-  addClip: (clip) => { const fps = get().lane?.fps ?? 24; get().apply((l) => append(l, laneClipFrom(clip, fps, undefined, chainIn(l, clip.chained_from, clip.overlap, clip.frames))), 'add clip'); set({ selected: (get().lane?.clips.length ?? 1) - 1 }) },
-  addShot: (clip, shot) => { const fps = get().lane?.fps ?? 24; get().apply((l) => append(l, laneClipFrom(clip, fps, shot, chainIn(l, clip.chained_from, clip.overlap, clip.frames))), 'add shot'); set({ selected: (get().lane?.clips.length ?? 1) - 1 }) },
+  addClip: (clip) => { if (isCut()) { void get().cutPlace({ clip_id: clip.id, track: 'V1', frame: endOf(get().tracks?.video[0]) }); return } const fps = get().lane?.fps ?? 24; get().apply((l) => append(l, laneClipFrom(clip, fps, undefined, chainIn(l, clip.chained_from, clip.overlap, clip.frames))), 'add clip'); set({ selected: (get().lane?.clips.length ?? 1) - 1 }) },
+  addShot: (clip, shot) => {
+    if (isCut()) { void get().cutPlace({ clip_id: clip.id, shot_id: shot.id, shot_version: shot.version, node_id: shot.node, track: 'V1', frame: endOf(get().tracks?.video[0]) }); return }
+    const fps = get().lane?.fps ?? 24; get().apply((l) => append(l, laneClipFrom(clip, fps, shot, chainIn(l, clip.chained_from, clip.overlap, clip.frames))), 'add shot'); set({ selected: (get().lane?.clips.length ?? 1) - 1 }) },
   removeClip: (i) => { get().apply((l) => remove(l, i), 'remove clip'); set({ selected: null }) },
   moveClip: (from, to) => { get().apply((l) => move(l, from, to), 'move clip'); set({ selected: to }) },
   trimClip: (i, edge, delta, sourceLen) => get().apply((l) => trim(l, i, edge, delta, () => sourceLen), 'trim'),
@@ -165,6 +215,25 @@ export const useSequence = create<SequenceState>()((set, get) => ({
         : 'Draft render queued — the clip lands in the Clips bin when it is done (CPU, no engine)', 'success')
       await s.refreshAll()
     } catch (e) { s.toast(`Render failed: ${(e as ApiError).detail ?? e}`, 'error') }
+  },
+
+  loadTracks: async () => {
+    const cur = get().current
+    if (!cur?.file) { set({ tracks: null }); return }
+    try { set({ tracks: await unwrap(http.GET('/timelines/{tl_id}/tracks', { params: { path: { tl_id: cur.id } } })) }) }
+    catch (e) { useSession.getState().toast(`The cut's tracks: ${(e as ApiError).detail ?? e}`, 'error') }
+  },
+  cutEdit: (steps) => cutCall(get, set, (id, revision) => unwrap(http.POST('/timelines/{tl_id}/edit', { params: { path: { tl_id: id } }, body: { revision, steps: steps.map((s) => ({ id: s.id, params: s.params ?? {} })) } }))),
+  cutPlace: (body) => cutCall(get, set, (id, revision) => unwrap(http.POST('/timelines/{tl_id}/place', { params: { path: { tl_id: id } }, body: { revision, insert: false, ...body } }))),
+  cutReplace: (clip, take) => cutCall(get, set, (id, revision) => unwrap(http.POST('/timelines/{tl_id}/replace', { params: { path: { tl_id: id } }, body: { revision, clip, ...take } }))),
+  cutUndo: async (redo = false) => {
+    await cutCall(get, set, (id, revision) => unwrap(redo ? http.POST('/timelines/{tl_id}/redo', { params: { path: { tl_id: id } }, body: { revision } })
+      : http.POST('/timelines/{tl_id}/undo', { params: { path: { tl_id: id } }, body: { revision } })))
+  },
+  setTool: (tool) => set({ tool }),
+  selectClip: (id) => {                                                       // a take on V1 is the lane's clip too (Update, the Inspector)
+    const k = id === null ? -1 : (get().lane?.clips.findIndex((c) => c.id === String(id)) ?? -1)
+    set({ selClip: id, selected: k >= 0 ? k : null })
   },
 }))
 

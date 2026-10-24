@@ -11,6 +11,8 @@ import { useSession } from '../../../store/session'
 import { useAnimate } from '../../animate/animateStore'
 import { duration, ticks } from './lane'
 import { lastMovie, useSequence } from './sequenceStore'
+import { findItem, itemLabel, trackRef, transitionInto } from './cut'
+import { tc } from './lane'
 import { useStory } from '../storyStore'
 import { binItem, laneBelowFormat, laneChecklist } from './sequenceCommands'
 import { markUsed, runCommand } from '../../../frame/commands'
@@ -131,7 +133,10 @@ export function SequenceInspector() {
   const clips = useAnimate((s) => s.clips)
   const shots = useStory((s) => s.shots)
   const jobs = useSession((s) => s.jobs)
+  const tracks = useSequence((s) => s.tracks)
+  const selClip = useSequence((s) => s.selClip)
   if (!current || !lane) return <span className="hint">No cut open.</span>
+  const cutSel = current.file && tracks && selClip !== null ? findItem(tracks, selClip) : null      // CE2: the clip selected on a FilmCraft cut's tracks
   const movie = lastMovie(jobs, current.id)                                                       // RC3: the newest movie job of this cut
   const ch = laneChanges(lane, shots)                                                           // D125 (S13): a newer approved take
   const changes = ch.length
@@ -141,8 +146,10 @@ export function SequenceInspector() {
   return (
     <div className="seq-insp">
       <h4>{current.name} <span className="hint">{saving ? '· saving…' : `· revision ${current.revision}`}</span></h4>
-      <div className="kv"><span>lane</span><span>{current.fps} fps · {current.w}×{current.h}</span></div>
-      <div className="kv"><span>duration</span><span>{duration(lane)} ticks · {(duration(lane) / current.fps).toFixed(2)} s · {lane.clips.length} clip{lane.clips.length === 1 ? '' : 's'}</span></div>
+      <div className="kv"><span>{current.file ? 'cut' : 'lane'}</span><span>{current.fps} fps · {current.w}×{current.h}{current.file ? <> · FilmCraft <Help text={"The cut is a FilmCraft project (D126): every track, each edit a FilmCraft command; undo is the cut's own. The lane the Flow's verbs read is V1's takes in order."} /></> : null}</span></div>
+      {current.file && tracks
+        ? <div className="kv"><span>duration</span><span>{Math.ceil(tracks.duration)} frames · {(tracks.duration / current.fps).toFixed(2)} s · {tracks.video.length} video · {tracks.audio.length} audio tracks</span></div>
+        : <div className="kv"><span>duration</span><span>{duration(lane)} ticks · {(duration(lane) / current.fps).toFixed(2)} s · {lane.clips.length} clip{lane.clips.length === 1 ? '' : 's'}</span></div>}
       {current.route && <div className="kv"><span>route</span><span>{Object.keys(current.route).length ? 'from the Flow, its picks kept' : 'from the Flow'}</span></div>}
       <div className="verbs"><CommandRow ids={['story.episode.reassemble', 'story.episode.rename', 'story.episode.delete']} /></div>
       <h4>Checklist <span className="hint">advisory — the export asks</span></h4>
@@ -156,7 +163,16 @@ export function SequenceInspector() {
       {movie && <div className="kv seq-movie" data-testid="seq-movie"><span>movie</span><span>{movie.status === 'running' ? `rendering ${Math.round(movie.progress * 100)}%`
         : movie.status === 'failed' ? 'failed — the Dock has the log'
         : <><span title={movie.path ?? ''}>{movie.path?.split('/').pop()}</span>{movie.revision !== null && movie.revision !== current.revision ? ' · the cut changed since' : ''} <CommandButton id="story.episode.revealMovie" /></>}</span></div>}
-      {c && <>
+      {cutSel && tracks && <>
+        <h4>{itemLabel(cutSel.item, shots.find((x) => x.id === cutSel.item.shot_id), clips.find((x) => x.id === cutSel.item.clip_id))} <span className="hint">{trackRef(tracks, cutSel.track)} · {cutSel.item.kind}</span></h4>
+        <div className="kv"><span>at</span><span>{tc(Math.round(cutSel.item.start), tracks.fps)} for {Math.round(cutSel.item.duration)} frames</span></div>
+        <div className="kv"><span>source</span><span>from {cutSel.item.source_in.toFixed(2)} s{cutSel.item.speed !== 1 ? ` · ${Math.round(cutSel.item.speed * 100)} %` : ''}{cutSel.item.hold ? ' · a frame held' : ''}</span></div>
+        {cutSel.item.shot_id && <div className="kv"><span>shot</span><span>{cutSel.item.shot_id} · {cutSel.item.shot_version}</span></div>}
+        {transitionInto(cutSel.track, cutSel.item) && <div className="kv"><span>in</span><span>{transitionInto(cutSel.track, cutSel.item)!.effect.replace(/_/g, ' ')} · {Math.round(transitionInto(cutSel.track, cutSel.item)!.duration)} frames</span></div>}
+        {selChange && <div className="kv changed"><span>changed</span><span>{selChange.name} {selChange.version} is the approved take now <CommandButton id="story.episode.update" text label="Update" /></span></div>}
+        <div className="verbs"><CommandRow ids={['story.cut.speed', 'story.cut.freeze', 'story.cut.dissolveIn', 'story.cut.dissolveOut', 'story.cut.removeTransition', 'story.episode.openClip', 'story.cut.lift', 'story.cut.rippleDelete']} /></div>
+      </>}
+      {c && !current.file && <>
         <h4>Clip {selected! + 1}</h4>
         <div className="kv"><span>source</span><span>{clip ? `${clip.model_id} · ${clip.frames}f @ ${clip.fps}` : `${c.source} (missing)`}</span></div>
         <div className="kv"><span>uses</span><span>frames {c.in}–{c.out} ({c.out - c.in}) · {ticks(lane, c)} ticks</span></div>

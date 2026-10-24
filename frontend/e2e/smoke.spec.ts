@@ -463,9 +463,9 @@ test('a sequence (P17, D83 — in Story · Episode since 17 SY4): a fake-engine 
   await dialog.locator('button.primary').click()
   await expect(page.locator('.seq-row.active')).toContainText('Reel one')
   await page.locator('.seq-bin:not(.shots-bin) .seq-clip-card button').first().click()    // + : add the clip to the end of the lane
-  await expect(page.locator('.seq-clip')).toHaveCount(1)
-  await expect(page.locator('.seq-canvas')).toBeVisible()
-  const thumb = page.locator('.seq-clip .seq-thumbs img').first()                          // C24 frame thumbnails across the block
+  await expect(page.locator('.cut-clip.k-take')).toHaveCount(1)                           // CE2 (D126): a cut is a FilmCraft project — its tracks, V1 holding the take
+  await expect(page.locator('.cut-view img')).toBeVisible()                                // FilmCraft's frame at the playhead
+  const thumb = page.locator('.cut-clip .cut-thumbs img').first()                          // C24 frame thumbnails across the block
   await expect(thumb).toBeAttached()
   await expect.poll(() => thumb.evaluate((i: HTMLImageElement) => i.complete && i.naturalWidth > 0), { timeout: 15_000 }).toBe(true)
   await expect.poll(async () => (await api<{ items: { name: string; revision: number; clips: unknown[] }[] }>('GET', '/timelines')).items.find((t) => t.name === 'Reel one')?.revision ?? 0, { timeout: 10_000 }).toBeGreaterThanOrEqual(1)
@@ -499,6 +499,60 @@ test('a sequence (P17, D83 — in Story · Episode since 17 SY4): a fake-engine 
   const mj = jobs.items.find((j) => j.recipe.kind === 'render' && j.recipe.movie)!
   const mv = await api<{ kind: string; lineage_kind: string | null; parents: string[]; params: { movie?: boolean } }>('GET', `/assets/${mj.result.asset_ids![0]}`)
   expect([mv.kind, mv.lineage_kind, mv.params.movie, mv.parents.length]).toEqual(['video', 'render', true, 1])
+})
+test("the cut's tracks (CE2, D126): a FilmCraft cut shows its every track and FilmCraft's frame; the razor cuts a take, the right-click sets its speed, undo and redo are the cut's own, a ripple trim closes up, a track is renamed from its header", async ({ page }) => {
+  test.setTimeout(120_000)
+  // a take from the fake engine, on a new cut's V1 (through the API: the bins' + is the sequence scenario's)
+  const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
+  const caps = await api<{ defaults: { i2v: string } }>('GET', '/capabilities')
+  type JobLite = { id: string; status: string; result: { clip_id?: string } }
+  const job = (await api<{ jobs: { id: string }[] }>('POST', '/jobs', { recipe: { kind: 'i2v', model_id: caps.defaults.i2v, start_asset: img, width: 832, height: 480, frames: 33, fps: 16, prompt_text: 'tracks clip' }, stage: false, origin: { suite: 'animate', surface: 'clip' } })).jobs[0]
+  await expect.poll(async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.id === job.id)?.status, { timeout: 60_000 }).toBe('done')
+  const clipId = (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.id === job.id)!.result.clip_id!
+  const name = `Tracks ${Date.now().toString(36)}`
+  const tl = await api<{ id: string; revision: number; file: string | null }>('POST', '/timelines', { name })
+  expect(tl.file).toBe('cut.fcproj')
+  await api('POST', `/timelines/${tl.id}/place`, { revision: tl.revision, clip_id: clipId, track: 'V1', frame: 0 })
+  type Tracks = { video: { name: string; items: { id: number; start: number; duration: number; speed: number }[] }[]; audio: unknown[] }
+  const tracks = () => api<Tracks>('GET', `/timelines/${tl.id}/tracks`)
+  await openApp(page, { suite: 'story', tab: 'episode' })
+  await page.locator('.seq-row', { hasText: name }).click()
+  await expect(page.locator('.cut-row')).toHaveCount(5)                                          // V2 V1 · A1 A2 A3
+  const takes = page.locator('.cut-clip.k-take')
+  await expect(takes).toHaveCount(1)
+  await expect(page.locator('.cut-view img')).toBeVisible()                                      // FilmCraft's frame at the playhead
+  // the razor: a click in the take cuts it there
+  await page.locator('.transport button[title^="Razor tool"]').click()
+  const box = (await takes.first().boundingBox())!
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+  await expect(takes).toHaveCount(2)
+  // back to Select with its key (the Episode answers the cut's tools), then the right-click: Speed… at 50 %
+  await page.keyboard.press('v')
+  await expect(page.locator('.transport button[title^="Select tool"]')).toHaveClass(/\bactive\b/)
+  await contextChoose(page, takes.first(), 'Speed…')
+  await page.locator('.modal.ask input').fill('50')
+  await page.locator('.modal.ask button.primary').click()
+  await expect(takes.first()).toContainText('50 %')
+  // the cut's undo and redo (the transport)
+  await page.locator('.transport button[title^="Undo (cut)"]').click()
+  await expect(takes.first()).not.toContainText('50 %')
+  await page.locator('.transport button[title^="Redo (cut)"]').click()
+  await expect(takes.first()).toContainText('50 %')
+  // Ripple: the first piece's out edge dragged left — the second piece follows it
+  const before = (await tracks()).video[0].items.map((i) => i.start)
+  await page.locator('.transport button[title^="Ripple trim tool"]').click()
+  const b1 = (await takes.first().boundingBox())!
+  await page.mouse.move(b1.x + b1.width - 2, b1.y + b1.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(b1.x + b1.width - 32, b1.y + b1.height / 2, { steps: 4 })
+  await page.mouse.up()
+  await expect.poll(async () => (await tracks()).video[0].items[1].start, { timeout: 10_000 }).toBeLessThan(before[1])
+  // a track's header: Rename the track…
+  await contextChoose(page, page.locator('.cut-head', { hasText: 'Video 2' }), 'Rename the track…')
+  await page.locator('.modal.ask input').fill('Inserts')
+  await page.locator('.modal.ask button.primary').click()
+  await expect(page.locator('.cut-head', { hasText: 'Inserts' })).toHaveCount(1)
+  expect((await tracks()).video[1].name).toBe('Inserts')
 })
 
 test('a stage (P13 / ST1, D81): a new stage gets a set and a figure from the Library, the Outliner lists them, the document saves and survives a reload', async ({ page }) => {
@@ -1547,9 +1601,9 @@ test("an episode (17 / SY4, D85): the Shots bin lists a final shot and adds it s
   await expect(card).toHaveClass(/\bfinal\b/)
   await expect(card).toContainText(`${name} node`)
   await card.locator('button[aria-label^="add shot"]').click()                                // + : stamped with the shot, its version and its node
-  await expect(page.locator('.seq-clip')).toHaveCount(1)
+  await expect(page.locator('.cut-clip.k-take')).toHaveCount(1)
   await page.locator('.seq-bin:not(.shots-bin) .seq-clip-card button').first().click()         // a plain clip beside it
-  await expect(page.locator('.seq-clip')).toHaveCount(2)
+  await expect(page.locator('.cut-clip.k-take')).toHaveCount(2)
   type TL = { id: string; name: string; clips: { clip_id: string; shot_id: string | null; shot_version: string | null; node_id: string | null }[] }
   await expect.poll(async () => (await api<{ items: TL[] }>('GET', '/timelines')).items.find((t) => t.name === name)?.clips.length, { timeout: 10_000 }).toBe(2)
   const tl = (await api<{ items: TL[] }>('GET', '/timelines')).items.find((t) => t.name === name)!
@@ -1565,7 +1619,7 @@ test("an episode (17 / SY4, D85): the Shots bin lists a final shot and adds it s
   await expect(page.locator('.seq-insp .hint', { hasText: 'last:' })).toContainText(`timelines/${tl.id}/`)
   const fx = await api<{ text: string; path: string }>('POST', `/timelines/${tl.id}/export`, { format: 'fcpxml' })
   expect(fx.text).toContain(`value="${name} node"`)
-  expect(fx.text.match(/<marker /g)).toHaveLength(1)
+  expect(fx.text.match(/<(chapter-)?marker /g)).toHaveLength(1)                              // CE2: a FilmCraft cut's FCPXML is FilmCraft's (chapter-marker)
   const srt = await api<{ text: string }>('POST', `/timelines/${tl.id}/export`, { format: 'srt' })
   expect(srt.text).toContain('Open the gate.')
   expect(srt.text).toContain('00:00:00,000 -->')
@@ -3052,7 +3106,7 @@ test('the cut from the Flow (D125 SP6): Assemble from the Flow… asks at the Ch
   await sheet.locator('input#assemble-name').fill(name)
   await sheet.locator('button.primary', { hasText: /^Assemble$/ }).click()
   await expect(page.locator('.seq-row.active')).toContainText(name)
-  await expect(page.locator('.seq-clip')).toHaveCount(2)
+  await expect(page.locator('.cut-clip.k-take')).toHaveCount(2)
   type TL = { id: string; name: string; route: Record<string, string> | null; clips: { clip_id: string; shot_id: string | null; shot_version: string | null; node_id: string | null }[] }
   const cut = async () => (await api<{ items: TL[] }>('GET', '/timelines')).items.find((t) => t.name === name)!
   await expect.poll(async () => (await cut())?.clips.length, { timeout: 10_000 }).toBe(2)
@@ -3061,7 +3115,7 @@ test('the cut from the Flow (D125 SP6): Assemble from the Flow… asks at the Ch
   // a newer take of the talk (used as its clip) marks its lane clip changed; the badge updates it
   const clipB2 = await clipFor(b.shot_id, true)
   await expect.poll(async () => (await api<ShotLite>('GET', `/story/shots/${b.shot_id}`)).versions[0].clip_id).toBe(clipB2)
-  const badge = page.locator('.seq-clip .seq-changed')
+  const badge = page.locator('.cut-clip .seq-changed')
   await expect(badge).toHaveCount(1, { timeout: 15_000 })
   await expect(page.locator('.seq-insp .seq-check li.warn', { hasText: 'newer approved take' })).toHaveCount(1)
   await badge.click()

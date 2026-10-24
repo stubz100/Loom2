@@ -408,6 +408,12 @@ class TimelineStore:
         check(tl, clip_frames)
         if self._filmcraft():
             from .cuts import CUT_FILE
+
+            def shape(t: Timeline) -> tuple:
+                return ([(c.clip_id, c.in_, c.out, c.fps, c.shot_id, c.shot_version, c.node_id) for c in t.clips], list(t.overlaps), t.route)
+            if cur.file and shape(cur) == shape(tl):                # CE2: the lane did not change (a rename): V1 and its edits stay as they are
+                self.save(tl.model_copy(update={"file": CUT_FILE, "clips": [], "overlaps": [], "route": None}))
+                return self.get(tl_id)                              # type: ignore[return-value]
             self.cuts.write(tl, records or {})
             self.save(tl.model_copy(update={"file": CUT_FILE, "clips": [], "overlaps": [], "route": None}))
             return self.get(tl_id)                              # type: ignore[return-value]
@@ -416,6 +422,21 @@ class TimelineStore:
             raise CutError("FilmCraft is not built, and this cut's file is a FilmCraft project: it can be read, not changed (scripts/build_filmcraft.py)")
         self.save(tl)
         return tl
+
+    def based(self, tl_id: str, base: int | None) -> Timeline:
+        """CE2: the cut an editor's change is based on — 404 when it is gone, 409 when the change is based on an older revision."""
+        cur = self.get(tl_id)
+        if cur is None:
+            raise KeyError(tl_id)
+        if base is not None and int(base) != cur.revision:
+            raise StaleTimeline(f"the sequence is at revision {cur.revision}, the change is based on {base} — reload it first")
+        return cur
+
+    def touch(self, tl_id: str) -> Timeline:
+        """CE2: an edit was made in the cut's project — the record's revision moves on (the clients' 409 guard)."""
+        rec = Timeline.model_validate(read_json(self.path(tl_id)))
+        self.save(rec.model_copy(update={"revision": rec.revision + 1, "updated_at": utc_now()}))
+        return self.get(tl_id)                                  # type: ignore[return-value]
 
     def delete(self, tl_id: str) -> bool:
         p = self.path(tl_id)
@@ -435,7 +456,10 @@ class TimelineStore:
         """D125 (S14): `resolve` writes the FCPXML (its markers in `markers.txt`), the EDL and the SRT into one folder named after the cut
         (`timelines/<id>/<name>/`) and returns the folder and the files' names. Otherwise: write the EDL, FCPXML or SRT beside the document (`timelines/<id>/<name>.<ext>`); the FCPXML names each clip's proxy by file URL and
         carries a chapter marker per named clip (`name_of`), written to `markers.txt` beside it too; the SRT takes each clip's lines (`lines_of`);
-        the FCPXML and the EDL carry the lines' voices (`audio_of`, CN2) on an audio lane at the lines' ticks."""
+        the FCPXML and the EDL carry the lines' voices (`audio_of`, CN2) on an audio lane at the lines' ticks. CE2: a FilmCraft cut exports
+        what its project holds — FilmCraft's own FCPXML and EDL, the SRT and markers from its tracks (`_export_cut`)."""
+        if tl.file:
+            return self._export_cut(tl, fmt, name_of, lines_of)
         if fmt == "resolve":
             folder = self.export_dir(tl.id) / slugify(tl.name, "sequence")
             folder.mkdir(parents=True, exist_ok=True)
@@ -469,3 +493,39 @@ class TimelineStore:
         if fmt == "fcpxml" and name_of:
             atomic_write_text(d / "markers.txt", to_markers(tl, name_of))
         return out, text
+
+    def _export_cut(self, tl: Timeline, fmt: str, name_of: Callable[[TimelineClip], str | None] | None,
+                    lines_of: Callable[[TimelineClip], list[str]] | None) -> tuple[Path, str]:
+        """CE2 (30 §12): a FilmCraft cut's exports — the FCPXML and EDL are FilmCraft's (gaps, speed, every track: needs FilmCraft), the
+        SRT and the markers come from the project's tracks (no FilmCraft needed); `resolve` puts the four in the cut's folder."""
+        from .cuts import CutError, cut_markers, cut_srt, read, tracks
+        d = self.export_dir(tl.id)
+        slug = slugify(tl.name, "sequence")
+        if fmt == "resolve":
+            folder = d / slug
+            folder.mkdir(parents=True, exist_ok=True)
+            names = []
+            for one in ("fcpxml", "edl", "srt"):
+                path, _ = self._export_cut(tl, one, name_of, lines_of)
+                path.replace(folder / path.name)
+                names.append(path.name)
+            if (d / "markers.txt").is_file():
+                (d / "markers.txt").replace(folder / "markers.txt")
+                names.append("markers.txt")
+            return folder, "\n".join(names)
+        if self.cuts is not None and self.cuts.available():
+            self.cuts.sync_lines(tl)                                    # a line voiced since the cut was made reaches A1 first
+        cut = tracks(read(d / tl.file))                                # type: ignore[operator]
+        out = d / f"{slug}.{fmt}"
+        if fmt in ("edl", "fcpxml"):
+            if self.cuts is None or not self.cuts.available():
+                raise CutError("FilmCraft is not built: a FilmCraft cut's FCPXML and EDL are FilmCraft's own (scripts/build_filmcraft.py)")
+            text = self.cuts.interchange(tl, fmt, out)
+            if fmt == "fcpxml" and name_of:
+                atomic_write_text(d / "markers.txt", cut_markers(cut, name_of))
+            return out, text
+        if fmt == "srt":
+            text = cut_srt(cut, lines_of or (lambda c: []))
+            atomic_write_text(out, text)
+            return out, text
+        raise ValueError(f"unknown export format {fmt!r}")

@@ -3,10 +3,10 @@
 import { handleKeyFor, type Command } from '../../frame/commands'
 
 export type StoryTab = 'world' | 'cast' | 'shots' | 'flow' | 'episode'
-const PREFIX: Record<StoryTab, string> = { world: 'story.world.', cast: 'story.cast.', shots: 'story.shot.', flow: 'story.flow.', episode: 'story.episode.' }
+const PREFIX: Record<StoryTab, string[]> = { world: ['story.world.'], cast: ['story.cast.'], shots: ['story.shot.'], flow: ['story.flow.'], episode: ['story.episode.', 'story.cut.'] }   // CE2: the cut's editor answers on the Episode
 
 /** The command belongs to the tab (its id carries the tab's prefix). */
-export const ownedBy = (tab: StoryTab, c: Pick<Command, 'id'>): boolean => c.id.startsWith(PREFIX[tab])
+export const ownedBy = (tab: StoryTab, c: Pick<Command, 'id'>): boolean => PREFIX[tab].some((p) => c.id.startsWith(p))
 /** The key is typed into a field (or a modal owns it), not meant for the tab's verbs — as useKeyboardMap's guard. */
 export const typing = (t: EventTarget | null): boolean => !!(t as HTMLElement | null)?.closest?.('input, textarea, select, [contenteditable], .modal')
 

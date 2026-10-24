@@ -2842,6 +2842,584 @@
         "title": "CoverageCaps",
         "type": "object"
       },
+      "CutEdit": {
+        "properties": {
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/CutStep"
+            },
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "steps"
+        ],
+        "title": "CutEdit",
+        "type": "object"
+      },
+      "CutEdited": {
+        "properties": {
+          "results": {
+            "items": {},
+            "title": "Results",
+            "type": "array"
+          },
+          "timeline": {
+            "$ref": "#/components/schemas/Timeline"
+          },
+          "tracks": {
+            "$ref": "#/components/schemas/CutTracks"
+          }
+        },
+        "required": [
+          "timeline",
+          "tracks"
+        ],
+        "title": "CutEdited",
+        "type": "object"
+      },
+      "CutItem": {
+        "description": "One clip on a track, as the editor shows it (frames at the cut's rate; the source in seconds).",
+        "properties": {
+          "asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Id"
+          },
+          "clip_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clip Id"
+          },
+          "duration": {
+            "title": "Duration",
+            "type": "number"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "hold": {
+            "default": false,
+            "title": "Hold",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "item": {
+            "title": "Item",
+            "type": "integer"
+          },
+          "kind": {
+            "default": "other",
+            "enum": [
+              "take",
+              "line",
+              "video",
+              "picture",
+              "sound",
+              "adjustment",
+              "other"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line"
+          },
+          "media_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Path"
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id"
+          },
+          "reverse": {
+            "default": false,
+            "title": "Reverse",
+            "type": "boolean"
+          },
+          "shot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shot Id"
+          },
+          "shot_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shot Version"
+          },
+          "source_in": {
+            "default": 0.0,
+            "title": "Source In",
+            "type": "number"
+          },
+          "speed": {
+            "default": 1.0,
+            "title": "Speed",
+            "type": "number"
+          },
+          "start": {
+            "title": "Start",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "item",
+          "name",
+          "kind",
+          "start",
+          "duration",
+          "source_in",
+          "speed",
+          "reverse",
+          "enabled",
+          "hold",
+          "media_path",
+          "clip_id",
+          "asset_id",
+          "shot_id",
+          "shot_version",
+          "node_id",
+          "line"
+        ],
+        "title": "CutItem",
+        "type": "object"
+      },
+      "CutPlace": {
+        "properties": {
+          "asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Id"
+          },
+          "clip_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clip Id"
+          },
+          "frame": {
+            "default": 0.0,
+            "title": "Frame",
+            "type": "number"
+          },
+          "insert": {
+            "default": false,
+            "title": "Insert",
+            "type": "boolean"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "shot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shot Id"
+          },
+          "shot_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shot Version"
+          },
+          "track": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "default": "V2",
+            "title": "Track"
+          }
+        },
+        "title": "CutPlace",
+        "type": "object"
+      },
+      "CutReplace": {
+        "properties": {
+          "clip": {
+            "title": "Clip",
+            "type": "integer"
+          },
+          "clip_id": {
+            "title": "Clip Id",
+            "type": "string"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "shot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shot Id"
+          },
+          "shot_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shot Version"
+          }
+        },
+        "required": [
+          "clip",
+          "clip_id"
+        ],
+        "title": "CutReplace",
+        "type": "object"
+      },
+      "CutStep": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": true,
+            "title": "Params",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "CutStep",
+        "type": "object"
+      },
+      "CutTrack": {
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CutItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "video",
+              "audio"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "locked": {
+            "default": false,
+            "title": "Locked",
+            "type": "boolean"
+          },
+          "muted": {
+            "default": false,
+            "title": "Muted",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "transitions": {
+            "items": {
+              "$ref": "#/components/schemas/CutTransition"
+            },
+            "title": "Transitions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "locked",
+          "muted",
+          "enabled",
+          "items",
+          "transitions"
+        ],
+        "title": "CutTrack",
+        "type": "object"
+      },
+      "CutTracks": {
+        "description": "CE2: a FilmCraft cut's every track, read from its project.",
+        "properties": {
+          "audio": {
+            "items": {
+              "$ref": "#/components/schemas/CutTrack"
+            },
+            "title": "Audio",
+            "type": "array"
+          },
+          "duration": {
+            "title": "Duration",
+            "type": "number"
+          },
+          "fps": {
+            "title": "Fps",
+            "type": "integer"
+          },
+          "h": {
+            "title": "H",
+            "type": "integer"
+          },
+          "redo": {
+            "default": 0,
+            "title": "Redo",
+            "type": "integer"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "undo": {
+            "default": 0,
+            "title": "Undo",
+            "type": "integer"
+          },
+          "video": {
+            "items": {
+              "$ref": "#/components/schemas/CutTrack"
+            },
+            "title": "Video",
+            "type": "array"
+          },
+          "w": {
+            "title": "W",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sequence",
+          "fps",
+          "w",
+          "h",
+          "duration",
+          "video",
+          "audio",
+          "undo",
+          "redo"
+        ],
+        "title": "CutTracks",
+        "type": "object"
+      },
+      "CutTransition": {
+        "properties": {
+          "duration": {
+            "title": "Duration",
+            "type": "number"
+          },
+          "effect": {
+            "title": "Effect",
+            "type": "string"
+          },
+          "from": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "start": {
+            "title": "Start",
+            "type": "number"
+          },
+          "to": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To"
+          }
+        },
+        "required": [
+          "id",
+          "effect",
+          "start",
+          "duration",
+          "from",
+          "to"
+        ],
+        "title": "CutTransition",
+        "type": "object"
+      },
+      "CutUndo": {
+        "properties": {
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          }
+        },
+        "title": "CutUndo",
+        "type": "object"
+      },
       "Deleted": {
         "properties": {
           "deleted": {
@@ -29222,6 +29800,59 @@
         ]
       }
     },
+    "/timelines/{tl_id}/edit": {
+      "post": {
+        "description": "CE2: the editor's change as FilmCraft commands (move, trim, roll, slip, slide, razor, ripple delete, speed, freeze, transitions, a\ntrack's name / lock / mute, tracks added, undo / redo), run in the session in order and saved.",
+        "operationId": "timeline_edit_timelines__tl_id__edit_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tl_id",
+            "required": true,
+            "schema": {
+              "title": "Tl Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CutEdit"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CutEdited"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Timeline Edit",
+        "tags": [
+          "timelines"
+        ]
+      }
+    },
     "/timelines/{tl_id}/export": {
       "post": {
         "operationId": "timeline_export_timelines__tl_id__export_post",
@@ -29269,6 +29900,173 @@
           }
         },
         "summary": "Timeline Export",
+        "tags": [
+          "timelines"
+        ]
+      }
+    },
+    "/timelines/{tl_id}/frame": {
+      "get": {
+        "description": "CE2: the cut's frame at `t` seconds as PNG from FilmCraft's session, its longest side `side` — the Episode's viewer.",
+        "operationId": "timeline_frame_timelines__tl_id__frame_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tl_id",
+            "required": true,
+            "schema": {
+              "title": "Tl Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "t",
+            "required": false,
+            "schema": {
+              "default": 0.0,
+              "title": "T",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "side",
+            "required": false,
+            "schema": {
+              "default": 960,
+              "title": "Side",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Timeline Frame",
+        "tags": [
+          "timelines"
+        ]
+      }
+    },
+    "/timelines/{tl_id}/place": {
+      "post": {
+        "description": "CE2: a loom2 clip or a Catalogue picture, sound or video on a track at a frame (imported once into the cut's project, with its link).",
+        "operationId": "timeline_place_timelines__tl_id__place_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tl_id",
+            "required": true,
+            "schema": {
+              "title": "Tl Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CutPlace"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CutEdited"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Timeline Place",
+        "tags": [
+          "timelines"
+        ]
+      }
+    },
+    "/timelines/{tl_id}/redo": {
+      "post": {
+        "description": "CE2: the change undone last, made again.",
+        "operationId": "timeline_redo_timelines__tl_id__redo_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tl_id",
+            "required": true,
+            "schema": {
+              "title": "Tl Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CutUndo"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CutEdited"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Timeline Redo",
         "tags": [
           "timelines"
         ]
@@ -29329,6 +30127,155 @@
           }
         },
         "summary": "Timeline Render",
+        "tags": [
+          "timelines"
+        ]
+      }
+    },
+    "/timelines/{tl_id}/replace": {
+      "post": {
+        "description": "CE2 (*Update*, D125 S13, on a FilmCraft cut): the track's clip plays another take in place — its start and length kept.",
+        "operationId": "timeline_replace_timelines__tl_id__replace_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tl_id",
+            "required": true,
+            "schema": {
+              "title": "Tl Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CutReplace"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CutEdited"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Timeline Replace",
+        "tags": [
+          "timelines"
+        ]
+      }
+    },
+    "/timelines/{tl_id}/tracks": {
+      "get": {
+        "description": "CE2: a FilmCraft cut's every track (its clips with their media and loom2's links, the transitions), read from its project.",
+        "operationId": "timeline_tracks_timelines__tl_id__tracks_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tl_id",
+            "required": true,
+            "schema": {
+              "title": "Tl Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CutTracks"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Timeline Tracks",
+        "tags": [
+          "timelines"
+        ]
+      }
+    },
+    "/timelines/{tl_id}/undo": {
+      "post": {
+        "description": "CE2: the cut as it was before its last change (its project's snapshot; any change, Assemble included, is one step).",
+        "operationId": "timeline_undo_timelines__tl_id__undo_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tl_id",
+            "required": true,
+            "schema": {
+              "title": "Tl Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CutUndo"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CutEdited"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Timeline Undo",
         "tags": [
           "timelines"
         ]

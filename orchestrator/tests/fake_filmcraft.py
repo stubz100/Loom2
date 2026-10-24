@@ -7,7 +7,11 @@ in for EffectCraft. Runs under the orchestrator's interpreter (PyAV, NumPy, soun
 It keeps the project in FilmCraft's own JSON shape (`filmcraft.project`, schema 13: items with `kind` Media / Sequence and `metadata`,
 sequences with video and audio tracks of items in ticks and transitions) for the commands loom2 sends — prefs.set, file.newProject,
 file.newSequence, file.open, file.save(As), file.import (media, PNG sequences at the preference's rate, audio), timeline.place (overwrite),
-edit.clear, sequence.applyVideoTransition (centred on the cut), metadata.set, clip.replaceFromBin, project.delete, file.exportMedia. A frame is a flat colour: R = the frame
+edit.clear, sequence.applyVideoTransition (centred on the cut), metadata.set, clip.replaceFromBin, project.delete, file.exportMedia;
+CE2's editor commands as the probe saw the real ones do them — timeline.trim (regular / ripple), roll, slip, slide, razor (the
+dissolve follows the new piece), move (across tracks, its transitions dropped), edit.rippleDelete, clip.speedDuration, clip.frameHold,
+timeline.setTrack, sequence.addTracks, timeline.select, edit.copy / pasteAttributes, edit.undo / redo (snapshots), and
+file.exportInterchange (a small FCPXML or EDL of V1). A frame is a flat colour: R = the frame
 number, G = how many clips V1 holds, B = 128. The export writes an H.264 MP4 at the sequence's size — each V1 clip a flat colour (its media
 item's id × 40), a dissolve blended — and A1's audio clips mixed into one AAC track where they sit.
 """
@@ -43,6 +47,10 @@ class Fake:
         self.path: str | None = None
         self.doc = self.blank("Untitled")
         self.seq: int | None = None
+        self.undo: list[dict] = []
+        self.redo: list[dict] = []
+        self.selection: list[int] = []
+        self.clipboard: list | None = None
 
     @staticmethod
     def blank(name: str) -> dict:
@@ -113,7 +121,46 @@ class Fake:
                     "video": {"width": v.codec_context.width, "height": v.codec_context.height, "frame_rate": {"num": rate, "den": 1}}, "audio_streams": []}
 
     # ---- commands ---------------------------------------------------------------------------------
+    PURE = {"prefs.set", "file.newProject", "file.closeProject", "file.newSequence", "file.save", "file.saveAs", "file.open", "file.import",
+            "file.exportMedia", "file.exportInterchange", "timeline.select", "edit.copy", "edit.undo", "edit.redo", "metadata.set", "project.delete"}
+
     def run(self, cid: str, p: dict):
+        if cid not in self.PURE:
+            import copy
+            before = copy.deepcopy(self.doc)
+            r = self.run_edit(cid, p)
+            self.undo.append(before)
+            self.redo.clear()
+            return r
+        if cid == "edit.undo":
+            if not self.undo:
+                raise Refused("nothing to undo")
+            self.redo.append(self.doc)
+            self.doc = self.undo.pop()
+            return {"undone": True}
+        if cid == "edit.redo":
+            if not self.redo:
+                raise Refused("nothing to redo")
+            self.undo.append(self.doc)
+            self.doc = self.redo.pop()
+            return {"redone": True}
+        if cid == "timeline.select":
+            self.selection = [int(c) for c in p.get("clips") or []]
+            return {"selection": self.selection}
+        if cid == "edit.copy":
+            if not self.selection:
+                raise Refused("command `edit.copy` is not available right now: nothing selected")
+            _, ti = self.find_clip(self.selection[0])
+            self.clipboard = [dict(e) for e in ti.get("effects", [])]
+            return None
+        if cid == "file.exportInterchange":
+            return self.interchange(p.get("format", "xml"), Path(p["path"]))
+        return self.run_edit(cid, p)
+
+    def run_edit(self, cid: str, p: dict):
+        ed = self.editor(cid, p)
+        if ed is not NotImplemented:
+            return ed
         if cid == "prefs.set":
             self.prefs.update(p.get("values") or {p["key"]: p["value"]})
             return {"ok": True}
@@ -221,8 +268,178 @@ class Fake:
             it["metadata"].update(p.get("fields") or {p["field"]: p["value"]})
             return {"item": int(p["item"]), "metadata": it["metadata"], "changed": True}
         if cid == "file.exportMedia":
+            if p.get("format") == "png":                               # a PNG sequence: frame000.png … beside `path`, at `scale`
+                return self.export_png(Path(p["path"]), float(p.get("scale", 1.0)))
             return self.export(Path(p["path"]))
         raise Refused(f"unknown command `{cid}`")
+
+    # ---- CE2: the editor's commands, as the real ones do them (the probe on 764723f) ---------------------------------------------------
+    def fps(self) -> int:
+        return round(self.sequence()["settings"]["frame_rate"]["num"])
+
+    def delta(self, p: dict) -> int:
+        return int(p["delta"]) if "delta" in p else int(p["deltaFrames"]) * TICK // self.fps()
+
+    def neighbours(self, t: dict, ti: dict) -> tuple[dict | None, dict | None]:
+        items = sorted(t["items"], key=lambda x: x["start"])
+        k = items.index(ti)
+        return (items[k - 1] if k > 0 else None), (items[k + 1] if k + 1 < len(items) else None)
+
+    def editor(self, cid: str, p: dict):
+        if cid == "timeline.setTrack":
+            t = self.track(p["track"])
+            for k, v in (("name", "name"), ("locked", "locked"), ("muted", "muted"), ("enabled", "enabled")):
+                if v in p:
+                    t[k] = p[v]
+            return None
+        if cid == "timeline.trim":
+            t, ti = self.find_clip(int(p["clip"]))
+            d = self.delta(p)
+            if p.get("edge") == "in":
+                ti["start"] += d
+                ti["source_in"] += round(d * ti.get("speed", 1.0))
+                ti["duration"] -= d
+            else:
+                old_end = ti["start"] + ti["duration"]
+                ti["duration"] += d
+                if p.get("mode") == "ripple":
+                    for x in t["items"]:
+                        if x is not ti and x["start"] >= old_end:
+                            x["start"] += d
+                    for x in t["transitions"]:
+                        if x["start"] >= old_end - x["duration"]:
+                            x["start"] += d
+            return {"delta": d}
+        if cid == "timeline.roll":
+            t, left = self.find_clip(int(p["left"]))
+            _, right = self.find_clip(int(p["right"]))
+            d = self.delta(p)
+            left["duration"] += d
+            right["start"] += d
+            right["source_in"] += d
+            right["duration"] -= d
+            for x in t["transitions"]:
+                if x.get("from") == left["id"] and x.get("to") == right["id"]:
+                    x["start"] += d
+            return {"delta": d}
+        if cid == "timeline.slip":
+            _, ti = self.find_clip(int(p["clip"]))
+            ti["source_in"] += self.delta(p)
+            return None
+        if cid == "timeline.slide":
+            t, ti = self.find_clip(int(p["clip"]))
+            d = self.delta(p)
+            prev, nxt = self.neighbours(t, ti)
+            ti["start"] += d
+            if prev is not None:
+                prev["duration"] += d
+            if nxt is not None:
+                nxt["start"] += d
+                nxt["source_in"] += d
+                nxt["duration"] -= d
+            return None
+        if cid == "timeline.razor":
+            at = int(p["time"])
+            tracks = [self.track(p["track"])] if p.get("track") is not None else self.sequence()["video_tracks"] + self.sequence()["audio_tracks"]
+            cuts = 0
+            for t in tracks:
+                for ti in list(t["items"]):
+                    if ti["start"] < at < ti["start"] + ti["duration"]:
+                        nid = self.new_id()
+                        head = at - ti["start"]
+                        piece = {**ti, "id": nid, "start": at, "duration": ti["duration"] - head, "source_in": ti["source_in"] + round(head * ti.get("speed", 1.0))}
+                        ti["duration"] = head
+                        t["items"].append(piece)
+                        for x in t["transitions"]:
+                            if x.get("from") == ti["id"] and x["start"] >= at - x["duration"]:
+                                x["from"] = nid
+                        cuts += 1
+                t["items"].sort(key=lambda x: x["start"])
+            return {"cuts": cuts}
+        if cid == "timeline.move":
+            moved = []
+            for m in p.get("moves") or []:
+                t, ti = self.find_clip(int(m["clip"]))
+                t["items"].remove(ti)
+                t["transitions"] = [x for x in t["transitions"] if ti["id"] not in (x.get("from"), x.get("to"))]
+                dest = self.track(m.get("track", t["id"]))
+                ti["start"] = int(m["time"])
+                dest["items"].append(ti)
+                dest["items"].sort(key=lambda x: x["start"])
+                moved.append(ti["id"])
+            return {"moved": moved, "overwritten": []}
+        if cid == "edit.rippleDelete":
+            for c in p.get("clips") or []:
+                t, ti = self.find_clip(int(c))
+                t["items"].remove(ti)
+                t["transitions"] = [x for x in t["transitions"] if ti["id"] not in (x.get("from"), x.get("to"))]
+                for x in t["items"]:
+                    if x["start"] >= ti["start"] + ti["duration"]:
+                        x["start"] -= ti["duration"]
+            return None
+        if cid == "clip.speedDuration":
+            for c in p.get("clips") or []:
+                _, ti = self.find_clip(int(c))
+                ti["speed"] = float(p.get("speed", 100)) / 100.0
+            return None
+        if cid == "clip.frameHold":
+            out = []
+            for c in p.get("clips") or []:
+                t, ti = self.find_clip(int(c))
+                at = int(p.get("time", ti["start"]))
+                if ti["start"] < at < ti["start"] + ti["duration"]:
+                    self.editor("timeline.razor", {"time": at, "track": t["id"]})
+                    piece = next(x for x in t["items"] if x["start"] == at)
+                    piece["frame_hold"] = piece["source_in"]
+                    out.append(piece["id"])
+            return {"clips": out}
+        if cid == "sequence.addTracks":
+            s = self.sequence()
+            made = {"video": [], "audio": [], "submix": []}
+            for kind, key, label in (("video", "video_tracks", "Video"), ("audio", "audio_tracks", "Audio")):
+                for _ in range(int(p.get(kind, 1 if kind == "video" else 0))):
+                    tid = self.new_id()
+                    s[key].append({"id": tid, "kind": label, "name": f"{label} {len(s[key]) + 1}", "items": [], "transitions": [], "locked": False,
+                                   "enabled": True, "muted": False})
+                    made[kind].append(tid)
+            return made
+        if cid == "edit.pasteAttributes":
+            for c in p.get("clips") or []:
+                _, ti = self.find_clip(int(c))
+                ti["effects"] = [dict(e) for e in (self.clipboard or [])]
+            return None
+        if cid == "markers.clearAll":
+            self.sequence()["markers"] = []
+            return None
+        if cid == "markers.addChapter":
+            mid = self.new_id()
+            self.sequence()["markers"].append({"id": mid, "start": int(p.get("time", 0)), "duration": 0, "name": p.get("name", ""), "comment": "",
+                                               "kind": "Chapter", "color": "Mango"})
+            return {"marker": mid}
+        if cid == "clip.rename":
+            _, ti = self.find_clip(int(p["clip"]))
+            ti["name"] = p["name"]
+            return None
+        return NotImplemented
+
+    def interchange(self, fmt: str, out: Path) -> dict:
+        s = self.sequence()
+        fps = self.fps()
+        v1 = sorted(s["video_tracks"][0]["items"], key=lambda x: x["start"])
+        if fmt == "edl":
+            rows = [f"{k + 1:03d}  AX       V     C        {ti['start'] * fps // TICK} {(ti['start'] + ti['duration']) * fps // TICK}\n* FROM CLIP NAME: {ti['name']}"
+                    for k, ti in enumerate(v1)]
+            text = "TITLE: " + self.items()[str(self.seq)]["name"] + "\n\n" + "\n".join(rows) + "\n"
+        else:
+            clips = "".join(f'<asset-clip name="{ti["name"]}" offset="{ti["start"] * fps // TICK}/{fps}s" duration="{ti["duration"] * fps // TICK}/{fps}s"/>' for ti in v1)
+            clips += "".join(f'<chapter-marker start="{m["start"] * fps // TICK}/{fps}s" value="{m["name"]}"/>' for m in s.get("markers", []) if m.get("kind") == "Chapter")
+            a1 = s["audio_tracks"][0]["items"] if s["audio_tracks"] else []                   # the dialogue: connected clips below the spine, as FilmCraft writes them
+            clips += "".join(f'<asset-clip lane="-1" name="{ti["name"]}" offset="{ti["start"] * fps // TICK}/{fps}s" duration="{ti["duration"] * fps // TICK}/{fps}s"/>' for ti in a1)
+            if a1:
+                clips = '<resources><asset hasAudio="1"/></resources>' + clips
+            text = f'<?xml version="1.0" encoding="UTF-8"?>\n<fcpxml version="1.10"><library><event><project><sequence><spine>{clips}</spine></sequence></project></event></library></fcpxml>\n'
+        out.write_text(text, encoding="utf-8")
+        return {"bytes": len(text), "path": str(out)}
 
     def inspect(self) -> dict:
         s = self.sequence()
@@ -240,6 +457,18 @@ class Fake:
         scale = min(1.0, max_side / max(w, h)) if max_side else 1.0
         f = round(seconds * s["settings"]["frame_rate"]["num"])
         return png(max(1, round(w * scale)), max(1, round(h * scale)), (f % 256, len(s["video_tracks"][0]["items"]) % 256, 128))
+
+    def export_png(self, out: Path, scale: float) -> dict:
+        s = self.sequence()
+        fps = s["settings"]["frame_rate"]["num"]
+        end = max([ti["start"] + ti["duration"] for ti in s["video_tracks"][0]["items"]] or [0])
+        total = round(end * fps / TICK)
+        w, h = max(2, round(s["settings"]["width"] * scale)), max(2, round(s["settings"]["height"] * scale))
+        out.parent.mkdir(parents=True, exist_ok=True)
+        width = max(3, len(str(total - 1)))
+        for f in range(total):
+            (out.parent / f"{out.stem}{f:0{width}d}.png").write_bytes(png(w, h, (f % 256, 0, 128)))
+        return {"path": str(out), "result": {"frames": total}}
 
     def export(self, out: Path) -> dict:
         from fractions import Fraction

@@ -1,6 +1,6 @@
 # 30 · RC4's study — FilmCraft for the cut editor
 
-Status: **study, 2026-10-24; answered the same day → D126 (§10); CE1 built (§11); CE2 next.** D96 planned RC4 as "FilmCraft reviewed as 03 reviewed EffectCraft
+Status: **study, 2026-10-24; answered the same day → D126 (§10); CE1 built (§11); CE2 built (§13); CE3 next.** D96 planned RC4 as "FilmCraft reviewed as 03 reviewed EffectCraft
 (what to reuse, how), then the multi-track cut editor that replaces the single-lane Episode" ([05](05-flow-nodes-as-shot-recipes.md)
 §6), with O6 (a scene grade and shot-match in the cut, [06](06-continuity-across-shots.md)) attached. RC1–RC3 are built
 ([28](28-recipe-graph.md), [29](29-movie-render.md)); this is the study, measured where it could be (§3, the probe E32).
@@ -167,7 +167,7 @@ Not in it: speed ramps (not rendered by FilmCraft), multicam, the audio mixer's 
 | --- | --- | --- |
 | **FC1 · the FCPXML dissolve** ✓ with this study | spine clips end to end, the transition on the cut over the handles (§3a) | 0.5 |
 | **CE1 · the engine** | `engine/filmcraft.pin.json` + `scripts/build_filmcraft.py` (`--check` in CI), `loom2/filmcraft.py` (the session, as `effectcraft.py`), a fake for the tests; the cut's `.fcproj` built by commands from the document, with conformed media; the movie by `file.exportMedia`; a rig check (memory beside ComfyUI, an episode-length cut) | 3 |
-| **CE2 · tracks** | the document's schema step to tracks; the multi-track timeline in Story · Episode (V1–V2, A1–A3, `+`); the edits as commands; the viewer's frames from the session | 4–5 |
+| **CE2 · tracks** ✓ built 2026-10-24 (§13) | the document's schema step to tracks; the multi-track timeline in Story · Episode (V1–V2, A1–A3, `+`); the edits as commands; the viewer's frames from the session | 4–5 |
 | **CE3 · sound** | the lines as A1 clips, music and effects from the Catalogue's audio, gain and volume keys, ducking, loudness at export; sound in the page | 2 |
 | **CE4 · colour (O6)** | *Grade the scene* (adjustment layer per scene group), *Match to…*, presets and LUT looks | 2 |
 | **CE5 · captions and delivery** | the caption track from the lines, burn-in, H.264 / ProRes presets; the Resolve folder kept | 1–2 |
@@ -255,3 +255,88 @@ into the cut's folder and the Catalogue as RC3. RC3's render stays where FilmCra
   A1; FilmCraft's movie in 5.9 s with Mara conformed (RC3's own render of the same lane: 12.0 s), the same 225 frames at 1920×1080 (mean
   difference 1.24 / 4.0 / 0.32 / 0.36 levels on frames 48 / 114 / 160 / 224) and the same sound; an edit round-trips; the export's peak
   memory 1.65 GB (4.0 s); warm frames at ½ 12.8 ms; software decoding in the session and the export.
+
+## 12. CE2 · tracks — the plan (2026-10-24)
+
+**The commands, probed on the real binary** (a copy of CE1's converted A1 cut): `timeline.setTrack {name}` names a track; a new
+transition on an edit replaces the old (`dip_to_black` over the dissolve); ripple trim, roll, slip and slide move what Premiere's do; razor
+splits and the dissolve follows the new piece; `timeline.move` across tracks takes its transition along; `clip.speedDuration` at 50 %
+keeps the length; `clip.frameHold` splits and holds; `sequence.addTracks` adds V3 / A4; `edit.undo` undoes in the session;
+`file.exportInterchange` writes FCPXML and EDL. **A ripple delete is refused** when a sync-locked track has a clip in the way (the
+dialogue on A1) — FilmCraft's message goes to the author as it is. `edit.clear` takes clips, not a transition.
+
+**What changes for a FilmCraft cut** (a cut that is still a record keeps today's single lane):
+
+- **The tracks are read from the project** (`cuts.tracks()`: every track's items with their media, links, speed and hold; the
+  transitions) and shown as the Episode's timeline: V tracks above, A tracks below, one row each, the dialogue lines as clips on A1.
+- **Every edit is a FilmCraft command** through one route (`POST /timelines/{id}/edit`, a whitelist of the commands above, the record's
+  revision guarding it like a PUT) — move, trim (ripple), roll, slip, slide, razor, ripple delete, lift, speed, freeze frame, a dissolve or
+  a dip on an edit, a track's name, lock and mute, add a track. Undo and redo are FilmCraft's, in the session.
+- **Placing** a Catalogue clip, picture or sound on a track (`POST /timelines/{id}/place`): imported once as a project item with its
+  links, placed where it is dropped.
+- **The Flow's verbs stay**: *Assemble* rebuilds V1 (it asks first, as now); *Update* swaps a take in place (`clip.replaceFromBin`), so the
+  edits around it survive; the checklist and the *changed* marks read V1's takes in order.
+- **The viewer** shows FilmCraft's frames from the session (`GET /timelines/{id}/frame`: ½ when still, ¼ while scrubbing or playing).
+- **The exports** of a FilmCraft cut are FilmCraft's FCPXML and EDL (what the project holds: gaps, speed, every track), the SRT and the
+  markers from the project's dialogue clips and takes; *Render draft* is FilmCraft's export to PNG → a clip.
+- **Mouse-first (D32):** the edit tools (Select, Ripple, Roll, Slip, Slide, Razor) on the toolbar with Premiere's keys as accelerators;
+  a clip's right-click (speed, freeze, dissolve / dip in and out, lift, ripple delete, move to track ▸, rename, update to the approved
+  take); a track header's right-click (rename, lock, mute, add a track).
+
+Slices: **CE2a** the server (tracks, the edit and place routes, frames, the exports and the draft for FilmCraft cuts, *Update* in place);
+**CE2b** the timeline (tracks, tools, menus, drops); **CE2c** the viewer. Each with tests on the fake, the e2e and a rig check.
+
+## 13. CE2 as built (2026-10-24)
+
+**The server** (`loom2/cuts.py`, `routes/timelines.py`):
+
+- `tracks()` reads every track of a FilmCraft cut from its project (clips with their kind — take, line, video, picture, sound,
+  adjustment — their media, speed, hold and loom2's links; the transitions); `GET /timelines/{id}/tracks`.
+- `POST /timelines/{id}/edit` runs the editor's steps in the session: a whitelist of FilmCraft's commands (`EDIT_COMMANDS`: move, trim,
+  roll, slip, slide, razor, rate stretch, a track's settings, select, ripple delete, lift, transitions, close gap, add / delete tracks, speed,
+  freeze, enable, rename) and `loom2.removeTransition` — **FilmCraft (764723f) has no command to delete a transition**: the clip it leads
+  into is lifted and placed back with its attributes copied over (`edit.copy` / `edit.pasteAttributes`) and its speed set again.
+- `POST /timelines/{id}/place` (a loom2 clip with its shot's stamps, or a Catalogue picture, sound or video; a sound only on an audio
+  track, the rest only on a video track), `/replace` (*Update* in place: `clip.replaceFromBin`, the edits around it kept), `/undo`, `/redo`,
+  `GET /timelines/{id}/frame` (the viewer's PNG).
+- **The cut's undo is loom2's**: before every change the project is copied to `timelines/<id>/history/undo/` (50 kept); undo and redo
+  restore a copy and reopen it. FilmCraft's own undo lives in its session (lost with it) and counted loom2's marker steps as edits — the
+  first test showed an undo removing markers instead of the speed. Any change (Assemble included) is one step; a change FilmCraft refuses
+  part-way is rolled back and leaves no step.
+- **Chapter markers are loom2's**: after every change, one per named shot on V1 (a *run*: consecutive pieces of one node — a razored take
+  is still one shot) at its start, so FilmCraft's FCPXML carries them (FilmCraft keeps no marker on a clip by command, and a sequence marker
+  does not follow a clip). Hand-set markers come with CE5.
+- **Exports of a FilmCraft cut**: the FCPXML and EDL are FilmCraft's own (`file.exportInterchange`: gaps, speed, every track; the lines on
+  A1 as `lane="-1"` connected clips), the SRT and markers.txt from the project (a voiced line at its A1 clip, the others laid across their
+  shot's run). Before an export or the movie, **a line voiced since the cut was made is brought onto A1** (`sync_lines`; a re-voiced line
+  plays its new audio in place; a moved line stays) — one undo step, none when nothing changed.
+- The draft of a FilmCraft cut is FilmCraft's export to PNG (the longer side 960) → a clip as before; a PUT that does not change the lane
+  (a rename) leaves V1 alone; FilmCraft's refusal reaches the author in its own words (`edit failed: this edit would break sync: A1 is
+  sync-locked and has a clip in the way …`).
+
+**The client** (`episode/cut.ts`, `CutStage.tsx`, `sequenceStore.ts`, `sequenceCommands.ts`):
+
+- A FilmCraft cut opens in **the tracks view**: FilmCraft's frame at the playhead (½ at rest, ¼ playing, the latest asked wins), the
+  transport with the **tools** (Select V, Ripple trim B, Roll N, Slip Y, Slide U, Razor C — Premiere's keys as accelerators), undo and
+  redo, add a video / audio track, zoom; every track as a row (V2 above V1 above A1 …): a take with its frames, a picture, a sound or a
+  line with its waveform, the transitions shaded, the *changed · Update* badge on a take whose shot has a newer approved take.
+- A drag asks for one edit when it ends (the tool and the grip decide which: `dragStep`); the razor cuts on a click; a clip's right-click:
+  *Update*, Speed…, Freeze frame at the playhead, Dissolve in / out, Dip to black in / out, Remove the transition into it, Move to track ▸,
+  Rename, Open the clip in the player, Lift, Ripple delete, Undo / Redo; a track header's: rename, lock, mute, add a track; the empty space's:
+  play, exports, renders, Assemble again, rename / delete. A drop on a track places a take (stamped from the Shots bin), a picture or a sound
+  where it falls. The Inspector shows the selected clip (track, place, source, speed, shot, the transition into it) with its verbs.
+- The Flow's verbs stay: *Assemble* rebuilds V1 (it asks first), *Update* replaces in place; the lane after a save is the server's (its
+  clip ids are FilmCraft's, which *Update* and the badges need — an e2e found the client's own lane ids there).
+
+**Checks:** offline `test_cuts_ce2.py` (2) on the fake (which now does CE2's commands as the probe saw the real ones); `cut.test.ts` (4);
+an e2e scenario on the tracks (razor, speed from the right-click, the cut's undo and redo, a ripple trim, a track renamed, the V key) and
+the four Episode scenarios moved onto the tracks; the rig (`scripts/ce2_acceptance.py`, 13/13 on the real FilmCraft, A1's records): the
+tracks, a named track, a stale base and a foreign command refused, the dissolve removed with the clip in place, razor, a move to V2 and
+speed, the cut's undo of the whole change, FilmCraft's ripple-delete refusal in its words with the cut unchanged, *Update* in place, a
+picture and a sound placed, the viewer's frame over HTTP 7.8 ms at ½, FilmCraft's FCPXML with the chapter marker, the draft through
+FilmCraft (225 frames at 960×540 in 2.8 s); edits round-trip in 23–29 ms. CE1's rig check re-run: 14/14.
+
+![The tracks view on A1's records](img/30-ce2-tracks.jpg)
+![A clip's right-click](img/30-ce2-clip-menu.jpg)
+![A track header's right-click](img/30-ce2-track-menu.jpg)
+![The razor tool](img/30-ce2-razor.jpg)

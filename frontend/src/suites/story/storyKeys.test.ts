@@ -14,6 +14,7 @@ const key = (k: string, target: EventTarget = document.body, ctrl = false) => { 
 describe('Story keys (D90 B2)', () => {
   it('maps every tab to its own id prefix', () => {
     expect(ownedBy('world', { id: 'story.world.remove' })).toBe(true)
+    expect([ownedBy('episode', { id: 'story.cut.tool.razor' }), ownedBy('flow', { id: 'story.cut.tool.razor' })]).toEqual([true, false])   // CE2: the cut's editor answers on the Episode
     expect(ownedBy('cast', { id: 'story.world.remove' })).toBe(false)
     expect(ownedBy('shots', { id: 'story.shot.finalize' })).toBe(true)
     expect(ownedBy('flow', { id: 'story.flow.play' })).toBe(true)

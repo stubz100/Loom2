@@ -72,12 +72,12 @@ class FilmCraft(McpSession):
             self._tool_locked("command_run", {"id": "file.open", "params": {"path": want}})
             self.project = want
 
-    def open(self, path: str | Path) -> None:
-        """Hold this cut's project open in the session (a no-op when it already is)."""
+    def open(self, path: str | Path, reload: bool = False) -> None:
+        """Hold this cut's project open in the session (a no-op when it already is, unless `reload`: the file changed under it)."""
         path = str(path)
         with self._lock:
             self._ensure_locked()
-            if self.project == path:
+            if self.project == path and not reload:
                 return
             self._tool_locked("command_run", {"id": "file.open", "params": {"path": path}})
             self.project = path
@@ -105,7 +105,15 @@ class FilmCraft(McpSession):
 
     def batch(self, steps: list[dict]) -> list[Any]:
         """Several commands in order, stopping at the first refusal (FilmCraft's `command_batch`): their results."""
-        r = self.tool("command_batch", {"steps": steps, "stop_on_error": True})
+        try:
+            r = self.tool("command_batch", {"steps": steps, "stop_on_error": True})
+        except FilmCraftError as e:                                # FilmCraft answers a refused batch as a tool error with its summary: its own words
+            _, _, body = str(e).partition(": ")
+            try:
+                said = next((x.get("error") for x in json.loads(body).get("results", []) if x.get("error")), None)
+            except (json.JSONDecodeError, AttributeError):
+                said = None
+            raise FilmCraftError(said or str(e)) from None
         results = r.get("results") or []
         bad = next((x for x in results if not x.get("ok")), None)
         if r.get("failed") or bad is not None:

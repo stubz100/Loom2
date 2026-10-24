@@ -1132,6 +1132,10 @@ async def run_render(job: JobRecord, recipe: Render, q: JobQueue) -> bool:
     missing = [c.clip_id for c in tl.clips if c.clip_id not in recs]
     if missing:
         raise ValueError(f"clips missing from the project: {', '.join(missing)}")
+    fc = getattr(q, "filmcraft", None)
+    if tl.file and fc is not None and fc.available():                # CE2 (30 §12): a FilmCraft cut's draft is its own export, to PNG
+        paths, t0 = await _draft_frames_filmcraft(job, q, tl)
+        return await _draft_clip(job, recipe, q, tl, recs, paths, t0)
     total = duration(tl)
     if total <= 0:
         raise ValueError("the sequence is empty")
@@ -1181,6 +1185,13 @@ async def run_render(job: JobRecord, recipe: Render, q: JobQueue) -> bool:
         paths += await asyncio.to_thread(chunk, f0, min(total, f0 + step))
     q.check_cancel(job)
     job.log_tail.append(f"render: {total} frames at {w}×{h} @ {tl.fps} fps in {time.time() - t0:.1f} s (CPU)")
+    return await _draft_clip(job, recipe, q, tl, recs, paths, t0)
+
+
+async def _draft_clip(job: JobRecord, recipe: Render, q: JobQueue, tl: Any, recs: dict, paths: list[Path], t0: float) -> bool:
+    """The draft's frames as a clip (master, proxy, asset with lineage to every source clip, `clip.ready`) — P17's tail, shared with CE2's
+    FilmCraft draft."""
+    clips = ClipStore(q.ws)
     q.progress(job, "writing the master")
     sources = [recs[c.clip_id] for c in tl.clips]
     parents = list(dict.fromkeys(r.asset_id for r in sources if r.asset_id))
@@ -1206,6 +1217,45 @@ async def run_render(job: JobRecord, recipe: Render, q: JobQueue) -> bool:
     q.hub.broadcast("clip.ready", {"clip_id": rec.id, "asset_id": asset.id, "job_id": job.id, "frames": rec.frames, "fps": rec.fps, "w": rec.w, "h": rec.h,
                                    "origin": job.origin.model_dump() if job.origin else None})
     return True
+
+
+async def _draft_frames_filmcraft(job: JobRecord, q: JobQueue, tl: Any) -> tuple[list[Path], float]:
+    """CE2: a FilmCraft cut's draft frames — `filmcraft-cli run` exports the saved project as a PNG sequence at draft size (the longer
+    side 960) in a process of its own (software decoding, D97), cancellable."""
+    import re
+
+    from ..filmcraft import export_argv, export_script
+    from ..fsio import utc_now
+    from ..trainer import _kill
+    from .supervisor import _assign_to_job
+    project = TimelineStore(q.ws).export_dir(tl.id) / tl.file
+    tmp = q.ws.temp_dir / f"render-{job.id}"
+    shutil.rmtree(tmp, ignore_errors=True)
+    (tmp / "png").mkdir(parents=True)
+    script = tmp / "export.jsonl"
+    script.write_text(export_script(tmp / "png" / "frame.png", "png", tl.fps, scale=round(min(1.0, 960 / max(tl.w, tl.h)), 4)), encoding="utf-8")
+    argv = export_argv(q.app.settings.filmcraft, q.app, project, script)
+    log_path = q.app.logs_dir / f"render-{job.id}.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    t0 = time.time()
+    with log_path.open("ab") as lf:
+        lf.write(f"==== launch {utc_now()} job {job.id} {' '.join(argv)}\n".encode("utf-8"))
+        lf.flush()
+        proc = subprocess.Popen(argv, stdout=lf, stderr=subprocess.STDOUT, env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+        _assign_to_job(proc)
+    q.progress(job, "rendering the draft (FilmCraft)")
+    while proc.poll() is None:
+        await asyncio.sleep(0.3)
+        if job.id in q._cancel_requested:
+            _kill(proc.pid)
+            await asyncio.to_thread(proc.wait)
+            q.check_cancel(job)
+    paths = sorted((tmp / "png").glob("*.png"), key=lambda x: int(re.sub(r"\D", "", x.stem) or 0))
+    if proc.returncode != 0 or not paths:
+        tail = log_path.read_text(encoding="utf-8", errors="replace").strip()[-400:]
+        raise ValueError(f"filmcraft-cli draft export failed ({proc.returncode}): {tail}")
+    job.log_tail.append(f"render (FilmCraft): {len(paths)} frames @ {tl.fps} fps in {time.time() - t0:.1f} s (CPU)")
+    return paths, t0
 
 
 MOVIE_SR = 48_000
@@ -1386,9 +1436,15 @@ async def run_movie_filmcraft(job: JobRecord, recipe: Render, q: JobQueue, tl: A
     from ..fsio import slugify, utc_now
     from ..trainer import _kill
     from .supervisor import _assign_to_job
+    from ..cuts import Cuts
+    from ..timelines import story_lookup
     fc, store, clips = q.filmcraft, TimelineStore(q.ws), ClipStore(q.ws)
     project = store.export_dir(tl.id) / tl.file
     t0 = time.time()
+    name_of, _, audio_of = await asyncio.to_thread(story_lookup, q.ws, q.catalogue)
+    synced = await asyncio.to_thread(Cuts(q.ws, fc, audio_of, name_of).sync_lines, tl)     # a line voiced since the cut was made is in the movie
+    if synced:
+        job.log_tail.append(f"movie (FilmCraft): {synced} spoken line(s) brought onto A1")
     conformed: list[str] = []
     if tl.fps == 24 and rife_binary() is not None:
         await asyncio.to_thread(fc.open, project)

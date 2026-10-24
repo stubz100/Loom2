@@ -3360,6 +3360,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/timelines/{tl_id}/edit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Timeline Edit
+         * @description CE2: the editor's change as FilmCraft commands (move, trim, roll, slip, slide, razor, ripple delete, speed, freeze, transitions, a
+         *     track's name / lock / mute, tracks added, undo / redo), run in the session in order and saved.
+         */
+        post: operations["timeline_edit_timelines__tl_id__edit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/timelines/{tl_id}/export": {
         parameters: {
             query?: never;
@@ -3371,6 +3392,66 @@ export interface paths {
         put?: never;
         /** Timeline Export */
         post: operations["timeline_export_timelines__tl_id__export_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/timelines/{tl_id}/frame": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Timeline Frame
+         * @description CE2: the cut's frame at `t` seconds as PNG from FilmCraft's session, its longest side `side` — the Episode's viewer.
+         */
+        get: operations["timeline_frame_timelines__tl_id__frame_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/timelines/{tl_id}/place": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Timeline Place
+         * @description CE2: a loom2 clip or a Catalogue picture, sound or video on a track at a frame (imported once into the cut's project, with its link).
+         */
+        post: operations["timeline_place_timelines__tl_id__place_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/timelines/{tl_id}/redo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Timeline Redo
+         * @description CE2: the change undone last, made again.
+         */
+        post: operations["timeline_redo_timelines__tl_id__redo_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3392,6 +3473,66 @@ export interface paths {
          *     renders the finished movie instead — an MP4 with the voice lane in the cut's folder and a Catalogue video.
          */
         post: operations["timeline_render_timelines__tl_id__render_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/timelines/{tl_id}/replace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Timeline Replace
+         * @description CE2 (*Update*, D125 S13, on a FilmCraft cut): the track's clip plays another take in place — its start and length kept.
+         */
+        post: operations["timeline_replace_timelines__tl_id__replace_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/timelines/{tl_id}/tracks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Timeline Tracks
+         * @description CE2: a FilmCraft cut's every track (its clips with their media and loom2's links, the transitions), read from its project.
+         */
+        get: operations["timeline_tracks_timelines__tl_id__tracks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/timelines/{tl_id}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Timeline Undo
+         * @description CE2: the cut as it was before its last change (its project's snapshot; any change, Assemble included, is one step).
+         */
+        post: operations["timeline_undo_timelines__tl_id__undo_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4524,6 +4665,219 @@ export interface components {
             };
             /** Shots */
             shots: string[];
+        };
+        /** CutEdit */
+        CutEdit: {
+            /** Revision */
+            revision?: number | null;
+            /** Steps */
+            steps: components["schemas"]["CutStep"][];
+        };
+        /** CutEdited */
+        CutEdited: {
+            /** Results */
+            results?: unknown[];
+            timeline: components["schemas"]["Timeline"];
+            tracks: components["schemas"]["CutTracks"];
+        };
+        /**
+         * CutItem
+         * @description One clip on a track, as the editor shows it (frames at the cut's rate; the source in seconds).
+         */
+        CutItem: {
+            /** Asset Id */
+            asset_id: string | null;
+            /** Clip Id */
+            clip_id: string | null;
+            /** Duration */
+            duration: number;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Hold
+             * @default false
+             */
+            hold: boolean;
+            /** Id */
+            id: number;
+            /** Item */
+            item: number;
+            /**
+             * Kind
+             * @default other
+             * @enum {string}
+             */
+            kind: "take" | "line" | "video" | "picture" | "sound" | "adjustment" | "other";
+            /** Line */
+            line: number | null;
+            /** Media Path */
+            media_path: string | null;
+            /**
+             * Name
+             * @default
+             */
+            name: string;
+            /** Node Id */
+            node_id: string | null;
+            /**
+             * Reverse
+             * @default false
+             */
+            reverse: boolean;
+            /** Shot Id */
+            shot_id: string | null;
+            /** Shot Version */
+            shot_version: string | null;
+            /**
+             * Source In
+             * @default 0
+             */
+            source_in: number;
+            /**
+             * Speed
+             * @default 1
+             */
+            speed: number;
+            /** Start */
+            start: number;
+        };
+        /** CutPlace */
+        CutPlace: {
+            /** Asset Id */
+            asset_id?: string | null;
+            /** Clip Id */
+            clip_id?: string | null;
+            /**
+             * Frame
+             * @default 0
+             */
+            frame?: number;
+            /**
+             * Insert
+             * @default false
+             */
+            insert?: boolean;
+            /** Node Id */
+            node_id?: string | null;
+            /** Revision */
+            revision?: number | null;
+            /** Shot Id */
+            shot_id?: string | null;
+            /** Shot Version */
+            shot_version?: string | null;
+            /**
+             * Track
+             * @default V2
+             */
+            track?: string | number;
+        };
+        /** CutReplace */
+        CutReplace: {
+            /** Clip */
+            clip: number;
+            /** Clip Id */
+            clip_id: string;
+            /** Node Id */
+            node_id?: string | null;
+            /** Revision */
+            revision?: number | null;
+            /** Shot Id */
+            shot_id?: string | null;
+            /** Shot Version */
+            shot_version?: string | null;
+        };
+        /** CutStep */
+        CutStep: {
+            /** Id */
+            id: string;
+            /** Params */
+            params?: {
+                [key: string]: unknown;
+            };
+        };
+        /** CutTrack */
+        CutTrack: {
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Id */
+            id: number;
+            /** Items */
+            items: components["schemas"]["CutItem"][];
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "video" | "audio";
+            /**
+             * Locked
+             * @default false
+             */
+            locked: boolean;
+            /**
+             * Muted
+             * @default false
+             */
+            muted: boolean;
+            /** Name */
+            name: string;
+            /** Transitions */
+            transitions: components["schemas"]["CutTransition"][];
+        };
+        /**
+         * CutTracks
+         * @description CE2: a FilmCraft cut's every track, read from its project.
+         */
+        CutTracks: {
+            /** Audio */
+            audio: components["schemas"]["CutTrack"][];
+            /** Duration */
+            duration: number;
+            /** Fps */
+            fps: number;
+            /** H */
+            h: number;
+            /**
+             * Redo
+             * @default 0
+             */
+            redo: number;
+            /** Sequence */
+            sequence: number;
+            /**
+             * Undo
+             * @default 0
+             */
+            undo: number;
+            /** Video */
+            video: components["schemas"]["CutTrack"][];
+            /** W */
+            w: number;
+        };
+        /** CutTransition */
+        CutTransition: {
+            /** Duration */
+            duration: number;
+            /** Effect */
+            effect: string;
+            /** From */
+            from: number | null;
+            /** Id */
+            id: number;
+            /** Start */
+            start: number;
+            /** To */
+            to: number | null;
+        };
+        /** CutUndo */
+        CutUndo: {
+            /** Revision */
+            revision?: number | null;
         };
         /** Deleted */
         Deleted: {
@@ -17865,6 +18219,41 @@ export interface operations {
             };
         };
     };
+    timeline_edit_timelines__tl_id__edit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tl_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CutEdit"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CutEdited"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     timeline_export_timelines__tl_id__export_post: {
         parameters: {
             query?: never;
@@ -17900,6 +18289,110 @@ export interface operations {
             };
         };
     };
+    timeline_frame_timelines__tl_id__frame_get: {
+        parameters: {
+            query?: {
+                t?: number;
+                side?: number;
+            };
+            header?: never;
+            path: {
+                tl_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    timeline_place_timelines__tl_id__place_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tl_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CutPlace"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CutEdited"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    timeline_redo_timelines__tl_id__redo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tl_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CutUndo"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CutEdited"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     timeline_render_timelines__tl_id__render_post: {
         parameters: {
             query?: never;
@@ -17922,6 +18415,107 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JobsSubmitted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    timeline_replace_timelines__tl_id__replace_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tl_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CutReplace"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CutEdited"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    timeline_tracks_timelines__tl_id__tracks_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tl_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CutTracks"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    timeline_undo_timelines__tl_id__undo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tl_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CutUndo"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CutEdited"];
                 };
             };
             /** @description Validation Error */

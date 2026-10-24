@@ -1,20 +1,28 @@
 // P17 (D83): the Sequence tab's verbs — every one has a mouse home (the lane's context menu, the Inspector, the transport) per D32;
 // undo / redo take Ctrl+Z / Ctrl+Shift+Z in the Animate scope (the clip player has no undo of its own).
-import { ArrowLeft, ArrowRight, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, FileDown, Film, FolderOpen, Pause, Play, Plus, Redo2, RefreshCw, Scissors, SkipBack, SkipForward, Trash2, Undo2, Workflow, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ArrowRightLeft, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, Columns2, FileDown, Film, FolderOpen, Gauge, Lock, MousePointer2, MoveHorizontal, Pause, Pencil, Play, Plus, Redo2, RefreshCw, Scissors, SkipBack, SkipForward, Snowflake, SplitSquareHorizontal, SquareDashed, Trash2, Undo2, Volume2, VolumeX, Workflow, ZoomIn, ZoomOut } from 'lucide-react'
 import { registerCommands, sep, type MenuItem } from '../../../frame/commands'
 import { askConfirm, askText, useSession } from '../../../store/session'
 import { useAnimate } from '../../animate/animateStore'
 import { useStory } from '../storyStore'
 import { assembleLane, laneChanges, routeLabel, routePicks, updateClip, walkRoute } from './assemble'
 import { duration, ticks } from './lane'
-import { lastMovie, useSequence } from './sequenceStore'
+import { isCut, lastMovie, useSequence } from './sequenceStore'
+import { CUT_TOOLS, findItem, isVideo, ticksOf, trackRef, transitionInto, transitionStep, type CutTool } from './cut'
 import { revealPath } from '../../../shell/tauri'
 
 const sq = () => useSequence.getState()
 const hasSeq = () => !!sq().current
 /** RC3: the open cut's newest finished movie, as the absolute path the job wrote. */
 const movieFile = (): string | null => { const c = sq().current; const m = c ? lastMovie(useSession.getState().jobs, c.id) : null; return m?.status === 'done' ? m.file : null }
-const hasSel = () => hasSeq() && sq().selected !== null && !!sq().lane?.clips[sq().selected!]
+const hasSel = () => hasSeq() && !isCut() && sq().selected !== null && !!sq().lane?.clips[sq().selected!]
+/** CE2: the clip selected on a FilmCraft cut's tracks, with its track. */
+const selCut = () => { const t = sq().tracks, id = sq().selClip; return t && id !== null ? findItem(t, id) : null }
+/** CE2: the cut's length in frames (a FilmCraft cut: its tracks; today's: its lane). */
+export const cutLength = (): number => (isCut() ? Math.ceil(sq().tracks?.duration ?? 0) : sq().lane ? duration(sq().lane!) : 0)
+/** CE2: the track a header's right-click is about (commands take no arguments; the menu sets this first). */
+export const trackItem: { id?: number } = {}
+const selTrack = () => { const t = sq().tracks; return t && trackItem.id !== undefined ? [...t.video, ...t.audio].find((x) => x.id === trackItem.id) ?? null : null }
 const an = () => useAnimate.getState()
 type BinClip = Parameters<ReturnType<typeof useSequence.getState>['addClip']>[0]
 /** D90 (01 §11.2): the bin entry the + was pressed on (commands take no arguments; the button sets this first, a run clears it). */
@@ -90,6 +98,13 @@ async function updateChanges(list: ReturnType<typeof allChanges>): Promise<void>
   const byId = new Map(an().clips.map((c) => [c.id, c]))
   const ok = list.filter((x) => byId.has(x.clip))
   if (!ok.length) { useSession.getState().toast('The newer take is not loaded yet — try again in a moment', 'info'); return }
+  if (isCut()) {                                                    // CE2: FilmCraft plays the new take in place; the edits around it stay
+    for (const x of ok) {
+      const c = sq().lane?.clips[x.i]
+      if (c?.shot) await sq().cutReplace(Number(c.id), { clip_id: x.clip, shot_id: c.shot.id, shot_version: x.version, node_id: c.shot.node })
+    }
+    return
+  }
   sq().apply((l) => ok.reduce((acc, x) => updateClip(acc, x, byId.get(x.clip)!), l), 'update')
 }
 
@@ -121,15 +136,17 @@ registerCommands([
   { id: 'story.episode.moveRight', scope: 'story', label: 'Move clip later', icon: ArrowRight, placement: ['inspector', 'context'], when: () => hasSel() && sq().selected! < (sq().lane?.clips.length ?? 0) - 1, run: () => sq().moveClip(sq().selected!, sq().selected! + 1) },
   { id: 'story.episode.dissolve', scope: 'story', label: 'Dissolve from the previous clip (12 frames)', icon: Scissors, placement: ['inspector', 'context'], when: () => hasSel() && sq().selected! > 0,
     run: () => { const i = sq().selected!; const l = sq().lane!; sq().setDissolve(i, l.overlaps[i] ? 0 : Math.min(12, ticks(l, l.clips[i]) - 1, ticks(l, l.clips[i - 1]) - 1)) } },
-  { id: 'story.episode.undo', scope: 'story', label: 'Undo (cut)', icon: Undo2, keys: 'Ctrl+Z', placement: ['toolbar', 'context'], when: () => hasSeq() && sq().undo.length > 0, run: () => sq().undoEdit() },
-  { id: 'story.episode.redo', scope: 'story', label: 'Redo (cut)', icon: Redo2, keys: 'Ctrl+Shift+Z', placement: ['toolbar', 'context'], when: () => hasSeq() && sq().redo.length > 0, run: () => sq().redoEdit() },
-  { id: 'story.episode.play', scope: 'story', label: 'Play / pause the cut', icon: Play, keys: 'Space', placement: ['toolbar', 'context'], when: () => hasSeq() && !!sq().lane?.clips.length, run: () => sq().togglePlay() },
+  { id: 'story.episode.undo', scope: 'story', label: 'Undo (cut)', icon: Undo2, keys: 'Ctrl+Z', placement: ['toolbar', 'context'],
+    when: () => hasSeq() && (isCut() ? (sq().tracks?.undo ?? 0) > 0 && !sq().cutBusy : sq().undo.length > 0), run: () => sq().undoEdit() },
+  { id: 'story.episode.redo', scope: 'story', label: 'Redo (cut)', icon: Redo2, keys: 'Ctrl+Shift+Z', placement: ['toolbar', 'context'],
+    when: () => hasSeq() && (isCut() ? (sq().tracks?.redo ?? 0) > 0 && !sq().cutBusy : sq().redo.length > 0), run: () => sq().redoEdit() },
+  { id: 'story.episode.play', scope: 'story', label: 'Play / pause the cut', icon: Play, keys: 'Space', placement: ['toolbar', 'context'], when: () => hasSeq() && cutLength() > 0, run: () => sq().togglePlay() },
   { id: 'story.episode.stepBack', scope: 'story', label: 'Previous frame', icon: SkipBack, keys: 'ArrowLeft', placement: ['toolbar', 'context'], when: hasSeq, run: () => sq().setPlayhead(sq().playhead - 1) },
   { id: 'story.episode.stepForward', scope: 'story', label: 'Next frame', icon: SkipForward, keys: 'ArrowRight', placement: ['toolbar', 'context'], when: hasSeq, run: () => sq().setPlayhead(sq().playhead + 1) },
   { id: 'story.episode.back10', scope: 'story', label: 'Back 10 frames', icon: ChevronLeft, keys: 'Shift+ArrowLeft', placement: ['toolbar'], when: hasSeq, run: () => sq().setPlayhead(sq().playhead - 10) },
   { id: 'story.episode.fwd10', scope: 'story', label: 'Forward 10 frames', icon: ChevronRight, keys: 'Shift+ArrowRight', placement: ['toolbar'], when: hasSeq, run: () => sq().setPlayhead(sq().playhead + 10) },
   { id: 'story.episode.home', scope: 'story', label: 'Start of the cut', icon: ChevronFirst, keys: 'Home', placement: ['toolbar', 'context'], when: hasSeq, run: () => sq().setPlayhead(0) },
-  { id: 'story.episode.end', scope: 'story', label: 'End of the cut', icon: ChevronLast, keys: 'End', placement: ['toolbar', 'context'], when: hasSeq, run: () => { const l = sq().lane; if (l) sq().setPlayhead(duration(l) - 1) } },
+  { id: 'story.episode.end', scope: 'story', label: 'End of the cut', icon: ChevronLast, keys: 'End', placement: ['toolbar', 'context'], when: hasSeq, run: () => sq().setPlayhead(cutLength() - 1) },
   { id: 'story.episode.zoomIn', scope: 'story', label: 'Zoom the lane in', icon: ZoomIn, placement: ['toolbar'], when: hasSeq, run: () => sq().zoom(1.5) },
   { id: 'story.episode.zoomOut', scope: 'story', label: 'Zoom the lane out', icon: ZoomOut, placement: ['toolbar'], when: hasSeq, run: () => sq().zoom(1 / 1.5) },
   { id: 'story.episode.exportEdl', scope: 'story', label: 'Export EDL (CMX 3600)', icon: FileDown, placement: ['inspector', 'context'], when: () => hasSeq() && !!sq().lane?.clips.length, run: () => void exportChecked('edl') },
@@ -140,8 +157,8 @@ registerCommands([
     run: () => void sq().render(true) },
   { id: 'story.episode.revealMovie', scope: 'story', label: 'Reveal the movie in its folder', icon: FolderOpen, placement: ['inspector'], when: () => !!movieFile(),
     run: () => { const f = movieFile(); if (f) void revealPath(f) } },
-  { id: 'story.episode.openClip', scope: 'story', label: 'Open the clip in the player', icon: Pause, placement: ['inspector', 'context'], when: hasSel,
-    run: () => { const l = sq().lane!; const c = l.clips[sq().selected!]; an().select(c.source); useSession.getState().toast('Opened in the clip player (Animate · Performance)', 'info') } },
+  { id: 'story.episode.openClip', scope: 'story', label: 'Open the clip in the player', icon: Pause, placement: ['inspector', 'context'], when: () => hasSel() || !!selCut()?.item.clip_id,
+    run: () => { const id = isCut() ? selCut()?.item.clip_id : sq().lane!.clips[sq().selected!].source; if (id) { an().select(id); useSession.getState().toast('Opened in the clip player (Animate · Performance)', 'info') } } },
 ])
 
 /** Right-click on a lane clip (selected by the caller) or on the lane's empty space. */
@@ -149,4 +166,79 @@ export function laneMenu(onClip: boolean): MenuItem[] {
   return onClip
     ? [{ cmd: 'story.episode.update' }, { cmd: 'story.episode.dissolve' }, { cmd: 'story.episode.moveLeft' }, { cmd: 'story.episode.moveRight' }, { cmd: 'story.episode.openClip' }, sep, { cmd: 'story.episode.removeClip' }, sep, { cmd: 'story.episode.undo' }, { cmd: 'story.episode.redo' }]
     : [{ cmd: 'story.episode.addCurrent' }, sep, { cmd: 'story.episode.play' }, { cmd: 'story.episode.stepBack' }, { cmd: 'story.episode.stepForward' }, { cmd: 'story.episode.home' }, { cmd: 'story.episode.end' }, sep, { cmd: 'story.episode.exportResolve' }, { label: 'Export one file', icon: FileDown, items: [{ cmd: 'story.episode.exportEdl' }, { cmd: 'story.episode.exportFcpxml' }, { cmd: 'story.episode.exportSrt' }] }, { cmd: 'story.episode.render' }, { cmd: 'story.episode.renderMovie' }, sep, { cmd: 'story.episode.assemble' }, { cmd: 'story.episode.reassemble' }, { cmd: 'story.episode.updateAll' }, sep, { cmd: 'story.episode.rename' }, { cmd: 'story.episode.delete' }, { cmd: 'story.episode.new' }, sep, { cmd: 'story.episode.undo' }, { cmd: 'story.episode.redo' }]
+}
+
+// ---- CE2 (D126, proto01_animate 30 §12): a FilmCraft cut's editor — the tools, a clip's verbs, a track's verbs; each a FilmCraft command
+const TOOL_INFO: Record<CutTool, { label: string; icon: typeof MousePointer2; keys: string; hint: string }> = {
+  select: { label: 'Select', icon: MousePointer2, keys: 'V', hint: 'drag a clip to move it (onto another track of its kind too); drag an edge to trim' },
+  ripple: { label: 'Ripple trim', icon: ArrowRightLeft, keys: 'B', hint: 'drag an edge: the clips after it follow' },
+  roll: { label: 'Roll', icon: Columns2, keys: 'N', hint: 'drag the edit point between two clips: one gets longer, the other shorter' },
+  slip: { label: 'Slip', icon: MoveHorizontal, keys: 'Y', hint: 'drag a clip: its source moves under it, the cut stays' },
+  slide: { label: 'Slide', icon: SplitSquareHorizontal, keys: 'U', hint: 'drag a clip between its neighbours: they give and take' },
+  razor: { label: 'Razor', icon: Scissors, keys: 'C', hint: 'click a clip to cut it there' },
+}
+const cutSel = () => isCut() && !!selCut() && !sq().cutBusy
+const edit1 = (id: string, params: Record<string, unknown>) => void sq().cutEdit([{ id, params }])
+const atPlayhead = () => { const s = selCut(); return !!s && sq().playhead > s.item.start && sq().playhead < s.item.start + s.item.duration }
+
+registerCommands([
+  ...CUT_TOOLS.map((tool) => ({
+    id: `story.cut.tool.${tool}`, scope: 'story' as const, label: `${TOOL_INFO[tool].label} tool`, icon: TOOL_INFO[tool].icon, keys: TOOL_INFO[tool].keys, hint: TOOL_INFO[tool].hint,
+    placement: ['toolbar'] as ['toolbar'], when: isCut, run: () => sq().setTool(tool),
+  })),
+  { id: 'story.cut.speed', scope: 'story', label: 'Speed…', icon: Gauge, placement: ['inspector', 'context'], when: cutSel, hint: 'the clip plays faster or slower; its length on the track stays',
+    run: () => { const s = selCut(); if (s) void askText({ title: 'Speed (%)', initial: String(Math.round(s.item.speed * 100)), placeholder: '100' }).then((v) => { const n = Number(v); if (v && n > 0) edit1('clip.speedDuration', { clips: [s.item.id], speed: n, ripple: false }) }) } },
+  { id: 'story.cut.freeze', scope: 'story', label: 'Freeze frame at the playhead', icon: Snowflake, placement: ['inspector', 'context'], when: () => cutSel() && atPlayhead(),
+    run: () => { const s = selCut(); if (s) edit1('clip.frameHold', { clips: [s.item.id], time: ticksOf(sq().playhead, sq().tracks!.fps) }) } },
+  { id: 'story.cut.dissolveIn', scope: 'story', label: 'Dissolve in (12 frames)', icon: SquareDashed, placement: ['inspector', 'context'], when: () => cutSel() && isVideo(sq().tracks!, selCut()!.track),
+    run: () => { const s = selCut(); if (s) void sq().cutEdit([transitionStep(s.item, 'cross_dissolve', 'in')]) } },
+  { id: 'story.cut.dissolveOut', scope: 'story', label: 'Dissolve out (12 frames)', icon: SquareDashed, placement: ['inspector', 'context'], when: () => cutSel() && isVideo(sq().tracks!, selCut()!.track),
+    run: () => { const s = selCut(); if (s) void sq().cutEdit([transitionStep(s.item, 'cross_dissolve', 'out')]) } },
+  { id: 'story.cut.dipIn', scope: 'story', label: 'Dip to black in', icon: SquareDashed, placement: ['context'], when: () => cutSel() && isVideo(sq().tracks!, selCut()!.track),
+    run: () => { const s = selCut(); if (s) void sq().cutEdit([transitionStep(s.item, 'dip_to_black', 'in')]) } },
+  { id: 'story.cut.dipOut', scope: 'story', label: 'Dip to black out', icon: SquareDashed, placement: ['context'], when: () => cutSel() && isVideo(sq().tracks!, selCut()!.track),
+    run: () => { const s = selCut(); if (s) void sq().cutEdit([transitionStep(s.item, 'dip_to_black', 'out')]) } },
+  { id: 'story.cut.removeTransition', scope: 'story', label: 'Remove the transition into it', icon: Trash2, placement: ['inspector', 'context'], when: () => cutSel() && !!transitionInto(selCut()!.track, selCut()!.item),
+    run: () => { const s = selCut(); const x = s && transitionInto(s.track, s.item); if (x) edit1('loom2.removeTransition', { transition: x.id }) } },
+  { id: 'story.cut.lift', scope: 'story', label: 'Lift (leave a gap)', icon: Trash2, placement: ['inspector', 'context'], when: cutSel, danger: true,
+    run: () => { const s = selCut(); if (s) edit1('edit.clear', { clips: [s.item.id] }) } },
+  { id: 'story.cut.rippleDelete', scope: 'story', label: 'Ripple delete', icon: Trash2, placement: ['inspector', 'context'], when: cutSel, danger: true, hint: 'the clips after it close up (FilmCraft says why when a synced track is in the way)',
+    run: () => { const s = selCut(); if (s) edit1('edit.rippleDelete', { clips: [s.item.id] }) } },
+  { id: 'story.cut.rename', scope: 'story', label: 'Rename the clip…', icon: Pencil, placement: ['context'], when: cutSel,
+    run: () => { const s = selCut(); if (s) void askText({ title: 'Rename the clip', initial: s.item.name }).then((n) => { if (n?.trim()) edit1('clip.rename', { clip: s.item.id, name: n.trim() }) }) } },
+  { id: 'story.cut.track.rename', scope: 'story', label: 'Rename the track…', icon: Pencil, placement: ['context'], when: () => isCut() && !!selTrack(),
+    run: () => { const tr = selTrack(); if (tr) void askText({ title: 'Rename the track', initial: tr.name }).then((n) => { if (n?.trim()) edit1('timeline.setTrack', { track: tr.id, name: n.trim() }) }) } },
+  { id: 'story.cut.track.lock', scope: 'story', label: 'Lock / unlock the track', icon: Lock, placement: ['context'], when: () => isCut() && !!selTrack(),
+    run: () => { const tr = selTrack(); if (tr) edit1('timeline.setTrack', { track: tr.id, locked: !tr.locked }) } },
+  { id: 'story.cut.track.mute', scope: 'story', label: 'Mute / unmute the track', icon: VolumeX, placement: ['context'], when: () => isCut() && !!selTrack(),
+    run: () => { const tr = selTrack(); if (tr) edit1('timeline.setTrack', { track: tr.id, muted: !tr.muted }) } },
+  { id: 'story.cut.addVideoTrack', scope: 'story', label: 'Add a video track', icon: Plus, placement: ['context', 'toolbar'], when: () => isCut() && !sq().cutBusy,
+    run: () => edit1('sequence.addTracks', { video: 1, audio: 0 }) },
+  { id: 'story.cut.addAudioTrack', scope: 'story', label: 'Add an audio track', icon: Volume2, placement: ['context', 'toolbar'], when: () => isCut() && !sq().cutBusy,
+    run: () => edit1('sequence.addTracks', { video: 0, audio: 1 }) },
+])
+
+/** CE2: a clip's right-click on a FilmCraft cut (the clip selected by the caller). */
+export function cutClipMenu(): MenuItem[] {
+  const s = selCut()
+  const t = sq().tracks
+  const moveTo: MenuItem[] = s && t ? (isVideo(t, s.track) ? t.video : t.audio).filter((x) => x.id !== s.track.id).map((x) => ({
+    label: `${trackRef(t, x)} · ${x.name}`, run: () => edit1('timeline.move', { moves: [{ clip: s.item.id, track: x.id, time: ticksOf(s.item.start, t.fps) }], insert: false }) })) : []
+  return [{ cmd: 'story.episode.update' }, sep, { cmd: 'story.cut.speed' }, { cmd: 'story.cut.freeze' }, sep, { cmd: 'story.cut.dissolveIn' }, { cmd: 'story.cut.dissolveOut' },
+    { cmd: 'story.cut.dipIn' }, { cmd: 'story.cut.dipOut' }, { cmd: 'story.cut.removeTransition' }, sep,
+    ...(moveTo.length ? [{ label: 'Move to track', icon: ArrowRight, items: moveTo } as MenuItem, sep] : []),
+    { cmd: 'story.cut.rename' }, { cmd: 'story.episode.openClip' }, sep, { cmd: 'story.cut.lift' }, { cmd: 'story.cut.rippleDelete' }, sep, { cmd: 'story.episode.undo' }, { cmd: 'story.episode.redo' }]
+}
+
+/** CE2: a track header's right-click (the track set by the caller in `trackItem`). */
+export function cutTrackMenu(): MenuItem[] {
+  return [{ cmd: 'story.cut.track.rename' }, { cmd: 'story.cut.track.lock' }, { cmd: 'story.cut.track.mute' }, sep, { cmd: 'story.cut.addVideoTrack' }, { cmd: 'story.cut.addAudioTrack' }]
+}
+
+/** CE2: the tracks' empty space. */
+export function cutSpaceMenu(): MenuItem[] {
+  return [{ cmd: 'story.episode.play' }, { cmd: 'story.episode.home' }, { cmd: 'story.episode.end' }, sep, { cmd: 'story.cut.addVideoTrack' }, { cmd: 'story.cut.addAudioTrack' }, sep,
+    { cmd: 'story.episode.exportResolve' }, { label: 'Export one file', icon: FileDown, items: [{ cmd: 'story.episode.exportEdl' }, { cmd: 'story.episode.exportFcpxml' }, { cmd: 'story.episode.exportSrt' }] },
+    { cmd: 'story.episode.render' }, { cmd: 'story.episode.renderMovie' }, sep, { cmd: 'story.episode.reassemble' }, { cmd: 'story.episode.updateAll' }, sep,
+    { cmd: 'story.episode.rename' }, { cmd: 'story.episode.delete' }, sep, { cmd: 'story.episode.undo' }, { cmd: 'story.episode.redo' }]
 }

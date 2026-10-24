@@ -8683,3 +8683,20 @@ reviewed EffectCraft, and measured where it could be.
   for the author (30 §9).
 - Tests: `test_timeline_d83.py` (the mixed-rate assertion on the lane's grid; a new FC1 test: the spine end to end, the dissolve on the
   cut, a line in a given-up head on the clip before). Offline 543 passed. Pictures `proto01_animate/img/30-fc-probe-*.jpg`.
+
+## 2026-10-24 08:15 — D126: the author's answers on RC4 (proto01_animate 30 §9) — the cut editor inside Story · Episode on FilmCraft's engine
+
+The author: "1) a 2) b 3) all 4) yes, in the first version 5) filmcraft's export, but inside loom2 - not by using filmcraft itself".
+
+- **1 (a):** the cut is edited in Story · Episode, loom2's own UI, every edit a FilmCraft command in a warm session beside the
+  orchestrator (D114's shape).
+- **2 (b), against the recommendation:** the FilmCraft project is the cut's file — `timelines/<id>/cut.fcproj`. loom2's links (a take's
+  shot, version, node and clip; a line's node and index; the cut's route) ride in it as item metadata: checked on the probe's build,
+  `metadata.set {item, fields: {"loom2.shot": …}}` keeps any field through a save. `timelines/<id>.json` stays as the registry record;
+  the lanes are read from the project; today's cuts are converted once.
+- **3:** all five tracks (V1 shots, V2 inserts and titles, A1 dialogue, A2 music, A3 effects). **4:** colour (a grade per scene, shot
+  match) in the first version.
+- **5:** the movie is FilmCraft's export run by loom2's queue; the author never opens FilmCraft's app. RC3's render stays where FilmCraft
+  is not built.
+- Plan (30 §10): CE1 the engine and the cut file (4 days: every existing Episode verb on the project first), CE2 tracks, CE3 sound, CE4
+  colour, CE5 captions and delivery. CE1 starts now.

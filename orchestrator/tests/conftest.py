@@ -1,9 +1,13 @@
 import json
+import os
 from pathlib import Path
 
 import pytest
 
 FIXTURES = Path(__file__).parent / "fixtures"
+# CE1 (D126): a cut is a FilmCraft project only when FilmCraft is built — the suite never picks up the author's built binary; a test
+# that wants FilmCraft sets Settings › filmcraft.cli to tests/fake_filmcraft.py (read before loom2.config is imported)
+os.environ.setdefault("LOOM2_FILMCRAFT_CLI", str(Path(__file__).parent / "no-filmcraft-cli.exe"))
 
 
 @pytest.fixture(scope="session")

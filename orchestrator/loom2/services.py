@@ -18,6 +18,7 @@ from .queue import JobQueue
 from .roster import Roster
 from .tools.fetch import FetchJob
 from .effectcraft import EffectCraft
+from .filmcraft import FilmCraft
 from .workspace import Workspace
 
 
@@ -28,6 +29,7 @@ class Services:
         self.roster = Roster(self.app.models_root, [Path(p) for p in self.app.settings.mounted_model_trees], self.app.settings.variant)
         self.engine = EngineSupervisor(self.app, on_state=lambda s: self.hub.broadcast("engine.state", s))
         self.effectcraft = EffectCraft(self.app)                            # AE1 (D114): the animation editor's engine, started on first use
+        self.filmcraft = FilmCraft(self.app)                                # CE1 (D126): the cut editor's engine, started on first use
         self.ws: Workspace | None = None
         self.catalogue: Catalogue | None = None
         self.queue: JobQueue | None = None
@@ -48,6 +50,7 @@ class Services:
             queue.documents = documents
             groups = await asyncio.to_thread(GroupStore, ws, catalogue)    # D34: the album pages; migrates collections once
             queue.groups = groups                                           # D73: @mentions resolve against them
+            queue.filmcraft = self.filmcraft                                # CE1 (D126): the movie conforms a FilmCraft cut's takes through the session
             if groups.migrated:
                 catalogue.recovery.append(f"{groups.migrated} collection{'s' if groups.migrated != 1 else ''} became groups on the Album page.")
             await queue.start()

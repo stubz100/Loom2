@@ -5201,6 +5201,29 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * FilmCraftSettings
+         * @description CE1 (proto01_animate 30 §10, D126): the cut editor's engine — the pinned `filmcraft-cli` (engine/filmcraft.pin.json, built by
+         *     scripts/build_filmcraft.py into engine/tools/, never in git) driven as one MCP session beside the orchestrator (loom2/filmcraft.py); the
+         *     movie is its export in a process of its own. A `.py` runs under the orchestrator's interpreter (the tests' fake).
+         */
+        FilmCraftSettings: {
+            /**
+             * Cli
+             * @default <repo>\engine\tools\filmcraft\filmcraft-cli.exe
+             */
+            cli: string;
+            /**
+             * Threads
+             * @default 8
+             */
+            threads: number;
+            /**
+             * Timeout S
+             * @default 120
+             */
+            timeout_s: number;
+        };
         /** FilterLayer */
         FilterLayer: {
             /**
@@ -9220,6 +9243,7 @@ export interface components {
             api_port: number;
             effectcraft: components["schemas"]["EffectCraftSettings"];
             engine: components["schemas"]["EngineSettings"];
+            filmcraft: components["schemas"]["FilmCraftSettings"];
             /**
              * H3 Licence Confirmed
              * @default false
@@ -10331,6 +10355,8 @@ export interface components {
             clips: components["schemas"]["TimelineClip"][];
             /** Created At */
             created_at: string;
+            /** File */
+            file: string | null;
             /**
              * Fps
              * @default 24

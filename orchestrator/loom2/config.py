@@ -85,6 +85,16 @@ class EffectCraftSettings(BaseModel):
     timeout_s: float = 120.0    # a request past this kills the session (a frame is ≈ 60 ms; the final render is a CLI job, never sent through it)
 
 
+class FilmCraftSettings(BaseModel):
+    """CE1 (proto01_animate 30 §10, D126): the cut editor's engine — the pinned `filmcraft-cli` (engine/filmcraft.pin.json, built by
+    scripts/build_filmcraft.py into engine/tools/, never in git) driven as one MCP session beside the orchestrator (loom2/filmcraft.py); the
+    movie is its export in a process of its own. A `.py` runs under the orchestrator's interpreter (the tests' fake)."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    cli: str = os.environ.get("LOOM2_FILMCRAFT_CLI") or str(REPO_ROOT / "engine" / "tools" / "filmcraft" / "filmcraft-cli.exe")   # the env: the offline suite keeps it unbuilt
+    threads: int = 8            # RAYON_NUM_THREADS of the session (E32: a warm frame is 10 ms at ½; D113's cap beside a GPU job)
+    timeout_s: float = 120.0    # a request past this kills the session (the movie's export is a job of its own, never sent through it)
+
+
 class MotionSettings(BaseModel):
     """CA1 (proto01_animate 02 §5): the motion library's folders. The starter set (CC0, ships with loom2) defaults to <models_root>/motion;
     the local folder holds the author's own downloads (e.g. Mixamo FBX) — never bundled, never in CI or tests."""
@@ -167,6 +177,7 @@ class Settings(BaseModel):
     samples: SampleSettings = Field(default_factory=SampleSettings)     # D90: the scenes of the style samples and the preset swatches
     motion: MotionSettings = Field(default_factory=MotionSettings)      # CA1: the motion library's starter set and local folder
     effectcraft: EffectCraftSettings = Field(default_factory=EffectCraftSettings)   # AE1 (D114): the animation editor's engine
+    filmcraft: FilmCraftSettings = Field(default_factory=FilmCraftSettings)         # CE1 (D126): the cut editor's engine
 
 
 class AppRecord(BaseModel):

@@ -4528,6 +4528,33 @@
         "title": "FetchState",
         "type": "object"
       },
+      "FilmCraftSettings": {
+        "description": "CE1 (proto01_animate 30 §10, D126): the cut editor's engine — the pinned `filmcraft-cli` (engine/filmcraft.pin.json, built by\nscripts/build_filmcraft.py into engine/tools/, never in git) driven as one MCP session beside the orchestrator (loom2/filmcraft.py); the\nmovie is its export in a process of its own. A `.py` runs under the orchestrator's interpreter (the tests' fake).",
+        "properties": {
+          "cli": {
+            "default": "<repo>\\engine\\tools\\filmcraft\\filmcraft-cli.exe",
+            "title": "Cli",
+            "type": "string"
+          },
+          "threads": {
+            "default": 8,
+            "title": "Threads",
+            "type": "integer"
+          },
+          "timeout_s": {
+            "default": 120.0,
+            "title": "Timeout S",
+            "type": "number"
+          }
+        },
+        "required": [
+          "cli",
+          "threads",
+          "timeout_s"
+        ],
+        "title": "FilmCraftSettings",
+        "type": "object"
+      },
       "FilterLayer": {
         "properties": {
           "blend": {
@@ -14316,6 +14343,9 @@
           "engine": {
             "$ref": "#/components/schemas/EngineSettings"
           },
+          "filmcraft": {
+            "$ref": "#/components/schemas/FilmCraftSettings"
+          },
           "h3_licence_confirmed": {
             "default": false,
             "title": "H3 Licence Confirmed",
@@ -14409,7 +14439,8 @@
           "h3_licence_confirmed",
           "samples",
           "motion",
-          "effectcraft"
+          "effectcraft",
+          "filmcraft"
         ],
         "title": "Settings",
         "type": "object"
@@ -17096,6 +17127,17 @@
             "title": "Created At",
             "type": "string"
           },
+          "file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File"
+          },
           "fps": {
             "default": 24,
             "title": "Fps",
@@ -17166,6 +17208,7 @@
           "clips",
           "overlaps",
           "route",
+          "file",
           "revision",
           "created_at",
           "updated_at"

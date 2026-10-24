@@ -97,6 +97,7 @@ def main() -> int:
     (lipsync / "latentsync_unet.pt").write_bytes(b"x" * 16)
     settings["lipsync"] = {**settings["lipsync"], "python": sys.executable, "run": str(tests / "fake_lipsync.py"), "checkout": str(lipsync.parent)}
     settings["effectcraft"] = {**settings["effectcraft"], "cli": str(tests / "fake_effectcraft.py")}         # AE1: the fake session stands in for effectcraft-cli
+    settings["filmcraft"] = {**settings["filmcraft"], "cli": str(tests / "fake_filmcraft.py")}             # CE1 (D126): the fake stands in for filmcraft-cli: cuts are FilmCraft projects
     settings["hf_home"] = str(state / "hf")
     motion = models / "motion" / "test"                                                      # CA1: the library's test rig stands in for the starter set
     motion.mkdir(parents=True, exist_ok=True)

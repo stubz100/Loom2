@@ -1,0 +1,8 @@
+{
+  "repository": "https://github.com/storytold/filmcraft",
+  "commit": "764723f439f96241443dc7a698f486cb4f9ef6e2",
+  "version": "0.5.0",
+  "binary": "filmcraft-cli.exe",
+  "sha256": "11d9498a83c9efcd20b0cc8c84010d79c2dfab294e2dc6e91ee965302a7a6fc2",
+  "bytes": 34621952
+}

@@ -1263,6 +1263,9 @@ async def run_movie(job: JobRecord, recipe: Render, q: JobQueue) -> bool:
     total = duration(tl)
     if total <= 0:
         raise ValueError("the sequence is empty")
+    fc = getattr(q, "filmcraft", None)
+    if tl.file and fc is not None and fc.available():                  # CE1 (D126 #5): the cut is a FilmCraft project — its own export
+        return await run_movie_filmcraft(job, recipe, q, tl, recs)
     s = starts(tl)
     W, H = tl.w - tl.w % 2, tl.h - tl.h % 2
     tmp = q.ws.temp_dir / f"movie-{job.id}"
@@ -1368,6 +1371,120 @@ async def run_movie(job: JobRecord, recipe: Render, q: JobQueue) -> bool:
     job.result["file"] = str(out)                                                  # the absolute path, for Reveal the movie
     shutil.rmtree(tmp, ignore_errors=True)
     return True
+
+
+async def run_movie_filmcraft(job: JobRecord, recipe: Render, q: JobQueue, tl: Any, recs: dict) -> bool:
+    """CE1 (proto01_animate 30 §10, D126 #5): the movie of a cut whose file is a FilmCraft project — FilmCraft's own export, run by loom2.
+    First each 16 fps take on a 24 fps cut is conformed once by RIFE v4.6 (D27; FilmCraft repeats frames), cached beside its master
+    (`clips/<id>/conform24/`), and swapped into the project for its proxy through the session (`clip.replaceFromBin`, the source in kept);
+    then `filmcraft-cli run` exports the saved project in a process of its own (software decoding, D97) to H.264 + AAC; the file goes to the
+    cut's folder and a copy to the Catalogue with lineage to every clip, as RC3's movie."""
+    from ..cuts import lines as cut_lines
+    from ..cuts import read
+    from ..filmcraft import export_argv, export_script, prefs
+    from ..final_assembly import conform_24, rife_binary
+    from ..fsio import slugify, utc_now
+    from ..trainer import _kill
+    from .supervisor import _assign_to_job
+    fc, store, clips = q.filmcraft, TimelineStore(q.ws), ClipStore(q.ws)
+    project = store.export_dir(tl.id) / tl.file
+    t0 = time.time()
+    conformed: list[str] = []
+    if tl.fps == 24 and rife_binary() is not None:
+        await asyncio.to_thread(fc.open, project)
+        doc = await asyncio.to_thread(read, project)
+        its = doc["project"]["items"]
+        seq = next(it["kind"]["Sequence"] for it in its.values() if "Sequence" in it["kind"])
+        v1 = seq["video_tracks"][0]["items"] if seq["video_tracks"] else []
+        for k, it in list(its.items()):
+            meta = it.get("metadata", {})
+            cid = meta.get("loom2.clip")
+            if meta.get("loom2.media") != "proxy" or meta.get("loom2.fps") != "16" or cid not in recs:
+                continue
+            rec, dst = recs[cid], q.ws.path / "clips" / cid / "conform24"
+            got = sorted(dst.glob("*.png"))
+            if len(got) != round((rec.frames - 1) * 24 / 16) + 1:
+                q.progress(job, f"conforming {cid} to 24 fps (RIFE)")
+                got = await asyncio.to_thread(conform_24, clips.frame_path(cid, 0).parent, dst, rec.frames) or []
+                if not got:
+                    continue
+            q.check_cancel(job)
+            r = await asyncio.to_thread(fc.batch, [{"id": "prefs.set", "params": {"values": prefs(24)}},                    # RIFE numbers from 1: the first it wrote
+                                                   {"id": "file.import", "params": {"paths": [str(got[0])], "imageSequence": True}}])
+            new = int(r[1]["items"][0])
+            uses = [ti["id"] for ti in v1 if ti["item"] == int(k)]
+            steps = [{"id": "metadata.set", "params": {"item": new, "fields": {**meta, "loom2.media": "conform24"}}}]
+            if uses:
+                steps.append({"id": "clip.replaceFromBin", "params": {"clips": uses, "item": new, "keepSourceIn": True}})
+            steps.append({"id": "project.delete", "params": {"items": [int(k)]}})
+            await asyncio.to_thread(fc.batch, steps)
+            conformed.append(cid)
+        if conformed:
+            await asyncio.to_thread(fc.save)
+    job.log_tail.append(f"movie (FilmCraft): {len(conformed)} take(s) conformed to 24 fps by RIFE and swapped in" if conformed
+                        else "movie (FilmCraft): nothing to conform (no 16 fps proxy on the cut, or no RIFE)")
+    tmp = q.ws.temp_dir / f"movie-{job.id}"
+    shutil.rmtree(tmp, ignore_errors=True)
+    tmp.mkdir(parents=True)
+    part, script = tmp / "movie.mp4", tmp / "export.jsonl"
+    script.write_text(export_script(part, "h264", tl.fps), encoding="utf-8")
+    argv = export_argv(q.app.settings.filmcraft, q.app, project, script)
+    log_path = q.app.logs_dir / f"movie-{job.id}.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with log_path.open("ab") as lf:
+        lf.write(f"==== launch {utc_now()} job {job.id} {' '.join(argv)}\n".encode("utf-8"))
+        lf.flush()
+        proc = subprocess.Popen(argv, stdout=lf, stderr=subprocess.STDOUT, env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+        _assign_to_job(proc)
+    job.log_tail.append(f"filmcraft-cli export pid {proc.pid}")
+    q.progress(job, "exporting the movie (FilmCraft)")
+    while proc.poll() is None:
+        await asyncio.sleep(0.5)
+        if job.id in q._cancel_requested:
+            _kill(proc.pid)
+            await asyncio.to_thread(proc.wait)
+            q.check_cancel(job)
+    if proc.returncode != 0 or not part.is_file():
+        tail = log_path.read_text(encoding="utf-8", errors="replace").strip()[-400:]
+        raise ValueError(f"filmcraft-cli export failed ({proc.returncode}): {tail}")
+    slug = slugify(tl.name, "sequence")
+    folder = store.export_dir(tl.id) / slug
+    folder.mkdir(parents=True, exist_ok=True)
+    out = folder / f"{slug}.mp4"
+    part.replace(out)
+    secs = round(time.time() - t0, 1)
+    placed = len(cut_lines(await asyncio.to_thread(read, project)))
+
+    def first_frame() -> Path:
+        import av
+        with av.open(str(out)) as c:
+            img = next(c.decode(video=0)).to_image()
+        p = tmp / "first.png"
+        img.save(p)
+        return p
+    first_png = await asyncio.to_thread(first_frame)
+    W, H, total = await asyncio.to_thread(_video_size, out)
+    job.log_tail.append(f"movie (FilmCraft): {total} frames at {W}×{H} @ {tl.fps} fps, {placed} spoken line(s), in {secs} s → {out.relative_to(q.ws.path).as_posix()}")
+    parents = list(dict.fromkeys(recs[c.clip_id].asset_id for c in tl.clips if recs[c.clip_id].asset_id))
+    asset = await asyncio.to_thread(q.catalogue.ingest_file, out, kind="video", move=False, job_id=job.id, batch_id=job.batch_id, suite="animate", model_id="movie",
+                                    seed=job.seed, prompt_text=tl.name, params={"recipe": recipe.model_dump(), "timeline_id": tl.id, "revision": tl.revision, "movie": True,
+                                                                                 "engine": "filmcraft", "conformed": sorted(conformed), "lines": placed},
+                                    timings={"wall_s": q.wall_s(), "render_s": secs}, parents=parents, lineage_kind="render", frames=total, w=W, h=H,
+                                    variant=job.variant, origin=job.origin)
+    asset = await asyncio.to_thread(q.catalogue.make_thumbs, asset, first_png)
+    q.hub.broadcast("asset.created", asset.model_dump())
+    job.result.update({"asset_ids": [asset.id], "path": out.relative_to(q.ws.path).as_posix(), "lines": placed, "revision": tl.revision, "file": str(out),
+                       "engine": "filmcraft"})
+    shutil.rmtree(tmp, ignore_errors=True)
+    return True
+
+
+def _video_size(path: Path) -> tuple[int, int, int]:
+    """A movie's width, height and frame count."""
+    import av
+    with av.open(str(path)) as c:
+        v = c.streams.video[0]
+        return v.codec_context.width, v.codec_context.height, v.frames or sum(1 for _ in c.decode(video=0))
 
 
 async def run_quick_remove(job: JobRecord, recipe: Inpaint, q: JobQueue) -> bool:

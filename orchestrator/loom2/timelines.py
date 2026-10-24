@@ -54,6 +54,7 @@ class Timeline(BaseModel):
     clips: list[TimelineClip] = Field(default_factory=list)
     overlaps: list[int] = Field(default_factory=list)      # overlaps[i] for clip i (overlaps[0] is 0)
     route: dict[str, str] | None = None                     # D125 (S13): the Flow route it was assembled from (a Choice node id → its option id); None: built by hand
+    file: str | None = None                                 # CE1 (D126 #2): the cut's FilmCraft project in its folder (`cut.fcproj`); then clips, overlaps and route are read from it
     revision: int = 0
     created_at: str = Field(default_factory=utc_now)
     updated_at: str = Field(default_factory=utc_now)
@@ -196,7 +197,7 @@ def line_spans(span: int, n: int) -> list[tuple[int, int]]:
     return [(k * per, span if k == n - 1 else (k + 1) * per) for k in range(n)]
 
 
-AudioCue = dict[str, Any]           # CN2: {name, src (a file URL), path (RC3: the movie reads it), duration_s} — a spoken line; None where a line has no voice yet
+AudioCue = dict[str, Any]           # CN2: {name, src (a file URL), path (RC3: the movie reads it), duration_s, asset, node, line (CE1)} — a spoken line; None where a line has no voice yet
 
 
 def story_lookup(ws, cat=None):
@@ -230,12 +231,12 @@ def story_lookup(ws, cat=None):
         if n is None or cat is None:
             return []
         out = []
-        for ln in n.lines:
+        for k, ln in enumerate(n.lines):
             if not ln.text.strip():
                 continue
             rec = cat.get(ln.audio_asset_id) if ln.audio_asset_id else None
             out.append({"name": Path(rec.path).name, "src": (ws.path / rec.path).resolve().as_uri(), "path": str((ws.path / rec.path).resolve()),   # RC3: the movie reads the file
-                        "duration_s": float(rec.duration_s)} if rec and rec.duration_s else None)
+                        "duration_s": float(rec.duration_s), "asset": rec.id, "node": n.id, "line": k} if rec and rec.duration_s else None)   # CE1: the cut's A1 links
         return out
     return name_of, lines_of, audio_of
 
@@ -344,10 +345,16 @@ def to_fcpxml(tl: Timeline, title: str, media: Callable[[str], tuple[str, str, i
 
 # ---- the store ----------------------------------------------------------------------------------------------------------------------
 class TimelineStore:
-    def __init__(self, ws: Workspace) -> None:
+    """The cuts' records. CE1 (D126 #2): a cut whose `file` is set is a FilmCraft project — its lane (V1), dissolves and route are read
+    from it, and with `cuts` (the FilmCraft session's writer, cuts.py) a change is written into it by commands; a cut made or changed while
+    FilmCraft is built gets its project then (today's cuts are converted on their first change). Without FilmCraft a converted cut is read,
+    not changed."""
+
+    def __init__(self, ws: Workspace, cuts: Any = None) -> None:
         self.ws = ws
         self.dir = ws.timelines_dir
         self.dir.mkdir(parents=True, exist_ok=True)
+        self.cuts = cuts
 
     def path(self, tl_id: str) -> Path:
         return self.dir / f"{tl_id}.json"
@@ -355,24 +362,40 @@ class TimelineStore:
     def export_dir(self, tl_id: str) -> Path:
         return self.dir / tl_id
 
+    def view(self, rec: Timeline) -> Timeline:
+        """The cut as loom2 shows it: a FilmCraft cut's lane, dissolves and route read from its project."""
+        if not rec.file:
+            return rec
+        from .cuts import lane, read
+        clips, overlaps, route = lane(read(self.export_dir(rec.id) / rec.file), rec.fps)
+        return rec.model_copy(update={"clips": clips, "overlaps": overlaps, "route": route})
+
     def get(self, tl_id: str) -> Timeline | None:
         p = self.path(tl_id)
-        return Timeline.model_validate(read_json(p)) if p.is_file() else None
+        return self.view(Timeline.model_validate(read_json(p))) if p.is_file() else None
 
     def list(self) -> list[Timeline]:
-        out = [Timeline.model_validate(read_json(p)) for p in self.dir.glob("tl_*.json")]
+        out = [self.view(Timeline.model_validate(read_json(p))) for p in self.dir.glob("tl_*.json")]
         return sorted(out, key=lambda t: t.updated_at, reverse=True)
+
+    def _filmcraft(self) -> bool:
+        return self.cuts is not None and self.cuts.available()
 
     def save(self, tl: Timeline) -> None:
         atomic_write_json(self.path(tl.id), tl.model_dump(by_alias=True))
 
     def create(self, name: str = "Sequence", fps: int = 24, w: int = 1920, h: int = 1080) -> Timeline:
         tl = Timeline(id=new_id("tl"), name=name.strip() or "Sequence", fps=fps, w=w, h=h)
+        if self._filmcraft():                                   # CE1: a new cut is a FilmCraft project from the start
+            from .cuts import CUT_FILE
+            self.cuts.create(tl)
+            tl.file = CUT_FILE
         self.save(tl)
         return tl
 
-    def put(self, tl_id: str, data: dict[str, Any], clip_frames: dict[str, int] | None = None) -> Timeline:
-        """Replace the document from a client body based on `revision` (409 when stale); id, schema and timestamps are the server's."""
+    def put(self, tl_id: str, data: dict[str, Any], clip_frames: dict[str, int] | None = None, records: dict[str, ClipRecord] | None = None) -> Timeline:
+        """Replace the document from a client body based on `revision` (409 when stale); id, schema, file and timestamps are the server's.
+        CE1: with FilmCraft the lane is written into the cut's project (made now for a cut that has none) and the record keeps no clips."""
         cur = self.get(tl_id)
         if cur is None:
             raise KeyError(tl_id)
@@ -383,6 +406,14 @@ class TimelineStore:
                   "id": tl_id, "schema_version": TIMELINE_SCHEMA_VERSION, "revision": cur.revision + 1, "created_at": cur.created_at, "updated_at": utc_now()}
         tl = Timeline.model_validate(merged)
         check(tl, clip_frames)
+        if self._filmcraft():
+            from .cuts import CUT_FILE
+            self.cuts.write(tl, records or {})
+            self.save(tl.model_copy(update={"file": CUT_FILE, "clips": [], "overlaps": [], "route": None}))
+            return self.get(tl_id)                              # type: ignore[return-value]
+        if cur.file:
+            from .cuts import CutError
+            raise CutError("FilmCraft is not built, and this cut's file is a FilmCraft project: it can be read, not changed (scripts/build_filmcraft.py)")
         self.save(tl)
         return tl
 
@@ -392,8 +423,10 @@ class TimelineStore:
             return False
         p.unlink()
         d = self.export_dir(tl_id)
+        if self.cuts is not None:
+            self.cuts.forget(tl_id)                             # CE1: the session lets go of the cut's project first
         if d.is_dir():
-            shutil.rmtree(d)                                    # its exports, the Resolve folder (D125) among them
+            shutil.rmtree(d)                                    # its exports, the Resolve folder (D125) and the cut's project among them
         return True
 
     def export(self, tl: Timeline, fmt: str, clips: dict[str, ClipRecord], name_of: Callable[[TimelineClip], str | None] | None = None,

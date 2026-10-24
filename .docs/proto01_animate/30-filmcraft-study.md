@@ -1,6 +1,6 @@
 # 30 · RC4's study — FilmCraft for the cut editor
 
-Status: **study, 2026-10-24; answered the same day → D126 (§10); building CE1.** D96 planned RC4 as "FilmCraft reviewed as 03 reviewed EffectCraft
+Status: **study, 2026-10-24; answered the same day → D126 (§10); CE1 built (§11); CE2 next.** D96 planned RC4 as "FilmCraft reviewed as 03 reviewed EffectCraft
 (what to reuse, how), then the multi-track cut editor that replaces the single-lane Episode" ([05](05-flow-nodes-as-shot-recipes.md)
 §6), with O6 (a scene grade and shot-match in the cut, [06](06-continuity-across-shots.md)) attached. RC1–RC3 are built
 ([28](28-recipe-graph.md), [29](29-movie-render.md)); this is the study, measured where it could be (§3, the probe E32).
@@ -226,8 +226,32 @@ into the cut's folder and the Catalogue as RC3. RC3's render stays where FilmCra
 
 | Wave | Content | Days |
 | --- | --- | --- |
-| **CE1 · the engine and the cut file** | pin, build script, CI check, Settings › FilmCraft; the session and its fake; `cut.fcproj` per cut (made and converted by commands, conformed masters, the links as metadata); the lane read from it, every existing Episode verb on it (assemble, *changed*, update, exports, checklist, RC3's movie by FilmCraft's export); a rig check (the real binary, an episode-length cut, memory beside ComfyUI) | 4 |
+| **CE1 · the engine and the cut file** ✓ built 2026-10-24 (§11) | pin, build script, CI check, Settings › FilmCraft; the session and its fake; `cut.fcproj` per cut (made and converted by commands, conformed masters, the links as metadata); the lane read from it, every existing Episode verb on it (assemble, *changed*, update, exports, checklist, RC3's movie by FilmCraft's export); a rig check (the real binary, an episode-length cut, memory beside ComfyUI) | 4 |
 | **CE2 · tracks** | the five tracks (V1 shots, V2 inserts and titles, A1 dialogue, A2 music, A3 effects; more by `+`); the edits as commands (move, trim, roll, slip, slide, razor, ripple delete, transitions, speed, freeze); the viewer's frames from the session | 4–5 |
 | **CE3 · sound** | the lines as A1 clips (placed as today, then moved by hand), music and effects from the Catalogue, gain and volume keys, ducking, loudness; sound in the page | 2 |
 | **CE4 · colour** | *Grade the scene* (an adjustment layer over a scene group's shots), *Match to…*, presets and looks | 2 |
 | **CE5 · captions and delivery** | the caption track from the lines, burn-in, H.264 / ProRes presets, the Resolve folder from the project | 1–2 |
+
+## 11. CE1 as built (2026-10-24)
+
+- **The engine:** `engine/filmcraft.pin.json` (FilmCraft 0.5.0 at `764723f4`, 34,621,952 B), `scripts/build_filmcraft.py` (`--check` in
+  CI; the release build takes 2 min 30 s), Settings › FilmCraft (`cli`, `threads`, `timeout_s`). The session (`loom2/filmcraft.py`) shares
+  its process and requests with EffectCraft's in `loom2/mcp_session.py` (moved out of `effectcraft.py`); every start sets software
+  decoding, scale-to-frame and the image-sequence rate. A fake (`tests/fake_filmcraft.py`) for the offline suite and the e2e; the suite
+  never picks up a built binary (`LOOM2_FILMCRAFT_CLI` in `conftest.py`).
+- **The cut file** (`loom2/cuts.py`): `lane()` reads V1 from the project's JSON without FilmCraft; `Cuts.write` rebuilds V1 and the lines
+  on A1 by commands (cleared, placed end to end, dissolves on the cut, the route on the sequence, loom2's unused items deleted).
+  **One project item per take as used** (the take with its shot's stamps): the e2e put one take on the lane as a shot and as a plain clip,
+  and per-file stamps let the last write win. The store reads a cut's lane from its project; with FilmCraft built a new cut is a project
+  and today's cut is converted on its first change; without it a converted cut is read, not changed (422).
+- **A 16 fps take** enters as its proxy and is conformed by RIFE in the queued movie job, then swapped in (`clip.replaceFromBin`, the source
+  in kept; the conformed frames cached in `clips/<id>/conform24/`): RIFE takes the card, so it never runs inside an edit (D97). RIFE
+  numbers its frames from 1 — the import names the first one it wrote (found on the e2e; the tests' fake RIFE now numbers the same way).
+- **A spoken line** that would overlap the one before it on A1 starts where that one ends (a track holds one clip at a time); the
+  exports still lay the lines evenly until CE3.
+- **The movie** of a FilmCraft cut is `filmcraft-cli run` (preferences, then `file.exportMedia`) in a process of its own, cancellable; the
+  Catalogue copy carries `engine: filmcraft`. RC3's render stays for cuts that are not converted and where FilmCraft is not built.
+- **On the rig** (`scripts/ce1_acceptance.py`, 14/14, a copy of the A1 project): converted in 0.26 s with the lane exact and both lines on
+  A1; FilmCraft's movie in 5.9 s with Mara conformed (RC3's own render of the same lane: 12.0 s), the same 225 frames at 1920×1080 (mean
+  difference 1.24 / 4.0 / 0.32 / 0.36 levels on frames 48 / 114 / 160 / 224) and the same sound; an edit round-trips; the export's peak
+  memory 1.65 GB (4.0 s); warm frames at ½ 12.8 ms; software decoding in the session and the export.

@@ -65,6 +65,7 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
             await svc.engine.stop()
             await svc.engine.client.aclose()
             svc.effectcraft.stop()                                  # AE1: the editor's session ends with the orchestrator
+            svc.filmcraft.stop()                                    # CE1: and the cut editor's
 
     dev = os.environ.get("LOOM2_DEV") == "1"                  # D67: the interactive docs only in development
     app = FastAPI(title="loom2 orchestrator", version=__version__, lifespan=lifespan,

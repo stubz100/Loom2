@@ -8715,3 +8715,25 @@ Re-measured with `playback.hardwareDecoding = off` in each process:
 
 proto01_animate 30 §3 now gives these figures. For CE1: loom2's session sets the preference at every start and the movie job runs the
 export in a process that sets it first (`run` with `prefs.set`, then `file.exportMedia`).
+
+## 2026-10-24 09:01 — CE1 built (proto01_animate 30 §11, D126): FilmCraft is the cut's engine and its project the cut's file; rig 14/14
+
+- **Engine:** `engine/filmcraft.pin.json` (0.5.0, `764723f4`), `scripts/build_filmcraft.py` (release build 2 min 30 s; `--check` in CI),
+  Settings › FilmCraft. `loom2/mcp_session.py` now holds the session process both sibling engines use (moved out of `effectcraft.py`;
+  EffectCraft's 30 tests unchanged). `loom2/filmcraft.py`: software decoding, scale-to-frame and the image-sequence rate at every start
+  (the probe's lesson: a preference lasts one process). `tests/fake_filmcraft.py` writes FilmCraft's own JSON shape; the offline suite never
+  picks up a built binary (`LOOM2_FILMCRAFT_CLI`, `conftest.py`; the OpenAPI export pins it).
+- **The cut's file** (`loom2/cuts.py`): the lane read from the project's JSON (no FilmCraft needed to read); writes rebuild V1 and A1's
+  lines by commands; loom2's links as item metadata, one project item per take *as used* (an e2e found per-file stamps losing to the last
+  write when one take was on the lane as a shot and as a plain clip). New cuts are projects; today's cuts convert on their first change; a
+  converted cut without FilmCraft is read-only (422). A line that would overlap the one before on A1 starts where it ends.
+- **Movie:** a FilmCraft cut's movie is its export in a process of its own after the queued job conforms each 16 fps take with RIFE and
+  swaps it in for its proxy (RIFE numbers from 1: an e2e failure, fixed, the tests' fake RIFE now numbers the same way). RC3's render
+  stays for unconverted cuts and where FilmCraft is not built.
+- **Rig** (`scripts/ce1_acceptance.py`, a copy of the A1 project, no other GPU job): 14/14 — converted in 0.26 s with the lane exact and
+  both lines on A1; FilmCraft's movie 5.9 s with Mara conformed (RC3's own render of the same lane 12.0 s), 225 frames at 1920×1080,
+  mean difference 1.24 / 4.0 / 0.32 / 0.36 against RC3's, the sound the same; an edit round-trips; the export's peak memory 1.65 GB
+  (4.0 s); warm frames at ½ 12.8 ms; software decoding in the session and the export.
+- Tests: `test_cuts_ce1.py` (5: the session, the round trip, the routes with conversion and read-only, the lines, the movie);
+  `fake_filmcraft.py`. Offline 548 passed; settings audit clean; OpenAPI current; Vitest 452 + 3 skipped; typecheck, lint (0 errors, 79
+  warnings) and build clean; e2e full 61/61 and open 61/61 on the fake. No UI change in CE1 (the Episode looks the same).

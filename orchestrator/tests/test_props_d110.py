@@ -120,7 +120,7 @@ def test_routes_make_and_pick(tmp_path: Path):
             assert cl.post(f"/story/profiles/{who['id']}/versions/{who['current']}/model", headers=H).status_code == 422
             r = cl.post(f"/story/profiles/{prop['id']}/versions/{prop['current']}/model", headers=H)
             if variant == "open":
-                assert r.status_code == 422 and "Q22" in r.json()["detail"]
+                assert r.status_code == 422 and "D128" in r.json()["detail"]
                 continue
             assert r.status_code == 200, r.text
             body = r.json()

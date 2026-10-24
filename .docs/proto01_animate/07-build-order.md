@@ -61,7 +61,7 @@ truth from here; the table above stays as written.
 | 4 · the editor | AE1 · AP1 · AE2 · AE3 | AE1 (the pin, the composition, `comp_render`), AP1 thin (the Final level), AE2 (layers, properties, masks, lanes), AE3 (effects) — 2026-10-20/21 (doc 20 §5) | the author's looks at 21 |
 | 5 · the clay pipeline | CA2 → CA6, AE4, AE5 | built as **PS1–PS5** (doc 16), see the mapping below; **AE4 built as AE4a–e** (D118, 2026-10-22: passes on layers, the line on the lanes, Face / Lip-sync, the lip-sync model as a tool, processing layers — doc 20 §6) | CA3's depth-guided plate for large moves · CA5's seam repair (W3) · AE5 |
 | 6 · review | UX9 | begun 2026-10-21 with the author's look at 21: U1–U3 (journal 2026-10-21 13:58), U4–U7 (D116, journal 2026-10-21 16:42); the ? sweep over the whole app (journal 2026-10-21 18:24) | 15, 17, 18 closed by the author (D117); 21's second look owed; the rest of the register after it |
-| 7 · Story pass | RC1–RC4 · O1–O7 · C1–C7 | RC0 only; the author chose C4 | all of it |
+| 7 · Story pass | RC1–RC4 · O1–O7 · C1–C7 | RC0 only; the author chose C4 | all of it — **as of 2026-10-24:** D125 built RC2's interface and RC3's cut (SP0–SP7), RC1 the graph (28), RC3's movie (29), RC4 the cut editor (30, D126 / D127); RC2's merge, scene groups, O2 and O3 planned in [31](31-props-shots-and-the-pipelines-rest.md) §3 |
 
 ### The mapping: 02's CA waves → 16's PS steps
 
@@ -83,7 +83,7 @@ truth from here; the table above stays as written.
 | — | **The author's looks** | docs 15, 17, 18, 19 — before AE2's viewer is designed (Q22, Q23) | no | ½ h |
 | 6 | **Review** | **UX9** | headed checks | 1–2 |
 | 3b | **The two spikes left** | **E29** lip-sync (ran 2026-10-21: L1 out, L2 keeps the pose — Q25 for the author, doc 23) → **E24** post-processing (two slices ran the same day, doc 24; the author: the low-expert pass improved the hands, the depth-locked LTX pass distorts — creative only; E29b: the head as its own layer gives the face; D118 shapes AE4 from them), then their D-number | yes, serial | ≈ 2.5 |
-| 5b | **The pipeline's rest** | ~~**AE4** AI passes on layers (CA7)~~ built 2026-10-22 (D118, AE4a–e) · **AE5** the output as a take · CA3's depth-guided plate · CA5's W3 repair | yes | 8–11 |
+| 5b | **The pipeline's rest** | ~~**AE4** AI passes on layers (CA7)~~ built 2026-10-22 (D118, AE4a–e) · **AE5** the output as a take · CA3's depth-guided plate · ~~CA5's W3 repair~~ (retired by D102: A6 stays for regions) · CA4's plan with its cost · CA5's re-take from a batch · D129's prop in the hand — planned in [31](31-props-shots-and-the-pipelines-rest.md) §4 | yes | 8–11 |
 | 7 | **Story pass** | RC1–RC4 · O1–O7 · C1–C3, C5–C7 as the author picks | rig checks | 15–20 + RC4 |
 
 **The first slice of phase 4** is AE1 plus a thin AP1: the rig's final shot opened in Animate and scrubbed there, before any editing control

@@ -8906,3 +8906,23 @@ patched (the Mid attenuated). A track with plugins is printed onto a hidden comp
 - Tests: offline 562 passed (test_cuts_ce5.py), settings audit (295), OpenAPI, agents_check clean, Vitest 460 + 3 skipped, typecheck, lint
   (0 errors, 79 warnings) and build clean, e2e full 63/63 and open 63/63 (the tracks scenario's caption, marker and delivery steps).
   Screenshots img/30-ce5-*.jpg. D126's plan (CE1–CE5) is built.
+
+## 2026-10-24 18:04 — D128 and D129 (the author's answers to Q22 and Q23); the plan for RC2 and phase 5b (proto01_animate 31); PM1 built
+
+- **The author:** "Q22: all props have to have a 3D model / Q23: I don't like a prop that is a part of the character, we should scrub that /
+  Let's build the remaining two items". **D128**: every prop has a 3D model in both builds — imported as a GLB (any build) or made from
+  an image (Pixal3D in `full`; `open`'s model chosen by spike E33, its downloads asked for when it runs). **D129**: a held prop is its own
+  model parented to the holder's hand in Stage; E28's P3 (the prop drawn into the character's layer) is dropped. Q22, Q23 resolved; Q25
+  marked resolved by D117 (it had stayed open in the table).
+- **The plan** (proto01_animate 31): RC2a–f (one record per Shot: the shot inside its node's file, both ids kept, `story/flow/shots.json`
+  a rebuildable index; Shot cards; scene groups; the Shots list; O2 templates; O3 linked parts with *Make independent*), then phase 5b
+  (AE5 render settings and output modules, CA4 the plan with its cost, CA5 re-take from a batch, HP1 the prop in the hand, E34 → CA3 the
+  plate along the path for large moves, E33). The code map behind RC2a: two records, two id spaces, pointers that can disagree (*Release*
+  patches `owner_node` alone; a deleted shot leaves its node pointing at nothing), ids saved in finals, cuts, origins and manifests.
+  07's status rows updated (phase 7, phase 5b; CA5's W3 retired by D102).
+- **PM1 built** (D128's import): `POST /story/profiles/{pid}/versions/{vid}/model/import` (the GLB header checked: `glTF`, version 2; a
+  character refused; into the Catalogue as a mesh as it is, then the version's model); the Catalogue's *Import* takes `.glb` as a mesh
+  (thumbnail by the client's 3D view); *Import a 3D model (GLB)…* on the prop's 3D model block, its right-click and the readiness row;
+  the readiness row owes a prop's model in any shot it is in. Tests: test_props_d128.py (the `open` build: no make, the import works; a
+  bad file, a png and a character refused; a quoted path; the Catalogue's import), castReady.test.ts +1; offline 563 passed, Vitest
+  (Story) 97, typecheck and lint clean.

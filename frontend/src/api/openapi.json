@@ -13815,6 +13815,19 @@
         "title": "ProjectOpenedEvent",
         "type": "object"
       },
+      "PropModelImport": {
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "title": "PropModelImport",
+        "type": "object"
+      },
       "PropModelPick": {
         "properties": {
           "asset_id": {
@@ -29598,6 +29611,68 @@
           }
         },
         "summary": "Profile Model Pick",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/profiles/{pid}/versions/{vid}/model/import": {
+      "post": {
+        "description": "D128: a prop version's 3D model imported from a GLB file — into the Catalogue as a mesh (as it is: the author's model keeps its\norientation and scale), then set on the version. Any build: no model weights involved.",
+        "operationId": "profile_model_import_story_profiles__pid__versions__vid__model_import_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PropModelImport"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Model Import",
         "tags": [
           "story"
         ]

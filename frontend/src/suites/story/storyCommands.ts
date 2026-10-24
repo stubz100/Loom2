@@ -88,7 +88,7 @@ function openStageRoute(card: 'clay' | 'clip' | 'final'): void {
 // ---- D125 (SP5): Cast's readiness — each item's verb (the readiness row is its mouse home; the foot runs the next owed one) ----
 const ITEM_CMDS: Record<ReadyItem, string[]> = {
   hero: ['story.cast.setHero', 'story.cast.useAsSubject'], sheet: ['story.cast.editSheet'], refs: ['story.cast.addRef', 'story.cast.expand', 'story.cast.openCandidates'],
-  animref: ['story.cast.useAsAnimRef', 'story.cast.makeAnimRef'], body: ['story.cast.fitBody'], model: ['story.cast.makeModel'], voice: ['story.cast.newVoice'],
+  animref: ['story.cast.useAsAnimRef', 'story.cast.makeAnimRef'], body: ['story.cast.fitBody'], model: ['story.cast.makeModel', 'story.cast.importModel'], voice: ['story.cast.newVoice'],
   lora: ['story.cast.train'], final: ['story.cast.lock'],
 }
 /** The item's verb that can run now (a picked candidate first: it becomes the hero, a reference, the animation reference), or null. */
@@ -326,6 +326,11 @@ const cmds: Command[] = [
       void askConfirm({ title: `${v.model_asset_id ? 'Remake' : 'Make'} ${p.name}'s 3D model?`, okLabel: 'Queue it',
         text: `${mc.label} builds a textured model from ${v.anim_ref_asset_id ? 'the animation reference' : 'the hero'} and stands it upright. About ${mins(mc.seconds)} with the model loaded, ${mins(mc.cold_seconds)} from cold, in the background${mc.health === 'missing' ? ' — its weights are missing (Models › Fetch)' : ''}.${v.model_asset_id ? ' The old model stays in the Catalogue.' : ''}` })
         .then((ok) => { if (ok) void sy().makeModel() }) } },
+  { id: 'story.cast.importModel', scope: 'story', label: 'Import a 3D model (GLB)…', icon: Box, placement: ['panel', 'inspector', 'context'],
+    hint: 'a .glb of your own (or one whose licence you vouch for) becomes this version\'s model, as it is — every prop has a 3D model (D128)',
+    when: () => profile()?.cls === 'prop' && !!version() && !modelBusy(),
+    run: () => void askText({ title: 'Import a 3D model', text: 'The path of a .glb file (binary glTF 2.0). It joins the Catalogue as a mesh and becomes this version\'s model.', placeholder: 'D:\\models\\cup.glb' })
+      .then((v) => { if (v?.trim()) void sy().importModel(v.trim()) }) },
   { id: 'story.cast.clearModel', scope: 'story', label: 'Clear the 3D model', icon: X, placement: ['inspector', 'context'], when: () => !!version()?.model_asset_id,
     run: () => void sy().setModel(null) },
   { id: 'story.cast.testAnimRef', scope: 'story', label: 'Test it: a turn on the spot…', icon: Play, hint: 'the reference performs a turn through the pose-driven model (the cost is asked first)',

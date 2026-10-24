@@ -195,6 +195,7 @@
  "POST /story/profiles/{pid}/versions/{vid}/body/fit",
  "POST /story/profiles/{pid}/versions/{vid}/lock",
  "POST /story/profiles/{pid}/versions/{vid}/model",
+ "POST /story/profiles/{pid}/versions/{vid}/model/import",
  "POST /story/shots",
  "POST /story/shots/{sid}/versions",
  "POST /story/shots/{sid}/versions/{vid}/finalize",

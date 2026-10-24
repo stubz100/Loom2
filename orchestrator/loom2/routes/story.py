@@ -482,7 +482,7 @@ async def profile_model_make(svc: Svc, pid: str, vid: str):
         raise HTTPException(422, "give the prop an image first: its animation reference (the prop alone, ¾ view) or a hero")
     spec = next((s for s in registry.mesh_specs() if registry.offered(s, svc.app.settings.variant)), None)
     if spec is None:
-        raise HTTPException(422, "no image → 3D model is offered in this build (the open variant: Pixal3D needs DINOv3, full only — Q22)")
+        raise HTTPException(422, "no image → 3D model is offered in this build (Pixal3D needs DINOv3, full only): import the prop's model as a GLB (D128)")
     try:
         jobs = svc.queue.submit({"kind": "image_to_mesh", "asset_id": source, "model_id": spec.id}, origin=prop_model_origin(p.id, v.id, source))
     except ValueError as e:
@@ -512,6 +512,36 @@ async def profile_model_pick(svc: Svc, pid: str, vid: str, body: PropModelPick):
         raise HTTPException(404, str(e.args[0]))
     except ValueError as e:
         raise HTTPException(422, str(e))
+    _changed(svc, p)
+    return p.model_dump()
+
+
+class PropModelImport(BaseModel):
+    path: str                                      # a .glb on this machine (the author's own 3D work, or a model whose licence the author vouches for)
+
+
+@router.post("/story/profiles/{pid}/versions/{vid}/model/import", response_model=Profile)
+async def profile_model_import(svc: Svc, pid: str, vid: str, body: PropModelImport):
+    """D128: a prop version's 3D model imported from a GLB file — into the Catalogue as a mesh (as it is: the author's model keeps its
+    orientation and scale), then set on the version. Any build: no model weights involved."""
+    from .assets import check_glb
+    ws, cat, _ = svc.require_project()
+    src = Path(body.path.strip().strip('"'))
+    if not src.is_file() or src.suffix.lower() != ".glb":
+        raise HTTPException(422, f"not a .glb file: {body.path}")
+    check_glb(src)
+    p = await asyncio.to_thread(StoryStore(ws).profile, pid)
+    if p is None:
+        raise HTTPException(404, "profile not found")
+    if p.cls != "prop":
+        raise HTTPException(422, "only a prop has a 3D model (a character has its body, a place its set)")
+    rec = await asyncio.to_thread(cat.ingest_file, src, kind="mesh", move=False, suite="story",
+                                  params={"imported_from": str(src), "format": "glb", "profile_id": pid, "version": vid})
+    svc.hub.broadcast("asset.created", rec.model_dump())
+    try:
+        p = await asyncio.to_thread(StoryStore(ws).set_model, pid, vid, rec.id, None)
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0]))
     _changed(svc, p)
     return p.model_dump()
 

@@ -507,20 +507,21 @@ function PropModel({ p, v }: { p: Profile; v: Profile['versions'][number] }) {
   const source = modelSource(v)
   const status = busy ? `making the model… ${Math.round((job!.progress ?? 0) * 100)} %${job!.progress_text ? ` · ${job!.progress_text}` : ''}`
     : job?.status === 'failed' && !v.model_asset_id ? `the last make failed: ${job.error ?? 'see the job'}`
-    : !mc?.model_id ? (mc?.why ?? 'no image → 3D model in this build')
-    : !source ? 'give the prop an image first: its animation reference (above) or a hero'
+    : v.model_asset_id && !v.model_from ? 'imported · Animate places it as it is'
+    : !mc?.model_id ? (v.model_asset_id ? 'Animate places it in the scene' : 'import its model as a GLB — no image → 3D in this build')
+    : !source ? 'give the prop an image first (its animation reference or a hero), or import a GLB'
     : modelStale(v) ? 'made from an older image — remake it from the current reference'
     : v.model_asset_id ? 'stood upright · Animate places it in the scene' : 'none yet'
   return (
     <section className="prop-model">
-      <h3>3D model <Help text={`The prop as a real object, made once from ${v.anim_ref_asset_id ? 'the animation reference' : 'the hero'} — Animate places it in the scene.`} /></h3>
-      <div className="prop-model-row" onContextMenu={(e) => showMenu(e, [{ cmd: 'story.cast.makeModel' }, { cmd: 'story.cast.clearModel' }])}>
+      <h3>3D model <Help text={`Every prop has a 3D model (D128): made once from ${v.anim_ref_asset_id ? 'the animation reference' : 'the hero'}, or imported as a GLB — Animate places it in the scene.`} /></h3>
+      <div className="prop-model-row" onContextMenu={(e) => showMenu(e, [{ cmd: 'story.cast.makeModel' }, { cmd: 'story.cast.importModel' }, { cmd: 'story.cast.clearModel' }])}>
         {v.model_asset_id
           ? <Suspense fallback={<div className="model-view" />}><ModelView key={v.model_asset_id} assetId={v.model_asset_id} /></Suspense>
           : <div className="model-view empty"><span className="hint">{busy ? 'making…' : 'no model yet'}</span></div>}
         <div className="prop-model-side">
           <span className={`hint${modelStale(v) ? ' warn' : ''}`} data-status>{status}</span>
-          <div className="verbs"><CommandButton id="story.cast.makeModel" text /><CommandButton id="story.cast.clearModel" text /></div>
+          <div className="verbs"><CommandButton id="story.cast.makeModel" text /><CommandButton id="story.cast.importModel" text /><CommandButton id="story.cast.clearModel" text /></div>
         </div>
       </div>
     </section>

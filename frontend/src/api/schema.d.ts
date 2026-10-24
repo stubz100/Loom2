@@ -3043,6 +3043,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/profiles/{pid}/versions/{vid}/model/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Profile Model Import
+         * @description D128: a prop version's 3D model imported from a GLB file — into the Catalogue as a mesh (as it is: the author's model keeps its
+         *     orientation and scale), then set on the version. Any build: no model weights involved.
+         */
+        post: operations["profile_model_import_story_profiles__pid__versions__vid__model_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/recipe-templates": {
         parameters: {
             query?: never;
@@ -9321,6 +9342,11 @@ export interface components {
              * @constant
              */
             type: "project.opened";
+        };
+        /** PropModelImport */
+        PropModelImport: {
+            /** Path */
+            path: string;
         };
         /** PropModelPick */
         PropModelPick: {
@@ -18014,6 +18040,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PropModelQueued"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_model_import_story_profiles__pid__versions__vid__model_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PropModelImport"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Profile"];
                 };
             };
             /** @description Validation Error */

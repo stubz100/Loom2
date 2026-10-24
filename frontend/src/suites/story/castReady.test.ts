@@ -18,6 +18,7 @@ describe('Cast readiness (D125 S5)', () => {
     expect(needsOf({ route: 'stage', how: ['figure'] }, 'character')).not.toContain('body')
     expect(needsOf({ route: 'clay2', how: ['prop'] }, 'prop')).toEqual(['hero', 'sheet', 'refs', 'animref', 'model', 'final'])
     expect(needsOf({ route: 'i2v', how: ['place'] }, 'place')).toEqual(['hero', 'sheet', 'refs', 'final'])
+    expect(needsOf({ route: 'i2v', how: [] }, 'prop')).toEqual(['hero', 'sheet', 'refs', 'model', 'final'])   // D128: every prop has a 3D model
   })
   it('owed when a shot needs it, open when none does, done when the version has it; the foot takes the first owed', () => {
     const uses = [use('Reunion', 'clay1', ['figure']), use('Talk', 'i2v', ['speaker'])]

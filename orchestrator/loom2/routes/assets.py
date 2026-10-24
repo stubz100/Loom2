@@ -19,7 +19,7 @@ from .deps import Svc
 
 router = APIRouter(tags=["assets"])
 
-IMPORTABLE = (".png", ".jpg", ".jpeg", ".webp", ".mp4", ".webm", ".wav", ".flac")   # CN2: a recorded reference clip
+IMPORTABLE = (".png", ".jpg", ".jpeg", ".webp", ".mp4", ".webm", ".wav", ".flac", ".glb")   # CN2: a recorded reference clip; D128: a 3D model (GLB)
 IMMUTABLE = {"Cache-Control": "private, max-age=31536000, immutable"}
 
 
@@ -251,8 +251,20 @@ def _import_files(paths: list[str]) -> list[Path]:
 def _ingest_import(cat: Catalogue, src: Path, suite: str):
     """One imported file → asset with the generation metadata its PNG carries (ComfyUI / A1111), then thumbnails."""
     meta = parse_image_metadata(src) if src.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp") else {}
-    kind = "video" if src.suffix.lower() in (".mp4", ".webm") else "audio" if src.suffix.lower() in (".wav", ".flac") else "image"
+    suffix = src.suffix.lower()
+    kind = "video" if suffix in (".mp4", ".webm") else "audio" if suffix in (".wav", ".flac") else "mesh" if suffix == ".glb" else "image"
+    if kind == "mesh":
+        check_glb(src)
     rec = cat.ingest_file(src, kind=kind, move=False, suite=suite, prompt_text=meta.get("prompt_text"),
                           prompt_json=meta.get("prompt_json"), seed=meta.get("seed") if isinstance(meta.get("seed"), int) else None,
-                          params={"imported_from": str(src), **{k: v for k, v in meta.items() if k not in ("prompt_text", "prompt_json", "seed", "w", "h")}})
-    return cat.make_thumbs(rec)
+                          params={"imported_from": str(src), **({"format": "glb"} if kind == "mesh" else {}),
+                                  **{k: v for k, v in meta.items() if k not in ("prompt_text", "prompt_json", "seed", "w", "h")}})
+    return rec if kind == "mesh" else cat.make_thumbs(rec)          # D128: a mesh's thumbnail is drawn by the client's 3D view (P18)
+
+
+def check_glb(src: Path) -> None:
+    """D128: a binary glTF (`glTF` magic, version 2) — anything else is refused before it reaches the Catalogue."""
+    with src.open("rb") as f:
+        head = f.read(12)
+    if len(head) < 12 or head[:4] != b"glTF" or int.from_bytes(head[4:8], "little") != 2:
+        raise HTTPException(422, f"{src.name} is not a binary glTF 2.0 (.glb) file")

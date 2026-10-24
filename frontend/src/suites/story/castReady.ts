@@ -18,14 +18,15 @@ export const ITEMS_OF: Record<Profile['cls'], ReadyItem[]> = {
 export const ITEM_LABEL: Record<ReadyItem, string> = { hero: 'Hero', sheet: 'Sheet', refs: 'References', animref: 'Animation reference', body: 'Body', model: '3D model', voice: 'Voice', lora: 'LoRA', final: 'Final' }
 
 /** What a shot needs from the profile, by how it uses it and its route: every use its hero, sheet, references and a final version; a
- *  speaker its voice; a figure on a clay route the animation reference and the body; a prop's mesh its 3D model (and on a clay route the
- *  animation reference). A LoRA is never needed (advisory). */
+ *  speaker its voice; a figure on a clay route the animation reference and the body; a prop its 3D model in any shot (D128: every prop
+ *  has one), on a clay route the animation reference too. A LoRA is never needed (advisory). */
 export function needsOf(u: Pick<CastUse, 'how' | 'route'>, cls: Profile['cls']): ReadyItem[] {
   const need = new Set<ReadyItem>(['hero', 'sheet', 'refs', 'final'])
   const clay = u.route.startsWith('clay')
   if (u.how.includes('speaker')) need.add('voice')
   if (u.how.includes('figure') && clay) { need.add('animref'); need.add('body') }
-  if (u.how.includes('prop')) { need.add('model'); if (clay) need.add('animref') }
+  if (cls === 'prop' || u.how.includes('prop')) need.add('model')
+  if (u.how.includes('prop') && clay) need.add('animref')
   return ITEMS_OF[cls].filter((i) => need.has(i))
 }
 

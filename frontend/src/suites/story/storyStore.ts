@@ -206,6 +206,8 @@ export interface StoryState {
   makeModel: () => Promise<void>
   /** D110: a mesh already in the Catalogue as the version's model, or null to clear it. */
   setModel: (assetId: string | null) => Promise<void>
+  /** D128: a prop version's 3D model imported from a GLB file on this machine. */
+  importModel: (path: string) => Promise<void>
   /** CA0: the author's pick (an image in the Catalogue) or null to clear it; a final version takes it too. */
   setAnimRef: (side: 'front' | 'back', assetId: string | null) => Promise<void>
   newVersion: () => Promise<void>
@@ -576,6 +578,13 @@ export const useStory = create<StoryState>()((set, get) => {
       const p = get().profile(); const v = get().version(); if (!p || !v) return
       try { replaceProfile(await unwrap(http.PUT('/story/profiles/{pid}/versions/{vid}/model', { params: { path: { pid: p.id, vid: v.id } }, body: { asset_id: assetId } }))) }
       catch (e) { toast(`3D model: ${detail(e)}`) }
+    },
+    importModel: async (path) => {
+      const p = get().profile(); const v = get().version(); if (!p || !v) return
+      try {
+        replaceProfile(await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/model/import', { params: { path: { pid: p.id, vid: v.id } }, body: { path } })))
+        useSession.getState().toast(`${p.name}'s 3D model imported — Animate places it as it is`, 'success')
+      } catch (e) { toast(`3D model: ${detail(e)}`) }
     },
     setAnimRef: async (side, assetId) => {
       const p = get().profile(); const v = get().version(); if (!p || !v) return

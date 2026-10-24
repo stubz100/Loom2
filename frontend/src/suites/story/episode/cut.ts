@@ -75,6 +75,9 @@ export function dragStep(t: CutTracks, tool: CutTool, track: CutTrack, item: Cut
 }
 
 export const isVideo = (t: CutTracks, track: CutTrack): boolean => t.video.some((x) => x.id === track.id)
+/** RC2f: a V1 take under a scene's grade — an adjustment clip on the top *Grade* track over it (CE4's scene grade). */
+export const underSceneGrade = (t: CutTracks, item: Pick<CutItem, 'start' | 'duration'>): boolean =>
+  t.video.some((tr) => tr.name === 'Grade' && tr.items.some((x) => x.kind === 'adjustment' && x.start < item.start + item.duration && x.start + x.duration > item.start))
 
 /** A trim keeps at least a frame of the clip (FilmCraft refuses the rest: a trim past the media's end is its to answer). */
 export function clampTrim(item: CutItem, edge: 'in' | 'out', d: number): number {

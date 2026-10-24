@@ -8,7 +8,7 @@ import { useStory } from '../storyStore'
 import { assembleLane, laneChanges, routeLabel, routePicks, updateClip, walkRoute } from './assemble'
 import { duration, ticks } from './lane'
 import { isCut, lastMovie, useSequence } from './sequenceStore'
-import { CAPTION_STYLES, CUT_TOOLS, dialogueOf, itemLabel, duckSteps, evenDialogueSteps, fadeStep, findItem, gainStep, isVideo, panLabel, ROLE_NAMES, STRIP, stripValue, ticksOf, trackRef, transitionInto, transitionStep, TRACK_ROLES, volumeLabel, widthLabel, type CutTool } from './cut'
+import { CAPTION_STYLES, CUT_TOOLS, dialogueOf, itemLabel, duckSteps, evenDialogueSteps, fadeStep, findItem, gainStep, isVideo, panLabel, ROLE_NAMES, STRIP, stripValue, ticksOf, trackRef, transitionInto, transitionStep, TRACK_ROLES, underSceneGrade, volumeLabel, widthLabel, type CutTool } from './cut'
 import type { TrackRole, TrackStrip } from '../../../api/types'
 import { revealPath } from '../../../shell/tauri'
 
@@ -276,6 +276,11 @@ registerCommands([
   { id: 'story.cut.grade.scene', scope: 'story', label: 'Grade its scene', icon: Palette, placement: ['inspector', 'context'],
     hint: 'an adjustment layer on the top Grade track over the shots at the same place in a row (trim it like any clip); its colour in the Inspector',
     when: () => cutSel() && sq().tracks!.video[0]?.id === selCut()!.track.id && selCut()!.item.kind === 'take', run: () => { const s = selCut(); if (s) void sq().cutGradeScene(s.item.id) } },
+  // RC2f (proto01_animate 31 §3b): a shot under its scene's grade can keep the grade as its own and leave the scene's layer
+  { id: 'story.cut.grade.own', scope: 'story', label: 'Make its grade independent', icon: Palette, placement: ['inspector', 'context'],
+    hint: "the scene's adjustment layer is cut around this shot, and the shot keeps the scene's grade as its own Lumetri — the rest of the scene keeps its grade",
+    when: () => cutSel() && sq().tracks!.video[0]?.id === selCut()!.track.id && selCut()!.item.kind === 'take' && underSceneGrade(sq().tracks!, selCut()!.item) && !sq().cutBusy,
+    run: () => { const s = selCut(); if (s) void sq().cutGradeOwn(s.item.id) } },
   { id: 'story.cut.grade.reset', scope: 'story', label: 'Reset its colour', icon: RotateCcw, placement: ['inspector', 'context'], when: () => cutSel() && !!selCut()!.item.grade,
     run: () => { const s = selCut(); if (s) void sq().cutGrade(s.item.id, { reset: true }) } },
   // CE5 (30 §5): captions — made from the lines, edited by FilmCraft's commands — and the author's markers beside loom2's chapters
@@ -324,7 +329,7 @@ export function cutClipMenu(): MenuItem[] {
     label: `${trackRef(t, x)} · ${x.name}`, run: () => edit1('timeline.move', { moves: [{ clip: s.item.id, track: x.id, time: ticksOf(s.item.start, t.fps) }], insert: false }) })) : []
   const video = !!s && !!t && isVideo(t, s.track)
   const takes = s && t && video ? t.video[0].items.filter((i) => i.id !== s.item.id && i.kind === 'take') : []
-  const colour: MenuItem[] = video ? [{ cmd: 'story.cut.grade.scene' }, ...(takes.length ? [{ label: 'Match its colour to', icon: Palette, items: takes.map((i) => ({
+  const colour: MenuItem[] = video ? [{ cmd: 'story.cut.grade.scene' }, { cmd: 'story.cut.grade.own' }, ...(takes.length ? [{ label: 'Match its colour to', icon: Palette, items: takes.map((i) => ({
     label: itemLabel(i, useStory.getState().shots.find((x) => x.id === i.shot_id), an().clips.find((c) => c.id === i.clip_id)), run: () => void sq().cutGrade(s!.item.id, { match: i.id }) })) } as MenuItem] : []),
     { cmd: 'story.cut.grade.reset' }, sep] : []
   const look: MenuItem[] = video ? [...colour, { cmd: 'story.cut.dissolveIn' }, { cmd: 'story.cut.dissolveOut' }, { cmd: 'story.cut.dipIn' }, { cmd: 'story.cut.dipOut' }]

@@ -286,6 +286,9 @@ export interface StoryState {
   setFlowSel: (ids: string[]) => void
   /** RC2c / O2: *New Shot from this Shot* — a sibling in its scene (the stage, the place and the pins shared; the lines and a camera copied). */
   newShotFrom: (nodeId: string) => Promise<void>
+  /** RC2f: a Shot's part in its scene kept for itself (`own`) or the scene's again — the Cast pins; its stage copied for itself. */
+  ownCast: (nodeId: string, own: boolean) => Promise<void>
+  ownStage: (shotId: string, version: string) => Promise<void>
   connect: (from: string, port: string, to: string) => Promise<void>
   disconnect: (from: string, port: string) => Promise<void>
   bindShot: (nodeId: string, shotId: string, version?: string | null) => Promise<void>
@@ -357,6 +360,7 @@ let graphChain: Promise<void> = Promise.resolve()
 let graphPending = 0                                   // saves queued or running: no reload from the socket while one is pending
 const nodeChains: Record<string, Promise<void>> = {}
 const nodeQueued = new Set<string>()
+const pinsChanged = new Set<string>()            // RC2f: a node whose speakers' pins were changed — only then are they sent (a linked node's are its scene's)
 let nodeSaving = 0
 
 export const useStory = create<StoryState>()((set, get) => {
@@ -986,6 +990,7 @@ export const useStory = create<StoryState>()((set, get) => {
     patchNode: async (id, patch) => {
       const n = get().flowNodes[id]; if (!n) return
       set({ flowNodes: { ...get().flowNodes, [id]: { ...n, ...patch } as FlowNode } })               // at once; the save follows (one at a time per node, the latest state)
+      if ('speaker_versions' in patch) pinsChanged.add(id)
       await saveNode(get, set, id, !!(patch.type || patch.options))
     },
     deleteNode: async (id, withShot = false) => {   // D125 (#4) / RC2a: its shot moves to a Shot node of its own, or goes too
@@ -1036,6 +1041,17 @@ export const useStory = create<StoryState>()((set, get) => {
         await Promise.all([get().loadFlow(), get().loadShots()])
         get().selectNode(n.id)
       } catch (e) { toast(`New Shot: ${detail(e)}`) }
+    },
+    ownCast: async (nodeId, own) => {
+      try { await unwrap(http.POST('/story/flow/nodes/{nid}/own', { params: { path: { nid: nodeId } }, body: { part: 'cast', own } })); await get().loadFlow() }
+      catch (e) { toast(`Cast: ${detail(e)}`) }
+    },
+    ownStage: async (shotId, version) => {
+      try {
+        await unwrap(http.POST('/story/shots/{sid}/versions/{vid}/own-stage', { params: { path: { sid: shotId, vid: version } } }))
+        await get().loadShots()
+        useSession.getState().toast('Its own stage now — a copy of the shared one; the other Shots keep theirs', 'success')
+      } catch (e) { toast(`Stage: ${detail(e)}`) }
     },
     newShotFrom: async (nodeId) => {
       try {
@@ -1133,7 +1149,8 @@ function saveNode(get: () => StoryState, set: (p: Partial<StoryState>) => void, 
     nodeSaving += 1
     try {
       const { type, title, lines, options, cond, set: sets, target, text, colour, board_group_id, place_id, speaker_versions } = n     // D90 (02 §4.2): the board rides along; D93 (C7): where; D93 follow-up: the speakers' versions
-      const next = await unwrap(http.PATCH('/story/flow/nodes/{nid}', { params: { path: { nid: id } }, body: { revision: n.revision, type, title, lines, options, cond, set: sets, target, text, colour, board_group_id, place_id, speaker_versions } as never }))
+      const pins = pinsChanged.delete(id) ? { speaker_versions } : {}
+      const next = await unwrap(http.PATCH('/story/flow/nodes/{nid}', { params: { path: { nid: id } }, body: { revision: n.revision, type, title, lines, options, cond, set: sets, target, text, colour, board_group_id, place_id, ...pins } as never }))
       const cur = get().flowNodes[id]
       if (cur) set({ flowNodes: { ...get().flowNodes, [id]: { ...cur, revision: next.revision, updated_at: next.updated_at } } })
       if (ports) { const r = await unwrap(http.GET('/story/flow')); set({ flowGraph: r.graph }) }

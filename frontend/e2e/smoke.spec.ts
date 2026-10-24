@@ -651,6 +651,10 @@ test("the cut's tracks (CE2–CE3, D126): a FilmCraft cut shows its every track 
   await expect(takes.nth(1)).toContainText('matched')
   await contextChoose(page, takes.nth(1), 'Reset its colour')
   await expect.poll(async () => (await col()).video[0].items[1].grade, { timeout: 10_000 }).toBeNull()
+  // RC2f: the first take leaves its scene's grade — the layer cut away over it, the scene's grade its own Lumetri
+  await contextChoose(page, takes.first(), 'Make its grade independent')
+  await expect.poll(async () => (await col()).video[0].items[0].grade?.values.exposure, { timeout: 10_000 }).toBe(5)
+  await expect.poll(async () => (await col()).video.at(-1)!.items.every((i) => i.kind === 'adjustment'), { timeout: 10_000 }).toBe(true)
   // CE5: a caption at the playhead (the caption row), edited and moved; a marker on the ruler; the movie as ProRes with the captions beside it
   type Cap = { captions: { name: string; captions: { id: number; text: string; start: number }[] }[]; markers: { id: number; name: string; kind: string }[] }
   const capOf = () => api<Cap>('GET', `/timelines/${tl.id}/tracks`)

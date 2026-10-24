@@ -351,6 +351,12 @@ class CutGradeScene(BaseModel):
     clip: int                                      # one of V1's shots
 
 
+@router.post("/timelines/{tl_id}/grade/own", response_model=CutEdited, response_model_by_alias=True)
+async def timeline_grade_own(svc: Svc, tl_id: str, body: CutGradeScene):
+    """RC2f: *Make its grade independent* — the V1 shot leaves its scene's grade (the layer cut around it) with the scene's Lumetri as its own."""
+    return await _cut_call(svc, tl_id, body.revision, lambda store, tl, ws, cat: [store.cuts.grade_own(tl, body.clip)])
+
+
 class ColourPreset(BaseModel):
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
     folder: str = ""

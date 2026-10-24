@@ -808,6 +808,44 @@ class Cuts:
             return {"clip": new, "made": True, "shots": hi - lo + 1}
         return self.changing(tl, run)
 
+    def grade_own(self, tl: Timeline, clip: int) -> dict:
+        """RC2f (proto01_animate 31 §3b): *Make its grade independent* — a V1 shot leaves its scene's grade: the scene's adjustment layer is
+        cut at the shot's edges (FilmCraft's razor) and the piece over it lifted, and the shot gets the scene's Lumetri as its own (copied
+        whole — look, values, wheels — by FilmCraft's paste attributes, its own Lumetri replaced). The rest of the scene keeps its grade."""
+        def run(p: Path) -> dict:
+            doc = read(p)
+            seq_id, _, seq = sequence(doc)
+            its = items(doc)
+            v1 = seq["video_tracks"][0]["items"] if seq["video_tracks"] else []
+            ti = next((x for x in v1 if x["id"] == clip), None)
+            if ti is None:
+                raise CutError("a grade is made independent on one of V1's shots")
+            start, end = ti["start"], ti["start"] + ti["duration"]
+            meta = json.loads(its[str(seq_id)].get("metadata", {}).get("loom2.gradetrack") or "null")
+            track = next((t for t in seq["video_tracks"] if t["id"] == meta), None)
+            layer = next((x for x in (track or {}).get("items", []) if x["start"] < end and x["start"] + x["duration"] > start
+                          and its.get(str(x["item"]), {}).get("metadata", {}).get("loom2.grade")), None)
+            if track is None or layer is None:
+                raise CutError("the shot is under no scene grade — its grade is its own already")
+            mine = [i for i, e in enumerate(ti.get("effects") or []) if e.get("effect") == "lumetri"]
+            steps: list[dict] = [{"id": "timeline.select", "params": {"clips": [layer["id"]]}}, {"id": "edit.copy", "params": {}}]
+            steps += [{"id": "effects.remove", "params": {"clip": clip, "index": k}} for k in reversed(mine)]
+            steps.append({"id": "edit.pasteAttributes", "params": {"clips": [clip], "motion": False, "opacity": False, "timeRemapping": False, "volume": False,
+                                                                    "channelVolume": False, "panner": False, "effects": ["lumetri"], "scaleTimes": False}})
+            for at in (start, end):
+                if layer["start"] < at < layer["start"] + layer["duration"]:
+                    steps.append({"id": "timeline.razor", "params": {"time": at, "track": track["id"]}})
+            self.fc.batch(steps)
+            self.fc.save()                                        # the piece over the shot is found in the project as it stands
+            _, _, seq = sequence(read(p))
+            t2 = next(t for t in seq["video_tracks"] if t["id"] == track["id"])
+            piece = next((x for x in t2["items"] if x["start"] == max(start, layer["start"])), None)
+            if piece is not None:
+                self.fc.batch([{"id": "edit.clear", "params": {"clips": [piece["id"]]}}])
+            self._markers(p)
+            return {"clip": clip, "left": layer["id"]}
+        return self.changing(tl, run)
+
     # ---- AU4: a track's chain of VST3 effects and its print ------------------------------------------------------------------------
     def _set_chains(self, seq_id: int, ch: dict[int, list[dict]]) -> None:
         self.fc.batch([{"id": "metadata.set", "params": {"item": seq_id, "fields": {"loom2.chains": json.dumps({str(k): v for k, v in ch.items() if v})}}}])

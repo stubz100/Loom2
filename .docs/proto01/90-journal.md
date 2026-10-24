@@ -8975,3 +8975,22 @@ patched (the Mid attenuated). A track with plugins is printed onto a hidden comp
 - **Found too:** the `open` run once failed a bind with a `PermissionError` — on Windows a node file another request is reading at that
   moment cannot be deleted (bind removes the bare node's file); `fsio.unlink` retries as `fsio.replace` does (D42), and the node files and
   the migration's moves go through it.
+
+## 2026-10-24 19:46 — RC2f built: linked parts within a scene with *Make independent* — RC2 done (proto01_animate 31 §3e)
+
+- **The cast:** `Scene.cast_versions`; a Shot in a scene wears its scene's pins and a change on it is the scene's, merged as a change
+  (the client now sends a node's pins only when they changed, so a title edit cannot write them); *Make its cast independent* /
+  *Use the scene's cast* (`FlowNode.own`); a node joining with differing pins keeps them, a scene with none takes the first node's, a node
+  leaving keeps the scene's; a sibling is linked.
+- **The stage:** a stage shared by Shots shows *stage · linked · N Shots* in the shot's panel; *Make its stage independent* copies it
+  (objects, cameras, keys, range, ambient) for that version, the other Shots keep the shared one.
+- **The grade:** *Make its grade independent* on a take under its scene's grade (the Inspector's colour block, the take's right-click):
+  the layer razored at the take's edges, the piece over it lifted, the layer's Lumetri pasted onto the take (its own replaced). The fake
+  FilmCraft's paste attributes now appends the effects a list names, as the real one does.
+- **The plate** stays with CA3 as O4 (the scene's first plate as a Klein reference for another camera).
+- **Rig** (`scripts/rc2f_acceptance.py`, 6/6, the real FilmCraft on the A1 project): the scene graded (warmth +35 / +29, mean +41 / +46);
+  Mara's shot independent — the layer over the composition alone, her Lumetri the layer's (exposure 1.0, temperature 35), her frame within
+  0.05 levels; the scene's exposure set back moves the composition −44.7 levels and her 0.00.
+- Tests: test_linked_rc2f.py (3: the cast, the stage, the grade on the fake), cut.test.ts (`underSceneGrade`), the tracks e2e's *Make its
+  grade independent*; routes_d37 +3. Screenshots img/31-rc2f-*.jpg. Offline 575 passed, settings audit and agents_check clean, Vitest 465 + 3 skipped, typecheck,
+  lint (0 errors, 79 warnings) and build clean, e2e full 63/63 and open 63/63. RC2 (a–f) is built.

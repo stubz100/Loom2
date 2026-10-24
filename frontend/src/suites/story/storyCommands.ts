@@ -54,6 +54,8 @@ const nodeShot = () => { const n = node(); return n?.shot_id ? sy().shots.find((
 /** RC2c: the node's scene group, the frame picked on the canvas (else the node's), the nodes a scene verb takes (the selection when the node is in it). */
 const sceneOf = (n: FlowNode | undefined): SceneOut | undefined => (n?.scene_id ? sy().scenes.find((s) => s.id === n.scene_id) : undefined)
 const pickedScene = (): SceneOut | undefined => (sy().sceneId ? sy().scenes.find((s) => s.id === sy().sceneId) : undefined) ?? sceneOf(node())
+/** RC2f: the other Shots whose shown version stands on the stage (a stage shared is linked). */
+export const stageUsers = (shotId: string, stageId: string): Shot[] => sy().shots.filter((s) => s.id !== shotId && s.versions.find((v) => v.id === s.current)?.stage_id === stageId)
 const sceneTargets = (): string[] => { const n = node(); if (!n) return []; const sel = sy().flowSel; return sel.length > 1 && sel.includes(n.id) ? sel : [n.id] }
 const nodeTarget = () => makeTarget(nodeShot(), node()?.shot_version)
 const board = () => { const g = node()?.board_group_id; return g ? findNode(useAlbum.getState().tree, g) : null }
@@ -499,6 +501,17 @@ const cmds: Command[] = [
     run: () => { const t = sy().shotTemplates.find((x) => x.id === sy().selected?.id); if (t) void askText({ title: 'Rename the template', initial: t.name }).then((v) => { if (v?.trim() && v.trim() !== t.name) void sy().renameTemplate(t.id, v.trim()) }) } },
   { id: 'story.template.delete', scope: 'story', label: 'Delete the template', icon: Trash2, placement: ['inspector', 'context'], danger: true, when: () => sy().selected?.kind === 'template',
     run: () => { const t = sy().shotTemplates.find((x) => x.id === sy().selected?.id); if (t) void askConfirm({ title: `Delete the template ${t.name}?`, okLabel: 'Delete', danger: true, text: 'The Shots made from it stay.' }).then((ok) => { if (ok) void sy().deleteTemplate(t.id) }) } },
+  // RC2f (06 O3): within a scene a Shot's parts are linked — the stage shared, the cast its scene's; Make independent keeps one for itself
+  { id: 'story.flow.ownCast', scope: 'story', label: "Make its cast independent", icon: Unlink, placement: ['inspector', 'context'],
+    hint: "it keeps the versions its speakers wear now as its own; the scene's other Shots go on sharing theirs",
+    when: () => { const n = node(); return !!sceneOf(n) && !n!.own.includes('cast') && !sy().play }, run: () => { const n = node(); if (n) void sy().ownCast(n.id, true) } },
+  { id: 'story.flow.linkCast', scope: 'story', label: "Use the scene's cast", icon: Link, placement: ['inspector', 'context'],
+    hint: "its own versions go; it wears the ones its scene's Shots share", when: () => { const n = node(); return !!sceneOf(n) && n!.own.includes('cast') && !sy().play },
+    run: () => { const n = node(); if (n) void sy().ownCast(n.id, false) } },
+  { id: 'story.shot.ownStage', scope: 'story', label: 'Make its stage independent', icon: Unlink, placement: ['inspector', 'context'],
+    hint: "a copy of the stage it shares with other Shots — the set, the props, the lights, the figures, the cameras and keys — for this version alone",
+    when: () => { const s = shot(); const v = shotVersion(); return !!s && !!v && v.state === 'open' && !!v.stage_id && stageUsers(s.id, v.stage_id).length > 0 },
+    run: () => { const s = shot(); const v = shotVersion(); if (s && v) void sy().ownStage(s.id, v.id) } },
   { id: 'story.flow.sibling', scope: 'story', label: 'New Shot from this Shot', icon: CopyPlus, placement: ['inspector', 'context'],
     hint: 'a sibling in its scene (one is made around the two when it has none): the stage, the place, the pinned cast and the board shared; the lines, a camera of its own and the route copied to change',
     when: () => visual() && !!node()?.shot_id && !sy().play, run: () => { const n = node(); if (n) void sy().newShotFrom(n.id) } },
@@ -598,7 +611,7 @@ export function nodeMenu(): MenuItem[] {
   const into = sy().scenes.filter((s) => s.id !== n?.scene_id)                                      // RC2c: join a scene by its name
   return [{ cmd: 'story.flow.makeFrame' }, { cmd: 'story.flow.makeClip' }, sepItem, { cmd: 'story.flow.newShot' }, { cmd: 'story.flow.openShot' }, { cmd: 'story.flow.recipe' }, { cmd: 'story.flow.unbind' }, { cmd: 'story.flow.placeForward' }, sepItem,
     { cmd: 'story.flow.sibling' }, { cmd: 'story.scene.make' }, ...(into.length && n ? [{ label: 'Into the scene', icon: Group, items: into.map((s) => ({ label: s.name, run: () => void sy().sceneMembers(s.id, sceneTargets(), []) })) }] : []),
-    { cmd: 'story.scene.leave' }, { cmd: 'story.flow.saveTemplate' }, ...templateItems(n?.id ?? null, null), sepItem,
+    { cmd: 'story.scene.leave' }, { cmd: 'story.flow.ownCast' }, { cmd: 'story.flow.linkCast' }, { cmd: 'story.flow.saveTemplate' }, ...templateItems(n?.id ?? null, null), sepItem,
     { cmd: 'story.flow.openBoard' }, { cmd: 'story.flow.clearBoard' }, sepItem, { cmd: 'story.flow.voiceAll' }, sepItem, { cmd: 'story.flow.duplicate' }, { cmd: 'story.flow.delete' }]
 }
 /** RC2e: *New Shot from a template ▸* — beside a node (its scene, its stage) or at a point of the Flow. */
@@ -617,6 +630,6 @@ export const makeClipItems = (): MenuItem[] => [{ cmd: 'story.shot.makeClip', la
 /** The right-click menu of a shot row (the shot is selected first). */
 export function shotMenu(): MenuItem[] {
   return [{ label: 'Make frame', icon: ImagePlus, items: makeFrameItems() }, { label: 'Make clip', icon: Film, items: makeClipItems() }, sep,
-    { cmd: 'story.shot.runStale' }, { cmd: 'story.shot.graphInAnimate' }, { cmd: 'story.shot.finalize' }, { cmd: 'story.shot.newVersion' }, sep, { cmd: 'story.shot.openStage' }, { cmd: 'story.shot.linkStage' }, { cmd: 'story.shot.blockOnStage' }, { cmd: 'story.shot.openAnimate' }, sep, { cmd: 'story.shot.release' }, { cmd: 'story.shot.delete' }, sep, { cmd: 'story.shot.new' }]
+    { cmd: 'story.shot.runStale' }, { cmd: 'story.shot.graphInAnimate' }, { cmd: 'story.shot.finalize' }, { cmd: 'story.shot.newVersion' }, sep, { cmd: 'story.shot.openStage' }, { cmd: 'story.shot.linkStage' }, { cmd: 'story.shot.blockOnStage' }, { cmd: 'story.shot.ownStage' }, { cmd: 'story.shot.openAnimate' }, sep, { cmd: 'story.shot.release' }, { cmd: 'story.shot.delete' }, sep, { cmd: 'story.shot.new' }]
 }
 const sepItem = { sep: true } as const

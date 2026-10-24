@@ -3,7 +3,7 @@ import type { FlowGraph, FlowNode } from '../../../api/types'
 import { optionsAvailable, startPlay, stepPlay } from './play'
 
 const node = (id: string, type: FlowNode['type'], extra: Partial<FlowNode> = {}): FlowNode => ({
-  schema_version: 1, id, type, title: id, lines: [], options: [], cond: null, set: [], target: null, text: '', shot_id: null, shot_version: null, board_group_id: null, place_id: null, speaker_versions: {}, colour: null, beat_id: null, scene_id: null,
+  schema_version: 1, id, type, title: id, lines: [], options: [], cond: null, set: [], target: null, text: '', shot_id: null, shot_version: null, board_group_id: null, place_id: null, speaker_versions: {}, colour: null, beat_id: null, scene_id: null, own: [],
   revision: 0, created_at: '', updated_at: '', ...extra,
 })
 const graph = (start: string | null, edges: [string, string, string][]): FlowGraph => ({

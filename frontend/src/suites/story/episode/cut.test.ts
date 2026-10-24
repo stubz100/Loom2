@@ -1,7 +1,7 @@
 // CE2 (D126): a gesture on the tracks as the FilmCraft command it asks for.
 import { describe, expect, it } from 'vitest'
 import type { CutItem, CutTrack, CutTracks } from '../../../api/types'
-import { clampTrim, dragStep, gripAt, itemAt, razorStep, TICK, trackRef, transitionStep } from './cut'
+import { clampTrim, dragStep, gripAt, itemAt, razorStep, TICK, trackRef, transitionStep, underSceneGrade } from './cut'
 
 const item = (id: number, start: number, duration: number, kind: CutItem['kind'] = 'take'): CutItem =>
   ({ id, item: id + 100, name: `c${id}.png`, kind, start, duration, source_in: 0, speed: 1, reverse: false, enabled: true, hold: false } as unknown as CutItem)
@@ -91,5 +91,15 @@ describe('captions (CE5)', () => {
     expect(captionStep(cap, 'in', 30)).toEqual({ id: 'captions.trim', params: { caption: 7, edge: 'in', deltaFrames: 9 } })
     expect(captionStep(cap, 'out', -30)).toEqual({ id: 'captions.trim', params: { caption: 7, edge: 'out', deltaFrames: -9 } })
     expect(captionStep(cap, 'body', 0.2)).toBeNull()
+  })
+})
+
+describe('a scene grade over a take (RC2f)', () => {
+  it('finds an adjustment clip on the Grade track over the take', () => {
+    const adj = { id: 9, kind: 'adjustment', start: 100, duration: 200 } as unknown as CutItem
+    const t = { video: [{ id: 1, name: 'V1', items: [] }, { id: 2, name: 'Grade', items: [adj] }], audio: [] } as unknown as CutTracks
+    expect(underSceneGrade(t, { start: 150, duration: 50 })).toBe(true)
+    expect(underSceneGrade(t, { start: 300, duration: 50 })).toBe(false)                     // after it
+    expect(underSceneGrade({ ...t, video: [t.video[0], { ...t.video[1], name: 'V2' }] } as CutTracks, { start: 150, duration: 50 })).toBe(false)   // not the Grade track
   })
 })

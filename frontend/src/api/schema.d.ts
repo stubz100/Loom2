@@ -2564,6 +2564,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/flow/nodes/{nid}/own": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Flow Own
+         * @description RC2f: a part of a Shot in a scene made independent (its own from now on) or linked again (the scene's).
+         */
+        post: operations["flow_own_story_flow_nodes__nid__own_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/flow/nodes/{nid}/shot": {
         parameters: {
             query?: never;
@@ -3394,6 +3414,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/shots/{sid}/versions/{vid}/own-stage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Shot Own Stage
+         * @description RC2f: *Make its stage independent* — the shared stage copied for this version (set, props, lights, figures, cameras and keys).
+         */
+        post: operations["shot_own_stage_story_shots__sid__versions__vid__own_stage_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/shots/{sid}/versions/{vid}/run-stale": {
         parameters: {
             query?: never;
@@ -3727,6 +3767,26 @@ export interface paths {
          * @description CE4: a clip's colour — a preset, a look (or a LUT file), the values, a match to another shot, or reset (one change of the cut).
          */
         post: operations["timeline_grade_timelines__tl_id__grade_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/timelines/{tl_id}/grade/own": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Timeline Grade Own
+         * @description RC2f: *Make its grade independent* — the V1 shot leaves its scene's grade (the layer cut around it) with the scene's Lumetri as its own.
+         */
+        post: operations["timeline_grade_own_timelines__tl_id__grade_own_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6694,6 +6754,8 @@ export interface components {
             lines: components["schemas"]["FlowLine"][];
             /** Options */
             options: components["schemas"]["FlowOption"][];
+            /** Own */
+            own: "cast"[];
             /** Place Id */
             place_id: string | null;
             /**
@@ -8949,6 +9011,20 @@ export interface components {
             node: components["schemas"]["FlowNode"];
             shot: components["schemas"]["Shot"] | null;
         };
+        /** OwnBody */
+        OwnBody: {
+            /**
+             * Own
+             * @default true
+             */
+            own?: boolean;
+            /**
+             * Part
+             * @default cast
+             * @constant
+             */
+            part?: "cast";
+        };
         /**
          * PassBody
          * @description D118 (AE4a): a pass on the layer — the preset and its strength; a seed given is a re-run with another. AE4c: `face` and `lipsync`
@@ -10204,6 +10280,10 @@ export interface components {
          * @description RC2c: a scene group and its member nodes (in the Flow's reading order).
          */
         SceneOut: {
+            /** Cast Versions */
+            cast_versions: {
+                [key: string]: string;
+            };
             /** Colour */
             colour: string | null;
             /** Created At */
@@ -17411,6 +17491,41 @@ export interface operations {
             };
         };
     };
+    flow_own_story_flow_nodes__nid__own_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                nid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OwnBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FlowNode"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     flow_spawn_story_flow_nodes__nid__shot_post: {
         parameters: {
             query?: never;
@@ -19132,6 +19247,38 @@ export interface operations {
             };
         };
     };
+    shot_own_stage_story_shots__sid__versions__vid__own_stage_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Shot"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     shot_run_stale_story_shots__sid__versions__vid__run_stale_post: {
         parameters: {
             query?: never;
@@ -19886,6 +20033,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["CutGradeChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CutEdited"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    timeline_grade_own_timelines__tl_id__grade_own_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tl_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CutGradeScene"];
             };
         };
         responses: {

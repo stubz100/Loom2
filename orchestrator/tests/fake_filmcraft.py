@@ -698,9 +698,13 @@ class Fake:
                     made[kind].append(tid)
             return made
         if cid == "edit.pasteAttributes":
+            want = p.get("effects")                                     # RC2f: as the real one — a list names the effects pasted, appended to the clip's
             for c in p.get("clips") or []:
                 _, ti = self.find_clip(int(c))
-                ti["effects"] = [dict(e) for e in (self.clipboard or [])]
+                if isinstance(want, list):
+                    ti["effects"] = [*ti.get("effects", []), *[dict(e) for e in (self.clipboard or []) if e.get("effect") in want]]
+                else:
+                    ti["effects"] = [dict(e) for e in (self.clipboard or [])]
             return None
         if cid == "markers.clearAll":
             self.sequence()["markers"] = []

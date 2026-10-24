@@ -757,6 +757,7 @@ class SceneOut(Out):
     id: str
     name: str
     colour: str | None
+    cast_versions: dict[str, str]
     created_at: str
     updated_at: str
     node_ids: list[str]

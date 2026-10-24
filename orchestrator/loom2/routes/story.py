@@ -1434,6 +1434,39 @@ async def shot_template_use(svc: Svc, tid: str, body: TemplateUse):
     return n.model_dump()
 
 
+class OwnBody(BaseModel):
+    part: Literal["cast"] = "cast"
+    own: bool = True
+
+
+@router.post("/story/flow/nodes/{nid}/own", response_model=FlowNode)
+async def flow_own(svc: Svc, nid: str, body: OwnBody):
+    """RC2f: a part of a Shot in a scene made independent (its own from now on) or linked again (the scene's)."""
+    ws, _, _ = svc.require_project()
+    try:
+        n = await asyncio.to_thread(StoryStore(ws).own_part, nid, body.part, body.own)
+    except KeyError:
+        raise HTTPException(404, "node not found")
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    _flow_changed(svc, nid)
+    return n.model_dump()
+
+
+@router.post("/story/shots/{sid}/versions/{vid}/own-stage", response_model=Shot)
+async def shot_own_stage(svc: Svc, sid: str, vid: str):
+    """RC2f: *Make its stage independent* — the shared stage copied for this version (set, props, lights, figures, cameras and keys)."""
+    ws, _, _ = svc.require_project()
+    try:
+        s = await asyncio.to_thread(StoryStore(ws).own_stage, sid, vid)
+    except KeyError as e:
+        raise HTTPException(404, f"{e.args[0]} not found")
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    _shot_changed(svc, s)
+    return s.model_dump()
+
+
 @router.post("/story/flow/nodes/{nid}/sibling", response_model=FlowNode)
 async def flow_sibling(svc: Svc, nid: str):
     """RC2c / O2: *New Shot from this Shot* — a sibling in the node's scene (one is made around the two when it has none): the stage, the

@@ -89,6 +89,8 @@ interface SequenceState {
   /** CE4: a clip's colour (a preset, a look or a LUT file, values, a match, reset) and *Grade the scene* (its grade selected after). */
   cutGrade: (clip: number, change: { preset?: string; look?: string; look_file?: string; values?: Record<string, number>; match?: number; reset?: boolean }) => Promise<boolean>
   cutGradeScene: (clip: number) => Promise<boolean>
+  /** RC2f: the shot leaves its scene's grade, the scene's Lumetri its own. */
+  cutGradeOwn: (clip: number) => Promise<boolean>
   looks: ColourLooks | null                 // FilmCraft's presets and looks (loaded when a video clip is first selected)
   /** CE5: a caption selected on the caption row; captions made from the lines; the movie's delivery (H.264 or ProRes, captions burned in
    *  or beside it), the next render's. */
@@ -288,6 +290,7 @@ export const useSequence = create<SequenceState>()((set, get) => ({
     if (ok && made !== null) get().selectClip(made)
     return ok
   },
+  cutGradeOwn: (clip) => cutCall(get, set, (id, revision) => unwrap(http.POST('/timelines/{tl_id}/grade/own', { params: { path: { tl_id: id } }, body: { revision, clip } }))),
   selectCaption: (id) => set({ selCaption: id, ...(id !== null ? { selClip: null, selTrack: null, selected: null } : {}) }),
   cutCaptions: () => cutCall(get, set, (id, revision) => unwrap(http.POST('/timelines/{tl_id}/captions', { params: { path: { tl_id: id } }, body: { revision } }))),
   setDelivery: (patch) => set({ delivery: { ...get().delivery, ...patch } }),

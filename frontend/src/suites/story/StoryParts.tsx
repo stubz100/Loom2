@@ -29,7 +29,7 @@ import { useLibrary } from './libraryStore'
 import { useGenerate } from '../generate/generateStore'
 import { versionName } from '../generate/sheet'
 import { CastSheet } from './CastSheet'
-import { askExpand, castCells, castNext, ITEM_NEXT, itemCommand, makeClipItems, makeFrameItems, NEXT_LABEL, profileMenu, rowMenu, runOnItem, selectedNext, storyItem } from './storyCommands'
+import { askExpand, castCells, castNext, ITEM_NEXT, itemCommand, makeClipItems, makeFrameItems, NEXT_LABEL, profileMenu, rowMenu, runOnItem, selectedNext, stageUsers, storyItem } from './storyCommands'
 import { BoardPanel, LinkStageSheet, ShotsBoard, VoiceAllButton } from './ShotsBoard'
 import { FlowRecipe, ShotRecipe } from './recipe/StoryRecipe'
 import { flatGroups, useAlbum } from '../catalogue/albumStore'
@@ -920,12 +920,23 @@ function UnboundShot({ n }: { n: FlowNode }) {
   )
 }
 
+/** RC2f: a stage shared with other Shots is linked — who shares it, and *Make its stage independent*. */
+function StageShared({ v }: { v: ShotVersion }) {
+  const shotId = useStory((s) => s.shotId)
+  useStory((s) => s.shots)
+  const users = shotId && v.stage_id ? stageUsers(shotId, v.stage_id) : []
+  if (!users.length) return null
+  return <><span>stage</span><span className="linked" title={`the same set, props, lights and figures as ${users.map((u) => u.name).join(', ')} — an edit there shows here`} data-linked="stage">
+    linked · {users.length + 1} Shots <CommandButton id="story.shot.ownStage" text /></span></>
+}
+
 function ShotVersionFields({ v, clip, stage }: { v: ShotVersion; clip?: { frames: number; fps: number; w: number; h: number }; stage?: { name: string; revision: number } }) {
   return (
     <>
       <h4>Version {v.id} · {v.state}{sy().shotStale(v) ? ' · stale' : ''}</h4>
       <div className="kv">
         <span>source</span><span>{v.stage_id ? `${stage?.name ?? v.stage_id} · camera ${v.camera_id}${v.stage_revision !== null && v.stage_revision !== undefined ? ` · rev ${v.stage_revision}` : ''}` : 'none (a clip or takes)'}</span>
+        {v.stage_id && <StageShared v={v} />}
         <span>frame</span><span>{v.frame_asset_id ? <img className="insp-thumb small" src={api.thumbUrl(v.frame_asset_id, 256)} alt="" /> : '—'}</span>
         <span>clip</span><span>{clip ? `${clip.frames} f @ ${clip.fps} · ${clip.w}×${clip.h}` : v.clip_id ?? '—'}</span>
         <span>takes</span><span>{v.takes.length}</span>
@@ -1096,7 +1107,8 @@ function SpeakerVersions({ n }: { n: FlowNode }) {
   }
   return (
     <>
-      <h4>Speakers <Help text={"The version each one wears here."} /></h4>
+      <h4>Speakers <Help text={"The version each one wears here. In a scene its Shots share them (linked): a change here is the scene's, unless this Shot keeps its own."} /></h4>
+      {n.scene_id && <div className="linked-row" data-linked="cast">{n.own.includes('cast') ? 'its own' : 'linked · the scene\'s'} <CommandButton id="story.flow.ownCast" text /><CommandButton id="story.flow.linkCast" text /></div>}
       <div className="speaker-versions" data-testid="speaker-versions">
         {speakers.map((p) => {
           const pinned = n.speaker_versions?.[p.id] ?? null

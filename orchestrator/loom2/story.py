@@ -408,6 +408,7 @@ class FlowNode(BaseModel):
     speaker_versions: dict[str, str] = Field(default_factory=dict)   # D93 follow-up: a speaker's pinned version (profile id → version id); absent = current — Make frame uses it unless the shot's stage binds another
     colour: str | None = None
     scene_id: str | None = None                   # RC2c: the scene group it is framed in (`story/flow/scenes.json`)
+    own: list[Literal["cast"]] = Field(default_factory=list)   # RC2f: the parts it keeps for itself in its scene (else linked: the scene's)
     revision: int = 0
     created_at: str = Field(default_factory=utc_now)
     updated_at: str = Field(default_factory=utc_now)
@@ -502,6 +503,7 @@ class Scene(BaseModel):
     id: str = Field(default_factory=lambda: new_id("scn"))
     name: str
     colour: str | None = None
+    cast_versions: dict[str, str] = Field(default_factory=dict)   # RC2f: the versions its Shots wear (linked); a node with `own` cast keeps its own
     created_at: str = Field(default_factory=utc_now)
     updated_at: str = Field(default_factory=utc_now)
 
@@ -1140,10 +1142,25 @@ class _FlowMixin:
 
     def flow_node(self, nid: str) -> FlowNode | None:
         r = self._record(nid)
-        return r.as_node() if r is not None else None
+        return self._view(r, self._scene_map()) if r is not None else None
 
     def flow_nodes(self) -> dict[str, FlowNode]:
-        return {nid: r.as_node() for nid, r in self._records().items()}
+        scenes = self._scene_map()
+        return {nid: self._view(r, scenes) for nid, r in self._records().items()}
+
+    def _scene_map(self) -> dict[str, Scene]:
+        p = self.flow_dir / "scenes.json"
+        return {s.id: s for s in SceneBook.model_validate(read_json_or(p, {})).scenes} if p.is_file() else {}
+
+    @staticmethod
+    def _linked(r: FlowNode, scenes: dict[str, Scene]) -> Scene | None:
+        """RC2f: the scene whose Cast pins the node wears (it is in one and keeps no cast of its own), else None."""
+        return scenes.get(r.scene_id) if r.scene_id and "cast" not in r.own else None
+
+    def _view(self, r: NodeRecord, scenes: dict[str, Scene]) -> FlowNode:
+        n = r.as_node()
+        s = self._linked(r, scenes)
+        return n.model_copy(update={"speaker_versions": dict(s.cast_versions)}) if s is not None else n
 
     def save_node(self, n: FlowNode) -> None:
         """A node's own fields written as they are, its shot kept."""
@@ -1222,7 +1239,7 @@ class _FlowMixin:
             self.save_graph(g)
             if r.shot is not None:
                 self._index_set(r.shot.id, r.id)                 # type: ignore[attr-defined]
-        return r.as_node()
+        return self._view(r, self._scene_map())
 
     def patch_node(self, nid: str, data: dict[str, Any]) -> FlowNode:
         """A node's own fields from a client body based on `revision` (409 when stale). RC2a: its shot is in the same file and keeps its
@@ -1235,6 +1252,15 @@ class _FlowMixin:
             if base is not None and int(base) != cur.revision:
                 raise StaleFlow(f"the node is at revision {cur.revision}, the change is based on {base} — reload it first")
             keep = ("type", "title", "lines", "options", "cond", "set", "target", "text", "colour", "board_group_id", "place_id", "speaker_versions")
+            linked = self._linked(cur, self._scene_map())
+            if linked is not None and isinstance(data.get("speaker_versions"), dict):   # RC2f: a linked Shot's pins are its scene's
+                was, now = dict(linked.cast_versions), dict(data["speaker_versions"])
+                pins = {**was, **{k: v for k, v in now.items() if was.get(k) != v}}
+                for k in [k for k in was if k not in now]:
+                    pins.pop(k, None)
+                if pins != was:
+                    self._set_scene_pins(linked.id, pins)
+                data = {k: v for k, v in data.items() if k != "speaker_versions"}
             merged = {**cur.model_dump(), **{k: v for k, v in data.items() if k in keep}, "id": nid, "schema_version": FLOW_SCHEMA_VERSION,
                       "revision": cur.revision + 1, "created_at": cur.created_at, "updated_at": utc_now()}
             r = NodeRecord.model_validate(merged)
@@ -1261,7 +1287,7 @@ class _FlowMixin:
             edges = [e for e in g.edges if e.from_ != nid or e.port in node_ports(r)]
             if len(edges) != len(g.edges):
                 self.save_graph(g.model_copy(update={"edges": edges, "revision": g.revision + 1, "updated_at": utc_now()}))
-            return r.as_node()
+            return self._view(r, self._scene_map())
 
     def set_line_audio(self, nid: str, index: int, asset_id: str | None, text: str | None) -> FlowNode:
         """CN2: the tts job's stamp on a line (the audio asset and the text it spoke) — server-side, no revision bump: the line's words are
@@ -1274,7 +1300,7 @@ class _FlowMixin:
                 raise KeyError(f"{nid} has no line {index}")
             lines = [ln.model_copy() for ln in cur.lines]
             lines[index].audio_asset_id, lines[index].audio_text = asset_id, text
-            return self._save_record(cur.model_copy(update={"lines": lines, "updated_at": utc_now()})).as_node()
+            return self._view(self._save_record(cur.model_copy(update={"lines": lines, "updated_at": utc_now()})), self._scene_map())
 
     def clear_voice(self, vid: str) -> list[Profile]:
         """CN2: a deleted voice leaves every profile that had it."""
@@ -1351,7 +1377,7 @@ class _FlowMixin:
                     n.shot.version(version)
                     part = n.shot.model_copy(update={"current": version, "revision": n.shot.revision + 1, "updated_at": utc_now()})
                     n = self._save_record(n.model_copy(update={"shot": part}))
-                return n.as_node(), n.as_shot()
+                return self._view(n, self._scene_map()), n.as_shot()
             donor = self._holder(shot_id)                        # type: ignore[attr-defined]
             if donor is None or donor.shot is None:
                 raise KeyError(shot_id)
@@ -1371,7 +1397,7 @@ class _FlowMixin:
             self._index_set(part.id, n.id)                       # type: ignore[attr-defined]
             unlink(self.node_path(donor.id))
             self.flow_graph()
-            return n.as_node(), n.as_shot()
+            return self._view(n, self._scene_map()), n.as_shot()
 
     def give_shot(self, nid: str) -> FlowNode:
         """A visual node made without a shot (`with_shot` False) gets an empty one; a node with one keeps it."""
@@ -1384,7 +1410,7 @@ class _FlowMixin:
             if n.shot is None:
                 n = self._save_record(n.model_copy(update={"shot": ShotPart(), "revision": n.revision + 1, "updated_at": utc_now()}))
                 self._index_set(n.shot.id, n.id)                 # type: ignore[attr-defined, union-attr]
-            return n.as_node()
+            return self._view(n, self._scene_map())
 
     def unbind_shot(self, nid: str) -> tuple[FlowNode, Shot | None]:
         """RC2a: the node's shot moves out to a Shot node of its own beside it (returned) and the node gets a fresh, empty shot; an empty
@@ -1394,12 +1420,12 @@ class _FlowMixin:
             if n is None:
                 raise KeyError(nid)
             if n.shot is None or n.shot.untouched():
-                return n.as_node(), None
+                return self._view(n, self._scene_map()), None
             released = self._new_bare_node(n.as_shot().name, n.shot, near=self._placed(nid, 160.0)).as_shot()
             fresh = ShotPart()
             n = self._save_record(n.model_copy(update={"shot": fresh, "revision": n.revision + 1, "updated_at": utc_now()}))
             self._index_set(fresh.id, n.id)                      # type: ignore[attr-defined]
-            return n.as_node(), released
+            return self._view(n, self._scene_map()), released
 
     # -- scene groups (RC2c) --
     def scene_book(self) -> SceneBook:
@@ -1424,12 +1450,76 @@ class _FlowMixin:
         return out
 
     def _join(self, node_ids: list[str], scene_id: str | None) -> None:
+        """Nodes into a scene (or out of any). RC2f: a node brings its Cast pins — the scene takes them when it has none; a node whose pins
+        differ from the scene's keeps them as its own (nothing chosen is lost); leaving, a linked node keeps the scene's pins as its own."""
         for nid in node_ids:
             r = self._record(nid)
             if r is None:
                 raise KeyError(nid)
-            if r.scene_id != scene_id:
-                self._save_record(r.model_copy(update={"scene_id": scene_id, "revision": r.revision + 1, "updated_at": utc_now()}))
+            if r.scene_id == scene_id:
+                continue
+            upd: dict[str, Any] = {"scene_id": scene_id, "revision": r.revision + 1, "updated_at": utc_now()}
+            old = self._linked(r, self._scene_map())
+            if old is not None:                                  # leaving a scene it was linked to: its pins become its own
+                upd["speaker_versions"] = dict(old.cast_versions)
+            pins = upd.get("speaker_versions", r.speaker_versions)
+            new = self._scene_map().get(scene_id) if scene_id else None
+            if new is not None:
+                if not new.cast_versions and pins:
+                    self._set_scene_pins(new.id, dict(pins))
+                    upd["own"] = [x for x in r.own if x != "cast"]
+                elif pins and pins != new.cast_versions:
+                    upd["own"] = sorted({*r.own, "cast"})
+                else:
+                    upd["own"] = [x for x in r.own if x != "cast"]
+            else:
+                upd["own"] = [x for x in r.own if x != "cast"]
+            self._save_record(r.model_copy(update=upd))
+
+    def _set_scene_pins(self, sid: str, pins: dict[str, str]) -> None:
+        b = self.scene_book()
+        self._save_book(b.model_copy(update={"scenes": [s.model_copy(update={"cast_versions": pins, "updated_at": utc_now()}) if s.id == sid else s for s in b.scenes],
+                                             "revision": b.revision + 1}))
+
+    def own_part(self, nid: str, part: str, own: bool) -> FlowNode:
+        """RC2f: *Make independent* — the node keeps the scene's Cast pins as its own from now on (`own`); *Use the scene's* — its own pins go
+        and it wears the scene's again."""
+        if part != "cast":
+            raise ValueError(f"no part {part!r} to keep apart (the stage is the shot's: Make its stage independent; the grade is the cut's)")
+        with _LOCK:
+            r = self._record(nid)
+            if r is None:
+                raise KeyError(nid)
+            s = self._scene_map().get(r.scene_id) if r.scene_id else None
+            if s is None:
+                raise ValueError("the node is in no scene — its Cast pins are its own already")
+            if own:
+                r = r.model_copy(update={"own": sorted({*r.own, "cast"}), "speaker_versions": dict(s.cast_versions) if "cast" not in r.own else r.speaker_versions})
+            else:
+                r = r.model_copy(update={"own": [x for x in r.own if x != "cast"], "speaker_versions": {}})
+            r = self._save_record(r.model_copy(update={"revision": r.revision + 1, "updated_at": utc_now()}))
+            return self._view(r, self._scene_map())
+
+    def own_stage(self, sid: str, vid: str) -> Shot:
+        """RC2f: *Make its stage independent* — the stage this version shares with other Shots copied (its set, props, lights, figures, cameras
+        and keys; not its rendered passes), and the version pointed at the copy with the same camera."""
+        from .stages import StageStore
+        cur = self.shot(sid)                                     # type: ignore[attr-defined]
+        if cur is None:
+            raise KeyError(sid)
+        v = cur.version(vid)
+        if v.state != "open":
+            raise ValueError(f"{cur.name} {vid} is final — make a new version to change its stage")
+        if not v.stage_id or not v.camera_id:
+            raise ValueError("the version is on no stage")
+        stages = StageStore(self.ws)                             # type: ignore[attr-defined]
+        st = stages.get(v.stage_id)
+        if st is None:
+            raise KeyError(v.stage_id)
+        copy = stages.create(f"{st.name} · {cur.name}", dict(st.size))
+        copy = stages.put(copy.id, {"revision": copy.revision, "objects": [o.model_dump() for o in st.objects], "cameras": [c.model_dump() for c in st.cameras],
+                                    "active_camera": v.camera_id, "keyframes": st.keyframes, "range": st.range.model_dump(), "ambient": st.ambient})
+        return self.set_source(sid, vid, copy.id, v.camera_id, copy.revision)   # type: ignore[attr-defined]
 
     def _prune_book(self) -> None:
         """A scene no node names any more goes."""
@@ -1541,12 +1631,12 @@ class _FlowMixin:
             while any(abs(p.x - x) < 120 and abs(p.y - y) < 120 for p in g.nodes):
                 y += 240.0
             r = NodeRecord(type=src.type, title=f"{base} · {k}", lines=[ln.model_copy() for ln in src.lines], place_id=src.place_id, board_group_id=src.board_group_id,
-                           speaker_versions=dict(src.speaker_versions), colour=src.colour, scene_id=scene_id, shot=part)
+                           colour=src.colour, scene_id=scene_id, shot=part)                  # RC2f: linked by default — it wears the scene's Cast pins
             r = self._save_record(r)
             g = self.flow_graph()
             self.save_graph(g.model_copy(update={"nodes": [*[p for p in g.nodes if p.id != r.id], FlowPlacement(id=r.id, x=x, y=y)], "revision": g.revision + 1, "updated_at": utc_now()}))
             self._index_set(part.id, r.id)                       # type: ignore[attr-defined]
-            return r.as_node()
+            return self._view(r, self._scene_map())
 
     # -- Shot templates (RC2e) --
     def shot_templates(self) -> ShotTemplateBook:
@@ -1649,7 +1739,7 @@ class _FlowMixin:
             g = self.flow_graph()
             self.save_graph(g.model_copy(update={"nodes": [*[p for p in g.nodes if p.id != r.id], FlowPlacement(id=r.id, x=float(x), y=float(y))], "revision": g.revision + 1, "updated_at": utc_now()}))
             self._index_set(part.id, r.id)                       # type: ignore[attr-defined]
-            return r.as_node()
+            return self._view(r, self._scene_map())
 
     def migrate_rc2(self) -> list[str]:
         """RC2a's migration, once (proto01_animate 31 §3b): each node's shot joins its file (the owner the shot names first, then a node

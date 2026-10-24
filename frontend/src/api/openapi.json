@@ -6952,6 +6952,14 @@
             "title": "Options",
             "type": "array"
           },
+          "own": {
+            "items": {
+              "const": "cast",
+              "type": "string"
+            },
+            "title": "Own",
+            "type": "array"
+          },
           "place_id": {
             "anyOf": [
               {
@@ -7082,6 +7090,7 @@
           "speaker_versions",
           "colour",
           "scene_id",
+          "own",
           "revision",
           "created_at",
           "updated_at"
@@ -12425,6 +12434,23 @@
         "title": "NodeShot",
         "type": "object"
       },
+      "OwnBody": {
+        "properties": {
+          "own": {
+            "default": true,
+            "title": "Own",
+            "type": "boolean"
+          },
+          "part": {
+            "const": "cast",
+            "default": "cast",
+            "title": "Part",
+            "type": "string"
+          }
+        },
+        "title": "OwnBody",
+        "type": "object"
+      },
       "PassBody": {
         "description": "D118 (AE4a): a pass on the layer — the preset and its strength; a seed given is a re-run with another. AE4c: `face` and `lipsync`\n(the strength unused).",
         "properties": {
@@ -15495,6 +15521,13 @@
       "SceneOut": {
         "description": "RC2c: a scene group and its member nodes (in the Flow's reading order).",
         "properties": {
+          "cast_versions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Cast Versions",
+            "type": "object"
+          },
           "colour": {
             "anyOf": [
               {
@@ -15534,6 +15567,7 @@
           "id",
           "name",
           "colour",
+          "cast_versions",
           "created_at",
           "updated_at",
           "node_ids"
@@ -28663,6 +28697,59 @@
         ]
       }
     },
+    "/story/flow/nodes/{nid}/own": {
+      "post": {
+        "description": "RC2f: a part of a Shot in a scene made independent (its own from now on) or linked again (the scene's).",
+        "operationId": "flow_own_story_flow_nodes__nid__own_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "nid",
+            "required": true,
+            "schema": {
+              "title": "Nid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OwnBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlowNode"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Flow Own",
+        "tags": [
+          "story"
+        ]
+      }
+    },
     "/story/flow/nodes/{nid}/shot": {
       "post": {
         "description": "A new, empty shot in the node (the handoff to the Shots tab, loom R134). RC2a: an empty shot of its own is the one (a name given\nbecomes the node's title); a shot with work in it moves out to a Shot node of its own first.",
@@ -31130,6 +31217,58 @@
         ]
       }
     },
+    "/story/shots/{sid}/versions/{vid}/own-stage": {
+      "post": {
+        "description": "RC2f: *Make its stage independent* — the shared stage copied for this version (set, props, lights, figures, cameras and keys).",
+        "operationId": "shot_own_stage_story_shots__sid__versions__vid__own_stage_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "title": "Sid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Shot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Shot Own Stage",
+        "tags": [
+          "story"
+        ]
+      }
+    },
     "/story/shots/{sid}/versions/{vid}/run-stale": {
       "post": {
         "description": "RC0 (D96, 05 §4): *Run stale* — the stale steps in dependency order with their cost; the first ones queued now (their results\nbecome the version's frame / clip), the server steps after them queued as each finishes. A stage still needs its passes (the client\nrenders them and sends them); a stage-guided clip and an edit are made again by hand.",
@@ -32250,6 +32389,59 @@
           }
         },
         "summary": "Timeline Grade",
+        "tags": [
+          "timelines"
+        ]
+      }
+    },
+    "/timelines/{tl_id}/grade/own": {
+      "post": {
+        "description": "RC2f: *Make its grade independent* — the V1 shot leaves its scene's grade (the layer cut around it) with the scene's Lumetri as its own.",
+        "operationId": "timeline_grade_own_timelines__tl_id__grade_own_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tl_id",
+            "required": true,
+            "schema": {
+              "title": "Tl Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CutGradeScene"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CutEdited"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Timeline Grade Own",
         "tags": [
           "timelines"
         ]

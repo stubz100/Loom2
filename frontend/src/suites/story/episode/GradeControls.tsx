@@ -64,7 +64,7 @@ export function GradeControls({ cut, track, item }: { cut: CutTracks; track: Cut
           <option value="">Match its colour to…</option>
           {takes.map((i) => <option key={i.id} value={i.id}>{itemLabel(i, shots.find((x) => x.id === i.shot_id), clips.find((c) => c.id === i.clip_id))}</option>)}
         </select></span></div>}
-      <div className="verbs"><CommandRow ids={['story.cut.grade.scene', 'story.cut.grade.reset']} /></div>
+      <div className="verbs"><CommandRow ids={['story.cut.grade.scene', 'story.cut.grade.own', 'story.cut.grade.reset']} /></div>
     </div>
   )
 }

@@ -61,7 +61,7 @@ The waves are in §3a; the model they change is mapped in §3b.
 | **RC2c · scene groups** ✓ built 2026-10-24 (§3d) | a frame around Shots in the Flow (made from a selection, named, moved together); *New coverage shot* on a Shot makes a sibling in its group; CE4's *Grade the scene* takes the group (the place's run stays the fallback) | 2 |
 | **RC2d · the Shots list** ✓ built 2026-10-24 (§3d) | the Shots tab's board rows are the Shot nodes, grouped by scene, with search, sort and the state filters | 1 |
 | **RC2e · templates (O2)** ✓ built 2026-10-24 (§3d) | *New Shot from this Shot* (the scene's parts linked, the Shot's own copied); *Save as a template…* into the World Library; *New Shot from a template…* | 2 |
-| **RC2f · linked copies (O3)** | within a scene the shared parts (set, plate, light, cast versions, props, grade) are linked by default: one item, several users, a badge; *Make independent* breaks a part away (an independent copy is the Catalogue's *Duplicate*) | 2–3 |
+| **RC2f · linked copies (O3)** ✓ built 2026-10-24 (§3e) | within a scene the shared parts (set, plate, light, cast versions, props, grade) are linked by default: one item, several users, a badge; *Make independent* breaks a part away (an independent copy is the Catalogue's *Duplicate*) | 2–3 |
 
 ### 3b. The model today and the merge
 
@@ -135,7 +135,7 @@ A part shows a *linked · N Shots* badge with its users; the Catalogue's *Duplic
 | **CA4 · the plan with its cost** | each character layer's batches (77 frames, 5 carried) with the frames each covers and its minutes from the measured runs; the shot's total; *Stage the runs* (the queue's *staged* jobs, released by *Run staged*) for an overnight start | no | 1 |
 | **CA5 · re-take from a batch** | *Re-take from this batch* on a layer's batch: that batch and the ones after it again with a new seed, the batches before kept (the carried frames come from the kept batch) | yes (rig) | 1–2 |
 | **HP1 · in the hand** | D129, §2 | rig check | 2 |
-| **CA3 · the plate for large moves** | spike **E34** first: the depth-guided plate video — LTX-2.3's IC-LoRA union control (Stage's guided method already loads it) with the plate still as the first frame and the bare set's depth along the camera path as the control; measured on an orbit and a long dolly against the projection (stretch, the still's match at frame 1, seconds, VRAM). If it holds: the final's plate gets a method (*projected* for small moves, *generated along the path* for large ones, chosen by the camera's travel), its frames a plate layer like the projection's | yes (spike, then rig) | 3–4 |
+| **CA3 · the plate for large moves** | spike **E34** first: the depth-guided plate video — LTX-2.3's IC-LoRA union control (Stage's guided method already loads it) with the plate still as the first frame and the bare set's depth along the camera path as the control; measured on an orbit and a long dolly against the projection (stretch, the still's match at frame 1, seconds, VRAM). If it holds: the final's plate gets a method (*projected* for small moves, *generated along the path* for large ones, chosen by the camera's travel), its frames a plate layer like the projection's; and O4 (RC2f's plate): a Shot's Klein plate made with its scene's first plate as a reference, so the room reads the same from another camera | yes (spike, then rig) | 3–4 |
 | **E33** | D128's open image → 3D (§1), downloads asked for first | yes | 1–2 |
 
 D102 retired CA5's W3 (a per-frame refine at a seam made the hold worse); A6's healing patch stays for regions.
@@ -167,3 +167,23 @@ touches, a journal entry and a local commit.
   lines (the words, not the voice), its line, its route and its camera with its keys; *New Shot from a template ▸* on the Flow's
   right-click places one there, on a node's right-click beside it (in its scene and place, the template's camera added to its stage);
   the World Inspector shows what a template keeps, *New Shot from it*, *Rename*, *Delete*.
+
+### 3e. RC2f as built (2026-10-24) — RC2 done
+
+- **The cast:** a scene keeps its Cast pins (`Scene.cast_versions`); a Shot in it wears them (the API's node shows the scene's pins) and a
+  change of a pin on it is the scene's, merged as a change (a key set or taken away), so a title edit or another Shot's edit is not undone
+  (the client sends a node's pins only when they were changed). *Make its cast independent* keeps the pins as the node's own
+  (`FlowNode.own`), *Use the scene's cast* drops them. A node joining with no pins is linked; one whose pins differ keeps them as its own
+  (nothing chosen is lost); a scene with none takes the first node's; a node leaving keeps the scene's as its own. A sibling (*New Shot
+  from this Shot*) is linked.
+- **The stage:** a stage shared by Shots is linked (the Inspector's *stage · linked · N Shots* with their names); *Make its stage
+  independent* copies it for that version (objects, cameras, keys, range, ambient — not its passes) and points the version at the copy with
+  the same camera; the other Shots keep the shared one.
+- **The grade:** in the cut, a take under its scene's grade can *Make its grade independent* — the scene's adjustment layer is razored at
+  the take's edges and the piece over it lifted, and the take gets the layer's Lumetri (copied whole with FilmCraft's *paste attributes*,
+  its own Lumetri replaced). Rig (`scripts/rc2f_acceptance.py`, 6/6, the real FilmCraft on the A1 project): the scene graded (Golden
+  Dusk, exposure +1: warmth +35 / +29, mean +41 / +46); Mara's shot independent — the layer covers the composition alone, her Lumetri the
+  layer's (exposure 1.0, temperature 35), her frame within 0.05 levels of before; the scene's exposure set back moves the composition
+  (−44.7 levels) and not her (0.00).
+- **The plate:** a picture set's plate is the stage's (linked with it); a Klein plate is its camera's, so linking it across cameras means
+  using the scene's first plate as a reference — O4, built with CA3 (§4).

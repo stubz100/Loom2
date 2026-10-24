@@ -1,6 +1,7 @@
 // D111 (PS5): the final shot in Animate's Shot section — *Make the final shot…* splits the finished scene into layers (their passes rendered
 // here and stored with the final); the stage's finals listed with their layers. PS5b: the plate's still (*Make the plate*) and its
 // projection along the camera path, which runs here when the still lands. PS5c–f add the characters, mattes, assembly and re-takes.
+import { useEffect } from 'react'
 import { Help } from '../../frame/Help'
 import { api } from '../../api/client'
 import type { Final, FinalLayer } from '../../api/types'
@@ -29,6 +30,30 @@ function statusText(l: FinalLayer, projecting: boolean, frames: number): string 
   return l.status === 'passes' ? 'passes ready' : l.status === 'done' ? `done · ${l.frames_done} frames` : l.status
 }
 
+/** CA4 / CA5: a character layer's batches — each the frames it adds, its state and its time (done) or cost; a right-click re-takes from
+ *  that batch on with a new seed (the batches before it kept). */
+function Batches({ f, l }: { f: Final; l: FinalLayer }) {
+  const plan = useFinals((s) => s.plans[f.id]?.layers.find((x) => x.id === l.id))
+  if (!plan) return null
+  const working = l.status === 'queued' || l.status === 'running'
+  const mark: Record<string, string> = { done: '✓', running: '◐', queued: '…', staged: '⏸', failed: '!', owed: '○' }
+  return (
+    <span className="batches" data-batches>
+      {plan.batches.map((b) => {
+        const can = !working && b.k > 0 && plan.batches.slice(0, b.k).every((x) => x.state === 'done')
+        const time = b.seconds ? (b.seconds < 90 ? `${Math.round(b.seconds)} s` : `${Math.round(b.seconds / 60)} min`) : ''
+        return (
+          <span key={b.k} className={`batch b-${b.state}`} data-batch={b.k} title={`batch ${b.k + 1}: frames ${b.covers[0]}–${b.covers[1]} (${b.frames} with the carried 5) · ${b.state}${time ? ` · ${b.state === 'done' ? 'took' : '≈'} ${time}` : ''}${can ? ' — right-click: re-take from here' : ''}`}
+            onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); showMenu(e, [{ label: `Re-take from batch ${b.k + 1} (a new seed)`, disabled: !can, run: () => void useFinals.getState().perform(f.id, l.id, undefined, { fromBatch: b.k }) },
+              { label: 'Re-take the whole layer (a new seed)', disabled: working || !l.batches.length, run: () => void useFinals.getState().perform(f.id, l.id, l.seed + 1) }]) }}>
+            {b.k + 1}{mark[b.state]}</span>
+        )
+      })}
+      {plan.seconds_owed > 0 && <span className="owed">≈ {Math.max(1, Math.round(plan.seconds_owed / 60))} min owed</span>}
+    </span>
+  )
+}
+
 function LayerRow({ f, l }: { f: Final; l: FinalLayer }) {
   const projecting = useFinals((s) => s.projecting === f.id)
   const plate = l.kind === 'plate'
@@ -46,6 +71,7 @@ function LayerRow({ f, l }: { f: Final; l: FinalLayer }) {
       <span className="kind">{KIND_LABEL[l.kind]}</span>
       <span className="name">{plate && l.still_asset_id ? <img className="still" src={api.thumbUrl(l.still_asset_id, 256)} alt="" /> : null}{l.name}</span>
       <span className={`status s-${l.status}`}>{statusText(l, projecting, f.frames)}</span>
+      {l.kind === 'figure' && <Batches f={f} l={l} />}
       {picture && (l.status === 'passes' || l.status === 'failed') && !projecting && <button className="quiet" onClick={() => void useFinals.getState().plate(f.id)} title="The set's picture through its relief along the camera path, rendered here in seconds (no Klein still: the picture is the place)">Render the plate</button>}
       {plate && !picture && (l.status === 'passes' || l.status === 'failed') && <button className="quiet" onClick={() => void useFinals.getState().plate(f.id)} title="A Klein Stage shot of the bare set at the first frame, with the Shot tab's prompt and references (no people, no objects: they are layers)">Make the plate</button>}
       {l.kind === 'figure' && !working && <button className="quiet" onClick={l.status === 'done' ? retake : () => void useFinals.getState().perform(f.id, l.id)}
@@ -57,6 +83,11 @@ function LayerRow({ f, l }: { f: Final; l: FinalLayer }) {
 
 function FinalRow({ f }: { f: Final }) {
   useFinals((s) => s.finals)                                                   // re-render as the poll reloads (the assembly job's state)
+  const plan = useFinals((s) => s.plans[f.id])
+  const jobs = useSession((s) => s.jobs)
+  const doing = Object.values(jobs).filter((j) => j.origin?.ref === f.id && (j.status === 'queued' || j.status === 'running' || j.status === 'staged')).length
+  useEffect(() => { void useFinals.getState().loadPlan(f.id) }, [f.id, f.revision, f.updated_at, doing])   // CA4: the plan follows the batches
+  const unperformed = f.layers.filter((l) => l.kind === 'figure' && !l.batches.length).length
   const busy = assembling(f.id)
   const ready = readyToAssemble(f)
   const comp = useFinals((s) => s.compositions[f.id]) ?? null                   // AE1: the composition, once made
@@ -71,6 +102,11 @@ function FinalRow({ f }: { f: Final }) {
       { label: 'Delete this final', danger: true, run: () => void useFinals.getState().remove(f.id) }]) }}>
       <div className="final-head"><b>{f.name}</b><span className="hint">{f.frames} frames at {f.rate} fps · {f.size.w}×{f.size.h} · frames {f.range.start}–{f.range.end}</span></div>
       <ul className="final-layers">{f.layers.map((l) => <LayerRow key={l.id} f={f} l={l} />)}</ul>
+      {plan && plan.layers.length > 0 && <div className="final-plan" data-plan>
+        <span className="hint" title={`the cost from ${plan.source}`}>{plan.seconds_owed > 0 ? `the performances owe ≈ ${Math.max(1, Math.round(plan.seconds_owed / 60))} min on the GPU` : 'every performance made'}</span>
+        {unperformed > 0 && <button className="quiet" data-stage-runs onClick={() => void useFinals.getState().stagePerformances(f.id)}
+          title="Every character layer not performed yet, staged in the queue — Run staged (the queue) starts them, one at a time (an overnight start)">Stage the performances</button>}
+      </div>}
       <div className="final-foot">
         <div className="verbs">
         <button className={ready && !f.clip_id ? 'primary' : 'quiet'} disabled={!ready || busy} onClick={() => void useFinals.getState().assemble(f.id)}
@@ -82,7 +118,7 @@ function FinalRow({ f }: { f: Final }) {
           {comp ? 'Make the composition again' : 'Make the composition'}</button>}
         {comp && <button className="quiet" data-open-final onClick={() => useFinals.getState().openFinal(f.id)} title="Scrub and play the composition at Animate's Final level">Open in Final</button>}
         {comp && <button className={comp.clip_id ? 'quiet' : 'primary'} data-render disabled={rendersNow} onClick={() => void useFinals.getState().render(f.id)}
-          title="effectcraft-cli renders the composition at Best and Full on the CPU (RIFE to 24 fps at F16); the clip becomes the final's and a take on its shot">
+          title="effectcraft-cli renders the composition on the CPU with its render settings (Animate › Final › Output; RIFE to 24 fps at F16); the clip becomes the final's and a take on its shot">
           {rendersNow ? 'Rendering…' : comp.clip_id ? 'Render again' : 'Render the finished shot'}</button>}
         </div>
         {comp && <span className="hint" data-comp-rev>composition · revision {comp.revision}{comp.stale ? ' · stale: the final changed' : ''}{comp.clip_id ? ` · rendered at revision ${comp.rendered_revision}` : ''}</span>}

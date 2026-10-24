@@ -132,8 +132,8 @@ A part shows a *linked · N Shots* badge with its users; the Catalogue's *Duplic
 | Wave | Content | GPU | Days |
 | --- | --- | --- | --- |
 | **AE5 · the output** ✓ built 2026-10-24 (§4a) | the finished shot's **render settings** (quality, resolution, frame rate, motion blur, frame blending, colour depth; proxy use off) and **output modules** (the PNG master always; ProRes 4444 with alpha beside it; the H.264 proxy) on the final, shown in the Final mode's foot and the render's Inspector; `comp_render` runs EffectCraft's render queue with them (`renderQueue.add` takes every one) | no (CPU, D113) | 1–2 |
-| **CA4 · the plan with its cost** | each character layer's batches (77 frames, 5 carried) with the frames each covers and its minutes from the measured runs; the shot's total; *Stage the runs* (the queue's *staged* jobs, released by *Run staged*) for an overnight start | no | 1 |
-| **CA5 · re-take from a batch** | *Re-take from this batch* on a layer's batch: that batch and the ones after it again with a new seed, the batches before kept (the carried frames come from the kept batch) | yes (rig) | 1–2 |
+| **CA4 · the plan with its cost** ✓ built 2026-10-24 (§4b) | each character layer's batches (77 frames, 5 carried) with the frames each covers and its minutes from the measured runs; the shot's total; *Stage the runs* (the queue's *staged* jobs, released by *Run staged*) for an overnight start | no | 1 |
+| **CA5 · re-take from a batch** ✓ built 2026-10-24 (§4b) | *Re-take from this batch* on a layer's batch: that batch and the ones after it again with a new seed, the batches before kept (the carried frames come from the kept batch) | yes (rig) | 1–2 |
 | **HP1 · in the hand** | D129, §2 | rig check | 2 |
 | **CA3 · the plate for large moves** | spike **E34** first: the depth-guided plate video — LTX-2.3's IC-LoRA union control (Stage's guided method already loads it) with the plate still as the first frame and the bare set's depth along the camera path as the control; measured on an orbit and a long dolly against the projection (stretch, the still's match at frame 1, seconds, VRAM). If it holds: the final's plate gets a method (*projected* for small moves, *generated along the path* for large ones, chosen by the camera's travel), its frames a plate layer like the projection's; and O4 (RC2f's plate): a Shot's Klein plate made with its scene's first plate as a reference, so the room reads the same from another camera | yes (spike, then rig) | 3–4 |
 | **E33** | D128's open image → 3D (§1), downloads asked for first | yes | 1–2 |
@@ -204,3 +204,17 @@ touches, a journal entry and a local commit.
 - **Rig** (`scripts/ae5_acceptance.py`, 7/7, the real EffectCraft on the A1 final): the default render equals AE1's `render` frame for frame
   (0 levels; 121 f @ 24 after RIFE, 5.0 s); Draft at half with the alpha and a ProRes: 416×240, an RGBA master opaque 255…255 through the
   conform, a ProRes 4444 with alpha of 121 frames (16.8 MB), 6.5 s.
+
+### 4b. CA4 and CA5 as built (2026-10-24)
+
+- **The plan** (`GET /finals/{fid}/plan`): each character layer's batches — the final's frames each adds (a later batch's carried 5 come
+  before its offset), its state (done, running, queued, staged, failed, owed), its time when done, else its cost: the mean of this final's
+  measured batches by frames, else the queue's estimate (D60: what the job would run) — and the shot's total owed. In Animate's final row
+  each character layer shows a chip a batch (its state; the tooltip its frames and time) and the minutes it still owes; the final's line says
+  what the performances owe on the GPU.
+- ***Stage the performances*** (the final's line): every character layer not performed yet is staged in the queue (`RunBody.stage`), so the
+  queue's *Run staged* starts them one at a time — an overnight start. A later batch is queued by its predecessor's finisher, as before.
+- ***Re-take from batch N*** (a batch chip's right-click; `RunBody.from_batch`): the batches before it kept, batch N made again with a new
+  seed continuing the kept batch's clip (W1's carried 5 frames) on the layer's placed reference and pose guide, the rest chained, the layer
+  stitched and matted again. *Re-take the whole layer* stays beside it. D102 retired W3 (a per-frame refine at a seam); A6's healing patch
+  stays for regions.

@@ -9015,3 +9015,23 @@ patched (the Mid attenuated). A track with plugins is printed onto a hidden comp
   the final-shot e2e sets half + ProRes and reads the job's recipe and result; routes_d37 +1; settings audit +8 fields (RenderSettings
   read as `rs`). Offline 579 passed, settings audit and agents_check clean, Vitest 465 + 3 skipped, typecheck, lint (0 errors, 79
   warnings) and build clean, e2e full 63/63 and open 63/63. Screenshot img/31-ae5-output.jpg.
+
+## 2026-10-24 20:40 — CA4 and CA5 built: a character layer's batch plan with its cost, staged runs, re-take from a batch (proto01_animate 31 §4b)
+
+- **CA4:** `GET /finals/{fid}/plan` — each character layer's batches (the final's frames each adds, its state, its time when done, else
+  its cost: this final's measured batches by frames, else the queue's estimate) and the shot's total owed. Animate's final row: a chip a
+  batch, the minutes a layer owes, the final's line *the performances owe ≈ N min on the GPU* and *Stage the performances* (every
+  character layer not performed yet staged; the queue's Run staged starts them). `RunBody.stage`.
+- **CA5:** *Re-take from batch N* on a batch chip's right-click (`RunBody.from_batch`): the batches before it kept, batch N made again with
+  a new seed continuing the kept clip (W1's carried 5), the rest chained, the layer stitched and matted again; *Re-take the whole layer*
+  beside it.
+- **Found by the test:** the plan first said a later batch adds frames from its offset + 5 — the carried 5 come before its offset (the
+  stitch drops them); fixed before the build.
+- **Rig** (`scripts/ca5_acceptance.py`, 6/6, the real engine on a copy of the A1 project, Mara's two batches): the plan (two done, 145.7 s and
+  28.7 s measured, nothing owed); batch 2 re-taken with a new seed (20261022), continuing batch 1's clip; stitched and matted again (81
+  frames); the frames before the join unchanged; the join's step over the median step 2.53 before, 1.66 after; 111 s (the batch 77 s, SAM 3
+  34 s).
+- Tests: test_batches_ca45.py (2: the plan before and after, the re-take from batch 2 with its chain and stitch, a refusal, a staged run; the
+  route), the final-shot e2e's plan chips and line; routes_d37 +1. Offline 581 passed, settings audit and agents_check clean, Vitest 465 + 3
+  skipped, typecheck, lint (0 errors, 79 warnings) and build clean, e2e full 63/63 and open 63/63. Screenshots img/31-ca4-plan.jpg,
+  img/31-ca5-retake-menu.jpg.

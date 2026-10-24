@@ -1291,6 +1291,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/finals/{fid}/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Final Plan
+         * @description CA4 (02 §3, proto01_animate 31 §4): the character layers' batches — the frames each adds, each one's state, its time when done, else
+         *     its cost: the mean of this final's measured batches scaled by frames, else the queue's estimate (D60: what the job would run) — and the
+         *     shot's total still owed.
+         */
+        get: operations["final_plan_finals__fid__plan_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/finals/{fid}/plate": {
         parameters: {
             query?: never;
@@ -6652,6 +6674,17 @@ export interface components {
             /** Items */
             items: components["schemas"]["Final"][];
         };
+        /** FinalPlan */
+        FinalPlan: {
+            /** Final Id */
+            final_id: string;
+            /** Layers */
+            layers: components["schemas"]["PlanLayer"][];
+            /** Seconds Owed */
+            seconds_owed: number;
+            /** Source */
+            source: string;
+        };
         /** FlattenRequest */
         FlattenRequest: {
             /** Name */
@@ -9130,6 +9163,39 @@ export interface components {
             /** W */
             w: number;
         };
+        /** PlanBatch */
+        PlanBatch: {
+            /** Clip Id */
+            clip_id: string | null;
+            /** Covers */
+            covers: number[];
+            /** Frames */
+            frames: number;
+            /** Job Id */
+            job_id: string | null;
+            /** K */
+            k: number;
+            /** Seconds */
+            seconds: number | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "done" | "running" | "queued" | "staged" | "failed" | "owed";
+        };
+        /** PlanLayer */
+        PlanLayer: {
+            /** Batches */
+            batches: components["schemas"]["PlanBatch"][];
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Seconds Owed */
+            seconds_owed: number;
+            /** Seed */
+            seed: number;
+        };
         /** PlanStep */
         PlanStep: {
             /** After */
@@ -10196,8 +10262,18 @@ export interface components {
         };
         /** RunBody */
         RunBody: {
+            /**
+             * From Batch
+             * @default 0
+             */
+            from_batch?: number;
             /** Seed */
             seed?: number | null;
+            /**
+             * Stage
+             * @default false
+             */
+            stage?: boolean;
         };
         /** RunQueued */
         RunQueued: {
@@ -15096,6 +15172,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FinalLines"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    final_plan_finals__fid__plan_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinalPlan"];
                 };
             };
             /** @description Validation Error */

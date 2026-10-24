@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, Response
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ..compositions import Composition, CompositionStore
 from ..effectcraft import EffectCraftError
@@ -235,6 +235,8 @@ async def final_layer_frames(svc: Svc, fid: str, lid: str, body: FramesBody):
 
 class RunBody(BaseModel):
     seed: int | None = None                        # None: the layer's seed (the first run 0; a re-take passes another)
+    from_batch: int = Field(0, ge=0)               # CA5: re-take from this batch on (the batches before it kept; a new seed unless one is given)
+    stage: bool = False                            # CA4: staged in the queue (released by Run staged — an overnight start), not queued
 
 
 class RunQueued(BaseModel):
@@ -282,6 +284,8 @@ async def final_layer_run(svc: Svc, fid: str, lid: str, body: RunBody):
     ref = cat.get(v.anim_ref_asset_id)
     if ref is None:
         raise HTTPException(422, "the animation reference is missing from the Catalogue")
+    if body.from_batch:                                                      # CA5: re-take from a batch on, the batches before it kept
+        return await _retake_from(svc, store, f, layer, body, spec.id, f"{p.name}, {compose_sheet(v, name=p.name)}, {CHARACTER_TAIL}", v.anim_ref_asset_id)
     w, h = f.size["w"], f.size["h"]
     folder = store.folder(fid) / lid
     kp = (await asyncio.to_thread(store.keypoints, fid, lid) or [None])[0]
@@ -310,7 +314,7 @@ async def final_layer_run(svc: Svc, fid: str, lid: str, body: RunBody):
     plan = plan_batches(f.frames)
     prompt = f"{p.name}, {compose_sheet(v, name=p.name)}, {CHARACTER_TAIL}"
     try:
-        jobs = svc.queue.submit(character_recipe(f, layer, spec.id, prompt, plan[0], None),
+        jobs = svc.queue.submit(character_recipe(f, layer, spec.id, prompt, plan[0], None), stage=body.stage,
                                 origin=JobOrigin(suite="stage", surface=FINAL_LAYER_SURFACE, ref=fid, payload={"layer": lid, "batch": 0, "batches": len(plan), "prompt": prompt}))
     except ValueError as e:
         raise HTTPException(422, str(e))
@@ -319,6 +323,109 @@ async def final_layer_run(svc: Svc, fid: str, lid: str, body: RunBody):
                                 batches=[{"k": 0, "job_id": jobs[0].id, "clip_id": None}], job_ids=[*layer.job_ids, jobs[0].id], frames_done=0)
     svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
     return {"job_id": jobs[0].id, "batches": len(plan), "reference_asset_id": ref_id, "placed": placed}
+
+
+async def _retake_from(svc, store: FinalStore, f: Final, layer: FinalLayer, body: RunBody, model_id: str, prompt: str, anim_ref: str | None) -> dict:
+    """CA5 (02 §3): batch k and the ones after it again with a new seed — batch k continues the kept batch k−1's clip (its last frames
+    carried, W1) on the layer's placed reference and pose guide; each finisher queues the next, the last stitches every batch and mattes."""
+    from ..finals import FINAL_LAYER_SURFACE, character_recipe, plan_batches
+    from ..origin import JobOrigin
+    k = body.from_batch
+    plan = plan_batches(f.frames)
+    kept = [dict(b) for b in layer.batches[:k]]
+    if k >= len(plan):
+        raise HTTPException(422, f"{layer.name} has {len(plan)} batch{'es' if len(plan) != 1 else ''}")
+    if len(kept) < k or not all(b.get("clip_id") for b in kept) or not layer.reference_asset_id or not layer.guide_asset_id:
+        raise HTTPException(422, f"batch {k + 1} is re-taken after the batches before it are made")
+    seed = layer.seed + 1 if body.seed is None else body.seed
+    redo = layer.model_copy(update={"seed": seed})
+    try:
+        jobs = svc.queue.submit(character_recipe(f, redo, model_id, prompt, plan[k], kept[-1]["clip_id"]), stage=body.stage,
+                                origin=JobOrigin(suite="stage", surface=FINAL_LAYER_SURFACE, ref=f.id, payload={"layer": layer.id, "batch": k, "batches": len(plan), "prompt": prompt}))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await svc.queue.flush()
+    f2 = await asyncio.to_thread(store.update_layer, f.id, layer.id, status="queued", error=None, seed=seed, frames_done=0,
+                                 batches=[*kept, {"k": k, "job_id": jobs[0].id, "clip_id": None}], job_ids=[*layer.job_ids, jobs[0].id])
+    svc.hub.broadcast("final.updated", {"id": f.id, "revision": f2.revision})
+    return {"job_id": jobs[0].id, "batches": len(plan), "reference_asset_id": layer.reference_asset_id, "placed": layer.reference_asset_id != anim_ref}
+
+
+class PlanBatch(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    k: int
+    frames: int                                    # the batch's frames (the carried 5 included after the first)
+    covers: list[int]                              # the final's frames it adds: [first, last]
+    state: Literal["done", "running", "queued", "staged", "failed", "owed"]
+    job_id: str | None = None
+    clip_id: str | None = None
+    seconds: float | None = None                   # its wall time when done, else its cost
+
+
+class PlanLayer(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    id: str
+    name: str
+    seed: int
+    batches: list[PlanBatch]
+    seconds_owed: float
+
+
+class FinalPlan(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    final_id: str
+    layers: list[PlanLayer]
+    seconds_owed: float
+    source: str                                    # where the cost comes from: this final's batches measured, else the queue's estimate
+
+
+@router.get("/finals/{fid}/plan", response_model=FinalPlan)
+async def final_plan(svc: Svc, fid: str):
+    """CA4 (02 §3, proto01_animate 31 §4): the character layers' batches — the frames each adds, each one's state, its time when done, else
+    its cost: the mean of this final's measured batches scaled by frames, else the queue's estimate (D60: what the job would run) — and the
+    shot's total still owed."""
+    from ..finals import CARRY, character_recipe, plan_batches
+    from ..models import registry
+    from ..recipes import parse_recipe
+    ws, _, _ = svc.require_project()
+    f = await asyncio.to_thread(FinalStore(ws).get, fid)
+    if f is None:
+        raise HTTPException(404, "final not found")
+    plan = plan_batches(f.frames)
+    jobs = svc.queue.jobs if svc.queue else {}
+    figures = [x for x in f.layers if x.kind == "figure"]
+    measured = [(jobs[b["job_id"]].wall_s, plan[b["k"]]["frames"]) for x in figures for b in x.batches
+                if b.get("clip_id") and b.get("job_id") in jobs and jobs[b["job_id"]].wall_s and b["k"] < len(plan)]
+    per_frame = sum(s for s, _ in measured) / sum(n for _, n in measured) if measured else None
+    spec = next((s for s in registry.animate_specs() if registry.offered(s, svc.app.settings.variant)), None)
+
+    def cost(b: dict[str, int]) -> float | None:
+        if per_frame is not None:
+            return round(per_frame * b["frames"], 1)
+        if spec is None or svc.queue is None:
+            return None
+        probe = figures[0].model_copy(update={"reference_asset_id": "ast_plan", "guide_asset_id": "ast_plan"})
+        try:
+            return svc.queue.estimate(parse_recipe(character_recipe(f, probe, spec.id, "", b, None))).get("seconds")
+        except Exception:                                                     # noqa: BLE001 — a cost is advice, never a failure
+            return None
+    out, owed_all = [], 0.0
+    for x in figures:
+        rows, owed = [], 0.0
+        for k, b in enumerate(plan):
+            covers = [b["offset"], min(f.frames, b["offset"] + b["frames"] - (CARRY if k else 0)) - 1]   # a later batch: its carried 5 come before its offset
+            have = x.batches[k] if k < len(x.batches) else None
+            j = jobs.get(have["job_id"]) if have and have.get("job_id") else None
+            state = "done" if have and have.get("clip_id") else (j.status if j is not None and j.status in ("running", "queued", "staged", "failed") else "owed")
+            secs = j.wall_s if state == "done" and j is not None and j.wall_s else cost(b)
+            if state != "done" and secs:
+                owed += secs
+            rows.append(PlanBatch(k=k, frames=b["frames"], covers=covers, state=state, job_id=have.get("job_id") if have else None,   # type: ignore[arg-type]
+                                  clip_id=have.get("clip_id") if have else None, seconds=round(secs, 1) if secs else None))
+        out.append(PlanLayer(id=x.id, name=x.name, seed=x.seed, batches=rows, seconds_owed=round(owed, 1)))
+        owed_all += owed
+    src = f"measured: {len(measured)} batch{'es' if len(measured) != 1 else ''} of this final" if per_frame is not None else "the queue's estimate"
+    return FinalPlan(final_id=fid, layers=out, seconds_owed=round(owed_all, 1), source=src).model_dump()
 
 
 class MatteBody(BaseModel):

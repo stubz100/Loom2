@@ -6664,6 +6664,37 @@
         "title": "FinalList",
         "type": "object"
       },
+      "FinalPlan": {
+        "properties": {
+          "final_id": {
+            "title": "Final Id",
+            "type": "string"
+          },
+          "layers": {
+            "items": {
+              "$ref": "#/components/schemas/PlanLayer"
+            },
+            "title": "Layers",
+            "type": "array"
+          },
+          "seconds_owed": {
+            "title": "Seconds Owed",
+            "type": "number"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "final_id",
+          "layers",
+          "seconds_owed",
+          "source"
+        ],
+        "title": "FinalPlan",
+        "type": "object"
+      },
       "FlattenRequest": {
         "properties": {
           "name": {
@@ -12606,6 +12637,117 @@
         "title": "PixelsPut",
         "type": "object"
       },
+      "PlanBatch": {
+        "properties": {
+          "clip_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clip Id"
+          },
+          "covers": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Covers",
+            "type": "array"
+          },
+          "frames": {
+            "title": "Frames",
+            "type": "integer"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "k": {
+            "title": "K",
+            "type": "integer"
+          },
+          "seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seconds"
+          },
+          "state": {
+            "enum": [
+              "done",
+              "running",
+              "queued",
+              "staged",
+              "failed",
+              "owed"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "k",
+          "frames",
+          "covers",
+          "state",
+          "job_id",
+          "clip_id",
+          "seconds"
+        ],
+        "title": "PlanBatch",
+        "type": "object"
+      },
+      "PlanLayer": {
+        "properties": {
+          "batches": {
+            "items": {
+              "$ref": "#/components/schemas/PlanBatch"
+            },
+            "title": "Batches",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "seconds_owed": {
+            "title": "Seconds Owed",
+            "type": "number"
+          },
+          "seed": {
+            "title": "Seed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "seed",
+          "batches",
+          "seconds_owed"
+        ],
+        "title": "PlanLayer",
+        "type": "object"
+      },
       "PlanStep": {
         "properties": {
           "after": {
@@ -15220,6 +15362,12 @@
       },
       "RunBody": {
         "properties": {
+          "from_batch": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "From Batch",
+            "type": "integer"
+          },
           "seed": {
             "anyOf": [
               {
@@ -15230,6 +15378,11 @@
               }
             ],
             "title": "Seed"
+          },
+          "stage": {
+            "default": false,
+            "title": "Stage",
+            "type": "boolean"
           }
         },
         "title": "RunBody",
@@ -25430,6 +25583,49 @@
           }
         },
         "summary": "Final Lines",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
+    "/finals/{fid}/plan": {
+      "get": {
+        "description": "CA4 (02 §3, proto01_animate 31 §4): the character layers' batches — the frames each adds, each one's state, its time when done, else\nits cost: the mean of this final's measured batches scaled by frames, else the queue's estimate (D60: what the job would run) — and the\nshot's total still owed.",
+        "operationId": "final_plan_finals__fid__plan_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinalPlan"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Final Plan",
         "tags": [
           "finals"
         ]

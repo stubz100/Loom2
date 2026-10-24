@@ -6,7 +6,7 @@
 import { useEffect } from 'react'
 import { create } from 'zustand'
 import { api, http, sha256Hex, unwrap, type ApiError } from '../../api/client'
-import type { Composition, Final, RenderSettings, StageDoc, StageObject } from '../../api/types'
+import type { BatchPlan, Composition, Final, RenderSettings, StageDoc, StageObject } from '../../api/types'
 import { useComposition } from '../animate/compositionStore'
 import { askConfirm, useSession } from '../../store/session'
 import { forLabel, useMakeFor } from '../../store/origin'
@@ -192,7 +192,12 @@ interface FinalsState {
   plate: (id: string) => Promise<void>
   project: (id: string) => Promise<void>
   /** PS5c: perform a character layer (Wan Animate in chained batches); a seed given is a re-take. */
-  perform: (id: string, layer: string, seed?: number) => Promise<void>
+  perform: (id: string, layer: string, seed?: number, opts?: { fromBatch?: number; stage?: boolean }) => Promise<void>
+  /** CA4: each final's batch plan (its states and costs), loaded with the finals. */
+  plans: Record<string, BatchPlan>
+  loadPlan: (id: string) => Promise<void>
+  /** CA4: every character layer not performed yet, staged in the queue (Run staged releases them — an overnight start). */
+  stagePerformances: (id: string) => Promise<void>
   /** PS5d: matte a performed character layer again (SAM 3 on its frames; it runs by itself after the last batch). */
   matte: (id: string, layer: string) => Promise<void>
   /** PS5e: composite the layers into the shot (a CPU job) — the clip lands on the final. */
@@ -281,15 +286,29 @@ export const useFinals = create<FinalsState>((set, get) => ({
       await get().load()
     } catch (e) { useSession.getState().toast(`Make the plate: ${(e as ApiError).detail ?? (e as Error).message ?? e}`, 'error') }
   },
-  perform: async (id, layer, seed) => {
+  perform: async (id, layer, seed, opts) => {
     const f = get().finals.find((x) => x.id === id)
     const l = f?.layers.find((x) => x.id === layer)
     if (!f || !l) return
     try {
-      const r = await unwrap(http.POST('/finals/{fid}/layers/{lid}/run', { params: { path: { fid: id, lid: layer } }, body: { seed: seed ?? null } }))
-      useSession.getState().toast(`${l.name}: ${r.batches} batch${r.batches === 1 ? '' : 'es'} of Wan Animate queued${r.placed ? ' — the reference stands where the figure starts' : ' — the figure is not whole at the start: the reference is centred'}`, 'info')
+      const r = await unwrap(http.POST('/finals/{fid}/layers/{lid}/run', { params: { path: { fid: id, lid: layer } }, body: { seed: seed ?? null, from_batch: opts?.fromBatch ?? 0, stage: !!opts?.stage } }))
+      const how = opts?.stage ? 'staged' : 'queued'
+      useSession.getState().toast(opts?.fromBatch ? `${l.name}: from batch ${opts.fromBatch + 1} of ${r.batches} again with a new seed — ${how}`
+        : `${l.name}: ${r.batches} batch${r.batches === 1 ? '' : 'es'} of Wan Animate ${how}${r.placed ? ' — the reference stands where the figure starts' : ' — the figure is not whole at the start: the reference is centred'}`, 'info')
       await get().load()
+      void get().loadPlan(id)
     } catch (e) { useSession.getState().toast(`Perform ${l.name}: ${(e as ApiError).detail ?? (e as Error).message ?? e}`, 'error') }
+  },
+  plans: {},
+  loadPlan: async (id) => {
+    try { const p = await unwrap(http.GET('/finals/{fid}/plan', { params: { path: { fid: id } } })); set({ plans: { ...get().plans, [id]: p } }) } catch { /* a plan is advice */ }
+  },
+  stagePerformances: async (id) => {
+    const f = get().finals.find((x) => x.id === id)
+    if (!f) return
+    const todo = f.layers.filter((l) => l.kind === 'figure' && !l.batches.length)
+    for (const l of todo) await get().perform(id, l.id, undefined, { stage: true })
+    if (todo.length) useSession.getState().toast(`${todo.length} performance${todo.length === 1 ? '' : 's'} staged — the queue's Run staged starts them`, 'info')
   },
   matte: async (id, layer) => {
     try { await unwrap(http.POST('/finals/{fid}/layers/{lid}/matte', { params: { path: { fid: id, lid: layer } }, body: { text: 'person' } })); await get().load() }

@@ -1132,6 +1132,10 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   expect(pf.status).toBe(200)
   await expect(page.locator('.final-section li[data-kind="plate"] .status')).toHaveText(/done · 9 frames/)
   await expect(page.locator('.final-section li[data-kind="plate"] img.still')).toBeVisible()
+  // CA4: the batch plan before the performance — one batch owed, its cost; the final's line offers to stage the performances
+  await expect(page.locator('.final-section li[data-kind="figure"] [data-batch="0"]')).toHaveClass(/b-owed/)
+  await expect(page.locator('.final-section [data-plan] .hint')).toContainText(/owe ≈ \d+ min/)
+  await expect(page.locator('.final-section [data-stage-runs]')).toBeVisible()
   // PS5c: the character layer — its reference (the anim ref; not keyable off a plain ground here, so padded), Wan Animate on the fake engine, one batch of 9
   await page.locator('.final-section li[data-kind="figure"] button', { hasText: 'Perform' }).click()
   type Fig = Lay & { batches: { k: number; job_id: string; clip_id: string | null }[]; guide_asset_id: string | null; reference_asset_id: string | null }
@@ -1142,6 +1146,7 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   const perf = (await api<{ items: { id: string; recipe: { kind: string; guide: { kind: string }; chain: { offset: number } | null; frames: number } }[] }>('GET', '/jobs')).items.find((j) => j.id === fig.batches[0].job_id)!
   expect(perf.recipe.guide.kind).toBe('pose'); expect(perf.recipe.chain?.offset).toBe(0); expect(perf.recipe.frames).toBe(9)
   await expect(page.locator('.final-section li[data-kind="figure"] button', { hasText: 'Re-take' })).toBeVisible()
+  await expect(page.locator('.final-section li[data-kind="figure"] [data-batch="0"]')).toHaveClass(/b-done/, { timeout: 15_000 })   // CA4: the plan follows
   const matteJob = (await api<{ items: { id: string; kind: string; status: string }[] }>('GET', '/jobs')).items.find((j) => fig.job_ids.includes(j.id) && j.kind === 'matte_sequence')
   expect(matteJob?.status).toBe('done')                                                                    // PS5d: SAM 3 on the layer's frames, by itself
   // D125 (A1, WB1/WB2): a Story shot on the final's camera — the final was made without the For chip, so its clips follow the camera

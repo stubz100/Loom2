@@ -126,7 +126,7 @@
 .final-section .final-row { border: 1px solid var(--line2); border-radius: var(--radius); padding: 6px 8px; margin-top: 6px; }
 .final-section .final-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .final-section .final-layers { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 2px; }
-.final-section .final-layers li { display: grid; grid-template-columns: 72px 1fr auto auto; gap: 6px; font-size: 12px; }   /* D116: kind · name · status · action, in columns */
+.final-section .final-layers li { display: grid; grid-template-columns: 72px 1fr auto auto auto; gap: 6px; font-size: 12px; }   /* D116: kind · name · status · (CA4: batches) · action, in columns */
 .final-section .final-layers .kind { color: var(--fg3); }
 .final-section .final-layers .status { color: var(--fg3); }
 .final-section .final-layers .status.s-done { color: var(--keep); }
@@ -203,3 +203,11 @@
 .things-sheet .things-pic canvas { position: absolute; left: 0; top: 0; cursor: crosshair; }
 .things-sheet .foot { display: flex; align-items: center; gap: 8px; }
 .things-sheet .foot .things-kept { color: var(--fg3); font-size: 12px; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* CA4 / CA5: a character layer's batches — a chip each (its state), the time owed; a chip's right-click re-takes from it */
+.final-section .final-layers .batches { display: inline-flex; gap: 3px; align-items: center; }
+.final-section .final-layers .batch { padding: 0 5px; border-radius: 3px; background: var(--bg3); color: var(--fg2); font-size: 11px; line-height: 16px; cursor: context-menu; }
+.final-section .final-layers .batch.b-done { color: var(--keep); }
+.final-section .final-layers .batch.b-running, .final-section .final-layers .batch.b-queued, .final-section .final-layers .batch.b-staged { color: var(--accent); }
+.final-section .final-layers .batch.b-failed { color: var(--reject); }
+.final-section .final-layers .batches .owed { color: var(--fg3); font-size: 11px; margin-left: 4px; }
+.final-section .final-plan { display: flex; gap: 8px; align-items: center; margin: 4px 0; }

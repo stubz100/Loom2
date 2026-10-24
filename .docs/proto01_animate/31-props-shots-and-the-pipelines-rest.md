@@ -31,7 +31,7 @@ VRAM). The winner becomes `open`'s image → 3D, the losers' weights deleted (ho
 E28's P3 (a prop drawn inside its holder's Wan Animate layer from a reference holding it) is dropped. A held prop is D109's 3D model
 **parented to the holder's hand** in Stage:
 
-**HP1 · in the hand** (Stage, no GPU but the rig check):
+**HP1 · in the hand** ✓ built 2026-10-24 (§2a) (Stage, no GPU but the rig check):
 
 - `StageObject.parent_joint` (`r_hand` | `l_hand`) beside `parent` (the figure): a bound mesh parented to a figure follows the hand's
   world transform every frame, with the offset the author sets (the transform is local to the hand). The Simple figure's hand is the
@@ -44,6 +44,18 @@ E28's P3 (a prop drawn inside its holder's Wan Animate layer from a reference ho
   the final's composite holds it in the hand.
 
 Generate's still-image wording (*holding …*, D93 C6) is a picture's prompt, not a layer, and stays.
+
+### 2a. HP1 as built (2026-10-24)
+
+- `StageObject.parent_joint` (`r_hand` / `l_hand`) with `parent` the figure: a prop (a 3D model, a stand-in, an image plane) held by a
+  figure — the server refuses anything else (a set or a light held, a figure held, a hand without its figure). Its transform is local to the
+  hand: the figure's wrist marker (COCO-18's wrist at the forearm's end, turning with it; `held.ts`), re-placed by the engine after every
+  pose, so the passes, the final's prop layer and every render see it in the hand; the gizmo moves it on the hand.
+- *Hold in a hand ▸ <figure> · right hand / left hand* on a prop's right-click (the viewport or the outliner), *Take it out of the hand*
+  there and in the Inspector's *held* row (it stays where it is). A figure deleted lets its held things go where they stand.
+- Rig (`scripts/hp1_acceptance.cjs`, 3/3, the A1 stage in a visible Edge, Mara walking her library clip with a cup in her right hand, Stage's
+  own passes every 8th frame at 832 × 468): the cup in every sampled mask (16/16, ≈ 238 px), within 7.8 px of her right-wrist keypoint at
+  worst, travelling 117 px with her.
 
 ## 3. RC2 — the Shot node
 
@@ -134,7 +146,7 @@ A part shows a *linked · N Shots* badge with its users; the Catalogue's *Duplic
 | **AE5 · the output** ✓ built 2026-10-24 (§4a) | the finished shot's **render settings** (quality, resolution, frame rate, motion blur, frame blending, colour depth; proxy use off) and **output modules** (the PNG master always; ProRes 4444 with alpha beside it; the H.264 proxy) on the final, shown in the Final mode's foot and the render's Inspector; `comp_render` runs EffectCraft's render queue with them (`renderQueue.add` takes every one) | no (CPU, D113) | 1–2 |
 | **CA4 · the plan with its cost** ✓ built 2026-10-24 (§4b) | each character layer's batches (77 frames, 5 carried) with the frames each covers and its minutes from the measured runs; the shot's total; *Stage the runs* (the queue's *staged* jobs, released by *Run staged*) for an overnight start | no | 1 |
 | **CA5 · re-take from a batch** ✓ built 2026-10-24 (§4b) | *Re-take from this batch* on a layer's batch: that batch and the ones after it again with a new seed, the batches before kept (the carried frames come from the kept batch) | yes (rig) | 1–2 |
-| **HP1 · in the hand** | D129, §2 | rig check | 2 |
+| **HP1 · in the hand** ✓ built 2026-10-24 (§2a) | D129, §2 | rig check | 2 |
 | **CA3 · the plate for large moves** | spike **E34** first: the depth-guided plate video — LTX-2.3's IC-LoRA union control (Stage's guided method already loads it) with the plate still as the first frame and the bare set's depth along the camera path as the control; measured on an orbit and a long dolly against the projection (stretch, the still's match at frame 1, seconds, VRAM). If it holds: the final's plate gets a method (*projected* for small moves, *generated along the path* for large ones, chosen by the camera's travel), its frames a plate layer like the projection's; and O4 (RC2f's plate): a Shot's Klein plate made with its scene's first plate as a reference, so the room reads the same from another camera | yes (spike, then rig) | 3–4 |
 | **E33** | D128's open image → 3D (§1), downloads asked for first | yes | 1–2 |
 

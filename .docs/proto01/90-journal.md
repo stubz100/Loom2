@@ -9035,3 +9035,19 @@ patched (the Mid attenuated). A track with plugins is printed onto a hidden comp
   route), the final-shot e2e's plan chips and line; routes_d37 +1. Offline 581 passed, settings audit and agents_check clean, Vitest 465 + 3
   skipped, typecheck, lint (0 errors, 79 warnings) and build clean, e2e full 63/63 and open 63/63. Screenshots img/31-ca4-plan.jpg,
   img/31-ca5-retake-menu.jpg.
+
+## 2026-10-24 21:00 — HP1 built: a held prop is its own thing in a figure's hand (D129, proto01_animate 31 §2a)
+
+- `StageObject.parent_joint` (`r_hand` / `l_hand`) with `parent` the figure; the server refuses anything but a prop (a 3D model, a stand-in,
+  an image plane) in a figure's hand. Its transform is local to the hand — the figure's wrist marker (`held.ts`: `heldWorld`, `onHand`) —
+  and the engine places it after every pose, so the passes, the final's prop layer and every render have it in the hand; the gizmo moves
+  it on the hand.
+- *Hold in a hand ▸ <figure> · right hand / left hand* on a prop's right-click, *Take it out of the hand* (it stays where it is) there and
+  in the Inspector's *held* row; a deleted figure lets its held things go where they stand.
+- **Rig** (`scripts/hp1_acceptance.cjs`, 3/3, the A1 stage in a visible Edge, Mara walking her library clip with a cup in her right hand,
+  Stage's passes every 8th frame at 832 × 468): the cup in every sampled mask (16/16), at worst 7.8 px from her right-wrist keypoint,
+  travelling 117 px with her.
+- Tests: test_held_d129.py (what is held and by whom), held.test.ts (3: on the wrist and following the arm, an offset and a gizmo's move
+  back on the hand, who can hold), a new e2e scenario (into the right hand from the outliner's right-click, up with the waving hand, the
+  Inspector's held row, taken out where it stands). Offline 582 passed, settings audit and agents_check clean, Vitest 468 + 3 skipped,
+  typecheck, lint (0 errors, 79 warnings) and build clean, e2e full 64/64 and open 64/64. Screenshot img/31-hp1-held.jpg.

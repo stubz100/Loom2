@@ -11123,6 +11123,8 @@ export interface components {
             name: string;
             /** Parent */
             parent: string | null;
+            /** Parent Joint */
+            parent_joint: ("r_hand" | "l_hand") | null;
             /** Path */
             path: number[][] | null;
             /** Plate Asset Id */

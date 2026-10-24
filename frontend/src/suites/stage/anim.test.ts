@@ -4,7 +4,7 @@ import type { StageCamera, StageDoc, StageObject } from '../../api/types'
 import { bracket, clipFrames, keyedFrames, keyframesOf, neighbourKey, sampleCamera, sampleDoc, sampleObject, withKey, withoutKey, type CameraKey, type ObjectKey } from './anim'
 
 const cam: StageCamera = { id: 'cam', name: 'Camera 1', pos: [0, 1.5, 4], target: [0, 1, 0], roll: 0, focal_mm: 35, sensor_mm: 36 }
-const obj = { id: 'fig', kind: 'mannequin', name: 'Figure 1', preset: 'adult', asset_id: null, transform: { pos: [0, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] }, parent: null, locked: false, visible: true, colour_id: 1, pose: { preset: 'stand', joints: {} }, billboard: false } as unknown as StageObject
+const obj = { id: 'fig', kind: 'mannequin', name: 'Figure 1', preset: 'adult', asset_id: null, transform: { pos: [0, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] }, parent: null, parent_joint: null, locked: false, visible: true, colour_id: 1, pose: { preset: 'stand', joints: {} }, billboard: false } as unknown as StageObject
 
 describe('anim', () => {
   it('brackets a frame between keys, holds outside, eases when asked', () => {

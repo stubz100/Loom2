@@ -11,6 +11,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { api } from '../../api/client'
 import type { StageCamera, StageDoc, StageObject } from '../../api/types'
 import { applyPose, clay, JOINTS, mannequin, POSES, prop, set as buildSet, setMaterial, vfovFor, type Body, type Joint, type Mannequin } from './builders'
+import { HAND_MARKER, heldWorld, onHand, transformOf } from './held'
 import { CHAINS, eulerDeg, figureChain, solveTwoBone, type Chain } from './ik'
 import { makeDetailed, type Detailed, type HandPreset } from './detailed'
 import { measure } from './motion/path'
@@ -283,6 +284,8 @@ export class StageEngine {
     }
     const id = [...this.entries.entries()].find(([, e]) => e.holder === o)?.[0]
     if (!id) return
+    const hand = this.handOf(this.entries.get(id)!.doc)
+    if (hand) { o.updateMatrix(); this.hooks.onTransformed(id, onHand(hand, o.matrix)); return }        // D129: a held thing moves on its hand
     const r = o.rotation
     this.hooks.onTransformed(id, { pos: [o.position.x, o.position.y, o.position.z].map((v) => +v.toFixed(4)), rot: [deg(r.x), deg(r.y), deg(r.z)].map((v) => +v.toFixed(2)), scale: [o.scale.x, o.scale.y, o.scale.z].map((v) => +v.toFixed(4)) })
   }
@@ -437,6 +440,7 @@ export class StageEngine {
     for (const [id, e] of [...this.entries]) if (!seen.has(id)) { this.scene.remove(e.holder); e.proxy?.dispose(); this.entries.delete(id); if (this.selectedId === id) this.select(null) }
     this.syncLight(doc)
     this.followAll()
+    this.placeHeld()
     this.syncPaths(doc)
     // cameras: helpers for the inactive ones, the active one drives the render camera
     const cams = new Set(doc.cameras.map((c) => c.id))
@@ -727,6 +731,25 @@ export class StageEngine {
     for (const [id, p] of [...this.paths]) if (!seen.has(id)) { this.scene.remove(p.obj); this.paths.delete(id) }
   }
   /** CA1: every Detailed figure after its joints (a key, a gizmo drag, the IK, a sampled frame). */
+  /** D129 (HP1): a held thing follows its figure's hand — its transform is local to the wrist marker, re-placed after every pose. */
+  private placeHeld(): void {
+    for (const e of this.entries.values()) {
+      const hand = this.handOf(e.doc)
+      if (hand) heldWorld(hand, e.doc.transform).decompose(e.holder.position, e.holder.quaternion, e.holder.scale)
+    }
+  }
+  private handOf(o: StageObject): THREE.Object3D | null {
+    if (!o.parent_joint || !o.parent) return null
+    const fig = this.entries.get(o.parent)?.figure
+    return fig ? fig.markers[HAND_MARKER[o.parent_joint]] ?? null : null
+  }
+  /** D129: an object's world transform as it stands now (a held thing let go stays where it is). */
+  worldOf(id: string): StageObject['transform'] | null {
+    const e = this.entries.get(id)
+    if (!e) return null
+    e.holder.updateMatrixWorld(true)
+    return transformOf(e.holder.matrixWorld)
+  }
   followAll(): void {
     for (const e of this.entries.values()) if (e.detailed && e.figure) { e.holder.updateMatrixWorld(true); e.detailed.follow(e.figure.joints, e.doc.pose?.extra) }
   }

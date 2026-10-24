@@ -209,6 +209,10 @@ interface StageState {
   /** SC3b (D120): the picture set rebuilt in place with a corrected lens (MoGe's reading wobbles); the stage reloads when it lands. */
   rebuildImageSet: (setId: string, lensDeg: number) => Promise<void>
   updateObject: (id: string, patch: Partial<StageObject>) => void
+  /** D129 (HP1): a prop put in a figure's hand (it moves with the hand; its transform is its place on the hand), or taken out where it stands. */
+  hold: (id: string, figureId: string, hand: 'r_hand' | 'l_hand') => void
+  letGo: (id: string) => void
+  worldOf: ((id: string) => Transform | null) | null                    // D129: the mounted viewport registers it (an object's world transform now)
   /** D110 (PS4): the sky light's strength (null = the default: 0.85 under lights, 1.1 without). */
   setAmbient: (v: number | null) => void
   /** D110 (PS4): a light above and in front of a point (the viewport's centre), aimed at it — a sun from the upper front-left. */
@@ -295,7 +299,7 @@ const thumbed = new Set<string>()                                            // 
 export const useStage = create<StageState>()((set, get) => ({
   stages: [], current: null, selected: null, selectedCamera: null, stageSelected: false, posing: false, tool: 'select', snap: false, view: 'free', guides: true, pip: true, undo: [], redo: [], saving: false,
   frameRequest: { ids: null, n: 0 }, selectedJoint: null, userPoses: {}, templates: [], pendingSet: null,
-  shot: DEFAULT_SHOT, shotPreview: null, shotPreviewError: null, rendering: false, shots: [], passRenderer: null,
+  shot: DEFAULT_SHOT, shotPreview: null, shotPreviewError: null, rendering: false, shots: [], passRenderer: null, worldOf: null,
   frame: 0, playing: false, guideKind: 'depth', clipMethod: 'guided', shotStart: null, rendered: null, sequenceRenderer: null, plateProjector: null,
   meshes: [],
 
@@ -650,7 +654,7 @@ export const useStage = create<StageState>()((set, get) => ({
     const n = cur.objects.filter((o) => o.kind === kind).length + 1
     const name = `${NAMES[kind] ?? kind} ${n}`
     const scale = kind === 'mannequin' ? (MANNEQUIN_PRESETS[preset ?? 'adult']?.scale ?? 1) : 1
-    const o: StageObject = { id, kind, name, preset, asset_id: assetId, transform: { pos: pos ?? [0, 0, 0], rot: [0, 0, 0], scale: [scale, scale, scale] }, parent: null,
+    const o: StageObject = { id, kind, name, preset, asset_id: assetId, transform: { pos: pos ?? [0, 0, 0], rot: [0, 0, 0], scale: [scale, scale, scale] }, parent: null, parent_joint: null,
       locked: false, visible: true, colour_id: (cur.objects.length % 12) + 1, pose: kind === 'mannequin' ? { preset: 'stand', joints: {}, extra: {} } : null, billboard: kind === 'plane', profile_id: null, version: null, body: null, detail: null, path: null, shadow_proxy: null,
       light: kind === 'light' ? { ...NEW_LIGHT, target: [...NEW_LIGHT.target] } : null,
       lens_deg: null, plate_asset_id: null, floor_y: null, plate_camera_id: null, level: null, things: [], things_document_id: null }
@@ -694,6 +698,12 @@ export const useStage = create<StageState>()((set, get) => ({
     } catch (e) { useSession.getState().toast(`Rebuild the set failed: ${(e as ApiError).detail ?? e}`, 'error') }
   },
   updateObject: (id, patch) => get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id ? { ...o, ...patch } : o)) }), 'edit'),
+  hold: (id, figureId, hand) => get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id
+    ? { ...o, parent: figureId, parent_joint: hand, transform: { pos: [0, -0.04, 0.03], rot: [0, 0, 0], scale: o.transform.scale } } : o)) }), 'hold'),
+  letGo: (id) => {
+    const world = get().worldOf?.(id) ?? null                                                       // where it stands now (the viewport's engine)
+    get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id ? { ...o, parent: null, parent_joint: null, ...(world ? { transform: world } : {}) } : o)) }), 'let go')
+  },
   setAmbient: (v) => get().apply((d) => ({ ...d, ambient: v }), 'ambient'),
   addLight: (at) => {
     const c = at ?? [0, 0, 0]
@@ -711,11 +721,13 @@ export const useStage = create<StageState>()((set, get) => ({
     get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id ? { ...o, transform: t } : o)) }), 'transform')
   },
   removeObject: (id) => {
+    const worldOf = get().worldOf
     get().apply((d) => {
       const gone = new Set<string>([id])
       let grew = true
-      while (grew) { grew = false; for (const o of d.objects) if (o.parent && gone.has(o.parent) && !gone.has(o.id)) { gone.add(o.id); grew = true } }
-      return { ...d, objects: d.objects.filter((o) => !gone.has(o.id)) }
+      while (grew) { grew = false; for (const o of d.objects) if (o.parent && !o.parent_joint && gone.has(o.parent) && !gone.has(o.id)) { gone.add(o.id); grew = true } }
+      return { ...d, objects: d.objects.filter((o) => !gone.has(o.id)).map((o) => (o.parent_joint && o.parent && gone.has(o.parent)          // D129: a held thing is let go where it is
+        ? { ...o, parent: null, parent_joint: null, transform: worldOf?.(o.id) ?? o.transform } : o)) }
     }, 'remove')
     if (get().selected === id) set({ selected: null })
   },

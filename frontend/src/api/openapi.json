@@ -17565,6 +17565,21 @@
             ],
             "title": "Parent"
           },
+          "parent_joint": {
+            "anyOf": [
+              {
+                "enum": [
+                  "r_hand",
+                  "l_hand"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Joint"
+          },
           "path": {
             "anyOf": [
               {
@@ -17693,6 +17708,7 @@
           "asset_id",
           "transform",
           "parent",
+          "parent_joint",
           "locked",
           "visible",
           "colour_id",

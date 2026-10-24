@@ -1,12 +1,13 @@
 // P13 / ST1 (D81): the Stage suite's verbs — every one has a mouse home (the gizmo bar, the panel, the Inspector, the viewport's
 // right-click menu) per D32; G / R / S / W, F, Delete, Ctrl+Z / Ctrl+Shift+Z are accelerators.
-import { Aperture, Box, PersonStanding, PictureInPicture2, Sun, UserRound, UserX, Camera, Clapperboard, Copy, Crosshair, Diamond, Eye, EyeOff, Focus, Frame, Grid3x3, ImagePlus, Layers, Pencil, Lock, LockOpen, Magnet, Move3d, MousePointer2, Play, Plus, Redo2, Rotate3d, Route, Scaling, Trash2, Undo2, User, Video, X } from 'lucide-react'
+import { Aperture, Box, Hand, PersonStanding, PictureInPicture2, Sun, UserRound, UserX, Camera, Clapperboard, Copy, Crosshair, Diamond, Eye, EyeOff, Focus, Frame, Grid3x3, ImagePlus, Layers, Pencil, Lock, LockOpen, Magnet, Move3d, MousePointer2, Play, Plus, Redo2, Rotate3d, Route, Scaling, Trash2, Undo2, User, Video, X } from 'lucide-react'
 import { registerCommands, sep, type Command, type MenuItem } from '../../frame/commands'
 import { askConfirm, askText, useSession } from '../../store/session'
 import { MANNEQUIN_PRESETS, PROP_PRESETS, SET_PRESETS } from './builders'
 import { st, useStage, type Kind, type Tool } from './stageStore'
 import { nextFinalStep, useFinals } from './finalShot'
 import type { HandPreset } from './detailed'
+import { canHold, HAND_LABEL, holders } from './held'
 import { profilesForMentions, useStory } from '../story/storyStore'
 import { useMakeFor } from '../../store/origin'
 import { useMotion } from './motion/motionStore'
@@ -69,6 +70,9 @@ registerCommands([
     when: () => sel()?.kind === 'mannequin' && !!useMotion.getState().picked && !useMotion.getState().applying, run: () => void useMotion.getState().apply() },
   { id: 'stage.motion.refresh', scope: 'stage', label: 'List the motion files again', icon: Redo2, placement: ['panel'], when: hasStage, run: () => void useMotion.getState().refresh() },
   { id: 'stage.object.duplicate', scope: 'stage', label: 'Duplicate', icon: Copy, keys: 'Ctrl+D', placement: ['inspector', 'context'], when: hasSel, run: () => st().duplicateObject(st().selected!) },
+  // D129 (HP1): a prop held — its own model in a figure's hand, never drawn into the character; put in a hand from the right-click's Hold ▸
+  { id: 'stage.object.letGo', scope: 'stage', label: 'Take it out of the hand', icon: Hand, placement: ['inspector', 'context'], hint: 'it stays where it is now, no longer following the hand',
+    when: () => !!sel()?.parent_joint, run: () => st().letGo(st().selected!) },
   { id: 'stage.object.lock', scope: 'stage', label: 'Lock / unlock', icon: Lock, keys: 'Ctrl+L', placement: ['inspector', 'context'], when: hasSel, run: () => { const o = sel()!; st().updateObject(o.id, { locked: !o.locked }) } },
   { id: 'stage.object.hide', scope: 'stage', label: 'Hide / show', icon: EyeOff, keys: 'H', placement: ['inspector', 'context'], when: hasSel, run: () => { const o = sel()!; st().updateObject(o.id, { visible: !o.visible }) } },
   { id: 'stage.object.reset', scope: 'stage', label: 'Reset transform', icon: LockOpen, placement: ['inspector', 'context'], when: hasSel, run: () => { const o = sel()!; st().setTransform(o.id, { pos: [o.transform.pos[0], 0, o.transform.pos[2]], rot: [0, 0, 0], scale: [1, 1, 1] }) } },
@@ -144,10 +148,21 @@ export function bindItems(): MenuItem[] {
     sep, { cmd: 'stage.figure.unbind' }, { cmd: 'stage.figure.openInCast' }] }]
 }
 
+/** D129 (HP1): *Hold ▸ <figure> · right hand / left hand* for a prop (a 3D model, a stand-in or an image plane), and *Take it out of the hand*. */
+function holdItems(): MenuItem[] {
+  const o = sel()
+  if (!o || !canHold(o)) return []
+  const figs = holders(st().current?.objects ?? [])
+  const items: MenuItem[] = figs.length ? figs.flatMap((f): MenuItem[] => (['r_hand', 'l_hand'] as const).map((h) => ({ label: `${f.name} · ${HAND_LABEL[h]}`, checked: o.parent === f.id && o.parent_joint === h,
+    run: () => st().hold(o.id, f.id, h) }))) : [{ label: 'no figure on the stage', disabled: true, run: () => {} }]
+  return [{ label: 'Hold in a hand', icon: Hand, items: [...items, sep, { cmd: 'stage.object.letGo' }] }, sep]
+}
+
 /** Right-click on an object (selected by the caller) or on empty space. */
 export function viewportMenu(onObject: boolean): MenuItem[] {
   return onObject
     ? [{ cmd: 'stage.frameSel' }, { cmd: 'stage.object.rename' }, { cmd: 'stage.object.duplicate' }, { cmd: 'stage.object.lock' }, { cmd: 'stage.object.hide' }, { cmd: 'stage.object.reset' }, sep,
+      ...holdItems(),
       ...(sel()?.kind === 'mannequin' ? [...bindItems(), { cmd: 'stage.pose.mode' }, { cmd: 'stage.pose.mirror' }, { cmd: 'stage.pose.reset' }, { cmd: 'stage.pose.save' }, { cmd: 'stage.motion.apply' }, { cmd: 'stage.path.clear' }, sep] : []),
       { cmd: 'stage.anim.keyObject' }, sep, { cmd: 'stage.object.delete' }, sep, { cmd: 'stage.undo' }, { cmd: 'stage.redo' }]
     : [addMenu(), { cmd: 'stage.add.plane' }, { cmd: 'stage.camera.add' }, { cmd: 'stage.camera.setFromView' }, cameraShotItem(), sep, { cmd: 'stage.tool.select' }, { cmd: 'stage.tool.move' }, { cmd: 'stage.tool.rotate' }, { cmd: 'stage.tool.scale' }, { cmd: 'stage.tool.path' }, { cmd: 'stage.snap' }, sep, { cmd: 'stage.frameAll' }, sep,

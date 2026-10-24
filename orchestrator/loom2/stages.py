@@ -97,6 +97,7 @@ class StageObject(BaseModel):
     asset_id: str | None = None                    # plane: the Catalogue image; mesh: the GLB asset (P18)
     transform: Transform = Field(default_factory=Transform)
     parent: str | None = None
+    parent_joint: Literal["r_hand", "l_hand"] | None = None   # D129 (HP1): held — `parent` is the figure, the transform is local to that hand
     locked: bool = False
     visible: bool = True
     colour_id: int = 0                             # the object-ID mask colour (ST3)
@@ -205,6 +206,8 @@ def check(st: Stage) -> None:
             raise ValueError(f"object {o.id}: a transform has three components each")
         if o.light is not None and (o.kind != "light" or len(o.light.target) != 3):
             raise ValueError(f"object {o.id}: light settings belong to a light, aimed at an [x, y, z] point")   # D110 (PS4)
+        if o.parent_joint is not None and (o.parent is None or by[o.parent].kind != "mannequin" or o.kind not in ("mesh", "prop", "plane")):
+            raise ValueError(f"object {o.id}: a held thing is a prop (a 3D model, a stand-in or an image plane) in a figure's hand")   # D129 (HP1)
         if o.profile_id is not None and o.kind not in ("mannequin", "mesh"):
             raise ValueError(f"object {o.id}: only a figure (to a character) or a 3D model (to a prop) is bound")   # D93 (C8), D110 (PS3)
     cids = [c.id for c in st.cameras]

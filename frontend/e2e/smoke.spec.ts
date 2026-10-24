@@ -3485,3 +3485,39 @@ test('the recipe graph in Story and the Catalogue (RC1c): Open its recipe shows 
   await expect(page.locator('[data-testid="animate-graph"] .recipe-strip')).toContainText(`Rec ${tag}`)
   await page.locator('button.graph-pill').click()
 })
+
+test('a prop held in a hand (D129 · HP1): a prop goes into a figure\'s right hand from its right-click, follows the hand when the pose changes, and is taken out where it stands', async ({ page }) => {
+  test.setTimeout(90_000)
+  const tag = Date.now().toString(36)
+  type Obj = { id: string; name: string; parent: string | null; parent_joint: string | null; transform: { pos: number[] } }
+  type StageLite = { id: string; revision: number; objects: Obj[] }
+  const st0 = await api<StageLite>('POST', '/stages', { name: `Held ${tag}` })
+  await api('PUT', `/stages/${st0.id}`, { ...st0, objects: [
+    { id: 'fig_m', kind: 'mannequin', name: 'Mara', preset: 'adult', transform: { pos: [0, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] }, pose: { preset: 'stand', joints: {} }, colour_id: 1 },
+    { id: 'prop_c', kind: 'prop', name: 'Cup', preset: 'block', transform: { pos: [1.5, 0, 0], rot: [0, 0, 0], scale: [0.1, 0.1, 0.1] }, colour_id: 2 }],
+    cameras: [{ id: 'cam_1', name: 'Camera 1', pos: [0, 1.5, 5], target: [0, 1, 0], roll: 0, focal_mm: 35, sensor_mm: 36 }], active_camera: 'cam_1' })
+  await openApp(page, { suite: 'stage' })
+  type StageHook = { open: (id: string) => Promise<void>; worldOf: (id: string) => { pos: number[] } | null }
+  await expect.poll(async () => page.evaluate(() => !!(window as unknown as { __loom2Stage?: StageHook }).__loom2Stage), { timeout: 30_000 }).toBe(true)
+  await page.evaluate(async (id) => { await (window as unknown as { __loom2Stage: StageHook }).__loom2Stage.open(id) }, st0.id)
+  await expect(page.locator('canvas.stage-canvas')).toBeVisible()
+  await openSection(page, 'Scene')
+  const cupRow = page.locator('.outl-row[data-row="object"]').filter({ has: page.locator('.name', { hasText: 'Cup' }) })
+  await cupRow.click({ button: 'right' })
+  await page.locator('.ctx-menu .item.sub', { hasText: 'Hold in a hand' }).hover()
+  await page.locator('.ctx-menu button.item', { hasText: 'Mara · right hand' }).click()
+  await expect.poll(async () => { const o = (await api<StageLite>('GET', `/stages/${st0.id}`)).objects.find((x) => x.id === 'prop_c')!; return `${o.parent} ${o.parent_joint}` }, { timeout: 10_000 }).toBe('fig_m r_hand')
+  const world = () => page.evaluate(() => (window as unknown as { __loom2Stage: StageHook }).__loom2Stage.worldOf('prop_c'))
+  await expect.poll(async () => (await world())!.pos[0], { timeout: 10_000 }).toBeLessThan(0)          // at Mara's right hand (her right is −x), no longer at 1.5
+  const low = (await world())!.pos[1]
+  await page.locator('.outl-row[data-row="object"]').filter({ has: page.locator('.name', { hasText: 'Mara' }) }).click()
+  await page.locator('.row-editor select').filter({ has: page.locator('option[value="wave"]') }).first().selectOption('wave')
+  await expect.poll(async () => (await world())!.pos[1] - low, { timeout: 10_000 }).toBeGreaterThan(0.5)   // up with the waving hand
+  await cupRow.click()
+  await expect(page.locator('.row-editor [data-held]')).toContainText("Mara's right hand")
+  const at = (await world())!.pos
+  await page.locator('.row-editor [data-held] button', { hasText: 'Take it out of the hand' }).click()            // the Inspector's (also under Hold in a hand ▸)
+  await expect.poll(async () => (await api<StageLite>('GET', `/stages/${st0.id}`)).objects.find((x) => x.id === 'prop_c')!.parent_joint, { timeout: 10_000 }).toBeNull()
+  const out = (await api<StageLite>('GET', `/stages/${st0.id}`)).objects.find((x) => x.id === 'prop_c')!.transform.pos
+  out.forEach((v, i) => expect(Math.abs(v - at[i])).toBeLessThan(0.01))                                 // where it was in the hand
+})

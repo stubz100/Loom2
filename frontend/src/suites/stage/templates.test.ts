@@ -6,7 +6,7 @@ import type { StageDoc, StageObject } from '../../api/types'
 import { st, TEMPLATE_KINDS, useStage } from './stageStore'
 
 const OBJ = (id: string, kind: StageObject['kind'], name: string, extra: Partial<StageObject> = {}): StageObject => ({
-  id, kind, name, preset: null, asset_id: null, transform: { pos: [1, 0, 2], rot: [0, 0, 0], scale: [1, 1, 1] }, parent: null, locked: false, visible: true, colour_id: 1,
+  id, kind, name, preset: null, asset_id: null, transform: { pos: [1, 0, 2], rot: [0, 0, 0], scale: [1, 1, 1] }, parent: null, parent_joint: null, locked: false, visible: true, colour_id: 1,
   pose: null, billboard: true, profile_id: null, version: null, body: null, detail: null, shadow_proxy: null, path: null, light: null, ...extra } as StageObject)
 const DOC = { schema_version: 2, id: 'stg_1', name: 'Room', size: { w: 1920, h: 1080, fps: 24 },
   objects: [OBJ('set_1', 'set', 'Set 1', { preset: 'room' }), OBJ('prop_1', 'prop', 'Prop 1', { preset: 'crate', parent: 'set_1' }), OBJ('fig_1', 'mannequin', 'Figure 1'), OBJ('light_1', 'light', 'Light 1')],

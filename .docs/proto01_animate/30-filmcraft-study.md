@@ -1,6 +1,6 @@
 # 30 · RC4's study — FilmCraft for the cut editor
 
-Status: **study, 2026-10-24; answered the same day → D126 (§10); CE1 built (§11); CE2 built (§13); CE3 built (§15); D127 (§16): the channel strip and VST3 chains, building; CE4 after.** D96 planned RC4 as "FilmCraft reviewed as 03 reviewed EffectCraft
+Status: **study, 2026-10-24; answered the same day → D126 (§10); CE1 built (§11); CE2 built (§13); CE3 built (§15); D127 (§16): the channel strip and VST3 chains — AU1 built (§17), AU2 next; CE4 after.** D96 planned RC4 as "FilmCraft reviewed as 03 reviewed EffectCraft
 (what to reuse, how), then the multi-track cut editor that replaces the single-lane Episode" ([05](05-flow-nodes-as-shot-recipes.md)
 §6), with O6 (a scene grade and shot-match in the cut, [06](06-continuity-across-shots.md)) attached. RC1–RC3 are built
 ([28](28-recipe-graph.md), [29](29-movie-render.md)); this is the study, measured where it could be (§3, the probe E32).
@@ -416,7 +416,38 @@ stale when the track's clips, its gain or its chain change; the mix, the movie a
 
 | Wave | Content |
 | --- | --- |
-| **AU1 · Settings and roles** | Settings › Audio: the loudness target (moved from Settings › FilmCraft) and each role's four defaults (dialogue, music, effects); a new cut's A1–A3 named and set as those roles; a track's role from its header |
+| **AU1 · Settings and roles** ✓ built 2026-10-24 (§17) | Settings › Audio: the loudness target (moved from Settings › FilmCraft) and each role's four defaults (dialogue, music, effects); a new cut's A1–A3 named and set as those roles; a track's role from its header |
 | **AU2 · the strip** | the four settings on every audio track (the track's Inspector and header: sliders with numbers), stored as the fader, the pan and the inserts; the width patch (`engine/patches/filmcraft/`, the build script, a new pin); measured on the rig |
 | **AU3 · the host** | `engine/vsthost/` — a C++ host on the VST 3 SDK (the SDK fetched at a pinned tag by the build script), `scan`, `render` (a chain over a WAV, offline), `editor` (a plugin's window, its state saved); pinned like FilmCraft; tests with the SDK's own sample plugins |
 | **AU4 · chains and printing** | a track's chain in the Inspector (add from the scanned plugins, reorder, bypass, open the editor, remove); printing (the companion track, staleness, before the mix, the movie and the exports); the rig with the SDK's samples and one of the author's plugins |
+
+## 17. AU1 as built (2026-10-24)
+
+- **Settings › Audio** (`config.AudioSettings`): the loudness target (moved from Settings › FilmCraft; an app.json from before keeps the
+  author's value, `Settings._loudness_moved`) with *as mixed*, and the strip of each role — dialogue 0 dB, music −6 dB, effects −3 dB of gain
+  by default, volume 0, pan 0, width 100 %. `config.TrackStrip` brings any value inside the requested ranges (gain ±36, volume −96…+18, pan
+  ±100, width 0–200).
+- **The strip in the project** (`cuts.strip_steps`, `cuts.strip_of`): the gain as pre-fader Amplify stages (+30 = 24 + 6), the width as a
+  Stereo Width after the track's other pre-fader effects, the volume as the fader up to +15 and a post-fader Amplify past it (+18 = 15 + 3),
+  the pan on the track; a neutral stage is no insert, the author's own effects stay where they are, and FilmCraft's 5 slots are said in
+  loom2's words when a strip would not fit. Read back from the project as it is (the floor −96 is −∞).
+- **Roles** in the sequence's `loom2.roles`: a new cut's A1–A3 are Dialogue, Music and Effects with Settings' strips (a converted cut too);
+  the header's right-click › *Role* names a track and sets its strip; *No role* keeps the strip. A sound on a dialogue track counts as
+  dialogue for *Duck* and *Even out*.
+- **The header's right-click** asks for *Gain…*, *Volume…* (−inf is silent), *Pan…* and *Width…*, each with its range and how it reads now;
+  the header shows the strip away from neutral under the name (`gain −6 dB · 65 % L · 35 % R · width 140 %`, the whole in its tooltip), the
+  Inspector's sound line too. Routes `POST /timelines/{id}/strip` (what changes; the rest stays) and `/role`; the cut's undo covers both.
+- **Rig** (`scripts/au_acceptance.py --parts roles,strip`, 10/10, the real FilmCraft, a 440 / 660 Hz pair at −60 dBFS measured by band
+  against the source): the roles on a new cut and the music's −6.04 dB in the mix; a neutral strip +0.01 dB; gain +30 with volume +18 heard
+  as +47.99 dB; −∞ silent (peak 0); pan 100 % left: the left +0.00 dB, the right silent; width 0 %: both sides one past the first 50 ms
+  (FilmCraft's Stereo Width glides to its setting over 20 ms from the render's start: 1.7e-3 there) and each tone −6.04 dB in both; undo;
+  a strip change 20 ms (median). The first run failed three checks on the meter, not on FilmCraft: the Hann window reads a sine +1.76 dB, so
+  the levels are now read against the source measured the same way, and the width check skips the glide. CE1 (14/14) and CE3 (7/7) re-run with the roles: CE3's music now sits on a Music track at −6 dB, its checks are relative and hold (gain −6.00, + volume −12.00, ducked 16.4 dB, the movie −16.0 LUFS).
+- Tests: `test_cuts_au1.py` (3: the settings and the moved loudness, the steps around the author's effects, roles / strips / the mix on
+  the fake — whose mixdown is now stereo, through the strip in FilmCraft's order); `cut.test.ts` +1; the tracks e2e scenario's strip and role
+  steps and a Settings › Audio scenario.
+
+![A new cut's roles; Music with its strip under the name](img/30-au1-tracks.jpg)
+![An audio track's right-click: the strip and Role](img/30-au1-track-menu.jpg)
+![Pan… with its range and how it reads now](img/30-au1-pan.jpg)
+![Settings › Audio](img/30-au1-settings.jpg)

@@ -1,7 +1,7 @@
 """Sequences (P17 / D83): the single-lane timeline documents — list, create, read, replace (409 on a stale revision), delete, and the
 EDL / FCPXML exports written from the document for Resolve (14 R151 / R152). CE1 (D126 #2): with FilmCraft built, a cut is a FilmCraft
 project written through the session (`_store`). CE2 (proto01_animate 30 §12): a FilmCraft cut's tracks, the editor's edits as FilmCraft
-commands, placing a Catalogue clip, picture or sound, *Update* in place and the viewer's frames."""
+commands, placing a Catalogue clip, picture or sound, *Update* in place and the viewer's frames. D127 (30 §16): an audio track's strip and role."""
 from __future__ import annotations
 
 import asyncio
@@ -36,7 +36,7 @@ def _store(svc, ws, cat=None) -> TimelineStore:
     """The cuts' store with the FilmCraft session's writer (CE1): changes go into a cut's project when FilmCraft is built."""
     from ..cuts import Cuts
     name_of, _, audio_of = _story_lookup(ws, cat)
-    return TimelineStore(ws, Cuts(ws, svc.filmcraft, audio_of, name_of))
+    return TimelineStore(ws, Cuts(ws, svc.filmcraft, audio_of, name_of, lambda: svc.app.settings.audio))
 
 
 @router.get("/timelines", response_model=TimelineList)
@@ -273,6 +273,34 @@ async def timeline_replace(svc: Svc, tl_id: str, body: CutReplace):
     return await _cut_call(svc, tl_id, body.revision, run)
 
 
+class CutStrip(BaseModel):
+    revision: int | None = None
+    track: int                                     # an audio track's id
+    gain_db: float | None = None                   # D127: what changes (the rest stays); the ranges are config.TrackStrip's
+    volume_db: float | None = None
+    pan: float | None = None
+    width: float | None = None
+
+
+class CutRole(BaseModel):
+    revision: int | None = None
+    track: int
+    role: Literal["dialogue", "music", "effects"] | None = None
+
+
+@router.post("/timelines/{tl_id}/strip", response_model=CutEdited, response_model_by_alias=True)
+async def timeline_strip(svc: Svc, tl_id: str, body: CutStrip):
+    """D127: an audio track's gain, volume, pan or width — written as FilmCraft's fader, pan and inserts, past its limits by a second stage."""
+    change = body.model_dump(include={"gain_db", "volume_db", "pan", "width"})
+    return await _cut_call(svc, tl_id, body.revision, lambda store, tl, ws, cat: [store.cuts.strip(tl, body.track, change)])
+
+
+@router.post("/timelines/{tl_id}/role", response_model=CutEdited, response_model_by_alias=True)
+async def timeline_role(svc: Svc, tl_id: str, body: CutRole):
+    """D127: an audio track's role — named after it, its strip set to the role's in Settings › Audio; none clears the role."""
+    return await _cut_call(svc, tl_id, body.revision, lambda store, tl, ws, cat: [store.cuts.role(tl, body.track, body.role)])
+
+
 class CutUndo(BaseModel):
     revision: int | None = None
 
@@ -301,7 +329,7 @@ async def timeline_mix(svc: Svc, tl_id: str):
     if tl is None:
         raise HTTPException(404, "sequence not found")
     try:
-        path = await asyncio.to_thread(store.cuts.mix, tl, svc.app.settings.filmcraft.loudness_lufs)
+        path = await asyncio.to_thread(store.cuts.mix, tl, svc.app.settings.audio.loudness_lufs)
     except (CutError, RuntimeError) as e:
         raise HTTPException(422, str(e))
     return FileResponse(path, media_type="audio/wav", headers={"Cache-Control": "no-store"})

@@ -57,3 +57,19 @@ describe('sound (CE3)', () => {
     expect([db(-6), db(3), db(0), db(-10.36)]).toEqual(['−6 dB', '+3 dB', '0 dB', '−10.4 dB'])
   })
 })
+
+describe('the channel strip (D127)', () => {
+  it('reads as the author wrote it and takes typed values inside the ranges', async () => {
+    const { dialogueOf, panLabel, stripLabel, stripValue, volumeLabel, widthLabel } = await import('./cut')
+    expect([panLabel(-100), panLabel(0), panLabel(-40), panLabel(100)]).toEqual(['100 % L', '50 % L · 50 % R', '70 % L · 30 % R', '100 % R'])
+    expect([volumeLabel(-96), volumeLabel(18), widthLabel(0), widthLabel(150)]).toEqual(['−∞ dB', '+18 dB', 'mono', '150 %'])
+    expect(stripLabel({ gain_db: 0, volume_db: 0, pan: 0, width: 100 })).toBe('')
+    expect(stripLabel({ gain_db: -6, volume_db: -96, pan: -40, width: 150 })).toBe('gain −6 dB · vol −∞ dB · 70 % L · 30 % R · width 150 %')
+    expect([stripValue('gain_db', '−48'), stripValue('volume_db', '-inf'), stripValue('volume_db', '+20 dB'), stripValue('width', '120 %'), stripValue('pan', 'left'), stripValue('pan', '  ')])
+      .toEqual([-36, -96, 18, 120, null, null])
+    // a sound on a dialogue track counts as dialogue (ducking and evening out take it)
+    const talk = item(30, 0, 10, 'sound')
+    const t = { ...cut, audio: [{ ...a1, role: 'dialogue', items: [item(12, 0, 10, 'line'), talk] } as CutTrack, { ...a1, id: 5, role: 'music', items: [item(31, 0, 10, 'sound')] } as CutTrack] } as CutTracks
+    expect(dialogueOf(t).map((i) => i.id)).toEqual([12, 30])
+  })
+})

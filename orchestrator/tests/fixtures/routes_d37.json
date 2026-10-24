@@ -207,6 +207,8 @@
  "POST /timelines/{tl_id}/redo",
  "POST /timelines/{tl_id}/render",
  "POST /timelines/{tl_id}/replace",
+ "POST /timelines/{tl_id}/role",
+ "POST /timelines/{tl_id}/strip",
  "POST /timelines/{tl_id}/undo",
  "PUT /assets/{asset_id}/thumbnail",
  "PUT /blobs/{sha}",

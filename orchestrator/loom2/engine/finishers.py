@@ -1483,7 +1483,7 @@ async def run_movie_filmcraft(job: JobRecord, recipe: Render, q: JobQueue, tl: A
     shutil.rmtree(tmp, ignore_errors=True)
     tmp.mkdir(parents=True)
     part, script = tmp / "movie.mp4", tmp / "export.jsonl"
-    lufs = q.app.settings.filmcraft.loudness_lufs                    # CE3: the movie normalised (Settings › FilmCraft › loudness)
+    lufs = q.app.settings.audio.loudness_lufs                        # CE3: the movie normalised (D127: Settings › Audio › loudness)
     script.write_text(export_script(part, "h264", tl.fps, **({"loudnessLufs": lufs} if lufs is not None else {})), encoding="utf-8")
     argv = export_argv(q.app.settings.filmcraft, q.app, project, script)
     log_path = q.app.logs_dir / f"movie-{job.id}.log"

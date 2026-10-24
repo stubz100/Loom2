@@ -136,7 +136,8 @@ def main() -> int:
             elif verbose:
                 print(f"ok   {key}")
     # settings (the app's and the engine's)
-    for mname, model in (("Settings", config.Settings), ("EngineSettings", config.EngineSettings)):
+    for mname, model in (("Settings", config.Settings), ("EngineSettings", config.EngineSettings), ("AudioSettings", config.AudioSettings),
+                         ("TrackStrip", config.TrackStrip)):   # D127: Settings › Audio and each role's strip
         for field in model.model_fields:
             key = f"{mname}.{field}"
             if key in ALLOW or field == "engine":

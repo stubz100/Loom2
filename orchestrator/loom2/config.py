@@ -11,7 +11,7 @@ import secrets
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .fsio import atomic_write_json, new_id, read_json_or, utc_now
 
@@ -93,7 +93,61 @@ class FilmCraftSettings(BaseModel):
     cli: str = os.environ.get("LOOM2_FILMCRAFT_CLI") or str(REPO_ROOT / "engine" / "tools" / "filmcraft" / "filmcraft-cli.exe")   # the env: the offline suite keeps it unbuilt
     threads: int = 8            # RAYON_NUM_THREADS of the session (E32: a warm frame is 10 ms at ½; D113's cap beside a GPU job)
     timeout_s: float = 120.0    # a request past this kills the session (the movie's export is a job of its own, never sent through it)
+
+
+# D127 (proto01_animate 30 §16): the ranges of an audio track's four settings — the author's, past FilmCraft's own limits by a second stage
+STRIP_GAIN_DB = (-36.0, 36.0)
+STRIP_VOLUME_DB = (-96.0, 18.0)            # −96 is FilmCraft's silent fader floor, shown as −∞
+STRIP_PAN = (-100.0, 100.0)                # 100 % left … 50 / 50 … 100 % right
+STRIP_WIDTH = (0.0, 200.0)                 # mono … as recorded (100) … the Side boosted and the Mid slightly lowered
+TRACK_ROLES = ("dialogue", "music", "effects")
+
+
+def _clamp(v: float, lo_hi: tuple[float, float]) -> float:
+    return round(min(lo_hi[1], max(lo_hi[0], float(v))), 2)
+
+
+class TrackStrip(BaseModel):
+    """D127: an audio track's channel strip — gain (before its plugins), width, volume (the fader), pan. Settings › Audio holds one per
+    track role; a cut's track holds its own in its FilmCraft project (`cuts.strip_of`). Values outside the ranges are brought inside."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    gain_db: float = 0.0
+    volume_db: float = 0.0
+    pan: float = 0.0
+    width: float = 100.0
+
+    @field_validator("gain_db")
+    @classmethod
+    def _gain(cls, v: float) -> float:
+        return _clamp(v, STRIP_GAIN_DB)
+
+    @field_validator("volume_db")
+    @classmethod
+    def _volume(cls, v: float) -> float:
+        return _clamp(v, STRIP_VOLUME_DB)
+
+    @field_validator("pan")
+    @classmethod
+    def _pan(cls, v: float) -> float:
+        return _clamp(v, STRIP_PAN)
+
+    @field_validator("width")
+    @classmethod
+    def _width(cls, v: float) -> float:
+        return _clamp(v, STRIP_WIDTH)
+
+
+class AudioSettings(BaseModel):
+    """D127: Settings › Audio — the loudness the movie and the Episode's mix are brought to, and each track role's strip: a new cut's
+    A1 / A2 / A3 are dialogue, music and effects with these settings, and giving a track a role sets its strip to the role's."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
     loudness_lufs: float | None = -16.0   # CE3: the movie's (and the page's mix's) integrated loudness — online delivery; EBU R128 broadcast is −23; None: as mixed
+    dialogue: TrackStrip = Field(default_factory=TrackStrip)
+    music: TrackStrip = Field(default_factory=lambda: TrackStrip(gain_db=-6.0))     # under the lines before any ducking
+    effects: TrackStrip = Field(default_factory=lambda: TrackStrip(gain_db=-3.0))
+
+    def role(self, name: str) -> TrackStrip:
+        return getattr(self, name) if name in TRACK_ROLES else TrackStrip()
 
 
 class MotionSettings(BaseModel):
@@ -179,6 +233,15 @@ class Settings(BaseModel):
     motion: MotionSettings = Field(default_factory=MotionSettings)      # CA1: the motion library's starter set and local folder
     effectcraft: EffectCraftSettings = Field(default_factory=EffectCraftSettings)   # AE1 (D114): the animation editor's engine
     filmcraft: FilmCraftSettings = Field(default_factory=FilmCraftSettings)         # CE1 (D126): the cut editor's engine
+    audio: AudioSettings = Field(default_factory=AudioSettings)                     # D127: the loudness target and the track roles' strips
+
+    @model_validator(mode="before")
+    @classmethod
+    def _loudness_moved(cls, v):
+        """D127: the loudness target moved from `filmcraft` to `audio`; an app.json from before keeps the author's value."""
+        if isinstance(v, dict) and "audio" not in v and isinstance(v.get("filmcraft"), dict) and "loudness_lufs" in v["filmcraft"]:
+            v = {**v, "audio": {"loudness_lufs": v["filmcraft"]["loudness_lufs"]}}
+        return v
 
 
 class AppRecord(BaseModel):

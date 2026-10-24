@@ -170,6 +170,11 @@ a { color: var(--accent); }
 .form label { color: var(--fg2); }
 .form .hint { grid-column: 2; color: var(--fg3); font-size: 12px; margin-top: -6px; }
 .form .row { display: flex; gap: 8px; align-items: center; justify-content: space-between; overflow-wrap: anywhere; }
+.form .strip-row { justify-content: flex-start; gap: 10px; }   /* D127: Settings › Audio — a role's four numbers on one line */
+.form .strip-row input[type=number] { width: 64px; }
+.form .strip-row > label { display: inline-flex; align-items: center; gap: 4px; }
+.form .strip-row span { color: var(--fg3); font-size: 11px; }
+.form .strip-row .spacer { flex: 1; }
 .form h4 { grid-column: 1 / -1; margin: 10px 0 0; color: var(--fg2); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
 
 table.grid { width: 100%; border-collapse: collapse; font-size: 12px; }

@@ -3,7 +3,7 @@
 // and the toast says so). Project data lives here and on disk, never in component state.
 import { create } from 'zustand'
 import { ApiError, http, unwrap } from '../../../api/client'
-import type { Clip, CutEdited, CutTracks, Job, Timeline, TimelineClipIn } from '../../../api/types'
+import type { Clip, CutEdited, CutTracks, Job, Timeline, TimelineClipIn, TrackRole, TrackStrip } from '../../../api/types'
 import { useSession } from '../../../store/session'
 import { DEV_HOOKS } from '../../../devHooks'
 import { append, at, duration, move, remove, setOverlap, starts, trim, type Lane, type LaneClip, chainIn } from './lane'
@@ -73,6 +73,9 @@ interface SequenceState {
   cutPlace: (body: { clip_id?: string; asset_id?: string; shot_id?: string | null; shot_version?: string | null; node_id?: string | null; track: string | number; frame: number }) => Promise<boolean>
   cutReplace: (clip: number, take: { clip_id: string; shot_id?: string | null; shot_version?: string | null; node_id?: string | null }) => Promise<boolean>
   cutUndo: (redo?: boolean) => Promise<void>
+  /** D127: an audio track's strip (what changes; the rest stays) and its role (Settings › Audio's strip for it). */
+  cutStrip: (track: number, change: Partial<TrackStrip>) => Promise<boolean>
+  cutRole: (track: number, role: TrackRole | null) => Promise<boolean>
   setTool: (tool: CutTool) => void
   selectClip: (id: number | null) => void
 }
@@ -230,6 +233,8 @@ export const useSequence = create<SequenceState>()((set, get) => ({
     await cutCall(get, set, (id, revision) => unwrap(redo ? http.POST('/timelines/{tl_id}/redo', { params: { path: { tl_id: id } }, body: { revision } })
       : http.POST('/timelines/{tl_id}/undo', { params: { path: { tl_id: id } }, body: { revision } })))
   },
+  cutStrip: (track, change) => cutCall(get, set, (id, revision) => unwrap(http.POST('/timelines/{tl_id}/strip', { params: { path: { tl_id: id } }, body: { revision, track, ...change } }))),
+  cutRole: (track, role) => cutCall(get, set, (id, revision) => unwrap(http.POST('/timelines/{tl_id}/role', { params: { path: { tl_id: id } }, body: { revision, track, role } }))),
   setTool: (tool) => set({ tool }),
   selectClip: (id) => {                                                       // a take on V1 is the lane's clip too (Update, the Inspector)
     const k = id === null ? -1 : (get().lane?.clips.findIndex((c) => c.id === String(id)) ?? -1)

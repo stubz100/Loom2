@@ -500,7 +500,7 @@ test('a sequence (P17, D83 — in Story · Episode since 17 SY4): a fake-engine 
   const mv = await api<{ kind: string; lineage_kind: string | null; parents: string[]; params: { movie?: boolean } }>('GET', `/assets/${mj.result.asset_ids![0]}`)
   expect([mv.kind, mv.lineage_kind, mv.params.movie, mv.parents.length]).toEqual(['video', 'render', true, 1])
 })
-test("the cut's tracks (CE2–CE3, D126): a FilmCraft cut shows its every track and FilmCraft's frame; the razor cuts a take, the right-click sets its speed, undo and redo are the cut's own, a ripple trim closes up, a track is renamed from its header; a sound's gain and fade from its right-click, the cut's mix in the viewer", async ({ page }) => {
+test("the cut's tracks (CE2–CE3, D126): a FilmCraft cut shows its every track and FilmCraft's frame; the razor cuts a take, the right-click sets its speed, undo and redo are the cut's own, a ripple trim closes up, a track is renamed from its header; a sound's gain and fade from its right-click, the cut's mix in the viewer; D127: the audio tracks' roles and a strip set from a header", async ({ page }) => {
   test.setTimeout(120_000)
   // a take from the fake engine, on a new cut's V1 (through the API: the bins' + is the sequence scenario's)
   const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
@@ -572,6 +572,43 @@ test("the cut's tracks (CE2–CE3, D126): a FilmCraft cut shows its every track 
   await expect.poll(async () => (await tracks()).audio[1].transitions.length, { timeout: 10_000 }).toBe(1)
   expect((await tracks()).audio[1].items[0].gain_db).toBe(-6)
   await expect(page.getByTestId('cut-mix')).toHaveAttribute('src', /^blob:/, { timeout: 15_000 })
+  // D127: a new cut's audio tracks are the roles with Settings › Audio's strips; a header's right-click sets a strip setting and a role
+  await expect(page.locator('.cut-head', { hasText: 'Music' })).toContainText('gain −6 dB')
+  const fx = page.locator('.cut-head', { hasText: 'Effects' })
+  await expect(fx).toContainText('gain −3 dB')
+  await contextChoose(page, fx, 'Pan…')
+  await page.locator('.modal.ask input').fill('-40')
+  await page.locator('.modal.ask button.primary').click()
+  await expect(fx).toContainText('70 % L · 30 % R')
+  await contextChoose(page, fx, 'Volume…')
+  await page.locator('.modal.ask input').fill('+18')
+  await page.locator('.modal.ask button.primary').click()
+  await expect(fx).toContainText('vol +18 dB')
+  type Strip = { audio: { name: string; role: string | null; gain_db: number; volume_db: number; pan: number }[] }
+  expect((await api<Strip>('GET', `/timelines/${tl.id}/tracks`)).audio[2]).toMatchObject({ role: 'effects', gain_db: -3, volume_db: 18, pan: -40 })
+  await fx.click({ button: 'right' })
+  await page.locator('.ctx-menu .item.sub', { hasText: /^Role/ }).hover()
+  await page.locator('.ctx-menu .ctx-menu button.item', { hasText: /^Music$/ }).click()
+  await expect.poll(async () => (await api<Strip>('GET', `/timelines/${tl.id}/tracks`)).audio[2], { timeout: 10_000 }).toMatchObject({ name: 'Music', role: 'music', gain_db: -6, volume_db: 0, pan: 0 })
+  await expect(page.locator('.cut-head', { hasText: 'Music' })).toHaveCount(2)
+})
+
+test("Settings › Audio (D127): the loudness target and a track role's strip are set in the general Settings and saved", async ({ page }) => {
+  type Audio = { audio: { loudness_lufs: number | null; music: { gain_db: number; volume_db: number; pan: number; width: number } } }
+  const before = (await api<Audio>('GET', '/settings')).audio
+  await openApp(page, { suite: 'catalogue' })
+  await page.locator('nav.rail').getByRole('button', { name: 'Settings…', exact: true }).click()
+  const loud = page.getByLabel('loudness target')
+  await loud.scrollIntoViewIfNeeded()
+  await expect(loud).toHaveValue(String(before.loudness_lufs))
+  await loud.fill('-14')
+  await page.getByLabel('music gain').fill('-9')
+  await page.getByLabel('music width').fill('140')
+  await page.locator('.modal .foot button.primary', { hasText: 'Save' }).click()
+  await expect(page.locator('.modal-backdrop')).toHaveCount(0)
+  const after = (await api<Audio>('GET', '/settings')).audio
+  expect([after.loudness_lufs, after.music.gain_db, after.music.width, after.music.volume_db]).toEqual([-14, -9, 140, 0])
+  await api('PUT', '/settings', { audio: before })                                          // the other scenarios' cuts keep the defaults
 })
 
 test('a stage (P13 / ST1, D81): a new stage gets a set and a figure from the Library, the Outliner lists them, the document saves and survives a reload', async ({ page }) => {

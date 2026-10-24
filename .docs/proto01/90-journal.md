@@ -8793,3 +8793,22 @@ Mid untouched, and it hosts no plugins (its ROADMAP: owner decision needed); the
 Pedalboard GPLv3. Four questions (proto01_animate 30 §16), every recommendation taken: loom2's own VST3 host (a C++ sidecar on the MIT SDK),
 defaults per track role (dialogue, music, effects), the requested ranges exactly (a second FilmCraft stage past its limits), the width law
 patched (the Mid attenuated). A track with plugins is printed onto a hidden companion track. Waves AU1–AU4; AU1 starts now.
+
+## 2026-10-24 13:53 — AU1 built (D127): Settings › Audio and the track roles; every audio track's strip in its FilmCraft project
+
+- **Settings › Audio**: the loudness target moved from Settings › FilmCraft (an app.json from before keeps its value) with *as mixed*; each
+  role's strip — dialogue 0 dB, music −6 dB, effects −3 dB of gain by default, volume 0, pan 0, width 100 % — brought inside the ranges.
+- **The strip in the project** (`cuts.strip_steps` / `strip_of`): gain as pre-fader Amplify stages (past +24 a second), width as a Stereo
+  Width after the track's other pre-fader effects, volume as the fader to +15 and a post-fader Amplify past it, pan on the track; neutral
+  stages are no insert; the author's effects stay; FilmCraft's 5 slots said in loom2's words. Read back as the project holds it.
+- **Roles** (`loom2.roles` on the sequence): a new or converted cut's A1–A3 are Dialogue, Music, Effects with Settings' strips; the header's
+  right-click › Role sets name and strip; a sound on a dialogue track counts as dialogue for ducking and evening out.
+- **The header** asks Gain… / Volume… (−inf silent) / Pan… / Width… with the range and the value now, and shows the strip away from
+  neutral under the name (a global `.strip` class first pushed the name out of the 32 px row — renamed `cut-strip`).
+- **Rig** `scripts/au_acceptance.py --parts roles,strip` 10/10 (real FilmCraft, 440 / 660 Hz at −60 dBFS by band against the source):
+  music −6.04 dB; neutral +0.01; gain +30 & volume +18 = +47.99 dB; −∞ peak 0; pan 100 % L: left +0.00, right silent; width 0 %: L = R past
+  50 ms (Stereo Width glides 20 ms from the render's start), −6.04 dB each; undo; a change 20 ms median. The first run's 3 failures were
+  the meter (Hann reads a sine +1.76 dB; now against the source) and the glide. CE1 14/14 and CE3 7/7 re-run with the roles.
+- Tests: offline 555 passed (test_cuts_au1.py 3; the fake's mixdown stereo through the strip), settings audit clean (AudioSettings and
+  TrackStrip audited), Vitest 458 + 3 skipped, typecheck, lint (0 errors, 79 warnings) and build clean, e2e full 63/63 and open 63/63 (+ a
+  Settings › Audio scenario; the tracks scenario's strip and role steps). Screenshots proto01_animate/img/30-au1-*.jpg. Next: AU2.

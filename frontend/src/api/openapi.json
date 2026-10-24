@@ -1102,6 +1102,40 @@
         "title": "AudioRef",
         "type": "object"
       },
+      "AudioSettings": {
+        "description": "D127: Settings › Audio — the loudness the movie and the Episode's mix are brought to, and each track role's strip: a new cut's\nA1 / A2 / A3 are dialogue, music and effects with these settings, and giving a track a role sets its strip to the role's.",
+        "properties": {
+          "dialogue": {
+            "$ref": "#/components/schemas/TrackStrip"
+          },
+          "effects": {
+            "$ref": "#/components/schemas/TrackStrip"
+          },
+          "loudness_lufs": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": -16.0,
+            "title": "Loudness Lufs"
+          },
+          "music": {
+            "$ref": "#/components/schemas/TrackStrip"
+          }
+        },
+        "required": [
+          "loudness_lufs",
+          "dialogue",
+          "music",
+          "effects"
+        ],
+        "title": "AudioSettings",
+        "type": "object"
+      },
       "Beat": {
         "description": "LTX keyframe guide (11 §3b): the asset is encoded as a guide at `frame` with `strength`.",
         "properties": {
@@ -3234,6 +3268,46 @@
         "title": "CutReplace",
         "type": "object"
       },
+      "CutRole": {
+        "properties": {
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "enum": [
+                  "dialogue",
+                  "music",
+                  "effects"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "track": {
+            "title": "Track",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "track"
+        ],
+        "title": "CutRole",
+        "type": "object"
+      },
       "CutStep": {
         "properties": {
           "id": {
@@ -3252,12 +3326,85 @@
         "title": "CutStep",
         "type": "object"
       },
+      "CutStrip": {
+        "properties": {
+          "gain_db": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gain Db"
+          },
+          "pan": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pan"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "track": {
+            "title": "Track",
+            "type": "integer"
+          },
+          "volume_db": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Volume Db"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width"
+          }
+        },
+        "required": [
+          "track"
+        ],
+        "title": "CutStrip",
+        "type": "object"
+      },
       "CutTrack": {
         "properties": {
           "enabled": {
             "default": true,
             "title": "Enabled",
             "type": "boolean"
+          },
+          "gain_db": {
+            "default": 0.0,
+            "title": "Gain Db",
+            "type": "number"
           },
           "id": {
             "title": "Id",
@@ -3292,6 +3439,27 @@
             "title": "Name",
             "type": "string"
           },
+          "pan": {
+            "default": 0.0,
+            "title": "Pan",
+            "type": "number"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "enum": [
+                  "dialogue",
+                  "music",
+                  "effects"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
           "transitions": {
             "items": {
               "$ref": "#/components/schemas/CutTransition"
@@ -3303,6 +3471,11 @@
             "default": 0.0,
             "title": "Volume Db",
             "type": "number"
+          },
+          "width": {
+            "default": 100.0,
+            "title": "Width",
+            "type": "number"
           }
         },
         "required": [
@@ -3313,6 +3486,10 @@
           "muted",
           "enabled",
           "volume_db",
+          "gain_db",
+          "pan",
+          "width",
+          "role",
           "items",
           "transitions"
         ],
@@ -5144,18 +5321,6 @@
             "title": "Cli",
             "type": "string"
           },
-          "loudness_lufs": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": -16.0,
-            "title": "Loudness Lufs"
-          },
           "threads": {
             "default": 8,
             "title": "Threads",
@@ -5170,8 +5335,7 @@
         "required": [
           "cli",
           "threads",
-          "timeout_s",
-          "loudness_lufs"
+          "timeout_s"
         ],
         "title": "FilmCraftSettings",
         "type": "object"
@@ -14958,6 +15122,9 @@
             "title": "Api Port",
             "type": "integer"
           },
+          "audio": {
+            "$ref": "#/components/schemas/AudioSettings"
+          },
           "effectcraft": {
             "$ref": "#/components/schemas/EffectCraftSettings"
           },
@@ -15061,7 +15228,8 @@
           "samples",
           "motion",
           "effectcraft",
-          "filmcraft"
+          "filmcraft",
+          "audio"
         ],
         "title": "Settings",
         "type": "object"
@@ -18114,6 +18282,39 @@
           "order"
         ],
         "title": "ToolCaps",
+        "type": "object"
+      },
+      "TrackStrip": {
+        "description": "D127: an audio track's channel strip — gain (before its plugins), width, volume (the fader), pan. Settings › Audio holds one per\ntrack role; a cut's track holds its own in its FilmCraft project (`cuts.strip_of`). Values outside the ranges are brought inside.",
+        "properties": {
+          "gain_db": {
+            "default": 0.0,
+            "title": "Gain Db",
+            "type": "number"
+          },
+          "pan": {
+            "default": 0.0,
+            "title": "Pan",
+            "type": "number"
+          },
+          "volume_db": {
+            "default": 0.0,
+            "title": "Volume Db",
+            "type": "number"
+          },
+          "width": {
+            "default": 100.0,
+            "title": "Width",
+            "type": "number"
+          }
+        },
+        "required": [
+          "gain_db",
+          "volume_db",
+          "pan",
+          "width"
+        ],
+        "title": "TrackStrip",
         "type": "object"
       },
       "Train": {
@@ -30264,6 +30465,112 @@
           }
         },
         "summary": "Timeline Replace",
+        "tags": [
+          "timelines"
+        ]
+      }
+    },
+    "/timelines/{tl_id}/role": {
+      "post": {
+        "description": "D127: an audio track's role — named after it, its strip set to the role's in Settings › Audio; none clears the role.",
+        "operationId": "timeline_role_timelines__tl_id__role_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tl_id",
+            "required": true,
+            "schema": {
+              "title": "Tl Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CutRole"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CutEdited"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Timeline Role",
+        "tags": [
+          "timelines"
+        ]
+      }
+    },
+    "/timelines/{tl_id}/strip": {
+      "post": {
+        "description": "D127: an audio track's gain, volume, pan or width — written as FilmCraft's fader, pan and inserts, past its limits by a second stage.",
+        "operationId": "timeline_strip_timelines__tl_id__strip_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tl_id",
+            "required": true,
+            "schema": {
+              "title": "Tl Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CutStrip"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CutEdited"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Timeline Strip",
         "tags": [
           "timelines"
         ]

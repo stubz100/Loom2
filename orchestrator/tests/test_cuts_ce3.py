@@ -27,10 +27,10 @@ FAKE = Path(__file__).resolve().parent / "fake_filmcraft.py"
 TICK = 254_016_000_000
 
 
-def _client(tmp_path: Path, **filmcraft):
+def _client(tmp_path: Path, **audio):
     state = tmp_path / "state"
     AppState(state).update_settings({"engine": {"python": str(tmp_path / "missing.exe"), "health_timeout_s": 1}, "models_root": str(tmp_path / "models"),
-                                     "mounted_model_trees": [], "variant": "full", "filmcraft": {"cli": str(FAKE), "timeout_s": 20.0, **filmcraft}})
+                                     "mounted_model_trees": [], "variant": "full", "filmcraft": {"cli": str(FAKE), "timeout_s": 20.0}, "audio": audio})
     return create_app(state)
 
 

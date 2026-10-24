@@ -1,6 +1,6 @@
 // P17 (D83): the Sequence tab's verbs — every one has a mouse home (the lane's context menu, the Inspector, the transport) per D32;
 // undo / redo take Ctrl+Z / Ctrl+Shift+Z in the Animate scope (the clip player has no undo of its own).
-import { ArrowLeft, ArrowRight, ArrowRightLeft, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, Columns2, FileDown, Film, FolderOpen, Gauge, Lock, MousePointer2, MoveHorizontal, Pause, Pencil, Play, Plus, Redo2, RefreshCw, Scissors, SkipBack, SkipForward, Snowflake, SplitSquareHorizontal, SquareDashed, Trash2, Undo2, Volume2, VolumeX, Workflow, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowLeft, ArrowLeftRight, ArrowRight, ArrowRightLeft, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, Columns2, FileDown, Film, FolderOpen, Gauge, Lock, Mic, MousePointer2, Music, MoveHorizontal, Pause, Pencil, Play, Plus, Redo2, RefreshCw, Scissors, SkipBack, SlidersHorizontal, Sparkles, SkipForward, Snowflake, SplitSquareHorizontal, SquareDashed, Tag, Trash2, Undo2, UnfoldHorizontal, Volume2, VolumeX, Workflow, ZoomIn, ZoomOut } from 'lucide-react'
 import { registerCommands, sep, type MenuItem } from '../../../frame/commands'
 import { askConfirm, askText, useSession } from '../../../store/session'
 import { useAnimate } from '../../animate/animateStore'
@@ -8,7 +8,8 @@ import { useStory } from '../storyStore'
 import { assembleLane, laneChanges, routeLabel, routePicks, updateClip, walkRoute } from './assemble'
 import { duration, ticks } from './lane'
 import { isCut, lastMovie, useSequence } from './sequenceStore'
-import { CUT_TOOLS, dialogueOf, duckSteps, evenDialogueSteps, fadeStep, findItem, gainStep, isVideo, ticksOf, trackRef, transitionInto, transitionStep, type CutTool } from './cut'
+import { CUT_TOOLS, dialogueOf, duckSteps, evenDialogueSteps, fadeStep, findItem, gainStep, isVideo, panLabel, ROLE_NAMES, STRIP, stripValue, ticksOf, trackRef, transitionInto, transitionStep, TRACK_ROLES, volumeLabel, widthLabel, type CutTool } from './cut'
+import type { TrackRole, TrackStrip } from '../../../api/types'
 import { revealPath } from '../../../shell/tauri'
 
 const sq = () => useSequence.getState()
@@ -178,6 +179,15 @@ const TOOL_INFO: Record<CutTool, { label: string; icon: typeof MousePointer2; ke
   razor: { label: 'Razor', icon: Scissors, keys: 'C', hint: 'click a clip to cut it there' },
 }
 const cutSel = () => isCut() && !!selCut() && !sq().cutBusy
+const audioTrack = () => isCut() && !!selTrack() && !isVideo(sq().tracks!, selTrack()!)
+const ROLE_ICONS: Record<TrackRole, typeof Mic> = { dialogue: Mic, music: Music, effects: Sparkles }
+/** D127: the strip's four settings as the header's right-click asks for them (the key, the label, its icon, the question, how it reads now). */
+const STRIP_ASKS: [keyof TrackStrip, string, typeof Mic, string, (v: number) => string][] = [
+  ['gain_db', 'Gain…', SlidersHorizontal, 'gain (dB, −36 … +36; before its effects)', volumeLabel],
+  ['volume_db', 'Volume…', Volume2, 'volume (dB, −∞ … +18; -inf is silent)', volumeLabel],
+  ['pan', 'Pan…', ArrowLeftRight, 'pan (−100 = 100 % left, 0 = 50 / 50, +100 = 100 % right)', panLabel],
+  ['width', 'Width…', UnfoldHorizontal, 'width (%, 0 = mono, 100 = as recorded, 200 = wider)', widthLabel],
+]
 const edit1 = (id: string, params: Record<string, unknown>) => void sq().cutEdit([{ id, params }])
 const atPlayhead = () => { const s = selCut(); return !!s && sq().playhead > s.item.start && sq().playhead < s.item.start + s.item.duration }
 
@@ -224,8 +234,18 @@ registerCommands([
     run: () => { const s = selCut(); if (s) void sq().cutEdit(duckSteps(sq().tracks!, [s.item])) } },
   { id: 'story.cut.evenDialogue', scope: 'story', label: 'Even out the dialogue (−23 LUFS)', icon: Volume2, placement: ['inspector', 'context'], hint: 'every spoken line brought to −23 LUFS by its gain (EBU R128 dialogue)',
     when: () => isCut() && !!sq().tracks && dialogueOf(sq().tracks!).length > 0 && !sq().cutBusy, run: () => void sq().cutEdit(evenDialogueSteps(sq().tracks!)) },
-  { id: 'story.cut.track.volume', scope: 'story', label: 'Track volume…', icon: Volume2, placement: ['context'], when: () => isCut() && !!selTrack() && !isVideo(sq().tracks!, selTrack()!),
-    run: () => { const tr = selTrack(); if (tr) void askText({ title: `${tr.name}: volume (dB)`, initial: String(tr.volume_db), placeholder: '0' }).then((v) => { const n = Number(v); if (v !== null && v.trim() !== '' && Number.isFinite(n)) edit1('timeline.setTrack', { track: tr.id, volumeDb: n }) }) } },
+  // D127 (30 §16): an audio track's strip — gain, volume, pan, width — and its role (Settings › Audio's strip for it)
+  ...STRIP_ASKS.map(([key, label, icon, title, shown]) => ({
+    id: `story.cut.track.${key === 'gain_db' ? 'gain' : key === 'volume_db' ? 'volume' : key}`, scope: 'story' as const, label, icon, placement: ['context'] as ['context'],
+    when: () => audioTrack() && !sq().cutBusy,
+    run: () => { const tr = selTrack(); if (tr) void askText({ title: `${tr.name}: ${title}`, text: `now ${shown(tr[key])}`, initial: String(tr[key] <= STRIP.volume_db[0] && key === 'volume_db' ? '-inf' : tr[key]), placeholder: String(STRIP[key].join(' … ')) })
+      .then((v) => { const n = stripValue(key, v); if (n !== null) void sq().cutStrip(tr.id, { [key]: n }) }) },
+  })),
+  ...[...TRACK_ROLES, null].map((role) => ({
+    id: `story.cut.track.role.${role ?? 'none'}`, scope: 'story' as const, label: role ? ROLE_NAMES[role] : 'No role', icon: role ? ROLE_ICONS[role] : Tag, placement: ['context'] as ['context'],
+    hint: role ? `named ${ROLE_NAMES[role]}, its gain, volume, pan and width set to the role's in Settings › Audio` : 'the role cleared; the strip stays',
+    when: () => audioTrack() && !sq().cutBusy && selTrack()!.role !== role, run: () => { const tr = selTrack(); if (tr) void sq().cutRole(tr.id, role) },
+  })),
   { id: 'story.cut.track.duck', scope: 'story', label: 'Duck the track under the dialogue', icon: VolumeX, placement: ['context'],
     when: () => isCut() && !!selTrack() && !isVideo(sq().tracks!, selTrack()!) && selTrack()!.items.some((i) => i.kind !== 'line') && dialogueOf(sq().tracks!).length > 0,
     run: () => { const tr = selTrack(); if (tr) void sq().cutEdit(duckSteps(sq().tracks!, tr.items)) } },
@@ -249,9 +269,11 @@ export function cutClipMenu(): MenuItem[] {
     { cmd: 'story.cut.rename' }, { cmd: 'story.episode.openClip' }, sep, { cmd: 'story.cut.lift' }, { cmd: 'story.cut.rippleDelete' }, sep, { cmd: 'story.episode.undo' }, { cmd: 'story.episode.redo' }]
 }
 
-/** CE2: a track header's right-click (the track set by the caller in `trackItem`). */
+/** CE2: a track header's right-click (the track set by the caller in `trackItem`); D127: an audio track's strip and role. */
 export function cutTrackMenu(): MenuItem[] {
-  return [{ cmd: 'story.cut.track.rename' }, { cmd: 'story.cut.track.lock' }, { cmd: 'story.cut.track.mute' }, { cmd: 'story.cut.track.volume' }, { cmd: 'story.cut.track.duck' }, sep,
+  const strip: MenuItem[] = audioTrack() ? [{ cmd: 'story.cut.track.gain' }, { cmd: 'story.cut.track.volume' }, { cmd: 'story.cut.track.pan' }, { cmd: 'story.cut.track.width' },
+    { label: 'Role', icon: Tag, items: [...TRACK_ROLES.map((r) => ({ cmd: `story.cut.track.role.${r}` })), { cmd: 'story.cut.track.role.none' }] }, sep] : []
+  return [{ cmd: 'story.cut.track.rename' }, { cmd: 'story.cut.track.lock' }, { cmd: 'story.cut.track.mute' }, sep, ...strip, { cmd: 'story.cut.track.duck' }, sep,
     { cmd: 'story.cut.evenDialogue' }, sep, { cmd: 'story.cut.addVideoTrack' }, { cmd: 'story.cut.addAudioTrack' }]
 }
 

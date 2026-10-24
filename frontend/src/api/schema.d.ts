@@ -3519,6 +3519,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/timelines/{tl_id}/role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Timeline Role
+         * @description D127: an audio track's role — named after it, its strip set to the role's in Settings › Audio; none clears the role.
+         */
+        post: operations["timeline_role_timelines__tl_id__role_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/timelines/{tl_id}/strip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Timeline Strip
+         * @description D127: an audio track's gain, volume, pan or width — written as FilmCraft's fader, pan and inserts, past its limits by a second stage.
+         */
+        post: operations["timeline_strip_timelines__tl_id__strip_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/timelines/{tl_id}/tracks": {
         parameters: {
             query?: never;
@@ -4013,6 +4053,21 @@ export interface components {
         AudioRef: {
             /** Asset Id */
             asset_id: string;
+        };
+        /**
+         * AudioSettings
+         * @description D127: Settings › Audio — the loudness the movie and the Episode's mix are brought to, and each track role's strip: a new cut's
+         *     A1 / A2 / A3 are dialogue, music and effects with these settings, and giving a track a role sets its strip to the role's.
+         */
+        AudioSettings: {
+            dialogue: components["schemas"]["TrackStrip"];
+            effects: components["schemas"]["TrackStrip"];
+            /**
+             * Loudness Lufs
+             * @default -16
+             */
+            loudness_lufs: number | null;
+            music: components["schemas"]["TrackStrip"];
         };
         /**
          * Beat
@@ -4821,6 +4876,15 @@ export interface components {
             /** Shot Version */
             shot_version?: string | null;
         };
+        /** CutRole */
+        CutRole: {
+            /** Revision */
+            revision?: number | null;
+            /** Role */
+            role?: ("dialogue" | "music" | "effects") | null;
+            /** Track */
+            track: number;
+        };
         /** CutStep */
         CutStep: {
             /** Id */
@@ -4830,6 +4894,21 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** CutStrip */
+        CutStrip: {
+            /** Gain Db */
+            gain_db?: number | null;
+            /** Pan */
+            pan?: number | null;
+            /** Revision */
+            revision?: number | null;
+            /** Track */
+            track: number;
+            /** Volume Db */
+            volume_db?: number | null;
+            /** Width */
+            width?: number | null;
+        };
         /** CutTrack */
         CutTrack: {
             /**
@@ -4837,6 +4916,11 @@ export interface components {
              * @default true
              */
             enabled: boolean;
+            /**
+             * Gain Db
+             * @default 0
+             */
+            gain_db: number;
             /** Id */
             id: number;
             /** Items */
@@ -4858,6 +4942,13 @@ export interface components {
             muted: boolean;
             /** Name */
             name: string;
+            /**
+             * Pan
+             * @default 0
+             */
+            pan: number;
+            /** Role */
+            role: ("dialogue" | "music" | "effects") | null;
             /** Transitions */
             transitions: components["schemas"]["CutTransition"][];
             /**
@@ -4865,6 +4956,11 @@ export interface components {
              * @default 0
              */
             volume_db: number;
+            /**
+             * Width
+             * @default 100
+             */
+            width: number;
         };
         /**
          * CutTracks
@@ -5604,11 +5700,6 @@ export interface components {
              * @default <repo>\engine\tools\filmcraft\filmcraft-cli.exe
              */
             cli: string;
-            /**
-             * Loudness Lufs
-             * @default -16
-             */
-            loudness_lufs: number | null;
             /**
              * Threads
              * @default 8
@@ -9637,6 +9728,7 @@ export interface components {
              * @default 8765
              */
             api_port: number;
+            audio: components["schemas"]["AudioSettings"];
             effectcraft: components["schemas"]["EffectCraftSettings"];
             engine: components["schemas"]["EngineSettings"];
             filmcraft: components["schemas"]["FilmCraftSettings"];
@@ -10900,6 +10992,33 @@ export interface components {
             vram_gb?: number | null;
         } & {
             [key: string]: unknown;
+        };
+        /**
+         * TrackStrip
+         * @description D127: an audio track's channel strip — gain (before its plugins), width, volume (the fader), pan. Settings › Audio holds one per
+         *     track role; a cut's track holds its own in its FilmCraft project (`cuts.strip_of`). Values outside the ranges are brought inside.
+         */
+        TrackStrip: {
+            /**
+             * Gain Db
+             * @default 0
+             */
+            gain_db: number;
+            /**
+             * Pan
+             * @default 0
+             */
+            pan: number;
+            /**
+             * Volume Db
+             * @default 0
+             */
+            volume_db: number;
+            /**
+             * Width
+             * @default 100
+             */
+            width: number;
         };
         /**
          * Train
@@ -18513,6 +18632,76 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["CutReplace"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CutEdited"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    timeline_role_timelines__tl_id__role_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tl_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CutRole"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CutEdited"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    timeline_strip_timelines__tl_id__strip_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tl_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CutStrip"];
             };
         };
         responses: {

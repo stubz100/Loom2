@@ -4,6 +4,7 @@ import { Fragment, useState } from 'react'
 import type { Settings } from '../api/types'
 import { useSession } from '../store/session'
 import { sampleOptions, sampleValue } from '../suites/story/styleSamples'
+import { ROLE_NAMES, STRIP, TRACK_ROLES } from '../suites/story/episode/cut'
 import { About } from './About'
 import { THEMES, type Theme } from './theme'
 
@@ -21,11 +22,12 @@ export function SettingsModal() {
   )
   const set = (patch: Partial<Settings>) => setDraft({ ...draft, ...patch })
   const setEngine = (patch: Partial<Settings['engine']>) => setDraft({ ...draft, engine: { ...draft.engine, ...patch } })
+  const setAudio = (patch: Partial<Settings['audio']>) => setDraft({ ...draft, audio: { ...draft.audio, ...patch } })
   const save = async () => {
     setBusy(true)
     try {
       await s.saveSettings({ models_root: draft.models_root, mounted_model_trees: draft.mounted_model_trees, vram_budget_gb: draft.vram_budget_gb, hf_home: draft.hf_home,
-        thumbnail_sizes: draft.thumbnail_sizes, log_level: draft.log_level, samples: draft.samples, motion: draft.motion, engine: { flags: draft.engine.flags, restart_every_jobs: draft.engine.restart_every_jobs, port: draft.engine.port, health_timeout_s: draft.engine.health_timeout_s,
+        thumbnail_sizes: draft.thumbnail_sizes, log_level: draft.log_level, samples: draft.samples, motion: draft.motion, audio: draft.audio, engine: { flags: draft.engine.flags, restart_every_jobs: draft.engine.restart_every_jobs, port: draft.engine.port, health_timeout_s: draft.engine.health_timeout_s,
           stall_timeout_s: draft.engine.stall_timeout_s, reserve_vram_gb: draft.engine.reserve_vram_gb, vram_headroom_gb: draft.engine.vram_headroom_gb } })
       s.openSettings(false)
     } finally { setBusy(false) }
@@ -85,6 +87,26 @@ export function SettingsModal() {
           <input type="text" aria-label="local motion folder" value={draft.motion.local_dir} placeholder="e.g. F:/loom2-motion-mixamo" onChange={(e) => set({ motion: { ...draft.motion, local_dir: e.target.value } })} />
           <label>Starter set folder <Help text={"The CC0 clips that ship with loom2 (Quaternius' Universal Animation Library 1 and 2)"} /></label>
           <input type="text" aria-label="starter motion folder" value={draft.motion.starter_dir} placeholder="blank = <models root>/motion" onChange={(e) => set({ motion: { ...draft.motion, starter_dir: e.target.value } })} />
+          <h4 id="settings-audio">Audio</h4>
+          {/* D127 (proto01_animate 30 §16): the loudness the movie and the Episode's mix are brought to, and each track role's strip */}
+          <label>Loudness target <Help text={"The movie and the Episode's mix are brought to this integrated loudness (ITU-R BS.1770): −16 LUFS for online delivery, −23 for EBU R128 broadcast; \"as mixed\" leaves the mix alone"} /></label>
+          <div className="row strip-row">
+            <input type="number" aria-label="loudness target" min={-36} max={-6} step={0.5} disabled={draft.audio.loudness_lufs === null} value={draft.audio.loudness_lufs ?? -16}
+              onChange={(e) => setAudio({ loudness_lufs: Number(e.target.value) })} /><span>LUFS</span><span className="spacer" />
+            <label className="chk"><input type="checkbox" checked={draft.audio.loudness_lufs === null} onChange={(e) => setAudio({ loudness_lufs: e.target.checked ? null : -16 })} /> as mixed</label>
+          </div>
+          {TRACK_ROLES.map((role) => (
+            <Fragment key={role}>
+              <label>{ROLE_NAMES[role]} track {role === 'dialogue' && <Help text={"A new cut's A1, A2 and A3 are the dialogue, music and effects tracks with these settings; a track's right-click › Role sets them on any audio track. Gain −36…+36 dB (before the track's effects), volume −96 (silent)…+18 dB, pan −100 (100 % left)…0 (50 / 50)…+100 (100 % right), width 0 (mono)…100 (as recorded)…200 % (wider)"} />}</label>
+              <div className="row strip-row">
+                {(['gain_db', 'volume_db', 'pan', 'width'] as const).map((k) => (
+                  <label key={k}><span>{k === 'gain_db' ? 'gain' : k === 'volume_db' ? 'volume' : k}</span>
+                    <input type="number" aria-label={`${role} ${k.replace('_db', '')}`} min={STRIP[k][0]} max={STRIP[k][1]} step={k === 'pan' || k === 'width' ? 5 : 0.5} value={draft.audio[role][k]}
+                      onChange={(e) => setAudio({ [role]: { ...draft.audio[role], [k]: Number(e.target.value) } })} /></label>
+                ))}
+              </div>
+            </Fragment>
+          ))}
           <h4 id="settings-keyboard">Keyboard</h4>
           <KeyboardSettings />
           <h4>Licences</h4>

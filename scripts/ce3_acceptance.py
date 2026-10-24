@@ -7,7 +7,7 @@ as tones at 440 and 660 Hz; music as a 220 Hz tone on A2, so each can be measure
 3. the music ducked under the dialogue: its band falls where a line speaks;
 4. the dialogue evened out (FilmCraft's auto-match to −23 LUFS);
 5. the mix the page plays (its first render and the kept one, timed);
-6. the movie normalised: its integrated loudness (ITU-R BS.1770-4, gated, measured here) at Settings › FilmCraft › loudness (−16 LUFS).
+6. the movie normalised: its integrated loudness (ITU-R BS.1770-4, gated, measured here) at Settings › Audio › loudness (−16 LUFS; D127 moved it).
 
 CPU only, but for RIFE's short conform in the movie (as the final's assembly); no other GPU job may run. Results:
 engine/spikes/out/ce3/results.json.
@@ -192,7 +192,7 @@ def main() -> int:
                 break
             time.sleep(0.25)
         res["movie_s"] = round(time.time() - t0, 1)
-        target = svc.app.settings.filmcraft.loudness_lufs
+        target = svc.app.settings.audio.loudness_lufs
         if j["status"] == "done":
             with av.open(str(ws.path / j["result"]["path"])) as c:
                 frames = [f.to_ndarray() for f in c.decode(audio=0)]

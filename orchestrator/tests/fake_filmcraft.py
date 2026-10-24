@@ -175,7 +175,7 @@ class Fake:
 
             def tracks(kind: str, n: int) -> list[dict]:
                 return [{"id": self.new_id(), "kind": kind, "name": f"{kind} {k + 1}", "items": [], "transitions": [], "locked": False,
-                         "enabled": True, "muted": False} for k in range(n)]
+                         "enabled": True, "muted": False, "volume_db": 0.0, "pan": 0.0, "effects": []} for k in range(n)]
             self.items()[str(sid)] = {"id": sid, "name": p["name"], "label": "Forest", "metadata": {}, "created": 0,
                                       "kind": {"Sequence": {"settings": {"width": p.get("width", 1920), "height": p.get("height", 1080),
                                                                          "frame_rate": {"num": fps, "den": 1}, "sample_rate": p.get("sampleRate", 48000)},
@@ -290,6 +290,44 @@ class Fake:
         return (items[k - 1] if k > 0 else None), (items[k + 1] if k + 1 < len(items) else None)
 
     def editor(self, cid: str, p: dict):
+        # D127: a track's strip — the fader and pan (FilmCraft's clamps), its inserts (Amplify −96…+24 dB, Stereo Width 0–200 %), at most 5
+        if cid == "mixer.setStrip":
+            t = self.track(p["strip"])
+            if "volumeDb" in p:
+                t["volume_db"] = min(15.0, max(-96.0, float(p["volumeDb"])))
+            if "pan" in p:
+                t["pan"] = min(100.0, max(-100.0, float(p["pan"])))
+            if "name" in p:
+                t["name"] = p["name"]
+            return {"ref": p["strip"], "volumeDb": t["volume_db"], "pan": t["pan"]}
+        if cid == "mixer.addInsert":
+            t = self.track(p["strip"])
+            fx = t.setdefault("effects", [])
+            if p["effect"] not in ("amplify", "stereo_width", "parametric_eq"):
+                raise Refused(f"mixer.addInsert: `{p['effect']}` is not an audio effect")
+            if len(fx) >= 5:
+                raise Refused("mixer.addInsert: all 5 effect slots are in use")
+            at = min(int(p.get("slot", len(fx))), len(fx))
+            e = {"effect": p["effect"], "enabled": True, "params": {"gain" if p["effect"] == "amplify" else "width": {"value": {"Float": 0.0 if p["effect"] == "amplify" else 100.0}}}}
+            if p.get("postFader"):
+                e["post_fader"] = True
+            fx.insert(at, e)
+            return {"slot": at}
+        if cid == "mixer.removeInsert":
+            fx = self.track(p["strip"]).get("effects") or []
+            if not 0 <= int(p["slot"]) < len(fx):
+                raise Refused("mixer.removeInsert: no effect in that slot")
+            fx.pop(int(p["slot"]))
+            return None
+        if cid == "mixer.setInsert":
+            fx = self.track(p["strip"]).get("effects") or []
+            if not 0 <= int(p["slot"]) < len(fx):
+                raise Refused("mixer.setInsert: no effect in that slot")
+            e = fx[int(p["slot"])]
+            for k, v in (p.get("params") or {}).items():
+                lo, hi = (-96.0, 24.0) if k == "gain" else (0.0, 200.0)
+                e["params"][k] = {"value": {"Float": min(hi, max(lo, float(v)))}}
+            return None
         if cid == "timeline.setTrack":
             t = self.track(p["track"])
             for k, v in (("name", "name"), ("locked", "locked"), ("muted", "muted"), ("enabled", "enabled"), ("volume_db", "volumeDb")):
@@ -440,7 +478,7 @@ class Fake:
                 for _ in range(int(p.get(kind, 1 if kind == "video" else 0))):
                     tid = self.new_id()
                     s[key].append({"id": tid, "kind": label, "name": f"{label} {len(s[key]) + 1}", "items": [], "transitions": [], "locked": False,
-                                   "enabled": True, "muted": False})
+                                   "enabled": True, "muted": False, "volume_db": 0.0, "pan": 0.0, "effects": []})
                     made[kind].append(tid)
             return made
         if cid == "edit.pasteAttributes":
@@ -499,24 +537,50 @@ class Fake:
         return png(max(1, round(w * scale)), max(1, round(h * scale)), (f % 256, len(s["video_tracks"][0]["items"]) % 256, 128))
 
     def mixdown(self, sr: int = 48000):
+        """Stereo, every audio track through its strip in FilmCraft's order: clip gain → pre-fader inserts → fader → post-fader inserts →
+        pan (balance). The Stereo Width law is D127's patched one (past 100 % the Mid is lowered up to 3 dB)."""
         import numpy as np
         import soundfile as sf
         s = self.sequence()
         end = max([ti["start"] + ti["duration"] for t in s["video_tracks"] + s["audio_tracks"] for ti in t["items"]] or [0])
-        audio = np.zeros(int(round(end / TICK * sr)) + 1, dtype=np.float32)
+        audio = np.zeros((int(round(end / TICK * sr)) + 1, 2), dtype=np.float32)
+
+        def insert(buf, e):
+            v = e["params"].get("gain" if e["effect"] == "amplify" else "width", {}).get("value", {}).get("Float")
+            if e["effect"] == "amplify":
+                return buf * 10 ** (float(v or 0.0) / 20)
+            w = float(100.0 if v is None else v) / 100
+            m, side = (buf[:, 0] + buf[:, 1]) / 2, (buf[:, 0] - buf[:, 1]) / 2 * w
+            m = m * (10 ** (-3 * (w - 1) / 20) if w > 1 else 1.0)
+            return np.stack([m + side, m - side], axis=1)
         for t in s["audio_tracks"]:
             if t.get("muted"):
                 continue
+            buf = np.zeros_like(audio)
             for ti in t["items"]:
                 src = self.items()[str(ti["item"])]["kind"]["Media"]["media"]["File"]["path"]
                 data, rate = sf.read(src, dtype="float32", always_2d=True)
-                mono = data.mean(axis=1)
+                data = data[:, :2] if data.shape[1] >= 2 else np.repeat(data, 2, axis=1)
                 if rate != sr:
-                    mono = np.interp(np.linspace(0, len(mono) - 1, int(len(mono) * sr / rate)), np.arange(len(mono)), mono).astype(np.float32)
-                mono = mono * 10 ** ((ti.get("gain_db", 0.0) + t.get("volume_db", 0.0)) / 20)
+                    x = np.linspace(0, len(data) - 1, int(len(data) * sr / rate))
+                    data = np.stack([np.interp(x, np.arange(len(data)), data[:, c]) for c in (0, 1)], axis=1).astype(np.float32)
+                data = data * 10 ** (ti.get("gain_db", 0.0) / 20)
                 at = int(round(ti["start"] / TICK * sr))
-                seg = mono[: max(0, min(len(mono), len(audio) - at, int(ti["duration"] / TICK * sr)))]
-                audio[at:at + len(seg)] += seg
+                seg = data[: max(0, min(len(data), len(buf) - at, int(ti["duration"] / TICK * sr)))]
+                buf[at:at + len(seg)] += seg
+            fx = [e for e in t.get("effects") or [] if e.get("enabled", True)]
+            for e in (e for e in fx if not e.get("post_fader")):
+                buf = insert(buf, e)
+            fader = t.get("volume_db", 0.0)
+            buf = buf * (0.0 if fader <= -96 else 10 ** (fader / 20))
+            for e in (e for e in fx if e.get("post_fader")):
+                buf = insert(buf, e)
+            pan = t.get("pan", 0.0) / 100                                  # balance: centre unity, the far side constant power
+            if pan > 0:
+                buf[:, 0] *= np.cos(pan * np.pi / 2)
+            elif pan < 0:
+                buf[:, 1] *= np.cos(-pan * np.pi / 2)
+            audio += buf
         return audio, sr
 
     def export_wav(self, out: Path) -> dict:

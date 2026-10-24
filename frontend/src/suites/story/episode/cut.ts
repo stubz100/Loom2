@@ -2,7 +2,7 @@
 // asks of FilmCraft (the command steps POST /timelines/{id}/edit runs), the frame ↔ tick maths. FilmCraft and the server keep the cut;
 // nothing here changes it. The tools are Premiere's (and FilmCraft's): Select moves a clip and trims an edge, Ripple trims and closes up,
 // Roll moves an edit point, Slip moves a clip's source under it, Slide moves a clip between its neighbours, Razor cuts.
-import type { CutItem, CutTrack, CutTracks, CutTransition } from '../../../api/types'
+import type { CutItem, CutTrack, CutTracks, CutTransition, TrackRole, TrackStrip } from '../../../api/types'
 
 export const TICK = 254_016_000_000                       // FilmCraft's ticks a second
 export type CutTool = 'select' | 'ripple' | 'roll' | 'slip' | 'slide' | 'razor'
@@ -116,8 +116,8 @@ export function fadeStep(item: CutItem, edge: 'in' | 'out', frames = 12): Step {
   return { id: 'sequence.applyAudioTransition', params: { clip: item.id, frames: Math.max(1, Math.min(frames, Math.floor(item.duration) - 1)), edge } }
 }
 export const gainStep = (item: CutItem, db: number): Step => ({ id: 'clip.audioGain', params: { clips: [item.id], db, mode: 'set' } })
-/** Every spoken line on the cut's audio tracks. */
-export const dialogueOf = (t: CutTracks): CutItem[] => t.audio.flatMap((tr) => tr.items.filter((i) => i.kind === 'line'))
+/** Every spoken line on the cut's audio tracks, and (D127) every sound on a dialogue track. */
+export const dialogueOf = (t: CutTracks): CutItem[] => t.audio.flatMap((tr) => tr.items.filter((i) => i.kind === 'line' || (tr.role === 'dialogue' && i.kind === 'sound')))
 /** *Duck under the dialogue*: the lines typed dialogue, these clips music, FilmCraft keys them down where a line speaks. */
 export function duckSteps(t: CutTracks, music: CutItem[]): Step[] {
   const lines = dialogueOf(t).map((i) => i.id)
@@ -133,3 +133,30 @@ export function evenDialogueSteps(t: CutTracks): Step[] {
 }
 /** A gain or volume in dB as the editor writes it (−6 dB, +3 dB, 0 dB). */
 export const db = (v: number): string => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(Math.round(v * 10) / 10)} dB`
+
+// ---- D127 (proto01_animate 30 §16): an audio track's channel strip and role ------------------------------------------------------
+export const TRACK_ROLES: TrackRole[] = ['dialogue', 'music', 'effects']
+export const ROLE_NAMES: Record<TrackRole, string> = { dialogue: 'Dialogue', music: 'Music', effects: 'Effects' }
+/** The strip's ranges, as the server's config.TrackStrip brings values inside them (−96 dB is FilmCraft's silent fader floor: −∞). */
+export const STRIP: Record<keyof TrackStrip, readonly [number, number]> = { gain_db: [-36, 36], volume_db: [-96, 18], pan: [-100, 100], width: [0, 200] }
+export const volumeLabel = (v: number): string => (v <= STRIP.volume_db[0] ? '−∞ dB' : db(v))
+/** Pan as the author reads it: 100 % L … 50 % L · 50 % R … 100 % R. */
+export function panLabel(p: number): string {
+  const l = Math.round((100 - p) / 2), r = 100 - l
+  return r === 0 ? '100 % L' : l === 0 ? '100 % R' : `${l} % L · ${r} % R`
+}
+export const widthLabel = (w: number): string => (w <= 0 ? 'mono' : `${Math.round(w)} %`)
+/** The strip's settings away from neutral, short — the track header's line ("gain −6 dB · vol −∞ dB · 70 % L · 30 % R · width 150 %"). */
+export function stripLabel(t: TrackStrip): string {
+  return [t.gain_db ? `gain ${db(t.gain_db)}` : '', t.volume_db ? `vol ${volumeLabel(t.volume_db)}` : '', t.pan ? panLabel(t.pan) : '',
+    t.width !== 100 ? `width ${widthLabel(t.width)}` : ''].filter(Boolean).join(' · ')
+}
+/** A typed strip setting: a number brought into its range (the volume also takes −∞ / -inf), or null when it is not one. */
+export function stripValue(key: keyof TrackStrip, text: string | null): number | null {
+  const s = (text ?? '').trim().replace(/−/g, '-').replace(/\s*(dB|%)$/i, '')
+  if (key === 'volume_db' && /^-?(inf|∞)$/i.test(s)) return STRIP.volume_db[0]
+  const n = Number(s)
+  if (!s || !Number.isFinite(n)) return null
+  const [lo, hi] = STRIP[key]
+  return Math.min(hi, Math.max(lo, n))
+}

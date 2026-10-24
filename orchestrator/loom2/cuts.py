@@ -17,6 +17,11 @@ CE2 (30 §12): the cut's every track is read as it is (`tracks()`), and the Epis
 (`Cuts.edit`, a whitelist), places a Catalogue clip, picture or sound (`Cuts.place`), swaps a take in place (`Cuts.replace`), draws a
 frame (`Cuts.frame`) and exports FilmCraft's FCPXML / EDL (`Cuts.interchange`). Then V1 may hold gaps, speed, holds, other transitions and
 things that are not takes: `lane()` stays the takes in order with their links for the Flow's verbs; the exports and renders read the project.
+
+D127 (30 §16): every audio track has a channel strip — gain, width, volume, pan — kept in the project as FilmCraft holds it (the fader and the
+pan on the track, the gain as pre-fader Amplify inserts, the width as a Stereo Width insert after the other pre-fader effects, the volume
+past the fader's +15 dB as a post-fader Amplify; a neutral stage is no insert) and read back from it (`strip_of`); a track's role
+(dialogue, music, effects) rides in the sequence's `loom2.roles`. A new cut's A1–A3 are the three roles with Settings › Audio's strips.
 """
 from __future__ import annotations
 
@@ -27,6 +32,7 @@ from typing import Any, Callable, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from .clips import ClipRecord, ClipStore
+from .config import TRACK_ROLES, AudioSettings, TrackStrip
 from .filmcraft import TICK, TIMEBASES, FilmCraft, prefs, ticks
 from .fsio import atomic_copy
 from .timelines import Timeline, TimelineClip, duration, line_spans, starts
@@ -36,6 +42,12 @@ from .workspace import Workspace
 CUT_FILE = "cut.fcproj"
 FORMAT = "filmcraft.project"
 UNDO_DEPTH = 50                                    # the cut's undo: snapshots of its project in `history/undo/` (FilmCraft's own undo dies with its session)
+ROLE_NAMES = {"dialogue": "Dialogue", "music": "Music", "effects": "Effects"}   # D127: a track given a role is named after it
+AMPLIFY_MAX_DB = 24.0                              # FilmCraft's Amplify reaches +24 dB (764723f): past it, a second stage
+FADER_MAX_DB = 15.0                                # its fader reaches +15 dB: past it, a post-fader Amplify
+SILENT_DB = -96.0                                  # its fader's floor renders silence (−∞)
+MAX_INSERTS = 5                                    # its effect slots on a track
+STRIP_EFFECTS = ("amplify", "stereo_width")        # the inserts a strip is made of (the author's other track effects stay where they are)
 
 
 class CutError(ValueError):
@@ -123,6 +135,81 @@ def placed_lines(doc: dict) -> set[str]:
         return set()
 
 
+def roles(doc: dict) -> dict[int, str]:
+    """D127: the audio tracks' roles (track id → dialogue / music / effects), from the sequence's `loom2.roles`."""
+    _, seq_item, _ = sequence(doc)
+    try:
+        raw = json.loads(seq_item.get("metadata", {}).get("loom2.roles") or "{}")
+    except json.JSONDecodeError:
+        return {}
+    return {int(k): v for k, v in raw.items() if v in TRACK_ROLES and str(k).isdigit()}
+
+
+def _param(e: dict, name: str, default: float) -> float:
+    v = (e.get("params", {}).get(name) or {}).get("value")
+    if isinstance(v, dict):
+        v = v.get("Float", default)
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return default
+
+
+def strip_of(t: dict) -> TrackStrip:
+    """D127: an audio track's strip as its project holds it — the gain is the pre-fader Amplify stages, the width the last pre-fader
+    Stereo Width, the volume the fader and any post-fader Amplify (the floor is silence), the pan the track's. Read as it is, not clamped."""
+    fx = [e for e in t.get("effects") or [] if e.get("enabled", True) is not False]
+    pre = [e for e in fx if not e.get("post_fader")]
+    widths = [_param(e, "width", 100.0) for e in pre if e.get("effect") == "stereo_width"]
+    fader = float(t.get("volume_db") or 0.0)
+    extra = sum(_param(e, "gain", 0.0) for e in fx if e.get("post_fader") and e.get("effect") == "amplify")
+    return TrackStrip.model_construct(gain_db=round(sum(_param(e, "gain", 0.0) for e in pre if e.get("effect") == "amplify"), 2),
+                                      volume_db=SILENT_DB if fader <= SILENT_DB else round(fader + extra, 2),
+                                      pan=round(float(t.get("pan") or 0.0), 2), width=round(widths[-1] if widths else 100.0, 2))
+
+
+def _stages(db: float) -> list[float]:
+    """A level as Amplify stages FilmCraft can hold (each up to +24 dB); none for 0 dB."""
+    out = []
+    while db > AMPLIFY_MAX_DB + 1e-9:
+        out.append(AMPLIFY_MAX_DB)
+        db -= AMPLIFY_MAX_DB
+    if abs(db) > 1e-9:
+        out.append(round(db, 2))
+    return out
+
+
+def strip_steps(t: dict, s: TrackStrip) -> list[dict]:
+    """D127: the FilmCraft commands that give the audio track `t` (its project dict) the strip `s`: the strip's old inserts out, the gain
+    stages first, the width after the track's other pre-fader effects, the volume's stage past +15 dB right after the fader; the fader and
+    the pan on the track."""
+    ref = t["id"]
+    fx = t.get("effects") or []
+    steps: list[dict] = [{"id": "mixer.removeInsert", "params": {"strip": ref, "slot": k}} for k in reversed(range(len(fx))) if fx[k].get("effect") in STRIP_EFFECTS]
+    rest = [e for e in fx if e.get("effect") not in STRIP_EFFECTS]
+    gains = _stages(s.gain_db)
+    extra = _stages(s.volume_db - FADER_MAX_DB) if s.volume_db > FADER_MAX_DB else []
+    wide = abs(s.width - 100.0) > 1e-9
+    if len(rest) + len(gains) + int(wide) + len(extra) > MAX_INSERTS:
+        raise CutError(f"FilmCraft holds {MAX_INSERTS} effects on a track and this one has {len(rest)} of its own — the strip needs {len(gains) + int(wide) + len(extra)} more")
+
+    def add(slot: int, effect: str, params: dict, post: bool = False) -> list[dict]:
+        return [{"id": "mixer.addInsert", "params": {"strip": ref, "effect": effect, "slot": slot, "postFader": post}},
+                {"id": "mixer.setInsert", "params": {"strip": ref, "slot": slot, "params": params}}]
+    for k, g in enumerate(gains):
+        steps += add(k, "amplify", {"gain": g})
+    pre_rest = max((k + 1 for k, e in enumerate(rest) if not e.get("post_fader")), default=0)
+    at = len(gains) + pre_rest
+    if wide:
+        steps += add(at, "stereo_width", {"width": s.width})
+        at += 1
+    for k, g in enumerate(extra):
+        steps += add(at + k, "amplify", {"gain": g}, post=True)
+    fader = SILENT_DB if s.volume_db <= SILENT_DB else min(s.volume_db, FADER_MAX_DB)
+    steps.append({"id": "mixer.setStrip", "params": {"strip": ref, "volumeDb": fader, "pan": s.pan}})
+    return steps
+
+
 def _effect(tr: dict) -> str:
     e = tr.get("effect")
     return e.get("effect", "") if isinstance(e, dict) else str(e or "")
@@ -172,7 +259,11 @@ class CutTrack(BaseModel):
     locked: bool = False
     muted: bool = False
     enabled: bool = True
-    volume_db: float = 0.0                          # CE3: the track's volume
+    volume_db: float = 0.0                          # CE3: the track's volume (D127: the fader and the stage past it; −96 is −∞)
+    gain_db: float = 0.0                            # D127: an audio track's strip — its gain, pan (−100 left … +100 right) and width (%)
+    pan: float = 0.0
+    width: float = 100.0
+    role: Literal["dialogue", "music", "effects"] | None = None   # D127: the track's role (its defaults come from Settings › Audio)
     items: list[CutItem] = Field(default_factory=list)
     transitions: list[CutTransition] = Field(default_factory=list)
 
@@ -215,6 +306,7 @@ def tracks(doc: dict) -> CutTracks:
     its = items(doc)
     sid, _, seq = sequence(doc)
     st = seq["settings"]
+    role = roles(doc)
     fps = int(round(st["frame_rate"]["num"] / max(1, st["frame_rate"].get("den", 1))))
 
     def f(t: int) -> float:
@@ -237,8 +329,10 @@ def tracks(doc: dict) -> CutTracks:
                                line=int(meta["loom2.line"]) if meta.get("loom2.line") not in (None, "") else None))
         trans = [CutTransition(id=x["id"], effect=_effect(x), start=f(x["start"]), duration=f(x["duration"]), **{"from": x.get("from")}, to=x.get("to"))
                  for x in t.get("transitions", [])]
+        sound = strip_of(t).model_dump() if kind == "audio" else {}
         return CutTrack(id=t["id"], kind=kind, name=t.get("name", ""), locked=bool(t.get("locked")), muted=bool(t.get("muted")),  # type: ignore[arg-type]
-                        enabled=t.get("enabled", True) is not False, volume_db=round(float(t.get("volume_db") or 0.0), 2), items=out, transitions=trans)
+                        enabled=t.get("enabled", True) is not False, items=out, transitions=trans, role=role.get(t["id"]) if kind == "audio" else None,  # type: ignore[arg-type]
+                        **sound)
     video = [one(t, "video") for t in seq.get("video_tracks", [])]
     audio = [one(t, "audio") for t in seq.get("audio_tracks", [])]
     end = max([i.start + i.duration for tr in video + audio for i in tr.items] or [0.0])
@@ -263,8 +357,9 @@ class Cuts:
     node's title or its shot's name) — loom2 keeps the sequence's chapter markers on V1's named takes after every change (`_markers`)."""
 
     def __init__(self, ws: Workspace, fc: FilmCraft, audio_of: Callable[[TimelineClip], list[dict | None]] | None = None,
-                 name_of: Callable[[TimelineClip], str | None] | None = None) -> None:
+                 name_of: Callable[[TimelineClip], str | None] | None = None, audio: Callable[[], AudioSettings] | None = None) -> None:
         self.ws, self.fc, self.audio_of, self.name_of = ws, fc, audio_of, name_of
+        self.audio = audio or AudioSettings                 # D127: Settings › Audio (the track roles' strips), read when a cut is made
 
     def available(self) -> bool:
         return self.fc.available()
@@ -277,10 +372,18 @@ class Cuts:
         self.fc.close(self.path(tl_id))
 
     def create(self, tl: Timeline) -> Path:
-        """A new cut's project, empty, at the cut's format."""
+        """A new cut's project, empty, at the cut's format; A1–A3 are the dialogue, music and effects tracks with Settings › Audio's strips."""
         p = self.path(tl.id)
         p.parent.mkdir(parents=True, exist_ok=True)
         self.fc.new(p, tl.name, tl.w, tl.h, tl.fps)
+        doc = read(p)
+        seq_id, _, seq = sequence(doc)
+        steps: list[dict] = []
+        for t, role in zip(seq["audio_tracks"], TRACK_ROLES):
+            steps += [{"id": "timeline.setTrack", "params": {"track": t["id"], "name": ROLE_NAMES[role]}}, *strip_steps(t, self.audio().role(role))]
+        given = {str(t["id"]): role for t, role in zip(seq["audio_tracks"], TRACK_ROLES)}
+        self.fc.batch(steps + [{"id": "metadata.set", "params": {"item": seq_id, "fields": {"loom2.roles": json.dumps(given)}}}])
+        self.fc.save()
         return p
 
     def write(self, tl: Timeline, clips: dict[str, ClipRecord]) -> None:
@@ -399,6 +502,42 @@ class Cuts:
                     results.extend(self.fc.batch([{"id": st["id"], "params": st.get("params") or {}}]))
             self._markers(p)
             return results
+        return self.changing(tl, run)
+
+    # ---- D127: a track's strip and role ------------------------------------------------------------------------------------------
+    def _audio_track(self, doc: dict, track: int) -> dict:
+        _, _, seq = sequence(doc)
+        t = next((x for x in seq["audio_tracks"] if x["id"] == track), None)
+        if t is None:
+            raise CutError(f"the cut has no audio track {track}")
+        return t
+
+    def strip(self, tl: Timeline, track: int, change: dict) -> dict:
+        """The audio track's strip with `change` (any of gain_db, volume_db, pan, width) — the rest as it is — as FilmCraft holds it."""
+        def run(p: Path) -> dict:
+            t = self._audio_track(read(p), track)
+            s = TrackStrip.model_validate({**strip_of(t).model_dump(), **{k: v for k, v in change.items() if v is not None}})
+            self.fc.batch(strip_steps(t, s))
+            self.fc.save()
+            return {"track": track, **s.model_dump()}
+        return self.changing(tl, run)
+
+    def role(self, tl: Timeline, track: int, role: str | None) -> dict:
+        """The audio track's role: named after it and its strip set to the role's in Settings › Audio (None: no role, the strip kept)."""
+        if role is not None and role not in TRACK_ROLES:
+            raise CutError(f"a track's role is one of {', '.join(TRACK_ROLES)}")
+        def run(p: Path) -> dict:
+            doc = read(p)
+            t = self._audio_track(doc, track)
+            seq_id, _, _ = sequence(doc)
+            given = {str(k): v for k, v in roles(doc).items() if k != track}
+            steps: list[dict] = []
+            if role is not None:
+                given[str(track)] = role
+                steps += [{"id": "timeline.setTrack", "params": {"track": track, "name": ROLE_NAMES[role]}}, *strip_steps(t, self.audio().role(role))]
+            self.fc.batch(steps + [{"id": "metadata.set", "params": {"item": seq_id, "fields": {"loom2.roles": json.dumps(given)}}}])
+            self.fc.save()
+            return {"track": track, "role": role}
         return self.changing(tl, run)
 
     def _remove_transition(self, doc: dict, tid: int) -> dict:

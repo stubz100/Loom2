@@ -15,7 +15,7 @@ import { storyKey } from '../storyKeys'
 import { laneTake } from './bin'
 import { laneChanges, type LaneChange } from './assemble'
 import { runCommand } from '../../../frame/commands'
-import { CUT_TOOLS, db, dragStep, gripAt, itemLabel, razorStep, trackDrop, trackRef, type Grip } from './cut'
+import { CUT_TOOLS, db, dragStep, gripAt, itemLabel, razorStep, ROLE_NAMES, stripLabel, trackDrop, trackRef, type Grip } from './cut'
 import { tc } from './lane'
 import { cutClipMenu, cutLength, cutSpaceMenu, cutTrackMenu, trackItem } from './sequenceCommands'
 import { useSequence } from './sequenceStore'
@@ -136,12 +136,17 @@ function TrackRow({ cut, track, ppf, len, drag, onDown, frameAt, changed }: { cu
     })()
   }, (p) => { const v = rule(p).verdict; return v.ok ? { ...v, label: `${v.label} · ${trackRef(cut, track)}` } : v })
   const target = drag && drag.grip === 'body' && drag.toTrack === track.id
+  const role = !video && track.role ? ROLE_NAMES[track.role] : null                     // D127: an audio track's role and its strip away from neutral
+  const strip = video ? '' : stripLabel(track)
   return (
     <div className={`cut-row${video ? ' v' : ' a'}${track.locked ? ' locked' : ''}${track.muted ? ' muted' : ''}${target ? ' target' : ''}`} data-track={track.id}>
-      <div className="cut-head" title={`${trackRef(cut, track)} · ${track.name} — right-click: rename, lock, mute, add a track`}
+      <div className="cut-head" title={`${trackRef(cut, track)} · ${track.name}${role ? ` (${role.toLowerCase()})` : ''}${strip ? ` · ${strip}` : ''} — right-click: ${video ? 'rename, lock, mute, add a track' : 'gain, volume, pan, width, role, rename, lock, mute'}`}
         onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); trackItem.id = track.id; showMenu(e, cutTrackMenu()) }}>
-        <span className="ref">{trackRef(cut, track)}</span><span className="name">{track.name}</span>
-        {track.locked && <i title="locked">🔒</i>}{track.muted && <i title="muted">∅</i>}{track.volume_db ? <i title="the track's volume">{db(track.volume_db)}</i> : null}
+        <span className="line">
+          <span className="ref">{trackRef(cut, track)}</span><span className="name">{track.name}</span>
+          {role && role !== track.name && <i title="the track's role">{role.toLowerCase()}</i>}{track.locked && <i title="locked">🔒</i>}{track.muted && <i title="muted">∅</i>}
+        </span>
+        {strip && <span className="cut-strip">{strip}</span>}
       </div>
       <div className="cut-lane" ref={ref} data-over={over || undefined} style={{ width: len * ppf }}>
         {track.transitions.map((x) => <i key={x.id} className={`cut-trans e-${x.effect}`} style={{ left: x.start * ppf, width: Math.max(2, x.duration * ppf) }} title={`${x.effect.replace(/_/g, ' ')} · ${Math.round(x.duration)} frames`} />)}

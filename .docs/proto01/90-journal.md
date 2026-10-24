@@ -9167,3 +9167,46 @@ patched (the Mid attenuated). A track with plugins is printed onto a hidden comp
   floor at the bottom left streaks a little between keyframes 48 and 64 (seen by no keyframe at a good angle). Each Fill ≈ 50 s.
 - **Q28** asks the author whether to build it (PF1: the plate's method *filled*, advised for a large move; ≈ 300 s a 5 s shot), tune it
   first or leave it a spike. Offline 586 passed, Vitest 470 + 3 skipped, typecheck, lint (0 errors, 79 warnings) and build clean, e2e full 64/64 and open 64/64 (the open run's first pass lost the cut's tracks scenario under load, 6.2 min; on its own 14.7 s, and the open suite again 64/64 in 4.3 min).
+
+## 2026-10-25 00:20 — Q28 answered → D133: project and fill tuned for any large move (E35d); E33's downloads approved
+
+- **The author:** tune the floor first (Q28 (b)), and asked whether that is this scene's or every large move's. Every large move's: a
+  frame between two keyframes can see a patch neither keyframe saw (here the near floor as the camera swung past it); orbits, trucks,
+  pull-backs and low cameras over a floor all reveal such patches. So the fix is the method's (D133): keyframes placed by the share of a
+  frame no keyframe saw (Stage's coverage pass, ≤ 3 %), each pixel from the keyframe that saw it most head-on, a keyframe's Fill
+  repainting what none saw within 70°; checked on a second, different move with the same settings.
+- **E33's downloads approved** (TRELLIS, TripoSR; licences read against D17 / D26 before any fetch). E33 runs after E35d, one GPU job at a
+  time. To check first: TRELLIS leans on CUDA-only kernels (spconv, flash-attention, nvdiffrast) — on ROCm under Windows it may not run.
+
+## 2026-10-25 00:59 — E35d: project and fill placed by need holds on two moves; what the Fills paint depends on their prompt → Q29 (proto01_animate 31 §4g)
+
+- **Built for the spike:** Stage's coverage pass returns the cosine (grey) at which a keyframe saw each pixel, inside its frustum
+  (`engine.renderProjected(…, coverage)`; E35c's script thresholds it itself, so it runs as it did); `engine/spikes/e35d_run.py` with
+  `e35d_browser.cjs` (a frame's pixel from the keyframe that saw it most head-on; a pixel *bad* when no keyframe saw it or the frame sees it
+  more than twice as head-on as the best keyframe did below 70°; walking on from the last keyframe, the first frame whose bad share passes
+  the limit becomes the next keyframe and its bad pixels are filled — expand 48, feather 32) and `e35d_setup.cjs` (a second move's final).
+- **Two moves, the same settings:** the orbit (E35's: 50° about the target, a quarter closer) and a crane in the A1 room (rising 1.05 →
+  2.4 m and 1.3 m in, tilting down onto the floor, panning a little left: the near floor and the left wall come into view).
+
+  | move | run | travel (x, y) | apart | step | Fills | time | bad left (median / max) |
+  | --- | --- | --- | --- | --- | --- | --- | --- |
+  | orbit | the set (clay) | (124, 2) | — | 0.14 | — | — | — |
+  | orbit | projected (PS5b) | (123, 0) | 4 | 3.67 | — | — | — |
+  | orbit | E35c every 16th | (122, 0) | 3 | 3.88 | 5 | 301 s | — |
+  | orbit | by need, 3 %, the place's prompt | (122, 0) | 3 | 4.28 | 16 × 3–4 % | 849 s | 0.9 / 2.5 % |
+  | orbit | by need, 8 %, a neutral prompt | (123, 0) | 4 | 3.71 | 7 × 8–9 % | 400 s | 0.3 / 2.5 % |
+  | crane | the set (clay) | (52, −79) | — | 0.56 | — | — | — |
+  | crane | projected (PS5b) | (65, −72) | 13 | 6.57 | — | — | — |
+  | crane | by need, 3 %, the place's prompt | (65, −73) | 13 | 6.37 | 8 × 3 % | 446 s | 0.8 / 1.6 % |
+  | crane | by need, 8 %, a neutral prompt | (64, −72) | 12 | 6.56 | 3 × 8 % | 203 s | 0.7 / 1.5 % |
+
+  (On the crane the projection — on the set by construction — sits 13 px from the clay too: the metric's limit on a tilt over a textured
+  floor, whose near planks move faster than the clay's edges; the plate matches the projection.)
+- **What the sheets show** (img/31-e35d-*.jpg): every run stays on the set and the near floor's smear is gone on both moves. 3 % places
+  thin Fills — on the orbit's left wall they leave seams and, prompted with the place ("… daylight from the tall window"), a second
+  window; the crane at 3 % is clean. 8 % with a neutral prompt ("Continue the surrounding surfaces seamlessly: the same materials, the same
+  light.") repeats nothing, its step is the projection's own, but on the orbit faint horizontal lines cross the left wall and the near floor
+  at the bottom left turns to coloured blocks (no word of wood); the crane at 8 % is clean but for a dark patch at the very bottom left at
+  the end. The method holds; what varies is what Klein paints, and its prompt decides it.
+- **Q29:** build PF1 with placement by need at 8 % and the Fill's prompt the place's surfaces (the author's place prompt under a lead that
+  asks to continue them and add nothing), a prompt spike first, or leave it.

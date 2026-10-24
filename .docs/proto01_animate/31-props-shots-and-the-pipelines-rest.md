@@ -335,3 +335,21 @@ first, or leave it a spike.
 ![E35c every 16th frame: the set · projected · generated (CA3) · project and fill · its keyframes](img/31-e35c-every16.jpg)
 ![E35c every 8th frame: the same rows — the newly seen wall in panels](img/31-e35c-every8.jpg)
 ![Keyframes 40 and 64 before and after their Fill (every 8th frame): the corner-like edge each thin strip gets](img/31-e35c-panels.jpg)
+
+### 4g. E35d — project and fill for any large move (D133)
+
+Q28 answered (2026-10-25): tune first, for every large move. The keyframes are placed where the move needs them — a new one when the share
+of a frame no keyframe saw passes 3 % (Stage's coverage pass, now the cosine at which each keyframe saw the pixel) — and each pixel of a
+frame comes from the keyframe that saw it most head-on; a keyframe's Fill repaints what none saw within 70°. Measured on E35's orbit
+(against E35c's every-16th) and on a pull-back with a pan in the A1 room, with the same settings.
+
+**Measured (2026-10-25, journal 00:59).** Placement by need holds the path on both moves and clears the near floor's smear. At 8 % the
+orbit takes 7 Fills (400 s) and the crane 3 (203 s), their step frame to frame the projection's own; at 3 % the Fills are thin (16 / 8) and
+seam. What a Fill paints depends on its prompt: the place's prompt repeats its features (a second window on the orbit at 3 %), a neutral
+one loses its materials (coloured blocks on the orbit's near floor at 8 %). → Q29: build PF1 at 8 % with the Fill's prompt the place's
+surfaces, a prompt spike first, or leave it.
+
+![E35d orbit, 8 %, a neutral prompt](img/31-e35d-orbit-8pct.jpg)
+![E35d orbit, 3 %, the place's prompt — thin Fills, a second window](img/31-e35d-orbit-3pct.jpg)
+![E35d crane, 8 %, a neutral prompt](img/31-e35d-crane-8pct.jpg)
+![E35d crane, 3 %, the place's prompt](img/31-e35d-crane-3pct.jpg)

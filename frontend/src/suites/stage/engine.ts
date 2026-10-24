@@ -855,11 +855,11 @@ export class StageEngine {
   /** D111 (PS5b): the plate projected along the camera path — the still (a Stage shot of the bare set at the first frame) cast from that
    *  frame's camera onto the set's surfaces and a far backdrop (so a part of the picture no surface of the set holds stays on the plate),
    *  rendered through each frame's camera: a camera move gives the plate's parallax, a still camera the still. The frames' documents
-   *  show the set alone (the caller hides the actors). D132 (E35c): `coverage` renders where the still lands instead — white inside its
-   *  frustum, in front of it and not at a grazing angle (the surface turned less than 80° from it, or the cosine `coverage` gives), black
-   *  where the colour pass clamps (the smear). */
+   *  show the set alone (the caller hides the actors). D132 / D133 (E35c–d): `coverage` renders how the still saw each pixel instead —
+   *  inside its frustum, the cosine between the surface's normal and the way to the still's camera as grey (white head-on, black at a
+   *  grazing angle or outside, where the colour pass clamps: the smear); the caller picks its threshold. */
   async renderProjected(frames: { cam: StageCamera; doc: StageDoc }[], w: number, h: number, plate: TexImageSource, proj: StageCamera, projAspect: number,
-                        restoreDoc: StageDoc, onProgress?: (done: number, total: number) => void, coverage: boolean | number = false): Promise<Blob[]> {
+                        restoreDoc: StageDoc, onProgress?: (done: number, total: number) => void, coverage = false): Promise<Blob[]> {
     if (frames.length) { this.sync(frames[0].doc); await this.settled() }          // SC3e: the set loaded
     const r = this.passRenderer(w, h)
     const tex = new THREE.Texture(plate as HTMLImageElement)
@@ -867,12 +867,12 @@ export class StageEngine {
     const pc = this.shotCamera(proj, projAspect)
     const projVP = new THREE.Matrix4().multiplyMatrices(pc.projectionMatrix, pc.matrixWorldInverse)
     const mat = new THREE.ShaderMaterial({
-      uniforms: { plate: { value: tex }, projVP: { value: projVP }, projPos: { value: new THREE.Vector3(...proj.pos) }, coverage: { value: typeof coverage === 'number' ? coverage : coverage ? 0.17 : 0 } }, side: THREE.DoubleSide,
+      uniforms: { plate: { value: tex }, projVP: { value: projVP }, projPos: { value: new THREE.Vector3(...proj.pos) }, coverage: { value: coverage ? 1 : 0 } }, side: THREE.DoubleSide,
       vertexShader: 'varying vec4 vWorld; varying vec3 vNormal; void main() { vWorld = modelMatrix * vec4(position, 1.0); vNormal = mat3(modelMatrix) * normal; gl_Position = projectionMatrix * viewMatrix * vWorld; }',
       fragmentShader: 'uniform sampler2D plate; uniform mat4 projVP; uniform vec3 projPos; uniform float coverage; varying vec4 vWorld; varying vec3 vNormal; void main() { vec4 c = projVP * vWorld; ' +
         'if (c.w <= 0.0) { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return; } vec2 p = c.xy / c.w * 0.5 + 0.5; ' +
         'if (coverage > 0.0) { float inside = step(0.0, p.x) * step(p.x, 1.0) * step(0.0, p.y) * step(p.y, 1.0); ' +
-        'float facing = step(coverage, abs(dot(normalize(vNormal), normalize(projPos - vWorld.xyz)))); gl_FragColor = vec4(vec3(inside * facing), 1.0); return; } ' +
+        'float facing = abs(dot(normalize(vNormal), normalize(projPos - vWorld.xyz))); gl_FragColor = vec4(vec3(inside * facing), 1.0); return; } ' +
         'gl_FragColor = texture2D(plate, clamp(p, 0.0, 1.0)); }',
     })
     const backdrop = new THREE.Mesh(new THREE.SphereGeometry(80, 48, 24), mat)

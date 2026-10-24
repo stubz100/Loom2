@@ -51,7 +51,7 @@ const KW = 1280, KH = 720, EVERY = Number(everyArg || 8), EXPAND = Number(expand
       for (const k of stack) {
         const im = await load(k.asset)
         const colour = await st().plateProjector(sel, w, h, im, frames[k.frame].cam, im.naturalWidth / im.naturalHeight, restore)
-        const cover = await st().plateProjector(sel, w, h, im, frames[k.frame].cam, im.naturalWidth / im.naturalHeight, restore, undefined, GRAZE)
+        const cover = await st().plateProjector(sel, w, h, im, frames[k.frame].cam, im.naturalWidth / im.naturalHeight, restore, undefined, true)   // the cosine as grey (D133)
         layers.push({ colour, cover })
       }
       const out = []
@@ -60,7 +60,7 @@ const KW = 1280, KH = 720, EVERY = Number(everyArg || 8), EXPAND = Number(expand
         const hole = new Uint8Array(w * h).fill(255)
         for (const L of layers) {
           const col = await pixels(L.colour[i], w, h), cov = await pixels(L.cover[i], w, h)
-          for (let p = 0; p < w * h; p++) if (hole[p] && cov.data[p * 4] > 127) { hole[p] = 0; base.data.set(col.data.subarray(p * 4, p * 4 + 4), p * 4) }
+          for (let p = 0; p < w * h; p++) if (hole[p] && cov.data[p * 4] > GRAZE * 255) { hole[p] = 0; base.data.set(col.data.subarray(p * 4, p * 4 + 4), p * 4) }
         }
         const c = new OffscreenCanvas(w, h); c.getContext('2d').putImageData(base, 0, 0)
         const png = await c.convertToBlob({ type: 'image/png' })

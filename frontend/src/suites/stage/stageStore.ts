@@ -61,7 +61,7 @@ type ClipCaps = { model_id: string; label: string; health: string; seconds?: num
 /** A rendered pass sequence recorded under a camera's passes entry (`guides[kind]`). */
 export interface GuideEntry { asset_id: string; frames: number; fps: number; size: { w: number; h: number }; range: { start: number; end: number }; revision: number; rendered_at?: string }
 /** D111 (PS5b): the plate projected along the camera path (engine.renderProjected). */
-export type PlateProjector = (frames: { cam: StageCamera; doc: StageDoc }[], w: number, h: number, plate: TexImageSource, proj: StageCamera, projAspect: number, restoreDoc: StageDoc, onProgress?: (done: number, total: number) => void, coverage?: boolean | number) => Promise<Blob[]>
+export type PlateProjector = (frames: { cam: StageCamera; doc: StageDoc }[], w: number, h: number, plate: TexImageSource, proj: StageCamera, projAspect: number, restoreDoc: StageDoc, onProgress?: (done: number, total: number) => void, coverage?: boolean) => Promise<Blob[]>
 export type SequenceRenderer = (frames: { cam: StageCamera; doc: StageDoc }[], w: number, h: number, kind: GuideKind | 'clay' | 'proxy' | 'proxymask' | 'beauty', restoreDoc: StageDoc, onProgress?: (done: number, total: number) => void) => Promise<{ blobs: Blob[]; keypoints: Keypoint[][][]; wholebody?: (WholeBody | null)[][] }>
 /** A result of this stage: a shot carries `stage_id` in its params, a clip (ST4) only its job's origin. */
 const ofStage = (a: Asset, stageId: string): boolean => (a.params as { stage_id?: string }).stage_id === stageId || (a.origin?.suite === 'stage' && a.origin?.ref === stageId)

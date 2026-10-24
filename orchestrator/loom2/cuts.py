@@ -30,6 +30,11 @@ strip neutral — is exported by FilmCraft in a process of its own (the project 
 and placed on a companion track (`loom2.prints`) that carries the source's width, volume, pan and mute; the source plays into a muted
 submix. A print is current while its key — the track's clips, media, gain and other pre-fader effects, the chain and the span — is the
 same and its file is there. The companions are not shown (`tracks()` leaves them out).
+
+CE4 (30 §5, O6): colour. A clip's grade is its Lumetri effect (FilmCraft's): a preset, a look (built in or a LUT file), the basic values,
+and a match to another shot (`lumetri.applyMatch`: FilmCraft solves the colour wheels toward a reference frame). *Grade the scene* puts an
+adjustment layer on the cut's top *Grade* track over the run of shots at the same place as the chosen one (the Flow's scene groups come
+with RC2; until then a scene is the place) — a clip the author trims like any other, its own Lumetri the scene's grade.
 """
 from __future__ import annotations
 
@@ -56,6 +61,12 @@ FADER_MAX_DB = 15.0                                # its fader reaches +15 dB: p
 SILENT_DB = -96.0                                  # its fader's floor renders silence (−∞)
 MAX_INSERTS = 5                                    # its effect slots on a track
 STRIP_EFFECTS = ("amplify", "stereo_width")        # the inserts a strip is made of (the author's other track effects stay where they are)
+GRADE_PARAMS = {                                   # CE4: the grade values loom2 sets (Lumetri's ranges; defaults: 0, saturation and intensity 100)
+    "temperature": (-100.0, 100.0), "tint": (-100.0, 100.0), "exposure": (-5.0, 5.0), "contrast": (-100.0, 100.0),
+    "highlights": (-100.0, 100.0), "shadows": (-100.0, 100.0), "whites": (-100.0, 100.0), "blacks": (-100.0, 100.0),
+    "saturation": (0.0, 200.0), "vibrance": (-100.0, 100.0), "faded_film": (0.0, 100.0), "look_intensity": (0.0, 200.0),
+}
+GRADE_TRACK = "Grade"                              # CE4: the top video track the scene grades sit on
 TAIL_S = 8.0                                       # AU4: a print runs this far past its track's last sound (an effect's tail), within the cut
 PRINT_BUS = "loom2 · printed sources"              # the muted submix a printed track plays into
 
@@ -273,6 +284,30 @@ def _effect(tr: dict) -> str:
     return e.get("effect", "") if isinstance(e, dict) else str(e or "")
 
 
+class CutGrade(BaseModel):
+    """CE4: a clip's grade as its Lumetri holds it — the look (a LUT ref, or none), the values, whether it is matched to another shot."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    look: str = ""                                  # "builtin:…" / "lib:…" (an imported LUT file) / "" none
+    values: dict[str, float] = Field(default_factory=dict)
+    matched: bool = False                           # the colour wheels moved (a match, or a preset that sets them)
+
+
+def grade_of(ti: dict) -> CutGrade | None:
+    """The clip's Lumetri, read as it is (None: no grade)."""
+    e = next((x for x in ti.get("effects") or [] if x.get("effect") == "lumetri" and x.get("enabled", True) is not False), None)
+    if e is None:
+        return None
+    pr = e.get("params", {})
+
+    def val(name: str, default: float) -> float:
+        v = (pr.get(name) or {}).get("value", {})
+        return float(v.get("Float", default)) if isinstance(v, dict) else default
+    look = ((pr.get("look_lut") or {}).get("value") or {}).get("Text", "") or ""
+    wheels = any(abs(float(((pr.get(f"wheel_{w}") or {}).get("value") or {}).get("Vec2", {}).get(k, 0.0))) > 1e-6 for w in ("shadows", "midtones", "highlights") for k in ("x", "y"))
+    wheels = wheels or any(abs(val(f"wheel_{w}_l", 0.0)) > 1e-6 for w in ("shadows", "midtones", "highlights"))
+    return CutGrade(look=look, values={k: round(val(k, 100.0 if k in ("saturation", "look_intensity") else 0.0), 3) for k in GRADE_PARAMS}, matched=wheels)
+
+
 class CutItem(BaseModel):
     """One clip on a track, as the editor shows it (frames at the cut's rate; the source in seconds)."""
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
@@ -297,6 +332,7 @@ class CutItem(BaseModel):
     shot_version: str | None = None
     node_id: str | None = None
     line: int | None = None
+    grade: CutGrade | None = None                   # CE4: its colour (a video clip's or an adjustment layer's Lumetri)
 
 
 class CutTransition(BaseModel):
@@ -400,7 +436,8 @@ def tracks(doc: dict) -> CutTracks:
                                media_path=(media.get("File") or {}).get("path"), clip_id=meta.get("loom2.clip") or None,
                                asset_id=meta.get("loom2.asset") or None, shot_id=meta.get("loom2.shot") or None,
                                shot_version=meta.get("loom2.version") or None, node_id=meta.get("loom2.node") or None,
-                               line=int(meta["loom2.line"]) if meta.get("loom2.line") not in (None, "") else None))
+                               line=int(meta["loom2.line"]) if meta.get("loom2.line") not in (None, "") else None,
+                               grade=grade_of(ti) if kind == "video" else None))
         trans = [CutTransition(id=x["id"], effect=_effect(x), start=f(x["start"]), duration=f(x["duration"]), **{"from": x.get("from")}, to=x.get("to"))
                  for x in t.get("transitions", [])]
         sound = strip_of(t).model_dump() if kind == "audio" else {}
@@ -619,6 +656,97 @@ class Cuts:
             self.fc.batch(steps + [{"id": "metadata.set", "params": {"item": seq_id, "fields": {"loom2.roles": json.dumps(given)}}}])
             self.fc.save()
             return {"track": track, "role": role}
+        return self.changing(tl, run)
+
+    # ---- CE4: colour ---------------------------------------------------------------------------------------------------------------
+    def _video_clip(self, doc: dict, clip: int) -> tuple[dict, dict]:
+        _, _, seq = sequence(doc)
+        for tr in seq["video_tracks"]:
+            ti = next((x for x in tr["items"] if x["id"] == clip), None)
+            if ti is not None:
+                return tr, ti
+        raise CutError(f"the cut has no video clip {clip}")
+
+    def grade(self, tl: Timeline, clip: int, change: dict) -> dict:
+        """A video clip's (or a scene grade's) colour: `preset` (one of FilmCraft's; it replaces the clip's grade), `look` (a LUT ref, ""
+        none), `look_file` (a .cube / .3dl imported into the cut's project), `values` (GRADE_PARAMS, brought inside their ranges), `match`
+        (another clip: this one's colour solved toward that clip's middle frame), `reset` (the grade away) — one change of the cut. A clip
+        keeps one Lumetri: FilmCraft's looks, matches and values act on a clip's first, but a preset always inserts another (764723f)."""
+        def run(p: Path) -> dict:
+            doc = read(p)
+            _, ti = self._video_clip(doc, clip)
+            out: dict = {"clip": clip}
+            mine = [i for i, e in enumerate(ti.get("effects") or []) if e.get("effect") == "lumetri"]
+            away = [{"id": "effects.remove", "params": {"clip": clip, "index": k}} for k in reversed(mine)]
+            if change.get("reset"):
+                if away:
+                    self.fc.batch(away)
+                self.fc.save()
+                return out
+            steps: list[dict] = []
+            if change.get("preset"):
+                steps += away + [{"id": "lumetri.applyPreset", "params": {"name": change["preset"], "clips": [clip]}}]
+            elif not mine:
+                steps.append({"id": "effects.apply", "params": {"clips": [clip], "effect": "lumetri"}})
+            if change.get("look_file"):
+                lut = self.fc.batch([{"id": "lut.import", "params": {"path": str(change["look_file"])}}])[0]
+                steps.append({"id": "lumetri.setLook", "params": {"clip": clip, "lut": lut["ref"]}})
+            elif change.get("look") is not None:
+                steps.append({"id": "lumetri.setLook", "params": {"clip": clip, "lut": str(change["look"])}})
+            for k, v in (change.get("values") or {}).items():
+                if k not in GRADE_PARAMS:
+                    raise CutError(f"`{k}` is not a grade value ({', '.join(GRADE_PARAMS)})")
+                lo, hi = GRADE_PARAMS[k]
+                steps.append({"id": "effects.setParam", "params": {"clip": clip, "effect": "lumetri", "param": k, "value": min(hi, max(lo, float(v)))}})
+            if change.get("match") is not None:
+                _, ref = self._video_clip(doc, int(change["match"]))
+                steps.append({"id": "lumetri.applyMatch", "params": {"clip": clip, "referenceTime": ref["start"] + ref["duration"] // 2}})
+            res = self.fc.batch(steps) if steps else []
+            if change.get("match") is not None and res:
+                m = res[-1] or {}
+                out["match"] = {"before": round(float(m.get("distanceBefore", 0.0)), 4), "after": round(float(m.get("distanceAfter", 0.0)), 4)}
+            self.fc.save()
+            return out
+        return self.changing(tl, run)
+
+    def grade_scene(self, tl: Timeline, clip: int, place_of: Callable[[str | None], tuple[str | None, str]]) -> dict:
+        """*Grade the scene*: an adjustment layer on the top *Grade* track over the run of V1's shots at the same place as `clip` (its
+        node's place; a shot with none is its own run); the scene's grade if it is there already. `place_of(node_id)` → (place id, name)."""
+        def run(p: Path) -> dict:
+            doc = read(p)
+            seq_id, _, seq = sequence(doc)
+            its = items(doc)
+            v1 = sorted(seq["video_tracks"][0]["items"], key=lambda x: x["start"]) if seq["video_tracks"] else []
+            k = next((i for i, x in enumerate(v1) if x["id"] == clip), None)
+            if k is None:
+                raise CutError("a scene is graded from one of V1's shots")
+            node = lambda x: its.get(str(x["item"]), {}).get("metadata", {}).get("loom2.node") or None   # noqa: E731
+            place, name = place_of(node(v1[k]))
+            lo = hi = k
+            while place and lo > 0 and place_of(node(v1[lo - 1]))[0] == place:
+                lo -= 1
+            while place and hi + 1 < len(v1) and place_of(node(v1[hi + 1]))[0] == place:
+                hi += 1
+            key = f"place:{place}:{v1[lo]['id']}" if place else f"clip:{clip}"
+            start, end = v1[lo]["start"], v1[hi]["start"] + v1[hi]["duration"]
+            meta = json.loads(its[str(seq_id)].get("metadata", {}).get("loom2.gradetrack") or "null")
+            track = meta if any(t["id"] == meta for t in seq["video_tracks"]) else None
+            if track is not None:
+                have = next((x for x in next(t for t in seq["video_tracks"] if t["id"] == track)["items"]
+                             if its.get(str(x["item"]), {}).get("metadata", {}).get("loom2.grade") == key), None)
+                if have is not None:
+                    return {"clip": have["id"], "made": False, "shots": hi - lo + 1}
+            else:
+                track = int(self.fc.batch([{"id": "sequence.addTracks", "params": {"video": 1, "audio": 0}}])[0]["video"][0])
+                self.fc.batch([{"id": "timeline.setTrack", "params": {"track": track, "name": GRADE_TRACK}},
+                               {"id": "metadata.set", "params": {"item": seq_id, "fields": {"loom2.gradetrack": json.dumps(track)}}}])
+            item = int(self.fc.batch([{"id": "file.newAdjustmentLayer", "params": {"seconds": (end - start) / TICK}}])[0]["item"])
+            placed = self.fc.batch([{"id": "metadata.set", "params": {"item": item, "fields": {"loom2.grade": key}}},
+                                    {"id": "timeline.place", "params": {"item": item, "track": track, "time": start, "duration": end - start, "insert": False, "audio": False}}])
+            new = int(placed[1]["clips"][0])
+            self.fc.batch([{"id": "clip.rename", "params": {"clip": new, "name": f"Grade · {name}" if place else "Grade"}}])   # as shot until a preset, a look or a value
+            self._markers(p)
+            return {"clip": new, "made": True, "shots": hi - lo + 1}
         return self.changing(tl, run)
 
     # ---- AU4: a track's chain of VST3 effects and its print ------------------------------------------------------------------------

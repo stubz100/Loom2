@@ -9,7 +9,7 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ..clips import ClipStore
 from ..origin import JobOrigin
@@ -328,6 +328,72 @@ async def timeline_fx_editor(svc: Svc, tl_id: str, body: CutFxEditor):
     """AU4 (D127): the effect's own editor in a window of loom2's host; answers when the author closes it, its state kept with the cut
     (one change; no base revision — the cut may change while the window is open)."""
     return await _cut_call(svc, tl_id, None, lambda store, tl, ws, cat: [store.cuts.fx_editor(tl, body.track, body.fx)])
+
+
+class CutGradeChange(BaseModel):
+    revision: int | None = None
+    clip: int                                      # a video clip or a scene grade (an adjustment layer)
+    preset: str | None = None                      # one of GET /colour/looks' presets
+    look: str | None = None                        # a look's ref ("builtin:…", "lib:…"); "" takes the look away
+    look_file: str | None = None                   # a .cube / .3dl file, imported into the cut's project
+    values: dict[str, float] | None = None         # cuts.GRADE_PARAMS
+    match: int | None = None                       # another clip: this one's colour matched to its middle frame
+    reset: bool = False
+
+
+class CutGradeScene(BaseModel):
+    revision: int | None = None
+    clip: int                                      # one of V1's shots
+
+
+class ColourPreset(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    folder: str = ""
+    name: str
+    description: str = ""
+
+
+class ColourLook(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    ref: str                                       # "builtin:…"
+    name: str
+
+
+class ColourLooks(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    presets: list[ColourPreset] = Field(default_factory=list)
+    looks: list[ColourLook] = Field(default_factory=list)
+
+
+@router.get("/colour/looks", response_model=ColourLooks)
+async def colour_looks(svc: Svc):
+    """CE4: FilmCraft's Lumetri presets and built-in looks (the grade's lists come from the engine that runs them)."""
+    try:
+        return await asyncio.to_thread(svc.filmcraft.looks)
+    except (ValueError, RuntimeError) as e:
+        raise HTTPException(422, str(e))
+
+
+@router.post("/timelines/{tl_id}/grade", response_model=CutEdited, response_model_by_alias=True)
+async def timeline_grade(svc: Svc, tl_id: str, body: CutGradeChange):
+    """CE4: a clip's colour — a preset, a look (or a LUT file), the values, a match to another shot, or reset (one change of the cut)."""
+    change = body.model_dump(exclude={"revision", "clip"})
+    return await _cut_call(svc, tl_id, body.revision, lambda store, tl, ws, cat: [store.cuts.grade(tl, body.clip, change)])
+
+
+@router.post("/timelines/{tl_id}/grade/scene", response_model=CutEdited, response_model_by_alias=True)
+async def timeline_grade_scene(svc: Svc, tl_id: str, body: CutGradeScene):
+    """CE4: *Grade the scene* — an adjustment layer on the top Grade track over the run of V1's shots at the chosen shot's place."""
+    def run(store, tl, ws, cat):
+        from ..story import StoryStore
+        st = StoryStore(ws)
+        nodes, places = st.flow_nodes(), {p.id: p.name for p in st.profiles() if p.cls == "place"}
+
+        def place_of(node_id):
+            pid = nodes[node_id].place_id if node_id in nodes else None
+            return (pid, places.get(pid, "")) if pid else (None, "")
+        return [store.cuts.grade_scene(tl, body.clip, place_of)]
+    return await _cut_call(svc, tl_id, body.revision, run)
 
 
 class CutUndo(BaseModel):

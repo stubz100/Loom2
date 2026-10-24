@@ -2429,6 +2429,73 @@
         "title": "Closed",
         "type": "object"
       },
+      "ColourLook": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "name"
+        ],
+        "title": "ColourLook",
+        "type": "object"
+      },
+      "ColourLooks": {
+        "properties": {
+          "looks": {
+            "items": {
+              "$ref": "#/components/schemas/ColourLook"
+            },
+            "title": "Looks",
+            "type": "array"
+          },
+          "presets": {
+            "items": {
+              "$ref": "#/components/schemas/ColourPreset"
+            },
+            "title": "Presets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "presets",
+          "looks"
+        ],
+        "title": "ColourLooks",
+        "type": "object"
+      },
+      "ColourPreset": {
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "folder": {
+            "default": "",
+            "title": "Folder",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "folder",
+          "name",
+          "description"
+        ],
+        "title": "ColourPreset",
+        "type": "object"
+      },
       "CompareReply": {
         "additionalProperties": true,
         "properties": {
@@ -3078,6 +3145,146 @@
         "title": "CutFxEditor",
         "type": "object"
       },
+      "CutGrade": {
+        "description": "CE4: a clip's grade as its Lumetri holds it — the look (a LUT ref, or none), the values, whether it is matched to another shot.",
+        "properties": {
+          "look": {
+            "default": "",
+            "title": "Look",
+            "type": "string"
+          },
+          "matched": {
+            "default": false,
+            "title": "Matched",
+            "type": "boolean"
+          },
+          "values": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Values",
+            "type": "object"
+          }
+        },
+        "required": [
+          "look",
+          "values",
+          "matched"
+        ],
+        "title": "CutGrade",
+        "type": "object"
+      },
+      "CutGradeChange": {
+        "properties": {
+          "clip": {
+            "title": "Clip",
+            "type": "integer"
+          },
+          "look": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Look"
+          },
+          "look_file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Look File"
+          },
+          "match": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match"
+          },
+          "preset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preset"
+          },
+          "reset": {
+            "default": false,
+            "title": "Reset",
+            "type": "boolean"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "values": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Values"
+          }
+        },
+        "required": [
+          "clip"
+        ],
+        "title": "CutGradeChange",
+        "type": "object"
+      },
+      "CutGradeScene": {
+        "properties": {
+          "clip": {
+            "title": "Clip",
+            "type": "integer"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          }
+        },
+        "required": [
+          "clip"
+        ],
+        "title": "CutGradeScene",
+        "type": "object"
+      },
       "CutItem": {
         "description": "One clip on a track, as the editor shows it (frames at the cut's rate; the source in seconds).",
         "properties": {
@@ -3121,6 +3328,16 @@
             "default": 0.0,
             "title": "Gain Db",
             "type": "number"
+          },
+          "grade": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CutGrade"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "hold": {
             "default": false,
@@ -3261,7 +3478,8 @@
           "shot_id",
           "shot_version",
           "node_id",
-          "line"
+          "line",
+          "grade"
         ],
         "title": "CutItem",
         "type": "object"
@@ -21948,6 +22166,28 @@
         ]
       }
     },
+    "/colour/looks": {
+      "get": {
+        "description": "CE4: FilmCraft's Lumetri presets and built-in looks (the grade's lists come from the engine that runs them).",
+        "operationId": "colour_looks_colour_looks_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ColourLooks"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Colour Looks",
+        "tags": [
+          "timelines"
+        ]
+      }
+    },
     "/documents": {
       "get": {
         "operationId": "documents_list_documents_get",
@@ -30667,6 +30907,112 @@
           }
         },
         "summary": "Timeline Fx Editor",
+        "tags": [
+          "timelines"
+        ]
+      }
+    },
+    "/timelines/{tl_id}/grade": {
+      "post": {
+        "description": "CE4: a clip's colour — a preset, a look (or a LUT file), the values, a match to another shot, or reset (one change of the cut).",
+        "operationId": "timeline_grade_timelines__tl_id__grade_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tl_id",
+            "required": true,
+            "schema": {
+              "title": "Tl Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CutGradeChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CutEdited"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Timeline Grade",
+        "tags": [
+          "timelines"
+        ]
+      }
+    },
+    "/timelines/{tl_id}/grade/scene": {
+      "post": {
+        "description": "CE4: *Grade the scene* — an adjustment layer on the top Grade track over the run of V1's shots at the chosen shot's place.",
+        "operationId": "timeline_grade_scene_timelines__tl_id__grade_scene_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tl_id",
+            "required": true,
+            "schema": {
+              "title": "Tl Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CutGradeScene"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CutEdited"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Timeline Grade Scene",
         "tags": [
           "timelines"
         ]

@@ -14,6 +14,7 @@ import { lastMovie, useSequence } from './sequenceStore'
 import { db, findItem, isVideo, itemLabel, stripLabel, trackRef, transitionInto } from './cut'
 import { tc } from './lane'
 import { TrackInspector } from './StripControls'
+import { GradeControls } from './GradeControls'
 import { useStory } from '../storyStore'
 import { binItem, laneBelowFormat, laneChecklist } from './sequenceCommands'
 import { markUsed, runCommand } from '../../../frame/commands'
@@ -176,6 +177,7 @@ export function SequenceInspector() {
         {selChange && <div className="kv changed"><span>changed</span><span>{selChange.name} {selChange.version} is the approved take now <CommandButton id="story.episode.update" text label="Update" /></span></div>}
         <div className="verbs"><CommandRow ids={isVideo(tracks, cutSel.track) ? ['story.cut.speed', 'story.cut.freeze', 'story.cut.dissolveIn', 'story.cut.dissolveOut', 'story.cut.removeTransition', 'story.episode.openClip', 'story.cut.lift', 'story.cut.rippleDelete']
           : ['story.cut.gain', 'story.cut.fadeIn', 'story.cut.fadeOut', 'story.cut.duck', 'story.cut.evenDialogue', 'story.cut.removeTransition', 'story.cut.lift', 'story.cut.rippleDelete']} /></div>
+        {isVideo(tracks, cutSel.track) && <GradeControls cut={tracks} track={cutSel.track} item={cutSel.item} />}
       </>}
       {trackSel && tracks && <TrackInspector cut={tracks} track={trackSel} />}
       {c && !current.file && <>

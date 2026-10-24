@@ -435,6 +435,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/colour/looks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Colour Looks
+         * @description CE4: FilmCraft's Lumetri presets and built-in looks (the grade's lists come from the engine that runs them).
+         */
+        get: operations["colour_looks_colour_looks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/documents": {
         parameters: {
             query?: never;
@@ -3480,6 +3500,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/timelines/{tl_id}/grade": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Timeline Grade
+         * @description CE4: a clip's colour — a preset, a look (or a LUT file), the values, a match to another shot, or reset (one change of the cut).
+         */
+        post: operations["timeline_grade_timelines__tl_id__grade_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/timelines/{tl_id}/grade/scene": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Timeline Grade Scene
+         * @description CE4: *Grade the scene* — an adjustment layer on the top Grade track over the run of V1's shots at the chosen shot's place.
+         */
+        post: operations["timeline_grade_scene_timelines__tl_id__grade_scene_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/timelines/{tl_id}/mix": {
         parameters: {
             query?: never;
@@ -4625,6 +4685,35 @@ export interface components {
             /** Closed */
             closed: string;
         };
+        /** ColourLook */
+        ColourLook: {
+            /** Name */
+            name: string;
+            /** Ref */
+            ref: string;
+        };
+        /** ColourLooks */
+        ColourLooks: {
+            /** Looks */
+            looks: components["schemas"]["ColourLook"][];
+            /** Presets */
+            presets: components["schemas"]["ColourPreset"][];
+        };
+        /** ColourPreset */
+        ColourPreset: {
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /**
+             * Folder
+             * @default
+             */
+            folder: string;
+            /** Name */
+            name: string;
+        };
         /** CompareReply */
         CompareReply: {
             /** At */
@@ -4876,6 +4965,57 @@ export interface components {
             track: number;
         };
         /**
+         * CutGrade
+         * @description CE4: a clip's grade as its Lumetri holds it — the look (a LUT ref, or none), the values, whether it is matched to another shot.
+         */
+        CutGrade: {
+            /**
+             * Look
+             * @default
+             */
+            look: string;
+            /**
+             * Matched
+             * @default false
+             */
+            matched: boolean;
+            /** Values */
+            values: {
+                [key: string]: number;
+            };
+        };
+        /** CutGradeChange */
+        CutGradeChange: {
+            /** Clip */
+            clip: number;
+            /** Look */
+            look?: string | null;
+            /** Look File */
+            look_file?: string | null;
+            /** Match */
+            match?: number | null;
+            /** Preset */
+            preset?: string | null;
+            /**
+             * Reset
+             * @default false
+             */
+            reset?: boolean;
+            /** Revision */
+            revision?: number | null;
+            /** Values */
+            values?: {
+                [key: string]: number;
+            } | null;
+        };
+        /** CutGradeScene */
+        CutGradeScene: {
+            /** Clip */
+            clip: number;
+            /** Revision */
+            revision?: number | null;
+        };
+        /**
          * CutItem
          * @description One clip on a track, as the editor shows it (frames at the cut's rate; the source in seconds).
          */
@@ -4901,6 +5041,7 @@ export interface components {
              * @default 0
              */
             gain_db: number;
+            grade: components["schemas"]["CutGrade"] | null;
             /**
              * Hold
              * @default false
@@ -12705,6 +12846,26 @@ export interface operations {
             };
         };
     };
+    colour_looks_colour_looks_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ColourLooks"];
+                };
+            };
+        };
+    };
     documents_list_documents_get: {
         parameters: {
             query?: never;
@@ -18758,6 +18919,76 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["CutFxEditor"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CutEdited"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    timeline_grade_timelines__tl_id__grade_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tl_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CutGradeChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CutEdited"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    timeline_grade_scene_timelines__tl_id__grade_scene_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tl_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CutGradeScene"];
             };
         };
         responses: {

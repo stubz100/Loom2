@@ -134,6 +134,21 @@ export function evenDialogueSteps(t: CutTracks): Step[] {
 /** A gain or volume in dB as the editor writes it (−6 dB, +3 dB, 0 dB). */
 export const db = (v: number): string => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(Math.round(v * 10) / 10)} dB`
 
+// ---- CE4 (proto01_animate 30 §5, O6): colour --------------------------------------------------------------------------------------
+/** The grade's sliders: Lumetri's values and ranges (the server's cuts.GRADE_PARAMS), their neutral and step. */
+export const GRADE_SLIDERS: { key: string; label: string; range: [number, number]; neutral: number; step: number }[] = [
+  { key: 'temperature', label: 'temperature', range: [-100, 100], neutral: 0, step: 1 },
+  { key: 'tint', label: 'tint', range: [-100, 100], neutral: 0, step: 1 },
+  { key: 'exposure', label: 'exposure', range: [-5, 5], neutral: 0, step: 0.05 },
+  { key: 'contrast', label: 'contrast', range: [-100, 100], neutral: 0, step: 1 },
+  { key: 'highlights', label: 'highlights', range: [-100, 100], neutral: 0, step: 1 },
+  { key: 'shadows', label: 'shadows', range: [-100, 100], neutral: 0, step: 1 },
+  { key: 'saturation', label: 'saturation', range: [0, 200], neutral: 100, step: 1 },
+  { key: 'look_intensity', label: 'look strength', range: [0, 200], neutral: 100, step: 1 },
+]
+/** A clip's grade in a few words ("graded", "matched"), for its block and the Inspector. */
+export const gradeLabel = (g: { matched: boolean } | null | undefined): string => (!g ? '' : g.matched ? 'matched' : 'graded')
+
 // ---- D127 (proto01_animate 30 §16): an audio track's channel strip and role ------------------------------------------------------
 export const TRACK_ROLES: TrackRole[] = ['dialogue', 'music', 'effects']
 export const ROLE_NAMES: Record<TrackRole, string> = { dialogue: 'Dialogue', music: 'Music', effects: 'Effects' }

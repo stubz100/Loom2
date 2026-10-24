@@ -500,7 +500,7 @@ test('a sequence (P17, D83 — in Story · Episode since 17 SY4): a fake-engine 
   const mv = await api<{ kind: string; lineage_kind: string | null; parents: string[]; params: { movie?: boolean } }>('GET', `/assets/${mj.result.asset_ids![0]}`)
   expect([mv.kind, mv.lineage_kind, mv.params.movie, mv.parents.length]).toEqual(['video', 'render', true, 1])
 })
-test("the cut's tracks (CE2–CE3, D126): a FilmCraft cut shows its every track and FilmCraft's frame; the razor cuts a take, the right-click sets its speed, undo and redo are the cut's own, a ripple trim closes up, a track is renamed from its header; a sound's gain and fade from its right-click, the cut's mix in the viewer; D127: the audio tracks' roles, a strip set from a header and from the Inspector's sliders, an effect added, edited, bypassed and printed", async ({ page }) => {
+test("the cut's tracks (CE2–CE3, D126): a FilmCraft cut shows its every track and FilmCraft's frame; the razor cuts a take, the right-click sets its speed, undo and redo are the cut's own, a ripple trim closes up, a track is renamed from its header; a sound's gain and fade from its right-click, the cut's mix in the viewer; D127: the audio tracks' roles, a strip set from a header and from the Inspector's sliders, an effect added, edited, bypassed and printed; CE4: a preset, a scene's grade, a value, a look, a match, a reset", async ({ page }) => {
   test.setTimeout(120_000)
   // a take from the fake engine, on a new cut's V1 (through the API: the bins' + is the sequence scenario's)
   const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
@@ -625,6 +625,32 @@ test("the cut's tracks (CE2–CE3, D126): a FilmCraft cut shows its every track 
   await expect(soundHead).toContainText('1 fx')
   await expect.poll(async () => (await fxOf()).printed, { timeout: 20_000 }).toBe('current')        // the page's mix printed it
   await expect(page.getByTestId('cut-mix')).toHaveAttribute('src', /^blob:/, { timeout: 15_000 })
+  // CE4: colour — a preset on a take, its scene's grade (an adjustment layer on the Grade track), a value, a match, a reset
+  type Col = { video: { name: string; items: { id: number; kind: string; grade: { look: string; values: Record<string, number>; matched: boolean } | null }[] }[] }
+  const col = () => api<Col>('GET', `/timelines/${tl.id}/tracks`)
+  await takes.first().click({ position: { x: 6, y: 8 } })
+  const gi = page.getByTestId('grade-inspector')
+  await expect(gi).toContainText('as shot')
+  await gi.getByLabel('apply a preset').selectOption('Golden Dusk')
+  await expect.poll(async () => (await col()).video[0].items[0].grade?.values.temperature, { timeout: 10_000 }).toBe(35)
+  await expect(takes.first()).toContainText('graded')
+  await contextChoose(page, takes.first(), 'Grade its scene')
+  await expect(page.locator('.cut-head', { hasText: 'Grade' })).toHaveCount(1)
+  await expect(page.locator('.cut-clip.k-adjustment')).toHaveCount(1)
+  await expect(page.locator('.cut-clip.k-adjustment')).toHaveClass(/\bselected\b/)
+  await expect(gi).toContainText("the scene's grade")
+  await gi.getByLabel('exposure').focus()
+  await page.keyboard.press('End')
+  await expect.poll(async () => (await col()).video.at(-1)!.items[0].grade?.values.exposure, { timeout: 10_000 }).toBe(5)
+  await gi.getByLabel('the look').selectOption({ label: 'Teal & Orange' })
+  await expect.poll(async () => (await col()).video.at(-1)!.items[0].grade?.look, { timeout: 10_000 }).toBe('builtin:look-teal-orange')
+  await takes.nth(1).click({ button: 'right', position: { x: 6, y: 8 } })
+  await page.locator('.ctx-menu .item.sub', { hasText: /^Match its colour to/ }).hover()
+  await page.locator('.ctx-menu .ctx-menu button.item').first().click()
+  await expect.poll(async () => (await col()).video[0].items[1].grade?.matched, { timeout: 10_000 }).toBe(true)
+  await expect(takes.nth(1)).toContainText('matched')
+  await contextChoose(page, takes.nth(1), 'Reset its colour')
+  await expect.poll(async () => (await col()).video[0].items[1].grade, { timeout: 10_000 }).toBeNull()
 })
 
 test("Settings › Audio (D127): the loudness target and a track role's strip are set in the general Settings and saved", async ({ page }) => {

@@ -8866,3 +8866,23 @@ patched (the Mid attenuated). A track with plugins is printed onto a hidden comp
 - Tests: offline 560 passed (test_cuts_au4.py 2), settings audit, OpenAPI, agents_check and the host's pin clean, Vitest 459 + 3 skipped,
   typecheck, lint (0 errors, 79 warnings) and build clean, e2e full 63/63 and open 63/63 (the tracks scenario adds, opens, bypasses an
   effect and waits for the print; re-run in both variants after the page's mix change). Screenshots img/30-au4-*.jpg. D127 done.
+
+## 2026-10-24 15:54 — CE4 built (D126, O6): colour in the cut — a scene's grade, a shot matched to another, presets and looks
+
+- **Probed first** (764723f): 18 Lumetri presets (4 folders), 8 built-in looks (+ 9 camera-log input LUTs), adjustment layers,
+  `effects.setParam {effect: lumetri}`, `lumetri.setLook` (built in / `lut.import` of a .cube or .3dl), `lumetri.applyMatch` (wheels
+  solved toward a reference frame). **Found:** looks, matches and values act on a clip's first Lumetri, `applyPreset` always inserts another
+  — stacked grades (on the rig a Monochrome preset survived a reset and greyed the next look). loom2 keeps one Lumetri a clip: a preset
+  replaces the grade, a reset removes every Lumetri.
+- **Built**: `GET /colour/looks` (FilmCraft's lists, once a session), `POST …/grade` (preset, look, LUT file, values in range, match,
+  reset) and `POST …/grade/scene` — the run of V1's shots at the same Flow place (RC2's scene groups later) under one adjustment layer on
+  a top *Grade* track, named after the place, as shot until graded, the same layer when asked again. The Inspector's colour block for any
+  video clip (preset by folder, look, *A LUT file…*, sliders committed on release and queued, *Match its colour to…*, *Grade its scene*,
+  *Reset its colour*); the same verbs on a take's right-click; a block says *graded* / *matched*.
+- **Rig** scripts/ce4_acceptance.py 11/11 (A1 project, both shots in one place): one layer over 0–225 of 225 frames; Golden Dusk +34.3 /
+  +38.7 red over blue on both shots; exposure +1 +44.7; Teal & Orange 13.3 levels; our swap-red-blue LUT swaps the means exactly; Mara
+  matched 0.0511 → 0.0357; reset + undo; the movie carries the grade (1.3 levels from the viewer, 8.8 s); graded frames 38.6 ms at ½.
+  CE2 13/13 re-run (AU4's `_place` change).
+- Tests: offline 561 passed (test_cuts_ce4.py; the fake's presets stack as the real ones), settings audit, OpenAPI, agents_check clean,
+  Vitest 459 + 3 skipped, typecheck, lint (0 errors, 79 warnings) and build clean, e2e full 63/63 and open 63/63 (the tracks scenario's
+  colour steps). Screenshots img/30-ce4-*.jpg. Next CE5 (captions and delivery).

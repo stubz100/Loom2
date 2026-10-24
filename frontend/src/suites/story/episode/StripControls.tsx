@@ -10,6 +10,7 @@ import { useSession } from '../../../store/session'
 import { detent, faderDb, faderPos, isVideo, panLabel, ROLE_NAMES, STRIP, TRACK_ROLES, trackRef, volumeLabel, widthLabel } from './cut'
 import { EffectPicker } from './EffectPicker'
 import { fxItem } from './sequenceCommands'
+import { enqueue } from './queue'
 import { useSequence } from './sequenceStore'
 import './cut.css'
 
@@ -22,13 +23,6 @@ const ROWS: { key: Key; label: string; cmd: string; show: (v: number) => string;
     help: '0 % mono … 100 % as recorded … 200 % wider: past 100 % the sides are raised and the centre lowered (3 dB at 200 %), so a mono sound gets quieter, not wider' },
 ]
 
-/** The strip's changes in the order the author made them: one waits for the one before (a slider stays live while FilmCraft takes a value —
- *  disabling it dropped the keys pressed meanwhile). */
-let queue: Promise<unknown> = Promise.resolve()
-function enqueue(change: () => Promise<unknown>): Promise<unknown> {
-  queue = queue.then(change)
-  return queue
-}
 
 /** A slider's travel for a setting (0…1000) and back: the volume on a fader taper, the rest straight with their detents. */
 const toPos = (k: Key, v: number): number => Math.round(k === 'volume_db' ? faderPos(v) * 1000 : (v - STRIP[k][0]) / (STRIP[k][1] - STRIP[k][0]) * 1000)

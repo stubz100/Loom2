@@ -1,6 +1,6 @@
 # 30 · RC4's study — FilmCraft for the cut editor
 
-Status: **study, 2026-10-24; answered the same day → D126 (§10); CE1 built (§11); CE2 built (§13); CE3 built (§15); D127 (§16): the channel strip and VST3 chains — AU1 built (§17), AU2 built (§18), AU3 built (§19), AU4 built (§20) — D127 done; CE4 next.** D96 planned RC4 as "FilmCraft reviewed as 03 reviewed EffectCraft
+Status: **study, 2026-10-24; answered the same day → D126 (§10); CE1 built (§11); CE2 built (§13); CE3 built (§15); D127 (§16): the channel strip and VST3 chains — AU1 built (§17), AU2 built (§18), AU3 built (§19), AU4 built (§20) — D127 done; CE4 built (§21); CE5 next.** D96 planned RC4 as "FilmCraft reviewed as 03 reviewed EffectCraft
 (what to reuse, how), then the multi-track cut editor that replaces the single-lane Episode" ([05](05-flow-nodes-as-shot-recipes.md)
 §6), with O6 (a scene grade and shot-match in the cut, [06](06-continuity-across-shots.md)) attached. RC1–RC3 are built
 ([28](28-recipe-graph.md), [29](29-movie-render.md)); this is the study, measured where it could be (§3, the probe E32).
@@ -229,7 +229,7 @@ into the cut's folder and the Catalogue as RC3. RC3's render stays where FilmCra
 | **CE1 · the engine and the cut file** ✓ built 2026-10-24 (§11) | pin, build script, CI check, Settings › FilmCraft; the session and its fake; `cut.fcproj` per cut (made and converted by commands, conformed masters, the links as metadata); the lane read from it, every existing Episode verb on it (assemble, *changed*, update, exports, checklist, RC3's movie by FilmCraft's export); a rig check (the real binary, an episode-length cut, memory beside ComfyUI) | 4 |
 | **CE2 · tracks** | the five tracks (V1 shots, V2 inserts and titles, A1 dialogue, A2 music, A3 effects; more by `+`); the edits as commands (move, trim, roll, slip, slide, razor, ripple delete, transitions, speed, freeze); the viewer's frames from the session | 4–5 |
 | **CE3 · sound** | the lines as A1 clips (placed as today, then moved by hand), music and effects from the Catalogue, gain and volume keys, ducking, loudness; sound in the page | 2 |
-| **CE4 · colour** | *Grade the scene* (an adjustment layer over a scene group's shots), *Match to…*, presets and looks | 2 |
+| **CE4 · colour** ✓ built 2026-10-24 (§21) | *Grade the scene* (an adjustment layer over a scene group's shots), *Match to…*, presets and looks | 2 |
 | **CE5 · captions and delivery** | the caption track from the lines, burn-in, H.264 / ProRes presets, the Resolve folder from the project | 1–2 |
 
 ## 11. CE1 as built (2026-10-24)
@@ -545,3 +545,37 @@ gets none; an effect's tail past the cut's end is cut; FilmCraft's own Essential
 ![The track's block](img/30-au4-inspector.jpg)
 ![kHs Reverb's own window, opened from the Inspector by loom2's host](img/30-au4-window.jpg)
 ![Settings › Audio with the VST3 folders](img/30-au4-settings.jpg)
+
+## 21. CE4 as built (2026-10-24)
+
+- **FilmCraft's colour, probed first** (764723f): 18 Lumetri presets in four folders, 8 built-in looks (and 9 camera-log input LUTs, left
+  out of the list), `file.newAdjustmentLayer` + `timeline.place` for a scene grade, `effects.setParam {effect: "lumetri"}` for any value,
+  `lumetri.setLook` (built in or an imported `.cube` / `.3dl`: `lut.import`), `lumetri.applyMatch` (the clip's colour wheels solved toward
+  a reference frame of the sequence). **Found:** looks, matches and values act on a clip's *first* Lumetri, but `lumetri.applyPreset` always
+  inserts *another* — stacked grades (a Monochrome preset survived a reset and greyed the next look on the rig). loom2 keeps one Lumetri per
+  clip: a preset replaces the grade (said behind the ?), a reset removes every Lumetri on the clip.
+- **The lists come from the engine** (`GET /colour/looks`, asked once a FilmCraft session); the Inspector's colour block for any selected
+  video clip (a take, a picture, a scene's grade): *Apply a preset…* (by folder), the look (none, the built-in ones, *A LUT file…* — a
+  path, imported into the cut's project), sliders for temperature, tint, exposure, contrast, highlights, shadows, saturation and the look's
+  strength (committed on release, queued as the strip's), *Match its colour to…* (V1's other takes), *Grade its scene*, *Reset its colour*.
+  A clip's block says *graded* or *matched*; the right-click has the same verbs (*Match its colour to ▸* lists the takes).
+- **A scene** (`POST /timelines/{id}/grade/scene`): the run of V1's shots whose Flow nodes are at the same place (the Flow's scene groups
+  come with RC2; until then a scene is the place — a shot with none is its own run) under one adjustment layer on the top *Grade* track,
+  named after the place (*Grade · The room*), as shot until a preset, a look or a value; asked again, the same layer. It is a clip: the
+  author trims or moves it like any other; video tracks added above it later are not graded.
+- **Rig** (`scripts/ce4_acceptance.py`, 11/11, the real FilmCraft on the A1 project — the composition and Mara at one place): FilmCraft's
+  18 presets and 8 looks; one layer over both shots (0–225 of 225 frames), the same on asking again; *Golden Dusk* warms both shots (red over
+  blue +34.3 / +38.7 levels); exposure +1 brightens (+44.7); *Teal & Orange* changes the picture (13.3 levels); a LUT file of ours that
+  swaps red and blue swaps them exactly (means 160.9 / 143.6 → 143.6 / 160.9); Mara matched to the composition (FilmCraft's distance
+  0.0511 → 0.0357, the mean colours 89.7 → 79.5 apart); reset and undo; **the movie** carries the grade (mean difference to the viewer's
+  frame 1.3 levels, 8.8 s); graded frames at ½ in 38.6 ms (median; 10 ms ungraded, E32). The first run's one failure (the LUT check) was
+  the stacked presets above.
+- Tests: `test_cuts_ce4.py` (1: the looks, the scene over two shots at one place, preset / values in range / look / LUT file / an unknown
+  value refused, a preset replacing the grade with one Lumetri, a match, reset, undo); the fake FilmCraft gained FilmCraft's colour commands
+  (its presets stack as the real ones); the tracks e2e scenario: a preset on a take, *Grade its scene* from the right-click (the Grade
+  track, the layer selected), exposure by its slider, a look, a match from *Match its colour to ▸*, a reset.
+
+![Before and after: the scene graded (Golden Dusk); Mara matched to the composition (the rig's own frames)](img/30-ce4-grades.jpg)
+![The scene's grade selected: the Grade track, the viewer graded, the colour block](img/30-ce4-scene.jpg)
+![The colour block](img/30-ce4-inspector.jpg)
+![A take's right-click: Grade its scene, Match its colour to ▸, Reset its colour](img/30-ce4-menu.jpg)

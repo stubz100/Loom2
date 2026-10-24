@@ -128,6 +128,15 @@ class FilmCraft(McpSession):
         """The active sequence as FilmCraft reports it (tracks, items, transitions, markers; ticks and frames)."""
         return self.tool("sequence_inspect", {})
 
+    def looks(self) -> dict:
+        """CE4: FilmCraft's Lumetri presets ({folder, name, description}) and its built-in looks ({ref, name}; the camera-log input LUTs
+        left out) — asked once a session (they are the binary's)."""
+        if getattr(self, "_looks", None) is None:
+            presets = self.command("lumetri.presets", {}).get("presets", [])
+            luts = self.command("lut.list", {})
+            self._looks = {"presets": presets, "looks": [{"ref": x["ref"], "name": x["name"]} for x in luts.get("builtin", []) if not x.get("input")]}
+        return self._looks
+
     def frame(self, seconds: float, max_side: int = 960) -> bytes:
         """The active sequence's frame at `seconds` as PNG, its longer side at most `max_side`."""
         content = self.tool("render_frame", {"seconds": float(seconds), "max_side": int(max_side)})

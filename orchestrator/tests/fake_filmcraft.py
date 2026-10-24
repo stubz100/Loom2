@@ -213,9 +213,9 @@ class Fake:
             return {"items": out, "errors": []}
         if cid == "timeline.place":
             it = self.items().get(str(p["item"]))
-            if it is None or "Media" not in it["kind"]:
+            if it is None or not ({"Media", "AdjustmentLayer"} & set(it["kind"])):
                 raise Refused(f"no media item {p['item']}")
-            info = it["kind"]["Media"]["info"]
+            info = it["kind"]["Media"]["info"] if "Media" in it["kind"] else it["kind"]["AdjustmentLayer"]          # CE4: a scene grade
             t = self.track(p.get("track", "V1"))
             start = int(p["time"]) if "time" in p else (int(p["frame"]) * TICK // 24 if "frame" in p else round(float(p["seconds"]) * TICK))
             src = int(p.get("sourceIn", 0))
@@ -293,7 +293,82 @@ class Fake:
         k = items.index(ti)
         return (items[k - 1] if k > 0 else None), (items[k + 1] if k + 1 < len(items) else None)
 
+    # ---- CE4: colour, as the real ones answer (the probe on 764723f) -----------------------------------------------------------------
+    PRESETS = {"Golden Dusk": {"temperature": 35.0, "saturation": 110.0}, "Steel Blue": {"temperature": -40.0, "saturation": 70.0},
+               "Neutral Mono": {"saturation": 0.0}}
+
+    def lumetri(self, clip: int) -> dict:
+        _, ti = self.find_clip(clip)
+        e = next((x for x in ti.setdefault("effects", []) if x["effect"] == "lumetri"), None)
+        if e is None:
+            e = {"effect": "lumetri", "enabled": True, "params": {"look_lut": {"value": {"Text": ""}}}}
+            ti["effects"].insert(0, e)
+        return e
+
+    def colour(self, cid: str, p: dict):
+        if cid == "lumetri.presets":
+            return {"folders": ["Cinematic", "Monochrome"], "presets": [{"folder": "Monochrome" if n == "Neutral Mono" else "Cinematic", "name": n, "description": n}
+                                                                        for n in self.PRESETS]}
+        if cid == "lut.list":
+            return {"library": [], "builtin": [{"ref": "builtin:look-teal-orange", "name": "Teal & Orange", "input": False},
+                                               {"ref": "builtin:look-night", "name": "Night", "input": False},
+                                               {"ref": "builtin:slog3-sgamut3-to-rec709", "name": "Sony S-Log3 / S-Gamut3 to Rec. 709", "input": True}]}
+        if cid == "lut.import":
+            if not Path(p["path"]).is_file() or Path(p["path"]).suffix.lower() not in (".cube", ".3dl"):
+                raise Refused(f"lut.import: {p['path']}: expected a .cube or .3dl file")
+            lid = f"lut{self.new_id()}"
+            return {"id": lid, "ref": f"lib:{lid}", "name": Path(p["path"]).stem}
+        if cid == "file.newAdjustmentLayer":
+            iid = self.new_id()
+            s = self.sequence()
+            self.items()[str(iid)] = {"id": iid, "name": "Adjustment Layer", "label": "Lavender", "metadata": {}, "created": iid,
+                                      "kind": {"AdjustmentLayer": {"width": s["settings"]["width"], "height": s["settings"]["height"],
+                                                                   "rate": s["settings"]["frame_rate"], "duration": round(float(p.get("seconds", 5)) * TICK)}}}
+            return {"item": iid}
+        if cid == "lumetri.applyPreset":                                    # as the real one: always another instance, after the Lumetri there
+            if p["name"] not in self.PRESETS:
+                raise Refused(f"lumetri.applyPreset: no preset `{p['name']}`")
+            for c in p.get("clips") or []:
+                _, ti = self.find_clip(int(c))
+                e = {"effect": "lumetri", "enabled": True, "params": {"look_lut": {"value": {"Text": ""}}}}
+                for k, v in self.PRESETS[p["name"]].items():
+                    e["params"][k] = {"value": {"Float": v}}
+                fx = ti.setdefault("effects", [])
+                fx.insert(max([i + 1 for i, x in enumerate(fx) if x["effect"] == "lumetri"], default=0), e)
+            return {"clips": len(p.get("clips") or []), "preset": p["name"]}
+        if cid == "effects.apply":
+            for c in p.get("clips") or []:
+                if p["effect"] != "lumetri":
+                    raise Refused(f"effects.apply: the fake knows lumetri only, not {p['effect']}")
+                self.lumetri(int(c))
+            return None
+        if cid == "effects.setParam":
+            _, ti = self.find_clip(int(p["clip"]))
+            e = next((x for x in ti.get("effects") or [] if x["effect"] == p.get("effect")), None)
+            if e is None:
+                raise Refused("effects.setParam: no such effect on clip")
+            e["params"][p["param"]] = {"value": {"Float": float(p["value"])}}
+            return None
+        if cid == "effects.remove":
+            _, ti = self.find_clip(int(p["clip"]))
+            fx = ti.get("effects") or []
+            if not 0 <= int(p["index"]) < len(fx):
+                raise Refused("effects.remove: no effect at that index")
+            fx.pop(int(p["index"]))
+            return None
+        if cid == "lumetri.setLook":
+            self.lumetri(int(p["clip"]))["params"]["look_lut"] = {"value": {"Text": p.get("lut") or ""}}
+            return {"clip": int(p["clip"]), "lut": p.get("lut") or ""}
+        if cid == "lumetri.applyMatch":
+            e = self.lumetri(int(p["clip"]))
+            e["params"]["wheel_midtones"] = {"value": {"Vec2": {"x": 0.3, "y": 0.1}}}
+            return {"clip": int(p["clip"]), "distanceBefore": 0.6, "distanceAfter": 0.2}
+        return NotImplemented
+
     def editor(self, cid: str, p: dict):
+        c = self.colour(cid, p)
+        if c is not NotImplemented:
+            return c
         # D127: a track's strip — the fader and pan (FilmCraft's clamps), its inserts (Amplify −96…+24 dB, Stereo Width 0–200 %), at most 5
         if cid == "mixer.addSubmix":                                        # AU4: the muted bus of the printed sources
             subs = self.sequence().setdefault("submix_tracks", [])

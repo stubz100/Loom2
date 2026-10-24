@@ -28,6 +28,10 @@
 .cut-clip.k-picture { background: color-mix(in srgb, #6a8 35%, var(--bg3, #333)); }
 .cut-clip.k-sound { background: color-mix(in srgb, #68c 35%, var(--bg3, #333)); }
 .cut-clip.k-line { background: color-mix(in srgb, #c96 35%, var(--bg3, #333)); }
+.cut-clip.k-adjustment { background: repeating-linear-gradient(135deg, color-mix(in srgb, #b8c 30%, var(--bg3, #333)) 0 8px, color-mix(in srgb, #b8c 20%, var(--bg3, #333)) 8px 16px); }   /* CE4: a scene's grade */
+.grade-insp .strip-ctl > span:last-child { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.grade-insp .strip-ctl input[type=range] { flex: 1; min-width: 80px; accent-color: var(--accent); }
+.grade-insp .strip-val { flex: 0 0 auto; min-width: 64px; text-align: right; font: var(--mono); font-size: 11px; color: var(--fg2); }
 .cut-clip.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); z-index: 3; }
 .cut-clip.moving { opacity: .55; }
 .cut-clip.off { filter: grayscale(1); opacity: .6; }

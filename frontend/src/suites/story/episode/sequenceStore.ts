@@ -3,7 +3,7 @@
 // and the toast says so). Project data lives here and on disk, never in component state.
 import { create } from 'zustand'
 import { ApiError, http, unwrap } from '../../../api/client'
-import type { Clip, CutEdited, CutTracks, Job, Timeline, TimelineClipIn, TrackRole, TrackStrip, VstPlugin, VstPluginList } from '../../../api/types'
+import type { Clip, CutEdited, CutTracks, Job, Timeline, TimelineClipIn, TrackRole, TrackStrip, VstPlugin, VstPluginList, ColourLooks } from '../../../api/types'
 import { useSession } from '../../../store/session'
 import { DEV_HOOKS } from '../../../devHooks'
 import { append, at, duration, move, remove, setOverlap, starts, trim, type Lane, type LaneClip, chainIn } from './lane'
@@ -86,6 +86,10 @@ interface SequenceState {
   fxScanning: boolean
   /** The list opens for `track` (none: closes); the installed effects are fetched the first time, or scanned again on `rescan`. */
   setFxPicker: (track: number | null, rescan?: boolean) => void
+  /** CE4: a clip's colour (a preset, a look or a LUT file, values, a match, reset) and *Grade the scene* (its grade selected after). */
+  cutGrade: (clip: number, change: { preset?: string; look?: string; look_file?: string; values?: Record<string, number>; match?: number; reset?: boolean }) => Promise<boolean>
+  cutGradeScene: (clip: number) => Promise<boolean>
+  looks: ColourLooks | null                 // FilmCraft's presets and looks (loaded when a video clip is first selected)
   setTool: (tool: CutTool) => void
   selectClip: (id: number | null) => void
   selectTrack: (id: number | null) => void
@@ -146,7 +150,7 @@ async function cutCall(get: () => SequenceState, set: (p: Partial<SequenceState>
 
 export const useSequence = create<SequenceState>()((set, get) => ({
   timelines: [], current: null, lane: null, selected: null, playhead: 0, playing: false, pxPerFrame: 3, undo: [], redo: [], saving: false, lastExport: null, assembleFor: null,
-  tracks: null, tool: 'select', selClip: null, selTrack: null, cutBusy: false, fxOpen: null, fxPicker: null, fxPlugins: null, fxScanning: false,
+  tracks: null, tool: 'select', selClip: null, selTrack: null, cutBusy: false, fxOpen: null, fxPicker: null, fxPlugins: null, fxScanning: false, looks: null,
 
   load: async () => {
     try { set({ timelines: (await unwrap(http.GET('/timelines'))).items }) } catch { set({ timelines: [] }) }
@@ -263,10 +267,22 @@ export const useSequence = create<SequenceState>()((set, get) => ({
     void unwrap(http.GET('/audio/plugins', { params: { query: { rescan } } })).then((r) => set({ fxPlugins: r }))
       .catch((e) => set({ fxPlugins: { available: false, plugins: [], failed: [], error: String((e as ApiError).detail ?? e) } })).finally(() => set({ fxScanning: false }))
   },
+  cutGrade: (clip, change) => cutCall(get, set, (id, revision) => unwrap(http.POST('/timelines/{tl_id}/grade', { params: { path: { tl_id: id } }, body: { revision, clip, ...change } }))),
+  cutGradeScene: async (clip) => {
+    let made: number | null = null
+    const ok = await cutCall(get, set, async (id, revision) => {
+      const r = await unwrap(http.POST('/timelines/{tl_id}/grade/scene', { params: { path: { tl_id: id } }, body: { revision, clip } }))
+      made = (r.results?.[0] as { clip: number } | undefined)?.clip ?? null
+      return r
+    })
+    if (ok && made !== null) get().selectClip(made)
+    return ok
+  },
   setTool: (tool) => set({ tool }),
   selectClip: (id) => {                                                       // a take on V1 is the lane's clip too (Update, the Inspector)
     const k = id === null ? -1 : (get().lane?.clips.findIndex((c) => c.id === String(id)) ?? -1)
     set({ selClip: id, selected: k >= 0 ? k : null, ...(id !== null ? { selTrack: null } : {}) })
+    if (id !== null && !get().looks) void unwrap(http.GET('/colour/looks')).then((looks) => set({ looks })).catch(() => { /* FilmCraft not built: no grade lists */ })   // CE4
   },
   selectTrack: (id) => set({ selTrack: id, ...(id !== null ? { selClip: null, selected: null } : {}) }),
 }))

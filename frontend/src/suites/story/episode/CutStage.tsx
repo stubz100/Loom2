@@ -16,7 +16,7 @@ import { storyKey } from '../storyKeys'
 import { laneTake } from './bin'
 import { laneChanges, type LaneChange } from './assemble'
 import { runCommand } from '../../../frame/commands'
-import { CUT_TOOLS, db, dragStep, gripAt, itemLabel, razorStep, ROLE_NAMES, stripLabel, trackDrop, trackRef, type Grip } from './cut'
+import { CUT_TOOLS, db, dragStep, gradeLabel, gripAt, itemLabel, razorStep, ROLE_NAMES, stripLabel, trackDrop, trackRef, type Grip } from './cut'
 import { tc } from './lane'
 import { cutClipMenu, cutLength, cutSpaceMenu, cutTrackMenu } from './sequenceCommands'
 import { useSequence } from './sequenceStore'
@@ -124,7 +124,7 @@ function ClipBlock({ cut, track, item, ppf, drag, onDown, changed }: { cut: CutT
       <div className="cut-thumbs">{thumbs()}</div>
       {changed && <button type="button" className="seq-changed" title={`${changed.name} ${changed.version} is the approved take now — Update plays it in place, the edits around it stay`}
         onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); useSequence.getState().selectClip(item.id); runCommand('story.episode.update') }}>changed · Update</button>}
-      <b>{label}{item.speed !== 1 ? ` · ${Math.round(item.speed * 100)} %` : ''}{item.hold ? ' · hold' : ''}{item.gain_db ? ` · ${db(item.gain_db)}` : ''}{item.ducked ? ' · ducked' : ''}</b>
+      <b>{label}{item.speed !== 1 ? ` · ${Math.round(item.speed * 100)} %` : ''}{item.hold ? ' · hold' : ''}{item.gain_db ? ` · ${db(item.gain_db)}` : ''}{item.ducked ? ' · ducked' : ''}{item.grade ? ` · ${gradeLabel(item.grade)}` : ''}</b>
     </div>
   )
 }

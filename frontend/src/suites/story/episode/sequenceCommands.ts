@@ -1,6 +1,6 @@
 // P17 (D83): the Sequence tab's verbs — every one has a mouse home (the lane's context menu, the Inspector, the transport) per D32;
 // undo / redo take Ctrl+Z / Ctrl+Shift+Z in the Animate scope (the clip player has no undo of its own).
-import { AppWindow, ArrowDown, ArrowLeft, ArrowLeftRight, ArrowRight, ArrowRightLeft, ArrowUp, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, Columns2, FileDown, Film, FolderOpen, Gauge, Lock, Mic, MousePointer2, MoveHorizontal, Music, Pause, Pencil, Play, Plug, Plus, Redo2, RefreshCw, Scissors, SkipBack, SkipForward, SlidersHorizontal, Snowflake, Sparkles, SplitSquareHorizontal, SquareDashed, Tag, ToggleLeft, Trash2, Undo2, UnfoldHorizontal, Volume2, VolumeX, Workflow, ZoomIn, ZoomOut } from 'lucide-react'
+import { AppWindow, ArrowDown, ArrowLeft, ArrowLeftRight, ArrowRight, ArrowRightLeft, ArrowUp, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, Columns2, FileDown, Film, FolderOpen, Gauge, Lock, Mic, MousePointer2, MoveHorizontal, Music, Palette, Pause, Pencil, Play, Plug, Plus, Redo2, RefreshCw, RotateCcw, Scissors, SkipBack, SkipForward, SlidersHorizontal, Snowflake, Sparkles, SplitSquareHorizontal, SquareDashed, Tag, ToggleLeft, Trash2, Undo2, UnfoldHorizontal, Volume2, VolumeX, Workflow, ZoomIn, ZoomOut } from 'lucide-react'
 import { registerCommands, sep, type MenuItem } from '../../../frame/commands'
 import { askConfirm, askText, useSession } from '../../../store/session'
 import { useAnimate } from '../../animate/animateStore'
@@ -8,7 +8,7 @@ import { useStory } from '../storyStore'
 import { assembleLane, laneChanges, routeLabel, routePicks, updateClip, walkRoute } from './assemble'
 import { duration, ticks } from './lane'
 import { isCut, lastMovie, useSequence } from './sequenceStore'
-import { CUT_TOOLS, dialogueOf, duckSteps, evenDialogueSteps, fadeStep, findItem, gainStep, isVideo, panLabel, ROLE_NAMES, STRIP, stripValue, ticksOf, trackRef, transitionInto, transitionStep, TRACK_ROLES, volumeLabel, widthLabel, type CutTool } from './cut'
+import { CUT_TOOLS, dialogueOf, itemLabel, duckSteps, evenDialogueSteps, fadeStep, findItem, gainStep, isVideo, panLabel, ROLE_NAMES, STRIP, stripValue, ticksOf, trackRef, transitionInto, transitionStep, TRACK_ROLES, volumeLabel, widthLabel, type CutTool } from './cut'
 import type { TrackRole, TrackStrip } from '../../../api/types'
 import { revealPath } from '../../../shell/tauri'
 
@@ -267,6 +267,12 @@ registerCommands([
   { id: 'story.cut.track.duck', scope: 'story', label: 'Duck the track under the dialogue', icon: VolumeX, placement: ['context', 'inspector'],
     when: () => isCut() && !!selTrack() && !isVideo(sq().tracks!, selTrack()!) && selTrack()!.items.some((i) => i.kind !== 'line') && dialogueOf(sq().tracks!).length > 0,
     run: () => { const tr = selTrack(); if (tr) void sq().cutEdit(duckSteps(sq().tracks!, tr.items)) } },
+  // CE4 (30 §5, O6): colour — a scene's grade, a shot matched to another, reset (presets, looks and values in the Inspector)
+  { id: 'story.cut.grade.scene', scope: 'story', label: 'Grade its scene', icon: Palette, placement: ['inspector', 'context'],
+    hint: 'an adjustment layer on the top Grade track over the shots at the same place in a row (trim it like any clip); its colour in the Inspector',
+    when: () => cutSel() && sq().tracks!.video[0]?.id === selCut()!.track.id && selCut()!.item.kind === 'take', run: () => { const s = selCut(); if (s) void sq().cutGradeScene(s.item.id) } },
+  { id: 'story.cut.grade.reset', scope: 'story', label: 'Reset its colour', icon: RotateCcw, placement: ['inspector', 'context'], when: () => cutSel() && !!selCut()!.item.grade,
+    run: () => { const s = selCut(); if (s) void sq().cutGrade(s.item.id, { reset: true }) } },
   { id: 'story.cut.addVideoTrack', scope: 'story', label: 'Add a video track', icon: Plus, placement: ['context', 'toolbar'], when: () => isCut() && !sq().cutBusy,
     run: () => edit1('sequence.addTracks', { video: 1, audio: 0 }) },
   { id: 'story.cut.addAudioTrack', scope: 'story', label: 'Add an audio track', icon: Volume2, placement: ['context', 'toolbar'], when: () => isCut() && !sq().cutBusy,
@@ -280,7 +286,11 @@ export function cutClipMenu(): MenuItem[] {
   const moveTo: MenuItem[] = s && t ? (isVideo(t, s.track) ? t.video : t.audio).filter((x) => x.id !== s.track.id).map((x) => ({
     label: `${trackRef(t, x)} · ${x.name}`, run: () => edit1('timeline.move', { moves: [{ clip: s.item.id, track: x.id, time: ticksOf(s.item.start, t.fps) }], insert: false }) })) : []
   const video = !!s && !!t && isVideo(t, s.track)
-  const look: MenuItem[] = video ? [{ cmd: 'story.cut.dissolveIn' }, { cmd: 'story.cut.dissolveOut' }, { cmd: 'story.cut.dipIn' }, { cmd: 'story.cut.dipOut' }]
+  const takes = s && t && video ? t.video[0].items.filter((i) => i.id !== s.item.id && i.kind === 'take') : []
+  const colour: MenuItem[] = video ? [{ cmd: 'story.cut.grade.scene' }, ...(takes.length ? [{ label: 'Match its colour to', icon: Palette, items: takes.map((i) => ({
+    label: itemLabel(i, useStory.getState().shots.find((x) => x.id === i.shot_id), an().clips.find((c) => c.id === i.clip_id)), run: () => void sq().cutGrade(s!.item.id, { match: i.id }) })) } as MenuItem] : []),
+    { cmd: 'story.cut.grade.reset' }, sep] : []
+  const look: MenuItem[] = video ? [...colour, { cmd: 'story.cut.dissolveIn' }, { cmd: 'story.cut.dissolveOut' }, { cmd: 'story.cut.dipIn' }, { cmd: 'story.cut.dipOut' }]
     : [{ cmd: 'story.cut.gain' }, { cmd: 'story.cut.fadeIn' }, { cmd: 'story.cut.fadeOut' }, { cmd: 'story.cut.duck' }, { cmd: 'story.cut.evenDialogue' }]   // CE3: a sound's verbs
   return [{ cmd: 'story.episode.update' }, sep, { cmd: 'story.cut.speed' }, { cmd: 'story.cut.freeze' }, sep, ...look, { cmd: 'story.cut.removeTransition' }, sep,
     ...(moveTo.length ? [{ label: 'Move to track', icon: ArrowRight, items: moveTo } as MenuItem, sep] : []),

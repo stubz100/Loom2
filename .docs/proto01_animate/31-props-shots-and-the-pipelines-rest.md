@@ -58,9 +58,9 @@ The waves are in §3a; the model they change is mapped in §3b.
 | --- | --- | --- |
 | **RC2a · one record** ✓ built 2026-10-24 (§3c) | the Flow node and its Story shot as one Shot (the record, the migration, the API kept for one release); a node without a shot stays a story node | 2 |
 | **RC2b · Shot cards** ✓ built 2026-10-24 | the Flow's card shows the used take (its first frame), the length, the stale count; the 30 s warning (a guideline: nothing is blocked) | 1 |
-| **RC2c · scene groups** | a frame around Shots in the Flow (made from a selection, named, moved together); *New coverage shot* on a Shot makes a sibling in its group; CE4's *Grade the scene* takes the group (the place's run stays the fallback) | 2 |
-| **RC2d · the Shots list** | the Shots tab's board rows are the Shot nodes, grouped by scene, with search, sort and the state filters | 1 |
-| **RC2e · templates (O2)** | *New Shot from this Shot* (the scene's parts linked, the Shot's own copied); *Save as a template…* into the World Library; *New Shot from a template…* | 2 |
+| **RC2c · scene groups** ✓ built 2026-10-24 (§3d) | a frame around Shots in the Flow (made from a selection, named, moved together); *New coverage shot* on a Shot makes a sibling in its group; CE4's *Grade the scene* takes the group (the place's run stays the fallback) | 2 |
+| **RC2d · the Shots list** ✓ built 2026-10-24 (§3d) | the Shots tab's board rows are the Shot nodes, grouped by scene, with search, sort and the state filters | 1 |
+| **RC2e · templates (O2)** ✓ built 2026-10-24 (§3d) | *New Shot from this Shot* (the scene's parts linked, the Shot's own copied); *Save as a template…* into the World Library; *New Shot from a template…* | 2 |
 | **RC2f · linked copies (O3)** | within a scene the shared parts (set, plate, light, cast versions, props, grade) are linked by default: one item, several users, a badge; *Make independent* breaks a part away (an independent copy is the Catalogue's *Duplicate*) | 2–3 |
 
 ### 3b. The model today and the merge
@@ -148,3 +148,22 @@ D102 retired CA5's W3 (a per-frame refine at a seam made the hold worse); A6's h
 
 Each wave: offline tests, Vitest, the e2e under both variants, the rig where a GPU path changes, screenshots of every section it
 touches, a journal entry and a local commit.
+
+### 3d. RC2c, RC2d and RC2e as built (2026-10-24)
+
+- **Scene groups** (`story/flow/scenes.json`, schema 1; a node names its scene, `FlowNode.scene_id`): *Make a scene of it…* on a node's
+  right-click or the Inspector (with the nodes selected with it — Ctrl-click or Shift-drag), *Into the scene ▸*, *Take it out of its
+  scene*, the node's *scene* select; a scene no node names goes. On the canvas each scene is a frame around its nodes, drawn in a
+  ViewportPortal behind the edges (frames as React Flow nodes measured by its ResizeObserver looped: their size follows the nodes'), its
+  name tab picks the scene, shows *Rename* / *Dissolve* on a right-click and moves its nodes by a drag.
+- ***New Shot from this Shot*** (O2's verb, also the coverage shot): a sibling below the source in its scene — one is made around the
+  two, named after the place, when the source has none; the stage, the place and the board shared; the lines (with their voice), a camera
+  of its own on the stage (the source's copied with its keys, *Camera 2*) and the route copied; no takes.
+- **CE4's *Grade the scene*** takes the scene group (`scene:<id>` keys), the place's run only for a node in none.
+- **The Shots list:** a search (a name, a line, the shot's line, the scene) and an order — the story's (the Flow's walk, its branches as
+  headings), by scene (the scenes as headings in the story order of their first Shot, *No scene* last), by name, longest first, most stale
+  first; each row's length, stale count and scene after its route.
+- **Shot templates** (`story/shot_templates.json`, World › Presets › *Shot templates*): *Save as a template…* keeps the node's kind, its
+  lines (the words, not the voice), its line, its route and its camera with its keys; *New Shot from a template ▸* on the Flow's
+  right-click places one there, on a node's right-click beside it (in its scene and place, the template's camera added to its stage);
+  the World Inspector shows what a template keeps, *New Shot from it*, *Rename*, *Delete*.

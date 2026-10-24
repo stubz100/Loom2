@@ -1737,6 +1737,36 @@ test('a flow (17 / SY3, D85): the Strip adds Start, Dialogue and Choice nodes, h
   await expect(page.locator('.flow-node')).toHaveCount(3)
   await expect(page.locator('.inspector [data-testid="node-shot-panel"] .shot-head')).toHaveText('Shot · Hello')
   expect((await api<FlowLite>('GET', '/story/flow')).nodes.find((n) => n.type === 'dialogue')!.shot_id).toBe(made.id)
+  // RC2c: a scene of the Dialogue from its right-click, its frame on the canvas; New Shot from this Shot puts a sibling in it
+  const dlgNode = page.locator('.flow-node.t-dialogue', { hasText: 'Hello' }).first()
+  await dlgNode.locator('.head').click({ button: 'right' })
+  await page.locator('.ctx-menu button.item', { hasText: /^Make a scene of it…$/ }).click()
+  await page.locator('.modal.ask input').fill('At the gate')
+  await page.locator('.modal.ask button.primary').click()
+  await expect(page.locator('.scene-frame[data-scene="At the gate"]')).toBeVisible()
+  await dlgNode.locator('.head').click({ button: 'right' })
+  await page.locator('.ctx-menu button.item', { hasText: /^New Shot from this Shot$/ }).click()
+  await expect(page.locator('.flow-node', { hasText: 'Hello · 2' })).toHaveCount(1)
+  type ScenesLite = { items: { name: string; node_ids: string[] }[] }
+  await expect.poll(async () => (await api<ScenesLite>('GET', '/story/scenes')).items.find((s) => s.name === 'At the gate')?.node_ids.length).toBe(2)
+  // RC2e: Save as a template… keeps it in World › Presets; the Flow's right-click places one from it
+  await dlgNode.locator('.head').click({ button: 'right' })
+  await page.locator('.ctx-menu button.item', { hasText: /^Save as a template…$/ }).click()
+  await page.locator('.modal.ask input').fill('Gate talk')
+  await page.locator('.modal.ask button.primary').click()
+  await expect.poll(async () => (await api<{ items: { name: string }[] }>('GET', '/story/shot-templates')).items.map((t) => t.name)).toContain('Gate talk')
+  const pane = page.locator('.react-flow__pane')
+  await pane.click({ button: 'right', position: { x: 30, y: 30 } })
+  await page.locator('.ctx-menu .item.sub', { hasText: /^New Shot from a template/ }).hover()
+  await page.locator('.ctx-menu button.item', { hasText: /^Gate talk$/ }).click()
+  await expect(page.locator('.flow-node', { hasText: 'Gate talk' })).toHaveCount(1)
+  // RC2d: the Shots list orders by scene (the scene's name heads its rows) and finds a shot by a word
+  await openApp(page, { suite: 'story', tab: 'shots' })
+  await page.locator('select[aria-label="shot order"]').selectOption('scene')
+  await expect(page.locator('.shots-board tr.grp', { hasText: 'At the gate' })).toHaveCount(1)
+  await page.locator('input[aria-label="search shots"]').fill('Hello · 2')
+  await expect(page.locator('.shots-board tr.row')).toHaveCount(1)
+  for (const t of (await api<{ items: { id: string; name: string }[] }>('GET', '/story/shot-templates')).items) if (t.name === 'Gate talk') await api('DELETE', `/story/shot-templates/${t.id}`)
 })
 
 test("an episode (17 / SY4, D85): the Shots bin lists a final shot and adds it stamped; the checklist names the plain clip; Export asks, writes the FCPXML with a chapter marker and markers.txt, and the SRT carries the node's line; the old deep link redirects", async ({ page }) => {

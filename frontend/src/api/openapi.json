@@ -6968,6 +6968,17 @@
             "title": "Revision",
             "type": "integer"
           },
+          "scene_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scene Id"
+          },
           "schema_version": {
             "default": 2,
             "title": "Schema Version",
@@ -7070,6 +7081,7 @@
           "beat_id",
           "speaker_versions",
           "colour",
+          "scene_id",
           "revision",
           "created_at",
           "updated_at"
@@ -15418,6 +15430,117 @@
         "title": "SavedPanels",
         "type": "object"
       },
+      "SceneCreate": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "node_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Node Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "node_ids"
+        ],
+        "title": "SceneCreate",
+        "type": "object"
+      },
+      "SceneList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SceneOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "revision"
+        ],
+        "title": "SceneList",
+        "type": "object"
+      },
+      "SceneMembers": {
+        "properties": {
+          "add": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Add",
+            "type": "array"
+          },
+          "remove": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Remove",
+            "type": "array"
+          }
+        },
+        "title": "SceneMembers",
+        "type": "object"
+      },
+      "SceneOut": {
+        "description": "RC2c: a scene group and its member nodes (in the Flow's reading order).",
+        "properties": {
+          "colour": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Colour"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "node_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Node Ids",
+            "type": "array"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "colour",
+          "created_at",
+          "updated_at",
+          "node_ids"
+        ],
+        "title": "SceneOut",
+        "type": "object"
+      },
       "Segment": {
         "description": "AI Select (10 §4, D7 masks): a mask from the visible composite becomes (part of) the document's selection.\n`subject` = BiRefNet matte through the core background-removal nodes; `text` / `points` / `box` = SAM 3\n(core `SAM3_Detect` on the sam3.pt checkpoint). Coordinates are document pixels; the queue scales them.",
         "properties": {
@@ -16259,6 +16382,110 @@
           "at"
         ],
         "title": "ShotTake",
+        "type": "object"
+      },
+      "ShotTemplate": {
+        "description": "RC2e (06 O2: \"saved templates in the Library, like ComfyUI's workflow templates\"): a Shot kept to start others from — its kind, its\nlines (the words, not the voice), its line, its route and its camera. The scene's parts (the stage, the place, the cast) come from where\nit is used.",
+        "properties": {
+          "camera": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TemplateCamera"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "from_node": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Node"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/TemplateLine"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "node_type": {
+            "enum": [
+              "dialogue",
+              "shot"
+            ],
+            "title": "Node Type",
+            "type": "string"
+          },
+          "route": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route"
+          },
+          "text": {
+            "default": "",
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "node_type",
+          "lines",
+          "text",
+          "route",
+          "camera",
+          "from_node",
+          "created_at"
+        ],
+        "title": "ShotTemplate",
+        "type": "object"
+      },
+      "ShotTemplateList": {
+        "description": "RC2e: the World's Shot templates.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ShotTemplate"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "revision"
+        ],
+        "title": "ShotTemplateList",
         "type": "object"
       },
       "ShotVersion": {
@@ -18415,6 +18642,108 @@
         "title": "TemplateBody",
         "type": "object"
       },
+      "TemplateCamera": {
+        "description": "A template's camera — its lens, its place and its keys as they were on the source stage (a new camera on the stage it is used on).",
+        "properties": {
+          "focal_mm": {
+            "default": 35.0,
+            "title": "Focal Mm",
+            "type": "number"
+          },
+          "keys": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Keys",
+            "type": "array"
+          },
+          "name": {
+            "default": "Camera",
+            "title": "Name",
+            "type": "string"
+          },
+          "pos": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Pos",
+            "type": "array"
+          },
+          "roll": {
+            "default": 0.0,
+            "title": "Roll",
+            "type": "number"
+          },
+          "sensor_mm": {
+            "default": 36.0,
+            "title": "Sensor Mm",
+            "type": "number"
+          },
+          "target": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Target",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "pos",
+          "target",
+          "roll",
+          "focal_mm",
+          "sensor_mm",
+          "keys"
+        ],
+        "title": "TemplateCamera",
+        "type": "object"
+      },
+      "TemplateLine": {
+        "properties": {
+          "speaker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker"
+          },
+          "text": {
+            "default": "",
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "speaker",
+          "text"
+        ],
+        "title": "TemplateLine",
+        "type": "object"
+      },
+      "TemplateSave": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "node_id",
+          "name"
+        ],
+        "title": "TemplateSave",
+        "type": "object"
+      },
       "TemplateStep": {
         "properties": {
           "experimental": {
@@ -18454,6 +18783,45 @@
           "label"
         ],
         "title": "TemplateStep",
+        "type": "object"
+      },
+      "TemplateUse": {
+        "properties": {
+          "near": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Near"
+          },
+          "x": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X"
+          },
+          "y": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Y"
+          }
+        },
+        "title": "TemplateUse",
         "type": "object"
       },
       "ThingFindBody": {
@@ -28348,6 +28716,49 @@
         ]
       }
     },
+    "/story/flow/nodes/{nid}/sibling": {
+      "post": {
+        "description": "RC2c / O2: *New Shot from this Shot* — a sibling in the node's scene (one is made around the two when it has none): the stage, the\nplace, the Cast pins and the board shared; the lines, a camera of its own (the source's copied with its keys) and the route copied.",
+        "operationId": "flow_sibling_story_flow_nodes__nid__sibling_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "nid",
+            "required": true,
+            "schema": {
+              "title": "Nid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlowNode"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Flow Sibling",
+        "tags": [
+          "story"
+        ]
+      }
+    },
     "/story/flow/nodes/{nid}/unbind": {
       "post": {
         "operationId": "flow_unbind_story_flow_nodes__nid__unbind_post",
@@ -29807,6 +30218,423 @@
           }
         },
         "summary": "Recipe Templates",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/scenes": {
+      "get": {
+        "description": "RC2c: the scene groups with their member nodes (a scene no node names is not listed).",
+        "operationId": "scenes_list_story_scenes_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SceneList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Scenes List",
+        "tags": [
+          "story"
+        ]
+      },
+      "post": {
+        "description": "A scene around the nodes (each leaves the scene it was in).",
+        "operationId": "scene_create_story_scenes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SceneCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SceneList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Scene Create",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/scenes/{sid}": {
+      "delete": {
+        "description": "The frame goes; its nodes stay where they are, in no scene.",
+        "operationId": "scene_delete_story_scenes__sid__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "title": "Sid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deleted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Scene Delete",
+        "tags": [
+          "story"
+        ]
+      },
+      "patch": {
+        "operationId": "scene_patch_story_scenes__sid__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "title": "Sid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SceneList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Scene Patch",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/scenes/{sid}/nodes": {
+      "post": {
+        "description": "Nodes join the scene (leaving their own) or leave it; a scene left empty goes.",
+        "operationId": "scene_members_story_scenes__sid__nodes_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "title": "Sid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SceneMembers"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SceneList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Scene Members",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/shot-templates": {
+      "get": {
+        "description": "RC2e: the World's Shot templates (its *Presets*).",
+        "operationId": "shot_templates_story_shot_templates_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShotTemplateList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Shot Templates",
+        "tags": [
+          "story"
+        ]
+      },
+      "post": {
+        "description": "*Save as a template…*: the node's kind, lines and line, its route and its camera (with its keys).",
+        "operationId": "shot_template_save_story_shot_templates_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplateSave"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShotTemplateList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Shot Template Save",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/shot-templates/{tid}": {
+      "delete": {
+        "operationId": "shot_template_delete_story_shot_templates__tid__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tid",
+            "required": true,
+            "schema": {
+              "title": "Tid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deleted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Shot Template Delete",
+        "tags": [
+          "story"
+        ]
+      },
+      "patch": {
+        "operationId": "shot_template_rename_story_shot_templates__tid__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tid",
+            "required": true,
+            "schema": {
+              "title": "Tid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplateSave"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShotTemplateList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Shot Template Rename",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/shot-templates/{tid}/use": {
+      "post": {
+        "description": "*New Shot from a template*: a node of its kind with its lines on its route — beside a node, in that node's scene, with the template's\ncamera on its stage.",
+        "operationId": "shot_template_use_story_shot_templates__tid__use_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tid",
+            "required": true,
+            "schema": {
+              "title": "Tid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplateUse"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlowNode"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Shot Template Use",
         "tags": [
           "story"
         ]

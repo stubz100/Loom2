@@ -1,7 +1,7 @@
 // D125 (SP3): the Shots board's order (the Flow's routes, the branches naming their rows) and its cells (what each route owes, what is done).
 import { describe, expect, it } from 'vitest'
 import type { FlowGraph, FlowNode, Shot, ShotVersion } from '../../api/types'
-import { bareNode, cellsOf, flowOrder, hasWork, lengthLine, nextStep, routeOf, type CellInput } from './board'
+import { arrange, bareNode, cellsOf, flowOrder, hasWork, lengthLine, nextStep, routeOf, type CellInput } from './board'
 
 const node = (id: string, type: FlowNode['type'], extra: Partial<FlowNode> = {}): FlowNode =>
   ({ id, type, title: id, lines: [], options: [], cond: null, set: [], target: null, text: '', shot_id: null, shot_version: null, board_group_id: null, place_id: null, speaker_versions: {}, colour: null, revision: 0, schema_version: 1, created_at: '', updated_at: '', ...extra }) as FlowNode
@@ -79,5 +79,26 @@ describe('a Shot card\'s length (RC2b, D96)', () => {
     expect(lengthLine({ length_s: 12.34, length_from: 'clip' }, 30)).toEqual({ text: '12.3 s', over: false, title: '12.3 s (its clip)' })
     const long = lengthLine({ length_s: 95, length_from: 'final' }, 30)!
     expect(long.text).toBe('1 min 35 s'); expect(long.over).toBe(true); expect(long.title).toContain('past about 30 s')
+  })
+})
+
+describe('the Shots list (RC2d)', () => {
+  const sc = [{ id: 'scn_q', name: 'Quay' }, { id: 'scn_s', name: 'Shed' }]
+  const n1 = node('n1', 'dialogue', { scene_id: 'scn_s', lines: [{ speaker: null, text: 'Close the door.', audio_asset_id: null, audio_text: null }] })
+  const n2 = node('n2', 'shot', { scene_id: 'scn_q', text: 'a boat comes in' }), n3 = node('n3', 'shot'), n4 = node('n4', 'shot', { scene_id: 'scn_s' })
+  const rows = [n1, n2, n3, n4].map((n) => ({ shot: shot(`s_${n.id}`, n.id), node: n, group: 'Stay or go ▸ Stay' }))
+  const cards = { s_n1: { length_s: 4, stale: 0 }, s_n2: { length_s: 31, stale: 2 }, s_n3: { length_s: null, stale: 1 }, s_n4: { length_s: 9, stale: 0 } }
+  it('finds a row by its name, a line, its line or its scene', () => {
+    expect(arrange(rows, 'door', 'story', sc, cards).map((r) => r.node.id)).toEqual(['n1'])
+    expect(arrange(rows, 'BOAT', 'story', sc, cards).map((r) => r.node.id)).toEqual(['n2'])
+    expect(arrange(rows, 'shed', 'story', sc, cards).map((r) => r.node.id)).toEqual(['n1', 'n4'])
+  })
+  it('keeps the story order, or groups by scene (the story order of their first Shot; none last), or sorts by name, length or staleness', () => {
+    expect(arrange(rows, '', 'story', sc, cards).map((r) => r.group)).toEqual(['Stay or go ▸ Stay', 'Stay or go ▸ Stay', 'Stay or go ▸ Stay', 'Stay or go ▸ Stay'])
+    const byScene = arrange(rows, '', 'scene', sc, cards)
+    expect(byScene.map((r) => [r.node.id, r.group])).toEqual([['n1', 'Shed'], ['n4', 'Shed'], ['n2', 'Quay'], ['n3', 'No scene']])
+    expect(arrange(rows, '', 'length', sc, cards).map((r) => r.node.id)).toEqual(['n2', 'n4', 'n1', 'n3'])
+    expect(arrange(rows, '', 'stale', sc, cards).map((r) => r.node.id)).toEqual(['n2', 'n3', 'n1', 'n4'])
+    expect(arrange(rows, '', 'name', sc, cards).every((r) => r.group === null)).toBe(true)
   })
 })

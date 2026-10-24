@@ -2585,6 +2585,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/flow/nodes/{nid}/sibling": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Flow Sibling
+         * @description RC2c / O2: *New Shot from this Shot* — a sibling in the node's scene (one is made around the two when it has none): the stage, the
+         *     place, the Cast pins and the board shared; the lines, a camera of its own (the source's copied with its keys) and the route copied.
+         */
+        post: operations["flow_sibling_story_flow_nodes__nid__sibling_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/flow/nodes/{nid}/unbind": {
         parameters: {
             query?: never;
@@ -3079,6 +3100,134 @@ export interface paths {
         get: operations["recipe_templates_story_recipe_templates_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/scenes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Scenes List
+         * @description RC2c: the scene groups with their member nodes (a scene no node names is not listed).
+         */
+        get: operations["scenes_list_story_scenes_get"];
+        put?: never;
+        /**
+         * Scene Create
+         * @description A scene around the nodes (each leaves the scene it was in).
+         */
+        post: operations["scene_create_story_scenes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/scenes/{sid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Scene Delete
+         * @description The frame goes; its nodes stay where they are, in no scene.
+         */
+        delete: operations["scene_delete_story_scenes__sid__delete"];
+        options?: never;
+        head?: never;
+        /** Scene Patch */
+        patch: operations["scene_patch_story_scenes__sid__patch"];
+        trace?: never;
+    };
+    "/story/scenes/{sid}/nodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Scene Members
+         * @description Nodes join the scene (leaving their own) or leave it; a scene left empty goes.
+         */
+        post: operations["scene_members_story_scenes__sid__nodes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/shot-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Shot Templates
+         * @description RC2e: the World's Shot templates (its *Presets*).
+         */
+        get: operations["shot_templates_story_shot_templates_get"];
+        put?: never;
+        /**
+         * Shot Template Save
+         * @description *Save as a template…*: the node's kind, lines and line, its route and its camera (with its keys).
+         */
+        post: operations["shot_template_save_story_shot_templates_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/shot-templates/{tid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Shot Template Delete */
+        delete: operations["shot_template_delete_story_shot_templates__tid__delete"];
+        options?: never;
+        head?: never;
+        /** Shot Template Rename */
+        patch: operations["shot_template_rename_story_shot_templates__tid__patch"];
+        trace?: never;
+    };
+    "/story/shot-templates/{tid}/use": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Shot Template Use
+         * @description *New Shot from a template*: a node of its kind with its lines on its route — beside a node, in that node's scene, with the template's
+         *     camera on its stage.
+         */
+        post: operations["shot_template_use_story_shot_templates__tid__use_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6552,6 +6701,8 @@ export interface components {
              * @default 0
              */
             revision: number;
+            /** Scene Id */
+            scene_id: string | null;
             /**
              * Schema Version
              * @default 2
@@ -10027,6 +10178,45 @@ export interface components {
              */
             schema_version: number;
         };
+        /** SceneCreate */
+        SceneCreate: {
+            /** Name */
+            name: string;
+            /** Node Ids */
+            node_ids: string[];
+        };
+        /** SceneList */
+        SceneList: {
+            /** Items */
+            items: components["schemas"]["SceneOut"][];
+            /** Revision */
+            revision: number;
+        };
+        /** SceneMembers */
+        SceneMembers: {
+            /** Add */
+            add?: string[];
+            /** Remove */
+            remove?: string[];
+        };
+        /**
+         * SceneOut
+         * @description RC2c: a scene group and its member nodes (in the Flow's reading order).
+         */
+        SceneOut: {
+            /** Colour */
+            colour: string | null;
+            /** Created At */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Node Ids */
+            node_ids: string[];
+            /** Updated At */
+            updated_at: string;
+        };
         /**
          * Segment
          * @description AI Select (10 §4, D7 masks): a mask from the visible composite becomes (part of) the document's selection.
@@ -10379,6 +10569,47 @@ export interface components {
              * @enum {string}
              */
             kind: "image" | "clip";
+        };
+        /**
+         * ShotTemplate
+         * @description RC2e (06 O2: "saved templates in the Library, like ComfyUI's workflow templates"): a Shot kept to start others from — its kind, its
+         *     lines (the words, not the voice), its line, its route and its camera. The scene's parts (the stage, the place, the cast) come from where
+         *     it is used.
+         */
+        ShotTemplate: {
+            camera: components["schemas"]["TemplateCamera"] | null;
+            /** Created At */
+            created_at: string;
+            /** From Node */
+            from_node: string | null;
+            /** Id */
+            id: string;
+            /** Lines */
+            lines: components["schemas"]["TemplateLine"][];
+            /** Name */
+            name: string;
+            /**
+             * Node Type
+             * @enum {string}
+             */
+            node_type: "dialogue" | "shot";
+            /** Route */
+            route: string | null;
+            /**
+             * Text
+             * @default
+             */
+            text: string;
+        };
+        /**
+         * ShotTemplateList
+         * @description RC2e: the World's Shot templates.
+         */
+        ShotTemplateList: {
+            /** Items */
+            items: components["schemas"]["ShotTemplate"][];
+            /** Revision */
+            revision: number;
         };
         /**
          * ShotVersion
@@ -11228,6 +11459,57 @@ export interface components {
             /** Template */
             template: string;
         };
+        /**
+         * TemplateCamera
+         * @description A template's camera — its lens, its place and its keys as they were on the source stage (a new camera on the stage it is used on).
+         */
+        TemplateCamera: {
+            /**
+             * Focal Mm
+             * @default 35
+             */
+            focal_mm: number;
+            /** Keys */
+            keys: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Name
+             * @default Camera
+             */
+            name: string;
+            /** Pos */
+            pos: number[];
+            /**
+             * Roll
+             * @default 0
+             */
+            roll: number;
+            /**
+             * Sensor Mm
+             * @default 36
+             */
+            sensor_mm: number;
+            /** Target */
+            target: number[];
+        };
+        /** TemplateLine */
+        TemplateLine: {
+            /** Speaker */
+            speaker: string | null;
+            /**
+             * Text
+             * @default
+             */
+            text: string;
+        };
+        /** TemplateSave */
+        TemplateSave: {
+            /** Name */
+            name: string;
+            /** Node Id */
+            node_id: string;
+        };
         /** TemplateStep */
         TemplateStep: {
             /**
@@ -11243,6 +11525,15 @@ export interface components {
             label: string;
             /** Wave */
             wave?: string | null;
+        };
+        /** TemplateUse */
+        TemplateUse: {
+            /** Near */
+            near?: string | null;
+            /** X */
+            x?: number | null;
+            /** Y */
+            y?: number | null;
         };
         /** ThingFindBody */
         ThingFindBody: {
@@ -17155,6 +17446,37 @@ export interface operations {
             };
         };
     };
+    flow_sibling_story_flow_nodes__nid__sibling_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                nid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FlowNode"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     flow_unbind_story_flow_nodes__nid__unbind_post: {
         parameters: {
             query?: never;
@@ -18159,6 +18481,316 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Template"][];
+                };
+            };
+        };
+    };
+    scenes_list_story_scenes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SceneList"];
+                };
+            };
+        };
+    };
+    scene_create_story_scenes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SceneCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SceneList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    scene_delete_story_scenes__sid__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Deleted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    scene_patch_story_scenes__sid__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SceneList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    scene_members_story_scenes__sid__nodes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SceneMembers"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SceneList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    shot_templates_story_shot_templates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShotTemplateList"];
+                };
+            };
+        };
+    };
+    shot_template_save_story_shot_templates_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TemplateSave"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShotTemplateList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    shot_template_delete_story_shot_templates__tid__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Deleted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    shot_template_rename_story_shot_templates__tid__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TemplateSave"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShotTemplateList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    shot_template_use_story_shot_templates__tid__use_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TemplateUse"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FlowNode"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

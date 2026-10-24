@@ -8953,3 +8953,25 @@ patched (the Mid attenuated). A track with plugins is printed onto a hidden comp
   (`bareNode`, `hasWork`, `lengthLine`); the flow e2e takes a shot made elsewhere from the panel; the episode e2e reads the card's length.
   Offline 567 passed, settings audit and agents_check clean, Vitest 462 + 3 skipped, typecheck, lint and build clean, e2e full 63/63 and
   open 63/63. Screenshots img/31-rc2a-*.jpg.
+
+## 2026-10-24 19:28 — RC2c, RC2d and RC2e built: scene groups and the sibling Shot, the Shots list, Shot templates (proto01_animate 31 §3d)
+
+- **RC2c:** scene groups in `story/flow/scenes.json` (a node names its scene); *Make a scene of it…*, *Into the scene ▸*, *Take it out of
+  its scene*, the node's *scene* select, a scene left empty goes; the frames drawn behind the nodes with a name tab (click, right-click
+  *Rename* / *Dissolve*, drag moves the scene's nodes). *New Shot from this Shot*: a sibling in the scene (one made around the two when
+  needed) — the stage, place and board shared, the lines, a copied camera with its keys and the route its own. CE4's *Grade the scene*
+  takes the scene group (the place's run for a node in none).
+- **RC2d:** the Shots list's search (name, lines, line, scene) and order (story, by scene, by name, longest first, most stale first); the
+  rows show the length, the stale count and the scene.
+- **RC2e:** Shot templates in World › Presets (`story/shot_templates.json`): *Save as a template…* (kind, lines' words, line, route,
+  camera with keys); *New Shot from a template ▸* on the Flow's right-click (there) or a node's (beside it: its scene, place and a camera
+  on its stage); the World Inspector's view of one, *Rename*, *Delete*.
+- **Found:** scene frames as React Flow nodes looped Chromium's ResizeObserver (a frame's size follows the nodes' measured sizes, and
+  React Flow measures the frame) — the error overlay covered the canvas in the e2e; the frames are a ViewportPortal layer now.
+- Tests: test_scenes_rc2c.py (3), test_shot_templates_rc2e.py (2), test_cuts_ce4.py +1 (a scene beats the place), board.test.ts (`arrange`),
+  the flow e2e (a scene from the right-click and its frame, the sibling, a template saved and placed from the canvas's right-click, the
+  Shots list by scene and searched); routes_d37 +11. Offline 572 passed, settings audit and agents_check clean, Vitest 464 + 3 skipped,
+  typecheck, lint (0 errors, 79 warnings) and build clean, e2e full 63/63 and open 63/63. Screenshots img/31-rc2c-*.jpg.
+- **Found too:** the `open` run once failed a bind with a `PermissionError` — on Windows a node file another request is reading at that
+  moment cannot be deleted (bind removes the bare node's file); `fsio.unlink` retries as `fsio.replace` does (D42), and the node files and
+  the migration's moves go through it.

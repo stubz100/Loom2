@@ -33,8 +33,8 @@ same and its file is there. The companions are not shown (`tracks()` leaves them
 
 CE4 (30 §5, O6): colour. A clip's grade is its Lumetri effect (FilmCraft's): a preset, a look (built in or a LUT file), the basic values,
 and a match to another shot (`lumetri.applyMatch`: FilmCraft solves the colour wheels toward a reference frame). *Grade the scene* puts an
-adjustment layer on the cut's top *Grade* track over the run of shots at the same place as the chosen one (the Flow's scene groups come
-with RC2; until then a scene is the place) — a clip the author trims like any other, its own Lumetri the scene's grade.
+adjustment layer on the cut's top *Grade* track over the run of shots in the same scene as the chosen one (RC2c: the Flow's scene group;
+a shot in none falls back to its place) — a clip the author trims like any other, its own Lumetri the scene's grade.
 
 CE5 (30 §5): captions and markers. *Captions from the lines* makes the cut's caption track (FilmCraft's, `captions.*`) from the Dialogue
 lines where the SRT lays them (a voiced line where its clip sits); the author edits the captions by FilmCraft's commands; the movie burns
@@ -768,8 +768,9 @@ class Cuts:
         return self.changing(tl, run)
 
     def grade_scene(self, tl: Timeline, clip: int, place_of: Callable[[str | None], tuple[str | None, str]]) -> dict:
-        """*Grade the scene*: an adjustment layer on the top *Grade* track over the run of V1's shots at the same place as `clip` (its
-        node's place; a shot with none is its own run); the scene's grade if it is there already. `place_of(node_id)` → (place id, name)."""
+        """*Grade the scene*: an adjustment layer on the top *Grade* track over the run of V1's shots in the same scene as `clip` (RC2c: its
+        node's scene group, else its place; a shot with neither is its own run); the scene's grade if it is there already. `place_of(node_id)`
+        → (the group's key — `scene:<id>` or `place:<id>` — and its name)."""
         def run(p: Path) -> dict:
             doc = read(p)
             seq_id, _, seq = sequence(doc)
@@ -785,7 +786,7 @@ class Cuts:
                 lo -= 1
             while place and hi + 1 < len(v1) and place_of(node(v1[hi + 1]))[0] == place:
                 hi += 1
-            key = f"place:{place}:{v1[lo]['id']}" if place else f"clip:{clip}"
+            key = f"{place}:{v1[lo]['id']}" if place else f"clip:{clip}"
             start, end = v1[lo]["start"], v1[hi]["start"] + v1[hi]["duration"]
             meta = json.loads(its[str(seq_id)].get("metadata", {}).get("loom2.gradetrack") or "null")
             track = meta if any(t["id"] == meta for t in seq["video_tracks"]) else None

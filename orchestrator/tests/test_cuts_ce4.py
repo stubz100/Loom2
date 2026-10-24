@@ -88,3 +88,11 @@ def test_grades_matches_and_the_scene(tmp_path: Path):
         assert next(i for i in r["tracks"]["video"][0]["items"] if i["id"] == v1[2]["id"])["grade"] is None
         r = cl.post(f"{base}/undo", json={"revision": r["timeline"]["revision"]}).json()
         assert next(i for i in r["tracks"]["video"][0]["items"] if i["id"] == v1[2]["id"])["grade"]["matched"] is True
+        # RC2c: a scene group beats the place — Through (the Gate) and Out (the Yard) in one scene are graded as one run, named after it
+        st.create_scene("Crossing", [nodes[1].id, nodes[2].id])
+        r = cl.post(f"{base}/grade/scene", json={"clip": v1[2]["id"]})
+        assert r.status_code == 200, r.text
+        res = r.json()["results"][0]
+        assert res["made"] and res["shots"] == 2
+        crossing = next(i for i in r.json()["tracks"]["video"][-1]["items"] if i["id"] == res["clip"])
+        assert crossing["name"] == "Grade · Crossing" and (crossing["start"], crossing["duration"]) == (v1[1]["start"], v1[1]["duration"] + v1[2]["duration"])

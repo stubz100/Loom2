@@ -16,7 +16,7 @@ from .clips import IDENTITY_SCHEMA, ClipRecord
 from .documents import Document
 from .timelines import Timeline
 from .stages import Stage
-from .story import FlowGraph, FlowNode, Profile, Shot
+from .story import FlowGraph, FlowNode, Profile, Shot, ShotTemplate
 from .library import Library, LibraryEntry
 from .groups import GroupRecord
 from .queue import JobRecord
@@ -750,6 +750,27 @@ class ShotCard(Out):
     length_from: Literal["clip", "final", "lines"] | None
     stale: int
     owed: int
+
+
+class SceneOut(Out):
+    """RC2c: a scene group and its member nodes (in the Flow's reading order)."""
+    id: str
+    name: str
+    colour: str | None
+    created_at: str
+    updated_at: str
+    node_ids: list[str]
+
+
+class SceneList(Out):
+    items: list[SceneOut]
+    revision: int
+
+
+class ShotTemplateList(Out):
+    """RC2e: the World's Shot templates."""
+    items: list[ShotTemplate]
+    revision: int
 
 
 class ShotCards(Out):

@@ -18,11 +18,11 @@ from ..models import registry
 from ..clips import ClipStore
 from ..loras import LoraRegistry, publish, unpublish
 from ..library import Library, LibraryStore, StaleLibrary
-from ..schemas import Deleted, ProfileAdded, LibraryChange, LibraryRemoved, Expanded, FlowOut, FlowProblems, LipsyncQueued, LoraCheckQueued, LoraRecordList, LoraRecordOut, NodeShot, ProfileList, ShotCards, ShotList, TrainQueued, TtsQueued, VoiceList, VoiceRecordOut
+from ..schemas import Deleted, ProfileAdded, LibraryChange, LibraryRemoved, Expanded, FlowOut, FlowProblems, LipsyncQueued, LoraCheckQueued, LoraRecordList, LoraRecordOut, NodeShot, ProfileList, SceneList, SceneOut, ShotCards, ShotList, ShotTemplateList, TrainQueued, TtsQueued, VoiceList, VoiceRecordOut
 from ..stages import StageStore, encode_guide
 from ..shot_recipe import TEMPLATES, StampReader, Template, recipe_state, rerun_recipe, stale_plan, used_run
 from ..shot_graph import ShotGraph, clay_rows, final_for, shot_graph
-from ..story import FOR_SHOT, NODE_TYPES, VISUAL_TYPES, CastUse, cast_uses, body_fit_origin, model_source, prop_model_origin, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
+from ..story import FOR_SHOT, NODE_TYPES, VISUAL_TYPES, StaleScenes, CastUse, cast_uses, body_fit_origin, model_source, prop_model_origin, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
 from ..voices import VoiceRecord, VoiceStore, check_voice
 from .deps import Svc
 
@@ -1275,6 +1275,180 @@ async def shot_source(svc: Svc, sid: str, vid: str, body: SourceBody):
 
 class SpawnBody(BaseModel):
     name: str = ""
+
+
+# ---- scene groups (RC2c, proto01_animate 31) ---------------------------------------------------------------------------------------------
+class SceneCreate(BaseModel):
+    name: str
+    node_ids: list[str]
+
+
+class SceneMembers(BaseModel):
+    add: list[str] = Field(default_factory=list)
+    remove: list[str] = Field(default_factory=list)
+
+
+def _scenes_out(store: StoryStore) -> dict:
+    return {"items": store.scenes(), "revision": store.scene_book().revision}
+
+
+@router.get("/story/scenes", response_model=SceneList)
+async def scenes_list(svc: Svc):
+    """RC2c: the scene groups with their member nodes (a scene no node names is not listed)."""
+    ws, _, _ = svc.require_project()
+    return await asyncio.to_thread(_scenes_out, StoryStore(ws))
+
+
+@router.post("/story/scenes", response_model=SceneList)
+async def scene_create(svc: Svc, body: SceneCreate):
+    """A scene around the nodes (each leaves the scene it was in)."""
+    ws, _, _ = svc.require_project()
+    store = StoryStore(ws)
+    try:
+        await asyncio.to_thread(store.create_scene, body.name, body.node_ids)
+    except KeyError as e:
+        raise HTTPException(404, f"node {e.args[0]} not found")
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    _flow_changed(svc, None)
+    return await asyncio.to_thread(_scenes_out, store)
+
+
+@router.patch("/story/scenes/{sid}", response_model=SceneList)
+async def scene_patch(svc: Svc, sid: str, body: dict):
+    ws, _, _ = svc.require_project()
+    store = StoryStore(ws)
+    try:
+        await asyncio.to_thread(store.patch_scene, sid, body)
+    except KeyError:
+        raise HTTPException(404, "scene not found")
+    except StaleScenes as e:
+        raise HTTPException(409, str(e))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    _flow_changed(svc, None)
+    return await asyncio.to_thread(_scenes_out, store)
+
+
+@router.post("/story/scenes/{sid}/nodes", response_model=SceneList)
+async def scene_members(svc: Svc, sid: str, body: SceneMembers):
+    """Nodes join the scene (leaving their own) or leave it; a scene left empty goes."""
+    ws, _, _ = svc.require_project()
+    store = StoryStore(ws)
+    try:
+        await asyncio.to_thread(store.scene_members, sid, body.add, body.remove)
+    except KeyError as e:
+        raise HTTPException(404, f"{e.args[0]} not found")
+    _flow_changed(svc, None)
+    return await asyncio.to_thread(_scenes_out, store)
+
+
+@router.delete("/story/scenes/{sid}", response_model=Deleted)
+async def scene_delete(svc: Svc, sid: str):
+    """The frame goes; its nodes stay where they are, in no scene."""
+    ws, _, _ = svc.require_project()
+    if not await asyncio.to_thread(StoryStore(ws).delete_scene, sid):
+        raise HTTPException(404, "scene not found")
+    _flow_changed(svc, None)
+    return {"deleted": sid}
+
+
+# ---- Shot templates (RC2e, 06 O2) ------------------------------------------------------------------------------------------------------
+class TemplateSave(BaseModel):
+    node_id: str
+    name: str
+
+
+class TemplateUse(BaseModel):
+    near: str | None = None                       # beside this node: its scene, its place, a camera on its stage
+    x: float | None = None
+    y: float | None = None
+
+
+def _templates_out(store: StoryStore) -> dict:
+    b = store.shot_templates()
+    return {"items": [t.model_dump() for t in b.templates], "revision": b.revision}
+
+
+def _templates_changed(svc) -> None:
+    svc.hub.broadcast("story.changed", {"kind": "templates", "id": None, "revision": 0})
+
+
+@router.get("/story/shot-templates", response_model=ShotTemplateList)
+async def shot_templates(svc: Svc):
+    """RC2e: the World's Shot templates (its *Presets*)."""
+    ws, _, _ = svc.require_project()
+    return await asyncio.to_thread(_templates_out, StoryStore(ws))
+
+
+@router.post("/story/shot-templates", response_model=ShotTemplateList)
+async def shot_template_save(svc: Svc, body: TemplateSave):
+    """*Save as a template…*: the node's kind, lines and line, its route and its camera (with its keys)."""
+    ws, _, _ = svc.require_project()
+    store = StoryStore(ws)
+    try:
+        await asyncio.to_thread(store.save_shot_template, body.node_id, body.name)
+    except KeyError:
+        raise HTTPException(404, "node not found")
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    _templates_changed(svc)
+    return await asyncio.to_thread(_templates_out, store)
+
+
+@router.patch("/story/shot-templates/{tid}", response_model=ShotTemplateList)
+async def shot_template_rename(svc: Svc, tid: str, body: TemplateSave):
+    ws, _, _ = svc.require_project()
+    store = StoryStore(ws)
+    try:
+        await asyncio.to_thread(store.rename_shot_template, tid, body.name)
+    except KeyError:
+        raise HTTPException(404, "template not found")
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    _templates_changed(svc)
+    return await asyncio.to_thread(_templates_out, store)
+
+
+@router.delete("/story/shot-templates/{tid}", response_model=Deleted)
+async def shot_template_delete(svc: Svc, tid: str):
+    ws, _, _ = svc.require_project()
+    if not await asyncio.to_thread(StoryStore(ws).delete_shot_template, tid):
+        raise HTTPException(404, "template not found")
+    _templates_changed(svc)
+    return {"deleted": tid}
+
+
+@router.post("/story/shot-templates/{tid}/use", response_model=FlowNode)
+async def shot_template_use(svc: Svc, tid: str, body: TemplateUse):
+    """*New Shot from a template*: a node of its kind with its lines on its route — beside a node, in that node's scene, with the template's
+    camera on its stage."""
+    ws, _, _ = svc.require_project()
+    try:
+        n = await asyncio.to_thread(StoryStore(ws).new_shot_from_template, tid, body.near, body.x, body.y)
+    except KeyError as e:
+        raise HTTPException(404, f"{e.args[0]} not found")
+    if n.shot_id:
+        svc.hub.broadcast("story.changed", {"kind": "shot", "id": n.shot_id, "revision": 0})
+    _flow_changed(svc, n.id)
+    return n.model_dump()
+
+
+@router.post("/story/flow/nodes/{nid}/sibling", response_model=FlowNode)
+async def flow_sibling(svc: Svc, nid: str):
+    """RC2c / O2: *New Shot from this Shot* — a sibling in the node's scene (one is made around the two when it has none): the stage, the
+    place, the Cast pins and the board shared; the lines, a camera of its own (the source's copied with its keys) and the route copied."""
+    ws, _, _ = svc.require_project()
+    try:
+        n = await asyncio.to_thread(StoryStore(ws).new_shot_from, nid)
+    except KeyError:
+        raise HTTPException(404, "node not found")
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    if n.shot_id:
+        svc.hub.broadcast("story.changed", {"kind": "shot", "id": n.shot_id, "revision": 0})
+    _flow_changed(svc, n.id)
+    return n.model_dump()
 
 
 def _flow_changed(svc, nid: str | None = None) -> None:

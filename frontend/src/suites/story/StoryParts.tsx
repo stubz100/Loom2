@@ -85,8 +85,9 @@ function WorldTab() {
   const section = useStory((s) => s.section)
   const entries = useLibrary((l) => l.library?.entries.length ?? 0)
   const panels = useGenerate((g) => g.presets.length)
+  const templates = useStory((s) => s.shotTemplates.length)                                   // RC2e
   const counts: Record<Section, number | null> = {
-    logline: null, synopsis: null, styles: world?.styles.length ?? 0, library: entries, panels, spine: world?.spine.length ?? 0, variables: world?.variables.length ?? 0,
+    logline: null, synopsis: null, styles: world?.styles.length ?? 0, library: entries, panels, templates, spine: world?.spine.length ?? 0, variables: world?.variables.length ?? 0,
   }
   return (
     <div className="story-panel">
@@ -185,7 +186,7 @@ function FlowTab() {
 
 export function Panel({ tab }: { tab: string }) {
   const project = useSession((s) => s.project)
-  useEffect(() => { if (project?.open) { void sy().load(); void sy().loadProfiles(); void sy().loadShots(); void sy().loadFlow(); void useLibrary.getState().load(); void useGenerate.getState().loadPresets() } }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (project?.open) { void sy().load(); void sy().loadProfiles(); void sy().loadShots(); void sy().loadFlow(); void sy().loadTemplates(); void useLibrary.getState().load(); void useGenerate.getState().loadPresets() } }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!project?.open) return <span className="hint">Open or create a project to begin.</span>
   if (tab === 'cast') return <CastTab />
   if (tab === 'shots') return <BoardPanel />                                      // D125 (SP3): the board's filters and legend; the shots are the board
@@ -467,6 +468,47 @@ function WorldEditor() {
         <h3>Saved panels<Help text={"Generate's whole-panel templates, each shown by its latest result; click one for Apply, Rename and Delete."} /></h3>
         <PanelGrid />
       </section>
+      <section id="story-sec-templates">
+        <h3>Shot templates<Help text={"Shots kept to start others from (RC2e): a node's kind, its lines, its route and its camera. Save as a template… on a Shot in the Flow keeps one; New Shot from a template ▸ (the Flow's right-click) places one — beside a node, in its scene with its camera on that node's stage."} /></h3>
+        <TemplateRows />
+      </section>
+    </div>
+  )
+}
+
+/** RC2e: the picked Shot template in the World Inspector — what it keeps, and its verbs. */
+function TemplateEditor({ id }: { id: string }) {
+  const t = useStory((s) => s.shotTemplates.find((x) => x.id === id))
+  if (!t) return null
+  return (
+    <>
+      <h4>Shot template · {t.name}</h4>
+      <div className="kv">
+        <span>kind</span><span>{NODE_LABEL[t.node_type]}</span>
+        <span>route</span><span>{t.route ? ROUTE_LABEL[t.route] ?? t.route : '—'}</span>
+        <span>lines</span><span>{t.lines.length ? t.lines.map((l) => l.text).join(' / ') : '—'}</span>
+        <span>camera</span><span>{t.camera ? `${t.camera.name} · ${Math.round(t.camera.focal_mm)} mm${t.camera.keys.length ? ` · ${t.camera.keys.length} keys` : ''}` : 'none (it was not on a stage)'}</span>
+      </div>
+      <div className="verbs"><CommandButton id="story.template.use" text /><CommandButton id="story.template.rename" text /><CommandButton id="story.template.delete" text /></div>
+    </>
+  )
+}
+
+/** RC2e: the World's Shot templates — a row each (its kind, route and camera); a click picks it for the Inspector's verbs, a right-click
+ *  shows them. */
+function TemplateRows() {
+  const ts = useStory((s) => s.shotTemplates)
+  const selected = useStory((s) => s.selected)
+  useEffect(() => { void sy().loadTemplates() }, [])
+  if (!ts.length) return <div className="empty">None yet — Save as a template… on a Shot in the Flow.</div>
+  return (
+    <div className="rows template-rows">
+      {ts.map((t) => (
+        <button key={t.id} className={`story-row${selected?.kind === 'template' && selected.id === t.id ? ' active' : ''}`} data-template={t.id} onClick={() => sy().select({ kind: 'template', id: t.id })}
+          onContextMenu={(e) => { sy().select({ kind: 'template', id: t.id }); showMenu(e, [{ cmd: 'story.template.use' }, sep, { cmd: 'story.template.rename' }, { cmd: 'story.template.delete' }]) }}>
+          <span>{t.name}</span><span className="muted">{NODE_LABEL[t.node_type]} · {t.lines.length ? `${t.lines.length} line${t.lines.length === 1 ? '' : 's'} · ` : ''}{t.route ? ROUTE_LABEL[t.route] ?? t.route : ''}{t.camera ? ` · ${Math.round(t.camera.focal_mm)} mm` : ''}</span>
+        </button>
+      ))}
     </div>
   )
 }
@@ -1107,6 +1149,21 @@ function NodeInspector() {
 }
 
 /** The node's half of the panel: its type and title, its own fields by type, where, its speakers' versions, its board, its problems. */
+/** RC2c: the node's scene group — pick one to join it, (none) to leave; *Make a scene of it…* and *New Shot from this Shot* beside. */
+function SceneField({ n }: { n: FlowNode }) {
+  const scenes = useStory((s) => s.scenes)
+  return (
+    <>
+      <div className="kv">
+        <span>scene <Help text="A scene group frames Shots that share a set, a light and a cast — a dialogue in shot / reverse-shot is several Shots, one scene. Episode grades a scene as one." /></span>
+        <select value={n.scene_id ?? ''} aria-label="node scene" onChange={(e) => { const sid = e.target.value; if (sid) void sy().sceneMembers(sid, [n.id], []); else if (n.scene_id) void sy().sceneMembers(n.scene_id, [], [n.id]) }}>
+          <option value="">(none)</option>{scenes.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+      </div>
+      <div className="verbs"><CommandButton id="story.scene.make" text /><CommandButton id="story.flow.sibling" text /></div>
+    </>
+  )
+}
+
 function NodeFields({ n }: { n: FlowNode }) {
   const flowNodes = useStory((s) => s.flowNodes)
   const problems = useStory((s) => s.problems)
@@ -1135,6 +1192,7 @@ function NodeFields({ n }: { n: FlowNode }) {
       {n.type === 'choice' && <><h4>Options <Help text={"Each is an out-port."} /></h4><OptionsEditor n={n} /></>}
       {n.type === 'action' && <><h4>Sets</h4><SetsEditor n={n} sets={n.set} onChange={(set) => void sy().patchNode(n.id, { set })} /></>}
       {visual && <PlaceField n={n} />}
+      <SceneField n={n} />
       {visual && <SpeakerVersions n={n} />}
       <BoardField n={n} />
       {mine.length > 0 && <><h4>Problems</h4><ul className="flow-problems">{mine.map((p, i) => <li key={i} className={p.code}>{p.message}</li>)}</ul></>}
@@ -1174,6 +1232,7 @@ export function Inspector() {
       {style && <StyleEditor key={style.id} s={style} isDefault={world.default_style === style.id} />}
       {entry && <EntryEditor key={entry.id} e={entry} />}
       {selected?.kind === 'panel' && <PanelEditor name={selected.id} />}
+      {selected?.kind === 'template' && <TemplateEditor id={selected.id} />}
       {beat && <>
         <h4>Beat {world.spine.indexOf(beat) + 1}</h4>
         <div className="kv">

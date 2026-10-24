@@ -393,11 +393,14 @@ async def timeline_grade_scene(svc: Svc, tl_id: str, body: CutGradeScene):
         from ..story import StoryStore
         st = StoryStore(ws)
         nodes, places = st.flow_nodes(), {p.id: p.name for p in st.profiles() if p.cls == "place"}
+        scenes = {s.id: s.name for s in st.scene_book().scenes}
 
-        def place_of(node_id):
-            pid = nodes[node_id].place_id if node_id in nodes else None
-            return (pid, places.get(pid, "")) if pid else (None, "")
-        return [store.cuts.grade_scene(tl, body.clip, place_of)]
+        def scene_of(node_id):                                  # RC2c: the node's scene group, else (as before RC2) its place
+            n = nodes.get(node_id) if node_id else None
+            if n is not None and n.scene_id in scenes:
+                return (f"scene:{n.scene_id}", scenes[n.scene_id])
+            return (f"place:{n.place_id}", places.get(n.place_id, "")) if n is not None and n.place_id else (None, "")
+        return [store.cuts.grade_scene(tl, body.clip, scene_of)]
     return await _cut_call(svc, tl_id, body.revision, run)
 
 

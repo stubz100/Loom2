@@ -4,9 +4,9 @@
 // D90: an edge is selected by a click and goes by its right-click menu or Delete (B3); the canvas takes the Flow tab's keys (B2); "Add a
 // node here" maps the pointer through the viewport (B11); a Shot node shows its text — a beat's line (B19). UI4 (02 §4.2): a node's board
 // (an album group) shows as its cover, name and count; a group card dropped on a node becomes its board (makeFor.boardDrop).
-import { Background, Controls, Handle, MiniMap, Position, ReactFlow, applyNodeChanges, useReactFlow, type Connection, type Edge, type Node, type NodeChange, type NodeProps } from '@xyflow/react'
+import { Background, Controls, Handle, MiniMap, Position, ReactFlow, ViewportPortal, applyNodeChanges, useReactFlow, useViewport, type Connection, type Edge, type Node, type NodeChange, type NodeProps } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../../api/client'
 import type { FlowNode } from '../../../api/types'
 import { sep, type MenuItem } from '../../../frame/commands'
@@ -16,7 +16,7 @@ import { boardDrop } from '../makeFor'
 import { findNode } from '../styleSamples'
 import { showMenu, useMenu } from '../../../frame/ContextMenu'
 import { CLASS_LABEL, sy, useStory } from '../storyStore'
-import { edgeMenu, flowView, nodeMenu } from '../storyCommands'
+import { edgeMenu, flowView, nodeMenu, sceneMenu, templateItems } from '../storyCommands'
 import { storyKey } from '../storyKeys'
 import { NODE_LABEL } from './types'
 import { cellsOf, lengthLine, owes, routeOf, STEPS, type CellState, type Step } from '../board'
@@ -28,6 +28,31 @@ interface StoryData extends Record<string, unknown> { node: FlowNode; thumb: str
   length: { text: string; over: boolean; title: string } | null; stale: number
   board: { name: string; cover: string | null; total: number } | null; place: string | null }
 type StoryNodeT = Node<StoryData, 'story'>
+/** RC2c: the scene groups' frames — drawn in the flow's coordinates behind the edges and nodes (a ViewportPortal: not nodes React Flow
+ *  measures, so their size never feeds back into its ResizeObserver), around their nodes as they stand. The name tab is the frame's
+ *  handle: a click picks the scene, a right-click shows its menu, a drag moves its nodes; the body lets clicks through to the canvas. */
+interface Frame { id: string; name: string; count: number; x: number; y: number; w: number; h: number }
+const FRAME_PAD = 20, FRAME_HEAD = 26
+
+function SceneFrames({ frames, picked, onMove, onDrop }: { frames: Frame[]; picked: string | null; onMove: (sceneId: string, dx: number, dy: number) => void; onDrop: () => void }) {
+  const { zoom } = useViewport()
+  const drag = useRef<{ id: string; x: number; y: number; moved: boolean } | null>(null)
+  return (
+    <ViewportPortal>
+      {frames.map((f) => (
+        <div key={f.id} className={`scene-frame${picked === f.id ? ' picked' : ''}`} data-scene={f.name} style={{ transform: `translate(${f.x}px, ${f.y}px)`, width: f.w, height: f.h }}>
+          <span className="scene-name nodrag nopan" title={`${f.name} — a scene of ${f.count} node${f.count === 1 ? '' : 's'}: drag its name to move them together, right-click to rename or dissolve it`}
+            onPointerDown={(e) => { if (e.button !== 0) return; e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId); drag.current = { id: f.id, x: e.clientX, y: e.clientY, moved: false } }}
+            onPointerMove={(e) => { const d = drag.current; if (!d || d.id !== f.id) return; const dx = (e.clientX - d.x) / zoom, dy = (e.clientY - d.y) / zoom
+              if (Math.abs(dx) + Math.abs(dy) > 2) d.moved = true
+              if (d.moved) onMove(f.id, dx, dy) }}
+            onPointerUp={() => { const d = drag.current; drag.current = null; if (!d) return; if (d.moved) onDrop(); else { sy().selectNode(null); sy().selectScene(f.id) } }}
+            onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); sy().selectNode(null); sy().selectScene(f.id); showMenu(e, sceneMenu()) }}>{f.name}</span>
+        </div>
+      ))}
+    </ViewportPortal>
+  )
+}
 
 function StoryNode({ id, data, selected }: NodeProps<StoryNodeT>) {
   const n = data.node
@@ -86,6 +111,8 @@ export function FlowCanvas() {
   const boardFinals = useStory((s) => s.boardFinals)                                          // D125 (SP3): the pills read the board's records
   const boardCuts = useStory((s) => s.boardCuts)
   const cards = useStory((s) => s.cards)                                                      // RC2b: length and stale count
+  const scenes = useStory((s) => s.scenes)                                                    // RC2c: the frames
+  const sceneId = useStory((s) => s.sceneId)
   const cardGuide = useStory((s) => s.cardGuide)
   useEffect(() => { void sy().loadBoard() }, [shots])
   const profiles = useStory((s) => s.profiles)
@@ -122,6 +149,26 @@ export function FlowCanvas() {
     const label = e.port.startsWith('opt:') ? n.options.find((o) => `opt:${o.id}` === e.port)?.label : e.port === 'then' || e.port === 'else' ? e.port : undefined
     return { id: `${e.from}:${e.port}`, source: e.from, sourceHandle: e.port, target: e.to, label, deletable: true, selected: edgeSel?.from === e.from && edgeSel.port === e.port }
   }), [graph, flowNodes, edgeSel])
+  // RC2c: each scene's frame around its nodes as they stand now (their measured sizes once drawn)
+  const frames = useMemo<Frame[]>(() => scenes.flatMap((s) => {
+    const ms = nodes.filter((x) => s.node_ids.includes(x.id))
+    if (!ms.length) return []
+    const x0 = Math.min(...ms.map((m) => m.position.x)) - FRAME_PAD, y0 = Math.min(...ms.map((m) => m.position.y)) - FRAME_PAD - FRAME_HEAD
+    const x1 = Math.max(...ms.map((m) => m.position.x + (m.measured?.width ?? NODE_W))) + FRAME_PAD
+    const y1 = Math.max(...ms.map((m) => m.position.y + (m.measured?.height ?? 120))) + FRAME_PAD
+    return [{ id: s.id, name: s.name, count: ms.length, x: x0, y: y0, w: x1 - x0, h: y1 - y0 }]
+  }), [scenes, nodes])
+  const dragFrom = useRef<Record<string, { x: number; y: number }> | null>(null)
+  const onFrameMove = (sid: string, dx: number, dy: number) => {
+    const s = scenes.find((x) => x.id === sid); if (!s) return
+    if (!dragFrom.current) dragFrom.current = Object.fromEntries(nodes.filter((m) => s.node_ids.includes(m.id)).map((m) => [m.id, { ...m.position }]))
+    const from = dragFrom.current
+    setNodes((ns) => ns.map((m) => (from[m.id] ? { ...m, position: { x: from[m.id].x + dx, y: from[m.id].y + dy } } : m)))
+  }
+  const onFrameDrop = () => {
+    const from = dragFrom.current; dragFrom.current = null; if (!from) return
+    sy().moveNodes(nodes.filter((m) => from[m.id]).map((m) => ({ id: m.id, x: Math.round(m.position.x), y: Math.round(m.position.y) })))
+  }
   const onNodesChange = (changes: NodeChange<StoryNodeT>[]) => {
     setNodes((ns) => applyNodeChanges(changes, ns))
     for (const c of changes) if (c.type === 'select' && c.selected) sy().selectNode(c.id)
@@ -130,20 +177,23 @@ export function FlowCanvas() {
     <div className="flow-host" data-testid="flow-canvas" tabIndex={0} onKeyDown={(e) => { storyKey('flow', e.nativeEvent) }}>
       <ReactFlow<StoryNodeT, Edge> nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView minZoom={0.2} maxZoom={2} deleteKeyCode={null} proOptions={{ hideAttribution: true }}
         onNodesChange={onNodesChange}
+        onSelectionChange={({ nodes: sel }) => sy().setFlowSel(sel.map((x) => x.id))}
         onNodeDragStop={(_e, _n, dragged) => sy().moveNodes(dragged.map((d) => ({ id: d.id, x: Math.round(d.position.x), y: Math.round(d.position.y) })))}
         onConnect={(c: Connection) => { if (c.source && c.target) void sy().connect(c.source, c.sourceHandle ?? 'out', c.target) }}
         onEdgesDelete={(es) => { for (const e of es) void sy().disconnect(e.source, e.sourceHandle ?? 'out') }}
-        onNodeClick={(_e, n) => sy().selectNode(n.id)}
-        onPaneClick={() => { sy().selectNode(null); sy().selectEdge(null) }}
+        onNodeClick={(_e, n) => { sy().selectScene(null); sy().selectNode(n.id) }}
+        onPaneClick={() => { sy().selectNode(null); sy().selectEdge(null); sy().selectScene(null) }}
         onEdgeClick={(_e, ed) => sy().selectEdge({ from: ed.source, port: ed.sourceHandle ?? 'out' })}
         onEdgeContextMenu={(e, ed) => { e.preventDefault(); sy().selectEdge({ from: ed.source, port: ed.sourceHandle ?? 'out' }); showMenu(e, edgeMenu()) }}
-        onNodeContextMenu={(e, n) => { e.preventDefault(); sy().selectNode(n.id); showMenu(e, nodeMenu() as MenuItem[]) }}
+        onNodeContextMenu={(e, n) => { e.preventDefault(); sy().selectScene(null); sy().selectNode(n.id); showMenu(e, nodeMenu() as MenuItem[]) }}
         onPaneContextMenu={(e) => { e.preventDefault(); sy().setAddAt(flowView.toFlow?.(e.clientX, e.clientY) ?? null)
-          showMenu(e, [{ heading: 'Add a node here' }, ...(['start', 'hub', 'dialogue', 'choice', 'condition', 'action', 'shot', 'jump', 'comment'] as const).map((t) => ({ cmd: `story.flow.add.${t}` })), sep, { cmd: 'story.flow.voiceEpisode' }, { cmd: 'story.flow.validate' }, { cmd: 'story.flow.play' }, { cmd: 'story.flow.fit' }]) }}>
+          showMenu(e, [{ heading: 'Add a node here' }, ...(['start', 'hub', 'dialogue', 'choice', 'condition', 'action', 'shot', 'jump', 'comment'] as const).map((t) => ({ cmd: `story.flow.add.${t}` })),
+            ...templateItems(null, flowView.toFlow?.(e.clientX, e.clientY) ?? null), sep, { cmd: 'story.flow.voiceEpisode' }, { cmd: 'story.flow.validate' }, { cmd: 'story.flow.play' }, { cmd: 'story.flow.fit' }]) }}>
         <Background gap={24} />
         <MiniMap pannable zoomable />
         <Controls showInteractive={false} />
         <FitBridge />
+        <SceneFrames frames={frames} picked={sceneId} onMove={onFrameMove} onDrop={onFrameDrop} />
       </ReactFlow>
     </div>
   )

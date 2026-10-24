@@ -57,6 +57,21 @@ def replace(src: Path | str, dst: Path | str) -> None:
             delay *= 2
 
 
+def unlink(path: Path | str, missing_ok: bool = False) -> None:
+    """`Path.unlink` with `replace`'s retries: on Windows a file another request is reading at that moment cannot be deleted (RC2a's bind
+    deletes a node file while the Flow is being read)."""
+    delay = REPLACE_FIRST_DELAY_S
+    for attempt in range(REPLACE_TRIES):
+        try:
+            Path(path).unlink(missing_ok=missing_ok)
+            return
+        except PermissionError:
+            if attempt == REPLACE_TRIES - 1:
+                raise
+            time.sleep(delay)
+            delay *= 2
+
+
 def _tmp_for(path: Path) -> Path:
     return path.with_name(f"{path.name}.{uuid.uuid4().hex[:8]}.tmp")
 

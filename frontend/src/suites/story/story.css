@@ -161,6 +161,13 @@
 .flow-node .shot { position: relative; margin: 4px 8px 6px; height: 56px; background: var(--bg3); border-radius: 4px; overflow: hidden; display: grid; place-items: center; color: var(--fg3); font-size: 11px; }
 .flow-node .shot img { width: 100%; height: 100%; object-fit: cover; }
 .flow-node .shot .dot { position: absolute; right: 4px; top: 4px; }
+/* RC2c: a scene group's frame behind its nodes, its name on the top edge */
+.flow-host .react-flow__viewport-portal { z-index: -1; }   /* behind the edges and nodes */
+.scene-frame { position: absolute; left: 0; top: 0; pointer-events: none; border: 1px dashed var(--line2, var(--fg3)); border-radius: 10px; background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.scene-frame.picked { border-style: solid; border-color: var(--accent); }
+.scene-frame .scene-name { position: absolute; left: 8px; top: 4px; padding: 1px 8px; border-radius: 6px; pointer-events: all; cursor: grab; color: var(--fg2); font-size: 12px; font-weight: 600; letter-spacing: .02em; }
+.scene-frame .scene-name:hover { background: var(--bg3); color: var(--fg1); }
+.scene-frame.picked .scene-name { color: var(--accent); }
 /* RC2b: the card's length and stale count over the take */
 .flow-node .shot .facts { position: absolute; left: 4px; bottom: 3px; display: flex; gap: 4px; }
 .flow-node .shot .facts > span { display: inline-flex; align-items: center; gap: 2px; padding: 0 4px; border-radius: 3px; background: color-mix(in srgb, var(--bg1) 80%, transparent); color: var(--fg1); font-size: 10px; line-height: 15px; }

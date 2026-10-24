@@ -21,14 +21,13 @@ id and the exact text that ran, and re-running a stored recipe uses the text it 
 from __future__ import annotations
 
 import re
-import shutil
 import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .fsio import atomic_write_json, new_id, read_json, read_json_or, utc_now
+from .fsio import atomic_move, atomic_write_json, new_id, read_json, read_json_or, unlink, utc_now
 from .models import registry
 from .body import Body
 from .origin import JobOrigin
@@ -408,6 +407,7 @@ class FlowNode(BaseModel):
     beat_id: str | None = None                    # D125 (S4): the spine beat it was made from (Make the Flow from the spine skips a beat already made)
     speaker_versions: dict[str, str] = Field(default_factory=dict)   # D93 follow-up: a speaker's pinned version (profile id → version id); absent = current — Make frame uses it unless the shot's stage binds another
     colour: str | None = None
+    scene_id: str | None = None                   # RC2c: the scene group it is framed in (`story/flow/scenes.json`)
     revision: int = 0
     created_at: str = Field(default_factory=utc_now)
     updated_at: str = Field(default_factory=utc_now)
@@ -489,6 +489,79 @@ class NodeRecord(FlowNode):
         p = self.shot
         return Shot(id=p.id, name=self.title.strip() or VISUAL_LABEL.get(self.type, "Shot"), owner_node=self.id, current=p.current, versions=p.versions,
                     revision=p.revision, created_at=p.created_at, updated_at=p.updated_at)
+
+
+# ---- scene groups (RC2c, proto01_animate 31 §3b) ----------------------------------------------------------------------------------------
+SCENES_SCHEMA_VERSION = 1
+
+
+class Scene(BaseModel):
+    """RC2c (D96, 05 §3): a scene group — a frame around Shots in the Flow (a dialogue in shot / reverse-shot is several Shots, one
+    scene). A node names its scene (`FlowNode.scene_id`); the scene keeps its name, colour and what its Shots share (RC2f)."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    id: str = Field(default_factory=lambda: new_id("scn"))
+    name: str
+    colour: str | None = None
+    created_at: str = Field(default_factory=utc_now)
+    updated_at: str = Field(default_factory=utc_now)
+
+
+class SceneBook(BaseModel):
+    """`story/flow/scenes.json`: the scene records (their members are the nodes that name them)."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    schema_version: int = SCENES_SCHEMA_VERSION
+    scenes: list[Scene] = Field(default_factory=list)
+    revision: int = 0
+
+
+class StaleScenes(ValueError):
+    """The client's change is based on an older revision of the scenes (→ 409)."""
+
+
+# ---- Shot templates (RC2e, 06 O2) -------------------------------------------------------------------------------------------------------
+SHOT_TEMPLATES_SCHEMA_VERSION = 1
+
+
+class TemplateLine(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    speaker: str | None = None
+    text: str = ""
+
+
+class TemplateCamera(BaseModel):
+    """A template's camera — its lens, its place and its keys as they were on the source stage (a new camera on the stage it is used on)."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    name: str = "Camera"
+    pos: list[float]
+    target: list[float]
+    roll: float = 0.0
+    focal_mm: float = 35.0
+    sensor_mm: float = 36.0
+    keys: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class ShotTemplate(BaseModel):
+    """RC2e (06 O2: "saved templates in the Library, like ComfyUI's workflow templates"): a Shot kept to start others from — its kind, its
+    lines (the words, not the voice), its line, its route and its camera. The scene's parts (the stage, the place, the cast) come from where
+    it is used."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    id: str = Field(default_factory=lambda: new_id("stp"))
+    name: str
+    node_type: Literal["dialogue", "shot"]
+    lines: list[TemplateLine] = Field(default_factory=list)
+    text: str = ""
+    route: str | None = None
+    camera: TemplateCamera | None = None
+    from_node: str | None = None
+    created_at: str = Field(default_factory=utc_now)
+
+
+class ShotTemplateBook(BaseModel):
+    """`story/shot_templates.json` — the World's Shot templates (its *Presets*, beside the Library and the saved panels)."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    schema_version: int = SHOT_TEMPLATES_SCHEMA_VERSION
+    templates: list[ShotTemplate] = Field(default_factory=list)
+    revision: int = 0
 
 
 def node_ports(n: FlowNode) -> list[str]:
@@ -1224,8 +1297,10 @@ class _FlowMixin:
                     self._index_set(cur.shot.id, None)           # type: ignore[attr-defined]
                 else:
                     released = self._new_bare_node(cur.as_shot().name, cur.shot, near=self._placed(nid)).as_shot()
-            self.node_path(nid).unlink()
+            unlink(self.node_path(nid))
             self.flow_graph()
+            if cur.scene_id:
+                self._prune_book()
             return released
 
     def put_graph(self, data: dict[str, Any]) -> FlowGraph:
@@ -1294,7 +1369,7 @@ class _FlowMixin:
             title = n.title if n.title.strip() else donor.title
             n = self._save_record(n.model_copy(update={"shot": part, "title": title, "revision": n.revision + 1, "updated_at": utc_now()}))
             self._index_set(part.id, n.id)                       # type: ignore[attr-defined]
-            self.node_path(donor.id).unlink()
+            unlink(self.node_path(donor.id))
             self.flow_graph()
             return n.as_node(), n.as_shot()
 
@@ -1325,6 +1400,256 @@ class _FlowMixin:
             n = self._save_record(n.model_copy(update={"shot": fresh, "revision": n.revision + 1, "updated_at": utc_now()}))
             self._index_set(fresh.id, n.id)                      # type: ignore[attr-defined]
             return n.as_node(), released
+
+    # -- scene groups (RC2c) --
+    def scene_book(self) -> SceneBook:
+        return SceneBook.model_validate(read_json_or(self.flow_dir / "scenes.json", {}))
+
+    def _save_book(self, b: SceneBook) -> SceneBook:
+        b = b.model_copy(update={"schema_version": SCENES_SCHEMA_VERSION})
+        self.flow_dir.mkdir(parents=True, exist_ok=True)
+        atomic_write_json(self.flow_dir / "scenes.json", b.model_dump())
+        return b
+
+    def scenes(self) -> list[dict[str, Any]]:
+        """Each scene with its members (the nodes naming it, in the Flow's placement order); a scene left without nodes is not listed."""
+        recs = self._records()
+        g = self.flow_graph()
+        order = {p.id: i for i, p in enumerate(sorted(g.nodes, key=lambda p: (p.y, p.x)))}
+        out = []
+        for s in self.scene_book().scenes:
+            members = sorted((r.id for r in recs.values() if r.scene_id == s.id), key=lambda nid: order.get(nid, 1 << 30))
+            if members:
+                out.append({**s.model_dump(), "node_ids": members})
+        return out
+
+    def _join(self, node_ids: list[str], scene_id: str | None) -> None:
+        for nid in node_ids:
+            r = self._record(nid)
+            if r is None:
+                raise KeyError(nid)
+            if r.scene_id != scene_id:
+                self._save_record(r.model_copy(update={"scene_id": scene_id, "revision": r.revision + 1, "updated_at": utc_now()}))
+
+    def _prune_book(self) -> None:
+        """A scene no node names any more goes."""
+        b = self.scene_book()
+        used = {r.scene_id for r in self._records().values() if r.scene_id}
+        keep = [s for s in b.scenes if s.id in used]
+        if len(keep) != len(b.scenes):
+            self._save_book(b.model_copy(update={"scenes": keep, "revision": b.revision + 1}))
+
+    def create_scene(self, name: str, node_ids: list[str]) -> Scene:
+        """A scene around the nodes (they leave the scene they were in)."""
+        name = name.strip()
+        if not name:
+            raise ValueError("a scene needs a name")
+        if not node_ids:
+            raise ValueError("a scene is made around at least one node")
+        with _LOCK:
+            for nid in node_ids:
+                if self._record(nid) is None:
+                    raise KeyError(nid)
+            b = self.scene_book()
+            s = Scene(name=name)
+            self._save_book(b.model_copy(update={"scenes": [*b.scenes, s], "revision": b.revision + 1}))
+            self._join(node_ids, s.id)
+            self._prune_book()
+            return s
+
+    def patch_scene(self, sid: str, data: dict[str, Any]) -> Scene:
+        with _LOCK:
+            b = self.scene_book()
+            base = data.get("revision")
+            if base is not None and int(base) != b.revision:
+                raise StaleScenes(f"the scenes are at revision {b.revision}, the change is based on {base} — reload them first")
+            cur = next((s for s in b.scenes if s.id == sid), None)
+            if cur is None:
+                raise KeyError(sid)
+            upd = {k: v for k, v in data.items() if k in ("name", "colour")}
+            if "name" in upd and not str(upd["name"] or "").strip():
+                raise ValueError("a scene needs a name")
+            s = cur.model_copy(update={**upd, "updated_at": utc_now()})
+            self._save_book(b.model_copy(update={"scenes": [s if x.id == sid else x for x in b.scenes], "revision": b.revision + 1}))
+            return s
+
+    def scene_members(self, sid: str, add: list[str], remove: list[str]) -> None:
+        """Nodes join the scene (leaving their own) or leave it; a scene left empty goes."""
+        with _LOCK:
+            if not any(s.id == sid for s in self.scene_book().scenes):
+                raise KeyError(sid)
+            self._join(add, sid)
+            self._join([nid for nid in remove if (r := self._record(nid)) is not None and r.scene_id == sid], None)
+            self._prune_book()
+
+    def delete_scene(self, sid: str) -> bool:
+        """The frame goes; its nodes stay where they are, in no scene."""
+        with _LOCK:
+            if not any(s.id == sid for s in self.scene_book().scenes):
+                return False
+            self._join([r.id for r in self._records().values() if r.scene_id == sid], None)
+            b = self.scene_book()
+            self._save_book(b.model_copy(update={"scenes": [s for s in b.scenes if s.id != sid], "revision": b.revision + 1}))
+            return True
+
+    def new_shot_from(self, nid: str) -> FlowNode:
+        """RC2c / O2 (06 §3, proto01_animate 31): *New Shot from this Shot* — a sibling in the source's scene (one is made around the two when
+        it has none, named after its place, else its title). The scene's parts stay shared: the same stage (set, props, lights, figures),
+        the place, the pinned Cast versions, the board. The Shot's own are copied as starting points: its lines (with their voice), a camera
+        of its own on the stage (the source camera and its keys copied), the recipe's route; no takes."""
+        from .stages import StageStore
+        with _LOCK:
+            src = self._record(nid)
+            if src is None:
+                raise KeyError(nid)
+            if src.type not in VISUAL_TYPES or src.shot is None:
+                raise ValueError("a Shot is made from a Dialogue or Shot node with its shot")
+            v = src.shot.version()
+            stage_id = camera_id = None
+            stage_revision = None
+            if v.stage_id and v.camera_id:
+                stages = StageStore(self.ws)                     # type: ignore[attr-defined]
+                st = stages.get(v.stage_id)
+                cam = next((c for c in st.cameras if c.id == v.camera_id), None) if st is not None else None
+                if st is not None and cam is not None:
+                    names = {c.name for c in st.cameras}
+                    k = 2
+                    while f"{cam.name} {k}" in names:
+                        k += 1
+                    copy = cam.model_copy(update={"id": new_id("cam"), "name": f"{cam.name} {k}"})
+                    keys = dict(st.keyframes or {})
+                    camkeys = dict(keys.get("camera") or {})
+                    if v.camera_id in camkeys:
+                        camkeys[copy.id] = [dict(x) if isinstance(x, dict) else x for x in camkeys[v.camera_id]]
+                    keys["camera"] = camkeys
+                    st = stages.put(st.id, {"revision": st.revision, "cameras": [*[c.model_dump() for c in st.cameras], copy.model_dump()], "keyframes": keys})
+                    stage_id, camera_id, stage_revision = st.id, copy.id, st.revision
+            titles = {r.title for r in self._records().values()}
+            base = re.sub(r" · \d+$", "", src.title.strip()) or VISUAL_LABEL[src.type]
+            k = 2
+            while f"{base} · {k}" in titles:
+                k += 1
+            recipe = ShotRecipe(template=v.recipe.template) if v.recipe and v.recipe.template else None
+            part = ShotPart(versions=[ShotVersion(id="v1", stage_id=stage_id, camera_id=camera_id, stage_revision=stage_revision, recipe=recipe)])
+            scene_id = src.scene_id
+            if scene_id is None or not any(s.id == scene_id for s in self.scene_book().scenes):
+                place = self.profile(src.place_id) if src.place_id else None     # type: ignore[attr-defined]
+                scene_id = self.create_scene(place.name if place is not None else base, [src.id]).id
+            g = self.flow_graph()
+            at = next((p for p in g.nodes if p.id == nid), None)
+            x, y = (at.x, at.y + 240.0) if at is not None else (40.0, 40.0)
+            while any(abs(p.x - x) < 120 and abs(p.y - y) < 120 for p in g.nodes):
+                y += 240.0
+            r = NodeRecord(type=src.type, title=f"{base} · {k}", lines=[ln.model_copy() for ln in src.lines], place_id=src.place_id, board_group_id=src.board_group_id,
+                           speaker_versions=dict(src.speaker_versions), colour=src.colour, scene_id=scene_id, shot=part)
+            r = self._save_record(r)
+            g = self.flow_graph()
+            self.save_graph(g.model_copy(update={"nodes": [*[p for p in g.nodes if p.id != r.id], FlowPlacement(id=r.id, x=x, y=y)], "revision": g.revision + 1, "updated_at": utc_now()}))
+            self._index_set(part.id, r.id)                       # type: ignore[attr-defined]
+            return r.as_node()
+
+    # -- Shot templates (RC2e) --
+    def shot_templates(self) -> ShotTemplateBook:
+        return ShotTemplateBook.model_validate(read_json_or(self.dir / "shot_templates.json", {}))
+
+    def _save_templates(self, b: ShotTemplateBook) -> ShotTemplateBook:
+        b = b.model_copy(update={"schema_version": SHOT_TEMPLATES_SCHEMA_VERSION, "revision": b.revision + 1})
+        atomic_write_json(self.dir / "shot_templates.json", b.model_dump())
+        return b
+
+    def save_shot_template(self, nid: str, name: str) -> ShotTemplate:
+        """*Save as a template…*: the node's kind, lines and line, its shot's route and its camera (with the camera's keys)."""
+        from .stages import StageStore
+        name = name.strip()
+        if not name:
+            raise ValueError("a template needs a name")
+        with _LOCK:
+            r = self._record(nid)
+            if r is None:
+                raise KeyError(nid)
+            if r.type not in VISUAL_TYPES or r.shot is None:
+                raise ValueError("a template is saved from a Dialogue or Shot node")
+            v = r.shot.version()
+            cam = None
+            if v.stage_id and v.camera_id:
+                st = StageStore(self.ws).get(v.stage_id)          # type: ignore[attr-defined]
+                c = next((x for x in st.cameras if x.id == v.camera_id), None) if st is not None else None
+                if st is not None and c is not None:
+                    keys = list(((st.keyframes or {}).get("camera") or {}).get(c.id) or [])
+                    cam = TemplateCamera(name=c.name, pos=list(c.pos), target=list(c.target), roll=c.roll, focal_mm=c.focal_mm, sensor_mm=c.sensor_mm, keys=keys)
+            t = ShotTemplate(name=name, node_type=r.type, lines=[TemplateLine(speaker=ln.speaker, text=ln.text) for ln in r.lines], text=r.text,   # type: ignore[arg-type]
+                             route=(v.recipe.template if v.recipe and v.recipe.template else default_template(v.stage_id)), camera=cam, from_node=nid)
+            b = self.shot_templates()
+            self._save_templates(b.model_copy(update={"templates": [*b.templates, t]}))
+            return t
+
+    def rename_shot_template(self, tid: str, name: str) -> ShotTemplate:
+        name = name.strip()
+        if not name:
+            raise ValueError("a template needs a name")
+        with _LOCK:
+            b = self.shot_templates()
+            t = next((x for x in b.templates if x.id == tid), None)
+            if t is None:
+                raise KeyError(tid)
+            t = t.model_copy(update={"name": name})
+            self._save_templates(b.model_copy(update={"templates": [t if x.id == tid else x for x in b.templates]}))
+            return t
+
+    def delete_shot_template(self, tid: str) -> bool:
+        with _LOCK:
+            b = self.shot_templates()
+            if not any(x.id == tid for x in b.templates):
+                return False
+            self._save_templates(b.model_copy(update={"templates": [x for x in b.templates if x.id != tid]}))
+            return True
+
+    def new_shot_from_template(self, tid: str, near: str | None = None, x: float | None = None, y: float | None = None) -> FlowNode:
+        """*New Shot from a template*: a node of the template's kind with its lines and line, its shot on the template's route; used beside a
+        node (`near`), it joins that node's scene and, when that node's shot is on a stage, gets the template's camera there (with its keys)."""
+        from .stages import StageStore
+        with _LOCK:
+            t = next((x for x in self.shot_templates().templates if x.id == tid), None)
+            if t is None:
+                raise KeyError(tid)
+            src = self._record(near) if near else None
+            if near and src is None:
+                raise KeyError(near)
+            stage_id = camera_id = None
+            stage_revision = None
+            sv = src.shot.version() if src is not None and src.shot is not None else None
+            if t.camera is not None and sv is not None and sv.stage_id:
+                stages = StageStore(self.ws)                     # type: ignore[attr-defined]
+                st = stages.get(sv.stage_id)
+                if st is not None:
+                    names = {c.name for c in st.cameras}
+                    k, label = 2, t.camera.name
+                    while label in names:
+                        label, k = f"{t.camera.name} {k}", k + 1
+                    cam = {"id": new_id("cam"), "name": label, "pos": t.camera.pos, "target": t.camera.target, "roll": t.camera.roll,
+                           "focal_mm": t.camera.focal_mm, "sensor_mm": t.camera.sensor_mm}
+                    keys = dict(st.keyframes or {})
+                    camkeys = dict(keys.get("camera") or {})
+                    if t.camera.keys:
+                        camkeys[cam["id"]] = [dict(k_) for k_ in t.camera.keys]
+                    keys["camera"] = camkeys
+                    st = stages.put(st.id, {"revision": st.revision, "cameras": [*[c.model_dump() for c in st.cameras], cam], "keyframes": keys})
+                    stage_id, camera_id, stage_revision = st.id, cam["id"], st.revision
+            recipe = ShotRecipe(template=t.route) if t.route else None
+            part = ShotPart(versions=[ShotVersion(id="v1", stage_id=stage_id, camera_id=camera_id, stage_revision=stage_revision, recipe=recipe)])
+            g = self.flow_graph()
+            if x is None or y is None:
+                at = next((p for p in g.nodes if p.id == near), None) if near else None
+                x, y = (at.x + 280.0, at.y) if at is not None else (40.0, 40.0)
+                while any(abs(p.x - x) < 120 and abs(p.y - y) < 120 for p in g.nodes):
+                    y += 240.0
+            r = NodeRecord(type=t.node_type, title=t.name, lines=[FlowLine(speaker=ln.speaker, text=ln.text) for ln in t.lines], text=t.text,
+                           place_id=src.place_id if src is not None else None, scene_id=src.scene_id if src is not None else None, shot=part)
+            r = self._save_record(r)
+            g = self.flow_graph()
+            self.save_graph(g.model_copy(update={"nodes": [*[p for p in g.nodes if p.id != r.id], FlowPlacement(id=r.id, x=float(x), y=float(y))], "revision": g.revision + 1, "updated_at": utc_now()}))
+            self._index_set(part.id, r.id)                       # type: ignore[attr-defined]
+            return r.as_node()
 
     def migrate_rc2(self) -> list[str]:
         """RC2a's migration, once (proto01_animate 31 §3b): each node's shot joins its file (the owner the shot names first, then a node
@@ -1376,7 +1701,7 @@ class _FlowMixin:
             keep = self.dir / "shots-rc2"
             keep.mkdir(exist_ok=True)
             for p in files:
-                shutil.move(str(p), str(keep / p.name))
+                atomic_move(p, keep / p.name)
             try:
                 d.rmdir()
             except OSError:

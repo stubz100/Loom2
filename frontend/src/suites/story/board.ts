@@ -1,6 +1,6 @@
 // D125 (proto01_UIcomp 04 §2.4, §3.1; SP3): the Shots board — every shot in the Flow's order against its steps, each step's state read from
 // records that exist (the shot version, its node, its clips, the finals made for it, the cuts). Pure: board.test.ts.
-import type { Final, FlowGraph, FlowNode, Shot, ShotCard, ShotVersion } from '../../api/types'
+import type { Final, FlowGraph, FlowNode, SceneOut, Shot, ShotCard, ShotVersion } from '../../api/types'
 
 export type Step = 'lines' | 'voice' | 'frame' | 'stage' | 'clip' | 'final' | 'lipsync' | 'approved' | 'cut'
 export const STEPS: { id: Step; label: string }[] = [
@@ -106,6 +106,27 @@ export function cellsOf(s: Shot, v: ShotVersion, node: FlowNode | null, x: CellI
   const onLane = x.cuts.flatMap((c) => c.clips).filter((c) => c.shot_id === s.id)
   cells.cut = !onLane.length ? { state: 'owed' } : onLane.some((c) => c.shot_version === v.id && c.clip_id === v.clip_id) ? { state: 'done' } : { state: 'stale', text: 'changed' }
   return cells
+}
+
+export type BoardSort = 'story' | 'scene' | 'name' | 'length' | 'stale'
+export const SORT_LABEL: Record<BoardSort, string> = { story: 'story order', scene: 'by scene', name: 'by name', length: 'longest first', stale: 'most stale first' }
+
+/** RC2d (05 §5: "the Shots tab as a list of Shot nodes — search, sort, state"): the board's rows found by a word (the shot's name, its node's
+ *  lines and line, its scene) and put in an order — the story's (the Flow's walk, its branches as headings), by scene (the scenes as
+ *  headings, in the story's order of their first Shot; none last), by name, by length (the card's) or by the stale count. */
+export function arrange<R extends Row>(rows: R[], q: string, sort: BoardSort, scenes: Pick<SceneOut, 'id' | 'name'>[], cards: Record<string, Pick<ShotCard, 'length_s' | 'stale'>>): R[] {
+  const want = q.trim().toLowerCase()
+  const sceneName = (r: Row) => (r.node?.scene_id ? scenes.find((s) => s.id === r.node!.scene_id)?.name ?? null : null)
+  const found = want ? rows.filter((r) => [r.shot.name, r.node?.title, r.node?.text, sceneName(r), ...(r.node?.lines.map((l) => l.text) ?? [])].some((t) => t?.toLowerCase().includes(want))) : rows
+  if (sort === 'story') return found
+  if (sort === 'scene') {
+    const first = new Map<string, number>()
+    found.forEach((r, i) => { const s = sceneName(r) ?? ''; if (!first.has(s)) first.set(s, i) })
+    const rank = (r: Row) => { const s = sceneName(r); return s === null ? Infinity : first.get(s)! }
+    return found.map((r, i) => ({ r, i })).sort((a, b) => rank(a.r) - rank(b.r) || a.i - b.i).map(({ r }) => ({ ...r, group: sceneName(r) ?? 'No scene' }))
+  }
+  const key = (r: Row): number | string => sort === 'name' ? r.shot.name.toLowerCase() : sort === 'length' ? -(cards[r.shot.id]?.length_s ?? -1) : -(cards[r.shot.id]?.stale ?? 0)
+  return found.map((r, i) => ({ r, i })).sort((a, b) => { const x = key(a.r), y = key(b.r); return x < y ? -1 : x > y ? 1 : a.i - b.i }).map(({ r }) => ({ ...r, group: null }))
 }
 
 /** RC2b (D96): a Shot card's length line — seconds to one decimal under a minute, with where it comes from; past the guide (about 30 s) it

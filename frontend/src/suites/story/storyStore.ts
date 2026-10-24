@@ -5,15 +5,16 @@
 // the styles for its picker (09 §3a) and the profiles for its @ picker (D73 / D85).
 import { create } from 'zustand'
 import { type ApiError, api, http, unwrap } from '../../api/client'
-import type { CastReadiness, Clip, Final, FlowGraph, FlowNode, FlowProblem, GroupPage, Job, LoraRecord, Profile, ProfileAdded, ProfileVersion, Shot, ShotCard, ShotVersion, StoryBeat, StoryVariable, VoiceRecord, World, WorldStyle } from '../../api/types'
+import type { CastReadiness, Clip, Final, FlowGraph, FlowNode, FlowProblem, GroupPage, Job, LoraRecord, Profile, ProfileAdded, ProfileVersion, SceneOut, Shot, ShotCard, ShotTemplate, ShotVersion, StoryBeat, StoryVariable, VoiceRecord, World, WorldStyle } from '../../api/types'
 import { askConfirm, useSession } from '../../store/session'
 import { useLibrary } from './libraryStore'
 import { startPlay, stepPlay, type PlayState } from './flow/play'
 import { spineEdges, spineRow, spineTodo } from './episodeVerbs'
+import type { BoardSort } from './board'
 
-export type Section = 'logline' | 'synopsis' | 'styles' | 'library' | 'panels' | 'spine' | 'variables'
+export type Section = 'logline' | 'synopsis' | 'styles' | 'library' | 'panels' | 'templates' | 'spine' | 'variables'
 /** A variable's id is its name; D92: a library entry's id is its `lib_` id, a saved panel's its name. */
-export type Selection = { kind: 'style' | 'beat' | 'variable' | 'entry' | 'panel'; id: string } | null
+export type Selection = { kind: 'style' | 'beat' | 'variable' | 'entry' | 'panel' | 'template'; id: string } | null
 export type ProfileClass = Profile['cls']
 /** D125 (SP3): the board's filter — every shot, the ones owing a step, the stale ones, the ones not approved. */
 export type BoardFilter = 'all' | 'owes' | 'stale' | 'open'
@@ -21,7 +22,7 @@ export type BoardFilter = 'all' | 'owes' | 'stale' | 'open'
  *  one heading at the end. */
 export const SECTIONS: { id: Section; label: string; presets?: true }[] = [
   { id: 'logline', label: 'Logline' }, { id: 'synopsis', label: 'Synopsis' }, { id: 'spine', label: 'Spine' }, { id: 'styles', label: 'Styles' }, { id: 'variables', label: 'Variables' },
-  { id: 'library', label: 'Library', presets: true }, { id: 'panels', label: 'Saved panels', presets: true },
+  { id: 'library', label: 'Library', presets: true }, { id: 'panels', label: 'Saved panels', presets: true }, { id: 'templates', label: 'Shot templates', presets: true },
 ]
 export const CLASS_LABEL: Record<ProfileClass, string> = { character: 'character', place: 'place', prop: 'prop' }
 /** D110 (PS1) → D125 (#2): props are the third class of Cast (Characters · Places · Props) — every profile lives on Cast, and the class
@@ -153,6 +154,14 @@ export interface StoryState {
   boardFinals: Final[]; boardCuts: { clips: { shot_id: string | null; shot_version: string | null; clip_id: string }[] }[]; boardFilter: BoardFilter
   /** RC2b: each shot's card facts (take, length, stale and owed counts) and the length guide (D96: about 30 s) — read with the board. */
   cards: Record<string, ShotCard>; cardGuide: number
+  /** RC2c: the scene groups (with their nodes), the frame picked on the canvas, the canvas's multi-selection (Ctrl-click, Shift-drag). */
+  scenes: SceneOut[]; sceneId: string | null; flowSel: string[]
+  /** RC2d: the Shots list's search and order. */
+  boardSearch: string; boardSort: BoardSort; setBoardSearch: (q: string) => void; setBoardSort: (s: BoardSort) => void
+  /** RC2e (06 O2): the World's Shot templates — saved from a Shot, renamed, deleted, used (beside a node: its scene, a camera on its stage). */
+  shotTemplates: ShotTemplate[]; loadTemplates: () => Promise<void>; saveTemplate: (nodeId: string, name: string) => Promise<void>
+  renameTemplate: (id: string, name: string) => Promise<void>; deleteTemplate: (id: string) => Promise<void>
+  useTemplate: (id: string, near: string | null, at?: { x: number; y: number } | null) => Promise<void>
   linkFor: { shotId: string; version: string } | null
   picked: string[]; expanding: boolean; busy: boolean
   // SY2 · Shots
@@ -268,6 +277,15 @@ export interface StoryState {
   deleteNode: (id: string, withShot?: boolean) => Promise<void>
   duplicateNode: (id: string) => Promise<void>
   moveNodes: (positions: { id: string; x: number; y: number }[]) => void
+  /** RC2c: scene groups — made around nodes, renamed, joined or left, dissolved (the nodes stay); a frame picked; the canvas's selection. */
+  makeScene: (name: string, nodeIds: string[]) => Promise<void>
+  renameScene: (sceneId: string, name: string) => Promise<void>
+  sceneMembers: (sceneId: string, add: string[], remove: string[]) => Promise<void>
+  dissolveScene: (sceneId: string) => Promise<void>
+  selectScene: (sceneId: string | null) => void
+  setFlowSel: (ids: string[]) => void
+  /** RC2c / O2: *New Shot from this Shot* — a sibling in its scene (the stage, the place and the pins shared; the lines and a camera copied). */
+  newShotFrom: (nodeId: string) => Promise<void>
   connect: (from: string, port: string, to: string) => Promise<void>
   disconnect: (from: string, port: string) => Promise<void>
   bindShot: (nodeId: string, shotId: string, version?: string | null) => Promise<void>
@@ -401,7 +419,7 @@ export const useStory = create<StoryState>()((set, get) => {
     world: null, loading: false, saving: false, section: 'logline', selected: null,
     profiles: [], profilesLoaded: false, profileId: null, versionId: null, refPage: null, candPage: null, pagesFor: null,
     loras: [], trainOpts: DEFAULT_TRAIN, voices: [], voiceId: null, voiceForm: false, lipsyncOpts: { node_id: null, index: null, preset: 'draft' }, audioSecs: {},
-    castFilter: 'all', castSearch: '', castUses: {}, flowRecipe: null, picked: [], expanding: false, busy: false, boardFinals: [], boardCuts: [], boardFilter: 'all', cards: {}, cardGuide: 30, linkFor: null,
+    castFilter: 'all', castSearch: '', castUses: {}, flowRecipe: null, picked: [], expanding: false, busy: false, boardFinals: [], boardCuts: [], boardFilter: 'all', cards: {}, cardGuide: 30, scenes: [], sceneId: null, flowSel: [], boardSearch: '', boardSort: 'story', shotTemplates: [], linkFor: null,
     shots: [], shotsLoaded: false, shotId: null, shotVersionId: null, clipsById: {}, stagesLite: [],
     flowNodes: {}, flowGraph: null, flowLoaded: false, nodeId: null, problems: null, play: null, addAt: null, edge: null,
     load: async () => {
@@ -484,7 +502,8 @@ export const useStory = create<StoryState>()((set, get) => {
         return
       }
       if (data?.kind === 'shot') { if (!shotPending) void get().loadShots(); return }   // SY2: a take arrived, a finalize, a copy (not while a typed name waits)
-      if (data?.kind === 'voice') { void get().loadVoices(); return }        // CN2: a voice made, changed, measured or deleted
+      if (data?.kind === 'voice') { void get().loadVoices(); return }
+      if (data?.kind === 'templates') { void get().loadTemplates(); return }   // RC2e: a Shot template saved, renamed or deleted        // CN2: a voice made, changed, measured or deleted
       if (data?.kind === 'library') { useLibrary.getState().onChanged(data.revision); return }   // D92: the World library moved
       if (data?.kind === 'panels') { void import('../generate/generateStore').then((m) => void m.useGenerate.getState().loadPresets()); return }   // D92: a saved panel (its picture)
       if (data?.kind === 'flow') { if (graphPending === 0 && nodeSaving === 0) void get().loadFlow(); return }   // SY3: a node or the index moved on the server (not while ours are pending)
@@ -816,6 +835,8 @@ export const useStory = create<StoryState>()((set, get) => {
         ...(cards ? { cards: Object.fromEntries(cards.items.map((c) => [c.shot_id, c])), cardGuide: cards.guide_s } : {}) })
     },
     setBoardFilter: (boardFilter) => set({ boardFilter }),
+    setBoardSearch: (boardSearch) => set({ boardSearch }),
+    setBoardSort: (boardSort) => set({ boardSort }),
     setLinkFor: (linkFor) => set({ linkFor }),
     linkStage: async (shotId, version, stageId, cameraId) => {                                       // D125 (S11): the version's stage source
       try {
@@ -931,10 +952,12 @@ export const useStory = create<StoryState>()((set, get) => {
     // ---- SY3 · Flow
     loadFlow: async () => {
       try {
-        const r = await unwrap(http.GET('/story/flow'))
+        const [r, sc] = await Promise.all([unwrap(http.GET('/story/flow')), unwrap(http.GET('/story/scenes')).catch(() => null)])
         const flowNodes: Record<string, FlowNode> = {}
         for (const n of r.nodes) flowNodes[n.id] = n
-        set({ flowNodes, flowGraph: r.graph, flowLoaded: true, ...(get().nodeId && !flowNodes[get().nodeId!] ? { nodeId: null } : {}) })
+        const scenes = sc?.items ?? get().scenes
+        set({ flowNodes, flowGraph: r.graph, flowLoaded: true, scenes, ...(get().nodeId && !flowNodes[get().nodeId!] ? { nodeId: null } : {}),
+          ...(get().sceneId && !scenes.some((s) => s.id === get().sceneId) ? { sceneId: null } : {}) })
       } catch (e) { if ((e as ApiError).status !== 409) toast(`Flow: ${detail(e)}`) }
     },
     selectNode: (nodeId) => {                                                                       // D125 (S10): a node selects its shot (one panel)
@@ -973,6 +996,54 @@ export const useStory = create<StoryState>()((set, get) => {
       const n = get().flowNodes[id]; const p = get().flowGraph?.nodes.find((x) => x.id === id); if (!n) return
       const made = await get().addNode(n.type, n.title ? `${n.title} copy` : '', { x: (p?.x ?? 0) + 40, y: (p?.y ?? 0) + 40 }, { text: n.text })
       if (made) await get().patchNode(made.id, { lines: n.lines, options: n.options.map((o) => ({ ...o, id: `opt_${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}` })), cond: n.cond, set: n.set, target: n.target, colour: n.colour, board_group_id: n.board_group_id, place_id: n.place_id, speaker_versions: n.speaker_versions })
+    },
+    makeScene: async (name, nodeIds) => {
+      try { const r = await unwrap(http.POST('/story/scenes', { body: { name, node_ids: nodeIds } })); set({ scenes: r.items }); await get().loadFlow() }
+      catch (e) { toast(`Scene: ${detail(e)}`) }
+    },
+    renameScene: async (sceneId, name) => {
+      try { const r = await unwrap(http.PATCH('/story/scenes/{sid}', { params: { path: { sid: sceneId } }, body: { name } as never })); set({ scenes: r.items }) }
+      catch (e) { toast(`Scene: ${detail(e)}`) }
+    },
+    sceneMembers: async (sceneId, add, remove) => {
+      try { const r = await unwrap(http.POST('/story/scenes/{sid}/nodes', { params: { path: { sid: sceneId } }, body: { add, remove } })); set({ scenes: r.items }); await get().loadFlow() }
+      catch (e) { toast(`Scene: ${detail(e)}`) }
+    },
+    dissolveScene: async (sceneId) => {
+      try { await unwrap(http.DELETE('/story/scenes/{sid}', { params: { path: { sid: sceneId } } })); set({ sceneId: null }); await get().loadFlow() }
+      catch (e) { toast(`Scene: ${detail(e)}`) }
+    },
+    selectScene: (sceneId) => set({ sceneId, ...(sceneId ? { edge: null } : {}) }),
+    setFlowSel: (flowSel) => { const cur = get().flowSel; if (cur.length !== flowSel.length || cur.some((x, i) => x !== flowSel[i])) set({ flowSel }) },
+    loadTemplates: async () => {
+      try { set({ shotTemplates: (await unwrap(http.GET('/story/shot-templates'))).items }) } catch (e) { if ((e as ApiError).status !== 409) toast(`Shot templates: ${detail(e)}`) }
+    },
+    saveTemplate: async (nodeId, name) => {
+      try { set({ shotTemplates: (await unwrap(http.POST('/story/shot-templates', { body: { node_id: nodeId, name } }))).items }); useSession.getState().toast(`Saved as the Shot template ${name} (World › Presets)`, 'success') }
+      catch (e) { toast(`Template: ${detail(e)}`) }
+    },
+    renameTemplate: async (id, name) => {
+      try { set({ shotTemplates: (await unwrap(http.PATCH('/story/shot-templates/{tid}', { params: { path: { tid: id } }, body: { node_id: '', name } }))).items }) }
+      catch (e) { toast(`Template: ${detail(e)}`) }
+    },
+    deleteTemplate: async (id) => {
+      try { await unwrap(http.DELETE('/story/shot-templates/{tid}', { params: { path: { tid: id } } })); set({ shotTemplates: get().shotTemplates.filter((t) => t.id !== id) }) }
+      catch (e) { toast(`Template: ${detail(e)}`) }
+    },
+    useTemplate: async (id, near, at) => {
+      try {
+        const n = await unwrap(http.POST('/story/shot-templates/{tid}/use', { params: { path: { tid: id } }, body: { near, x: at?.x ?? null, y: at?.y ?? null } }))
+        await Promise.all([get().loadFlow(), get().loadShots()])
+        get().selectNode(n.id)
+      } catch (e) { toast(`New Shot: ${detail(e)}`) }
+    },
+    newShotFrom: async (nodeId) => {
+      try {
+        const n = await unwrap(http.POST('/story/flow/nodes/{nid}/sibling', { params: { path: { nid: nodeId } } }))
+        await Promise.all([get().loadFlow(), get().loadShots()])
+        get().selectNode(n.id)
+        useSession.getState().toast(`${n.title}: a sibling in its scene — the stage, the place and the cast shared; its camera and lines its own`, 'success')
+      } catch (e) { toast(`New Shot: ${detail(e)}`) }
     },
     moveNodes: (positions) => {
       const g = get().flowGraph; if (!g) return

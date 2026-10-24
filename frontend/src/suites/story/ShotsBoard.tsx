@@ -7,7 +7,8 @@ import { runCommand } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import { Help } from '../../frame/Help'
 import { useSession } from '../../store/session'
-import { STEPS, cellsOf, flowOrder, madeFinal, routeOf, ROUTE_LABEL, type Cell, type Step } from './board'
+import { STEPS, SORT_LABEL, arrange, cellsOf, flowOrder, lengthLine, madeFinal, routeOf, ROUTE_LABEL, type BoardSort, type Cell, type Step } from './board'
+import type { ShotCard } from '../../api/types'
 import { runStep, shotMenu, STEP_VERB } from './storyCommands'
 import { linesToVoice } from './episodeVerbs'
 import { CommandButton } from '../../frame/CommandButton'
@@ -49,13 +50,18 @@ export function ShotsBoard() {
   const finals = useStory((s) => s.boardFinals)
   const cuts = useStory((s) => s.boardCuts)
   const filter = useStory((s) => s.boardFilter)
+  const search = useStory((s) => s.boardSearch)                                               // RC2d: the list's search and order
+  const sort = useStory((s) => s.boardSort)
+  const scenes = useStory((s) => s.scenes)
+  const cards = useStory((s) => s.cards)
+  const guide = useStory((s) => s.cardGuide)
   const busy = useBusy()
   useEffect(() => { void sy().loadBoard() }, [shots])
   const rows = useMemo(() => flowOrder(flowGraph, flowNodes, shots).map((r) => {
     const v = r.shot.versions.find((x) => x.id === r.shot.current) ?? r.shot.versions[0]
     return { ...r, v, cells: cellsOf(r.shot, v, r.node, { clipAudio: (id) => (clipsById[id] ? !!clipsById[id].audio_asset_id : undefined), finals, cuts, busy }) }
   }), [flowGraph, flowNodes, shots, clipsById, finals, cuts, busy])
-  const shown = rows.filter((r) => keep(filter, r.cells))
+  const shown = arrange(rows.filter((r) => keep(filter, r.cells)), search, sort, scenes, cards)
   return (
     <div className="shots-board" data-testid="shots-board">
       <table className="board">
@@ -71,7 +77,8 @@ export function ShotsBoard() {
                   onContextMenu={(e) => { sy().selectShot(r.shot.id); showMenu(e, shotMenu()) }}>
                   <td className="name">
                     {thumb ? <img src={api.thumbUrl(thumb, 256)} alt="" /> : <span className="ph" />}
-                    <span><b>{r.shot.name}</b><span className="route" title="its route — the recipe template (the Inspector changes it)">{ROUTE_LABEL[routeOf(r.v, madeFinal(r.shot.id, finals))] ?? routeOf(r.v, madeFinal(r.shot.id, finals))}</span></span>
+                    <span><b>{r.shot.name}</b><span className="route" title="its route — the recipe template (the Inspector changes it)">{ROUTE_LABEL[routeOf(r.v, madeFinal(r.shot.id, finals))] ?? routeOf(r.v, madeFinal(r.shot.id, finals))}
+                      <RowFacts card={cards[r.shot.id]} guide={guide} scene={sort !== 'scene' && r.node?.scene_id ? scenes.find((s) => s.id === r.node!.scene_id)?.name : undefined} /></span></span>
                   </td>
                   {STEPS.map((s) => {
                     const c = r.cells[s.id]
@@ -104,13 +111,24 @@ function keep(f: BoardFilter, cells: Record<Step, Cell>): boolean {
   return true
 }
 
-/** The Shots panel (04 §3.1): the filters, the legend, the shot verbs. */
+/** RC2b / RC2d: a row's length (a warning past the guide), its stale count and its scene, after its route. */
+function RowFacts({ card, guide, scene }: { card?: ShotCard; guide: number; scene?: string }) {
+  const len = lengthLine(card, guide)
+  return <>{len && <span className={`len${len.over ? ' over' : ''}`} title={len.title} data-length> · {len.text}</span>}
+    {card && card.stale > 0 && <span className="stale" data-stale> · {card.stale} stale</span>}{scene && <span className="scene" title="its scene group"> · {scene}</span>}</>
+}
+
+/** The Shots panel (04 §3.1): the filters, the search and the order (RC2d), the legend, the shot verbs. */
 export function BoardPanel() {
   const filter = useStory((s) => s.boardFilter)
+  const search = useStory((s) => s.boardSearch)
+  const sort = useStory((s) => s.boardSort)
   const F: [BoardFilter, string][] = [['all', 'all'], ['owes', 'owes a step'], ['stale', 'stale'], ['open', 'not approved']]
   return (
     <div className="story-panel board-panel">
       <div className="segmented" aria-label="filter">{F.map(([id, label]) => <button key={id} className={filter === id ? 'active' : ''} onClick={() => sy().setBoardFilter(id)}>{label}</button>)}</div>
+      <input type="search" value={search} aria-label="search shots" placeholder="search — a name, a line, a scene" onChange={(e) => sy().setBoardSearch(e.target.value)} />
+      <div className="kv"><span>order</span><select value={sort} aria-label="shot order" onChange={(e) => sy().setBoardSort(e.target.value as BoardSort)}>{(Object.keys(SORT_LABEL) as BoardSort[]).map((s) => <option key={s} value={s}>{SORT_LABEL[s]}</option>)}</select></div>
       <div className="verbs"><VoiceAllButton /></div>
       <h4>Legend <Help text={"A cell is its step's verb: a click does it for that shot (the maker opens on the shot). A right-click on a row is the shot's menu."} /></h4>
       <div className="board-legend">

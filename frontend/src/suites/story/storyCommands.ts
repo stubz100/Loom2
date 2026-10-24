@@ -1,6 +1,6 @@
 // 17 (D85): the Story suite's verbs — every one has a mouse home (the panel's buttons, the editor rows' tools, the Inspector, right-click
 // menus) per D32; Delete and the arrows are accelerators. SY1 adds the Cast tab's verbs (new profile, expand, add to the reference set, lock, copy, open).
-import { Workflow, ArrowDown, ArrowLeft, Box, Ruler, ArrowUp, BookOpen, BookPlus, ChevronLeft, ChevronRight, Pencil, UserRoundPlus, Users, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImageOff, ImagePlus, ImageUp, Link, ListChecks, ListPlus, Lock, MapPinPlus, Maximize, MessageSquare, Mic, PackagePlus, Palette, PersonStanding, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
+import { CopyPlus, Group, Ungroup, Workflow, ArrowDown, ArrowLeft, Box, Ruler, ArrowUp, BookOpen, BookPlus, ChevronLeft, ChevronRight, Pencil, UserRoundPlus, Users, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImageOff, ImagePlus, ImageUp, Link, ListChecks, ListPlus, Lock, MapPinPlus, Maximize, MessageSquare, Mic, PackagePlus, Palette, PersonStanding, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
 import { command, isEnabled, registerCommands, runCommand, sep, type Command, type MenuItem } from '../../frame/commands'
 import { nextOwed, readinessOf, type ReadyCell, type ReadyItem } from './castReady'
 import { linesToVoice, spineTodo } from './episodeVerbs'
@@ -11,7 +11,7 @@ import { useAlbum } from '../catalogue/albumStore'
 import { CLASS_LABEL, latestModelJob, latestTrainJob, modelSource, nodesAfterWithoutPlace, revealClass, sy, ttsJobFor, useStory, type ProfileClass } from './storyStore'
 import { forShot, makeClipFor, makeFrameFor, makeTarget, speakersOf } from './makeFor'
 import { runStale, staleOf } from './runStale'
-import type { Profile, Shot, ShotVersion } from '../../api/types'
+import type { FlowNode, Profile, SceneOut, Shot, ShotVersion } from '../../api/types'
 import { findNode, pickSampleModel, sampleJob, sampleRecipe, styleGroupName } from './styleSamples'
 import { useLibrary } from './libraryStore'
 import { FIELD_LABEL, type FieldKey } from '../generate/fieldPresets'
@@ -51,6 +51,10 @@ const projectOpen = () => !!useSession.getState().project?.open
 /** D90 (02 §5): the open version Make ▸ works for — the shown one (Shots), or the one a node pins (Flow); null when final (a retake first). */
 const shotTarget = () => makeTarget(shot(), shotVersion()?.id)
 const nodeShot = () => { const n = node(); return n?.shot_id ? sy().shots.find((x) => x.id === n.shot_id) : undefined }
+/** RC2c: the node's scene group, the frame picked on the canvas (else the node's), the nodes a scene verb takes (the selection when the node is in it). */
+const sceneOf = (n: FlowNode | undefined): SceneOut | undefined => (n?.scene_id ? sy().scenes.find((s) => s.id === n.scene_id) : undefined)
+const pickedScene = (): SceneOut | undefined => (sy().sceneId ? sy().scenes.find((s) => s.id === sy().sceneId) : undefined) ?? sceneOf(node())
+const sceneTargets = (): string[] => { const n = node(); if (!n) return []; const sel = sy().flowSel; return sel.length > 1 && sel.includes(n.id) ? sel : [n.id] }
 const nodeTarget = () => makeTarget(nodeShot(), node()?.shot_version)
 const board = () => { const g = node()?.board_group_id; return g ? findNode(useAlbum.getState().tree, g) : null }
 /** D125 (S7): the visual nodes after the selected one without a place, up to the next node that has one. */
@@ -469,6 +473,35 @@ const cmds: Command[] = [
   { id: 'story.flow.unbind', scope: 'story', label: 'Move its shot to a node of its own', icon: Unlink, placement: ['inspector', 'context'],
     hint: 'the shot leaves for a Shot node beside this one (outside the routes); this node gets a fresh shot',
     when: () => { const n = node(); const s = nodeShot(); return !!n && !!s && !bareNode(n, sy().flowGraph) && hasWork(s) && !sy().play }, run: () => { const n = node(); if (n) void sy().unbindShot(n.id) } },
+  // RC2c (proto01_animate 31 §3a): scene groups — a frame around Shots; O2: New Shot from this Shot, a sibling in the scene
+  { id: 'story.scene.make', scope: 'story', label: 'Make a scene of it…', icon: Group, placement: ['inspector', 'context'],
+    hint: 'a frame around this node (and the nodes selected with it — Ctrl-click or Shift-drag): a dialogue in shot / reverse-shot is several Shots, one scene; Episode grades it as one',
+    when: () => !!node() && !sy().play,
+    run: () => { const n = node(); if (!n) return; const ids = sceneTargets()
+      const place = n.place_id ? sy().profiles.find((p) => p.id === n.place_id)?.name : undefined
+      void askText({ title: ids.length > 1 ? `A scene of ${ids.length} nodes` : 'A scene', text: 'Its name, shown on its frame in the Flow.', initial: place ?? n.title })
+        .then((v) => { if (v?.trim()) void sy().makeScene(v.trim(), ids) }) } },
+  { id: 'story.scene.leave', scope: 'story', label: 'Take it out of its scene', icon: Ungroup, placement: ['inspector', 'context'],
+    when: () => !!sceneOf(node()) && !sy().play, run: () => { const n = node(); const s = sceneOf(n); if (n && s) void sy().sceneMembers(s.id, [], sceneTargets()) } },
+  { id: 'story.scene.rename', scope: 'story', label: 'Rename the scene…', icon: Pencil, placement: ['inspector', 'context'], when: () => !!pickedScene() && !sy().play,
+    run: () => { const s = pickedScene(); if (s) void askText({ title: 'Rename the scene', initial: s.name }).then((v) => { if (v?.trim() && v.trim() !== s.name) void sy().renameScene(s.id, v.trim()) }) } },
+  { id: 'story.scene.dissolve', scope: 'story', label: 'Dissolve the scene (its nodes stay)', icon: Ungroup, placement: ['inspector', 'context'], when: () => !!pickedScene() && !sy().play,
+    run: () => { const s = pickedScene(); if (s) void sy().dissolveScene(s.id) } },
+  // RC2e (06 O2): Shot templates — saved from a Shot into World › Presets, used beside a node or where the Flow was right-clicked
+  { id: 'story.flow.saveTemplate', scope: 'story', label: 'Save as a template…', icon: BookPlus, placement: ['inspector', 'context'],
+    hint: "its kind, its lines (the words), its line, its route and its camera with its keys — World › Presets › Shot templates keeps it",
+    when: () => visual() && !!node()?.shot_id && !sy().play,
+    run: () => { const n = node(); if (n) void askText({ title: 'Save as a Shot template', text: 'Its name in World › Presets.', initial: n.title }).then((v) => { if (v?.trim()) void sy().saveTemplate(n.id, v.trim()) }) } },
+  { id: 'story.template.use', scope: 'story', label: 'New Shot from it', icon: CopyPlus, placement: ['inspector', 'context'],
+    hint: 'a node of its kind with its lines on its route — beside the node picked in the Flow (its scene, a camera on its stage), else at the Flow\'s centre',
+    when: () => sy().selected?.kind === 'template', run: () => { const id = sy().selected?.id; if (id) void sy().useTemplate(id, sy().nodeId, null) } },
+  { id: 'story.template.rename', scope: 'story', label: 'Rename the template…', icon: Pencil, placement: ['inspector', 'context'], when: () => sy().selected?.kind === 'template',
+    run: () => { const t = sy().shotTemplates.find((x) => x.id === sy().selected?.id); if (t) void askText({ title: 'Rename the template', initial: t.name }).then((v) => { if (v?.trim() && v.trim() !== t.name) void sy().renameTemplate(t.id, v.trim()) }) } },
+  { id: 'story.template.delete', scope: 'story', label: 'Delete the template', icon: Trash2, placement: ['inspector', 'context'], danger: true, when: () => sy().selected?.kind === 'template',
+    run: () => { const t = sy().shotTemplates.find((x) => x.id === sy().selected?.id); if (t) void askConfirm({ title: `Delete the template ${t.name}?`, okLabel: 'Delete', danger: true, text: 'The Shots made from it stay.' }).then((ok) => { if (ok) void sy().deleteTemplate(t.id) }) } },
+  { id: 'story.flow.sibling', scope: 'story', label: 'New Shot from this Shot', icon: CopyPlus, placement: ['inspector', 'context'],
+    hint: 'a sibling in its scene (one is made around the two when it has none): the stage, the place, the pinned cast and the board shared; the lines, a camera of its own and the route copied to change',
+    when: () => visual() && !!node()?.shot_id && !sy().play, run: () => { const n = node(); if (n) void sy().newShotFrom(n.id) } },
   // RC1 (proto01_animate 28): a node's shot as its recipe graph, in place of the canvas; the same graph in Animate
   { id: 'story.flow.recipe', scope: 'story', label: 'Open its recipe', icon: Workflow, hint: "the shot's recipe as a graph, here in place of the canvas — what it is made of, what is stale",
     placement: ['inspector', 'context'], when: () => !!node()?.shot_id && !sy().play, run: () => { const n = node(); if (n) sy().setFlowRecipe(n.id) } },
@@ -560,9 +593,22 @@ export function rowMenu(kind: NonNullable<ReturnType<typeof selected>>['kind'], 
 export function edgeMenu(): { cmd: string }[] { return [{ cmd: 'story.flow.deleteEdge' }] }
 
 /** The right-click menu of a Flow node (the node is selected first). */
-export function nodeMenu(): ({ cmd: string } | typeof sepItem)[] {
+export function nodeMenu(): MenuItem[] {
+  const n = node()
+  const into = sy().scenes.filter((s) => s.id !== n?.scene_id)                                      // RC2c: join a scene by its name
   return [{ cmd: 'story.flow.makeFrame' }, { cmd: 'story.flow.makeClip' }, sepItem, { cmd: 'story.flow.newShot' }, { cmd: 'story.flow.openShot' }, { cmd: 'story.flow.recipe' }, { cmd: 'story.flow.unbind' }, { cmd: 'story.flow.placeForward' }, sepItem,
+    { cmd: 'story.flow.sibling' }, { cmd: 'story.scene.make' }, ...(into.length && n ? [{ label: 'Into the scene', icon: Group, items: into.map((s) => ({ label: s.name, run: () => void sy().sceneMembers(s.id, sceneTargets(), []) })) }] : []),
+    { cmd: 'story.scene.leave' }, { cmd: 'story.flow.saveTemplate' }, ...templateItems(n?.id ?? null, null), sepItem,
     { cmd: 'story.flow.openBoard' }, { cmd: 'story.flow.clearBoard' }, sepItem, { cmd: 'story.flow.voiceAll' }, sepItem, { cmd: 'story.flow.duplicate' }, { cmd: 'story.flow.delete' }]
+}
+/** RC2e: *New Shot from a template ▸* — beside a node (its scene, its stage) or at a point of the Flow. */
+export function templateItems(near: string | null, at: { x: number; y: number } | null): MenuItem[] {
+  const ts = sy().shotTemplates
+  return ts.length ? [{ label: 'New Shot from a template', icon: CopyPlus, items: ts.map((t) => ({ label: t.name, run: () => void sy().useTemplate(t.id, near, at) })) }] : []
+}
+/** RC2c: a scene frame's right-click (the frame is picked first). */
+export function sceneMenu(): MenuItem[] {
+  return [{ cmd: 'story.scene.rename' }, { cmd: 'story.scene.dissolve' }]
 }
 
 /** D90 (02 §5): the entries of "Make frame ▸" and "Make clip ▸" (the shot board, the Strip, the Inspector, the shot row's menu). */

@@ -153,7 +153,8 @@ node in `story/flow/nodes/<id>.json` (loom R139); the index is rebuilt from the 
 **Node ↔ shot (loom R134 / R146):** a Dialogue or Shot node *binds* an **unbound** shot (the picker lists only those) or *spawns* a
 new one owned by it; binding transfers **sole ownership** (`owner_node` on the shot) — a look reused elsewhere is a duplicated shot;
 deleting a node releases its shot (the shot stays, unbound). The node pins the shot version it shows (`shot_version`, default the
-current one). **Inspector:** the node's fields by type — title; Dialogue: lines `[{speaker: profile_id, text}]` with an ✚ row and
+current one). *(Superseded by RC2a, 2026-10-24 — proto01_animate 31 §3b: the shot lives inside its node's file, every shot has a node, a
+shot made elsewhere is a Shot node outside the routes, the version shown is the shot's current one.)* **Inspector:** the node's fields by type — title; Dialogue: lines `[{speaker: profile_id, text}]` with an ✚ row and
 a speaker picker, and **where** (D93 C7: a Cast place, on Dialogue and Shot nodes — the card says "@ <place>"); Choice: options `[{label, to, require?: {var, value}, set?: [{var, value}]}]`; Condition: `{var, op, value}` with
 *then* / *else*; Action: `set[]`; Jump: the target node; Comment: text; colour; the bound shot card with *Bind* / *Release* /
 *Open*. **D93 (C7):** *Make frame ▸* from a Dialogue node opens Generate in Tree mode with one subject card linked per speaker (the
@@ -212,10 +213,12 @@ the Sequence stage, undo stack, Mediabunny scrubbing, trims, dissolves, draft re
 story/
 ├── world.json                # L1: logline, synopsis, styles[{id, name, fragment, group_id?}], default_style, spine[{id, title, line}], variables[{name, type, values?, default}]; revision
 ├── profiles/<id>.json        # L2: name, cls (character | place | prop), current, versions[{id, label, state, group_id, hero_asset_id?, candidates_group_id, appearance, outfit, colours[{hex, object}], marks, trigger?, lora?, derived_from?, created_at}]; revision (schema 2, D93 B4 — schema 1's `stub` reads as the appearance)
-├── shots/<id>.json           # L3: name, owner_node?, current, versions[{id, state, source?: {stage_id, camera_id, stage_revision} | {clip_id}, frame_asset_id?, clip_id?, takes[{kind, id, at}], derived_from?, created_at}]; revision
+├── shots/<id>.json           # L3 (until RC2a): name, owner_node?, current, versions[{id, state, source?: {stage_id, camera_id, stage_revision} | {clip_id}, frame_asset_id?, clip_id?, takes[{kind, id, at}], derived_from?, created_at}]; revision
+├── shots-rc2/                # RC2a: the shot files as they were before the migration (kept, not read)
 └── flow/
     ├── graph.json            # L4 index (rebuildable): nodes[{id, x, y}], edges[{from, port, to}], start
-    └── nodes/<id>.json       # one node per file: type, title, lines[] | options[] | cond | set[] | target | text, speaker?, shot_id?, shot_version?, colour; revision
+    ├── shots.json            # RC2a index (rebuildable): a shot id → the node holding it
+    └── nodes/<id>.json       # one node per file: type, title, lines[] | options[] | cond | set[] | target | text, speaker?, colour; revision; RC2a (schema 2): shot {id, current, versions[…], revision} for a Dialogue or Shot node, shot_id / shot_version written beside it
 timelines/<id>.json           # L5 (P17): clips[] gain shot_id?, shot_version?, node_id?
 ```
 

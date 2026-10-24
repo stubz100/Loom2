@@ -6,7 +6,10 @@ SY1 — profiles (L2: a character, place or prop with versions; a version's refe
 SY2 — shots (L3: a shot with versions; a version points at a stage camera and / or a clip, records its takes and owns one finalized clip —
       the gate is the project format's size; loom R62 / R166).
 SY3 — the flow (L4: one flat graph of nodes — one file per node, a rebuildable `graph.json` index of positions, edges and the start
-      (loom R74 / R139); a Dialogue or Shot node binds a shot as its sole owner (loom R146); validation is a list, play is the client's).
+      (loom R74 / R139); validation is a list, play is the client's).
+RC2a — the Shot node (D96, proto01_animate 31 §3b): a Dialogue or Shot node's file holds its shot (`NodeRecord.shot`), so the node and
+      its shot are one record; the shot keeps its `sht_*` id (finals, cuts and job origins name it) and its own revision, found through the
+      rebuildable `story/flow/shots.json`; a shot made elsewhere is a Shot node outside the routes. `Shot` stays the API's view of it.
 
 A record is one JSON file written through fsio (temp → fsync → replace) with a `schema_version` and a `revision` the client sends back
 on every replace (409 when stale, like documents and stages). Records are read on demand (small files), never cached across requests.
@@ -18,6 +21,8 @@ id and the exact text that ran, and re-running a stored recipe uses the text it 
 from __future__ import annotations
 
 import re
+import shutil
+import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -37,8 +42,9 @@ if TYPE_CHECKING:
 
 WORLD_SCHEMA_VERSION = 1
 PROFILE_SCHEMA_VERSION = 2                         # D93 (B4): 2 — a version holds a sheet (appearance, outfit, colours, marks) and a label, not one stub
-SHOT_SCHEMA_VERSION = 1
-FLOW_SCHEMA_VERSION = 1
+SHOT_SCHEMA_VERSION = 2                            # RC2a: 2 — the shot lives in its node's file (`Shot` is the API's view of it)
+FLOW_SCHEMA_VERSION = 2                            # RC2a: 2 — a visual node's file holds its shot
+_LOCK = threading.RLock()                          # RC2a: a node's fields and its shot share one file — every read-modify-write holds this
 _NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 ProfileClass = Literal["character", "place", "prop"]
@@ -295,7 +301,7 @@ class Shot(BaseModel):
     schema_version: int = SHOT_SCHEMA_VERSION
     id: str = Field(default_factory=lambda: new_id("sht"))
     name: str
-    owner_node: str | None = None                 # loom R146: exactly one Flow node owns a shot; None = unbound (SY3 binds)
+    owner_node: str | None = None                 # RC2a: the node that holds it (every shot has one; a shot made elsewhere is a Shot node outside the routes)
     current: str
     versions: list[ShotVersion] = Field(default_factory=list)
     revision: int = 0
@@ -381,9 +387,9 @@ class FlowCondition(BaseModel):
 
 
 class FlowNode(BaseModel):
-    """One node of the flow, one file (loom R139). The fields a type uses: Dialogue `lines` (+ a bound shot), Shot a bound shot, Choice
-    `options`, Condition `cond`, Action `set`, Jump `target`, Comment `text`; Start and Hub carry a title. `shot_id` / `shot_version`
-    are set by binding only (loom R146: sole ownership)."""
+    """One node of the flow, one file (loom R139). The fields a type uses: Dialogue `lines` (+ its shot), Shot its shot, Choice
+    `options`, Condition `cond`, Action `set`, Jump `target`, Comment `text`; Start and Hub carry a title. RC2a: `shot_id` /
+    `shot_version` are the id and current version of the shot inside the node's file (`NodeRecord`)."""
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
     schema_version: int = FLOW_SCHEMA_VERSION
     id: str = Field(default_factory=lambda: new_id("node"))
@@ -430,6 +436,59 @@ class FlowGraph(BaseModel):
     start: str | None = None
     revision: int = 0
     updated_at: str = Field(default_factory=utc_now)
+
+
+class ShotPart(BaseModel):
+    """RC2a: a Dialogue or Shot node's shot, kept in the node's file — its versions, the current one (the version the node shows) and its
+    own revision (the shot's edits are guarded apart from the node's). The `sht_*` id stays: finals, cuts, job origins and Catalogue
+    manifests name it."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    id: str = Field(default_factory=lambda: new_id("sht"))
+    current: str = "v1"
+    versions: list[ShotVersion] = Field(default_factory=lambda: [ShotVersion(id="v1")])
+    revision: int = 0
+    created_at: str = Field(default_factory=utc_now)
+    updated_at: str = Field(default_factory=utc_now)
+
+    def version(self, vid: str | None = None) -> ShotVersion:
+        want = vid or self.current
+        v = next((x for x in self.versions if x.id == want), None)
+        if v is None:
+            raise KeyError(f"shot {self.id} has no version {want}")
+        return v
+
+    def untouched(self) -> bool:
+        """One open version with nothing in it — no source, frame, clip, take or run: a node's fresh shot, dropped or replaced freely."""
+        if len(self.versions) != 1:
+            return False
+        v = self.versions[0]
+        return v.state == "open" and not (v.stage_id or v.frame_asset_id or v.clip_id or v.takes or (v.recipe and any(s.runs for s in v.recipe.steps)))
+
+
+class NodeRecord(FlowNode):
+    """RC2a: a node's file — the node and, for a Dialogue or Shot node, its shot (one record, so the two pointers that could disagree
+    before are gone). `shot_id` / `shot_version` are written beside it for readers of the file; a file before RC2a (schema 1) keeps its
+    pointers until the migration joins the shot."""
+    shot: ShotPart | None = None
+
+    @model_validator(mode="after")
+    def _sync(self) -> NodeRecord:
+        if self.shot is not None:
+            self.shot_id, self.shot_version = self.shot.id, self.shot.current
+        elif self.schema_version >= 2:
+            self.shot_id = self.shot_version = None
+        return self
+
+    def as_node(self) -> FlowNode:
+        return FlowNode.model_validate({**self.model_dump(exclude={"shot"}), "shot_id": self.shot.id if self.shot else None,
+                                        "shot_version": self.shot.current if self.shot else None})
+
+    def as_shot(self) -> Shot:
+        if self.shot is None:
+            raise KeyError(f"node {self.id} has no shot")
+        p = self.shot
+        return Shot(id=p.id, name=self.title.strip() or VISUAL_LABEL.get(self.type, "Shot"), owner_node=self.id, current=p.current, versions=p.versions,
+                    revision=p.revision, created_at=p.created_at, updated_at=p.updated_at)
 
 
 def node_ports(n: FlowNode) -> list[str]:
@@ -655,33 +714,79 @@ def plan_anim_ref(profile: Profile, version: ProfileVersion, side: str, variant:
     return out
 
 
-# ---- the store · shots (SY2) ----------------------------------------------------------------------------------------------------------
+# ---- the store · shots (SY2; RC2a: inside their nodes) ---------------------------------------------------------------------------------
 class _ShotMixin:
-    """StoryStore's shot records (kept beside the profiles; one file per shot)."""
+    """StoryStore's shots. RC2a (proto01_animate 31 §3b): a shot lives in its node's file (`NodeRecord.shot`), found by its `sht_*` id
+    through the rebuildable index `story/flow/shots.json`; every shot has a node — one made elsewhere is a Shot node outside the routes.
+    The `Shot` these methods return is the view the API kept (its name the node's title, `owner_node` the node)."""
 
     dir: Path
 
-    def shot_path(self, sid: str) -> Path:
-        return self.dir / "shots" / f"{sid}.json"
+    def _shot_index(self, rebuild: bool = False) -> dict[str, str]:
+        p = self.flow_dir / "shots.json"                         # type: ignore[attr-defined]
+        if not rebuild:
+            d = read_json_or(p, {})
+            idx = d.get("shots") if isinstance(d, dict) else None
+            if isinstance(idx, dict):
+                return idx
+        idx = {r.shot.id: r.id for r in self._records().values() if r.shot is not None}   # type: ignore[attr-defined]
+        with _LOCK:
+            self.flow_dir.mkdir(parents=True, exist_ok=True)     # type: ignore[attr-defined]
+            atomic_write_json(p, {"schema_version": 1, "shots": idx})
+        return idx
+
+    def _index_set(self, sid: str, nid: str | None) -> None:
+        with _LOCK:
+            idx = dict(self._shot_index())
+            if nid is None:
+                idx.pop(sid, None)
+            else:
+                idx[sid] = nid
+            atomic_write_json(self.flow_dir / "shots.json", {"schema_version": 1, "shots": idx})   # type: ignore[attr-defined]
+
+    def _holder(self, sid: str) -> NodeRecord | None:
+        """The node record holding the shot, or None (the index is rebuilt once when it names none or the wrong node)."""
+        for rebuild in (False, True):
+            nid = self._shot_index(rebuild).get(sid)
+            r = self._record(nid) if nid else None               # type: ignore[attr-defined]
+            if r is not None and r.shot is not None and r.shot.id == sid:
+                return r
+        return None
 
     def shot(self, sid: str) -> Shot | None:
-        p = self.shot_path(sid)
-        return Shot.model_validate(read_json(p)) if p.is_file() else None
+        r = self._holder(sid)
+        return r.as_shot() if r is not None else None
 
     def shots(self) -> list[Shot]:
-        d = self.dir / "shots"
-        if not d.is_dir():
-            return []
-        out = [Shot.model_validate(read_json(p)) for p in d.glob("sht_*.json")]
+        out = [r.as_shot() for r in self._records().values() if r.shot is not None]   # type: ignore[attr-defined]
         return sorted(out, key=lambda s: s.updated_at, reverse=True)
 
     def save_shot(self, s: Shot) -> None:
-        (self.dir / "shots").mkdir(parents=True, exist_ok=True)
-        atomic_write_json(self.shot_path(s.id), s.model_dump())
+        """A shot's view written back as it is: its versions and current version into its node, its name as the node's title."""
+        with _LOCK:
+            r = self._holder(s.id)
+            if r is None or r.shot is None:
+                raise KeyError(s.id)
+            part = r.shot.model_copy(update={"versions": s.versions, "current": s.current, "revision": s.revision, "updated_at": s.updated_at})
+            self._save_record(r.model_copy(update={"shot": part, "title": s.name if s.name != r.as_shot().name else r.title}))   # type: ignore[attr-defined]
+
+    def _change_part(self, sid: str, fn: Any) -> Shot:
+        """Read the shot's node, let `fn(part, record)` return the new part (or raise), bump the shot's revision, write the node once."""
+        with _LOCK:
+            r = self._holder(sid)
+            if r is None:
+                raise KeyError(sid)
+            part = fn(r.shot.model_copy(deep=True), r)           # type: ignore[union-attr]
+            part = part.model_copy(update={"revision": r.shot.revision + 1, "updated_at": utc_now()})   # type: ignore[union-attr]
+            check_shot(r.model_copy(update={"shot": part}).as_shot())
+            r = r.model_copy(update={"shot": part})
+            self._save_record(r)                                 # type: ignore[attr-defined]
+            return r.as_shot()
 
     def create_shot(self, name: str, *, stage_id: str | None = None, camera_id: str | None = None, stage_revision: int | None = None,
                     clip_id: str | None = None, frame_asset_id: str | None = None) -> Shot:
-        """A shot with version 1 pointing at a stage camera and / or holding a clip or a frame (each given one is also its first take)."""
+        """A shot made elsewhere (*New shot from this camera…*, *Make a shot from this clip…*): version 1 pointing at a stage camera and / or
+        holding a clip or a frame (each given one is also its first take). RC2a: it is a Shot node outside the routes, beside the graph."""
         name = name.strip()
         if not name:
             raise ValueError("a shot needs a name")
@@ -689,89 +794,95 @@ class _ShotMixin:
         if clip_id:
             takes.append(ShotTake(kind="clip", id=clip_id))
         v = ShotVersion(id="v1", stage_id=stage_id, camera_id=camera_id, stage_revision=stage_revision if stage_id else None, frame_asset_id=frame_asset_id, clip_id=clip_id, takes=takes)
-        s = Shot(name=name, current="v1", versions=[v])
-        check_shot(s)
-        self.save_shot(s)
-        return s
+        part = ShotPart(versions=[v])
+        check_shot(Shot(id=part.id, name=name, current="v1", versions=[v]))
+        r = self._new_bare_node(name, part)                      # type: ignore[attr-defined]
+        return r.as_shot()
 
     def patch_shot(self, sid: str, data: dict[str, Any]) -> Shot:
-        """Name, owner node, the current version, and an open version's frame / clip from a client body based on `revision` (409 when stale)."""
-        cur = self.shot(sid)
-        if cur is None:
-            raise KeyError(sid)
-        base = data.get("revision")
-        if base is not None and int(base) != cur.revision:
-            raise StaleShot(f"the shot is at revision {cur.revision}, the change is based on {base} — reload it first")
-        versions = [v.model_copy() for v in cur.versions]
-        for patch in data.get("versions") or []:
-            v = next((x for x in versions if x.id == patch.get("id")), None)
-            if v is None:
-                raise ValueError(f"no version {patch.get('id')!r}")
-            if v.state != "open" and any(k in patch for k in ("frame_asset_id", "clip_id", "stage_id", "camera_id")):
-                raise ValueError(f"version {v.id} is final — its frame and clip are fixed; make a new version")
-            for k in ("frame_asset_id", "clip_id", "stage_id", "camera_id", "stage_revision"):
-                if k in patch:
-                    setattr(v, k, patch[k])
-        merged = {**cur.model_dump(), **{k: v for k, v in data.items() if k in ("name", "current", "owner_node")}, "versions": [v.model_dump() for v in versions],
-                  "id": sid, "schema_version": SHOT_SCHEMA_VERSION, "revision": cur.revision + 1, "created_at": cur.created_at, "updated_at": utc_now()}
-        s = Shot.model_validate(merged)
-        check_shot(s)
-        self.save_shot(s)
-        return s
+        """Name (the node's title), the current version (the one the node shows), and an open version's frame / clip from a client body
+        based on `revision` (409 when stale). `owner_node` (kept from the API before RC2a): None moves the shot out to a node of its own
+        (*Release*: the node keeps its lines and gets a fresh shot), another node's id moves it there (*Bind*)."""
+        with _LOCK:
+            r = self._holder(sid)
+            if r is None:
+                raise KeyError(sid)
+            base = data.get("revision")
+            if base is not None and int(base) != r.shot.revision:            # type: ignore[union-attr]
+                raise StaleShot(f"the shot is at revision {r.shot.revision}, the change is based on {base} — reload it first")   # type: ignore[union-attr]
+            if "owner_node" in data:
+                own = data["owner_node"]
+                if own is None and not self._bare(r):                         # type: ignore[attr-defined]
+                    self.unbind_shot(r.id)                                    # type: ignore[attr-defined]
+                elif own is not None and own != r.id:
+                    self.bind_shot(own, sid)                                  # type: ignore[attr-defined]
+                r = self._holder(sid)
+                assert r is not None and r.shot is not None
+            if "name" in data:
+                name = str(data["name"] or "").strip()
+                if not name:
+                    raise ValueError("a shot needs a name")
+                if name != r.as_shot().name:
+                    r = r.model_copy(update={"title": name, "revision": r.revision + 1, "updated_at": utc_now()})
+            part = r.shot.model_copy(deep=True)                               # type: ignore[union-attr]
+            for patch in data.get("versions") or []:
+                v = next((x for x in part.versions if x.id == patch.get("id")), None)
+                if v is None:
+                    raise ValueError(f"no version {patch.get('id')!r}")
+                if v.state != "open" and any(k in patch for k in ("frame_asset_id", "clip_id", "stage_id", "camera_id")):
+                    raise ValueError(f"version {v.id} is final — its frame and clip are fixed; make a new version")
+                for k in ("frame_asset_id", "clip_id", "stage_id", "camera_id", "stage_revision"):
+                    if k in patch:
+                        setattr(v, k, patch[k])
+            part = part.model_copy(update={"current": data.get("current", part.current), "revision": part.revision + 1, "updated_at": utc_now()})
+            r = r.model_copy(update={"shot": part})
+            check_shot(r.as_shot())
+            self._save_record(r)                                              # type: ignore[attr-defined]
+            return r.as_shot()
 
     def set_source(self, sid: str, vid: str, stage_id: str | None, camera_id: str | None, stage_revision: int | None) -> Shot:
         """D125 (S11): an open version pointed at a stage camera (*Link a stage camera…*, *Block it on a stage…*, Animate's *Use this camera
         for <shot>*), or at none; its stills and clips then come back by the camera (record_stage_result). The recipe's default template
         follows the source (RC0: `stage` for a stage camera's shot) unless one was chosen."""
-        cur = self.shot(sid)
-        if cur is None:
-            raise KeyError(sid)
-        v = cur.version(vid)
-        if v.state != "open":
-            raise ValueError(f"{cur.name} {vid} is final — make a new version to change its source")
         if (stage_id is None) != (camera_id is None):
             raise ValueError("a stage source names both the stage and the camera")
-        upd = {"stage_id": stage_id, "camera_id": camera_id, "stage_revision": stage_revision if stage_id else None}
-        versions = [x.model_copy(update=upd) if x.id == vid else x for x in cur.versions]
-        s = cur.model_copy(update={"versions": versions, "revision": cur.revision + 1, "updated_at": utc_now()})
-        self.save_shot(s)
-        return s
+
+        def apply(part: ShotPart, r: NodeRecord) -> ShotPart:
+            v = part.version(vid)
+            if v.state != "open":
+                raise ValueError(f"{r.as_shot().name} {vid} is final — make a new version to change its source")
+            upd = {"stage_id": stage_id, "camera_id": camera_id, "stage_revision": stage_revision if stage_id else None}
+            return part.model_copy(update={"versions": [x.model_copy(update=upd) if x.id == vid else x for x in part.versions]})
+        return self._change_part(sid, apply)
 
     def new_shot_version(self, sid: str) -> Shot:
         """A copy of the current version's pointers (the source, the frame and the clip — no files, no takes), open, now the current one."""
-        cur = self.shot(sid)
-        if cur is None:
-            raise KeyError(sid)
-        src = cur.version()
-        n = max(int(v.id[1:]) for v in cur.versions if v.id[1:].isdigit()) + 1
-        v = ShotVersion(id=f"v{n}", stage_id=src.stage_id, camera_id=src.camera_id, stage_revision=src.stage_revision, frame_asset_id=src.frame_asset_id,
-                        clip_id=src.clip_id, derived_from=src.id, recipe=src.recipe.model_copy(deep=True) if src.recipe else None)   # RC0: the plan and its history carry over
-        s = cur.model_copy(update={"versions": [*cur.versions, v], "current": v.id, "revision": cur.revision + 1, "updated_at": utc_now()})
-        check_shot(s)
-        self.save_shot(s)
-        return s
+        def apply(part: ShotPart, _r: NodeRecord) -> ShotPart:
+            src = part.version()
+            n = max(int(v.id[1:]) for v in part.versions if v.id[1:].isdigit()) + 1
+            v = ShotVersion(id=f"v{n}", stage_id=src.stage_id, camera_id=src.camera_id, stage_revision=src.stage_revision, frame_asset_id=src.frame_asset_id,
+                            clip_id=src.clip_id, derived_from=src.id, recipe=src.recipe.model_copy(deep=True) if src.recipe else None)   # RC0: the plan and its history carry over
+            return part.model_copy(update={"versions": [*part.versions, v], "current": v.id})
+        return self._change_part(sid, apply)
 
     def add_take(self, sid: str, vid: str, kind: str, ref_id: str, *, use: bool | None = None, stage_revision: int | None = None) -> Shot:
         """Record a take on an open version; `use` makes it the frame or the clip (None: only when that slot is still empty)."""
-        cur = self.shot(sid)
-        if cur is None:
-            raise KeyError(sid)
-        v = cur.version(vid)
-        if v.state != "open":
-            raise ValueError(f"version {vid} is final")
         if kind not in ("image", "clip"):
             raise ValueError("a take is an image or a clip")
-        takes = [t for t in v.takes if not (t.kind == kind and t.id == ref_id)] + [ShotTake(kind=kind, id=ref_id)]   # type: ignore[arg-type]
-        upd: dict[str, Any] = {"takes": takes}
-        slot = "frame_asset_id" if kind == "image" else "clip_id"
-        if use or (use is None and getattr(v, slot) is None):
-            upd[slot] = ref_id
-            if stage_revision is not None:
-                upd["stage_revision"] = stage_revision
-        versions = [x.model_copy(update=upd) if x.id == vid else x for x in cur.versions]
-        s = cur.model_copy(update={"versions": versions, "revision": cur.revision + 1, "updated_at": utc_now()})
-        self.save_shot(s)
-        return s
+
+        def apply(part: ShotPart, _r: NodeRecord) -> ShotPart:
+            v = part.version(vid)
+            if v.state != "open":
+                raise ValueError(f"version {vid} is final")
+            takes = [t for t in v.takes if not (t.kind == kind and t.id == ref_id)] + [ShotTake(kind=kind, id=ref_id)]   # type: ignore[arg-type]
+            upd: dict[str, Any] = {"takes": takes}
+            slot = "frame_asset_id" if kind == "image" else "clip_id"
+            if use or (use is None and getattr(v, slot) is None):
+                upd[slot] = ref_id
+                if stage_revision is not None:
+                    upd["stage_revision"] = stage_revision
+            return part.model_copy(update={"versions": [x.model_copy(update=upd) if x.id == vid else x for x in part.versions]})
+        return self._change_part(sid, apply)
 
     def record_run(self, sid: str, vid: str, recipe: dict[str, Any], *, outputs: list[str], job_id: str | None, seconds: float | None,
                    stage_id: str | None = None, stage_revision: int | None = None) -> Shot | None:
@@ -780,55 +891,62 @@ class _ShotMixin:
         cur = self.shot(sid)
         if cur is None:
             raise KeyError(sid)
-        v = cur.version(vid)
-        where = step_of(recipe, v.frame_asset_id)
-        if v.state != "open" or where is None:
+        v0 = cur.version(vid)
+        where = step_of(recipe, v0.frame_asset_id)
+        if v0.state != "open" or where is None:
             return None
-        stamps = stamps_for(recipe, frame_asset_id=v.frame_asset_id, stage_id=stage_id, stage_revision=stage_revision, story=self)
+        stamps = stamps_for(recipe, frame_asset_id=v0.frame_asset_id, stage_id=stage_id, stage_revision=stage_revision, story=self)
         run = RecipeRun(job_id=job_id, kind=str(recipe.get("kind") or "?"), settings=recipe, stamps=stamps, outputs=outputs,
                         seconds=round(seconds, 1) if seconds is not None else None)
-        r = add_run(v.recipe, default_template(v.stage_id), where[0], where[1], run)
-        versions = [x.model_copy(update={"recipe": r}) if x.id == vid else x for x in cur.versions]
-        s = cur.model_copy(update={"versions": versions, "revision": cur.revision + 1, "updated_at": utc_now()})
-        self.save_shot(s)
-        return s
+
+        def apply(part: ShotPart, _r: NodeRecord) -> ShotPart:
+            v = part.version(vid)
+            r = add_run(v.recipe, default_template(v.stage_id), where[0], where[1], run)
+            return part.model_copy(update={"versions": [x.model_copy(update={"recipe": r}) if x.id == vid else x for x in part.versions]})
+        return self._change_part(sid, apply)
 
     def set_template(self, sid: str, vid: str, template: str) -> Shot:
         """RC0: the version's recipe follows another template (its runs stay)."""
         from .shot_recipe import TEMPLATES
         if template not in TEMPLATES:
             raise ValueError(f"no recipe template {template!r}")
-        cur = self.shot(sid)
-        if cur is None:
-            raise KeyError(sid)
-        v = cur.version(vid)
-        r = (v.recipe or ShotRecipe()).model_copy(update={"template": template})
-        versions = [x.model_copy(update={"recipe": r}) if x.id == vid else x for x in cur.versions]
-        s = cur.model_copy(update={"versions": versions, "revision": cur.revision + 1, "updated_at": utc_now()})
-        self.save_shot(s)
-        return s
+
+        def apply(part: ShotPart, _r: NodeRecord) -> ShotPart:
+            v = part.version(vid)
+            r = (v.recipe or ShotRecipe()).model_copy(update={"template": template})
+            return part.model_copy(update={"versions": [x.model_copy(update={"recipe": r}) if x.id == vid else x for x in part.versions]})
+        return self._change_part(sid, apply)
 
     def finalize_shot(self, sid: str, vid: str, clip_size: tuple[int, int] | None, fmt: tuple[int, int]) -> Shot:
         cur = self.shot(sid)
         if cur is None:
             raise KeyError(sid)
-        v = cur.version(vid)
-        if v.state == "final":
+        if cur.version(vid).state == "final":
             return cur
-        why = finalize_reason(v, clip_size[0] if clip_size else None, clip_size[1] if clip_size else None, fmt[0], fmt[1])
-        if why:
-            raise ValueError(why)
-        versions = [x.model_copy(update={"state": "final", "finalized_at": utc_now()}) if x.id == vid else x for x in cur.versions]
-        s = cur.model_copy(update={"versions": versions, "revision": cur.revision + 1, "updated_at": utc_now()})
-        self.save_shot(s)
-        return s
+
+        def apply(part: ShotPart, _r: NodeRecord) -> ShotPart:
+            v = part.version(vid)
+            why = finalize_reason(v, clip_size[0] if clip_size else None, clip_size[1] if clip_size else None, fmt[0], fmt[1])
+            if why:
+                raise ValueError(why)
+            return part.model_copy(update={"versions": [x.model_copy(update={"state": "final", "finalized_at": utc_now()}) if x.id == vid else x for x in part.versions]})
+        return self._change_part(sid, apply)
 
     def delete_shot(self, sid: str) -> bool:
-        p = self.shot_path(sid)
-        if not p.is_file():
-            return False
-        p.unlink()
-        return True
+        """RC2a: a bare Shot node outside the routes goes with its shot; a node in the story keeps its lines and place and gets a fresh,
+        empty shot (its old shot's files stay in the Catalogue)."""
+        with _LOCK:
+            r = self._holder(sid)
+            if r is None:
+                return False
+            if self._bare(r):                                     # type: ignore[attr-defined]
+                self.delete_node(r.id, delete_shot=True)          # type: ignore[attr-defined]
+            else:
+                fresh = ShotPart()
+                self._save_record(r.model_copy(update={"shot": fresh, "revision": r.revision + 1, "updated_at": utc_now()}))   # type: ignore[attr-defined]
+                self._index_set(sid, None)
+                self._index_set(fresh.id, r.id)
+            return True
 
     def record_stage_result(self, stage_id: str, camera_id: str, kind: str, ref_id: str, stage_revision: int | None,
                             run: dict[str, Any] | None = None, skip: str | None = None, use: bool | None = None) -> list[Shot]:
@@ -915,7 +1033,8 @@ def check_for_shot(store: StoryStore, payload: dict[str, Any] | None) -> Shot:
 
 # ---- the store ---------------------------------------------------------------------------------------------------------------------
 class _FlowMixin:
-    """StoryStore's flow records: one file per node under `story/flow/nodes/`, the index `story/flow/graph.json`."""
+    """StoryStore's flow records: one file per node under `story/flow/nodes/` (RC2a: a Dialogue or Shot node's file holds its shot), the
+    index `story/flow/graph.json`."""
 
     dir: Path
 
@@ -926,23 +1045,38 @@ class _FlowMixin:
     def node_path(self, nid: str) -> Path:
         return self.flow_dir / "nodes" / f"{nid}.json"
 
-    def flow_node(self, nid: str) -> FlowNode | None:
+    def _record(self, nid: str) -> NodeRecord | None:
         p = self.node_path(nid)
-        return FlowNode.model_validate(read_json(p)) if p.is_file() else None
+        return NodeRecord.model_validate(read_json(p)) if p.is_file() else None
 
-    def flow_nodes(self) -> dict[str, FlowNode]:
+    def _records(self) -> dict[str, NodeRecord]:
         d = self.flow_dir / "nodes"
         if not d.is_dir():
             return {}
         out = {}
         for p in d.glob("node_*.json"):
-            n = FlowNode.model_validate(read_json(p))
-            out[n.id] = n
+            r = NodeRecord.model_validate(read_json(p))
+            out[r.id] = r
         return out
 
-    def save_node(self, n: FlowNode) -> None:
+    def _save_record(self, r: NodeRecord) -> NodeRecord:
+        r = NodeRecord.model_validate({**r.model_dump(), "schema_version": FLOW_SCHEMA_VERSION})   # the shot's id and current version written beside it
         (self.flow_dir / "nodes").mkdir(parents=True, exist_ok=True)
-        atomic_write_json(self.node_path(n.id), n.model_dump())
+        atomic_write_json(self.node_path(r.id), r.model_dump())
+        return r
+
+    def flow_node(self, nid: str) -> FlowNode | None:
+        r = self._record(nid)
+        return r.as_node() if r is not None else None
+
+    def flow_nodes(self) -> dict[str, FlowNode]:
+        return {nid: r.as_node() for nid, r in self._records().items()}
+
+    def save_node(self, n: FlowNode) -> None:
+        """A node's own fields written as they are, its shot kept."""
+        with _LOCK:
+            cur = self._record(n.id)
+            self._save_record(NodeRecord.model_validate({**n.model_dump(), "shot": cur.shot.model_dump() if cur is not None and cur.shot is not None else None}))
 
     def save_graph(self, g: FlowGraph) -> None:
         self.flow_dir.mkdir(parents=True, exist_ok=True)
@@ -969,98 +1103,130 @@ class _FlowMixin:
             self.save_graph(g)
         return g
 
+    def _bare(self, r: NodeRecord, g: FlowGraph | None = None) -> bool:
+        """RC2a: a Shot node that is nothing but its shot — outside the routes (no edge in or out, not the start), no lines, text, beat,
+        place or board. A shot made elsewhere is one; *Bind* takes its shot into another node and it goes."""
+        if r.type != "shot" or r.lines or r.text.strip() or r.beat_id or r.place_id or r.board_group_id:
+            return False
+        g = g or self.flow_graph()
+        return g.start != r.id and not any(e.from_ == r.id or e.to == r.id for e in g.edges)
+
+    def _new_bare_node(self, title: str, part: ShotPart, near: tuple[float, float] | None = None) -> NodeRecord:
+        """RC2a: a Shot node outside the routes holding `part` — at `near`, else in the column right of the graph, under the bare nodes
+        already there."""
+        with _LOCK:
+            g = self.flow_graph()
+            if near is not None:
+                x, y = near
+            else:
+                recs = self._records()
+                routed = [pl for pl in g.nodes if pl.id in recs and not self._bare(recs[pl.id], g)]
+                bare = [pl for pl in g.nodes if pl.id in recs and self._bare(recs[pl.id], g)]
+                x = (max(pl.x for pl in routed) + 280.0) if routed else 40.0
+                y = (max(pl.y for pl in bare if pl.x >= x - 1.0) + 140.0) if any(pl.x >= x - 1.0 for pl in bare) else (min((pl.y for pl in routed), default=40.0))
+            r = self._save_record(NodeRecord(type="shot", title=title.strip() or "Shot", shot=part))
+            g = g.model_copy(update={"nodes": [*[p for p in g.nodes if p.id != r.id], FlowPlacement(id=r.id, x=x, y=y)], "revision": g.revision + 1, "updated_at": utc_now()})
+            self.save_graph(g)
+            self._index_set(part.id, r.id)                       # type: ignore[attr-defined]
+            return r
+
+    def _placed(self, nid: str, dy: float = 0.0) -> tuple[float, float] | None:
+        pl = next((p for p in self.flow_graph().nodes if p.id == nid), None)
+        return (pl.x, pl.y + dy) if pl is not None else None
+
     def create_node(self, type_: str, title: str = "", x: float = 0.0, y: float = 0.0, *, with_shot: bool = True, **fields: Any) -> FlowNode:
-        """A node and its placement. D125 (#4): a Dialogue or Shot node is made with its shot — named after the node, owned by it
-        (`with_shot` False: none, for a shot bound later)."""
+        """A node and its placement. D125 (#4) / RC2a: a Dialogue or Shot node is made with its shot inside it (`with_shot` False: none)."""
         if type_ not in NODE_TYPES:
             raise ValueError(f"unknown node type {type_!r}; one of {', '.join(NODE_TYPES)}")
         fields = {k: v for k, v in fields.items() if k in ("lines", "options", "cond", "set", "target", "text", "colour", "beat_id")}
-        n = FlowNode(type=type_, title=title.strip() or {"start": "Start", "hub": "Hub", "comment": "Note"}.get(type_, ""), **fields)
-        g = self.flow_graph()                                        # before the file exists, so the index does not place it twice
-        self.save_node(n)
-        g = g.model_copy(update={"nodes": [*[p for p in g.nodes if p.id != n.id], FlowPlacement(id=n.id, x=x, y=y)], "start": g.start or (n.id if type_ == "start" else None),
-                                 "revision": g.revision + 1, "updated_at": utc_now()})
-        self.save_graph(g)
-        if type_ in VISUAL_TYPES and with_shot:
-            n = self._own_shot(n)
-        return n
-
-    def _own_shot(self, n: FlowNode) -> FlowNode:
-        """D125 (#4): a new shot owned by the visual node, named after it."""
-        sh = self.create_shot(n.title.strip() or VISUAL_LABEL[n.type])      # type: ignore[attr-defined]
-        n, _ = self.bind_shot(n.id, sh.id)
-        return n
+        r = NodeRecord(type=type_, title=title.strip() or {"start": "Start", "hub": "Hub", "comment": "Note"}.get(type_, ""),
+                       shot=ShotPart() if type_ in VISUAL_TYPES and with_shot else None, **fields)
+        with _LOCK:
+            g = self.flow_graph()                                    # before the file exists, so the index does not place it twice
+            r = self._save_record(r)
+            g = g.model_copy(update={"nodes": [*[p for p in g.nodes if p.id != r.id], FlowPlacement(id=r.id, x=x, y=y)], "start": g.start or (r.id if type_ == "start" else None),
+                                     "revision": g.revision + 1, "updated_at": utc_now()})
+            self.save_graph(g)
+            if r.shot is not None:
+                self._index_set(r.shot.id, r.id)                 # type: ignore[attr-defined]
+        return r.as_node()
 
     def patch_node(self, nid: str, data: dict[str, Any]) -> FlowNode:
-        """A node's own fields from a client body based on `revision` (409 when stale); the bound shot changes through bind / unbind only."""
-        cur = self.flow_node(nid)
-        if cur is None:
-            raise KeyError(nid)
-        base = data.get("revision")
-        if base is not None and int(base) != cur.revision:
-            raise StaleFlow(f"the node is at revision {cur.revision}, the change is based on {base} — reload it first")
-        keep = ("type", "title", "lines", "options", "cond", "set", "target", "text", "colour", "board_group_id", "place_id", "speaker_versions")
-        merged = {**cur.model_dump(), **{k: v for k, v in data.items() if k in keep}, "id": nid, "schema_version": FLOW_SCHEMA_VERSION,
-                  "revision": cur.revision + 1, "created_at": cur.created_at, "updated_at": utc_now()}
-        n = FlowNode.model_validate(merged)
-        if "lines" in data:                                             # CN2: a client that did not see the tts job's stamp keeps it on a line whose text it left alone
-            for i, ln in enumerate(n.lines):
-                if i < len(cur.lines) and ln.audio_asset_id is None and cur.lines[i].audio_asset_id and cur.lines[i].text == ln.text:
-                    ln.audio_asset_id, ln.audio_text = cur.lines[i].audio_asset_id, cur.lines[i].audio_text
-        if n.type not in NODE_TYPES:
-            raise ValueError(f"unknown node type {n.type!r}")
-        self.save_node(n)
-        g = self.flow_graph()                                        # the start may move with the type; an edge from a port that is gone goes too
-        edges = [e for e in g.edges if e.from_ != nid or e.port in node_ports(n)]
-        if len(edges) != len(g.edges):
-            self.save_graph(g.model_copy(update={"edges": edges, "revision": g.revision + 1, "updated_at": utc_now()}))
-        if n.type in VISUAL_TYPES and n.shot_id and n.title != cur.title:   # D125 (#4): the shot follows the node's title until renamed by hand
-            sh = self.shot(n.shot_id)                                # type: ignore[attr-defined]
-            if sh is not None and sh.owner_node == nid and sh.name == (cur.title.strip() or VISUAL_LABEL.get(cur.type, "")) and (n.title.strip() or VISUAL_LABEL[n.type]):
-                self.patch_shot(sh.id, {"name": n.title.strip() or VISUAL_LABEL[n.type]})   # type: ignore[attr-defined]
-        if n.type in VISUAL_TYPES and not n.shot_id and cur.type not in VISUAL_TYPES:   # turned visual: it gets its shot
-            n = self._own_shot(n)
-        return n
+        """A node's own fields from a client body based on `revision` (409 when stale). RC2a: its shot is in the same file and keeps its
+        own revision; a node turned into a non-visual type drops an empty shot and refuses one with work in it; one turned visual gets one."""
+        with _LOCK:
+            cur = self._record(nid)
+            if cur is None:
+                raise KeyError(nid)
+            base = data.get("revision")
+            if base is not None and int(base) != cur.revision:
+                raise StaleFlow(f"the node is at revision {cur.revision}, the change is based on {base} — reload it first")
+            keep = ("type", "title", "lines", "options", "cond", "set", "target", "text", "colour", "board_group_id", "place_id", "speaker_versions")
+            merged = {**cur.model_dump(), **{k: v for k, v in data.items() if k in keep}, "id": nid, "schema_version": FLOW_SCHEMA_VERSION,
+                      "revision": cur.revision + 1, "created_at": cur.created_at, "updated_at": utc_now()}
+            r = NodeRecord.model_validate(merged)
+            if "lines" in data:                                         # CN2: a client that did not see the tts job's stamp keeps it on a line whose text it left alone
+                for i, ln in enumerate(r.lines):
+                    if i < len(cur.lines) and ln.audio_asset_id is None and cur.lines[i].audio_asset_id and cur.lines[i].text == ln.text:
+                        ln.audio_asset_id, ln.audio_text = cur.lines[i].audio_asset_id, cur.lines[i].audio_text
+            if r.type not in NODE_TYPES:
+                raise ValueError(f"unknown node type {r.type!r}")
+            dropped = None
+            if r.type not in VISUAL_TYPES and r.shot is not None:
+                if not r.shot.untouched():
+                    raise ValueError(f"{cur.title or VISUAL_LABEL.get(cur.type, 'the node')} has a shot with work in it — release the shot to a node "
+                                     "of its own or delete it, then change the type")
+                dropped, r = r.shot.id, r.model_copy(update={"shot": None})
+            elif r.type in VISUAL_TYPES and r.shot is None and cur.type not in VISUAL_TYPES:   # turned visual: it gets its shot
+                r = r.model_copy(update={"shot": ShotPart()})
+            r = self._save_record(r)
+            if dropped:
+                self._index_set(dropped, None)                   # type: ignore[attr-defined]
+            elif r.shot is not None and (cur.shot is None or cur.shot.id != r.shot.id):
+                self._index_set(r.shot.id, r.id)                 # type: ignore[attr-defined]
+            g = self.flow_graph()                                    # the start may move with the type; an edge from a port that is gone goes too
+            edges = [e for e in g.edges if e.from_ != nid or e.port in node_ports(r)]
+            if len(edges) != len(g.edges):
+                self.save_graph(g.model_copy(update={"edges": edges, "revision": g.revision + 1, "updated_at": utc_now()}))
+            return r.as_node()
 
     def set_line_audio(self, nid: str, index: int, asset_id: str | None, text: str | None) -> FlowNode:
         """CN2: the tts job's stamp on a line (the audio asset and the text it spoke) — server-side, no revision bump: the line's words are
         the client's, the voice is the job's (patch_node keeps the stamp a client did not see)."""
-        cur = self.flow_node(nid)
-        if cur is None:
-            raise KeyError(nid)
-        if not 0 <= index < len(cur.lines):
-            raise KeyError(f"{nid} has no line {index}")
-        lines = [ln.model_copy() for ln in cur.lines]
-        lines[index].audio_asset_id, lines[index].audio_text = asset_id, text
-        n = cur.model_copy(update={"lines": lines, "updated_at": utc_now()})
-        self.save_node(n)
-        return n
+        with _LOCK:
+            cur = self._record(nid)
+            if cur is None:
+                raise KeyError(nid)
+            if not 0 <= index < len(cur.lines):
+                raise KeyError(f"{nid} has no line {index}")
+            lines = [ln.model_copy() for ln in cur.lines]
+            lines[index].audio_asset_id, lines[index].audio_text = asset_id, text
+            return self._save_record(cur.model_copy(update={"lines": lines, "updated_at": utc_now()})).as_node()
 
     def clear_voice(self, vid: str) -> list[Profile]:
         """CN2: a deleted voice leaves every profile that had it."""
         out = []
-        for p in self.profiles():
+        for p in self.profiles():                                # type: ignore[attr-defined]
             if p.voice_id == vid:
-                out.append(self.patch_profile(p.id, {"voice_id": None}))
+                out.append(self.patch_profile(p.id, {"voice_id": None}))   # type: ignore[attr-defined]
         return out
 
     def delete_node(self, nid: str, delete_shot: bool = False) -> Shot | None:
-        """The node file goes, its placement and edges with it; its shot is released (not deleted) and returned — D125 (#4): or deleted too
-        with `delete_shot` (its files stay in the Catalogue), and None returned."""
-        cur = self.flow_node(nid)
-        if cur is None:
-            raise KeyError(nid)
-        released = None
-        if cur.shot_id:
-            sh = self.shot(cur.shot_id)                           # type: ignore[attr-defined]
-            if sh is not None and sh.owner_node == nid:
-                if delete_shot:
-                    self.delete_shot(sh.id)                       # type: ignore[attr-defined]
+        """The node file goes, its placement and edges with it. RC2a: its shot is deleted with it (`delete_shot`, its files stay in the
+        Catalogue), or moved to a Shot node of its own where the node stood and returned; an empty shot simply goes."""
+        with _LOCK:
+            cur = self._record(nid)
+            if cur is None:
+                raise KeyError(nid)
+            released = None
+            if cur.shot is not None:
+                if delete_shot or cur.shot.untouched():
+                    self._index_set(cur.shot.id, None)           # type: ignore[attr-defined]
                 else:
-                    released = self.patch_shot(sh.id, {"owner_node": None})   # type: ignore[attr-defined]
-        self.node_path(nid).unlink()
-        self.flow_graph()
-        return released
+                    released = self._new_bare_node(cur.as_shot().name, cur.shot, near=self._placed(nid)).as_shot()
+            self.node_path(nid).unlink()
+            self.flow_graph()
+            return released
 
     def put_graph(self, data: dict[str, Any]) -> FlowGraph:
         """Positions, edges and the start from a client body based on `revision` (409 when stale); edges must join existing nodes on
@@ -1096,40 +1262,130 @@ class _FlowMixin:
         return g
 
     def bind_shot(self, nid: str, shot_id: str, version: str | None = None) -> tuple[FlowNode, Shot]:
-        """A visual node takes a shot as its sole owner (loom R146): an unbound shot, or re-selecting a version of its own."""
-        n = self.flow_node(nid)
-        if n is None:
-            raise KeyError(nid)
-        if n.type not in VISUAL_TYPES:
-            raise ValueError(f"a {n.type} node does not bind a shot")
-        sh = self.shot(shot_id)                                   # type: ignore[attr-defined]
-        if sh is None:
-            raise KeyError(shot_id)
-        if sh.owner_node and sh.owner_node != nid:
-            raise ValueError(f"{sh.name} is owned by another node — duplicate it into a new shot (loom R23 / R146)")
-        v = sh.version(version)
-        if n.shot_id and n.shot_id != shot_id:
-            old = self.shot(n.shot_id)                            # type: ignore[attr-defined]
-            if old is not None and old.owner_node == nid:
-                self.patch_shot(old.id, {"owner_node": None})     # type: ignore[attr-defined]
-        if sh.owner_node != nid:
-            sh = self.patch_shot(sh.id, {"owner_node": nid})      # type: ignore[attr-defined]
-        n = n.model_copy(update={"shot_id": shot_id, "shot_version": v.id, "revision": n.revision + 1, "updated_at": utc_now()})
-        self.save_node(n)
-        return n, sh
+        """The node shows a version of its own shot, or takes a shot made elsewhere (RC2a: the shot of a bare Shot node outside the routes,
+        which then goes). The node's own shot, if it has work in it, moves out to a node of its own — nothing is lost. A shot of another
+        node in the story is refused: a shot is one node (*New Shot from this Shot* copies one)."""
+        with _LOCK:
+            n = self._record(nid)
+            if n is None:
+                raise KeyError(nid)
+            if n.type not in VISUAL_TYPES:
+                raise ValueError(f"a {n.type} node does not bind a shot")
+            if n.shot is not None and n.shot.id == shot_id:
+                if version is not None and version != n.shot.current:
+                    n.shot.version(version)
+                    part = n.shot.model_copy(update={"current": version, "revision": n.shot.revision + 1, "updated_at": utc_now()})
+                    n = self._save_record(n.model_copy(update={"shot": part}))
+                return n.as_node(), n.as_shot()
+            donor = self._holder(shot_id)                        # type: ignore[attr-defined]
+            if donor is None or donor.shot is None:
+                raise KeyError(shot_id)
+            if not self._bare(donor):
+                raise ValueError(f"{donor.as_shot().name} is the shot of another node in the story — a shot is one node (RC2); "
+                                 "New Shot from this Shot copies it")
+            part = donor.shot
+            if version is not None:
+                part.version(version)
+            part = part.model_copy(update={"current": version or part.current, "revision": part.revision + 1, "updated_at": utc_now()})
+            if n.shot is not None and not n.shot.untouched():
+                self._new_bare_node(n.as_shot().name, n.shot, near=self._placed(nid, 160.0))
+            elif n.shot is not None:
+                self._index_set(n.shot.id, None)                 # type: ignore[attr-defined]
+            title = n.title if n.title.strip() else donor.title
+            n = self._save_record(n.model_copy(update={"shot": part, "title": title, "revision": n.revision + 1, "updated_at": utc_now()}))
+            self._index_set(part.id, n.id)                       # type: ignore[attr-defined]
+            self.node_path(donor.id).unlink()
+            self.flow_graph()
+            return n.as_node(), n.as_shot()
+
+    def give_shot(self, nid: str) -> FlowNode:
+        """A visual node made without a shot (`with_shot` False) gets an empty one; a node with one keeps it."""
+        with _LOCK:
+            n = self._record(nid)
+            if n is None:
+                raise KeyError(nid)
+            if n.type not in VISUAL_TYPES:
+                raise ValueError(f"a {n.type} node has no shot")
+            if n.shot is None:
+                n = self._save_record(n.model_copy(update={"shot": ShotPart(), "revision": n.revision + 1, "updated_at": utc_now()}))
+                self._index_set(n.shot.id, n.id)                 # type: ignore[attr-defined, union-attr]
+            return n.as_node()
 
     def unbind_shot(self, nid: str) -> tuple[FlowNode, Shot | None]:
-        n = self.flow_node(nid)
-        if n is None:
-            raise KeyError(nid)
-        released = None
-        if n.shot_id:
-            sh = self.shot(n.shot_id)                             # type: ignore[attr-defined]
-            if sh is not None and sh.owner_node == nid:
-                released = self.patch_shot(sh.id, {"owner_node": None})   # type: ignore[attr-defined]
-        n = n.model_copy(update={"shot_id": None, "shot_version": None, "revision": n.revision + 1, "updated_at": utc_now()})
-        self.save_node(n)
-        return n, released
+        """RC2a: the node's shot moves out to a Shot node of its own beside it (returned) and the node gets a fresh, empty shot; an empty
+        shot stays (there is nothing to move)."""
+        with _LOCK:
+            n = self._record(nid)
+            if n is None:
+                raise KeyError(nid)
+            if n.shot is None or n.shot.untouched():
+                return n.as_node(), None
+            released = self._new_bare_node(n.as_shot().name, n.shot, near=self._placed(nid, 160.0)).as_shot()
+            fresh = ShotPart()
+            n = self._save_record(n.model_copy(update={"shot": fresh, "revision": n.revision + 1, "updated_at": utc_now()}))
+            self._index_set(fresh.id, n.id)                      # type: ignore[attr-defined]
+            return n.as_node(), released
+
+    def migrate_rc2(self) -> list[str]:
+        """RC2a's migration, once (proto01_animate 31 §3b): each node's shot joins its file (the owner the shot names first, then a node
+        pointing at a shot nobody owns; a visual node left without one gets a fresh shot), a shot without a node becomes a Shot node
+        outside the routes, the old files move to `story/shots-rc2/`. The notes for the open's recovery list."""
+        d = self.dir / "shots"
+        files = sorted(d.glob("sht_*.json")) if d.is_dir() else []
+        if not files:
+            return []
+        with _LOCK:
+            notes: list[str] = []
+            shots: dict[str, Shot] = {}
+            for p in files:
+                try:
+                    s = Shot.model_validate(read_json(p))
+                    shots[s.id] = s
+                except Exception:                                # noqa: BLE001 — a broken file is kept, not lost
+                    notes.append(f"RC2: the shot file {p.name} could not be read — kept in story/shots-rc2")
+            recs = sorted(self._records().values(), key=lambda r: r.created_at)
+            owner: dict[str, str] = {}
+            for r in recs:                                       # the node the shot names as its owner
+                if r.shot is None and r.type in VISUAL_TYPES and r.shot_id in shots and shots[r.shot_id].owner_node == r.id and r.shot_id not in owner:
+                    owner[r.shot_id] = r.id
+            for r in recs:                                       # then a node pointing at a shot nobody owns
+                if (r.shot is None and r.type in VISUAL_TYPES and r.shot_id in shots and r.shot_id not in owner and r.id not in owner.values()
+                        and shots[r.shot_id].owner_node in (None, r.id)):
+                    owner[r.shot_id] = r.id
+            by_node = {nid: sid for sid, nid in owner.items()}
+            for r in recs:
+                if r.shot is not None:
+                    continue
+                if r.id in by_node:
+                    s = shots[by_node[r.id]]
+                    label = VISUAL_LABEL.get(r.type, "")
+                    title = r.title if r.title.strip() and r.title.strip() != label else (s.name.strip() or r.title)
+                    current = r.shot_version if r.shot_version in [v.id for v in s.versions] else s.current
+                    part = ShotPart(id=s.id, current=current, versions=s.versions, revision=s.revision, created_at=s.created_at, updated_at=s.updated_at)
+                    self._save_record(r.model_copy(update={"shot": part, "title": title}))
+                elif r.type in VISUAL_TYPES:
+                    if r.shot_id:
+                        notes.append(f"RC2: {r.title or VISUAL_LABEL[r.type]} pointed at a shot that is gone or another node's — it has a fresh shot")
+                    self._save_record(r.model_copy(update={"shot": ShotPart()}))
+                else:
+                    self._save_record(r)
+            orphans = sorted((s for sid, s in shots.items() if sid not in owner), key=lambda s: s.created_at)
+            for s in orphans:
+                self._new_bare_node(s.name, ShotPart(id=s.id, current=s.current, versions=s.versions, revision=s.revision, created_at=s.created_at, updated_at=s.updated_at))
+            self._shot_index(rebuild=True)                       # type: ignore[attr-defined]
+            keep = self.dir / "shots-rc2"
+            keep.mkdir(exist_ok=True)
+            for p in files:
+                shutil.move(str(p), str(keep / p.name))
+            try:
+                d.rmdir()
+            except OSError:
+                pass
+            joined = len(owner)
+            notes.insert(0, f"RC2: {joined} shot{'s' if joined != 1 else ''} joined {'their' if joined != 1 else 'its'} Flow node"
+                            f"{'s' if joined != 1 else ''}" + (f"; {len(orphans)} without a node became {'Shot nodes' if len(orphans) != 1 else 'a Shot node'} outside the routes" if orphans else "")
+                            + " (the old files are in story/shots-rc2).")
+            return notes
 
 
 class StoryStore(_ShotMixin, _FlowMixin):
@@ -1138,6 +1394,7 @@ class StoryStore(_ShotMixin, _FlowMixin):
         self.dir = ws.story_dir
         self.dir.mkdir(parents=True, exist_ok=True)
         self.profiles_dir = self.dir / "profiles"
+        self.migrated: list[str] = self.migrate_rc2() if (self.dir / "shots").is_dir() else []   # RC2a: once, at the first open after it
 
     # -- world --
     @property

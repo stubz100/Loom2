@@ -1039,9 +1039,10 @@ test('a prop (D110 PS1–PS2, D125): Cast\'s props class lists the props (the ol
   await classes.filter({ hasText: /^props$/ }).click()
   await expect(page.locator('.cast-page h2')).toContainText(name)
   const make = section.locator('button', { hasText: 'Make the 3D model' })
-  if (JSON.parse(process.env.LOOM2_E2E ?? '{}').variant === 'open') {                                       // Q22: no image → 3D model under open
+  if (JSON.parse(process.env.LOOM2_E2E ?? '{}').variant === 'open') {                                       // D128: no image → 3D model under open (E33 owed) …
     await expect(make).toBeDisabled()
-    await expect(section.locator('[data-status]')).toContainText('DINOv3')
+    await expect(section.locator('[data-status]')).toContainText('import its model as a GLB')
+    await expect(section.locator('button', { hasText: 'Import a 3D model (GLB)' })).toBeEnabled()           // … the import is there in every build
     return
   }
   await make.click()
@@ -1643,7 +1644,7 @@ test('a flow (17 / SY3, D85): the Strip adds Start, Dialogue and Choice nodes, h
   await openApp(page, { suite: 'story', tab: 'flow' })
   await expect(page.locator('[data-testid="flow-canvas"]')).toBeVisible()
   type FlowLite = { graph: { edges: { from: string; port: string; to: string }[]; start: string | null }; nodes: { id: string; type: string; shot_id: string | null }[] }
-  for (const n of (await api<FlowLite>('GET', '/story/flow')).nodes) await api('DELETE', `/story/flow/nodes/${n.id}`)   // a clean slate (the project is reused between runs)
+  for (const n of (await api<FlowLite>('GET', '/story/flow')).nodes) await api('DELETE', `/story/flow/nodes/${n.id}?shot=delete`)   // a clean slate (the project is reused between runs; RC2a: a kept shot would stay as a node)
   type Hook = { loadFlow: () => Promise<void> }
   await page.evaluate(() => (window as unknown as { __loom2Story: Hook }).__loom2Story.loadFlow())
   await expect(page.locator('.flow-node')).toHaveCount(0)
@@ -1727,6 +1728,15 @@ test('a flow (17 / SY3, D85): the Strip adds Start, Dialogue and Choice nodes, h
   await expect(page.locator('.flow-node')).toHaveCount(3)
   await expect(page.locator('.flow-node.t-dialogue .shot img, .flow-node.t-dialogue .shot span')).toHaveCount(1)
   expect((await api<FlowLite>('GET', '/story/flow')).nodes.find((n) => n.type === 'dialogue')!.shot_id).toBeTruthy()
+  // RC2a (proto01_animate 31 §3b): one record — a shot made elsewhere is a Shot node outside the routes; the Dialogue takes it from its panel,
+  // the bare node goes (the Dialogue's own shot was empty: it is dropped), and the shot's name is the node's title
+  const made = await api<{ id: string; owner_node: string }>('POST', '/story/shots', { name: 'From the camera' })
+  await expect(page.locator('.flow-node')).toHaveCount(4)
+  await page.locator('.flow-node.t-dialogue .head').click()
+  await page.locator('.inspector select[aria-label="bind shot"]').selectOption({ label: 'From the camera' })
+  await expect(page.locator('.flow-node')).toHaveCount(3)
+  await expect(page.locator('.inspector [data-testid="node-shot-panel"] .shot-head')).toHaveText('Shot · Hello')
+  expect((await api<FlowLite>('GET', '/story/flow')).nodes.find((n) => n.type === 'dialogue')!.shot_id).toBe(made.id)
 })
 
 test("an episode (17 / SY4, D85): the Shots bin lists a final shot and adds it stamped; the checklist names the plain clip; Export asks, writes the FCPXML with a chapter marker and markers.txt, and the SRT carries the node's line; the old deep link redirects", async ({ page }) => {
@@ -1745,6 +1755,9 @@ test("an episode (17 / SY4, D85): the Shots bin lists a final shot and adds it s
   const node = await api<{ id: string; revision: number }>('POST', '/story/flow/nodes', { type: 'dialogue', title: `${name} node`, x: 900, y: 500 })
   await api('PATCH', `/story/flow/nodes/${node.id}`, { revision: node.revision, lines: [{ speaker: null, text: 'Open the gate.' }] })
   await api('POST', `/story/flow/nodes/${node.id}/bind`, { shot_id: shot.id })
+  // RC2b (D96): the node's Shot card carries its length — 9 frames at 16 fps from its clip
+  await openApp(page, { suite: 'story', tab: 'flow' })
+  await expect(page.locator(`.flow-node[data-id="${node.id}"] [data-length]`)).toHaveText('0.6 s')
   // the old Sequence deep link lands on Story · Episode
   await openApp(page, { suite: 'animate', tab: 'sequence' })
   await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Story/)

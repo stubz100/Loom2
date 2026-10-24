@@ -2575,7 +2575,8 @@ export interface paths {
         put?: never;
         /**
          * Flow Spawn
-         * @description A new, empty shot owned by the node (the handoff to the Shots tab, loom R134).
+         * @description A new, empty shot in the node (the handoff to the Shots tab, loom R134). RC2a: an empty shot of its own is the one (a name given
+         *     becomes the node's title); a shot with work in it moves out to a Shot node of its own first.
          */
         post: operations["flow_spawn_story_flow_nodes__nid__shot_post"];
         delete?: never;
@@ -3096,6 +3097,27 @@ export interface paths {
         put?: never;
         /** Shot Create */
         post: operations["shot_create_story_shots_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/shots/cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Shot Cards
+         * @description RC2b (D96): the Shot cards' facts for the Flow and the Shots list — each shot's take, length (the 30 s guide warns past it) and its
+         *     recipe graph's stale and owed counts, in one call.
+         */
+        get: operations["shot_cards_story_shots_cards_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -6476,7 +6498,7 @@ export interface components {
             revision: number;
             /**
              * Schema Version
-             * @default 1
+             * @default 2
              */
             schema_version: number;
             /** Start */
@@ -6503,9 +6525,9 @@ export interface components {
         };
         /**
          * FlowNode
-         * @description One node of the flow, one file (loom R139). The fields a type uses: Dialogue `lines` (+ a bound shot), Shot a bound shot, Choice
-         *     `options`, Condition `cond`, Action `set`, Jump `target`, Comment `text`; Start and Hub carry a title. `shot_id` / `shot_version`
-         *     are set by binding only (loom R146: sole ownership).
+         * @description One node of the flow, one file (loom R139). The fields a type uses: Dialogue `lines` (+ its shot), Shot its shot, Choice
+         *     `options`, Condition `cond`, Action `set`, Jump `target`, Comment `text`; Start and Hub carry a title. RC2a: `shot_id` /
+         *     `shot_version` are the id and current version of the shot inside the node's file (`NodeRecord`).
          */
         FlowNode: {
             /** Beat Id */
@@ -6532,7 +6554,7 @@ export interface components {
             revision: number;
             /**
              * Schema Version
-             * @default 1
+             * @default 2
              */
             schema_version: number;
             /** Set */
@@ -10253,13 +10275,45 @@ export interface components {
             revision: number;
             /**
              * Schema Version
-             * @default 1
+             * @default 2
              */
             schema_version: number;
             /** Updated At */
             updated_at: string;
             /** Versions */
             versions: components["schemas"]["ShotVersion"][];
+        };
+        /**
+         * ShotCard
+         * @description RC2b (D96, proto01_animate 31 §3a): what a Shot card shows beside its picture — the version its node shows, the used take's picture,
+         *     the length (the used clip's, else the final shot's, else the voiced lines'), the recipe graph's stale and owed counts.
+         */
+        ShotCard: {
+            /** Length From */
+            length_from: ("clip" | "final" | "lines") | null;
+            /** Length S */
+            length_s: number | null;
+            /** Node Id */
+            node_id: string | null;
+            /** Owed */
+            owed: number;
+            /** Route */
+            route: string;
+            /** Shot Id */
+            shot_id: string;
+            /** Stale */
+            stale: number;
+            /** Take Asset Id */
+            take_asset_id: string | null;
+            /** Version */
+            version: string;
+        };
+        /** ShotCards */
+        ShotCards: {
+            /** Guide S */
+            guide_s: number;
+            /** Items */
+            items: components["schemas"]["ShotCard"][];
         };
         /** ShotCreate */
         ShotCreate: {
@@ -18158,6 +18212,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    shot_cards_story_shots_cards_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShotCards"];
                 };
             };
         };

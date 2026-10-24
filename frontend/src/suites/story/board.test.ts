@@ -1,7 +1,7 @@
 // D125 (SP3): the Shots board's order (the Flow's routes, the branches naming their rows) and its cells (what each route owes, what is done).
 import { describe, expect, it } from 'vitest'
 import type { FlowGraph, FlowNode, Shot, ShotVersion } from '../../api/types'
-import { cellsOf, flowOrder, nextStep, routeOf, type CellInput } from './board'
+import { bareNode, cellsOf, flowOrder, hasWork, lengthLine, nextStep, routeOf, type CellInput } from './board'
 
 const node = (id: string, type: FlowNode['type'], extra: Partial<FlowNode> = {}): FlowNode =>
   ({ id, type, title: id, lines: [], options: [], cond: null, set: [], target: null, text: '', shot_id: null, shot_version: null, board_group_id: null, place_id: null, speaker_versions: {}, colour: null, revision: 0, schema_version: 1, created_at: '', updated_at: '', ...extra }) as FlowNode
@@ -24,6 +24,16 @@ describe('the board\'s order (D125 SP3)', () => {
     const rows = flowOrder(graph, nodes, shots)
     expect(rows.map((r) => r.shot.id)).toEqual(['s_arr', 's_reu', 's_talk', 's_door', 's_lone', 's_free'])
     expect(rows.map((r) => r.group)).toEqual([null, null, 'Stay or go ▸ Stay', 'Stay or go ▸ Leave', 'Not on a route', 'Unbound'])
+  })
+  it('RC2a: a bare Shot node is nothing but its shot, off the routes; a shot has work once it has a source, a take or a second version', () => {
+    expect(bareNode(nodes.lone, graph)).toBe(true)
+    expect(bareNode(nodes.door, graph)).toBe(false)                                         // on a route
+    expect(bareNode(node('x', 'dialogue'), graph)).toBe(false)                              // a Dialogue is in the story
+    expect(bareNode(node('y', 'shot', { place_id: 'prf_quay' }), graph)).toBe(false)        // a place of its own
+    expect(hasWork(shot('a', null))).toBe(false)
+    expect(hasWork(shot('b', null, { takes: [{ kind: 'image', id: 'ast_1', at: '' }] }))).toBe(true)
+    expect(hasWork(shot('c', null, { stage_id: 'stg', camera_id: 'cam' }))).toBe(true)
+    expect(hasWork({ versions: [ver(), ver({ id: 'v2' })] })).toBe(true)
   })
 })
 
@@ -59,5 +69,15 @@ describe('the board\'s cells (D125 SP3)', () => {
     const s = shot('s', 'n')
     const c = cellsOf(s, s.versions[0], node('n', 'shot'), { ...none, busy: () => new Set(['clip']) })
     expect(c.clip.state).toBe('running')
+  })
+})
+
+describe('a Shot card\'s length (RC2b, D96)', () => {
+  it('says where the length comes from and warns past the guide', () => {
+    expect(lengthLine(undefined, 30)).toBeNull()
+    expect(lengthLine({ length_s: null, length_from: null }, 30)).toBeNull()
+    expect(lengthLine({ length_s: 12.34, length_from: 'clip' }, 30)).toEqual({ text: '12.3 s', over: false, title: '12.3 s (its clip)' })
+    const long = lengthLine({ length_s: 95, length_from: 'final' }, 30)!
+    expect(long.text).toBe('1 min 35 s'); expect(long.over).toBe(true); expect(long.title).toContain('past about 30 s')
   })
 })

@@ -69,12 +69,14 @@ def test_store_nodes_graph_bind(tmp_path: Path):
     # an option removed takes its edge with it
     c2 = st.patch_node(c.id, {"revision": st.flow_node(c.id).revision, "options": [{"id": "opt_b", "label": "B"}]})
     assert [o.id for o in c2.options] == ["opt_b"] and all(not (e.from_ == c.id and e.port == "opt:opt_a") for e in st.flow_graph().edges)
-    # bind: sole ownership; a second node is refused; unbind releases; delete releases
+    # bind (RC2a): a shot made elsewhere is a bare Shot node; binding moves it into the node and the bare node goes; a shot of a node in
+    # the story is refused (a shot is one node); unbind and delete move it out to a node of its own
     sh = st.create_shot("Gate")
+    bare = sh.owner_node
     other = st.create_node("shot", "Other", 0, 300, with_shot=False)
     n, sh2 = st.bind_shot(d.id, sh.id)
-    assert n.shot_id == sh.id and n.shot_version == "v1" and sh2.owner_node == d.id
-    with pytest.raises(ValueError, match="owned by another node"):
+    assert n.shot_id == sh.id and n.shot_version == "v1" and sh2.owner_node == d.id and st.flow_node(bare) is None
+    with pytest.raises(ValueError, match="a shot is one node"):
         st.bind_shot(other.id, sh.id)
     with pytest.raises(ValueError, match="does not bind"):
         st.bind_shot(s.id, sh.id)
@@ -83,20 +85,21 @@ def test_store_nodes_graph_bind(tmp_path: Path):
     st.new_shot_version(sh.id)
     n2, _ = st.bind_shot(d.id, sh.id, "v1")                                                           # re-selecting a version of its own
     assert n2.shot_version == "v1"
+    st.add_take(sh.id, "v2", "image", "ast_1")
     n3, rel = st.unbind_shot(d.id)
-    assert n3.shot_id is None and rel is not None and rel.owner_node is None
+    assert n3.shot_id not in (None, sh.id) and rel is not None and rel.id == sh.id and rel.owner_node not in (None, d.id)   # a fresh shot stays
     st.bind_shot(d.id, sh.id)
     released = st.delete_node(d.id)
-    assert released is not None and released.owner_node is None and st.flow_node(d.id) is None
+    assert released is not None and released.id == sh.id and released.owner_node not in (None, d.id) and st.flow_node(d.id) is None
     g4 = st.flow_graph()
     assert all(p.id != d.id for p in g4.nodes) and all(d.id not in (e.from_, e.to) for e in g4.edges) and g4.start == s.id
     # the index is rebuilt from the node files when it is gone or disagrees
     (ws.story_dir / "flow" / "graph.json").unlink()
     g5 = st.flow_graph()
-    assert {p.id for p in g5.nodes} == {s.id, c.id, other.id} and g5.start == s.id and g5.edges == []
+    assert {p.id for p in g5.nodes} == {s.id, c.id, other.id, released.owner_node} and g5.start == s.id and g5.edges == []
     (ws.story_dir / "flow" / "graph.json").write_text(json.dumps({**g5.model_dump(by_alias=True), "nodes": [{"id": "node_ghost", "x": 1, "y": 1}], "edges": [{"from": s.id, "port": "out", "to": "node_ghost"}]}), encoding="utf-8")
     g6 = st.flow_graph()
-    assert {p.id for p in g6.nodes} == {s.id, c.id, other.id} and g6.edges == []
+    assert {p.id for p in g6.nodes} == {s.id, c.id, other.id, released.owner_node} and g6.edges == []
 
 
 def test_routes_flow(tmp_path: Path):
@@ -107,7 +110,7 @@ def test_routes_flow(tmp_path: Path):
     with TestClient(app, headers={"X-Loom-Token": app.state.services.app.token}) as cl:
         assert cl.get("/story/flow").status_code == 409
         assert cl.post("/project", json={"path": str(tmp_path / "p"), "name": "p", "size_cap_gb": 10}).status_code == 200
-        assert cl.get("/story/flow").json() == {"graph": {"schema_version": 1, "nodes": [], "edges": [], "start": None, "revision": 0, "updated_at": cl.get("/story/flow").json()["graph"]["updated_at"]}, "nodes": []}
+        assert cl.get("/story/flow").json() == {"graph": {"schema_version": 2, "nodes": [], "edges": [], "start": None, "revision": 0, "updated_at": cl.get("/story/flow").json()["graph"]["updated_at"]}, "nodes": []}
         assert cl.post("/story/flow/nodes", json={"type": "scene"}).status_code == 422
         s = cl.post("/story/flow/nodes", json={"type": "start", "x": 10, "y": 10}).json()
         d = cl.post("/story/flow/nodes", json={"type": "dialogue", "title": "Hello", "x": 300, "y": 10, "shot": False}).json()   # D125: spawned below
@@ -131,18 +134,24 @@ def test_routes_flow(tmp_path: Path):
         assert r.status_code == 200 and r.json()["shot"]["owner_node"] == d["id"] and r.json()["node"]["shot_id"] == r.json()["shot"]["id"]
         sid = r.json()["shot"]["id"]
         sh = cl.post("/story/flow/nodes", json={"type": "shot", "title": "Other", "x": 0, "y": 300, "shot": False}).json()
-        assert cl.post(f"/story/flow/nodes/{sh['id']}/bind", json={"shot_id": sid}).status_code == 422
+        assert cl.post(f"/story/flow/nodes/{sh['id']}/bind", json={"shot_id": sid}).status_code == 422                # RC2a: a shot is one node
         assert cl.post(f"/story/flow/nodes/{s['id']}/bind", json={"shot_id": sid}).status_code == 422
         assert cl.post(f"/story/flow/nodes/{d['id']}/bind", json={"shot_id": sid, "version": "v9"}).status_code == 404
         assert cl.get(f"/story/shots/{sid}").json()["owner_node"] == d["id"]
         p = cl.post("/story/flow/validate").json()["problems"]
         assert sorted(x["code"] for x in p) == ["no_shot", "shot_open", "unreachable"]                      # Other: no shot, unreachable; Hello's shot not final
+        r = cl.post(f"/story/flow/nodes/{d['id']}/unbind")                                                       # an empty shot: nothing moves
+        assert r.status_code == 200 and r.json()["node"]["shot_id"] == sid and r.json()["shot"] is None
+        cl.post(f"/story/shots/{sid}/versions")                                                                  # work in it: unbind moves it out
         r = cl.post(f"/story/flow/nodes/{d['id']}/unbind")
-        assert r.status_code == 200 and r.json()["node"]["shot_id"] is None and r.json()["shot"]["owner_node"] is None
-        assert cl.post(f"/story/flow/nodes/{sh['id']}/bind", json={"shot_id": sid}).status_code == 200      # free now
-        # delete the node → its shot released, the edges gone
+        assert r.status_code == 200 and r.json()["node"]["shot_id"] not in (None, sid) and r.json()["shot"]["id"] == sid
+        mover = r.json()["shot"]["owner_node"]
+        assert mover != d["id"] and cl.get(f"/story/shots/{sid}").json()["owner_node"] == mover
+        assert cl.post(f"/story/flow/nodes/{sh['id']}/bind", json={"shot_id": sid}).status_code == 200      # a shot of its own: it moves in
+        assert all(n["id"] != mover for n in cl.get("/story/flow").json()["nodes"])
+        # delete the node → its shot moved to a node of its own, the edges gone
         assert cl.delete(f"/story/flow/nodes/{sh['id']}").json()["deleted"] == sh["id"]
-        assert cl.get(f"/story/shots/{sid}").json()["owner_node"] is None
+        assert cl.get(f"/story/shots/{sid}").json()["owner_node"] not in (None, sh["id"])
         assert cl.delete(f"/story/flow/nodes/{sh['id']}").status_code == 404
         f = cl.get("/story/flow").json()
-        assert all(sh["id"] not in (e["from"], e["to"]) for e in f["graph"]["edges"]) and len(f["nodes"]) == 3
+        assert all(sh["id"] not in (e["from"], e["to"]) for e in f["graph"]["edges"]) and len(f["nodes"]) == 4

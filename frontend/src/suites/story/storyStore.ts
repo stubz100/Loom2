@@ -5,7 +5,7 @@
 // the styles for its picker (09 §3a) and the profiles for its @ picker (D73 / D85).
 import { create } from 'zustand'
 import { type ApiError, api, http, unwrap } from '../../api/client'
-import type { CastReadiness, Clip, Final, FlowGraph, FlowNode, FlowProblem, GroupPage, Job, LoraRecord, Profile, ProfileAdded, ProfileVersion, Shot, ShotVersion, StoryBeat, StoryVariable, VoiceRecord, World, WorldStyle } from '../../api/types'
+import type { CastReadiness, Clip, Final, FlowGraph, FlowNode, FlowProblem, GroupPage, Job, LoraRecord, Profile, ProfileAdded, ProfileVersion, Shot, ShotCard, ShotVersion, StoryBeat, StoryVariable, VoiceRecord, World, WorldStyle } from '../../api/types'
 import { askConfirm, useSession } from '../../store/session'
 import { useLibrary } from './libraryStore'
 import { startPlay, stepPlay, type PlayState } from './flow/play'
@@ -151,6 +151,8 @@ export interface StoryState {
   castFilter: ProfileClass | 'all'; castSearch: string
   // D125 (SP3): the Shots board — the finals and the cuts its cells read, its filter; the shot a stage camera is being linked for
   boardFinals: Final[]; boardCuts: { clips: { shot_id: string | null; shot_version: string | null; clip_id: string }[] }[]; boardFilter: BoardFilter
+  /** RC2b: each shot's card facts (take, length, stale and owed counts) and the length guide (D96: about 30 s) — read with the board. */
+  cards: Record<string, ShotCard>; cardGuide: number
   linkFor: { shotId: string; version: string } | null
   picked: string[]; expanding: boolean; busy: boolean
   // SY2 · Shots
@@ -399,7 +401,7 @@ export const useStory = create<StoryState>()((set, get) => {
     world: null, loading: false, saving: false, section: 'logline', selected: null,
     profiles: [], profilesLoaded: false, profileId: null, versionId: null, refPage: null, candPage: null, pagesFor: null,
     loras: [], trainOpts: DEFAULT_TRAIN, voices: [], voiceId: null, voiceForm: false, lipsyncOpts: { node_id: null, index: null, preset: 'draft' }, audioSecs: {},
-    castFilter: 'all', castSearch: '', castUses: {}, flowRecipe: null, picked: [], expanding: false, busy: false, boardFinals: [], boardCuts: [], boardFilter: 'all', linkFor: null,
+    castFilter: 'all', castSearch: '', castUses: {}, flowRecipe: null, picked: [], expanding: false, busy: false, boardFinals: [], boardCuts: [], boardFilter: 'all', cards: {}, cardGuide: 30, linkFor: null,
     shots: [], shotsLoaded: false, shotId: null, shotVersionId: null, clipsById: {}, stagesLite: [],
     flowNodes: {}, flowGraph: null, flowLoaded: false, nodeId: null, problems: null, play: null, addAt: null, edge: null,
     load: async () => {
@@ -805,12 +807,13 @@ export const useStory = create<StoryState>()((set, get) => {
       const want = new Set<string>()
       for (const s of get().shots) { const v = s.versions.find((x) => x.id === s.current); if (v?.clip_id) want.add(v.clip_id) }
       const missing = [...want].filter((id) => !get().clipsById[id])
-      const [got, finals, cuts] = await Promise.all([
+      const [got, finals, cuts, cards] = await Promise.all([
         Promise.all(missing.map((id) => unwrap(http.GET('/clips/{clip_id}', { params: { path: { clip_id: id } } })).catch(() => null))),
-        unwrap(http.GET('/finals')).catch(() => null), unwrap(http.GET('/timelines')).catch(() => null)])
+        unwrap(http.GET('/finals')).catch(() => null), unwrap(http.GET('/timelines')).catch(() => null), unwrap(http.GET('/story/shots/cards')).catch(() => null)])
       const next = { ...get().clipsById }
       got.forEach((c, i) => { if (c) next[missing[i]] = c })
-      set({ clipsById: next, ...(finals ? { boardFinals: finals.items } : {}), ...(cuts ? { boardCuts: cuts.items.map((t) => ({ clips: t.clips.map((c) => ({ shot_id: c.shot_id ?? null, shot_version: c.shot_version ?? null, clip_id: c.clip_id })) })) } : {}) })
+      set({ clipsById: next, ...(finals ? { boardFinals: finals.items } : {}), ...(cuts ? { boardCuts: cuts.items.map((t) => ({ clips: t.clips.map((c) => ({ shot_id: c.shot_id ?? null, shot_version: c.shot_version ?? null, clip_id: c.clip_id })) })) } : {}),
+        ...(cards ? { cards: Object.fromEntries(cards.items.map((c) => [c.shot_id, c])), cardGuide: cards.guide_s } : {}) })
     },
     setBoardFilter: (boardFilter) => set({ boardFilter }),
     setLinkFor: (linkFor) => set({ linkFor }),
@@ -962,7 +965,7 @@ export const useStory = create<StoryState>()((set, get) => {
       set({ flowNodes: { ...get().flowNodes, [id]: { ...n, ...patch } as FlowNode } })               // at once; the save follows (one at a time per node, the latest state)
       await saveNode(get, set, id, !!(patch.type || patch.options))
     },
-    deleteNode: async (id, withShot = false) => {   // D125 (#4): its shot stays unbound, or goes too
+    deleteNode: async (id, withShot = false) => {   // D125 (#4) / RC2a: its shot moves to a Shot node of its own, or goes too
       try { await unwrap(http.DELETE('/story/flow/nodes/{nid}', { params: { path: { nid: id }, query: { shot: withShot ? 'delete' : 'keep' } } })); if (get().nodeId === id) set({ nodeId: null }); await get().loadFlow(); void get().loadShots() }
       catch (e) { toast(`Delete: ${detail(e)}`) }
     },

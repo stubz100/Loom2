@@ -1,5 +1,6 @@
-"""D125 (#4, SP2): a Dialogue or Shot node has its shot from the moment it is made — the shot takes the node's title and follows its renames
-until it is renamed by hand; a node turned visual gets one; deleting a node keeps its shot unbound or deletes it too, as asked."""
+"""D125 (#4, SP2): a Dialogue or Shot node has its shot from the moment it is made — the shot's name is the node's title (RC2a: one
+record, one name); a node turned visual gets one; deleting a node moves its shot to a Shot node of its own or deletes it too, as asked
+(an empty shot simply goes)."""
 from __future__ import annotations
 
 import sys
@@ -31,9 +32,10 @@ def test_the_shot_follows_the_title_and_a_node_turned_visual_gets_one(tmp_path: 
     n = st.patch_node(n.id, {"title": "Arrival in the rain"})
     assert st.shot(n.shot_id).name == "Arrival in the rain"
     sh = st.shot(n.shot_id)
-    st.patch_shot(sh.id, {"revision": sh.revision, "name": "Arrival · wide"})       # renamed by hand: it keeps its own name
+    st.patch_shot(sh.id, {"revision": sh.revision, "name": "Arrival · wide"})       # RC2a: renaming the shot renames its node
+    assert st.flow_node(n.id).title == "Arrival · wide"
     st.patch_node(n.id, {"title": "Arrival at night"})
-    assert st.shot(n.shot_id).name == "Arrival · wide"
+    assert st.shot(n.shot_id).name == "Arrival at night"
     c = st.create_node("choice", "Door")
     c = st.patch_node(c.id, {"type": "shot"})
     assert c.shot_id and st.shot(c.shot_id).name == "Door"
@@ -42,8 +44,12 @@ def test_the_shot_follows_the_title_and_a_node_turned_visual_gets_one(tmp_path: 
 def test_deleting_a_node_keeps_or_deletes_its_shot(tmp_path: Path):
     st = StoryStore(Workspace.create(tmp_path / "p", name="P"))
     a = st.create_node("dialogue", "Kept")
+    assert st.delete_node(a.id) is None and st.shot(a.shot_id) is None                   # an empty shot simply goes
+    a = st.create_node("dialogue", "Kept")
+    st.add_take(a.shot_id, "v1", "image", "ast_1")
     released = st.delete_node(a.id)
-    assert released is not None and released.owner_node is None and st.shot(a.shot_id) is not None
+    assert released is not None and released.id == a.shot_id and released.owner_node not in (None, a.id)   # RC2a: moved to a Shot node of its own
+    assert st.flow_node(released.owner_node).type == "shot" and released.name == "Kept"
     b = st.create_node("dialogue", "Gone")
     assert st.delete_node(b.id, delete_shot=True) is None and st.shot(b.shot_id) is None
 
@@ -61,8 +67,8 @@ def test_routes(tmp_path: Path):
         assert cl.get(f"/story/shots/{n['shot_id']}", headers=H).json()["owner_node"] == n["id"]
         bare = cl.post("/story/flow/nodes", json={"type": "shot", "title": "Bare", "shot": False}, headers=H).json()
         assert bare["shot_id"] is None
-        r = cl.post(f"/story/flow/nodes/{n['id']}/shot", json={"name": "Reunion · wide"}, headers=H).json()     # its untouched shot is reused, renamed
-        assert r["shot"]["id"] == n["shot_id"] and r["shot"]["name"] == "Reunion · wide"
+        r = cl.post(f"/story/flow/nodes/{n['id']}/shot", json={"name": "Reunion · wide"}, headers=H).json()     # its untouched shot is reused; the name is the node's
+        assert r["shot"]["id"] == n["shot_id"] and r["shot"]["name"] == "Reunion · wide" and r["node"]["title"] == "Reunion · wide"
         assert len(cl.get("/story/shots", headers=H).json()["items"]) == 1
         assert cl.delete(f"/story/flow/nodes/{n['id']}?shot=delete", headers=H).status_code == 200
         assert cl.get(f"/story/shots/{n['shot_id']}", headers=H).status_code == 404

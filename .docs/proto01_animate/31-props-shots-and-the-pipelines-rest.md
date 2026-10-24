@@ -56,8 +56,8 @@ The waves are in §3a; the model they change is mapped in §3b.
 
 | Wave | Content | Days |
 | --- | --- | --- |
-| **RC2a · one record** | the Flow node and its Story shot as one Shot (the record, the migration, the API kept for one release); a node without a shot stays a story node | 2 |
-| **RC2b · Shot cards** | the Flow's card shows the used take (its first frame), the length, the stale count; the 30 s warning (a guideline: nothing is blocked) | 1 |
+| **RC2a · one record** ✓ built 2026-10-24 (§3c) | the Flow node and its Story shot as one Shot (the record, the migration, the API kept for one release); a node without a shot stays a story node | 2 |
+| **RC2b · Shot cards** ✓ built 2026-10-24 | the Flow's card shows the used take (its first frame), the length, the stale count; the 30 s warning (a guideline: nothing is blocked) | 1 |
 | **RC2c · scene groups** | a frame around Shots in the Flow (made from a selection, named, moved together); *New coverage shot* on a Shot makes a sibling in its group; CE4's *Grade the scene* takes the group (the place's run stays the fallback) | 2 |
 | **RC2d · the Shots list** | the Shots tab's board rows are the Shot nodes, grouped by scene, with search, sort and the state filters | 1 |
 | **RC2e · templates (O2)** | *New Shot from this Shot* (the scene's parts linked, the Shot's own copied); *Save as a template…* into the World Library; *New Shot from a template…* | 2 |
@@ -106,6 +106,26 @@ item metadata (`loom2.shot`, `loom2.node`), job origins in the queue and in Cata
 | **Grade** | the scene's grade (CE4's adjustment layer over the scene's run) — the scene record keeps it, so a re-assembled cut grades the scene again | the Shot leaves the scene's layer: its clip gets the scene's grade as its own Lumetri and the layer is split around it |
 
 A part shows a *linked · N Shots* badge with its users; the Catalogue's *Duplicate* stays the independent copy of an item.
+
+### 3c. RC2a as built (2026-10-24)
+
+- **The record** (`story.py`): `NodeRecord` = the node + `ShotPart` (id, current, versions, revision, timestamps); `FlowNode` and `Shot`
+  stay the API's views (`as_node()` without the shot's body, so `GET /story/flow` stays light; `as_shot()` with the node's title as its
+  name and the node as `owner_node`). Flow schema 2, shot schema 2. `story/flow/shots.json` maps a shot id to its node, rebuilt when it
+  is missing or wrong. One lock (`_LOCK`) holds every read-modify-write of a node's file: a node's edit and its shot's take can no longer
+  lose each other (a test races 40 takes against 40 title edits).
+- **The verbs:** a shot made elsewhere is a Shot node outside the routes, in a column right of the graph; *Take a shot made elsewhere*
+  (the shot panel's *take* select) moves it into a node, the bare node goes and the node's own shot moves out if it has work in it;
+  *Move to a node of its own* (was *Unbind* / *Release*) moves the shot out beside the node and leaves a fresh one; *Delete shot* empties a
+  node in the story, removes a bare node; deleting a node keeps its shot as a node of its own unless asked, an empty shot simply goes; a
+  node turned into a logic node refuses a shot with work in it. Renaming the shot renames the node (one name); the shot's current version
+  is the one the node shows.
+- **The migration** runs in `StoryStore` when `story/shots/` exists (and its notes join the open's recovery list): the owner the shot
+  names first, then a node pointing at an unowned shot; the loser of a doubly-pointed shot and a node pointing at nothing get fresh shots
+  (a note each); shots without a node become bare Shot nodes; the old files go to `story/shots-rc2/`.
+- Tests: `test_shot_node_rc2a.py` (the migration on a hand-written old project, the race, type changes, delete, the API's light nodes);
+  the D85 / D125 / AE4 tests moved to the one-record verbs; `board.test.ts` (`bareNode`, `hasWork`); the flow e2e takes a shot made
+  elsewhere from the panel.
 
 ## 4. Phase 5b — the clay pipeline's rest
 

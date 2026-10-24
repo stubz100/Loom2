@@ -8927,3 +8927,29 @@ patched (the Mid attenuated). A track with plugins is printed onto a hidden comp
   bad file, a png and a character refused; a quoted path; the Catalogue's import), castReady.test.ts +1; offline 563 passed, Vitest
   (Story) 97, typecheck and lint clean.
 - PM1's screenshots: img/31-pm1-before.jpg, img/31-pm1-imported.jpg (the E28 project's Chest, its Pixal3D spike mesh imported as a GLB).
+
+## 2026-10-24 18:59 — RC2a and RC2b built: one record per Shot (the merge and its migration), Shot cards (proto01_animate 31 §3)
+
+- **RC2a, the record:** a Dialogue or Shot node's file holds its shot (`NodeRecord.shot`: versions, current, its own revision); `FlowNode`
+  and `Shot` stay the API's views (the Flow's nodes without the shot's body; a shot's name is its node's title, `owner_node` its node).
+  Both ids kept (finals, cuts, origins and manifests name `sht_*`); `story/flow/shots.json` maps a shot to its node, rebuilt when missing
+  or wrong. One lock around every read-modify-write of a node's file (a test races 40 takes against 40 title edits: none lost).
+- **RC2a, the verbs:** a shot made elsewhere is a Shot node outside the routes (a column right of the graph); the shot panel's *take*
+  select moves such a shot into a node (the bare node goes; the node's own shot, if it has work in it, moves out to a node of its own);
+  *Move to a node of its own* (was *Unbind* / *Release*); *Delete shot* empties a node in the story and removes a bare one; deleting a node
+  keeps its shot as a node of its own unless asked (an empty shot simply goes); a node turned into a logic node refuses a shot with work
+  in it; one name (renaming the shot renames the node) and one shown version (the current one).
+- **RC2a, the migration** (once, at the open; its notes in the recovery list): the owner the shot names first, then a node pointing at an
+  unowned shot; the loser of a doubly-pointed shot and a node pointing at nothing get fresh shots (a note each); shots without a node become
+  bare Shot nodes; the old files move to `story/shots-rc2/`. Checked on copies of the A1 rig project (1 shot joined, its final still
+  resolves it) and the CE5 cut project (a Dialogue made without a shot got a fresh one).
+- **RC2b:** `GET /story/shots/cards` — per shot its take, length (the used clip's, else the final shot's, else the voiced lines') and RC1's
+  graph's stale and owed counts, the records read once; the Flow card shows the length (a warning past the 30 s guide, D96) and the stale
+  count over the take.
+- **Found:** a clean-slate step in the flow e2e deleted nodes without their shots, which now stay as nodes (it deletes them too now); PM1's
+  wording change (the `open` build points to the GLB import) had not been run through the e2e — the prop scenario expects it now and checks
+  the import button.
+- Tests: test_shot_node_rc2a.py (3), test_shot_cards_rc2b.py; the D85 / D125 / AE4 tests moved to the one-record verbs; board.test.ts
+  (`bareNode`, `hasWork`, `lengthLine`); the flow e2e takes a shot made elsewhere from the panel; the episode e2e reads the card's length.
+  Offline 567 passed, settings audit and agents_check clean, Vitest 462 + 3 skipped, typecheck, lint and build clean, e2e full 63/63 and
+  open 63/63. Screenshots img/31-rc2a-*.jpg.

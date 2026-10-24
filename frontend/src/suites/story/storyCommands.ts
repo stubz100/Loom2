@@ -5,7 +5,7 @@ import { command, isEnabled, registerCommands, runCommand, sep, type Command, ty
 import { nextOwed, readinessOf, type ReadyCell, type ReadyItem } from './castReady'
 import { linesToVoice, spineTodo } from './episodeVerbs'
 import { goBack, useMakeFor } from '../../store/origin'
-import { cellsOf, nextStep, routeOf, type Cell, type Step } from './board'
+import { bareNode, cellsOf, hasWork, nextStep, routeOf, type Cell, type Step } from './board'
 import { askConfirm, askConfirmCheck, askText, useSession } from '../../store/session'
 import { useAlbum } from '../catalogue/albumStore'
 import { CLASS_LABEL, latestModelJob, latestTrainJob, modelSource, nodesAfterWithoutPlace, revealClass, sy, ttsJobFor, useStory, type ProfileClass } from './storyStore'
@@ -431,11 +431,14 @@ const cmds: Command[] = [
     run: () => { const v = shotVersion(); if (!v?.clip_id) return; const cid = v.clip_id
       useSession.getState().setSuite('animate')
       void import('../animate/animateStore').then((m) => { const an = m.useAnimate.getState(); void an.loadClips().then(() => an.select(cid)) }) } },
-  { id: 'story.shot.release', scope: 'story', label: 'Unbind from its node', icon: Unlink, placement: ['inspector', 'context'], when: () => !!shot()?.owner_node,
+  // RC2a (proto01_animate 31 §3b): a shot is in its node — releasing it moves it to a Shot node of its own beside it; the node gets a fresh shot
+  { id: 'story.shot.release', scope: 'story', label: 'Move to a node of its own', icon: Unlink, placement: ['inspector', 'context'],
+    hint: 'the shot leaves its node for a Shot node beside it (outside the routes); the node keeps its lines and gets a fresh shot',
+    when: () => { const s = shot(); const n = s?.owner_node ? sy().flowNodes[s.owner_node] : undefined; return !!s && !!n && !bareNode(n, sy().flowGraph) && hasWork(s) },
     run: () => void sy().patchShot({ owner_node: null }) },
   { id: 'story.shot.delete', scope: 'story', label: 'Delete shot', icon: Trash2, placement: ['inspector', 'context'], danger: true, when: () => !!shot(),
     run: () => { const s = shot(); if (!s) return
-      void askConfirm({ title: `Delete ${s.name}?`, okLabel: 'Delete', danger: true, text: 'The shot record goes; its frames and clips stay in the Catalogue. A Flow node bound to it loses its shot.' }).then((ok) => { if (ok) void sy().deleteShot() }) } },
+      void askConfirm({ title: `Delete ${s.name}?`, okLabel: 'Delete', danger: true, text: 'Its versions and takes go; the frames and clips stay in the Catalogue. Its node keeps its lines and gets a fresh shot — a Shot node outside the routes goes with it.' }).then((ok) => { if (ok) void sy().deleteShot() }) } },
   // SY3 · Flow
   ...(Object.keys(NODE_ICON) as (keyof typeof NODE_ICON)[]).map((t): Command => ({
     id: `story.flow.add.${t}`, scope: 'story', label: `Add ${NODE_LABEL[t]}`, icon: NODE_ICON[t], placement: ['strip', 'context'], when: () => !!useSession.getState().project?.open && !sy().play,
@@ -445,8 +448,9 @@ const cmds: Command[] = [
     run: () => { const n = node(); if (!n) return
       const sh = nodeShot()
       if (!sh || sh.owner_node !== n.id) { void askConfirm({ title: `Delete ${n.title || NODE_LABEL[n.type]}?`, okLabel: 'Delete', danger: true, text: 'Its edges go with it.' }).then((ok) => { if (ok) void sy().deleteNode(n.id) }); return }
-      // D125 (#4): the node is its shot — the shot stays unbound, or goes too (its frames and clips stay in the Catalogue)
-      void askConfirmCheck({ title: `Delete ${n.title || NODE_LABEL[n.type]}?`, okLabel: 'Delete', danger: true, text: 'Its edges go with it.', check: `Delete its shot ${sh.name} too (its frames and clips stay in the Catalogue)` })
+      // D125 (#4) / RC2a: the node is its shot — the shot moves to a Shot node of its own, or goes too (its frames and clips stay in the Catalogue)
+      if (!hasWork(sh)) { void askConfirm({ title: `Delete ${n.title || NODE_LABEL[n.type]}?`, okLabel: 'Delete', danger: true, text: 'Its edges and its empty shot go with it.' }).then((ok) => { if (ok) void sy().deleteNode(n.id, true) }); return }
+      void askConfirmCheck({ title: `Delete ${n.title || NODE_LABEL[n.type]}?`, okLabel: 'Delete', danger: true, text: 'Its edges go with it; its shot stays, as a Shot node of its own.', check: `Delete its shot ${sh.name} too (its frames and clips stay in the Catalogue)` })
         .then((r) => { if (r) void sy().deleteNode(n.id, r.checked) }) } },
   // D90 (B3): an edge goes by its right-click menu or Delete / Backspace on the canvas while it is selected (nodes keep their confirm)
   { id: 'story.flow.deleteEdge', scope: 'story', label: 'Delete the connection', icon: Unlink, keys: 'Delete', alt: ['Backspace'], placement: ['context'], when: () => !!sy().edge && !sy().play,
@@ -462,7 +466,9 @@ const cmds: Command[] = [
     hint: 'the nodes after this one without a place take it, up to the next node that has one', when: () => !!node()?.place_id && placeTargets().length > 0 && !sy().play,
     run: () => { const n = node(); if (!n?.place_id) return; const ids = placeTargets(); ids.forEach((id) => void sy().patchNode(id, { place_id: n.place_id }))
       useSession.getState().toast(`${ids.length} node${ids.length === 1 ? '' : 's'} at the same place`, 'info') } },
-  { id: 'story.flow.unbind', scope: 'story', label: 'Unbind from its node', icon: Unlink, placement: ['inspector', 'context'], when: () => !!node()?.shot_id && !sy().play, run: () => { const n = node(); if (n) void sy().unbindShot(n.id) } },
+  { id: 'story.flow.unbind', scope: 'story', label: 'Move its shot to a node of its own', icon: Unlink, placement: ['inspector', 'context'],
+    hint: 'the shot leaves for a Shot node beside this one (outside the routes); this node gets a fresh shot',
+    when: () => { const n = node(); const s = nodeShot(); return !!n && !!s && !bareNode(n, sy().flowGraph) && hasWork(s) && !sy().play }, run: () => { const n = node(); if (n) void sy().unbindShot(n.id) } },
   // RC1 (proto01_animate 28): a node's shot as its recipe graph, in place of the canvas; the same graph in Animate
   { id: 'story.flow.recipe', scope: 'story', label: 'Open its recipe', icon: Workflow, hint: "the shot's recipe as a graph, here in place of the canvas — what it is made of, what is stale",
     placement: ['inspector', 'context'], when: () => !!node()?.shot_id && !sy().play, run: () => { const n = node(); if (n) sy().setFlowRecipe(n.id) } },

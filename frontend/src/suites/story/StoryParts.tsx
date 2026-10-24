@@ -18,7 +18,7 @@ import type { Asset, Profile, Shot, ShotVersion, StoryBeat, StoryVariable, World
 import { coverageGrid } from './coverage'
 import { ITEM_LABEL, readinessOf, rowSummary, shotNeeds } from './castReady'
 import { spineTodo } from './episodeVerbs'
-import { ROUTE_LABEL } from './board'
+import { ROUTE_LABEL, bareNode } from './board'
 import { TrainingBlock } from './TrainingBlock'
 import { VoicesBlock } from './VoicesBlock'
 import { LipsyncBlock } from './LipsyncBlock'
@@ -837,12 +837,12 @@ function ShotFields({ s, n }: { s: Shot; n?: FlowNode }) {
     <>
       <h4 className="shot-head">Shot · {s.name}</h4>
       <div className="kv">
-        <span>name</span><input type="text" value={s.name} aria-label="shot name" onChange={(e) => sy().renameShot(e.target.value)} />
-        {!n && <><span>owner</span><span>{s.owner_node ? nodeName(flowNodes, s.owner_node) : 'unbound (a Flow node binds it)'}</span></>}
+        {!n && <><span>name</span><input type="text" value={s.name} aria-label="shot name" onChange={(e) => sy().renameShot(e.target.value)} /></>}{/* RC2a: with its node, the node's title is the name */}
+        {!n && <><span>node</span><span>{s.owner_node ? nodeName(flowNodes, s.owner_node) : '—'}</span></>}
         <span>current</span>
-        <select value={s.current} aria-label="current shot version" onChange={(e) => void sy().patchShot({ current: e.target.value })}>{s.versions.map((x) => <option key={x.id} value={x.id}>{x.id}</option>)}</select>
-        {n && <><span>this node shows</span><select value={n.shot_version ?? s.current} aria-label="bound version" title="The version the Flow pins (Play, the cut)" onChange={(e) => void sy().bindShot(n.id, s.id, e.target.value)}>{s.versions.map((x) => <option key={x.id} value={x.id}>{x.id}{x.state === 'final' ? ' · final' : ''}</option>)}</select></>}
+        <select value={s.current} aria-label="current shot version" title="The version the node shows — Play and the cut use it" onChange={(e) => void sy().patchShot({ current: e.target.value })}>{s.versions.map((x) => <option key={x.id} value={x.id}>{x.id}{x.state === 'final' ? ' · final' : ''}</option>)}</select>
         <span>versions</span><span>{s.versions.length}</span>
+        {n && <MadeElsewhere n={n} />}
       </div>
       {v && <ShotVersionFields v={v} clip={clip} stage={stage} />}
       {v && <RecipeSteps shotId={s.id} version={v.id} editable={v.state === 'open'} run="story.shot.runStale" />}{/* RC0 (D96) */}
@@ -852,14 +852,27 @@ function ShotFields({ s, n }: { s: Shot; n?: FlowNode }) {
   )
 }
 
-/** A visual node without a shot (made before D125, or unbound since): its own, or an unbound one bound. */
-function UnboundShot({ n }: { n: FlowNode }) {
+/** RC2a: the shots made elsewhere (each a Shot node outside the routes) a node can take as its own — the node's shot, if it has work in
+ *  it, moves out to a node of its own (nothing is lost). */
+function useMadeElsewhere(n: FlowNode): Shot[] {
   const shots = useStory((s) => s.shots)
-  const unbound = shots.filter((s) => !s.owner_node || s.owner_node === n.id)
+  const flowNodes = useStory((s) => s.flowNodes)
+  const graph = useStory((s) => s.flowGraph)
+  return shots.filter((s) => { const o = s.owner_node ? flowNodes[s.owner_node] : undefined; return s.owner_node !== n.id && (!o || bareNode(o, graph)) })
+}
+function MadeElsewhere({ n }: { n: FlowNode }) {
+  const made = useMadeElsewhere(n)
+  if (!made.length) return null
+  return <><span>take</span><select value="" aria-label="bind shot" title="A shot made elsewhere (a Shot node outside the routes) becomes this node's shot; its own, if it has work in it, moves to a node of its own"
+    onChange={(e) => { if (e.target.value) void sy().bindShot(n.id, e.target.value) }}><option value="">a shot made elsewhere…</option>{made.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></>
+}
+
+/** A visual node without a shot (made with `shot: false` through the API): its own, or a shot made elsewhere. */
+function UnboundShot({ n }: { n: FlowNode }) {
   return (
     <>
       <h4>Shot</h4>
-      <div className="kv"><span>bind</span><select value="" aria-label="bind shot" onChange={(e) => { if (e.target.value) void sy().bindShot(n.id, e.target.value) }}><option value="">an unbound shot…</option>{unbound.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+      <div className="kv"><MadeElsewhere n={n} /></div>
       <div className="verbs"><CommandButton id="story.flow.newShot" text /></div>
     </>
   )

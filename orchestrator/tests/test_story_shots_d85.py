@@ -69,9 +69,14 @@ def test_store_create_take_copy_finalize_delete(tmp_path: Path):
     assert s.version().clip_id == "clp_1" and [t.kind for t in s.version().takes] == ["image", "image", "clip"]
     with pytest.raises(ValueError, match="image or a clip"):
         st.add_take(s.id, "v1", "mesh", "x")
-    # patch with the revision; stale refused
-    s2 = st.patch_shot(s.id, {"revision": s.revision, "name": "Gate at dawn", "owner_node": "node_1"})
-    assert s2.name == "Gate at dawn" and s2.owner_node == "node_1" and s2.revision == s.revision + 1
+    # patch with the revision; stale refused. RC2a: a shot made here is a Shot node outside the routes; owner_node moves it into another
+    # node (its bare node goes, the receiving node's empty shot is dropped), and the name is the node's title
+    bare = s.owner_node
+    assert st.flow_node(bare).type == "shot" and st.flow_node(bare).title == "Gate"
+    d = st.create_node("dialogue", "Reunion")
+    s2 = st.patch_shot(s.id, {"revision": s.revision, "name": "Gate at dawn", "owner_node": d.id})
+    assert s2.name == "Gate at dawn" and s2.owner_node == d.id and s2.revision == s.revision + 2          # moved, then patched
+    assert st.flow_node(bare) is None and st.flow_node(d.id).title == "Gate at dawn" and st.flow_node(d.id).shot_id == s.id
     with pytest.raises(StaleShot):
         st.patch_shot(s.id, {"revision": s.revision, "name": "x"})
     with pytest.raises(ValueError):
@@ -84,7 +89,8 @@ def test_store_create_take_copy_finalize_delete(tmp_path: Path):
         st.add_take(s.id, "v1", "clip", "clp_2")
     with pytest.raises(ValueError, match="final"):
         st.patch_shot(s.id, {"revision": s3.revision, "versions": [{"id": "v1", "clip_id": "clp_2"}]})
-    assert st.patch_shot(s.id, {"revision": s3.revision, "owner_node": None}).owner_node is None                   # release is always allowed
+    released = st.patch_shot(s.id, {"revision": s3.revision, "owner_node": None})                                  # release is always allowed:
+    assert released.owner_node not in (None, d.id) and st.flow_node(d.id).shot_id != s.id                         # RC2a: to a node of its own
     # copy: the pointers come along, not the takes; the copy is current and open
     s4 = st.new_shot_version(s.id)
     v2 = s4.version()
@@ -131,10 +137,11 @@ def test_routes_shots(tmp_path: Path):
         r = cl.post(f"/story/shots/{s['id']}/versions/v1/finalize")
         assert r.status_code == 200 and r.json()["versions"][0]["state"] == "final" and r.json()["versions"][0]["clip_id"] == big.id
         assert cl.post(f"/story/shots/{s['id']}/versions/v1/take", json={"kind": "clip", "id": small.id}).status_code == 422          # final: fixed
-        # patch: name and owner; stale → 409; copy → v2 open with the pointers
+        # patch: name and owner (RC2a: into another node); stale → 409; copy → v2 open with the pointers
         s = cl.get(f"/story/shots/{s['id']}").json()
-        r = cl.patch(f"/story/shots/{s['id']}", json={"revision": s["revision"], "name": "Gate at dawn", "owner_node": "node_1"})
-        assert r.status_code == 200 and r.json()["owner_node"] == "node_1"
+        d = cl.post("/story/flow/nodes", json={"type": "dialogue", "title": "Reunion"}).json()
+        r = cl.patch(f"/story/shots/{s['id']}", json={"revision": s["revision"], "name": "Gate at dawn", "owner_node": d["id"]})
+        assert r.status_code == 200 and r.json()["owner_node"] == d["id"] and r.json()["name"] == "Gate at dawn"
         assert cl.patch(f"/story/shots/{s['id']}", json={"revision": s["revision"], "name": "x"}).status_code == 409
         r = cl.post(f"/story/shots/{s['id']}/versions")
         assert r.status_code == 200 and r.json()["current"] == "v2" and r.json()["versions"][1]["clip_id"] == big.id and r.json()["versions"][1]["state"] == "open"

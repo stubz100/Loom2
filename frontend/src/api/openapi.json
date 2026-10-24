@@ -6802,7 +6802,7 @@
             "type": "integer"
           },
           "schema_version": {
-            "default": 1,
+            "default": 2,
             "title": "Schema Version",
             "type": "integer"
           },
@@ -6885,7 +6885,7 @@
         "type": "object"
       },
       "FlowNode": {
-        "description": "One node of the flow, one file (loom R139). The fields a type uses: Dialogue `lines` (+ a bound shot), Shot a bound shot, Choice\n`options`, Condition `cond`, Action `set`, Jump `target`, Comment `text`; Start and Hub carry a title. `shot_id` / `shot_version`\nare set by binding only (loom R146: sole ownership).",
+        "description": "One node of the flow, one file (loom R139). The fields a type uses: Dialogue `lines` (+ its shot), Shot its shot, Choice\n`options`, Condition `cond`, Action `set`, Jump `target`, Comment `text`; Start and Hub carry a title. RC2a: `shot_id` /\n`shot_version` are the id and current version of the shot inside the node's file (`NodeRecord`).",
         "properties": {
           "beat_id": {
             "anyOf": [
@@ -6969,7 +6969,7 @@
             "type": "integer"
           },
           "schema_version": {
-            "default": 1,
+            "default": 2,
             "title": "Schema Version",
             "type": "integer"
           },
@@ -15931,7 +15931,7 @@
             "type": "integer"
           },
           "schema_version": {
-            "default": 1,
+            "default": 2,
             "title": "Schema Version",
             "type": "integer"
           },
@@ -15959,6 +15959,114 @@
           "updated_at"
         ],
         "title": "Shot",
+        "type": "object"
+      },
+      "ShotCard": {
+        "description": "RC2b (D96, proto01_animate 31 §3a): what a Shot card shows beside its picture — the version its node shows, the used take's picture,\nthe length (the used clip's, else the final shot's, else the voiced lines'), the recipe graph's stale and owed counts.",
+        "properties": {
+          "length_from": {
+            "anyOf": [
+              {
+                "enum": [
+                  "clip",
+                  "final",
+                  "lines"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Length From"
+          },
+          "length_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Length S"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id"
+          },
+          "owed": {
+            "title": "Owed",
+            "type": "integer"
+          },
+          "route": {
+            "title": "Route",
+            "type": "string"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "integer"
+          },
+          "take_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Take Asset Id"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "shot_id",
+          "node_id",
+          "version",
+          "route",
+          "take_asset_id",
+          "length_s",
+          "length_from",
+          "stale",
+          "owed"
+        ],
+        "title": "ShotCard",
+        "type": "object"
+      },
+      "ShotCards": {
+        "properties": {
+          "guide_s": {
+            "title": "Guide S",
+            "type": "number"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ShotCard"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "guide_s"
+        ],
+        "title": "ShotCards",
         "type": "object"
       },
       "ShotCreate": {
@@ -28189,7 +28297,7 @@
     },
     "/story/flow/nodes/{nid}/shot": {
       "post": {
-        "description": "A new, empty shot owned by the node (the handoff to the Shots tab, loom R134).",
+        "description": "A new, empty shot in the node (the handoff to the Shots tab, loom R134). RC2a: an empty shot of its own is the one (a name given\nbecomes the node's title); a shot with work in it moves out to a Shot node of its own first.",
         "operationId": "flow_spawn_story_flow_nodes__nid__shot_post",
         "parameters": [
           {
@@ -29759,6 +29867,28 @@
           }
         },
         "summary": "Shot Create",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/shots/cards": {
+      "get": {
+        "description": "RC2b (D96): the Shot cards' facts for the Flow and the Shots list — each shot's take, length (the 30 s guide warns past it) and its\nrecipe graph's stale and owed counts, in one call.",
+        "operationId": "shot_cards_story_shots_cards_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShotCards"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Shot Cards",
         "tags": [
           "story"
         ]

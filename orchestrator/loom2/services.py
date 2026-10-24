@@ -56,6 +56,8 @@ class Services:
             queue.vsthost = self.vsthost                                    # AU4 (D127): the movie prints a track's effects first
             if groups.migrated:
                 catalogue.recovery.append(f"{groups.migrated} collection{'s' if groups.migrated != 1 else ''} became groups on the Album page.")
+            from .story import StoryStore
+            catalogue.recovery.extend((await asyncio.to_thread(StoryStore, ws)).migrated)   # RC2a: the shots join their nodes, once
             await queue.start()
         except Exception:
             catalogue.close()

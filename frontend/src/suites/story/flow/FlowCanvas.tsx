@@ -19,11 +19,13 @@ import { CLASS_LABEL, sy, useStory } from '../storyStore'
 import { edgeMenu, flowView, nodeMenu } from '../storyCommands'
 import { storyKey } from '../storyKeys'
 import { NODE_LABEL } from './types'
-import { cellsOf, owes, routeOf, STEPS, type CellState, type Step } from '../board'
+import { cellsOf, lengthLine, owes, routeOf, STEPS, type CellState, type Step } from '../board'
+import { TriangleAlert } from 'lucide-react'
 
 const NODE_W = 220
 
 interface StoryData extends Record<string, unknown> { node: FlowNode; thumb: string | null; speaker: string | null; problem: string | null; shotState: string | null; pills: { step: Step; label: string; state: CellState }[] | null
+  length: { text: string; over: boolean; title: string } | null; stale: number
   board: { name: string; cover: string | null; total: number } | null; place: string | null }
 type StoryNodeT = Node<StoryData, 'story'>
 
@@ -42,7 +44,10 @@ function StoryNode({ id, data, selected }: NodeProps<StoryNodeT>) {
       {n.type === 'condition' && n.cond && <div className="line">{n.cond.var || '?'} {n.cond.op === 'ne' ? '≠' : '='} {String(n.cond.value)}</div>}
       {n.type === 'action' && <div className="line">{n.set.map((s) => `${String(s.var)} = ${String(s.value)}`).join(', ') || 'sets nothing'}</div>}
       {(n.type === 'dialogue' || n.type === 'shot') && (
-        <div className={`shot${n.shot_id ? '' : ' none'}`}>{data.thumb ? <img src={api.thumbUrl(data.thumb, 256)} alt="" /> : <span>{n.shot_id ? 'shot' : 'no shot'}</span>}{data.shotState && <i className={`dot ${data.shotState === 'final' ? 'ok' : 'tight'}`} title={data.shotState} />}</div>
+        <div className={`shot${n.shot_id ? '' : ' none'}`}>{data.thumb ? <img src={api.thumbUrl(data.thumb, 256)} alt="" /> : <span>{n.shot_id ? 'shot' : 'no shot'}</span>}{data.shotState && <i className={`dot ${data.shotState === 'final' ? 'ok' : 'tight'}`} title={data.shotState} />}
+          {(data.length || data.stale > 0) && <span className="facts">{/* RC2b (D96): the length (a warning past the guide) and the stale count */}
+            {data.length && <span className={`len${data.length.over ? ' over' : ''}`} title={data.length.title} data-length>{data.length.over && <TriangleAlert size={11} aria-hidden />}{data.length.text}</span>}
+            {data.stale > 0 && <span className="stale" title={`${data.stale} part${data.stale === 1 ? '' : 's'} of its recipe changed since made — Run stale on the shot`} data-stale>{data.stale} stale</span>}</span>}</div>
       )}
       {data.pills && <div className="pills" aria-label="the shot's steps">{data.pills.map((p) => <span key={p.step} className={`pill ${p.state}`} title={`${p.label}: ${p.state}`}>{p.label.toLowerCase()}</span>)}</div>}{/* D125 (SP3): the shot's steps, as on the board */}
       {data.place && <div className="place" title="where — a Cast place; Make frame links Generate's scene to it">@ {data.place}</div>}{/* D93 (C7) */}
@@ -80,6 +85,8 @@ export function FlowCanvas() {
   const clipsById = useStory((s) => s.clipsById)
   const boardFinals = useStory((s) => s.boardFinals)                                          // D125 (SP3): the pills read the board's records
   const boardCuts = useStory((s) => s.boardCuts)
+  const cards = useStory((s) => s.cards)                                                      // RC2b: length and stale count
+  const cardGuide = useStory((s) => s.cardGuide)
   useEffect(() => { void sy().loadBoard() }, [shots])
   const profiles = useStory((s) => s.profiles)
   const problems = useStory((s) => s.problems)
@@ -103,10 +110,12 @@ export function FlowCanvas() {
       const g = findNode(tree, n.board_group_id)
       const cells = sh && v ? cellsOf(sh, v, n, { clipAudio: (id) => (clipsById[id] ? !!clipsById[id].audio_asset_id : undefined), finals: boardFinals, cuts: boardCuts, busy: () => new Set() }) : null
       const pills = cells && v ? STEPS.filter((s) => s.id !== 'lines' && s.id !== 'cut' && owes(routeOf(v), n, s.id)).map((s) => ({ step: s.id, label: s.label, state: cells[s.id].state })) : null
+      const card = sh ? cards[sh.id] : undefined
       return { id: p.id, type: 'story' as const, position: { x: p.x, y: p.y }, selected: p.id === nodeId, data: { node: n, thumb, speaker: sp ? `${sp.name} (${CLASS_LABEL[sp.cls]})` : null, problem: byProblem.get(p.id) ?? null, shotState: v?.state ?? null, pills,
+        length: lengthLine(card, cardGuide), stale: card?.stale ?? 0,
         board: g ? { name: g.name, cover: g.cover_ids[0] ?? null, total: g.total } : null, place: n.place_id ? profiles.find((x) => x.id === n.place_id)?.name ?? 'a deleted place' : null } }
     })
-  }, [graph, flowNodes, nodeId, shots, clipsById, profiles, problems, tree, boardFinals, boardCuts])
+  }, [graph, flowNodes, nodeId, shots, clipsById, profiles, problems, tree, boardFinals, boardCuts, cards, cardGuide])
   if (from !== built) { setFrom(built); setNodes(built) }                                      // derived state, synced in render (not an effect)
   const edges = useMemo<Edge[]>(() => (graph?.edges ?? []).filter((e) => flowNodes[e.from] && flowNodes[e.to]).map((e) => {
     const n = flowNodes[e.from]

@@ -18,11 +18,11 @@ from ..models import registry
 from ..clips import ClipStore
 from ..loras import LoraRegistry, publish, unpublish
 from ..library import Library, LibraryStore, StaleLibrary
-from ..schemas import Deleted, ProfileAdded, LibraryChange, LibraryRemoved, Expanded, FlowOut, FlowProblems, LipsyncQueued, LoraCheckQueued, LoraRecordList, LoraRecordOut, NodeShot, ProfileList, ShotList, TrainQueued, TtsQueued, VoiceList, VoiceRecordOut
+from ..schemas import Deleted, ProfileAdded, LibraryChange, LibraryRemoved, Expanded, FlowOut, FlowProblems, LipsyncQueued, LoraCheckQueued, LoraRecordList, LoraRecordOut, NodeShot, ProfileList, ShotCards, ShotList, TrainQueued, TtsQueued, VoiceList, VoiceRecordOut
 from ..stages import StageStore, encode_guide
 from ..shot_recipe import TEMPLATES, StampReader, Template, recipe_state, rerun_recipe, stale_plan, used_run
 from ..shot_graph import ShotGraph, clay_rows, final_for, shot_graph
-from ..story import FOR_SHOT, NODE_TYPES, CastUse, cast_uses, body_fit_origin, model_source, prop_model_origin, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
+from ..story import FOR_SHOT, NODE_TYPES, VISUAL_TYPES, CastUse, cast_uses, body_fit_origin, model_source, prop_model_origin, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
 from ..voices import VoiceRecord, VoiceStore, check_voice
 from .deps import Svc
 
@@ -831,7 +831,9 @@ class TakeBody(BaseModel):
 
 
 def _shot_changed(svc, s: Shot) -> None:
+    """RC2a: a shot is in its node's file — its name is the node's title, a new one is a new node — so the Flow hears it too."""
     svc.hub.broadcast("story.changed", {"kind": "shot", "id": s.id, "revision": s.revision})
+    svc.hub.broadcast("story.changed", {"kind": "flow", "id": s.owner_node, "revision": 0})
 
 
 def _check_source(ws, cat, body: ShotCreate) -> int | None:
@@ -857,6 +859,70 @@ def _check_source(ws, cat, body: ShotCreate) -> int | None:
 async def shots_list(svc: Svc):
     ws, _, _ = svc.require_project()
     return {"items": [s.model_dump() for s in await asyncio.to_thread(StoryStore(ws).shots)]}
+
+
+SHOT_GUIDE_S = 30.0                                # D96 (05 §3): about 30 s a Shot, a guideline — the card warns past it
+
+
+def _cards(svc, ws) -> dict:
+    """RC2b: every shot's card, its records read once (the finals, the nodes, the Cast, the stages, the clips) and RC1's graph per shot for
+    its stale and owed counts."""
+    from ..clips import ClipStore
+    from ..compositions import CompositionStore
+    from ..finals import FinalStore
+    from ..shot_recipe import ShotRecipe
+    store = StoryStore(ws)
+    finals = FinalStore(ws).list()
+    nodes = store.flow_nodes()
+    profiles = {p.id: p for p in store.profiles()}
+    stages, comps, clips, cat = StageStore(ws), CompositionStore(ws), ClipStore(ws), svc.catalogue
+    reader = StampReader(stages=stages, groups=svc.groups, story=store)
+    jobs = list(svc.queue.jobs.values()) if svc.queue else []
+    stage_of: dict[str, Any] = {}
+    clip_of: dict[str, Any] = {}
+
+    def stage(sid: str | None) -> Any:
+        if sid and sid not in stage_of:
+            stage_of[sid] = stages.get(sid)
+        return stage_of.get(sid) if sid else None
+
+    def clip(cid: str | None) -> Any:
+        if cid and cid not in clip_of:
+            clip_of[cid] = clips.get(cid)
+        return clip_of.get(cid) if cid else None
+    items = []
+    for s in store.shots():
+        v = s.version()
+        fin = final_for(s.id, v, finals)
+        if fin is not None and fin.shot_id == s.id and not (v.recipe and v.recipe.template):          # RC1: a final shot puts it on the clay route
+            clay = "clay2" if sum(1 for x in fin.layers if x.kind == "figure") > 1 else "clay1"
+            v = v.model_copy(update={"recipe": (v.recipe or ShotRecipe()).model_copy(update={"template": clay})})
+        rc0 = recipe_state(v, reader)
+        node = nodes.get(s.owner_node) if s.owner_node else None
+        st = stage(v.stage_id) or (stage(fin.stage_id) if fin is not None else None)
+        g = shot_graph(s, v, rc0=rc0, node=node, profiles=profiles, stage=st, final=fin, composition=comps.get(fin) if fin is not None else None,
+                       clip_asset=lambda cid: (clip(cid).asset_id if clip(cid) else None), jobs=jobs)
+        c = clip(v.clip_id)
+        length, src = None, None
+        if c is not None and c.fps:
+            length, src = c.frames / float(c.fps), "clip"
+        elif fin is not None and fin.rate:
+            length, src = fin.frames / float(fin.rate), "final"
+        elif node is not None and cat is not None:
+            secs = [a.duration_s for a in (cat.get(ln.audio_asset_id) for ln in node.lines if ln.audio_asset_id) if a is not None and a.duration_s]
+            if secs:
+                length, src = float(sum(secs)), "lines"
+        items.append({"shot_id": s.id, "node_id": s.owner_node, "version": v.id, "route": g.route, "take_asset_id": v.frame_asset_id or (c.asset_id if c else None),
+                      "length_s": round(length, 2) if length is not None else None, "length_from": src, "stale": g.stale, "owed": g.owed})
+    return {"items": items, "guide_s": SHOT_GUIDE_S}
+
+
+@router.get("/story/shots/cards", response_model=ShotCards)
+async def shot_cards(svc: Svc):
+    """RC2b (D96): the Shot cards' facts for the Flow and the Shots list — each shot's take, length (the 30 s guide warns past it) and its
+    recipe graph's stale and owed counts, in one call."""
+    ws, _, _ = svc.require_project()
+    return await asyncio.to_thread(_cards, svc, ws)
 
 
 @router.post("/story/shots", response_model=Shot)
@@ -902,6 +968,7 @@ async def shot_delete(svc: Svc, sid: str):
     if not await asyncio.to_thread(StoryStore(ws).delete_shot, sid):
         raise HTTPException(404, "shot not found")
     svc.hub.broadcast("story.changed", {"kind": "shot", "id": sid, "revision": 0, "deleted": True})
+    svc.hub.broadcast("story.changed", {"kind": "flow", "id": None, "revision": 0})   # RC2a: its bare node went, or its node has a fresh shot
     return {"deleted": sid}
 
 
@@ -1333,25 +1400,29 @@ async def flow_unbind(svc: Svc, nid: str):
 
 @router.post("/story/flow/nodes/{nid}/shot", response_model=NodeShot)
 async def flow_spawn(svc: Svc, nid: str, body: SpawnBody):
-    """A new, empty shot owned by the node (the handoff to the Shots tab, loom R134)."""
+    """A new, empty shot in the node (the handoff to the Shots tab, loom R134). RC2a: an empty shot of its own is the one (a name given
+    becomes the node's title); a shot with work in it moves out to a Shot node of its own first."""
     ws, _, _ = svc.require_project()
     store = StoryStore(ws)
     n = await asyncio.to_thread(store.flow_node, nid)
     if n is None:
         raise HTTPException(404, "node not found")
-    name = body.name.strip() or n.title or n.type
-    mine = await asyncio.to_thread(store.shot, n.shot_id) if n.shot_id else None
-    v = mine.version() if mine is not None else None
+    if n.type not in VISUAL_TYPES:
+        raise HTTPException(422, f"a {n.type} node has no shot")
     try:
-        if mine is not None and v is not None and mine.owner_node == nid and len(mine.versions) == 1 and not (v.takes or v.frame_asset_id or v.clip_id or v.stage_id):
-            sh = await asyncio.to_thread(store.patch_shot, mine.id, {"name": name})      # D125 (#4): the node's untouched shot is the one, renamed
-        else:
-            sh = await asyncio.to_thread(store.create_shot, name)
-            n, sh = await asyncio.to_thread(store.bind_shot, nid, sh.id, None)
+        if n.shot_id is None:
+            n = await asyncio.to_thread(store.give_shot, nid)                               # a visual node made without one gets it
+        n, released = await asyncio.to_thread(store.unbind_shot, nid)
+        if body.name.strip() and body.name.strip() != n.title:                       # one name: the shot's is the node's title
+            n = await asyncio.to_thread(store.patch_node, nid, {"title": body.name.strip()})
+        sh = await asyncio.to_thread(store.shot, n.shot_id) if n.shot_id else None
     except ValueError as e:
         raise HTTPException(422, str(e))
-    svc.hub.broadcast("story.changed", {"kind": "shot", "id": sh.id, "revision": sh.revision})
-    _flow_changed(svc, nid)
+    if sh is None:
+        raise HTTPException(500, "the node has no shot")
+    if released is not None:
+        _shot_changed(svc, released)
+    _shot_changed(svc, sh)
     return {"node": n.model_dump(), "shot": sh.model_dump()}
 
 

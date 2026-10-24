@@ -180,8 +180,7 @@ def test_layer_pass_routes(tmp_path: Path):
         sh = store.create_shot("Shot 1", stage_id=st["id"], camera_id=st["cameras"][0]["id"], stage_revision=0)
         n = store.create_node("dialogue", "Hello", lines=[{"speaker": prof["id"], "text": "Hello there", "audio_asset_id": a.id, "audio_text": "Hello there"},
                                                          {"speaker": None, "text": "unvoiced", "audio_asset_id": None, "audio_text": None}])
-        n.shot_id = sh.id                                                                  # the bound shot (create_node keeps the content fields only)
-        store.save_node(n)
+        n, _ = store.bind_shot(n.id, sh.id)                                                # RC2a: the shot made on the stage moves into the node
         from loom2.finals import FinalStore as FS
         fs = FS(svc.ws)
         fs.save(fs.get(f.id).model_copy(update={"shot_id": sh.id}))

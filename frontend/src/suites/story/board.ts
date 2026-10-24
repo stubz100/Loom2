@@ -1,6 +1,6 @@
 // D125 (proto01_UIcomp 04 §2.4, §3.1; SP3): the Shots board — every shot in the Flow's order against its steps, each step's state read from
 // records that exist (the shot version, its node, its clips, the finals made for it, the cuts). Pure: board.test.ts.
-import type { Final, FlowGraph, FlowNode, Shot, ShotVersion } from '../../api/types'
+import type { Final, FlowGraph, FlowNode, Shot, ShotCard, ShotVersion } from '../../api/types'
 
 export type Step = 'lines' | 'voice' | 'frame' | 'stage' | 'clip' | 'final' | 'lipsync' | 'approved' | 'cut'
 export const STEPS: { id: Step; label: string }[] = [
@@ -23,9 +23,21 @@ export const owes = (route: string, node: Pick<FlowNode, 'type'> | null, step: S
 
 export interface Row { shot: Shot; node: FlowNode | null; group: string | null }
 
+/** RC2a (proto01_animate 31 §3b): a Shot node that is nothing but its shot — outside the routes (no edge, not the start), no lines, text,
+ *  beat, place or board. A shot made elsewhere (*New shot from this camera…*, *Make a shot from this clip…*) is one; another node can take
+ *  its shot (bind), and then it goes. The server's `_bare`. */
+export const bareNode = (n: Pick<FlowNode, 'id' | 'type' | 'lines' | 'text' | 'beat_id' | 'place_id' | 'board_group_id'>, graph: Pick<FlowGraph, 'start' | 'edges'> | null): boolean =>
+  n.type === 'shot' && !n.lines.length && !n.text.trim() && !n.beat_id && !n.place_id && !n.board_group_id && graph?.start !== n.id
+  && !(graph?.edges ?? []).some((e) => e.from === n.id || e.to === n.id)
+/** RC2a: a shot with something in it (a second version, a source, a frame, a clip, a take, a run) — moved to a node of its own, never
+ *  dropped, when its node changes. The server's `ShotPart.untouched`, negated. */
+export const hasWork = (s: Pick<Shot, 'versions'>): boolean =>
+  s.versions.length > 1 || s.versions.some((v) => v.state === 'final' || !!(v.stage_id || v.frame_asset_id || v.clip_id || v.takes.length || v.recipe?.steps.some((x) => x.runs.length)))
+
 /** The shots in the Flow's order: a walk from the Start along the edges (a node's ports in their order — out, then / else, a Choice's options
  *  as it lists them), each visual node's shot at its first visit; a Choice's or a Condition's branch names the rows under it (the latest
- *  branch wins). Then the shots of nodes off the routes, then the unbound ones. */
+ *  branch wins). Then the shots of nodes off the routes (RC2a: a shot made elsewhere is a Shot node there); a shot without a node (before
+ *  RC2a's merge) last. */
 export function flowOrder(graph: Pick<FlowGraph, 'start' | 'edges'> | null, nodes: Record<string, FlowNode>, shots: Shot[]): Row[] {
   const byShot = new Map(shots.map((s) => [s.id, s]))
   const out: Row[] = []
@@ -94,6 +106,17 @@ export function cellsOf(s: Shot, v: ShotVersion, node: FlowNode | null, x: CellI
   const onLane = x.cuts.flatMap((c) => c.clips).filter((c) => c.shot_id === s.id)
   cells.cut = !onLane.length ? { state: 'owed' } : onLane.some((c) => c.shot_version === v.id && c.clip_id === v.clip_id) ? { state: 'done' } : { state: 'stale', text: 'changed' }
   return cells
+}
+
+/** RC2b (D96): a Shot card's length line — seconds to one decimal under a minute, with where it comes from; past the guide (about 30 s) it
+ *  warns. Null when nothing gives the shot a length yet. */
+export function lengthLine(c: Pick<ShotCard, 'length_s' | 'length_from'> | undefined, guide: number): { text: string; over: boolean; title: string } | null {
+  if (!c || c.length_s == null) return null
+  const s = c.length_s
+  const text = s < 60 ? `${s.toFixed(1)} s` : `${Math.floor(s / 60)} min ${Math.round(s % 60)} s`
+  const from = c.length_from === 'clip' ? 'its clip' : c.length_from === 'final' ? 'its final shot' : 'its voiced lines'
+  const over = s > guide
+  return { text, over, title: over ? `${text} (${from}) — past about ${guide} s: two Shots joined by a transition read better (a guideline, D96)` : `${text} (${from})` }
 }
 
 /** The first owed step of a row, in the board's order (Approved and In cut last) — the foot's next step. */

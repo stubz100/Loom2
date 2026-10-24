@@ -738,6 +738,25 @@ class ShotList(Out):
     items: list[Shot]
 
 
+class ShotCard(Out):
+    """RC2b (D96, proto01_animate 31 §3a): what a Shot card shows beside its picture — the version its node shows, the used take's picture,
+    the length (the used clip's, else the final shot's, else the voiced lines'), the recipe graph's stale and owed counts."""
+    shot_id: str
+    node_id: str | None
+    version: str
+    route: str
+    take_asset_id: str | None
+    length_s: float | None
+    length_from: Literal["clip", "final", "lines"] | None
+    stale: int
+    owed: int
+
+
+class ShotCards(Out):
+    items: list[ShotCard]
+    guide_s: float                                 # D96: about 30 s a Shot — past it the card warns; nothing is blocked
+
+
 class FlowOut(Out):
     """17 §3d: the index and every node."""
     graph: FlowGraph

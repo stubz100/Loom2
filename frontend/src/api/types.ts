@@ -74,6 +74,7 @@ export type VoiceRecord = S['VoiceRecordOut']                // 19 (D87) CN2: a 
 export type VoiceCaps = S['VoiceCaps']
 export type ProfileVersion = S['ProfileVersion']
 export type Shot = S['Shot']                                  // 17 (D85) SY2: a shot with versions
+export type ShotCard = S['ShotCard']                          // RC2b: a Shot card's take, length and stale count
 export type ShotVersion = S['ShotVersion']
 export type CastUse = S['CastUse']                            // D125 (S5): a shot that uses a Cast profile, how and its route
 export type CastReadiness = S['CastReadiness']

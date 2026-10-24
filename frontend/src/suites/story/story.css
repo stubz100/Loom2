@@ -161,6 +161,11 @@
 .flow-node .shot { position: relative; margin: 4px 8px 6px; height: 56px; background: var(--bg3); border-radius: 4px; overflow: hidden; display: grid; place-items: center; color: var(--fg3); font-size: 11px; }
 .flow-node .shot img { width: 100%; height: 100%; object-fit: cover; }
 .flow-node .shot .dot { position: absolute; right: 4px; top: 4px; }
+/* RC2b: the card's length and stale count over the take */
+.flow-node .shot .facts { position: absolute; left: 4px; bottom: 3px; display: flex; gap: 4px; }
+.flow-node .shot .facts > span { display: inline-flex; align-items: center; gap: 2px; padding: 0 4px; border-radius: 3px; background: color-mix(in srgb, var(--bg1) 80%, transparent); color: var(--fg1); font-size: 10px; line-height: 15px; }
+.flow-node .shot .facts .len.over { color: var(--warn); }
+.flow-node .shot .facts .stale { color: var(--warn); }
 .flow-node .port { position: absolute; right: 0; transform: translateY(-50%); display: flex; align-items: center; gap: 4px; pointer-events: none; }
 .flow-node .port .plabel { font-size: 10px; color: var(--fg3); background: var(--bg1); padding: 0 4px; transform: translateX(-10px); }
 .flow-node.t-start .head .type { color: var(--ok, #4caf50); }
@@ -177,7 +182,7 @@
 .lines-editor { display: grid; gap: 4px; }
 .lines-editor .line-row { display: grid; grid-template-columns: 110px 1fr auto auto; gap: 4px; align-items: center; }
 .line-voice { display: inline-flex; gap: 2px; }
-.line-voice .play.stale { color: var(--warn, #e0a030); }
+.line-voice .play.stale { color: var(--warn); }
 .voice-row { display: flex; gap: 6px; align-items: center; margin-top: 4px; }
 .voice-row select { flex: 1; min-width: 0; }
 .voices .voice-form textarea { width: 100%; box-sizing: border-box; }

@@ -79,9 +79,14 @@ async def timeline_delete(svc: Svc, tl_id: str):
     return {"deleted": tl_id}
 
 
+class TimelineRender(BaseModel):
+    movie: bool = False                            # RC3 (proto01_animate 29): the movie (conformed, the cut's size, the voice lane, an MP4) instead of the draft
+
+
 @router.post("/timelines/{tl_id}/render", response_model=JobsSubmitted)
-async def timeline_render(svc: Svc, tl_id: str):
-    """P17: the draft render as a CPU job (no engine) — the result is a Catalogue clip with lineage to every clip on the lane."""
+async def timeline_render(svc: Svc, tl_id: str, body: TimelineRender | None = None):
+    """P17: the draft render as a CPU job (no engine) — the result is a Catalogue clip with lineage to every clip on the lane. RC3: `movie`
+    renders the finished movie instead — an MP4 with the voice lane in the cut's folder and a Catalogue video."""
     ws, _, queue = svc.require_project()
     store, clips = TimelineStore(ws), ClipStore(ws)
     tl = await asyncio.to_thread(store.get, tl_id)
@@ -94,7 +99,7 @@ async def timeline_render(svc: Svc, tl_id: str):
     if missing:
         raise HTTPException(422, f"clips missing from the project: {', '.join(missing)}")
     try:
-        jobs = queue.submit({"kind": "render", "timeline_id": tl_id}, origin=JobOrigin(suite="animate", surface="sequence", ref=tl_id))
+        jobs = queue.submit({"kind": "render", "timeline_id": tl_id, "movie": bool(body and body.movie)}, origin=JobOrigin(suite="animate", surface="sequence", ref=tl_id))
     except ValueError as e:
         raise HTTPException(422, str(e))
     return {"jobs": [j.model_dump() for j in jobs]}
@@ -121,41 +126,6 @@ async def timeline_export(svc: Svc, tl_id: str, body: TimelineExport):
 
 
 def _story_lookup(ws, cat=None):
-    """17 §3e: a lane clip's chapter name (its node's title, else its shot's name), its Dialogue lines and (CN2) the lines' voices — the
-    audio assets as cues in the SRT's order, None where a line has no voice yet — from the Story records and the Catalogue."""
-    from pathlib import Path
-    from ..story import StoryStore
-    from ..timelines import TimelineClip
-    store = StoryStore(ws)
-    shots = {sh.id: sh for sh in store.shots()}
-    nodes = store.flow_nodes()
-
-    def node_for(c: TimelineClip):
-        n = nodes.get(c.node_id) if c.node_id else None
-        if n is None and c.shot_id:
-            n = next((x for x in nodes.values() if x.shot_id == c.shot_id), None)
-        return n
-
-    def name_of(c: TimelineClip) -> str | None:
-        n = nodes.get(c.node_id) if c.node_id else None
-        if n is not None and (n.title or n.type):
-            return n.title or n.type
-        sh = shots.get(c.shot_id) if c.shot_id else None
-        return sh.name if sh is not None else None
-
-    def lines_of(c: TimelineClip) -> list[str]:
-        n = node_for(c)
-        return [ln.text for ln in n.lines] if n is not None else []
-
-    def audio_of(c: TimelineClip) -> list:
-        n = node_for(c)
-        if n is None or cat is None:
-            return []
-        out = []
-        for ln in n.lines:
-            if not ln.text.strip():
-                continue
-            rec = cat.get(ln.audio_asset_id) if ln.audio_asset_id else None
-            out.append({"name": Path(rec.path).name, "src": (ws.path / rec.path).resolve().as_uri(), "duration_s": float(rec.duration_s)} if rec and rec.duration_s else None)
-        return out
-    return name_of, lines_of, audio_of
+    """17 §3e: see `timelines.story_lookup` (RC3: the movie render reads the same lines and voices)."""
+    from ..timelines import story_lookup
+    return story_lookup(ws, cat)

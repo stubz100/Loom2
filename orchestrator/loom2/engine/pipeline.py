@@ -129,8 +129,9 @@ def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = 
         params = {"final_id": recipe.final_id}
         est = {"seconds": 5.0, "source": "E27 2026-10-20: effectcraft-cli render, 81 frames at 832×480 in 2.2 s on the CPU"}
     elif isinstance(recipe, Render):                                  # P17: a CPU job — frames from the masters, seconds unknown before the document is read
-        params = {"timeline_id": recipe.timeline_id}
-        est = {"seconds": None, "source": "CPU (PNG masters → clip); the Dock shows frames done"}
+        params = {"timeline_id": recipe.timeline_id, "movie": recipe.movie}
+        est = {"seconds": None, "source": ("CPU (PNG masters, RIFE to 24 fps where the tool is there, the voice lane → MP4)" if recipe.movie   # RC3
+                                           else "CPU (PNG masters → clip)") + "; the Dock shows frames done"}
     elif isinstance(recipe, Reangle):                                 # P14 (D82): the method `auto` resolved to in this build, and its measured time
         try:
             mid = reangle_model_id(recipe, variant)

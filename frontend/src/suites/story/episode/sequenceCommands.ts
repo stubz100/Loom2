@@ -1,16 +1,19 @@
 // P17 (D83): the Sequence tab's verbs — every one has a mouse home (the lane's context menu, the Inspector, the transport) per D32;
 // undo / redo take Ctrl+Z / Ctrl+Shift+Z in the Animate scope (the clip player has no undo of its own).
-import { ArrowLeft, ArrowRight, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, FileDown, Pause, Play, Plus, Redo2, RefreshCw, Scissors, SkipBack, SkipForward, Trash2, Undo2, Workflow, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, FileDown, Film, FolderOpen, Pause, Play, Plus, Redo2, RefreshCw, Scissors, SkipBack, SkipForward, Trash2, Undo2, Workflow, ZoomIn, ZoomOut } from 'lucide-react'
 import { registerCommands, sep, type MenuItem } from '../../../frame/commands'
 import { askConfirm, askText, useSession } from '../../../store/session'
 import { useAnimate } from '../../animate/animateStore'
 import { useStory } from '../storyStore'
 import { assembleLane, laneChanges, routeLabel, routePicks, updateClip, walkRoute } from './assemble'
 import { duration, ticks } from './lane'
-import { useSequence } from './sequenceStore'
+import { lastMovie, useSequence } from './sequenceStore'
+import { revealPath } from '../../../shell/tauri'
 
 const sq = () => useSequence.getState()
 const hasSeq = () => !!sq().current
+/** RC3: the open cut's newest finished movie, as the absolute path the job wrote. */
+const movieFile = (): string | null => { const c = sq().current; const m = c ? lastMovie(useSession.getState().jobs, c.id) : null; return m?.status === 'done' ? m.file : null }
 const hasSel = () => hasSeq() && sq().selected !== null && !!sq().lane?.clips[sq().selected!]
 const an = () => useAnimate.getState()
 type BinClip = Parameters<ReturnType<typeof useSequence.getState>['addClip']>[0]
@@ -133,6 +136,10 @@ registerCommands([
   { id: 'story.episode.exportSrt', scope: 'story', label: 'Export subtitles (.srt from the nodes\' lines)', icon: FileDown, placement: ['inspector', 'context'], when: () => hasSeq() && !!sq().lane?.clips.length, run: () => void exportChecked('srt') },
   { id: 'story.episode.exportFcpxml', scope: 'story', label: 'Export FCPXML 1.10', icon: FileDown, placement: ['inspector', 'context'], when: () => hasSeq() && !!sq().lane?.clips.length, run: () => void exportChecked('fcpxml') },
   { id: 'story.episode.render', scope: 'story', label: 'Render a draft clip (CPU)', icon: Clapperboard, placement: ['inspector', 'context'], when: () => hasSeq() && !!sq().lane?.clips.length, run: () => void sq().render() },
+  { id: 'story.episode.renderMovie', scope: 'story', label: 'Render the movie (MP4, CPU)', icon: Film, placement: ['inspector', 'context'], when: () => hasSeq() && !!sq().lane?.clips.length,   // RC3 (proto01_animate 29)
+    run: () => void sq().render(true) },
+  { id: 'story.episode.revealMovie', scope: 'story', label: 'Reveal the movie in its folder', icon: FolderOpen, placement: ['inspector'], when: () => !!movieFile(),
+    run: () => { const f = movieFile(); if (f) void revealPath(f) } },
   { id: 'story.episode.openClip', scope: 'story', label: 'Open the clip in the player', icon: Pause, placement: ['inspector', 'context'], when: hasSel,
     run: () => { const l = sq().lane!; const c = l.clips[sq().selected!]; an().select(c.source); useSession.getState().toast('Opened in the clip player (Animate · Performance)', 'info') } },
 ])
@@ -141,5 +148,5 @@ registerCommands([
 export function laneMenu(onClip: boolean): MenuItem[] {
   return onClip
     ? [{ cmd: 'story.episode.update' }, { cmd: 'story.episode.dissolve' }, { cmd: 'story.episode.moveLeft' }, { cmd: 'story.episode.moveRight' }, { cmd: 'story.episode.openClip' }, sep, { cmd: 'story.episode.removeClip' }, sep, { cmd: 'story.episode.undo' }, { cmd: 'story.episode.redo' }]
-    : [{ cmd: 'story.episode.addCurrent' }, sep, { cmd: 'story.episode.play' }, { cmd: 'story.episode.stepBack' }, { cmd: 'story.episode.stepForward' }, { cmd: 'story.episode.home' }, { cmd: 'story.episode.end' }, sep, { cmd: 'story.episode.exportResolve' }, { label: 'Export one file', icon: FileDown, items: [{ cmd: 'story.episode.exportEdl' }, { cmd: 'story.episode.exportFcpxml' }, { cmd: 'story.episode.exportSrt' }] }, { cmd: 'story.episode.render' }, sep, { cmd: 'story.episode.assemble' }, { cmd: 'story.episode.reassemble' }, { cmd: 'story.episode.updateAll' }, sep, { cmd: 'story.episode.rename' }, { cmd: 'story.episode.delete' }, { cmd: 'story.episode.new' }, sep, { cmd: 'story.episode.undo' }, { cmd: 'story.episode.redo' }]
+    : [{ cmd: 'story.episode.addCurrent' }, sep, { cmd: 'story.episode.play' }, { cmd: 'story.episode.stepBack' }, { cmd: 'story.episode.stepForward' }, { cmd: 'story.episode.home' }, { cmd: 'story.episode.end' }, sep, { cmd: 'story.episode.exportResolve' }, { label: 'Export one file', icon: FileDown, items: [{ cmd: 'story.episode.exportEdl' }, { cmd: 'story.episode.exportFcpxml' }, { cmd: 'story.episode.exportSrt' }] }, { cmd: 'story.episode.render' }, { cmd: 'story.episode.renderMovie' }, sep, { cmd: 'story.episode.assemble' }, { cmd: 'story.episode.reassemble' }, { cmd: 'story.episode.updateAll' }, sep, { cmd: 'story.episode.rename' }, { cmd: 'story.episode.delete' }, { cmd: 'story.episode.new' }, sep, { cmd: 'story.episode.undo' }, { cmd: 'story.episode.redo' }]
 }

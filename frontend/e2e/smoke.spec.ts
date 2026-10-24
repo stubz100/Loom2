@@ -488,6 +488,17 @@ test('a sequence (P17, D83 — in Story · Episode since 17 SY4): a fake-engine 
   const asset = await api<{ parents: string[]; lineage_kind: string | null }>('GET', `/assets/${render.asset_id}`)
   expect(asset.lineage_kind).toBe('render')
   expect(asset.parents).toHaveLength(1)
+  // RC3: the movie — an MP4 named after the cut in its folder, a Catalogue video (not a clip), Reveal beside it
+  await page.locator('.seq-insp button', { hasText: /^Render the movie$/ }).click()
+  const movie = page.getByTestId('seq-movie')
+  await expect(movie).toContainText('reel-one.mp4', { timeout: 120_000 })
+  await expect(movie.locator('span[title]', { hasText: 'reel-one.mp4' })).toHaveAttribute('title', `timelines/${tl.id}/reel-one/reel-one.mp4`)
+  await expect(movie.locator('button[title^="Reveal the movie"]')).toBeEnabled()
+  await expect(page.locator('.seq-bin:not(.shots-bin) .seq-clip-card')).toHaveCount(2)
+  const jobs = await api<{ items: { recipe: { kind: string; movie?: boolean }; result: { asset_ids?: string[]; revision?: number } }[] }>('GET', '/jobs')
+  const mj = jobs.items.find((j) => j.recipe.kind === 'render' && j.recipe.movie)!
+  const mv = await api<{ kind: string; lineage_kind: string | null; parents: string[]; params: { movie?: boolean } }>('GET', `/assets/${mj.result.asset_ids![0]}`)
+  expect([mv.kind, mv.lineage_kind, mv.params.movie, mv.parents.length]).toEqual(['video', 'render', true, 1])
 })
 
 test('a stage (P13 / ST1, D81): a new stage gets a set and a figure from the Library, the Outliner lists them, the document saves and survives a reload', async ({ page }) => {

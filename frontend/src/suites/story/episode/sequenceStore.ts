@@ -3,7 +3,7 @@
 // and the toast says so). Project data lives here and on disk, never in component state.
 import { create } from 'zustand'
 import { ApiError, http, unwrap } from '../../../api/client'
-import type { Clip, Timeline, TimelineClipIn } from '../../../api/types'
+import type { Clip, Job, Timeline, TimelineClipIn } from '../../../api/types'
 import { useSession } from '../../../store/session'
 import { DEV_HOOKS } from '../../../devHooks'
 import { append, at, duration, move, remove, setOverlap, starts, trim, type Lane, type LaneClip, chainIn } from './lane'
@@ -60,7 +60,8 @@ interface SequenceState {
   zoom: (factor: number) => void
   exportAs: (format: ExportFormat) => Promise<void>
   /** P17 slice 2: the draft render as a CPU job; the clip lands in the bin and the Catalogue when it is done. */
-  render: () => Promise<void>
+  /** P17's draft (a silent clip) or, RC3, the movie (`movie`: an MP4 with the voice lane in the cut's folder and the Catalogue). */
+  render: (movie?: boolean) => Promise<void>
 }
 
 let saveTimer: number | null = null
@@ -154,19 +155,34 @@ export const useSequence = create<SequenceState>()((set, get) => ({
       useSession.getState().toast(`${format.toUpperCase()} written: ${r.path}${r.audio ? ` · ${r.audio} spoken line${r.audio === 1 ? '' : 's'} on the audio lane` : ''}`, 'success')
     } catch (e) { useSession.getState().toast(`Export failed: ${(e as ApiError).detail ?? e}`, 'error') }
   },
-  render: async () => {
+  render: async (movie = false) => {
     const cur = get().current
     if (!cur) return
     const s = useSession.getState()
     try {
-      await unwrap(http.POST('/timelines/{tl_id}/render', { params: { path: { tl_id: cur.id } } }))
-      s.toast('Draft render queued — the clip lands in the Clips bin when it is done (CPU, no engine)', 'success')
+      await unwrap(http.POST('/timelines/{tl_id}/render', { params: { path: { tl_id: cur.id } }, body: { movie } }))
+      s.toast(movie ? 'Movie queued — an MP4 in the cut\'s folder and the Catalogue when it is done (CPU, no engine)'
+        : 'Draft render queued — the clip lands in the Clips bin when it is done (CPU, no engine)', 'success')
       await s.refreshAll()
     } catch (e) { s.toast(`Render failed: ${(e as ApiError).detail ?? e}`, 'error') }
   },
 }))
 
 export const seqActive = (): boolean => !!useSequence.getState().current
+
+/** RC3: the cut's newest movie job in the session — running (with its progress), done (the file, the cut's revision it read) or failed. */
+export interface MovieState { status: 'running' | 'done' | 'failed'; progress: number; path: string | null; file: string | null; revision: number | null; assetId: string | null }
+export function lastMovie(jobs: Record<string, Job>, tlId: string): MovieState | null {
+  const mine = Object.values(jobs).filter((j) => {
+    const r = j.recipe as { kind?: string; movie?: boolean; timeline_id?: string }
+    return r.kind === 'render' && r.movie === true && r.timeline_id === tlId && ['queued', 'running', 'done', 'failed'].includes(j.status)
+  }).sort((a, b) => b.created_at.localeCompare(a.created_at))
+  const j = mine[0]
+  if (!j) return null
+  const res = (j.result ?? {}) as { path?: string; file?: string; revision?: number; asset_ids?: string[] }
+  return { status: j.status === 'done' ? 'done' : j.status === 'failed' ? 'failed' : 'running', progress: j.progress ?? 0, path: res.path ?? null, file: res.file ?? null,
+    revision: res.revision ?? null, assetId: res.asset_ids?.[0] ?? null }
+}
 // dev: scripts/sy_acceptance.py drives the lane through the store (the smoke test uses the buttons)
 if (DEV_HOOKS) (window as unknown as { __loom2Sequence?: typeof useSequence }).__loom2Sequence = useSequence
 /** What the lane shows at the playhead (for the preview and the Inspector). */

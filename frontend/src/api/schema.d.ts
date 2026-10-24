@@ -3388,7 +3388,8 @@ export interface paths {
         put?: never;
         /**
          * Timeline Render
-         * @description P17: the draft render as a CPU job (no engine) — the result is a Catalogue clip with lineage to every clip on the lane.
+         * @description P17: the draft render as a CPU job (no engine) — the result is a Catalogue clip with lineage to every clip on the lane. RC3: `movie`
+         *     renders the finished movie instead — an MP4 with the voice lane in the cut's folder and a Catalogue video.
          */
         post: operations["timeline_render_timelines__tl_id__render_post"];
         delete?: never;
@@ -10440,6 +10441,14 @@ export interface components {
         TimelineList: {
             /** Items */
             items: components["schemas"]["Timeline"][];
+        };
+        /** TimelineRender */
+        TimelineRender: {
+            /**
+             * Movie
+             * @default false
+             */
+            movie?: boolean;
         };
         /**
          * ToolCaps
@@ -17874,7 +17883,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TimelineRender"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

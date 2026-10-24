@@ -1122,6 +1122,8 @@ async def run_render(job: JobRecord, recipe: Render, q: JobQueue) -> bool:
     frames blended through a dissolve, frames mapped by nearest frame where a clip's rate differs from the lane's (D27: no conform
     here), at the first clip's size and the lane's fps; then the clip pipeline as for an i2v job (master, proxy, asset, lineage to
     every source clip's asset, `clip.ready`)."""
+    if recipe.movie:
+        return await run_movie(job, recipe, q)
     store, clips = TimelineStore(q.ws), ClipStore(q.ws)
     tl = await asyncio.to_thread(store.get, recipe.timeline_id)
     if tl is None:
@@ -1203,6 +1205,168 @@ async def run_render(job: JobRecord, recipe: Render, q: JobQueue) -> bool:
     job.log_tail.append(f"clip {rec.id}: {rec.frames} frames @ {rec.fps} fps, {rec.w}×{rec.h}, proxy {rec.proxy_bytes / 2**20:.1f} MiB")
     q.hub.broadcast("clip.ready", {"clip_id": rec.id, "asset_id": asset.id, "job_id": job.id, "frames": rec.frames, "fps": rec.fps, "w": rec.w, "h": rec.h,
                                    "origin": job.origin.model_dump() if job.origin else None})
+    return True
+
+
+MOVIE_SR = 48_000
+
+
+def _movie_audio(tl: Any, cues_of: Any, total: int) -> tuple[np.ndarray, int]:
+    """RC3: the voice lane as one mono track at 48 kHz — each lane clip's spoken lines (`cues_of(clip)`: {path, duration_s} or None per line)
+    where the exports place them (`line_spans`: laid evenly across the clip), resampled and summed, clipped to ±1. Returns the samples and
+    the number of lines placed."""
+    import soundfile as sf
+    from ..timelines import line_spans, ticks
+    out = np.zeros(int(round(total / tl.fps * MOVIE_SR)), dtype=np.float32)
+    s = starts(tl)
+    placed = 0
+    for i, c in enumerate(tl.clips):
+        cues = cues_of(c) or []
+        for (a0, _), cue in zip(line_spans(ticks(tl, c), len(cues)), cues):
+            if not cue or not cue.get("path"):
+                continue
+            data, sr = sf.read(cue["path"], dtype="float32", always_2d=True)
+            mono = data.mean(axis=1)
+            if sr != MOVIE_SR and len(mono) > 1:
+                n = int(round(len(mono) * MOVIE_SR / sr))
+                mono = np.interp(np.linspace(0, len(mono) - 1, n), np.arange(len(mono)), mono).astype(np.float32)
+            at0 = int(round((s[i] + a0) / tl.fps * MOVIE_SR))
+            if at0 >= len(out):
+                continue
+            seg = mono[: len(out) - at0]
+            out[at0:at0 + len(seg)] += seg
+            placed += 1
+    return np.clip(out, -1.0, 1.0), placed
+
+
+async def run_movie(job: JobRecord, recipe: Render, q: JobQueue) -> bool:
+    """RC3 (D96, proto01_animate 29): the cut as a movie — every lane tick from the clips' PNG masters, a 16 fps clip on a 24 fps lane
+    conformed by RIFE v4.6 (D27, D102) when the local tool is there (else the nearest frame, as the draft), each frame fitted into the cut's
+    w × h (the project format; letterboxed, Lanczos), dissolves blended; the spoken lines mixed into one track where the exports place them;
+    H.264 + AAC in one MP4 in the cut's folder (`timelines/<id>/<cut>/<cut>.mp4`, beside the Resolve export) and a Catalogue video with
+    lineage to every clip. A CPU job (RIFE runs on its own, one job at a time, D97)."""
+    from fractions import Fraction
+
+    import av
+
+    from ..final_assembly import conform_24, rife_binary
+    from ..fsio import slugify
+    from ..timelines import story_lookup
+    store, clips = TimelineStore(q.ws), ClipStore(q.ws)
+    tl = await asyncio.to_thread(store.get, recipe.timeline_id)
+    if tl is None:
+        raise ValueError(f"sequence {recipe.timeline_id} is not in the project")
+    recs = {c.id: c for c in await asyncio.to_thread(clips.list)}
+    missing = [c.clip_id for c in tl.clips if c.clip_id not in recs]
+    if missing:
+        raise ValueError(f"clips missing from the project: {', '.join(missing)}")
+    total = duration(tl)
+    if total <= 0:
+        raise ValueError("the sequence is empty")
+    s = starts(tl)
+    W, H = tl.w - tl.w % 2, tl.h - tl.h % 2
+    tmp = q.ws.temp_dir / f"movie-{job.id}"
+    tmp.mkdir(parents=True, exist_ok=True)
+    t0 = time.time()
+    # the conform: each 16 fps clip on a 24 fps lane, once (the RIFE frames cached for the whole render)
+    conformed: dict[str, list[Path]] = {}
+    if tl.fps == 24 and rife_binary() is not None:
+        for cid in dict.fromkeys(c.clip_id for c in tl.clips):
+            rec = recs[cid]
+            if rec.fps == 16:
+                q.progress(job, f"conforming {cid} to 24 fps (RIFE)")
+                got = await asyncio.to_thread(conform_24, clips.frame_path(cid, 0).parent, tmp / "conform" / cid, rec.frames)
+                if got:
+                    conformed[cid] = got
+    job.log_tail.append(f"movie: {len(conformed)} clip(s) conformed to 24 fps by RIFE" if conformed else "movie: no RIFE conform (the nearest frame where a clip's rate differs)")
+    cache: dict[tuple[str, int], np.ndarray] = {}
+
+    def picture(k: int, f: int, local: int) -> np.ndarray:
+        c = tl.clips[k]
+        conf = conformed.get(c.clip_id)
+        if conf is not None:                                                     # the conformed sequence at the lane's rate
+            i = min(len(conf) - 1, round(c.in_ * 24 / 16) + (f - s[k]))
+            path, key = conf[i], (c.clip_id + ":24", i)
+        else:
+            path, key = clips.frame_path(c.clip_id, local), (c.clip_id, local)
+        arr = cache.get(key)
+        if arr is None:
+            with Image.open(path) as im:
+                im = im.convert("RGB")
+                scale = min(W / im.width, H / im.height)
+                fw, fh = max(1, round(im.width * scale)), max(1, round(im.height * scale))
+                canvas = Image.new("RGB", (W, H), (0, 0, 0))
+                canvas.paste(im.resize((fw, fh), Image.LANCZOS), ((W - fw) // 2, (H - fh) // 2))
+                arr = np.asarray(canvas, dtype=np.float32)
+            if len(cache) > 8:
+                cache.pop(next(iter(cache)))
+            cache[key] = arr
+        return arr
+
+    def frame_at(f: int) -> np.ndarray:
+        what = at(tl, f, s)
+        assert what is not None
+        (ka, la), b, mix = what
+        img = picture(ka, f, la)
+        if b is not None:
+            img = img * (1.0 - mix) + picture(b[0], f, b[1]) * mix
+        return np.ascontiguousarray(np.clip(img + 0.5, 0, 255).astype(np.uint8))
+
+    _, _, cues_of = await asyncio.to_thread(story_lookup, q.ws, q.catalogue)
+    audio, placed = await asyncio.to_thread(_movie_audio, tl, cues_of, total)
+    folder = store.export_dir(tl.id) / slugify(tl.name, "sequence")
+    folder.mkdir(parents=True, exist_ok=True)
+    out, part = folder / f"{slugify(tl.name, 'sequence')}.mp4", tmp / "movie.tmp.mp4"
+    first_png = tmp / "first.png"
+
+    def encode() -> None:
+        with av.open(str(part), "w", format="mp4", options={"movflags": "+faststart"}) as container:
+            vs = container.add_stream("libx264", rate=tl.fps)
+            vs.width, vs.height, vs.pix_fmt = W, H, "yuv420p"
+            vs.options = {"crf": "18", "preset": "medium"}
+            ast = None
+            if placed:
+                ast = container.add_stream("aac", rate=MOVIE_SR)
+                ast.layout = "mono"
+            for f in range(total):
+                if f % max(1, tl.fps) == 0:
+                    q.check_cancel(job)
+                    job.progress = f / total
+                    q.progress(job, f"rendering {f}/{total}")
+                arr = frame_at(f)
+                if f == 0:
+                    Image.fromarray(arr).save(first_png)
+                for pkt in vs.encode(av.VideoFrame.from_ndarray(arr, format="rgb24")):
+                    container.mux(pkt)
+            for pkt in vs.encode():
+                container.mux(pkt)
+            if ast is not None:
+                for i in range(0, len(audio), 1024):
+                    af = av.AudioFrame.from_ndarray(np.ascontiguousarray(audio[i:i + 1024].reshape(1, -1)), format="fltp", layout="mono")
+                    af.sample_rate, af.pts, af.time_base = MOVIE_SR, i, Fraction(1, MOVIE_SR)
+                    for pkt in ast.encode(af):
+                        container.mux(pkt)
+                for pkt in ast.encode():
+                    container.mux(pkt)
+        part.replace(out)
+    await asyncio.to_thread(encode)
+    q.check_cancel(job)
+    secs = round(time.time() - t0, 1)
+    job.log_tail.append(f"movie: {total} frames at {W}×{H} @ {tl.fps} fps, {placed} spoken line(s), in {secs} s → {out.relative_to(q.ws.path).as_posix()}")
+    parents = list(dict.fromkeys(recs[c.clip_id].asset_id for c in tl.clips if recs[c.clip_id].asset_id))
+    asset = await asyncio.to_thread(q.catalogue.ingest_file, out, kind="video", move=False, job_id=job.id, batch_id=job.batch_id, suite="animate", model_id="movie",
+                                    seed=job.seed, prompt_text=tl.name, params={"recipe": recipe.model_dump(), "timeline_id": tl.id, "revision": tl.revision, "movie": True,
+                                                                                 "conformed": sorted(conformed), "lines": placed},
+                                    timings={"wall_s": q.wall_s(), "render_s": secs}, parents=parents, lineage_kind="render", frames=total, w=W, h=H,
+                                    variant=job.variant, origin=job.origin)
+    asset = await asyncio.to_thread(q.catalogue.make_thumbs, asset, first_png)
+    q.hub.broadcast("asset.created", asset.model_dump())
+    job.result["asset_ids"] = [asset.id]
+    job.result["path"] = out.relative_to(q.ws.path).as_posix()
+    job.result["lines"] = placed
+    job.result["revision"] = tl.revision
+    job.result["file"] = str(out)                                                  # the absolute path, for Reveal the movie
+    shutil.rmtree(tmp, ignore_errors=True)
     return True
 
 

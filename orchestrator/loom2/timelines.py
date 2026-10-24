@@ -196,7 +196,48 @@ def line_spans(span: int, n: int) -> list[tuple[int, int]]:
     return [(k * per, span if k == n - 1 else (k + 1) * per) for k in range(n)]
 
 
-AudioCue = dict[str, Any]           # CN2: {name, src (a file URL), duration_s} — a spoken line; None where a line has no voice yet
+AudioCue = dict[str, Any]           # CN2: {name, src (a file URL), path (RC3: the movie reads it), duration_s} — a spoken line; None where a line has no voice yet
+
+
+def story_lookup(ws, cat=None):
+    """17 §3e: a lane clip's chapter name (its node's title, else its shot's name), its Dialogue lines and (CN2) the lines' voices — the
+    audio assets as cues in the SRT's order, None where a line has no voice yet — from the Story records and the Catalogue."""
+    from pathlib import Path
+    from .story import StoryStore
+    store = StoryStore(ws)
+    shots = {sh.id: sh for sh in store.shots()}
+    nodes = store.flow_nodes()
+
+    def node_for(c: TimelineClip):
+        n = nodes.get(c.node_id) if c.node_id else None
+        if n is None and c.shot_id:
+            n = next((x for x in nodes.values() if x.shot_id == c.shot_id), None)
+        return n
+
+    def name_of(c: TimelineClip) -> str | None:
+        n = nodes.get(c.node_id) if c.node_id else None
+        if n is not None and (n.title or n.type):
+            return n.title or n.type
+        sh = shots.get(c.shot_id) if c.shot_id else None
+        return sh.name if sh is not None else None
+
+    def lines_of(c: TimelineClip) -> list[str]:
+        n = node_for(c)
+        return [ln.text for ln in n.lines] if n is not None else []
+
+    def audio_of(c: TimelineClip) -> list:
+        n = node_for(c)
+        if n is None or cat is None:
+            return []
+        out = []
+        for ln in n.lines:
+            if not ln.text.strip():
+                continue
+            rec = cat.get(ln.audio_asset_id) if ln.audio_asset_id else None
+            out.append({"name": Path(rec.path).name, "src": (ws.path / rec.path).resolve().as_uri(), "path": str((ws.path / rec.path).resolve()),   # RC3: the movie reads the file
+                        "duration_s": float(rec.duration_s)} if rec and rec.duration_s else None)
+        return out
+    return name_of, lines_of, audio_of
 
 
 def to_srt(tl: Timeline, lines_of: Callable[[TimelineClip], list[str]]) -> str:

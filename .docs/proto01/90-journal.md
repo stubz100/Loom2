@@ -8623,3 +8623,28 @@ WB1–WB3, *Mark final* at any size, the For context ended by *← Back* and hon
   figure selected; the graph stays until its pill) and Story and the Catalogue (the Flow in place and back, the shot page's Recipe, a
   clip's *Show its recipe*, *Open the graph in Animate*). Offline 540 passed; Vitest 451 + 3 skipped; typecheck and build clean; lint 0
   errors (79 warnings); e2e full 61/61 and open 61/61.
+
+## 2026-10-24 06:39 — RC3's rest built (proto01_animate 29): the Episode renders the movie
+
+D96's RC3 is complete: SP6 (D125) had built the cut from the Flow, the *changed* mark and the update; the movie render was the rest.
+
+- **Server:** the render job takes `movie: true` (`Render.movie`; `POST /timelines/{id}/render` with `{movie}`, no body = the draft as
+  before). `run_movie` (engine/finishers.py, a CPU job): every lane tick from the clips' PNG masters; a 16 fps clip on a 24 fps lane
+  conformed once by the local RIFE v4.6 (`conform_24`, D27 / D102; the nearest frame without the tool, the log says which); each frame fitted
+  into the cut's w × h with bars where its shape differs (Lanczos, no crop); dissolves blended; the voiced Dialogue lines mixed into one
+  mono 48 kHz track where the exports place them (`line_spans`, laid evenly across their clip, resampled); H.264 (CRF 18) + AAC in
+  `timelines/<id>/<cut>/<cut>.mp4` beside the Resolve export, and a copy as a Catalogue video with lineage to every clip (`render`,
+  params `movie`, `lines`, `conformed`). The job's result carries the path, the absolute file, the lines placed and the cut's revision.
+  `story_lookup` moved into `timelines.py` (the route and the job share it; a cue carries its file path); the estimate names the movie.
+- **Client:** *Render the movie* (`story.episode.renderMovie`: the Inspector's Export verbs, the lane's right-click) beside *Render draft*;
+  the Inspector's **movie** row reads the cut's newest movie job from the session — *rendering n%*, the file's name (its path on hover)
+  with *the cut changed since* when the revision moved, *Reveal the movie in its folder* (`story.episode.revealMovie`), or *failed*; the
+  Export ? says what the movie is.
+- **On the A1 rig's records** (a copy of the project, CPU + RIFE on an idle card; `proto01_animate/img/29-rc3-a1-sheet.jpg`): the
+  composition (121 f @ 24) dissolving over 12 ticks into Mara's performance (77 f @ 16 → 116 at 24 by RIFE), two tone lines on the
+  first: 225 frames at 1920×1080 @ 24 with an AAC track in **10.7 s** (2.6 MB); the draft of the same cut 7.5 s at 832×480.
+- **Tests:** `test_timeline_movie_rc3.py` (2: the estimate; a 24 fps and a 16 fps clip with a dissolve and a voiced line → the MP4 at the
+  cut's size with bars, 44 frames, the conformed frames used, the line's audio at the clip's start and silence after, the Catalogue copy's
+  lineage; RIFE faked so the test never takes the card); `sequenceStore.test.ts` +1 (the movie state); the sequence e2e scenario renders the
+  movie from the Inspector. Offline 542 passed; settings audit clean; Vitest 452 + 3 skipped; typecheck and build clean; lint 0 errors
+  (79 warnings); e2e full 61/61 and open 61/61. Screenshots `proto01_animate/img/29-rc3-*.jpg`.

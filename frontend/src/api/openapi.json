@@ -17362,6 +17362,17 @@
         "title": "TimelineList",
         "type": "object"
       },
+      "TimelineRender": {
+        "properties": {
+          "movie": {
+            "default": false,
+            "title": "Movie",
+            "type": "boolean"
+          }
+        },
+        "title": "TimelineRender",
+        "type": "object"
+      },
       "ToolCaps": {
         "additionalProperties": true,
         "description": "D65: an Edit tool (an upscaler, an AI Select model) from the registry.",
@@ -29222,7 +29233,7 @@
     },
     "/timelines/{tl_id}/render": {
       "post": {
-        "description": "P17: the draft render as a CPU job (no engine) — the result is a Catalogue clip with lineage to every clip on the lane.",
+        "description": "P17: the draft render as a CPU job (no engine) — the result is a Catalogue clip with lineage to every clip on the lane. RC3: `movie`\nrenders the finished movie instead — an MP4 with the voice lane in the cut's folder and a Catalogue video.",
         "operationId": "timeline_render_timelines__tl_id__render_post",
         "parameters": [
           {
@@ -29235,6 +29246,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/TimelineRender"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {

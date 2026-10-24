@@ -10,7 +10,7 @@ import { Help } from '../../../frame/Help'
 import { useSession } from '../../../store/session'
 import { useAnimate } from '../../animate/animateStore'
 import { duration, ticks } from './lane'
-import { useSequence } from './sequenceStore'
+import { lastMovie, useSequence } from './sequenceStore'
 import { useStory } from '../storyStore'
 import { binItem, laneBelowFormat, laneChecklist } from './sequenceCommands'
 import { markUsed, runCommand } from '../../../frame/commands'
@@ -130,7 +130,9 @@ export function SequenceInspector() {
   const lastExport = useSequence((s) => s.lastExport)
   const clips = useAnimate((s) => s.clips)
   const shots = useStory((s) => s.shots)
+  const jobs = useSession((s) => s.jobs)
   if (!current || !lane) return <span className="hint">No cut open.</span>
+  const movie = lastMovie(jobs, current.id)                                                       // RC3: the newest movie job of this cut
   const ch = laneChanges(lane, shots)                                                           // D125 (S13): a newer approved take
   const changes = ch.length
   const selChange = ch.find((x) => x.i === selected) ?? null
@@ -147,10 +149,13 @@ export function SequenceInspector() {
       <ul className="seq-check">{(() => { const issues = laneChecklist(); return issues.length ? issues.map((x) => <li key={x.i} className="warn">clip {x.i + 1}: {x.what}</li>) : <li className="ok">{lane.clips.length ? 'every clip is a final shot version' : 'the lane is empty'}</li> })()}
         {(() => { const b = laneBelowFormat(); return b.count ? <li className="note" data-testid="below-format">{b.count} clip{b.count === 1 ? '' : 's'} below the format ({b.sizes.join(', ')}) <Help text={"A delivery note, not a problem: no video route renders the project format yet; Resolve scales the clips when it conforms the cut (D125)."} /></li> : null })()}</ul>
       {changes > 0 && <div className="verbs"><CommandButton id="story.episode.updateAll" text label={`Update ${changes} changed clip${changes === 1 ? '' : 's'}`} /></div>}
-      <h4>Export <Help text={"Export for Resolve writes the FCPXML (a chapter marker per shot — its node's title — and the lines' voices on an audio lane), the EDL, the SRT (the nodes' Dialogue lines) and markers.txt into one folder named after the cut; Resolve conforms each clip at its own rate. One file at a time is still there. The draft render is a CPU job: frames from the masters, dissolves blended, a clip at another rate mapped by nearest frame (not conformed)."} /></h4>
-      <div className="verbs"><CommandButton id="story.episode.exportResolve" text /><CommandButton id="story.episode.render" text label="Render draft" /></div>
+      <h4>Export <Help text={"Export for Resolve writes the FCPXML (a chapter marker per shot — its node's title — and the lines' voices on an audio lane), the EDL, the SRT (the nodes' Dialogue lines) and markers.txt into one folder named after the cut; Resolve conforms each clip at its own rate. One file at a time is still there. The draft render is a CPU job: frames from the masters, dissolves blended, a clip at another rate mapped by nearest frame (not conformed). The movie is the finished file: the cut's size (each clip fitted, bars where its shape differs), a 16 fps clip conformed to 24 by RIFE when the tool is installed, the voiced lines mixed where the exports place them; an MP4 (H.264 + AAC) beside the Resolve export and a video in the Catalogue."} /></h4>
+      <div className="verbs"><CommandButton id="story.episode.exportResolve" text /><CommandButton id="story.episode.renderMovie" text label="Render the movie" /><CommandButton id="story.episode.render" text label="Render draft" /></div>
       <div className="verbs one-file"><span className="hint">one file</span><CommandButton id="story.episode.exportEdl" text label="EDL" /><CommandButton id="story.episode.exportFcpxml" text label="FCPXML + markers" /><CommandButton id="story.episode.exportSrt" text label="SRT" /></div>
       {lastExport && <p className="hint">last: {lastExport.path}</p>}
+      {movie && <div className="kv seq-movie" data-testid="seq-movie"><span>movie</span><span>{movie.status === 'running' ? `rendering ${Math.round(movie.progress * 100)}%`
+        : movie.status === 'failed' ? 'failed — the Dock has the log'
+        : <><span title={movie.path ?? ''}>{movie.path?.split('/').pop()}</span>{movie.revision !== null && movie.revision !== current.revision ? ' · the cut changed since' : ''} <CommandButton id="story.episode.revealMovie" /></>}</span></div>}
       {c && <>
         <h4>Clip {selected! + 1}</h4>
         <div className="kv"><span>source</span><span>{clip ? `${clip.model_id} · ${clip.frames}f @ ${clip.fps}` : `${c.source} (missing)`}</span></div>

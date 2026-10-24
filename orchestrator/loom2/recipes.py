@@ -402,6 +402,7 @@ class Render(BaseModel):
     kind: Literal["render"] = "render"
     timeline_id: str
     seeds: list[int] = Field(default_factory=lambda: [0])
+    movie: bool = False                            # RC3 (D96, proto01_animate 29): the finished movie — RIFE-conformed, at the cut's size, the voice lane mixed in, an MP4 in the cut's folder
 
 
 class TrainLora(BaseModel):

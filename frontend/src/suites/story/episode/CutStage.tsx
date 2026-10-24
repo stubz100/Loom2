@@ -15,7 +15,7 @@ import { storyKey } from '../storyKeys'
 import { laneTake } from './bin'
 import { laneChanges, type LaneChange } from './assemble'
 import { runCommand } from '../../../frame/commands'
-import { CUT_TOOLS, dragStep, gripAt, itemLabel, razorStep, trackDrop, trackRef, type Grip } from './cut'
+import { CUT_TOOLS, db, dragStep, gripAt, itemLabel, razorStep, trackDrop, trackRef, type Grip } from './cut'
 import { tc } from './lane'
 import { cutClipMenu, cutLength, cutSpaceMenu, cutTrackMenu, trackItem } from './sequenceCommands'
 import { useSequence } from './sequenceStore'
@@ -62,27 +62,25 @@ function CutViewer({ tlId, revision, fps, w, h }: { tlId: string; revision: numb
   return <div className="cut-view" style={{ aspectRatio: `${w} / ${h}` }}>{src ? <img src={src} alt="" draggable={false} /> : null}</div>
 }
 
-/** rAF playback at the cut's fps; stops at the end (the viewer asks FilmCraft for each frame it shows). */
-function useCutPlayback(len: number, fps: number) {
-  const playing = useSequence((s) => s.playing)
+/** CE3: the cut's sound as FilmCraft mixes it (`GET /timelines/{id}/mix`, a WAV at the movie's loudness), fetched again when the cut moves. */
+function useCutMix(tlId: string, revision: number): string | null {
+  const [url, setUrl] = useState<string | null>(null)
   useEffect(() => {
-    if (!playing || len <= 0) return
-    let raf = 0, last = performance.now(), acc = 0
-    const step = (t: number) => {
-      acc += ((t - last) * fps) / 1000; last = t
-      const n = Math.floor(acc)
-      if (n > 0) {
-        acc -= n
-        const s = useSequence.getState()
-        if (s.playhead + n >= len - 1) { s.setPlayhead(len - 1); s.togglePlay(false); return }
-        s.setPlayhead(s.playhead + n)
-      }
-      raf = requestAnimationFrame(step)
-    }
-    raf = requestAnimationFrame(step)
-    return () => cancelAnimationFrame(raf)
-  }, [playing, len, fps])
+    let gone = false, made: string | null = null
+    const timer = window.setTimeout(() => {
+      const b = getBackend()
+      if (!b) return
+      void fetch(`${baseUrl()}/timelines/${tlId}/mix`, { headers: { 'X-Loom-Token': b.token } }).then(async (res) => {
+        if (!res.ok || gone) return
+        made = URL.createObjectURL(await res.blob())
+        if (gone) URL.revokeObjectURL(made); else setUrl(made)
+      }).catch(() => { /* the picture plays without it */ })
+    }, 250)
+    return () => { gone = true; window.clearTimeout(timer); if (made) URL.revokeObjectURL(made) }
+  }, [tlId, revision])
+  return url
 }
+
 
 interface Drag { id: number; grip: Grip; dx: number; toTrack: number }
 
@@ -96,7 +94,9 @@ function ClipBlock({ cut, track, item, ppf, drag, onDown, changed }: { cut: CutT
   }
   const clip = item.clip_id ? clips.find((c) => c.id === item.clip_id) : undefined
   const shot = useStory((s) => (item.shot_id ? s.shots.find((x) => x.id === item.shot_id) : undefined))
-  const label = itemLabel(item, shot, clip)
+  const node = useStory((s) => (item.kind === 'line' && item.node_id ? s.flowNodes[item.node_id] : undefined))
+  const said = node && item.line !== null && item.line !== undefined ? node.lines[item.line]?.text : undefined
+  const label = said ? `“${said.length > 40 ? `${said.slice(0, 38)}…` : said}”` : itemLabel(item, shot, clip)          // CE3: a line by its words
   const thumbs = () => {
     if (item.kind === 'take' && clip) {
       const tw = Math.max(40, Math.round((40 * clip.w) / Math.max(1, clip.h)))
@@ -117,7 +117,7 @@ function ClipBlock({ cut, track, item, ppf, drag, onDown, changed }: { cut: CutT
       <div className="cut-thumbs">{thumbs()}</div>
       {changed && <button type="button" className="seq-changed" title={`${changed.name} ${changed.version} is the approved take now — Update plays it in place, the edits around it stay`}
         onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); useSequence.getState().selectClip(item.id); runCommand('story.episode.update') }}>changed · Update</button>}
-      <b>{label}{item.speed !== 1 ? ` · ${Math.round(item.speed * 100)} %` : ''}{item.hold ? ' · hold' : ''}</b>
+      <b>{label}{item.speed !== 1 ? ` · ${Math.round(item.speed * 100)} %` : ''}{item.hold ? ' · hold' : ''}{item.gain_db ? ` · ${db(item.gain_db)}` : ''}{item.ducked ? ' · ducked' : ''}</b>
     </div>
   )
 }
@@ -141,7 +141,7 @@ function TrackRow({ cut, track, ppf, len, drag, onDown, frameAt, changed }: { cu
       <div className="cut-head" title={`${trackRef(cut, track)} · ${track.name} — right-click: rename, lock, mute, add a track`}
         onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); trackItem.id = track.id; showMenu(e, cutTrackMenu()) }}>
         <span className="ref">{trackRef(cut, track)}</span><span className="name">{track.name}</span>
-        {track.locked && <i title="locked">🔒</i>}{track.muted && <i title="muted">∅</i>}
+        {track.locked && <i title="locked">🔒</i>}{track.muted && <i title="muted">∅</i>}{track.volume_db ? <i title="the track's volume">{db(track.volume_db)}</i> : null}
       </div>
       <div className="cut-lane" ref={ref} data-over={over || undefined} style={{ width: len * ppf }}>
         {track.transitions.map((x) => <i key={x.id} className={`cut-trans e-${x.effect}`} style={{ left: x.start * ppf, width: Math.max(2, x.duration * ppf) }} title={`${x.effect.replace(/_/g, ' ')} · ${Math.round(x.duration)} frames`} />)}
@@ -219,11 +219,43 @@ export function CutStage() {
   const playing = useSequence((s) => s.playing)
   const busy = useSequence((s) => s.cutBusy)
   const tool = useSequence((s) => s.tool)
-  useCutPlayback(cut ? cutLength() : 0, cut?.fps ?? 24)
+  const mix = useCutMix(current?.id ?? '', current?.revision ?? 0)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const len = cut ? cutLength() : 0, fps = cut?.fps ?? 24
+  // Playback at the cut's fps; stops at the end (the viewer asks FilmCraft for each frame it shows). CE3: with the mix loaded its clock
+  // moves the playhead (the sound never drifts from the picture); without it, the frame clock.
+  useEffect(() => {
+    if (!playing || len <= 0) return
+    let raf = 0, last = performance.now(), acc = 0
+    const el = audioRef.current
+    const sound = el && el.readyState >= 2 ? el : null
+    if (sound) { sound.currentTime = useSequence.getState().playhead / fps; void sound.play().catch(() => undefined) }
+    const step = (t: number) => {
+      const s = useSequence.getState()
+      if (sound && !sound.paused) {
+        const f = Math.floor(sound.currentTime * fps)
+        if (f >= len - 1 || sound.ended) { s.setPlayhead(len - 1); s.togglePlay(false); return }
+        if (f !== s.playhead) s.setPlayhead(f)
+      } else {
+        acc += ((t - last) * fps) / 1000
+        const n = Math.floor(acc)
+        if (n > 0) {
+          acc -= n
+          if (s.playhead + n >= len - 1) { s.setPlayhead(len - 1); s.togglePlay(false); return }
+          s.setPlayhead(s.playhead + n)
+        }
+      }
+      last = t
+      raf = requestAnimationFrame(step)
+    }
+    raf = requestAnimationFrame(step)
+    return () => { cancelAnimationFrame(raf); sound?.pause() }
+  }, [playing, len, fps])
   if (!current || !cut) return <div className="anim-empty"><h2>Episode</h2>opening the cut…</div>
   return (
     <div className="anim-stage seq-stage cut-stage" tabIndex={0} onKeyDown={(e) => { storyKey('episode', e.nativeEvent) }}>
       <div className="anim-view"><CutViewer tlId={current.id} revision={current.revision} fps={cut.fps} w={cut.w} h={cut.h} /></div>
+      {mix && <audio ref={audioRef} src={mix} preload="auto" data-testid="cut-mix" />}
       <div className="transport">
         <CommandRow ids={['story.episode.home', 'story.episode.back10', 'story.episode.stepBack', 'story.episode.play', 'story.episode.stepForward', 'story.episode.fwd10', 'story.episode.end']} labels={{ 'story.episode.play': playing ? 'Pause' : 'Play' }} />
         <span className="counter">{tc(playhead, cut.fps)} / {tc(Math.ceil(cut.duration), cut.fps)}{busy ? ' · …' : ''}</span>

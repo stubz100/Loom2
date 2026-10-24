@@ -1483,7 +1483,8 @@ async def run_movie_filmcraft(job: JobRecord, recipe: Render, q: JobQueue, tl: A
     shutil.rmtree(tmp, ignore_errors=True)
     tmp.mkdir(parents=True)
     part, script = tmp / "movie.mp4", tmp / "export.jsonl"
-    script.write_text(export_script(part, "h264", tl.fps), encoding="utf-8")
+    lufs = q.app.settings.filmcraft.loudness_lufs                    # CE3: the movie normalised (Settings › FilmCraft › loudness)
+    script.write_text(export_script(part, "h264", tl.fps, **({"loudnessLufs": lufs} if lufs is not None else {})), encoding="utf-8")
     argv = export_argv(q.app.settings.filmcraft, q.app, project, script)
     log_path = q.app.logs_dir / f"movie-{job.id}.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1530,7 +1531,7 @@ async def run_movie_filmcraft(job: JobRecord, recipe: Render, q: JobQueue, tl: A
     asset = await asyncio.to_thread(q.catalogue.make_thumbs, asset, first_png)
     q.hub.broadcast("asset.created", asset.model_dump())
     job.result.update({"asset_ids": [asset.id], "path": out.relative_to(q.ws.path).as_posix(), "lines": placed, "revision": tl.revision, "file": str(out),
-                       "engine": "filmcraft"})
+                       "engine": "filmcraft", "loudness_lufs": lufs})
     shutil.rmtree(tmp, ignore_errors=True)
     return True
 

@@ -8761,3 +8761,25 @@ export in a process that sets it first (`run` with `prefs.set`, then `file.expor
   warnings) and build clean; e2e full 62/62 and open 62/62 (a new tracks scenario; four Episode scenarios moved onto the tracks); rig
   `scripts/ce2_acceptance.py` 13/13 on the real FilmCraft (edits round-trip in 23–29 ms, frames over HTTP 7.8 ms at ½, the draft 2.8 s),
   `scripts/ce1_acceptance.py` re-run 14/14. Screenshots on A1's records: `proto01_animate/img/30-ce2-*.jpg`.
+
+## 2026-10-24 11:45 — CE3 built (proto01_animate 30 §14–§15, D126): sound in the cut; rig 7/7, the movie measured −16.0 LUFS
+
+- **Probe first** (the real binary, a copy of CE2's A1 cut): `clip.audioGain`; `sequence.applyAudioTransition` takes an `edge` (in / out)
+  though its listed signature omits it; `essentialSound.setType` + `generateDucking` key the music down 15 dB under the dialogue;
+  `autoMatch` brought a line from −15.6 to −23 LUFS; a WAV mixdown of the 9.4 s cut takes 0.11 s in the session.
+- **The lines are the author's**: the cut records the lines it placed (`loom2.lines`), a lifted one stays out at the next export, a line on
+  any audio track counts and keeps its subtitle there (the test caught a lifted line falling through to the re-voiced check with no clip).
+- **Sound verbs** (whitelisted, built in `cut.ts`): Gain…, Fade in / out, Duck under the dialogue (a clip or a track), Even out the
+  dialogue (−23 LUFS), a track's Volume…; the tracks carry gain, sound type, ducked, a track's volume — the blocks and headers say them, a
+  line shows its words. Freeze frame stays on video clips (seen on the screenshots: it was offered on a sound).
+- **Loudness**: Settings › FilmCraft › `loudness_lufs` (−16 by default, online; EBU R128 broadcast −23; None: as mixed) for the movie and
+  the page's mix. **The mix** (`GET /timelines/{id}/mix`): FilmCraft's WAV, kept per revision; the viewer plays it with the picture, its
+  clock moving the playhead.
+- **Rig** (`scripts/ce3_acceptance.py`, 7/7, the real FilmCraft on A1's records, tones apart by band): the mix 115 ms (4 ms kept); a
+  lifted line stays out; gain −6.00 dB and with the track's volume −12.00 dB, measured against the line (the mix is normalised as a whole:
+  measured alone the music moved −0.9 / −3.7 dB and the first run failed for that); fades −14 dB at head and tail; ducked 16.4 dB under
+  the line; the line evened out by −10.4 dB; the movie −16.0 LUFS (BS.1770-4, gated, measured in the script). CE1 14/14 and CE2 13/13
+  re-run.
+- Tests: `test_cuts_ce3.py` (2), `cut.test.ts` +1, the tracks e2e scenario's sound steps. Offline 552 passed; settings audit clean; OpenAPI
+  current; Vitest 457 + 3 skipped; typecheck, lint (0 errors, 79 warnings) and build clean; e2e full 62/62 and open 62/62. Screenshots
+  `proto01_animate/img/30-ce3-*.jpg`.

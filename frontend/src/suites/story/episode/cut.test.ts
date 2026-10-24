@@ -42,3 +42,18 @@ describe('the editor\'s gestures as FilmCraft commands', () => {
     expect(transitionStep(item(1, 0, 8), 'cross_dissolve', 'in').params).toMatchObject({ frames: 7, edge: 'in', effect: 'cross_dissolve' })
   })
 })
+
+describe('sound (CE3)', () => {
+  it('fades either edge, sets a gain, ducks the music under the lines and evens the dialogue out', async () => {
+    const { db, duckSteps, evenDialogueSteps, fadeStep, gainStep } = await import('./cut')
+    const music = item(20, 0, 30, 'sound')
+    const cutWithSound = { ...cut, audio: [a1, { ...a1, id: 4, items: [music] } as CutTrack] } as CutTracks
+    expect(fadeStep(music, 'out')).toEqual({ id: 'sequence.applyAudioTransition', params: { clip: 20, frames: 12, edge: 'out' } })
+    expect(gainStep(music, -6)).toEqual({ id: 'clip.audioGain', params: { clips: [20], db: -6, mode: 'set' } })
+    expect(duckSteps(cutWithSound, [music]).map((s) => [s.id, s.params])).toEqual([
+      ['essentialSound.setType', { clips: [12], type: 'dialogue' }], ['essentialSound.setType', { clips: [20], type: 'music' }], ['essentialSound.generateDucking', { clips: [20] }]])
+    expect(duckSteps({ ...cutWithSound, audio: [{ ...a1, items: [] } as CutTrack] } as CutTracks, [music])).toEqual([])   // no line: nothing to duck under
+    expect(evenDialogueSteps(cutWithSound)[1]).toEqual({ id: 'essentialSound.autoMatch', params: { clips: [12], target: -23 } })
+    expect([db(-6), db(3), db(0), db(-10.36)]).toEqual(['−6 dB', '+3 dB', '0 dB', '−10.4 dB'])
+  })
+})

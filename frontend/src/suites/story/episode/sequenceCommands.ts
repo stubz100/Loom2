@@ -8,7 +8,7 @@ import { useStory } from '../storyStore'
 import { assembleLane, laneChanges, routeLabel, routePicks, updateClip, walkRoute } from './assemble'
 import { duration, ticks } from './lane'
 import { isCut, lastMovie, useSequence } from './sequenceStore'
-import { CUT_TOOLS, findItem, isVideo, ticksOf, trackRef, transitionInto, transitionStep, type CutTool } from './cut'
+import { CUT_TOOLS, dialogueOf, duckSteps, evenDialogueSteps, fadeStep, findItem, gainStep, isVideo, ticksOf, trackRef, transitionInto, transitionStep, type CutTool } from './cut'
 import { revealPath } from '../../../shell/tauri'
 
 const sq = () => useSequence.getState()
@@ -188,7 +188,7 @@ registerCommands([
   })),
   { id: 'story.cut.speed', scope: 'story', label: 'Speed…', icon: Gauge, placement: ['inspector', 'context'], when: cutSel, hint: 'the clip plays faster or slower; its length on the track stays',
     run: () => { const s = selCut(); if (s) void askText({ title: 'Speed (%)', initial: String(Math.round(s.item.speed * 100)), placeholder: '100' }).then((v) => { const n = Number(v); if (v && n > 0) edit1('clip.speedDuration', { clips: [s.item.id], speed: n, ripple: false }) }) } },
-  { id: 'story.cut.freeze', scope: 'story', label: 'Freeze frame at the playhead', icon: Snowflake, placement: ['inspector', 'context'], when: () => cutSel() && atPlayhead(),
+  { id: 'story.cut.freeze', scope: 'story', label: 'Freeze frame at the playhead', icon: Snowflake, placement: ['inspector', 'context'], when: () => cutSel() && atPlayhead() && isVideo(sq().tracks!, selCut()!.track),
     run: () => { const s = selCut(); if (s) edit1('clip.frameHold', { clips: [s.item.id], time: ticksOf(sq().playhead, sq().tracks!.fps) }) } },
   { id: 'story.cut.dissolveIn', scope: 'story', label: 'Dissolve in (12 frames)', icon: SquareDashed, placement: ['inspector', 'context'], when: () => cutSel() && isVideo(sq().tracks!, selCut()!.track),
     run: () => { const s = selCut(); if (s) void sq().cutEdit([transitionStep(s.item, 'cross_dissolve', 'in')]) } },
@@ -212,6 +212,23 @@ registerCommands([
     run: () => { const tr = selTrack(); if (tr) edit1('timeline.setTrack', { track: tr.id, locked: !tr.locked }) } },
   { id: 'story.cut.track.mute', scope: 'story', label: 'Mute / unmute the track', icon: VolumeX, placement: ['context'], when: () => isCut() && !!selTrack(),
     run: () => { const tr = selTrack(); if (tr) edit1('timeline.setTrack', { track: tr.id, muted: !tr.muted }) } },
+  // CE3 (proto01_animate 30 §14): sound — each a FilmCraft command on the clip or the track
+  { id: 'story.cut.gain', scope: 'story', label: 'Gain…', icon: Volume2, placement: ['inspector', 'context'], when: () => cutSel() && !isVideo(sq().tracks!, selCut()!.track),
+    run: () => { const s = selCut(); if (s) void askText({ title: 'Gain (dB)', initial: String(Math.round(s.item.gain_db * 10) / 10), placeholder: '0' }).then((v) => { const n = Number(v); if (v !== null && v.trim() !== '' && Number.isFinite(n)) void sq().cutEdit([gainStep(s.item, n)]) }) } },
+  { id: 'story.cut.fadeIn', scope: 'story', label: 'Fade in (12 frames)', icon: Volume2, placement: ['inspector', 'context'], when: () => cutSel() && !isVideo(sq().tracks!, selCut()!.track),
+    run: () => { const s = selCut(); if (s) void sq().cutEdit([fadeStep(s.item, 'in')]) } },
+  { id: 'story.cut.fadeOut', scope: 'story', label: 'Fade out (12 frames)', icon: VolumeX, placement: ['inspector', 'context'], when: () => cutSel() && !isVideo(sq().tracks!, selCut()!.track),
+    run: () => { const s = selCut(); if (s) void sq().cutEdit([fadeStep(s.item, 'out')]) } },
+  { id: 'story.cut.duck', scope: 'story', label: 'Duck under the dialogue', icon: VolumeX, placement: ['inspector', 'context'], hint: 'FilmCraft keys this sound down where a line speaks (the lines typed dialogue, this music)',
+    when: () => cutSel() && !isVideo(sq().tracks!, selCut()!.track) && selCut()!.item.kind !== 'line' && dialogueOf(sq().tracks!).length > 0,
+    run: () => { const s = selCut(); if (s) void sq().cutEdit(duckSteps(sq().tracks!, [s.item])) } },
+  { id: 'story.cut.evenDialogue', scope: 'story', label: 'Even out the dialogue (−23 LUFS)', icon: Volume2, placement: ['inspector', 'context'], hint: 'every spoken line brought to −23 LUFS by its gain (EBU R128 dialogue)',
+    when: () => isCut() && !!sq().tracks && dialogueOf(sq().tracks!).length > 0 && !sq().cutBusy, run: () => void sq().cutEdit(evenDialogueSteps(sq().tracks!)) },
+  { id: 'story.cut.track.volume', scope: 'story', label: 'Track volume…', icon: Volume2, placement: ['context'], when: () => isCut() && !!selTrack() && !isVideo(sq().tracks!, selTrack()!),
+    run: () => { const tr = selTrack(); if (tr) void askText({ title: `${tr.name}: volume (dB)`, initial: String(tr.volume_db), placeholder: '0' }).then((v) => { const n = Number(v); if (v !== null && v.trim() !== '' && Number.isFinite(n)) edit1('timeline.setTrack', { track: tr.id, volumeDb: n }) }) } },
+  { id: 'story.cut.track.duck', scope: 'story', label: 'Duck the track under the dialogue', icon: VolumeX, placement: ['context'],
+    when: () => isCut() && !!selTrack() && !isVideo(sq().tracks!, selTrack()!) && selTrack()!.items.some((i) => i.kind !== 'line') && dialogueOf(sq().tracks!).length > 0,
+    run: () => { const tr = selTrack(); if (tr) void sq().cutEdit(duckSteps(sq().tracks!, tr.items)) } },
   { id: 'story.cut.addVideoTrack', scope: 'story', label: 'Add a video track', icon: Plus, placement: ['context', 'toolbar'], when: () => isCut() && !sq().cutBusy,
     run: () => edit1('sequence.addTracks', { video: 1, audio: 0 }) },
   { id: 'story.cut.addAudioTrack', scope: 'story', label: 'Add an audio track', icon: Volume2, placement: ['context', 'toolbar'], when: () => isCut() && !sq().cutBusy,
@@ -224,15 +241,18 @@ export function cutClipMenu(): MenuItem[] {
   const t = sq().tracks
   const moveTo: MenuItem[] = s && t ? (isVideo(t, s.track) ? t.video : t.audio).filter((x) => x.id !== s.track.id).map((x) => ({
     label: `${trackRef(t, x)} · ${x.name}`, run: () => edit1('timeline.move', { moves: [{ clip: s.item.id, track: x.id, time: ticksOf(s.item.start, t.fps) }], insert: false }) })) : []
-  return [{ cmd: 'story.episode.update' }, sep, { cmd: 'story.cut.speed' }, { cmd: 'story.cut.freeze' }, sep, { cmd: 'story.cut.dissolveIn' }, { cmd: 'story.cut.dissolveOut' },
-    { cmd: 'story.cut.dipIn' }, { cmd: 'story.cut.dipOut' }, { cmd: 'story.cut.removeTransition' }, sep,
+  const video = !!s && !!t && isVideo(t, s.track)
+  const look: MenuItem[] = video ? [{ cmd: 'story.cut.dissolveIn' }, { cmd: 'story.cut.dissolveOut' }, { cmd: 'story.cut.dipIn' }, { cmd: 'story.cut.dipOut' }]
+    : [{ cmd: 'story.cut.gain' }, { cmd: 'story.cut.fadeIn' }, { cmd: 'story.cut.fadeOut' }, { cmd: 'story.cut.duck' }, { cmd: 'story.cut.evenDialogue' }]   // CE3: a sound's verbs
+  return [{ cmd: 'story.episode.update' }, sep, { cmd: 'story.cut.speed' }, { cmd: 'story.cut.freeze' }, sep, ...look, { cmd: 'story.cut.removeTransition' }, sep,
     ...(moveTo.length ? [{ label: 'Move to track', icon: ArrowRight, items: moveTo } as MenuItem, sep] : []),
     { cmd: 'story.cut.rename' }, { cmd: 'story.episode.openClip' }, sep, { cmd: 'story.cut.lift' }, { cmd: 'story.cut.rippleDelete' }, sep, { cmd: 'story.episode.undo' }, { cmd: 'story.episode.redo' }]
 }
 
 /** CE2: a track header's right-click (the track set by the caller in `trackItem`). */
 export function cutTrackMenu(): MenuItem[] {
-  return [{ cmd: 'story.cut.track.rename' }, { cmd: 'story.cut.track.lock' }, { cmd: 'story.cut.track.mute' }, sep, { cmd: 'story.cut.addVideoTrack' }, { cmd: 'story.cut.addAudioTrack' }]
+  return [{ cmd: 'story.cut.track.rename' }, { cmd: 'story.cut.track.lock' }, { cmd: 'story.cut.track.mute' }, { cmd: 'story.cut.track.volume' }, { cmd: 'story.cut.track.duck' }, sep,
+    { cmd: 'story.cut.evenDialogue' }, sep, { cmd: 'story.cut.addVideoTrack' }, { cmd: 'story.cut.addAudioTrack' }]
 }
 
 /** CE2: the tracks' empty space. */

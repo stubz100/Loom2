@@ -2915,6 +2915,11 @@
             ],
             "title": "Clip Id"
           },
+          "ducked": {
+            "default": false,
+            "title": "Ducked",
+            "type": "boolean"
+          },
           "duration": {
             "title": "Duration",
             "type": "number"
@@ -2923,6 +2928,11 @@
             "default": true,
             "title": "Enabled",
             "type": "boolean"
+          },
+          "gain_db": {
+            "default": 0.0,
+            "title": "Gain Db",
+            "type": "number"
           },
           "hold": {
             "default": false,
@@ -3016,6 +3026,17 @@
             ],
             "title": "Shot Version"
           },
+          "sound": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sound"
+          },
           "source_in": {
             "default": 0.0,
             "title": "Source In",
@@ -3043,6 +3064,9 @@
           "reverse",
           "enabled",
           "hold",
+          "gain_db",
+          "sound",
+          "ducked",
           "media_path",
           "clip_id",
           "asset_id",
@@ -3274,6 +3298,11 @@
             },
             "title": "Transitions",
             "type": "array"
+          },
+          "volume_db": {
+            "default": 0.0,
+            "title": "Volume Db",
+            "type": "number"
           }
         },
         "required": [
@@ -3283,6 +3312,7 @@
           "locked",
           "muted",
           "enabled",
+          "volume_db",
           "items",
           "transitions"
         ],
@@ -5114,6 +5144,18 @@
             "title": "Cli",
             "type": "string"
           },
+          "loudness_lufs": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": -16.0,
+            "title": "Loudness Lufs"
+          },
           "threads": {
             "default": 8,
             "title": "Threads",
@@ -5128,7 +5170,8 @@
         "required": [
           "cli",
           "threads",
-          "timeout_s"
+          "timeout_s",
+          "loudness_lufs"
         ],
         "title": "FilmCraftSettings",
         "type": "object"
@@ -29961,6 +30004,47 @@
           }
         },
         "summary": "Timeline Frame",
+        "tags": [
+          "timelines"
+        ]
+      }
+    },
+    "/timelines/{tl_id}/mix": {
+      "get": {
+        "description": "CE3: the cut's sound as FilmCraft mixes it (a WAV at the movie's loudness, kept per revision) — the Episode's viewer plays it.",
+        "operationId": "timeline_mix_timelines__tl_id__mix_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tl_id",
+            "required": true,
+            "schema": {
+              "title": "Tl Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Timeline Mix",
         "tags": [
           "timelines"
         ]

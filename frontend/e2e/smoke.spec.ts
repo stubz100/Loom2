@@ -500,7 +500,7 @@ test('a sequence (P17, D83 — in Story · Episode since 17 SY4): a fake-engine 
   const mv = await api<{ kind: string; lineage_kind: string | null; parents: string[]; params: { movie?: boolean } }>('GET', `/assets/${mj.result.asset_ids![0]}`)
   expect([mv.kind, mv.lineage_kind, mv.params.movie, mv.parents.length]).toEqual(['video', 'render', true, 1])
 })
-test("the cut's tracks (CE2, D126): a FilmCraft cut shows its every track and FilmCraft's frame; the razor cuts a take, the right-click sets its speed, undo and redo are the cut's own, a ripple trim closes up, a track is renamed from its header", async ({ page }) => {
+test("the cut's tracks (CE2–CE3, D126): a FilmCraft cut shows its every track and FilmCraft's frame; the razor cuts a take, the right-click sets its speed, undo and redo are the cut's own, a ripple trim closes up, a track is renamed from its header; a sound's gain and fade from its right-click, the cut's mix in the viewer", async ({ page }) => {
   test.setTimeout(120_000)
   // a take from the fake engine, on a new cut's V1 (through the API: the bins' + is the sequence scenario's)
   const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
@@ -512,8 +512,16 @@ test("the cut's tracks (CE2, D126): a FilmCraft cut shows its every track and Fi
   const name = `Tracks ${Date.now().toString(36)}`
   const tl = await api<{ id: string; revision: number; file: string | null }>('POST', '/timelines', { name })
   expect(tl.file).toBe('cut.fcproj')
-  await api('POST', `/timelines/${tl.id}/place`, { revision: tl.revision, clip_id: clipId, track: 'V1', frame: 0 })
-  type Tracks = { video: { name: string; items: { id: number; start: number; duration: number; speed: number }[] }[]; audio: unknown[] }
+  const placed = await api<{ timeline: { revision: number } }>('POST', `/timelines/${tl.id}/place`, { revision: tl.revision, clip_id: clipId, track: 'V1', frame: 0 })
+  // CE3: a sound on A2 — a line voiced on the fake runner, its audio placed as music
+  const voice = await api<{ id: string }>('POST', '/story/voices', { name: `Tr voice ${name}`, voice: 'af_heart' })
+  const vn = await api<{ id: string; revision: number }>('POST', '/story/flow/nodes', { type: 'dialogue', title: `${name} cue`, x: 960, y: 640 })
+  await api('PATCH', `/story/flow/nodes/${vn.id}`, { revision: vn.revision, lines: [{ speaker: null, text: 'A short cue.' }] })
+  const tts = await api<{ job_ids: string[] }>('POST', `/story/flow/nodes/${vn.id}/lines/0/voice`, { voice_id: voice.id })
+  await expect.poll(async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.id === tts.job_ids[0])?.status, { timeout: 60_000 }).toBe('done')
+  const cue = (await api<{ nodes: { id: string; lines: { audio_asset_id: string | null }[] }[] }>('GET', '/story/flow')).nodes.find((n) => n.id === vn.id)!.lines[0].audio_asset_id!
+  await api('POST', `/timelines/${tl.id}/place`, { revision: placed.timeline.revision, asset_id: cue, track: 'A2', frame: 0 })
+  type Tracks = { video: { name: string; items: { id: number; start: number; duration: number; speed: number }[] }[]; audio: { items: { gain_db: number }[]; transitions: unknown[] }[] }
   const tracks = () => api<Tracks>('GET', `/timelines/${tl.id}/tracks`)
   await openApp(page, { suite: 'story', tab: 'episode' })
   await page.locator('.seq-row', { hasText: name }).click()
@@ -553,6 +561,17 @@ test("the cut's tracks (CE2, D126): a FilmCraft cut shows its every track and Fi
   await page.locator('.modal.ask button.primary').click()
   await expect(page.locator('.cut-head', { hasText: 'Inserts' })).toHaveCount(1)
   expect((await tracks()).video[1].name).toBe('Inserts')
+  // CE3: the sound's right-click — Gain… and Fade in; the cut's mix reaches the viewer
+  const sound = page.locator('.cut-clip.k-sound')
+  await expect(sound).toHaveCount(1)
+  await contextChoose(page, sound, 'Gain…')
+  await page.locator('.modal.ask input').fill('-6')
+  await page.locator('.modal.ask button.primary').click()
+  await expect(sound).toContainText('−6 dB')
+  await contextChoose(page, sound, 'Fade in (12 frames)')
+  await expect.poll(async () => (await tracks()).audio[1].transitions.length, { timeout: 10_000 }).toBe(1)
+  expect((await tracks()).audio[1].items[0].gain_db).toBe(-6)
+  await expect(page.getByTestId('cut-mix')).toHaveAttribute('src', /^blob:/, { timeout: 15_000 })
 })
 
 test('a stage (P13 / ST1, D81): a new stage gets a set and a figure from the Library, the Outliner lists them, the document saves and survives a reload', async ({ page }) => {

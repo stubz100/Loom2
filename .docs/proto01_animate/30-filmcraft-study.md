@@ -1,6 +1,6 @@
 # 30 · RC4's study — FilmCraft for the cut editor
 
-Status: **study, 2026-10-24; answered the same day → D126 (§10); CE1 built (§11); CE2 built (§13); CE3 next.** D96 planned RC4 as "FilmCraft reviewed as 03 reviewed EffectCraft
+Status: **study, 2026-10-24; answered the same day → D126 (§10); CE1 built (§11); CE2 built (§13); CE3 built (§15); CE4 next.** D96 planned RC4 as "FilmCraft reviewed as 03 reviewed EffectCraft
 (what to reuse, how), then the multi-track cut editor that replaces the single-lane Episode" ([05](05-flow-nodes-as-shot-recipes.md)
 §6), with O6 (a scene grade and shot-match in the cut, [06](06-continuity-across-shots.md)) attached. RC1–RC3 are built
 ([28](28-recipe-graph.md), [29](29-movie-render.md)); this is the study, measured where it could be (§3, the probe E32).
@@ -168,7 +168,7 @@ Not in it: speed ramps (not rendered by FilmCraft), multicam, the audio mixer's 
 | **FC1 · the FCPXML dissolve** ✓ with this study | spine clips end to end, the transition on the cut over the handles (§3a) | 0.5 |
 | **CE1 · the engine** | `engine/filmcraft.pin.json` + `scripts/build_filmcraft.py` (`--check` in CI), `loom2/filmcraft.py` (the session, as `effectcraft.py`), a fake for the tests; the cut's `.fcproj` built by commands from the document, with conformed media; the movie by `file.exportMedia`; a rig check (memory beside ComfyUI, an episode-length cut) | 3 |
 | **CE2 · tracks** ✓ built 2026-10-24 (§13) | the document's schema step to tracks; the multi-track timeline in Story · Episode (V1–V2, A1–A3, `+`); the edits as commands; the viewer's frames from the session | 4–5 |
-| **CE3 · sound** | the lines as A1 clips, music and effects from the Catalogue's audio, gain and volume keys, ducking, loudness at export; sound in the page | 2 |
+| **CE3 · sound** ✓ built 2026-10-24 (§15) | the lines as A1 clips, music and effects from the Catalogue's audio, gain and volume keys, ducking, loudness at export; sound in the page | 2 |
 | **CE4 · colour (O6)** | *Grade the scene* (adjustment layer per scene group), *Match to…*, presets and LUT looks | 2 |
 | **CE5 · captions and delivery** | the caption track from the lines, burn-in, H.264 / ProRes presets; the Resolve folder kept | 1–2 |
 
@@ -340,3 +340,52 @@ FilmCraft (225 frames at 960×540 in 2.8 s); edits round-trip in 23–29 ms. CE1
 ![A clip's right-click](img/30-ce2-clip-menu.jpg)
 ![A track header's right-click](img/30-ce2-track-menu.jpg)
 ![The razor tool](img/30-ce2-razor.jpg)
+
+## 14. CE3 · sound — the plan (2026-10-24)
+
+**The commands, probed on the real binary** (a copy of CE2's A1 cut: a line on A1, a sound on A2): `clip.audioGain {db, mode: set}` sets a
+clip's gain; `sequence.applyAudioTransition {clip, frames, edge}` puts a constant-power fade on a clip's head or tail (the `edge` the video
+one takes; its listed signature omits it); `essentialSound.setType` (dialogue / music / sfx / ambience) then `essentialSound.generateDucking`
+keys the music down 15 dB under the dialogue (volume keyframes on the music clip); `essentialSound.autoMatch` brought the line from
+−15.6 to −23 LUFS by gain; `timeline.setTrack {volumeDb}` sets a track's volume. **A WAV mixdown of the 9.4 s cut takes 0.11 s** in the
+session, with or without `loudnessLufs`.
+
+**What CE3 adds:**
+
+- **The lines are the author's**: the cut remembers the lines it has placed (`loom2.lines` on its sequence), so a line the author lifts
+  stays out (the export's sync adds only lines never placed) and a line moved to another audio track keeps its subtitle there.
+- **Volume**: a clip's *Gain…*, *Fade in*, *Fade out* (12 frames, constant power); a track's *Volume…*.
+- **Ducking**: *Duck under the dialogue* on a music or effects clip or track — the lines typed dialogue, the clips music, FilmCraft's
+  ducking keys them down; *Even out the dialogue* brings the lines to −23 LUFS (EBU R128 dialogue).
+- **Loudness**: the movie is normalised to **−16 LUFS** by default (online delivery; EBU R128 broadcast is −23) — Settings › FilmCraft ›
+  loudness, and *off* leaves the mix as it is. The page's mix uses the same, so what plays is what the movie will be.
+- **Sound in the page**: FilmCraft's WAV mixdown of the cut (`GET /timelines/{id}/mix`, rendered on demand and kept per revision) plays
+  with the picture; while it plays, its clock moves the playhead.
+
+Slices: **CE3a** the server (the lines' registry, the mix, loudness, the audio verbs in the whitelist); **CE3b** the client (the verbs in the
+menus and the Inspector, the mix in the viewer). Tests on the fake, an e2e step, a rig check (gain, fades, ducking, the mix and the movie's
+loudness measured).
+
+## 15. CE3 as built (2026-10-24)
+
+- **The lines are the author's.** The cut records the lines it places (`loom2.lines` on its sequence); a placed line that is gone was lifted
+  and stays out; a line is read on any audio track (moved to A2, its subtitle follows it). A lifted line's key first fell through to the
+  re-voiced check with no clip — the test caught it.
+- **Sound verbs** (`EDIT_COMMANDS` gained `clip.audioGain`, `essentialSound.setType` / `generateDucking` / `autoMatch`, `clipMixer.set`;
+  the client builds the steps, `cut.ts`): a clip's *Gain…*, *Fade in*, *Fade out* (12 frames, constant power, either edge), *Duck under the
+  dialogue* (a clip, or a whole track from its header), *Even out the dialogue (−23 LUFS)*, a track's *Volume…*. The tracks carry a clip's
+  gain, sound type and whether it is ducked, a track's volume; the blocks and headers say them (−6 dB · ducked), a line shows its words.
+- **Loudness**: Settings › FilmCraft › `loudness_lufs` (−16 by default; *None* leaves the mix as it is) normalises the movie and the page's mix.
+- **The mix** (`GET /timelines/{id}/mix`): FilmCraft's WAV of every audio track at that loudness, kept per revision in
+  `timelines/<id>/mix/` (the older go). The viewer loads it when the cut changes and, while playing, its clock moves the playhead.
+- **Rig** (`scripts/ce3_acceptance.py`, 7/7, the real FilmCraft on A1's records, tones apart by band): the mix 9.38 s rendered in 115 ms
+  (4 ms kept); a lifted line stays out; gain −6.00 dB and with the track's volume −12.00 dB (measured against the line — the mix is
+  normalised as a whole, so the music alone moves less: the first check measured it alone and failed for that reason); fades −14 dB at the
+  head and tail; the music ducked 16.4 dB where the line speaks; the line evened out by −10.4 dB; **the movie measured −16.0 LUFS**
+  (ITU-R BS.1770-4, gated, in the script) for Settings' −16.
+- Tests: `test_cuts_ce3.py` (2) on the fake (which mixes the audio tracks at their gains and volumes); `cut.test.ts` +1; the tracks e2e
+  scenario's sound steps (Gain… and Fade in from the sound's right-click, the mix in the viewer).
+
+![A sound selected: its gain, ducking and fades; a line by its words](img/30-ce3-sound.jpg)
+![A sound's right-click](img/30-ce3-sound-menu.jpg)
+![An audio track's header](img/30-ce3-track-menu.jpg)

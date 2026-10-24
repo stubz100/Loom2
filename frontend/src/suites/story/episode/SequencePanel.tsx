@@ -11,7 +11,7 @@ import { useSession } from '../../../store/session'
 import { useAnimate } from '../../animate/animateStore'
 import { duration, ticks } from './lane'
 import { lastMovie, useSequence } from './sequenceStore'
-import { findItem, itemLabel, trackRef, transitionInto } from './cut'
+import { db, findItem, itemLabel, isVideo, trackRef, transitionInto } from './cut'
 import { tc } from './lane'
 import { useStory } from '../storyStore'
 import { binItem, laneBelowFormat, laneChecklist } from './sequenceCommands'
@@ -168,9 +168,11 @@ export function SequenceInspector() {
         <div className="kv"><span>at</span><span>{tc(Math.round(cutSel.item.start), tracks.fps)} for {Math.round(cutSel.item.duration)} frames</span></div>
         <div className="kv"><span>source</span><span>from {cutSel.item.source_in.toFixed(2)} s{cutSel.item.speed !== 1 ? ` · ${Math.round(cutSel.item.speed * 100)} %` : ''}{cutSel.item.hold ? ' · a frame held' : ''}</span></div>
         {cutSel.item.shot_id && <div className="kv"><span>shot</span><span>{cutSel.item.shot_id} · {cutSel.item.shot_version}</span></div>}
+        {!isVideo(tracks, cutSel.track) && <div className="kv"><span>sound</span><span>{db(cutSel.item.gain_db)}{cutSel.item.sound ? ` · ${cutSel.item.sound.toLowerCase()}` : ''}{cutSel.item.ducked ? ' · ducked under the dialogue' : ''}{cutSel.track.volume_db ? ` · track ${db(cutSel.track.volume_db)}` : ''}</span></div>}
         {transitionInto(cutSel.track, cutSel.item) && <div className="kv"><span>in</span><span>{transitionInto(cutSel.track, cutSel.item)!.effect.replace(/_/g, ' ')} · {Math.round(transitionInto(cutSel.track, cutSel.item)!.duration)} frames</span></div>}
         {selChange && <div className="kv changed"><span>changed</span><span>{selChange.name} {selChange.version} is the approved take now <CommandButton id="story.episode.update" text label="Update" /></span></div>}
-        <div className="verbs"><CommandRow ids={['story.cut.speed', 'story.cut.freeze', 'story.cut.dissolveIn', 'story.cut.dissolveOut', 'story.cut.removeTransition', 'story.episode.openClip', 'story.cut.lift', 'story.cut.rippleDelete']} /></div>
+        <div className="verbs"><CommandRow ids={isVideo(tracks, cutSel.track) ? ['story.cut.speed', 'story.cut.freeze', 'story.cut.dissolveIn', 'story.cut.dissolveOut', 'story.cut.removeTransition', 'story.episode.openClip', 'story.cut.lift', 'story.cut.rippleDelete']
+          : ['story.cut.gain', 'story.cut.fadeIn', 'story.cut.fadeOut', 'story.cut.duck', 'story.cut.evenDialogue', 'story.cut.removeTransition', 'story.cut.lift', 'story.cut.rippleDelete']} /></div>
       </>}
       {c && !current.file && <>
         <h4>Clip {selected! + 1}</h4>

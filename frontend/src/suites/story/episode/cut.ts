@@ -109,3 +109,27 @@ export function trackDrop<C extends { id: string; asset_id?: string | null }>(it
 export function transitionStep(item: CutItem, effect: 'cross_dissolve' | 'dip_to_black', edge: 'in' | 'out', frames = 12): Step {
   return { id: 'sequence.applyVideoTransition', params: { clip: item.id, effect, frames: Math.max(1, Math.min(frames, Math.floor(item.duration) - 1)), edge } }
 }
+
+// ---- CE3 (proto01_animate 30 §14): sound ----------------------------------------------------------------------------------------
+/** A constant-power fade on a sound's head or tail (FilmCraft's audio transition takes the edge the video one does). */
+export function fadeStep(item: CutItem, edge: 'in' | 'out', frames = 12): Step {
+  return { id: 'sequence.applyAudioTransition', params: { clip: item.id, frames: Math.max(1, Math.min(frames, Math.floor(item.duration) - 1)), edge } }
+}
+export const gainStep = (item: CutItem, db: number): Step => ({ id: 'clip.audioGain', params: { clips: [item.id], db, mode: 'set' } })
+/** Every spoken line on the cut's audio tracks. */
+export const dialogueOf = (t: CutTracks): CutItem[] => t.audio.flatMap((tr) => tr.items.filter((i) => i.kind === 'line'))
+/** *Duck under the dialogue*: the lines typed dialogue, these clips music, FilmCraft keys them down where a line speaks. */
+export function duckSteps(t: CutTracks, music: CutItem[]): Step[] {
+  const lines = dialogueOf(t).map((i) => i.id)
+  const ids = music.filter((i) => i.kind !== 'line').map((i) => i.id)
+  if (!lines.length || !ids.length) return []
+  return [{ id: 'essentialSound.setType', params: { clips: lines, type: 'dialogue' } }, { id: 'essentialSound.setType', params: { clips: ids, type: 'music' } },
+    { id: 'essentialSound.generateDucking', params: { clips: ids } }]
+}
+/** *Even out the dialogue*: every line brought to −23 LUFS (EBU R128 dialogue) by its gain. */
+export function evenDialogueSteps(t: CutTracks): Step[] {
+  const lines = dialogueOf(t).map((i) => i.id)
+  return lines.length ? [{ id: 'essentialSound.setType', params: { clips: lines, type: 'dialogue' } }, { id: 'essentialSound.autoMatch', params: { clips: lines, target: -23 } }] : []
+}
+/** A gain or volume in dB as the editor writes it (−6 dB, +3 dB, 0 dB). */
+export const db = (v: number): string => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(Math.round(v * 10) / 10)} dB`

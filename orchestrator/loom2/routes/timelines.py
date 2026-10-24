@@ -289,6 +289,24 @@ async def timeline_redo(svc: Svc, tl_id: str, body: CutUndo):
     return await _cut_call(svc, tl_id, body.revision, lambda store, tl, ws, cat: [store.cuts.undo(tl, redo=True)])
 
 
+@router.get("/timelines/{tl_id}/mix")
+async def timeline_mix(svc: Svc, tl_id: str):
+    """CE3: the cut's sound as FilmCraft mixes it (a WAV at the movie's loudness, kept per revision) — the Episode's viewer plays it."""
+    from fastapi.responses import FileResponse
+
+    from ..cuts import CutError
+    ws, cat, _ = svc.require_project()
+    store = _store(svc, ws, cat)
+    tl = await asyncio.to_thread(store.get, tl_id)
+    if tl is None:
+        raise HTTPException(404, "sequence not found")
+    try:
+        path = await asyncio.to_thread(store.cuts.mix, tl, svc.app.settings.filmcraft.loudness_lufs)
+    except (CutError, RuntimeError) as e:
+        raise HTTPException(422, str(e))
+    return FileResponse(path, media_type="audio/wav", headers={"Cache-Control": "no-store"})
+
+
 @router.get("/timelines/{tl_id}/frame")
 async def timeline_frame(svc: Svc, tl_id: str, t: float = 0.0, side: int = 960):
     """CE2: the cut's frame at `t` seconds as PNG from FilmCraft's session, its longest side `side` — the Episode's viewer."""

@@ -11,7 +11,9 @@ edit.clear, sequence.applyVideoTransition (centred on the cut), metadata.set, cl
 CE2's editor commands as the probe saw the real ones do them — timeline.trim (regular / ripple), roll, slip, slide, razor (the
 dissolve follows the new piece), move (across tracks, its transitions dropped), edit.rippleDelete, clip.speedDuration, clip.frameHold,
 timeline.setTrack, sequence.addTracks, timeline.select, edit.copy / pasteAttributes, edit.undo / redo (snapshots), and
-file.exportInterchange (a small FCPXML or EDL of V1). A frame is a flat colour: R = the frame
+file.exportInterchange (a small FCPXML or EDL of V1); CE3's sound — clip.audioGain, the audio fades (an edge), essentialSound.setType /
+generateDucking / autoMatch (recorded on the clip), a track's volume, and a WAV mixdown (every audio track at its clips' gain and its
+volume, muted tracks left out; fades and ducking recorded, not shaped — the rig measures the real ones). A frame is a flat colour: R = the frame
 number, G = how many clips V1 holds, B = 128. The export writes an H.264 MP4 at the sequence's size — each V1 clip a flat colour (its media
 item's id × 40), a dissolve blended — and A1's audio clips mixed into one AAC track where they sit.
 """
@@ -268,6 +270,8 @@ class Fake:
             it["metadata"].update(p.get("fields") or {p["field"]: p["value"]})
             return {"item": int(p["item"]), "metadata": it["metadata"], "changed": True}
         if cid == "file.exportMedia":
+            if p.get("format") == "wav":                               # CE3: the cut's mix
+                return self.export_wav(Path(p["path"]))
             if p.get("format") == "png":                               # a PNG sequence: frame000.png … beside `path`, at `scale`
                 return self.export_png(Path(p["path"]), float(p.get("scale", 1.0)))
             return self.export(Path(p["path"]))
@@ -288,10 +292,46 @@ class Fake:
     def editor(self, cid: str, p: dict):
         if cid == "timeline.setTrack":
             t = self.track(p["track"])
-            for k, v in (("name", "name"), ("locked", "locked"), ("muted", "muted"), ("enabled", "enabled")):
+            for k, v in (("name", "name"), ("locked", "locked"), ("muted", "muted"), ("enabled", "enabled"), ("volume_db", "volumeDb")):
                 if v in p:
                     t[k] = p[v]
             return None
+        if cid == "clip.audioGain":
+            out = []
+            for c in p.get("clips") or []:
+                _, ti = self.find_clip(int(c))
+                ti["gain_db"] = float(p.get("db", 0.0)) + (ti.get("gain_db", 0.0) if p.get("mode") == "adjust" else 0.0)
+                out.append({"clip": ti["id"], "gainDb": ti["gain_db"]})
+            return {"clips": len(out), "gainDb": out}
+        if cid == "sequence.applyAudioTransition":
+            t, ti = self.find_clip(int(p["clip"]))
+            dur = int(p.get("frames", 12)) * TICK // self.fps()
+            out_edge = p.get("edge") == "out"
+            xid = self.new_id()
+            t["transitions"].append({"id": xid, "effect": {"effect": p.get("effect") or "constant_power", "enabled": True, "params": {}},
+                                     "start": ti["start"] + ti["duration"] - dur if out_edge else ti["start"], "duration": dur,
+                                     "from": ti["id"] if out_edge else None, "to": None if out_edge else ti["id"], "align": "Start"})
+            return {"transition": xid}
+        if cid == "essentialSound.setType":
+            for c in p.get("clips") or []:
+                _, ti = self.find_clip(int(c))
+                ti["essential"] = {"kind": str(p.get("type", "")).capitalize()}
+            return {"clips": len(p.get("clips") or []), "type": str(p.get("type", "")).capitalize()}
+        if cid == "essentialSound.generateDucking":
+            out = []
+            for c in p.get("clips") or []:
+                _, ti = self.find_clip(int(c))
+                ti["effects"] = [e for e in ti.get("effects", []) if e.get("effect") != "volume"] + [   # FilmCraft keys the clip's volume down
+                    {"effect": "volume", "enabled": True, "params": {"level": {"value": {"Float": 0.0}, "keyframes": [{"time": 0, "value": {"Float": -15.0}}]}}}]
+                out.append({"clip": ti["id"], "keyframes": [{"levelDb": -15.0}]})
+            return {"clips": out}
+        if cid == "essentialSound.autoMatch":
+            out = []
+            for c in p.get("clips") or []:
+                _, ti = self.find_clip(int(c))
+                ti["gain_db"] = float(p.get("target", -23.0)) + 13.0             # a stand-in: a tone measured at −13 LUFS
+                out.append({"clip": ti["id"], "gainDb": ti["gain_db"], "targetLufs": p.get("target", -23.0)})
+            return {"clips": out}
         if cid == "timeline.trim":
             t, ti = self.find_clip(int(p["clip"]))
             d = self.delta(p)
@@ -457,6 +497,34 @@ class Fake:
         scale = min(1.0, max_side / max(w, h)) if max_side else 1.0
         f = round(seconds * s["settings"]["frame_rate"]["num"])
         return png(max(1, round(w * scale)), max(1, round(h * scale)), (f % 256, len(s["video_tracks"][0]["items"]) % 256, 128))
+
+    def mixdown(self, sr: int = 48000):
+        import numpy as np
+        import soundfile as sf
+        s = self.sequence()
+        end = max([ti["start"] + ti["duration"] for t in s["video_tracks"] + s["audio_tracks"] for ti in t["items"]] or [0])
+        audio = np.zeros(int(round(end / TICK * sr)) + 1, dtype=np.float32)
+        for t in s["audio_tracks"]:
+            if t.get("muted"):
+                continue
+            for ti in t["items"]:
+                src = self.items()[str(ti["item"])]["kind"]["Media"]["media"]["File"]["path"]
+                data, rate = sf.read(src, dtype="float32", always_2d=True)
+                mono = data.mean(axis=1)
+                if rate != sr:
+                    mono = np.interp(np.linspace(0, len(mono) - 1, int(len(mono) * sr / rate)), np.arange(len(mono)), mono).astype(np.float32)
+                mono = mono * 10 ** ((ti.get("gain_db", 0.0) + t.get("volume_db", 0.0)) / 20)
+                at = int(round(ti["start"] / TICK * sr))
+                seg = mono[: max(0, min(len(mono), len(audio) - at, int(ti["duration"] / TICK * sr)))]
+                audio[at:at + len(seg)] += seg
+        return audio, sr
+
+    def export_wav(self, out: Path) -> dict:
+        import soundfile as sf
+        audio, sr = self.mixdown()
+        out.parent.mkdir(parents=True, exist_ok=True)
+        sf.write(str(out), audio, sr, subtype="PCM_16")
+        return {"path": str(out), "result": {"frames": len(audio)}}
 
     def export_png(self, out: Path, scale: float) -> dict:
         s = self.sequence()

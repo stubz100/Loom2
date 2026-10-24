@@ -101,15 +101,26 @@ def lane(doc: dict, fps: int) -> tuple[list[TimelineClip], list[int], dict | Non
 
 
 def lines(doc: dict) -> list[dict]:
-    """The spoken lines loom2 placed on A1: {track item, start tick, node, line, asset}."""
+    """The spoken lines on the cut's audio tracks (A1, or wherever the author moved them, CE3): {track item, start tick, node, line, asset}."""
     its = items(doc)
     _, _, seq = sequence(doc)
     out = []
-    for ti in (seq["audio_tracks"][0]["items"] if seq["audio_tracks"] else []):
-        meta = its.get(str(ti["item"]), {}).get("metadata", {})
-        if "loom2.line" in meta:
-            out.append({"clip": ti["id"], "start": ti["start"], "node": meta.get("loom2.node"), "line": int(meta["loom2.line"]), "asset": meta.get("loom2.asset")})
+    for tr in seq["audio_tracks"]:
+        for ti in tr["items"]:
+            meta = its.get(str(ti["item"]), {}).get("metadata", {})
+            if "loom2.line" in meta:
+                out.append({"clip": ti["id"], "start": ti["start"], "node": meta.get("loom2.node"), "line": int(meta["loom2.line"]), "asset": meta.get("loom2.asset")})
     return out
+
+
+def placed_lines(doc: dict) -> set[str]:
+    """CE3: the lines the cut has placed (`node:line` in its sequence's `loom2.lines`) — a placed line missing now was lifted by the author."""
+    _, seq_item, _ = sequence(doc)
+    raw = seq_item.get("metadata", {}).get("loom2.lines") or "[]"
+    try:
+        return set(json.loads(raw))
+    except json.JSONDecodeError:
+        return set()
 
 
 def _effect(tr: dict) -> str:
@@ -131,6 +142,9 @@ class CutItem(BaseModel):
     reverse: bool = False
     enabled: bool = True
     hold: bool = False
+    gain_db: float = 0.0                            # CE3: the clip's gain
+    sound: str | None = None                        # CE3: its sound type for FilmCraft's ducking (Dialogue, Music, Sfx, Ambience)
+    ducked: bool = False                            # CE3: its volume keyed (FilmCraft's ducking under the dialogue)
     media_path: str | None = None
     clip_id: str | None = None                      # loom2's links: a take's clip and shot, a line's node and index, an asset
     asset_id: str | None = None
@@ -158,6 +172,7 @@ class CutTrack(BaseModel):
     locked: bool = False
     muted: bool = False
     enabled: bool = True
+    volume_db: float = 0.0                          # CE3: the track's volume
     items: list[CutItem] = Field(default_factory=list)
     transitions: list[CutTransition] = Field(default_factory=list)
 
@@ -214,6 +229,8 @@ def tracks(doc: dict) -> CutTracks:
             out.append(CutItem(id=ti["id"], item=ti["item"], name=ti.get("name") or it.get("name", ""), kind=_kind(it), start=f(ti["start"]),  # type: ignore[arg-type]
                                duration=f(ti["duration"]), source_in=round(ti.get("source_in", 0) / TICK, 4), speed=float(ti.get("speed") or 1.0),
                                reverse=bool(ti.get("reverse")), enabled=ti.get("enabled", True) is not False, hold=ti.get("frame_hold") is not None,
+                               gain_db=round(float(ti.get("gain_db") or 0.0), 2), sound=(ti.get("essential") or {}).get("kind") or None,
+                               ducked=any(e.get("effect") == "volume" and (e.get("params", {}).get("level") or {}).get("keyframes") for e in ti.get("effects") or []),
                                media_path=(media.get("File") or {}).get("path"), clip_id=meta.get("loom2.clip") or None,
                                asset_id=meta.get("loom2.asset") or None, shot_id=meta.get("loom2.shot") or None,
                                shot_version=meta.get("loom2.version") or None, node_id=meta.get("loom2.node") or None,
@@ -221,7 +238,7 @@ def tracks(doc: dict) -> CutTracks:
         trans = [CutTransition(id=x["id"], effect=_effect(x), start=f(x["start"]), duration=f(x["duration"]), **{"from": x.get("from")}, to=x.get("to"))
                  for x in t.get("transitions", [])]
         return CutTrack(id=t["id"], kind=kind, name=t.get("name", ""), locked=bool(t.get("locked")), muted=bool(t.get("muted")),  # type: ignore[arg-type]
-                        enabled=t.get("enabled", True) is not False, items=out, transitions=trans)
+                        enabled=t.get("enabled", True) is not False, volume_db=round(float(t.get("volume_db") or 0.0), 2), items=out, transitions=trans)
     video = [one(t, "video") for t in seq.get("video_tracks", [])]
     audio = [one(t, "audio") for t in seq.get("audio_tracks", [])]
     end = max([i.start + i.duration for tr in video + audio for i in tr.items] or [0.0])
@@ -234,6 +251,8 @@ EDIT_COMMANDS = frozenset({
     "timeline.setTrack", "timeline.select", "edit.rippleDelete", "edit.clear", "sequence.applyVideoTransition",
     "sequence.applyAudioTransition", "sequence.setTransition", "sequence.closeGap", "sequence.addTracks", "sequence.deleteTrack",
     "clip.speedDuration", "clip.frameHold", "clip.insertFrameHoldSegment", "clip.enable", "clip.rename",
+    # CE3: sound — a clip's gain, the dialogue / music types FilmCraft ducks by, the ducking itself, the dialogue's loudness, volume keys
+    "clip.audioGain", "essentialSound.setType", "essentialSound.generateDucking", "essentialSound.autoMatch", "clipMixer.set",
 })
 REMOVE_TRANSITION = "loom2.removeTransition"      # FilmCraft has no command for it (764723f): the clip lifted and placed again, its attributes kept
 
@@ -292,8 +311,9 @@ class Cuts:
         trans = [{"id": "sequence.applyVideoTransition", "params": {"clip": placed[i], "effect": "cross_dissolve", "frames": tl.overlaps[i], "edge": "in"}}
                  for i in range(1, n) if tl.overlaps[i] > 0]
         route = [{"id": "metadata.set", "params": {"item": seq_id, "fields": {"loom2.route": json.dumps(tl.route) if tl.route is not None else ""}}}]
-        line_steps = self._line_steps(doc, tl, s)
-        self.fc.batch(trans + route + line_steps)
+        line_steps, placed = self._line_steps(doc, tl, s)
+        registry = [{"id": "metadata.set", "params": {"item": seq_id, "fields": {"loom2.lines": json.dumps(sorted(placed))}}}]
+        self.fc.batch(trans + route + registry + line_steps)
         used = set(media.values()) | {st["params"]["item"] for st in line_steps}
         unused = [int(k) for k, it in items(doc).items() if ({"loom2.clip", "loom2.line"} & set(it.get("metadata", {}))) and int(k) not in used]
         if unused:                                                  # loom2's own items no use holds any more (never anything else in the project)
@@ -470,6 +490,22 @@ class Cuts:
         self._open(tl, change=False)
         return self.fc.frame(seconds, side)
 
+    def mix(self, tl: Timeline, loudness: float | None) -> Path:
+        """CE3: the cut's sound as FilmCraft mixes it — a WAV of every audio track (gain, fades, ducking, the tracks' volume), at the movie's
+        loudness — kept per revision in `timelines/<id>/mix/` (the older ones go): what the page plays with the picture."""
+        out = self.path(tl.id).parent / "mix" / f"{tl.revision}.wav"
+        if out.is_file():
+            return out
+        self._open(tl, change=False)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        part = out.with_name(f"{tl.revision}.part.wav")
+        self.fc.command("file.exportMedia", {"path": str(part), "format": "wav", "wait": True, **({"loudnessLufs": loudness} if loudness is not None else {})})
+        part.replace(out)
+        for old in out.parent.glob("*.wav"):
+            if old != out:
+                old.unlink(missing_ok=True)
+        return out
+
     def interchange(self, tl: Timeline, fmt: str, out: Path) -> str:
         """FilmCraft's own FCPXML or EDL of the cut (everything the project holds), written to `out`."""
         self._open(tl, change=False)
@@ -509,11 +545,11 @@ class Cuts:
         doc["project"]["items"][str(item)] = {"metadata": {"loom2.clip": cid, "loom2.shot": use[1], "loom2.version": use[2], "loom2.node": use[3]}}   # seen by the next use
         return item
 
-    def _line_steps(self, doc: dict, tl: Timeline, s: list[int]) -> list[dict]:
+    def _line_steps(self, doc: dict, tl: Timeline, s: list[int]) -> tuple[list[dict], set[str]]:
         """The spoken lines on A1 where the exports lay them (`line_spans`), a line that would overlap the one before it starting where
-        that one ends; each line's audio imported once with its links."""
+        that one ends; each line's audio imported once with its links. Returns the steps and the lines placed (`node:line`)."""
         if self.audio_of is None:
-            return []
+            return [], set()
         have = {it["metadata"].get("loom2.asset"): int(k) for k, it in items(doc).items() if "loom2.line" in it.get("metadata", {})}
         placed: list[tuple[int, int, dict]] = []                                  # (start tick at the lane's rate, length in ticks, cue)
         for i, c in enumerate(tl.clips):
@@ -523,6 +559,7 @@ class Cuts:
                     placed.append((s[i] + a0, max(1, round(float(cue["duration_s"]) * tl.fps)), cue))
         placed.sort(key=lambda x: x[0])
         steps: list[dict] = []
+        keys = {f"{cue.get('node')}:{cue.get('line')}" for _, _, cue in placed}
         end = 0
         for start, length, cue in placed:
             start = max(start, end)
@@ -531,7 +568,7 @@ class Cuts:
             if item is None:
                 item = have[cue.get("asset")] = self._line_item(cue)
             steps.append({"id": "timeline.place", "params": {"item": item, "track": "A1", "time": ticks(start, tl.fps), "insert": False, "video": False}})
-        return steps
+        return steps, keys
 
     def _line_item(self, cue: dict) -> int:
         """A spoken line's audio imported as a project item with its links."""
@@ -544,13 +581,17 @@ class Cuts:
     def sync_lines(self, tl: Timeline) -> int:
         """Before an export or the movie: a voiced line not on A1 yet is placed where the exports lay it (its shot's lines evenly across the
         shot's run on V1, pushed past a clip already there); a line voiced anew plays its new audio in place; a line the author moved stays.
-        One change (one undo step) when anything moved; none otherwise. Returns how many lines changed. CE3 makes the lines the author's."""
+        One change (one undo step) when anything moved; none otherwise. Returns how many lines changed. CE3: the lines are the author's — a line
+        on any audio track counts, and a line the cut placed before that is gone now was lifted by the author and stays out."""
         if self.audio_of is None:
             return 0
         p = self.path(tl.id)
-        cut = tracks(read(p))
+        doc = read(p)
+        cut = tracks(doc)
+        seq_id = cut.sequence
         a1 = cut.audio[0].items if cut.audio else []
-        have = {(i.node_id, i.line): i for i in a1 if i.kind == "line"}
+        have = {(i.node_id, i.line): i for t in cut.audio for i in t.items if i.kind == "line"}
+        gone = placed_lines(doc)
         missing: list[tuple[float, dict]] = []
         revoiced: list[tuple[CutItem, dict]] = []
         for first, start, end in runs(cut):
@@ -560,7 +601,8 @@ class Cuts:
                     continue
                 ex = have.get((cue.get("node"), cue.get("line")))
                 if ex is None:
-                    missing.append((start + a0, cue))
+                    if f"{cue.get('node')}:{cue.get('line')}" not in gone:              # lifted by the author: it stays out
+                        missing.append((start + a0, cue))
                 elif ex.asset_id != cue.get("asset"):
                     revoiced.append((ex, cue))
         if not missing and not revoiced:
@@ -578,6 +620,8 @@ class Cuts:
                         start = b
                 spans = sorted(spans + [(start, start + length)])
                 steps.append({"id": "timeline.place", "params": {"item": self._line_item(cue), "track": "A1", "time": ticks(start, cut.fps), "insert": False, "video": False}})
+            known = sorted(gone | {f"{c.get('node')}:{c.get('line')}" for _, c in missing})
+            steps.append({"id": "metadata.set", "params": {"item": seq_id, "fields": {"loom2.lines": json.dumps(known)}}})
             self.fc.batch(steps)
             self._markers(p)
             return len(steps)
@@ -606,7 +650,7 @@ def cut_srt(cut: CutTracks, lines_of: Callable[[TimelineClip], list[str]]) -> st
     """CE2: the SubRip of a FilmCraft cut — each shot's lines across where its run sits on V1 (laid evenly, as the lane's SRT), a voiced
     line where its clip sits on A1."""
     from .timelines import srt_tc
-    voiced = {(i.node_id, i.line): (i.start, i.start + i.duration) for t in cut.audio[:1] for i in t.items if i.kind == "line"}
+    voiced = {(i.node_id, i.line): (i.start, i.start + i.duration) for t in cut.audio for i in t.items if i.kind == "line"}
     cues: list[tuple[float, float, str]] = []
     for i, start, end in runs(cut):
         if not i.node_id:

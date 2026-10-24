@@ -93,6 +93,7 @@ class FilmCraftSettings(BaseModel):
     cli: str = os.environ.get("LOOM2_FILMCRAFT_CLI") or str(REPO_ROOT / "engine" / "tools" / "filmcraft" / "filmcraft-cli.exe")   # the env: the offline suite keeps it unbuilt
     threads: int = 8            # RAYON_NUM_THREADS of the session (E32: a warm frame is 10 ms at ½; D113's cap beside a GPU job)
     timeout_s: float = 120.0    # a request past this kills the session (the movie's export is a job of its own, never sent through it)
+    loudness_lufs: float | None = -16.0   # CE3: the movie's (and the page's mix's) integrated loudness — online delivery; EBU R128 broadcast is −23; None: as mixed
 
 
 class MotionSettings(BaseModel):

@@ -3418,6 +3418,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/timelines/{tl_id}/mix": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Timeline Mix
+         * @description CE3: the cut's sound as FilmCraft mixes it (a WAV at the movie's loudness, kept per revision) — the Episode's viewer plays it.
+         */
+        get: operations["timeline_mix_timelines__tl_id__mix_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/timelines/{tl_id}/place": {
         parameters: {
             query?: never;
@@ -4689,6 +4709,11 @@ export interface components {
             asset_id: string | null;
             /** Clip Id */
             clip_id: string | null;
+            /**
+             * Ducked
+             * @default false
+             */
+            ducked: boolean;
             /** Duration */
             duration: number;
             /**
@@ -4696,6 +4721,11 @@ export interface components {
              * @default true
              */
             enabled: boolean;
+            /**
+             * Gain Db
+             * @default 0
+             */
+            gain_db: number;
             /**
              * Hold
              * @default false
@@ -4731,6 +4761,8 @@ export interface components {
             shot_id: string | null;
             /** Shot Version */
             shot_version: string | null;
+            /** Sound */
+            sound: string | null;
             /**
              * Source In
              * @default 0
@@ -4828,6 +4860,11 @@ export interface components {
             name: string;
             /** Transitions */
             transitions: components["schemas"]["CutTransition"][];
+            /**
+             * Volume Db
+             * @default 0
+             */
+            volume_db: number;
         };
         /**
          * CutTracks
@@ -5567,6 +5604,11 @@ export interface components {
              * @default <repo>\engine\tools\filmcraft\filmcraft-cli.exe
              */
             cli: string;
+            /**
+             * Loudness Lufs
+             * @default -16
+             */
+            loudness_lufs: number | null;
             /**
              * Threads
              * @default 8
@@ -18295,6 +18337,37 @@ export interface operations {
                 t?: number;
                 side?: number;
             };
+            header?: never;
+            path: {
+                tl_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    timeline_mix_timelines__tl_id__mix_get: {
+        parameters: {
+            query?: never;
             header?: never;
             path: {
                 tl_id: string;

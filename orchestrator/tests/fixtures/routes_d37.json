@@ -92,6 +92,7 @@
  "GET /timelines",
  "GET /timelines/{tl_id}",
  "GET /timelines/{tl_id}/frame",
+ "GET /timelines/{tl_id}/mix",
  "GET /timelines/{tl_id}/tracks",
  "GET /version",
  "PATCH /assets/bulk",

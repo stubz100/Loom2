@@ -317,3 +317,21 @@ or E35c *project and fill* (the earlier keyframe projected into the new view, on
 
 ![E35: the set · projected · generated (CA3) · A every frame · B keyframes + projection, at frames 0, 20, 40, 60, 80](img/31-e35-sheet.jpg)
 ![E35b: the keyframes against the set's clay — as run, the look-not-layout note with three references and with one](img/31-e35b-keyframes.jpg)
+
+### 4f. E35c — the plate as *project and fill* (D132)
+
+Q27 answered (2026-10-24): keep the layout in pixels. A keyframe every 8th frame is the keyframes before it projected into its own camera
+(the most recent first, a pixel from the first that saw it — Stage's projector now says which pixels it saw), and only what none of them
+saw is filled by Klein's Fill on an Edit document with the place's prompt; the frames between keyframes are the nearest keyframes
+projected the same way. On E35's project (CA3's F16 run), measured as E35.
+
+**Measured (2026-10-24, journal 23:32): it holds.** The plate stays on the set (travel 122 px against the set's 124, at most 3 apart — the
+projection's 123 / 4, CA3's 142 / 32) and the walls the still never saw are drawn. A keyframe every 8th frame filled thin strips at the
+frame's edge, where Klein paints a corner-like edge each time — panels by frame 60 (10 Fills, 559 s). Every 16th frame, the Fill reaching
+48 px into what was seen (feather 32) and a surface past 70° from a keyframe counted unseen: one plaster wall, no seams (5 Fills of 29–39 %,
+301 s). Left: the near floor streaks a little between keyframes 48 and 64. → Q28: build it as the plate's method *filled* (PF1), tune it
+first, or leave it a spike.
+
+![E35c every 16th frame: the set · projected · generated (CA3) · project and fill · its keyframes](img/31-e35c-every16.jpg)
+![E35c every 8th frame: the same rows — the newly seen wall in panels](img/31-e35c-every8.jpg)
+![Keyframes 40 and 64 before and after their Fill (every 8th frame): the corner-like edge each thin strip gets](img/31-e35c-panels.jpg)

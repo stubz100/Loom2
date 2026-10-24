@@ -816,7 +816,7 @@ function Viewport() {
     engineRef.current = engine
     viewport.centre = () => engine.centre(); viewport.freePose = () => engine.freePose(); viewport.frame = (ids) => engine.frame(ids); useStage.setState({ worldOf: (id) => engine.worldOf(id) })
     useStage.setState({ passRenderer: (cam, w, h) => engine.renderPasses(cam, w, h), sequenceRenderer: (fr, w, h, kind, restore, on) => engine.renderSequence(fr, w, h, kind, restore, on),
-      plateProjector: (fr, w, h, plate, proj, aspect, restore, on) => engine.renderProjected(fr, w, h, plate, proj, aspect, restore, on) })   // ST3 / ST4, D111
+      plateProjector: (fr, w, h, plate, proj, aspect, restore, on, coverage) => engine.renderProjected(fr, w, h, plate, proj, aspect, restore, on, coverage) })   // ST3 / ST4, D111; D132: coverage
     viewport.handPreset = (id, side, preset) => engine.handPreset(id, side, preset)                                   // CA1
     if (DEV_HOOKS) Object.assign(devHook(), { worldOf: (id: string) => engine.worldOf(id), screenOf: (at: string) => engine.screenOf(at as Joint), cameraScreen: (id: string) => engine.cameraScreen(id), gizmoMode: () => engine.gizmoMode(), pipRect: () => engine.pipRect(), imageSetLayers: (id: string) => engine.imageSetLayers(id),
       frameTime: (n: number, on: boolean) => { const was = useStage.getState().pip; engine.setPip(on); const t = engine.measureFrame(n); engine.setPip(was); return t }, meshes: () => ({ loaded: [...engine.meshesLoaded], failed: Object.fromEntries(engine.meshesFailed) }) })   // the smoke test aims the mouse at joints and handles; P18 asks which props loaded

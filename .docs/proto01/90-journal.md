@@ -9133,3 +9133,37 @@ patched (the Mid attenuated). A track with plugins is printed onto a hidden comp
 - **D131 measured: it does not hold.** The plate stays projected (D130 held, generated on request). Q27 asks the author for the next step:
   stop here, or a spike E35c — *project and fill*: each keyframe the one before it projected into its view (the layout from pixels, so a
   reference cannot move it) and only what no earlier still saw filled by Klein's inpaint with the earlier keyframe as its reference.
+
+## 2026-10-24 23:12 — Q27 answered → D132: the large-move plate as *project and fill* (spike E35c, proto01_animate 31 §4f)
+
+- **The author:** try E35c. A keyframe every 8th frame: the three keyframes before it projected into its own camera by Stage (the most
+  recent first; a pixel from the first that saw it), and only what none of them saw filled by Klein's Fill on an Edit document — the
+  layout comes from pixels already on the set, so no reference can pull it back; the look comes from the pixels themselves.
+- **Stage's projector** gets a coverage mode (`engine.renderProjected(…, coverage)`): white where the still lands — inside its frustum,
+  in front of it and not at a grazing angle — black where the colour pass clamps (the smear). Opt-in; PS5b's projection unchanged.
+- **E35c** (`engine/spikes/e35c_fill.py`, `e35c_browser.cjs`) on E35's project: the keyframes made in the browser and through the API
+  (import, document, selection, Fill, flatten), the frames between them the nearest keyframes projected the same way. Measured as E35.
+
+## 2026-10-24 23:32 — E35c: *project and fill* holds the path and draws what the still never saw; Q28 (proto01_animate 31 §4f)
+
+- **Built for the spike:** Stage's projector's coverage mode (`engine.renderProjected(…, coverage)`: true or a cosine — white where the
+  still lands, inside its frustum and turned less than the given angle from it); `engine/spikes/e35c_fill.py` + `e35c_browser.cjs` (the
+  keyframes made in the browser — the keyframes before it projected into its camera at 1280 × 720, a pixel from the first that saw it —
+  and filled through the API: import, document, selection, Fill with the place's prompt, flatten; the frames between keyframes the nearest
+  keyframes projected the same way).
+- **Measured** on a copy of E35's project (CA3's F16 run; the room's travel against the set's clay, px of 256 every 8 frames):
+
+  | | travel | apart at most | step | Fills | time |
+  | --- | --- | --- | --- | --- | --- |
+  | the set (clay) | 124 | — | 0.14 | — | — |
+  | projected (PS5b) | 123 | 4 | 3.67 | — | seconds |
+  | generated along the path (CA3) | 142 | 32 | 4.30 | — | 112 s (LTX) |
+  | E35c, a keyframe every 8th frame (expand 6, feather 8, unseen past 80°) | 122 | 3 | 4.01 | 10 × 6–13 % | 559 s |
+  | E35c, every 16th (expand 48, feather 32, unseen past 70°) | 122 | 3 | 3.88 | 5 × 29–39 % | 301 s |
+
+  Every 8th frame: each Fill a thin strip at the frame's edge, where Klein paints a corner-like edge — projected on, the newly seen wall
+  reads as panels by frame 60 (img/31-e35c-panels.jpg, img/31-e35c-every8.jpg). Every 16th with the Fill reaching into what was seen:
+  the wall drawn as one plaster wall, no seams, the window and corners where the set puts them (img/31-e35c-every16.jpg); left: the near
+  floor at the bottom left streaks a little between keyframes 48 and 64 (seen by no keyframe at a good angle). Each Fill ≈ 50 s.
+- **Q28** asks the author whether to build it (PF1: the plate's method *filled*, advised for a large move; ≈ 300 s a 5 s shot), tune it
+  first or leave it a spike. Offline 586 passed, Vitest 470 + 3 skipped, typecheck, lint (0 errors, 79 warnings) and build clean, e2e full 64/64 and open 64/64 (the open run's first pass lost the cut's tracks scenario under load, 6.2 min; on its own 14.7 s, and the open suite again 64/64 in 4.3 min).

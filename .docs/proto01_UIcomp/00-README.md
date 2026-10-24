@@ -2,7 +2,8 @@
 
 Status: **research, 2026-10-23; accepted the same day → D125.** Read from the code at `0a943c2`. The author accepted every
 recommendation of [04](04-story-structure-and-ui.md) §9 except one: the Catalogue becomes the fourth top tab (Story · Image · Animate ·
-Catalogue) instead of staying under Story. Built in waves SP0 → SP7 (04 §8).
+Catalogue) instead of staying under Story. Built in waves SP0 → SP7 (04 §8), 2026-10-23; A1 checked on the rig 2026-10-24; the author's
+click-through is [05](05-testing-story.md).
 
 ## The request
 
@@ -22,6 +23,7 @@ The author, 2026-10-23:
 | 02 | [The efficient workflow](02-efficient-workflow.md) | the same episode with the same functions: eight principles, the steps and their clicks, five habits that help today, and the list of what it needs (Story S1–S15, Image I1–I4, Animate A1–A4) |
 | 03 | [The comparison](03-comparison.md) | the numbers side by side, where the difference comes from, route by route, and the six requirements for Story (R1–R6) |
 | 04 | [Story: structure and UI](04-story-structure-and-ui.md) | the rail, the shot as the unit, the For-context contract, the states, five wireframes, the commands, the justified Image and Animate changes, the delivery gaps, a build plan, 14 decisions with recommendations |
+| 05 | [Trying the new Story](05-testing-story.md) | the author's click-through of the built waves SP0–SP7 (≈ 15 min), with a notes table |
 
 `img/cur-*.jpg` are screenshots of today's app (the fake engine; flat-colour pictures). `img/ui-*.jpg` are wireframes of the proposal,
 rendered from `mock/story-mock.html` (a static mock, not the app).

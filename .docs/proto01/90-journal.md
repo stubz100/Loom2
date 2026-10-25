@@ -9625,3 +9625,58 @@ before the work).
   (0 errors, 79 warnings) and build clean; e2e full 67/67 and open 67/67.
 - **Owed by the author:** their characters' references drawn again in the A-pose (the fit and the shell wait for it), then *From a
   picture ▾* on a reference-set picture that shows the hands.
+
+## 2026-10-25 14:05 — E39 → D141: poses and clips fit a character by contacts and IK; no retargeting model (D137 stage 3, first part)
+
+`engine/spikes/e39_poses.py measure | score`, `e39_browser.cjs`, `frontend/src/spikes/e39Poses.ts`; outputs `engine/spikes/out/e39/`,
+sheets `.docs/proto01_UIcast/img/e39-*.jpg`.
+
+**The setup.** Seven skeletons from E36's project:
+
+- the default adult (the baseline);
+- Pip (a child of 1.2 m), Bruno (heavy), the dancer and the fisherman, with their shells bound as the shots bind them (bone heat, the
+  reference's stance, placed by the picture);
+- A1's Mara and Ines, feet only: their E36 shells come from arms-down pictures (D139).
+
+They get Stage's ten pose presets and ten starter clips (UAL: Walk_Loop, Jog_Fwd_Loop, Idle_Loop, Sitting_Enter, Sitting_Idle_Loop,
+Walk_Carry_Loop, Farm_Harvest, Pistol_Aim_Neutral, Crouch_Idle_Loop, Interact) as Animate applies them: the joints retargeted, the
+root scaled to the character's hip, the foot lock with its body. The measures:
+
+- the planted foot's slide;
+- each stance's contact: the planted foot's lowest point against its standing height;
+- a fingertip through the body: inside the posed shell, nearest the torso or a leg, not that arm.
+
+**The results** (cm; a stance's contact, + floats, − sinks):
+
+| | walk | idle | sit | carry | harvest | crouch | hands in the body |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| default | 0 / −0.1 | −0.6 | −0.8 | −5.1 | −3.3 | +7.4 | — |
+| Pip | −0.2 | −0.4 | −1.1 | −3.0 | −2.0 | +4.5 | none |
+| Bruno | −0.4 | −0.4 | −0.6 | −4.5 | −3.9 | +7.6 | sitting 6–24 % of frames |
+| dancer | −0.5 | −0.6 | −4.2 | −6.0 | −4.4 | −3.0 | sitting 12–19 % |
+| fisherman | −0.9 | −0.6 | −5.7 | −5.6 | −4.3 | −6.2 | none |
+| Mara | −0.1 | −0.5 | −0.9 | −4.4 | −2.9 | +6.3 | — |
+| Ines | −0.2 | −0.5 | −0.8 | −4.6 | −2.9 | +6.8 | — |
+
+- **Slides:** 0 cm everywhere; the foot lock holds any skeleton.
+- **Jogs:** their short stances read +4 to +10 cm, but they are flight (the classifier calls a foot planted when neither is high).
+- **The presets:** the standing ones exact; walk 3–5 cm; a crouch floats 4–11 cm (10.7 on the default); a sit sinks 1.6–7.7 (−2.6 on
+  the default).
+
+**The contacts tried in the spike:**
+
+- **A vertical contact:** through each stance the root is raised or lowered so the planted foot's lowest point meets the floor, eased
+  over 4 frames between stances. Every stance is within 0.4 cm, but a crouch's second foot goes 5–7 cm through the floor.
+- **Then two-bone IK** (ik.ts `solveTwoBone`, the knee bending as it does) on any foot still under the floor: every foot is within
+  0.3 cm of it, on all seven.
+
+→ **D141.** The errors are geometric: the root's height against the legs' proportions, the arms against a broad body. They are not a
+style a model would learn; the default adult has most of them already. AP1 therefore builds:
+
+- the vertical contact and the leg IK into the clips and the presets;
+- the arm clearance and the hand pins into the pose editor.
+
+No retargeting model; no licence to read.
+
+Bruno's sheet shows the clips playing on his heavy shell without tearing (bone heat). The *arms crossed* preset does not cross the arms
+on any skeleton (the preset itself): it goes to AP1's list of presets to correct.

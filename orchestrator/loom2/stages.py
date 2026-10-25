@@ -126,6 +126,7 @@ class StageObject(BaseModel):
     level: dict[str, float] | None = None          # SC3d: how the picture set was laid level (pitch, the sideways tilt left, the fit's residual)
     things: list[SetThing] = Field(default_factory=list)   # D123 (SC3c): the things the author picked on the picture
     things_document_id: str | None = None          # D123: the set's own document (its picture), where SAM 3 finds them and the plate is cleaned
+    height_m: float | None = Field(None, gt=0.0, le=100.0)   # CW4: a mesh's model scaled to this height (metres); None = the GLB's own size
 
 
 class StageCamera(BaseModel):
@@ -145,11 +146,23 @@ class StageRange(BaseModel):
     end: int = 120
 
 
+Purpose = Literal["stage", "bench", "lineup"]
+
+
+class StageBound(BaseModel):
+    """D142: the Cast version a bench stage is for."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    profile_id: str
+    version: str
+
+
 class Stage(BaseModel):
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
     schema_version: int = STAGE_SCHEMA_VERSION
     id: str
     name: str = "Stage"
+    purpose: Purpose = "stage"                     # D142: a stage, a Cast version's bench, or the line-up (CW5) — the last two stay out of the pickers
+    bound: StageBound | None = None                # D142: a bench's Cast version
     size: dict[str, int] = Field(default_factory=lambda: {"w": 1920, "h": 1080, "fps": 24})   # from the project format (D18)
     objects: list[StageObject] = Field(default_factory=list)
     cameras: list[StageCamera] = Field(default_factory=list)
@@ -162,6 +175,29 @@ class Stage(BaseModel):
     revision: int = 0
     created_at: str = Field(default_factory=utc_now)
     updated_at: str = Field(default_factory=utc_now)
+
+
+REFERENCE_HEIGHT_M = 1.75                         # CW4: the figure a prop's bench and the line-up stand beside it for scale
+
+
+def bench_objects(profile: Any, v: Any) -> tuple[list[StageObject], float]:
+    """D142: what a bench holds — a character's figure bound to the version (its body, shell, mannequin), or a prop's model bound to it at its
+    height with an unbound 1.75 m figure beside it; and the height to frame."""
+    if profile.cls == "character":
+        h = v.body.height_m if v.body else REFERENCE_HEIGHT_M
+        fig = StageObject(id=new_id("fig"), kind="mannequin", name=profile.name, preset="adult", profile_id=profile.id, version=v.id, body=v.body,
+                          detail=(v.body.figure if v.body else "female"), shadow_proxy=v.shell_asset_id, pose=Pose(preset="stand"), colour_id=1)
+        return [fig], h
+    if profile.cls == "prop":
+        if not v.model_asset_id:
+            raise ValueError("the prop has no 3D model yet — make or import it first, then its bench shows it at its height")
+        h = float(v.height_m or 1.0)
+        mesh = StageObject(id=new_id("mesh"), kind="mesh", name=profile.name, asset_id=v.model_asset_id, profile_id=profile.id, version=v.id,
+                           height_m=h, colour_id=1)
+        ref = StageObject(id=new_id("fig"), kind="mannequin", name="1.75 m for scale", preset="adult", detail="female", pose=Pose(preset="stand"),
+                          transform=Transform(pos=[round(-0.6 - 0.25 * h, 3), 0.0, 0.0]), colour_id=2)
+        return [mesh, ref], max(h, REFERENCE_HEIGHT_M)
+    raise ValueError("a place's bench comes with the set builder (CW6) — a character or a prop has one now")
 
 
 def migrate(raw: dict[str, Any]) -> dict[str, Any]:
@@ -269,6 +305,64 @@ class StageStore:
 
     def save(self, st: Stage) -> None:
         atomic_write_json(self.path(st.id), st.model_dump())
+
+    def bench(self, profile: Any, version_id: str, size: dict[str, int] | None = None) -> tuple[Stage, bool]:
+        """D142: a Cast version's bench — made once and kept (the author's camera and light stay): a character's figure bound to it, or a
+        prop's model at its height with a 1.75 m figure beside it for scale. (stage, made now)."""
+        for st in self.list():
+            if st.purpose == "bench" and st.bound is not None and st.bound.profile_id == profile.id and st.bound.version == version_id:
+                return st, False
+        v = profile.version(version_id)
+        objects, h = bench_objects(profile, v)
+        d = max(1.2, h * 2.0)
+        cam = StageCamera(id=new_id("cam"), name="Bench camera", pos=[round(d * 0.3, 3), round(h * 0.6, 3), round(d, 3)], target=[0.0, round(h * 0.5, 3), 0.0])
+        st = Stage(id=new_id("stg"), name=f"Bench · {profile.name} {v.id}", purpose="bench", bound=StageBound(profile_id=profile.id, version=v.id),
+                   size=size or {"w": 1920, "h": 1080, "fps": 24}, objects=objects, cameras=[cam], active_camera=cam.id)
+        check(st)
+        self.save(st)
+        return st, True
+
+    def lineup(self, entries: list[dict[str, Any]], size: dict[str, int] | None = None) -> Stage:
+        """CW5 (02 §7): the line-up — the characters and props picked side by side on a neutral floor before a wall with 0.5 m marks,
+        one camera framing them; the project's one line-up stage, made again each time (*Send to a stage ▸* keeps what should stay).
+        `entries`: {name, kind: figure|mesh, profile_id?, version?, body?, shell?, asset_id?, height_m?} in order, left to right."""
+        objects: list[StageObject] = []
+        x, tallest, gap = 0.0, REFERENCE_HEIGHT_M, 0.35
+        widths = []
+        for e in entries:
+            if e["kind"] == "figure":
+                body = e.get("body")
+                h = float((body or {}).get("height_m") or REFERENCE_HEIGHT_M) if isinstance(body, dict) else (body.height_m if body else REFERENCE_HEIGHT_M)
+                widths.append(0.55 * h / REFERENCE_HEIGHT_M + gap)
+            else:
+                h = float(e.get("height_m") or 1.0)
+                widths.append(max(0.5, 0.7 * h) + gap)
+            tallest = max(tallest, h)
+        total = sum(widths)
+        x = -total / 2
+        for k, (e, w) in enumerate(zip(entries, widths)):
+            at = Transform(pos=[round(x + w / 2, 3), 0.0, 0.0])
+            x += w
+            if e["kind"] == "figure":
+                body = e.get("body")
+                fig = body if body is None or isinstance(body, Body) else Body.model_validate(body)
+                objects.append(StageObject(id=new_id("fig"), kind="mannequin", name=e["name"], preset="adult", profile_id=e.get("profile_id"),
+                                           version=e.get("version"), body=fig, detail=(fig.figure if fig else "female"), shadow_proxy=e.get("shell"),
+                                           pose=Pose(preset="stand"), transform=at, colour_id=(k % 12) + 1))
+            else:
+                objects.append(StageObject(id=new_id("mesh"), kind="mesh", name=e["name"], asset_id=e["asset_id"], profile_id=e.get("profile_id"),
+                                           version=e.get("version"), height_m=float(e.get("height_m") or 1.0), transform=at, colour_id=(k % 12) + 1))
+        wall = StageObject(id=new_id("set"), kind="set", name="Line-up (0.5 m marks)", preset="lineup", locked=True,
+                           transform=Transform(scale=[round(max(0.35, (total + 1.5) / 8.0), 3), 1.0, 1.0]))   # the wall as wide as the row (8 m at 1)
+        d = max(2.5, total * 0.95, tallest * 2.0)
+        cam = StageCamera(id=new_id("cam"), name="Line-up camera", pos=[0.0, round(tallest * 0.6, 3), round(d, 3)], target=[0.0, round(tallest * 0.5, 3), 0.0])
+        cur = next((s for s in self.list() if s.purpose == "lineup"), None)
+        st = Stage(id=cur.id if cur else new_id("stg"), name="Line-up", purpose="lineup", size=size or {"w": 1920, "h": 1080, "fps": 24},
+                   objects=[wall, *objects], cameras=[cam], active_camera=cam.id, revision=(cur.revision + 1) if cur else 0,
+                   created_at=cur.created_at if cur else utc_now())
+        check(st)
+        self.save(st)
+        return st
 
     def create(self, name: str = "Stage", size: dict[str, int] | None = None) -> Stage:
         """A new stage with one camera (35 mm, eye level) looking at the origin — a shot is always framed by something."""

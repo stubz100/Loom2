@@ -202,6 +202,38 @@ the shell's picture replaces the skeleton guide. Wan Animate needs the skeleton 
 
 U12's original question is answered by this: a place's set is edited in Cast's bench, and a free set in Clay.
 
+**As built (CW3–CW5, 2026-10-25; D142).**
+
+- **The bench is Clay opened for the Cast version** (D142).
+  - *Bench ▶* is in a character's body row and a prop's 3D model section, and on the profile's right-click.
+  - It opens Animate › Clay on a **bench stage**: `purpose: bench`, with `bound` naming the profile and version. The stage is made once and
+    kept, so the camera and light the author sets stay.
+  - A character's bench holds its figure, bound (body, shell, poses). A prop's bench holds its model at its height, beside an unbound
+    1.75 m figure for scale.
+  - A chip in the Shot section says *Bench: ‹name› v1* with *Back to Cast*.
+  - Benches and the line-up stay out of `GET /stages` (asked for with `?purpose=`) and out of the stage picker.
+- **Clay's cards follow Cast.**
+  - Figures' "+" lists Cast's characters first. A click adds the character's figure, bound and named, or selects it when it is already
+    there.
+  - *Edit in Cast* is the bound figure's and the bound mesh's way to Cast.
+  - ***Make a free copy*** puts a copy beside it, free, with the body and shell, or the model and height, as they are now.
+  - ***Prototype ▸ a new idea*** on a free figure or mesh makes a character or prop idea. Clay's view of the object alone is its picture
+    (on the idea's page, lineage to the model). The object is its clay: a figure's body and shell, or a mesh's model and height. *Keep ▶*
+    carries it, a body without an A-pose picture counting as fitted by hand.
+- **Props have a height** (CW4, 03 §4).
+  - `ProfileVersion.height_m` is prefilled from the prop's name and look by `sizes.prop_height` (143 common things; a cup 0.1 m, a door
+    2.1 m), else 1 m. It is edited in the prop's 3D model section.
+  - `StageObject.height_m` scales a mesh's model to that height: Cast's for a bound one, the author's for a free one (the mesh's editor).
+  - Not built: the pivot and the grip (held props keep D129's hand placement).
+- **The line-up** (CW5, 02 §7):
+  - *Line-up ▶* on the Cast board lines up the characters and props shown, twelve at most. On the Ideas board it lines up the ideas picked
+    (Ctrl-click), else those shown that have clay.
+  - It makes the project's one line-up stage (`purpose: lineup`, made again each time): side by side at their sizes, before a wall
+    marked every 0.5 m, with a camera framing them. Clay opens on it.
+  - The chip offers *Pose all ▾* (stand, walk, sit, wave, point), *Send to a stage ▾* (a new stage, or one of the project's: the
+    things copied where they stand; a second figure of a character there stands free) and *Back*.
+  - Not built: a place's set in the line-up (CW6), and the textured shell as an alternative to the clay one.
+
 ### 2.8 One figure: the Detailed mannequin only (U18)
 
 Every character gets a hand (its rest hand, [03](03-clay-from-a-picture.md) §3.2), so the Simple dummy has no job left. **It is
@@ -326,6 +358,7 @@ About 9½ weeks in all, the spikes included.
 | **E39 · Poses and clips on characters' skeletons** | 2026-10-25 → D141: ten presets and ten starter clips on seven skeletons; slides 0 cm; the deep knee bends miss the floor by 3–7 cm already on the default adult, proportions move it; a vertical contact plus leg IK puts every foot within 0.3 cm; hands through the body only sitting on broad or dressed shells — contacts and IK, no retargeting model | journal 2026-10-25 14:05; `img/e39-*.jpg` |
 | **CS3 · The shell in the shots, the skeleton over time** | the passes from the shell, the pose pass's landmarks (§2.5); skeleton keys on the timeline, *the skeleton changed* with its two choices, the guide's hash per segment (§2.10) | yes (rig) | 4 |
 | **AP1 · Feet on the floor, the pose editor** | 2026-10-25 (§2.9 as built): AP1a — presets and clips on the character's feet (the pose's drop, the stances' vertical contact, leg IK); AP1b — pins on hands and feet held by twist-keeping two-bone IK in the figure's own space, red rings in Pose, the Pins row; *Save for ‹character›* into the Cast version's own poses, a starter pose's name standing in for the preset; the bench lists them | no | 1 |
+| **CW3–CW5 · The bench, Clay's cards, props' height, the line-up** | 2026-10-25 (§2.7 as built, D142): *Bench ▶* opens Clay on a bench stage bound to the version (a character's figure; a prop at its height beside a 1.75 m figure); Cast's characters as figure cards; *Make a free copy*; *Prototype ▸* on free figures and meshes; `height_m` on props (from their words) and meshes; *Line-up ▶* on both boards with *Pose all* and *Send to a stage* | no | 1 |
 | **CW1–CW2 · Ideas** | 2026-10-25 (§2.2 as built): the ideas store and its routes; Cast's *Cast · Ideas* switch, the board, the idea's bench and Inspector; *Prototype ▸* on every picture (copied, named from the prompt); *Make the clay ▶* (the A-pose picture, the fit, the shell, chained); *Keep ▶* (a profile or a version: hero, drafted sheet, clay, `from_idea`); Image's For chip on an idea, `for_idea` on the results, *Made for this idea*, *＋ variant* | no (the clay's jobs: yes, through the queue) | 1 |
 | **E39 → AP1 · The pose editor** | §2.9: E39 first; then contacts and IK on every pose and clip, the pose editor in Animate › Clay and Cast's bench, the character's pose library | yes (rig) | 1.5 + 4 |
 | **CW1 · The ideas store** | §2.1: the store, the Ideas board, *Prototype ▸* (copy, U2) with a name from the prompt (U3), variants, *Make the clay ▶* on a variant, *Keep ▶* | no | 3 |

@@ -46,11 +46,17 @@ export function castModel(profileId: string | null | undefined, version: string 
   const p = useStory.getState().profiles.find((x) => x.id === profileId)
   return p?.versions.find((x) => x.id === (version ?? p.current))?.model_asset_id ?? undefined
 }
-/** D110: a bound mesh shows its prop version's model — remade, or another version picked, it follows. */
+/** CW4 (03 §4): a bound prop version's height (metres); undefined while the profile is not loaded or the version has none. */
+function castHeight(profileId: string | null | undefined, version: string | null | undefined): number | undefined {
+  const p = profileId ? useStory.getState().profiles.find((x) => x.id === profileId) : undefined
+  return p?.versions.find((x) => x.id === (version ?? p.current))?.height_m ?? undefined
+}
+/** D110: a bound mesh shows its prop version's model — remade, or another version picked, it follows; CW4: at the prop's height. */
 function withModel(o: StageObject): StageObject {
   if (o.kind !== 'mesh' || !o.profile_id) return o
-  const m = castModel(o.profile_id, o.version)
-  return m && m !== o.asset_id ? { ...o, asset_id: m } : o
+  const m = castModel(o.profile_id, o.version), h = castHeight(o.profile_id, o.version)
+  const next = m && m !== o.asset_id ? { ...o, asset_id: m } : o
+  return h !== undefined && h !== next.height_m ? { ...next, height_m: h } : next
 }
 /** CS2 (D136 U6): the shell of a bound figure's Cast version (pinned, else the current) — its shadow proxy; undefined while the character
  *  is not loaded or the version has none (the figure keeps what it has). */
@@ -278,6 +284,24 @@ interface StageState {
   activeCamera: () => StageCamera | undefined
   /** D93 (C8): bind a figure to a Cast character (at a version — a costume; null = the current one), or unbind it (`null`). */
   bindFigure: (id: string, profileId: string | null, version?: string | null) => void
+  /** D142: Clay opened for a Cast version — its bench stage (made once, kept); `back` is where *← Back* goes (Cast on the version). */
+  openBench: (profileId: string, version?: string | null) => Promise<boolean>
+  /** CW5: Clay opened on the line-up of these Cast versions and ideas (made again each time); `back` returns to the board it came from. */
+  openLineup: (items: { profile_id?: string; version?: string | null; idea_id?: string }[], back?: () => void) => Promise<boolean>
+  /** D142: *← Back* from a bench or the line-up. */
+  backFromBench: () => void
+  /** CW5: the line-up's things copied into a stage (`null`: a new one, named by the author) and that stage opened. */
+  sendLineup: (target: string | null) => Promise<void>
+  /** CW5: every figure on the stage takes a preset at once (the line-up's *Pose all ▸*). */
+  poseAll: (preset: string) => void
+  /** CW3 (02 §9): a Cast character's figure at a point — its figure selected when it is already here (one per character). */
+  placeCharacter: (profileId: string, pos?: number[]) => void
+  /** CW3 (06 §2.7): a bound figure or mesh copied beside it, free — its body and shell, or its model and height, as they are now. */
+  freeCopy: (id: string) => void
+  /** CW3 (06 §2.7): *Prototype ▸* on a free figure or mesh — a new idea in Cast, Clay's view of it as its picture, the object as its clay. */
+  prototypeObject: (id: string) => Promise<void>
+  /** CW4: a free mesh's height (metres; null: the model's own size). */
+  setHeight: (id: string, h: number | null) => void
   /** D110 (PS3): a Cast prop's 3D model placed in the scene, bound to the prop (its version's model follows); null when it has no model yet. */
   placeProp: (profileId: string, pos?: number[]) => string | null
   /** D110: a mesh bound to a Cast prop and a pinned version (null = the current one), or unbound (it keeps the model it shows). */
@@ -294,6 +318,7 @@ interface StageState {
 }
 
 let saveTimer: number | null = null
+let benchBack: (() => void) | null = null                                     // D142: where *← Back* from a bench or the line-up goes (this session)
 let saveSeq = 0
 
 async function save(get: () => StageState, set: (p: Partial<StageState>) => void): Promise<void> {
@@ -693,7 +718,7 @@ export const useStage = create<StageState>()((set, get) => ({
     if (!id) { set({ current: null, selected: null, selectedCamera: null, stageSelected: false, undo: [], redo: [] }); return }
     try {
       const st = await unwrap(http.GET('/stages/{st_id}', { params: { path: { st_id: id } } }))
-      set({ current: st, selected: null, selectedCamera: null, stageSelected: false, posing: false, selectedJoint: null, undo: [], redo: [], stages: get().stages.some((s) => s.id === st.id) ? get().stages.map((s) => (s.id === st.id ? st : s)) : [st, ...get().stages],
+      set({ current: st, selected: null, selectedCamera: null, stageSelected: false, posing: false, selectedJoint: null, undo: [], redo: [], stages: get().stages.some((s) => s.id === st.id) ? get().stages.map((s) => (s.id === st.id ? st : s)) : st.purpose === 'stage' ? [st, ...get().stages] : get().stages,   // D142: a bench stays out of the picker
         shot: { ...get().shot, refs: [], use_as_is: false }, shots: [], frame: st.range?.start ?? 0, playing: false, shotStart: null })
       void get().loadShots(); void get().refreshShotPreview()
       if (st.objects.some((o) => o.profile_id)) { profilesForMentions(); get().syncBodies() }        // CA0: the bound figures' bodies
@@ -747,7 +772,7 @@ export const useStage = create<StageState>()((set, get) => ({
     const o: StageObject = { id, kind, name, preset, asset_id: assetId, transform: { pos: pos ?? [0, 0, 0], rot: [0, 0, 0], scale: [scale, scale, scale] }, parent: null, parent_joint: null,
       locked: false, visible: true, colour_id: (cur.objects.length % 12) + 1, pose: kind === 'mannequin' ? { preset: 'stand', joints: {}, extra: {}, ground: 0, pins: {} } : null, billboard: kind === 'plane', profile_id: null, version: null, body: null, detail: kind === 'mannequin' ? newDetail(cur.objects) : null, path: null, shadow_proxy: null,
       light: kind === 'light' ? { ...NEW_LIGHT, target: [...NEW_LIGHT.target] } : null,
-      lens_deg: null, plate_asset_id: null, floor_y: null, plate_camera_id: null, level: null, things: [], things_document_id: null }
+      lens_deg: null, plate_asset_id: null, floor_y: null, plate_camera_id: null, level: null, things: [], things_document_id: null, height_m: null }
     get().apply((d) => ({ ...d, objects: [...d.objects, o] }), 'add')
     set({ selected: id })
     return id
@@ -862,6 +887,91 @@ export const useStage = create<StageState>()((set, get) => ({
   frameView: (ids) => set({ frameRequest: { ids, n: get().frameRequest.n + 1 } }),
   object: (id) => (id ? get().current?.objects.find((o) => o.id === id) : undefined),
   activeCamera: () => { const c = get().current; return c?.cameras.find((x) => x.id === c.active_camera) ?? c?.cameras[0] },
+  openBench: async (profileId, version = null) => {
+    try {
+      const r = await unwrap(http.POST('/stages/bench', { body: { profile_id: profileId, version } }))
+      await get().open(r.stage.id)
+      benchBack = () => void import('../../store/origin').then((m) => m.goToStory({ tab: 'cast', id: profileId, version: r.stage.bound?.version ?? version }))
+      useSession.getState().setSuite('stage')
+      return true
+    } catch (e) { useSession.getState().toast(`The bench: ${(e as ApiError).detail ?? e}`, 'error'); return false }
+  },
+  openLineup: async (items, back) => {
+    try {
+      const st = await unwrap(http.POST('/stages/lineup', { body: { items: items.map((x) => ({ profile_id: x.profile_id ?? null, version: x.version ?? null, idea_id: x.idea_id ?? null, variant_id: null })) } }))
+      await get().open(st.id)
+      benchBack = back ?? null
+      useSession.getState().setSuite('stage')
+      const left = items.length - st.objects.filter((o) => o.kind !== 'set').length
+      if (left > 0) useSession.getState().toast(`${left} left out: an idea needs its clay (Make the clay ▶), a prop its 3D model; places come with their sets`, 'info')
+      return true
+    } catch (e) { useSession.getState().toast(`The line-up: ${(e as ApiError).detail ?? e}`, 'error'); return false }
+  },
+  backFromBench: () => {
+    const cur = get().current
+    const back = benchBack ?? (cur?.bound ? () => void import('../../store/origin').then((m) => m.goToStory({ tab: 'cast', id: cur.bound!.profile_id, version: cur.bound!.version }))
+      : () => void import('../../store/origin').then((m) => m.goToStory({ tab: 'cast', id: '' })))
+    benchBack = null
+    back()
+  },
+  sendLineup: async (target) => {
+    const cur = get().current
+    if (!cur || cur.purpose !== 'lineup') return
+    const things = cur.objects.filter((o) => !(o.kind === 'set' && o.preset === 'lineup'))
+    let id = target
+    if (!id) {
+      const name = await useSession.getState().askText({ title: 'Send the line-up to a new stage', text: 'Its figures and props, where they stand; the new stage opens.', placeholder: 'stage name', initial: 'Line-up' })
+      if (!name?.trim()) return
+      try { id = (await unwrap(http.POST('/stages', { body: { name: name.trim() } }))).id } catch (e) { useSession.getState().toast(`New stage: ${(e as ApiError).detail ?? e}`, 'error'); return }
+    }
+    benchBack = null
+    await get().open(id)
+    const d = get().current
+    if (!d || d.id !== id) return
+    const bound = new Set(d.objects.filter((o) => o.kind === 'mannequin' && o.profile_id).map((o) => o.profile_id))
+    const added = things.map((o, k) => ({ ...o, id: newId(o.kind === 'mannequin' ? 'fig' : o.kind), colour_id: ((d.objects.length + k) % 12) + 1,
+      ...(o.kind === 'mannequin' && o.profile_id && bound.has(o.profile_id) ? { profile_id: null, version: null } : {}) }))   // one figure per character: a second stands free
+    get().apply((doc) => ({ ...doc, objects: [...doc.objects, ...added] }), 'from the line-up')
+    useSession.getState().toast(`${added.length} from the line-up in ${d.name}`, 'success')
+  },
+  poseAll: (preset) => { for (const o of get().current?.objects ?? []) if (o.kind === 'mannequin') get().applyPose(o.id, preset) },
+  placeCharacter: (profileId, pos) => {
+    const here = get().current?.objects.find((o) => o.kind === 'mannequin' && o.profile_id === profileId)
+    if (here) { get().select(here.id); return }
+    const id = get().addObject('mannequin', 'adult', pos)
+    if (!id) return
+    get().bindFigure(id, profileId)
+    const name = useStory.getState().profiles.find((p) => p.id === profileId)?.name
+    if (name) get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id ? { ...o, name } : o)) }), 'name')   // the character's name, not "Figure 3"
+  },
+  freeCopy: (id) => {
+    const o = get().sampledDoc()?.objects.find((x) => x.id === id) ?? get().object(id)
+    if (!o || !o.profile_id || (o.kind !== 'mannequin' && o.kind !== 'mesh')) return
+    const nid = newId(o.kind === 'mannequin' ? 'fig' : 'mesh')
+    const copy: StageObject = { ...JSON.parse(JSON.stringify(o)) as StageObject, id: nid, name: `${o.name} (free)`, profile_id: null, version: null, parent: null, parent_joint: null,
+      transform: { ...o.transform, pos: [o.transform.pos[0] + 0.8, o.transform.pos[1], o.transform.pos[2]] }, colour_id: ((get().current?.objects.length ?? 0) % 12) + 1 }
+    get().apply((d) => ({ ...d, objects: [...d.objects, copy] }), 'free copy')
+    get().select(nid)
+  },
+  prototypeObject: async (id) => {
+    const o = get().sampledDoc()?.objects.find((x) => x.id === id) ?? get().object(id)
+    const s = useSession.getState()
+    if (!o || o.profile_id || (o.kind !== 'mannequin' && o.kind !== 'mesh')) return
+    const { viewport } = await import('./stageCommands')
+    const blob = await viewport.snapshot?.(id)
+    if (!blob) { s.toast('Prototype: the viewport is not ready', 'error'); return }
+    try {
+      const sha = await sha256Hex(await blob.arrayBuffer())
+      await api.putBlob(sha, blob)
+      const fig = o.kind === 'mannequin'
+      const idea = await unwrap(http.POST('/story/ideas/from-clay', { body: { cls: fig ? 'character' : 'prop', name: o.name.slice(0, 80) || (fig ? 'figure' : 'prop'), blob: sha,
+        clay: fig ? { kind: 'figure', body: o.body as never, shell_asset_id: o.shadow_proxy ?? null, model_asset_id: null, height_m: null }
+          : { kind: 'model', body: null, shell_asset_id: null, model_asset_id: o.asset_id ?? null, height_m: o.height_m ?? null } } }))
+      void import('../story/ideasStore').then((m) => { if (m.useIdeas.getState().loaded) void m.useIdeas.getState().load() })
+      s.toast(`New ${fig ? 'character' : 'prop'} idea “${idea.name}” on Cast's Ideas board`, 'success', { label: 'Open', run: () => void import('../../store/origin').then((m) => m.goToIdea(idea.id)) })
+    } catch (e) { s.toast(`Prototype: ${(e as ApiError).detail ?? e}`, 'error') }
+  },
+  setHeight: (id, h) => get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id && o.kind === 'mesh' && !o.profile_id ? { ...o, height_m: h } : o)) }), 'height'),
   bindFigure: (id, profileId, version = null) => {
     const o = get().object(id)
     if (!o || o.kind !== 'mannequin') return

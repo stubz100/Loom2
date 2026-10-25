@@ -2341,11 +2341,57 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Stages List */
+        /**
+         * Stages List
+         * @description The project's stages — D142: the stages proper by default; a Cast version's bench and the line-up only when asked for.
+         */
         get: operations["stages_list_stages_get"];
         put?: never;
         /** Stage Create */
         post: operations["stage_create_stages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stages/bench": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stage Bench
+         * @description D142: a Cast version's bench — Clay opened for it: the bench stage made once (a character's figure bound to the version; a prop's model
+         *     at its height beside a 1.75 m figure) and kept, so the camera and light the author set stay.
+         */
+        post: operations["stage_bench_stages_bench_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stages/lineup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stage Lineup
+         * @description CW5 (02 §7): the line-up — Cast's characters and props, and ideas with clay, side by side at their sizes before 0.5 m marks; Clay
+         *     opens on it (D142). A Cast version stands bound (its body and shell, or its model at its height, follow Cast); an idea's figure is its
+         *     variant's clay (free). An idea without clay, a prop without a model, and a place are left out (and named).
+         */
+        post: operations["stage_lineup_stages_lineup_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2843,6 +2889,27 @@ export interface paths {
         put?: never;
         /** Idea Create */
         post: operations["idea_create_story_ideas_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/ideas/from-clay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Idea From Clay
+         * @description CW3 (06 §2.7): *Prototype ▸* on a free figure or mesh in Clay — a new idea whose first variant is Clay's view of it (a picture made
+         *     for it, on the idea's page) and whose clay is the object: a figure's body and shell, or a mesh's model and height.
+         */
+        post: operations["idea_from_clay_story_ideas_from_clay_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4798,6 +4865,19 @@ export interface components {
              */
             strength?: number;
         };
+        /** BenchOpen */
+        BenchOpen: {
+            /** Profile Id */
+            profile_id: string;
+            /** Version */
+            version?: string | null;
+        };
+        /** BenchOut */
+        BenchOut: {
+            /** Made */
+            made: boolean;
+            stage: components["schemas"]["Stage"];
+        };
         /** BindBody */
         BindBody: {
             /** Shot Id */
@@ -4849,14 +4929,113 @@ export interface components {
          * @description CA0 (D94, 01 §9 answer 3): the body on the Cast sheet — it shapes the figure's Stage dummy when the figure is bound to this version.
          *     Height in metres; the proportions are factors of the default dummy (1 = the 1.75 m adult); the build widens or narrows it.
          */
-        Body: {
+        "Body-Input": {
+            /**
+             * Arms
+             * @default 1
+             */
+            arms?: number;
+            /** Attachments */
+            attachments?: components["schemas"]["BodyAttachment-Input"][];
+            /**
+             * Build
+             * @default average
+             * @enum {string}
+             */
+            build?: "slim" | "average" | "broad" | "heavy";
+            /**
+             * Elbow
+             * @default 0.5178571428571429
+             */
+            elbow?: number;
+            /**
+             * Feet
+             * @default 1
+             */
+            feet?: number;
+            /**
+             * Feet Out
+             * @default 0
+             */
+            feet_out?: number;
+            /**
+             * Figure
+             * @default female
+             * @enum {string}
+             */
+            figure?: "female" | "male";
+            hand_rest?: components["schemas"]["HandRest-Input"];
+            /**
+             * Hands
+             * @default 1
+             */
+            hands?: number;
+            /**
+             * Head
+             * @default 1
+             */
+            head?: number;
+            /**
+             * Head Forward
+             * @default 0
+             */
+            head_forward?: number;
+            /**
+             * Height M
+             * @default 1.75
+             */
+            height_m?: number;
+            /**
+             * Hips
+             * @default 1
+             */
+            hips?: number;
+            /**
+             * Knee
+             * @default 0.5057471264367817
+             */
+            knee?: number;
+            /**
+             * Legs
+             * @default 1
+             */
+            legs?: number;
+            /** Locks */
+            locks?: string[];
+            /**
+             * Neck
+             * @default 1
+             */
+            neck?: number;
+            /**
+             * Shoulder Drop
+             * @default 1
+             */
+            shoulder_drop?: number;
+            /**
+             * Shoulders
+             * @default 1
+             */
+            shoulders?: number;
+            /**
+             * Torso
+             * @default 1
+             */
+            torso?: number;
+        };
+        /**
+         * Body
+         * @description CA0 (D94, 01 §9 answer 3): the body on the Cast sheet — it shapes the figure's Stage dummy when the figure is bound to this version.
+         *     Height in metres; the proportions are factors of the default dummy (1 = the 1.75 m adult); the build widens or narrows it.
+         */
+        "Body-Output": {
             /**
              * Arms
              * @default 1
              */
             arms: number;
             /** Attachments */
-            attachments: components["schemas"]["BodyAttachment"][];
+            attachments: components["schemas"]["BodyAttachment-Output"][];
             /**
              * Build
              * @default average
@@ -4884,7 +5063,7 @@ export interface components {
              * @enum {string}
              */
             figure: "female" | "male";
-            hand_rest: components["schemas"]["HandRest"];
+            hand_rest: components["schemas"]["HandRest-Output"];
             /**
              * Hands
              * @default 1
@@ -4948,7 +5127,31 @@ export interface components {
          * @description CA0 (01 §9b N1): a rigid part that follows a joint of the figure — a tail, horns, folded wings. Shown on the Stage dummy and in its
          *     clay and depth passes; not in the pose pass (Wan Animate guesses its motion from the reference).
          */
-        BodyAttachment: {
+        "BodyAttachment-Input": {
+            /** Joint */
+            joint?: ("root" | "spine" | "head" | "r_shoulder" | "l_shoulder" | "r_elbow" | "l_elbow") | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "tail" | "horns" | "ears" | "wings" | "antennae" | "hat" | "backpack" | "other";
+            /**
+             * Note
+             * @default
+             */
+            note?: string;
+            /**
+             * Size
+             * @default 1
+             */
+            size?: number;
+        };
+        /**
+         * BodyAttachment
+         * @description CA0 (01 §9b N1): a rigid part that follows a joint of the figure — a tail, horns, folded wings. Shown on the Stage dummy and in its
+         *     clay and depth passes; not in the pose pass (Wan Animate guesses its motion from the reference).
+         */
+        "BodyAttachment-Output": {
             /** Joint */
             joint: ("root" | "spine" | "head" | "r_shoulder" | "l_shoulder" | "r_elbow" | "l_elbow") | null;
             /**
@@ -5132,6 +5335,24 @@ export interface components {
         ChangedGroups: {
             /** Changed */
             changed: string[];
+        };
+        /**
+         * ClayIn
+         * @description CW3: what a free object in Clay is, as a variant's clay.
+         */
+        ClayIn: {
+            body?: components["schemas"]["Body-Input"] | null;
+            /** Height M */
+            height_m?: number | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "figure" | "model";
+            /** Model Asset Id */
+            model_asset_id?: string | null;
+            /** Shell Asset Id */
+            shell_asset_id?: string | null;
         };
         /** ClayQueued */
         ClayQueued: {
@@ -7694,7 +7915,35 @@ export interface components {
          * @description S2 (proto01_UIcast 03 §3.1): the character's hands at rest — what every pose of its Detailed figure starts from (a key's hand preset
          *     still turns them): a preset's curl, scaled. The GLB's own flat, fanned hand is never the rest.
          */
-        HandRest: {
+        "HandRest-Input": {
+            /**
+             * Curl
+             * @default 1
+             */
+            curl?: number;
+            /**
+             * Preset
+             * @default relaxed
+             * @enum {string}
+             */
+            preset?: "open" | "relaxed" | "fist" | "point" | "grip" | "pinch";
+            /**
+             * Spread
+             * @default 0
+             */
+            spread?: number;
+            /**
+             * Thumb
+             * @default 0
+             */
+            thumb?: number;
+        };
+        /**
+         * HandRest
+         * @description S2 (proto01_UIcast 03 §3.1): the character's hands at rest — what every pose of its Detailed figure starts from (a key's hand preset
+         *     still turns them): a preset's curl, scaled. The GLB's own flat, fanned hand is never the rest.
+         */
+        "HandRest-Output": {
             /**
              * Curl
              * @default 1
@@ -8138,6 +8387,19 @@ export interface components {
              * @default
              */
             note?: string;
+        };
+        /** IdeaFromClay */
+        IdeaFromClay: {
+            /** Blob */
+            blob: string;
+            clay: components["schemas"]["ClayIn"];
+            /**
+             * Cls
+             * @enum {string}
+             */
+            cls: "character" | "prop" | "place";
+            /** Name */
+            name: string;
         };
         /** IdeaList */
         IdeaList: {
@@ -8852,6 +9114,26 @@ export interface components {
             };
             /** Root Id */
             root_id: string;
+        };
+        /** LineupBody */
+        LineupBody: {
+            /** Items */
+            items: components["schemas"]["LineupItem"][];
+        };
+        /**
+         * LineupItem
+         * @description One thing in the line-up: a Cast version (a character or a prop; its current version when none is named) or an idea (its variant in
+         *     focus, else the one named).
+         */
+        LineupItem: {
+            /** Idea Id */
+            idea_id?: string | null;
+            /** Profile Id */
+            profile_id?: string | null;
+            /** Variant Id */
+            variant_id?: string | null;
+            /** Version */
+            version?: string | null;
         };
         /** LipsyncBody */
         LipsyncBody: {
@@ -10085,7 +10367,7 @@ export interface components {
              * @default
              */
             appearance: string;
-            body: components["schemas"]["Body"] | null;
+            body: components["schemas"]["Body-Output"] | null;
             /** Body Fit From */
             body_fit_from: string | null;
             /** Body Points */
@@ -10103,6 +10385,8 @@ export interface components {
             from_idea: components["schemas"]["IdeaRef"] | null;
             /** Group Id */
             group_id: string;
+            /** Height M */
+            height_m: number | null;
             /** Hero Asset Id */
             hero_asset_id: string | null;
             /** Id */
@@ -11496,6 +11780,7 @@ export interface components {
             active_camera: string | null;
             /** Ambient */
             ambient: number | null;
+            bound: components["schemas"]["StageBound"] | null;
             /** Cameras */
             cameras: components["schemas"]["StageCamera"][];
             /** Created At */
@@ -11519,6 +11804,12 @@ export interface components {
             passes: {
                 [key: string]: unknown;
             }[];
+            /**
+             * Purpose
+             * @default stage
+             * @enum {string}
+             */
+            purpose: "stage" | "bench" | "lineup";
             range: components["schemas"]["StageRange"];
             /**
              * Revision
@@ -11568,6 +11859,16 @@ export interface components {
             size: number[];
         } & {
             [key: string]: unknown;
+        };
+        /**
+         * StageBound
+         * @description D142: the Cast version a bench stage is for.
+         */
+        StageBound: {
+            /** Profile Id */
+            profile_id: string;
+            /** Version */
+            version: string;
         };
         /** StageCamera */
         StageCamera: {
@@ -11696,7 +11997,7 @@ export interface components {
              * @default true
              */
             billboard: boolean;
-            body: components["schemas"]["Body"] | null;
+            body: components["schemas"]["Body-Output"] | null;
             /**
              * Colour Id
              * @default 0
@@ -11706,6 +12007,8 @@ export interface components {
             detail: ("male" | "female") | null;
             /** Floor Y */
             floor_y: number | null;
+            /** Height M */
+            height_m: number | null;
             /** Id */
             id: string;
             /**
@@ -12967,13 +13270,15 @@ export interface components {
         VariantClay: {
             /** Anim Ref Asset Id */
             anim_ref_asset_id: string | null;
-            body: components["schemas"]["Body"] | null;
+            body: components["schemas"]["Body-Output"] | null;
             /** Body Points */
             body_points: {
                 [key: string]: unknown;
             } | null;
             /** Error */
             error: string | null;
+            /** Height M */
+            height_m: number | null;
             /** Job Id */
             job_id: string | null;
             /**
@@ -12982,6 +13287,8 @@ export interface components {
              * @enum {string}
              */
             kind: "figure" | "model" | "set";
+            /** Model Asset Id */
+            model_asset_id: string | null;
             /** Note */
             note: string | null;
             /** Shell Asset Id */
@@ -17759,7 +18066,9 @@ export interface operations {
     };
     stages_list_stages_get: {
         parameters: {
-            query?: never;
+            query?: {
+                purpose?: "stage" | "bench" | "lineup" | "all";
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -17775,6 +18084,15 @@ export interface operations {
                     "application/json": components["schemas"]["StageList"];
                 };
             };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
     stage_create_stages_post: {
@@ -17787,6 +18105,72 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["StageCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Stage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stage_bench_stages_bench_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BenchOpen"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stage_lineup_stages_lineup_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LineupBody"];
             };
         };
         responses: {
@@ -18772,6 +19156,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["IdeaCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Idea"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    idea_from_clay_story_ideas_from_clay_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IdeaFromClay"];
             };
         };
         responses: {

@@ -216,7 +216,7 @@ export interface StoryState {
   patchProfile: (patch: { name?: string; cls?: ProfileClass; current?: string; voice_id?: string | null }) => Promise<void>
   /** D93 (B4): the shown version's sheet (appearance, outfit, colours, marks) and (B5) its label — shown at once, saved after a pause with
    *  the name in one body, one save at a time (B14); a final version takes only its label. */
-  setSheet: (patch: Partial<Pick<ProfileVersion, 'appearance' | 'outfit' | 'colours' | 'marks' | 'label' | 'body'>>) => void
+  setSheet: (patch: Partial<Pick<ProfileVersion, 'appearance' | 'outfit' | 'colours' | 'marks' | 'label' | 'body' | 'height_m'>>) => void
   /** D90 (B14): the name as typed — shown at once, saved after a pause (as the stub). */
   renameProfile: (name: string) => void
   setHero: (assetId: string | null) => Promise<void>

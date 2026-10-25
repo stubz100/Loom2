@@ -447,7 +447,8 @@ export class StageEngine {
       seen.add(o.id)
       let e = this.entries.get(o.id)
       if (!e || e.doc.kind !== o.kind || e.doc.preset !== o.preset || e.doc.asset_id !== o.asset_id || JSON.stringify((e.doc as { body?: unknown }).body ?? null) !== JSON.stringify((o as { body?: unknown }).body ?? null)
-        || (e.doc.detail ?? null) !== (o.detail ?? null) || (e.doc.shadow_proxy ?? null) !== (o.shadow_proxy ?? null) || (e.doc.floor_y ?? null) !== (o.floor_y ?? null)) {
+        || (e.doc.detail ?? null) !== (o.detail ?? null) || (e.doc.shadow_proxy ?? null) !== (o.shadow_proxy ?? null) || (e.doc.floor_y ?? null) !== (o.floor_y ?? null)
+        || (e.doc.height_m ?? null) !== (o.height_m ?? null)) {
         if (e) { e.holder.removeFromParent(); e.proxy?.dispose() }
         e = this.build(o)
         this.entries.set(o.id, e)
@@ -573,7 +574,9 @@ export class StageEngine {
         const model = gltf.scene
         const box = new THREE.Box3().setFromObject(model, true)                 // SC3d: its vertices, not its boxes turned (D109's upright turn inflates those)
         const c = box.getCenter(new THREE.Vector3())
-        model.position.sub(new THREE.Vector3(c.x, box.min.y, c.z))             // centred on its footprint, standing on the floor
+        const s = o.height_m ? o.height_m / Math.max(1e-6, box.max.y - box.min.y) : 1   // CW4: at its height (an image → 3D model is unit-sized)
+        model.scale.multiplyScalar(s)
+        model.position.sub(new THREE.Vector3(c.x, box.min.y, c.z).multiplyScalar(s))   // centred on its footprint, standing on the floor
         model.traverse((m) => { m.userData.stageId = id; const mm = m as THREE.Mesh; if (mm.isMesh) { mm.castShadow = true; mm.receiveShadow = true } })   // D109: the model arrives after build() set the body's shadow flags
         group.remove(stub)
         group.add(model)
@@ -802,6 +805,14 @@ export class StageEngine {
     const fig = this.entries.get(o.parent)?.figure
     return fig ? fig.markers[HAND_MARKER[o.parent_joint]] ?? null : null
   }
+  /** CW4 (a dev hook's check): an object's height as drawn, in metres (its box in the world); null before it is built. */
+  heightOf(id: string): number | null {
+    const e = this.entries.get(id)
+    if (!e) return null
+    e.holder.updateMatrixWorld(true)
+    const b = new THREE.Box3().setFromObject(e.holder)
+    return b.isEmpty() ? null : +(b.max.y - b.min.y).toFixed(4)
+  }
   /** D129: an object's world transform as it stands now (a held thing let go stays where it is). */
   worldOf(id: string): StageObject['transform'] | null {
     const e = this.entries.get(id)
@@ -963,6 +974,39 @@ export class StageEngine {
   }
   /** P18: a lit three-quarter view of a model with the camera fitted to its bounding sphere (the E14 renderer's framing) — the thumbnail the
    *  engine's RenderMesh cannot make (its camera sits inside some props). */
+  /** CW3: one object alone as Clay draws it (its shell with a figure), a lit three-quarter view framing it — the picture *Prototype ▸* gives
+   *  its idea. The live scene, everything else hidden for the moment (a skinned figure does not clone). */
+  async snapshotOf(id: string, size = 512): Promise<Blob | null> {
+    const e = this.entries.get(id)
+    if (!e) return null
+    const r = this.passRenderer(size, size)
+    const hidden: THREE.Object3D[] = []
+    const hide = (o: THREE.Object3D | undefined) => { if (o && o.visible) { o.visible = false; hidden.push(o) } }
+    for (const [k, x] of this.entries) if (k !== id) { hide(x.holder); x.proxy?.meshes.forEach(hide) }
+    hide(this.grid); hide(this.selection); hide(this.gizmo.getHelper()); e.pickers?.forEach(hide)
+    for (const h of this.camHelpers.values()) hide(h)
+    for (const p of this.paths.values()) hide(p.obj)
+    const bg = this.scene.background
+    this.scene.background = new THREE.Color(0x2a2a2e)
+    try {
+      this.scene.updateMatrixWorld(true)
+      const box = new THREE.Box3().setFromObject(e.holder)
+      e.proxy?.meshes.forEach((m) => box.expandByObject(m))
+      const centre = box.getCenter(new THREE.Vector3()), radius = Math.max(1e-3, box.getSize(new THREE.Vector3()).length() / 2)
+      const fov = 35, dist = (radius / Math.tan(THREE.MathUtils.degToRad(fov / 2))) * 1.1
+      const yaw = THREE.MathUtils.degToRad(25), pitch = THREE.MathUtils.degToRad(10)
+      const cam = new THREE.PerspectiveCamera(fov, 1, radius / 100, radius * 100)
+      cam.position.set(centre.x + dist * Math.sin(yaw) * Math.cos(pitch), centre.y + dist * Math.sin(pitch), centre.z + dist * Math.cos(yaw) * Math.cos(pitch))
+      cam.lookAt(centre); cam.updateProjectionMatrix(); cam.updateMatrixWorld()
+      r.render(this.scene, cam)
+      return await toBlob(r.domElement)
+    } finally {
+      this.scene.background = bg
+      for (const o of hidden) o.visible = true
+      r.dispose(); r.forceContextLoss()
+      this.dirty = true
+    }
+  }
   async thumbnailOf(model: THREE.Object3D, size = 512): Promise<Blob> {
     const r = this.passRenderer(size, size)
     const scene = new THREE.Scene()

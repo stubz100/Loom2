@@ -59,6 +59,8 @@ class VariantClay(BaseModel):
     body_points: dict[str, Any] | None = None
     note: str | None = None                       # the fit's reading of the stance ("arms_close": drawn again, D140)
     shell_asset_id: str | None = None
+    model_asset_id: str | None = None             # CW3: a prop idea's model (Prototype ▸ on a free mesh in Clay)
+    height_m: float | None = Field(None, gt=0.0, le=100.0)   # CW3/CW4: that model's height
     job_id: str | None = None                     # the step's job (the Dock and the bench follow it)
     error: str | None = None
 
@@ -106,6 +108,11 @@ class Idea(BaseModel):
 
 class StaleIdea(Exception):
     pass
+
+
+def focus_variant(idea: Idea) -> Variant | None:
+    """The variant in focus, else the newest."""
+    return next((v for v in idea.variants if v.id == idea.focus), None) or (idea.variants[-1] if idea.variants else None)
 
 
 # ---- the words: a name and a sheet from a prompt (U3; 02 §4) --------------------------------------------------------------------------
@@ -203,9 +210,9 @@ class IdeaStore:
         groups.move([("asset", dup.id)], gid)
         return dup.id, made_from(rec)
 
-    def create(self, cls: IdeaClass, groups: GroupStore, asset_id: str | None = None, name: str | None = None, note: str = "") -> Idea:
+    def create(self, cls: IdeaClass, groups: GroupStore, asset_id: str | None = None, name: str | None = None, note: str = "", move: bool = False) -> Idea:
         """A new idea on its own album page; a picture given is copied there as its first variant (in focus), and names the idea when no
-        name is given (U3)."""
+        name is given (U3). `move`: a picture made for it (Clay's view of a free object) moves there instead."""
         prompt = ""
         if asset_id:
             rec = groups.cat.get(asset_id)
@@ -213,7 +220,15 @@ class IdeaStore:
         nm = (name or "").strip() or name_from_prompt(prompt, cls)
         g = groups.create(f"{nm} · idea")
         idea = Idea(cls=cls, name=nm[:80], note=note, group_id=g.id)
-        if asset_id:
+        if asset_id and move:
+            rec = groups.cat.get(asset_id)
+            if rec is None or rec.kind != "image":
+                raise ValueError("a variant is a picture in the Catalogue")
+            groups.move([("asset", asset_id)], g.id)
+            groups.update(g.id, cover_id=asset_id)
+            v = Variant(asset_id=asset_id, made_from=made_from(rec))
+            idea = idea.model_copy(update={"variants": [v], "focus": v.id})
+        elif asset_id:
             aid, src = self._copy(groups, asset_id, g.id)
             groups.update(g.id, cover_id=aid)
             v = Variant(asset_id=aid, made_from=src)
@@ -428,9 +443,13 @@ def keep(ws: Workspace, groups: GroupStore, iid: str, vid: str, profile_id: str 
             aref = dup.id
     p = stories.set_kept_from_idea(p.id, ver.id, {"idea_id": idea.id, "variant_id": v.id},
                                    anim_ref_asset_id=aref,
-                                   body=clay.body if clay and aref else None,
+                                   body=clay.body if clay and idea.cls == "character" else None,
                                    body_points=clay.body_points if clay and aref else None,
                                    note=clay.note if clay and aref else None,
-                                   shell_asset_id=clay.shell_asset_id if clay and aref else None)
+                                   shell_asset_id=clay.shell_asset_id if clay and idea.cls == "character" else None)
+    if clay and idea.cls == "prop" and clay.model_asset_id:                         # CW3: a prop's model and height (Prototype ▸ on a mesh)
+        p = stories.set_model(p.id, ver.id, clay.model_asset_id, None)
+        if clay.height_m:
+            p = stories.patch_profile(p.id, {"versions": [{"id": ver.id, "height_m": clay.height_m}]})
     idea = store.record_kept(iid, Kept(profile_id=p.id, version_id=ver.id, variant_id=v.id))
     return p, idea

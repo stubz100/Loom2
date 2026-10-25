@@ -28,16 +28,16 @@ function variantMenu(i: Idea, v: IdeaVariant): MenuItem[] {
 }
 
 // ------------------------------------------------------------------ Panel · the board
-function IdeaRow({ i, active }: { i: Idea; active: boolean }) {
+function IdeaRow({ i, active, picked }: { i: Idea; active: boolean; picked: boolean }) {
   const v = focusOf(i)
   const { ref, over } = useDropTarget((p) => onlyAssets(p) && imageIds(p).length > 0, (p) => void addToIdea(i.id, imageIds(p)), (p) => ({ ok: true, label: `Add ${imageIds(p).length > 1 ? `${imageIds(p).length} variants` : 'a variant'} to ${i.name}` }))
   return (
-    <button ref={ref} className={`story-row profile-row idea-row${active ? ' active' : ''}${over ? ' drop-over' : ''}`} role="listitem" data-id={i.id}
-      onClick={() => ideas().select(i.id)} onContextMenu={(e) => { ideas().select(i.id); showMenu(e, ideaMenu(i)) }}>
+    <button ref={ref} className={`story-row profile-row idea-row${active ? ' active' : ''}${picked ? ' picked' : ''}${over ? ' drop-over' : ''}`} role="listitem" data-id={i.id} aria-pressed={picked}
+      onClick={(e) => (e.ctrlKey || e.metaKey ? ideas().togglePick(i.id) : ideas().select(i.id))} onContextMenu={(e) => { ideas().select(i.id); showMenu(e, ideaMenu(i)) }}>
       {v ? <img className="pthumb" src={api.thumbUrl(v.asset_id, 256)} alt="" /> : <span className="pthumb empty" />}
       <span className="pname">{i.name}<span className="muted"> · {CLASS_LABEL[i.cls]} idea</span>
         <span className="owes">{i.variants.length} variant{i.variants.length === 1 ? '' : 's'}{v?.clay ? ` · ${clayWords(v)}` : ''}</span></span>
-      <span className="n">{i.kept.length ? <span title="kept in Cast">kept ✓</span> : null}</span>
+      <span className="n">{picked ? <span title="picked for the line-up">☑</span> : null}{i.kept.length ? <span title="kept in Cast">kept ✓</span> : null}</span>
     </button>
   )
 }
@@ -47,18 +47,21 @@ export function IdeasList({ filter, q }: { filter: 'all' | ProfileClass; q: stri
   const list = useIdeas((s) => s.ideas)
   const loaded = useIdeas((s) => s.loaded)
   const ideaId = useIdeas((s) => s.ideaId)
+  const picked = useIdeas((s) => s.picked)
   useEffect(() => { if (!ideas().loaded) void ideas().load() }, [])
   const cls: ProfileClass = filter === 'all' ? 'character' : filter
   const { ref, over } = useDropTarget((p) => onlyAssets(p) && imageIds(p).length > 0, (p) => void newIdeaFrom(cls, imageIds(p)), () => ({ ok: true, label: `A new ${cls} idea` }))
   const shown = list.filter((i) => (filter === 'all' || i.cls === filter) && (!q || i.name.toLowerCase().includes(q)))
-  markUsed('story.idea.new')
+  markUsed('story.idea.new'); markUsed('story.idea.lineup')
   return (
     <>
       <div ref={ref} className={`story-list${over ? ' drop-over' : ''}`} role="list" aria-label="ideas">
-        {shown.map((i) => <IdeaRow key={i.id} i={i} active={ideaId === i.id} />)}
+        {shown.map((i) => <IdeaRow key={i.id} i={i} active={ideaId === i.id} picked={picked.includes(i.id)} />)}
         {!shown.length && <div className="empty hint">{!loaded ? 'loading…' : list.length ? 'No idea matches.' : 'No ideas yet — Prototype ▸ on any picture, or drop pictures here'}</div>}
       </div>
-      <div className="verbs"><CommandButton id="story.idea.new" text /></div>
+      <div className="verbs"><CommandButton id="story.idea.new" text /><CommandButton id="story.idea.lineup" text />
+        {picked.length > 0 && <button type="button" className="quiet" onClick={() => useIdeas.setState({ picked: [] })} title="Clear the ideas picked for the line-up">{picked.length} picked ✕</button>}
+        <Help text="Ctrl-click ideas to pick several for the line-up; without a pick it lines up those shown that have their clay." /></div>
     </>
   )
 }
@@ -77,7 +80,13 @@ function Variant({ i, v }: { i: Idea; v: IdeaVariant }) {
 
 function Clay({ i, v }: { i: Idea; v: IdeaVariant }) {
   const c = v.clay
-  if (i.cls !== 'character') return <span className="hint">A {CLASS_LABEL[i.cls]}'s clay comes with Cast's bench for props and places (CW4, CW6); Keep ▶ makes it a Cast {CLASS_LABEL[i.cls]} meanwhile.</span>
+  if (c?.model_asset_id) return (                                                                    // CW3: a prop's model (Prototype ▸ on a mesh in Clay)
+    <div className="idea-clay" data-step={c.step}>
+      <img className="aref" src={api.thumbUrl(c.model_asset_id, 256)} alt="the model" />
+      <div className="kv"><span>model</span><span>from Clay</span><span>height</span><span>{c.height_m ? `${c.height_m.toFixed(2)} m` : 'its own size'}</span></div>
+    </div>
+  )
+  if (i.cls !== 'character') return <span className="hint">A {CLASS_LABEL[i.cls]}'s clay: Prototype ▸ on a mesh in Clay, or Keep ▶ then its 3D model in Cast{i.cls === 'place' ? ' (places get their set builder later)' : ''}.</span>
   if (!c) return <span className="hint">no clay yet</span>
   const pts = ((c.body_points as { pose?: unknown[] } | null)?.pose ?? []).length
   return (

@@ -9802,3 +9802,49 @@ on any skeleton (the preset itself): it goes to AP1's list of presets to correct
     *Back* → *＋ variant* → *Keep ▶* → Cast on the new character.
 - **Totals:** offline 606 passed, agents_check, model_literals_check and settings audit clean, Vitest 524 + 3 skipped, typecheck, lint (0 errors, 79 warnings) and build clean, e2e full 69/69 and open 69/69 (a first open run failed the ideas scenario once, uncaptured — its toast was clicked only after the API poll; it now clicks Open at once, and the scenario passed alone in both variants after).
 - Screenshots: `.docs/proto01_UIcast/img/cw1-*.jpg`, `cw2-for-idea.jpg`.
+
+## 2026-10-25 17:26 — D142, CW3–CW5 built: Cast's bench is Clay opened for the version, Clay's cards follow Cast, props have a height, the line-up (D137 stage 5)
+
+- **The A-pose against the T-pose** (the author asked). The A-pose stays. D140's prompt turns the palms to the camera, so SDPose reads each
+  hand flat; a T-pose's palms face down, edge-on to a front camera. A shell skinned in an A-pose turns about 45–60° to the arms-down poses
+  most clips hold, against about 90° from a T-pose, which squashes the shoulder more under bone heat. E36 measured A-pose shells (85/96
+  joints inside). If arms still fuse at 30°, the answer is a wider A-pose (40–45°), not 90°. A short spike can settle it with numbers if
+  the author wants them.
+- **D142** (recorded before the work): Cast's bench is Clay opened for the Cast version, as Image is opened for a shot or an idea.
+  - The server: `Stage.purpose` (stage · bench · lineup) and `Stage.bound {profile_id, version}`; `POST /stages/bench` makes the
+    version's bench once and keeps it; `GET /stages` lists the stages proper unless `?purpose=` asks.
+  - A character's bench holds its figure, bound. A prop's bench holds its model at its height, beside an unbound 1.75 m figure. A place's
+    waits for CW6.
+  - The client: *Bench ▶* (`story.cast.bench`) is in the character's body row, the prop's 3D model section and the profile's right-click.
+    Clay's Shot section shows the chip *Bench: ‹name› v1 · Back to Cast*. The stage picker leaves benches and the line-up out.
+- **CW3:**
+  - Figures' "+" lists Cast's characters first. `placeCharacter` adds the figure bound and named, or selects the one there.
+  - *Edit in Cast* replaces *Open the character in Story · Cast*, on the mesh's editor too.
+  - *Make a free copy* (`stage.object.freeCopy`) puts a free copy beside, with the body and shell, or the model and height, as they are.
+  - *Prototype ▸ a new idea* (`stage.object.prototype`) works on a free figure or mesh. `engine.snapshotOf` renders the object alone; the
+    PNG goes up as a blob, and `POST /story/ideas/from-clay` ingests it (lineage `clay-view` ← the model or shell). It makes the idea with
+    that picture on its page and the object as its clay (`VariantClay.model_asset_id`, `height_m`).
+  - *Keep ▶* carries a figure's body without an A-pose picture (fitted by hand), and a prop's model and height.
+- **CW4:**
+  - `ProfileVersion.height_m`, a prop's height, prefilled at creation by `sizes.prop_height` (143 common things: a cup 0.1 m, a wardrobe
+    2.0 m; else 1 m). It is a sheet field (copied to new versions, read-only once final), edited in the prop's 3D model section.
+  - `StageObject.height_m` scales a mesh's GLB to that height in the engine. A bound mesh follows its prop's height (`withModel`); a free
+    one takes the author's (the mesh's editor).
+- **CW5:**
+  - *Line-up ▶* on the Cast board takes the characters and props shown. On the Ideas board it takes the ideas picked (Ctrl-click, *n
+    picked ✕*), else those shown that have clay.
+  - `POST /stages/lineup` makes the project's one line-up stage again each time. Cast versions stand bound and ideas stand free in their
+    clay; an idea's prop shows its model. They stand side by side at their sizes, before the new `lineup` set: a wall marked every 0.5 m,
+    the metres bolder, stretched to the row. A camera frames them.
+  - The chip offers *Pose all ▾*, *Send to a stage ▾* (a new stage or one of the project's; a second figure of a character there stands
+    free) and *Back*.
+- **Not built:** a prop's pivot and grip; a place's bench and line-up strip (CW6); the line-up's textured shells.
+- **Tests:**
+  - `test_bench_lineup_cw345.py` 3: the words; benches, the list, the line-up; Prototype ▸ from Clay and Keep ▶ carrying it.
+  - `bench.test.ts` 4; the routes snapshot +3.
+  - Two e2e scenarios:
+    - the bench and a prop's height: the character's bench and chip, Back; a cup at 0.1 m from its name, edited to 0.12, its model drawn
+      0.12 m tall beside the figure;
+    - Cast in Clay and the line-up: the character's card, a free copy, Prototype ▸, Line-up ▶, Send to a new stage.
+- **Totals:** offline 609 passed, agents_check, model_literals_check and settings audit clean, Vitest 528 + 3 skipped, typecheck, lint (0 errors, 79 warnings) and build clean, e2e full 71/71 and open 71/71 (the first runs failed the new scenarios in sequence: open has no image → 3D job, so the prop's model is now a GLB import; and with the full suite's many characters the Figures + panel and a figure's editor covered the rows the scenario right-clicked — it closes the panel and right-clicks the row's name).
+- Screenshots: `.docs/proto01_UIcast/img/cw3-bench.jpg`, `cw4-prop-bench.jpg`, `cw5-lineup.jpg`.

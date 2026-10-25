@@ -11,14 +11,14 @@ import { BoundTag, FigureCharacter } from './FigureBinding'
 import { bindItems } from './stageCommands'
 import { st, useStage } from './stageStore'
 
-const ver = (v: Partial<ProfileVersion>): ProfileVersion => ({ id: 'v1', label: 'v1', state: 'open', group_id: 'grp_1', candidates_group_id: null, hero_asset_id: null, body: null, anim_ref_asset_id: null, anim_ref_back_asset_id: null, anim_test_clip_id: null, shell_asset_id: null, shell_from: null, poses: {}, from_idea: null, model_asset_id: null, model_from: null, body_fit_from: null, body_points: null, anim_ref_note: null, appearance: '', outfit: '',
+const ver = (v: Partial<ProfileVersion>): ProfileVersion => ({ id: 'v1', label: 'v1', state: 'open', group_id: 'grp_1', candidates_group_id: null, hero_asset_id: null, body: null, anim_ref_asset_id: null, anim_ref_back_asset_id: null, anim_test_clip_id: null, shell_asset_id: null, shell_from: null, poses: {}, from_idea: null, height_m: null, model_asset_id: null, model_from: null, body_fit_from: null, body_points: null, anim_ref_note: null, appearance: '', outfit: '',
   colours: [], marks: '', trigger: null, lora: null, derived_from: null, created_at: '', locked_at: null, ...v })
 const prof = (id: string, name: string, cls: Profile['cls'], versions: ProfileVersion[]): Profile => ({ id, name, cls, current: versions[0].id, schema_version: 2, revision: 0, voice_id: null, created_at: '', updated_at: '', versions })
 const MARA = prof('prf_m', 'Mara', 'character', [ver({ group_id: 'grp_m', hero_asset_id: 'ast_hm' }), ver({ id: 'v2', label: 'winter', group_id: 'grp_m2', hero_asset_id: 'ast_hm2' })])
 const INES = prof('prf_i', 'Ines', 'character', [ver({ group_id: 'grp_i', hero_asset_id: 'ast_hi' })])
 const HARBOUR = prof('prf_h', 'Harbour', 'place', [ver({ group_id: 'grp_h' })])
 const fig = (id: string, x: number, extra: Partial<StageObject> = {}): StageObject => ({ id, kind: 'mannequin', name: id, preset: 'adult', asset_id: null, body: null, detail: null, path: null, shadow_proxy: null, light: null, transform: { pos: [x, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] },
-  parent: null, parent_joint: null, locked: false, visible: true, colour_id: 1, pose: { preset: 'stand', joints: {}, extra: {}, ground: 0, pins: {} }, billboard: false, profile_id: null, version: null, lens_deg: null, plate_asset_id: null, floor_y: null, plate_camera_id: null, level: null, things: [], things_document_id: null, ...extra })
+  parent: null, parent_joint: null, locked: false, visible: true, colour_id: 1, pose: { preset: 'stand', joints: {}, extra: {}, ground: 0, pins: {} }, billboard: false, profile_id: null, version: null, lens_deg: null, plate_asset_id: null, floor_y: null, plate_camera_id: null, level: null, things: [], things_document_id: null, height_m: null, ...extra })
 const DOC = { schema_version: 1, id: 'stg_1', name: 'Quay', size: { w: 1920, h: 1080, fps: 24 }, objects: [fig('fig_r', 1.2), fig('fig_l', -1.2)],
   cameras: [{ id: 'cam_1', name: 'Camera 1', pos: [0, 1.5, 5], target: [0, 1, 0], roll: 0, focal_mm: 35, sensor_mm: 36 }], active_camera: 'cam_1',
   keyframes: { camera: {}, objects: {} }, range: { start: 0, end: 120 }, passes: [], group_id: null, revision: 1, created_at: '', updated_at: '' } as unknown as StageDoc

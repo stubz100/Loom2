@@ -96,6 +96,7 @@ export function CastBody({ p, v }: { p: Profile; v: ProfileVersion }) {
             <span>
               {v.anim_ref_asset_id && <CommandButton id="story.cast.fitBody" text size={12} />}
               <CommandButton id="cast.skeleton.open" text size={12} />
+              <CommandButton id="story.cast.bench" text size={12} />{/* D142: Clay opened for this version */}
               <ShellState v={v} />
               <button type="button" className="quiet" title="Proportions and build back to the default adult (the height and attachments stay)" onClick={() => set({ build: 'average', head: 1, neck: 1, torso: 1, shoulders: 1, hips: 1, arms: 1, elbow: ELBOW_AT, legs: 1, knee: KNEE_AT, hands: 1, feet: 1 })}>Reset proportions</button>
               <button type="button" className="quiet" title="No body of its own: the default 1.75 m dummy" onClick={() => setSheet({ body: null as never })}>Remove the body</button>

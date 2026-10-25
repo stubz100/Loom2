@@ -16,6 +16,8 @@ interface IdeasState {
   ideas: Idea[]
   loaded: boolean
   ideaId: string | null
+  picked: string[]                                                      // CW5: the ideas picked for the line-up (Ctrl-click)
+  togglePick: (id: string) => void
   board: Board
   setBoard: (b: Board) => void
   load: () => Promise<void>
@@ -39,7 +41,8 @@ const detail = (e: unknown) => (e as ApiError).detail ?? String(e)
 export const useIdeas = create<IdeasState>()((set, get) => {
   const put = (i: Idea) => set({ ideas: [i, ...get().ideas.filter((x) => x.id !== i.id)] })
   return {
-    ideas: [], loaded: false, ideaId: null, board: 'cast',
+    ideas: [], loaded: false, ideaId: null, picked: [], board: 'cast',
+    togglePick: (id) => set({ picked: get().picked.includes(id) ? get().picked.filter((x) => x !== id) : [...get().picked, id] }),
     setBoard: (board) => { set({ board }); if (board === 'ideas' && !get().loaded) void get().load() },
     load: async () => {
       try { set({ ideas: (await unwrap(http.GET('/story/ideas'))).items, loaded: true }) }
@@ -110,11 +113,12 @@ export const focusOf = (i: Idea | undefined): IdeaVariant | undefined => i?.vari
 export function clayWords(v: IdeaVariant | undefined): string {
   const c = v?.clay
   if (!c) return 'no clay yet'
+  if (c.model_asset_id) return c.height_m ? `model · ${c.height_m.toFixed(2)} m` : 'model'                 // CW3: a prop's
   switch (c.step) {
     case 'drawing': return 'drawing the A-pose…'
     case 'fitting': return 'fitting the body…'
     case 'shell': return 'figure ready · the shell in the background…'
-    case 'done': return c.shell_asset_id ? 'figure and shell' : 'figure'
+    case 'done': return c.shell_asset_id ? 'figure and shell' : c.body ? 'figure' : 'done'
     default: return c.error ? `stopped: ${c.error}` : 'stopped'
   }
 }

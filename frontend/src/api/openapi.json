@@ -1164,6 +1164,47 @@
         "title": "Beat",
         "type": "object"
       },
+      "BenchOpen": {
+        "properties": {
+          "profile_id": {
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "profile_id"
+        ],
+        "title": "BenchOpen",
+        "type": "object"
+      },
+      "BenchOut": {
+        "properties": {
+          "made": {
+            "title": "Made",
+            "type": "boolean"
+          },
+          "stage": {
+            "$ref": "#/components/schemas/Stage"
+          }
+        },
+        "required": [
+          "stage",
+          "made"
+        ],
+        "title": "BenchOut",
+        "type": "object"
+      },
       "BindBody": {
         "properties": {
           "shot_id": {
@@ -1296,7 +1337,7 @@
         "title": "BlobPut",
         "type": "object"
       },
-      "Body": {
+      "Body-Input": {
         "description": "CA0 (D94, 01 §9 answer 3): the body on the Cast sheet — it shapes the figure's Stage dummy when the figure is bound to this version.\nHeight in metres; the proportions are factors of the default dummy (1 = the 1.75 m adult); the build widens or narrows it.",
         "properties": {
           "arms": {
@@ -1308,7 +1349,7 @@
           },
           "attachments": {
             "items": {
-              "$ref": "#/components/schemas/BodyAttachment"
+              "$ref": "#/components/schemas/BodyAttachment-Input"
             },
             "maxItems": 6,
             "title": "Attachments",
@@ -1356,7 +1397,158 @@
             "type": "string"
           },
           "hand_rest": {
-            "$ref": "#/components/schemas/HandRest"
+            "$ref": "#/components/schemas/HandRest-Input"
+          },
+          "hands": {
+            "default": 1.0,
+            "maximum": 1.6,
+            "minimum": 0.5,
+            "title": "Hands",
+            "type": "number"
+          },
+          "head": {
+            "default": 1.0,
+            "maximum": 2.5,
+            "minimum": 0.5,
+            "title": "Head",
+            "type": "number"
+          },
+          "head_forward": {
+            "default": 0.0,
+            "maximum": 40.0,
+            "minimum": -30.0,
+            "title": "Head Forward",
+            "type": "number"
+          },
+          "height_m": {
+            "default": 1.75,
+            "maximum": 4.0,
+            "minimum": 0.3,
+            "title": "Height M",
+            "type": "number"
+          },
+          "hips": {
+            "default": 1.0,
+            "maximum": 1.6,
+            "minimum": 0.6,
+            "title": "Hips",
+            "type": "number"
+          },
+          "knee": {
+            "default": 0.5057471264367817,
+            "maximum": 0.65,
+            "minimum": 0.35,
+            "title": "Knee",
+            "type": "number"
+          },
+          "legs": {
+            "default": 1.0,
+            "maximum": 1.6,
+            "minimum": 0.5,
+            "title": "Legs",
+            "type": "number"
+          },
+          "locks": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Locks",
+            "type": "array"
+          },
+          "neck": {
+            "default": 1.0,
+            "maximum": 3.0,
+            "minimum": 0.5,
+            "title": "Neck",
+            "type": "number"
+          },
+          "shoulder_drop": {
+            "default": 1.0,
+            "maximum": 3.0,
+            "minimum": 0.0,
+            "title": "Shoulder Drop",
+            "type": "number"
+          },
+          "shoulders": {
+            "default": 1.0,
+            "maximum": 1.8,
+            "minimum": 0.6,
+            "title": "Shoulders",
+            "type": "number"
+          },
+          "torso": {
+            "default": 1.0,
+            "maximum": 1.6,
+            "minimum": 0.6,
+            "title": "Torso",
+            "type": "number"
+          }
+        },
+        "title": "Body",
+        "type": "object"
+      },
+      "Body-Output": {
+        "description": "CA0 (D94, 01 §9 answer 3): the body on the Cast sheet — it shapes the figure's Stage dummy when the figure is bound to this version.\nHeight in metres; the proportions are factors of the default dummy (1 = the 1.75 m adult); the build widens or narrows it.",
+        "properties": {
+          "arms": {
+            "default": 1.0,
+            "maximum": 1.6,
+            "minimum": 0.6,
+            "title": "Arms",
+            "type": "number"
+          },
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/BodyAttachment-Output"
+            },
+            "maxItems": 6,
+            "title": "Attachments",
+            "type": "array"
+          },
+          "build": {
+            "default": "average",
+            "enum": [
+              "slim",
+              "average",
+              "broad",
+              "heavy"
+            ],
+            "title": "Build",
+            "type": "string"
+          },
+          "elbow": {
+            "default": 0.5178571428571429,
+            "maximum": 0.65,
+            "minimum": 0.35,
+            "title": "Elbow",
+            "type": "number"
+          },
+          "feet": {
+            "default": 1.0,
+            "maximum": 1.6,
+            "minimum": 0.5,
+            "title": "Feet",
+            "type": "number"
+          },
+          "feet_out": {
+            "default": 0.0,
+            "maximum": 45.0,
+            "minimum": -20.0,
+            "title": "Feet Out",
+            "type": "number"
+          },
+          "figure": {
+            "default": "female",
+            "enum": [
+              "female",
+              "male"
+            ],
+            "title": "Figure",
+            "type": "string"
+          },
+          "hand_rest": {
+            "$ref": "#/components/schemas/HandRest-Output"
           },
           "hands": {
             "default": 1.0,
@@ -1469,7 +1661,64 @@
         "title": "Body",
         "type": "object"
       },
-      "BodyAttachment": {
+      "BodyAttachment-Input": {
+        "description": "CA0 (01 §9b N1): a rigid part that follows a joint of the figure — a tail, horns, folded wings. Shown on the Stage dummy and in its\nclay and depth passes; not in the pose pass (Wan Animate guesses its motion from the reference).",
+        "properties": {
+          "joint": {
+            "anyOf": [
+              {
+                "enum": [
+                  "root",
+                  "spine",
+                  "head",
+                  "r_shoulder",
+                  "l_shoulder",
+                  "r_elbow",
+                  "l_elbow"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Joint"
+          },
+          "kind": {
+            "enum": [
+              "tail",
+              "horns",
+              "ears",
+              "wings",
+              "antennae",
+              "hat",
+              "backpack",
+              "other"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "note": {
+            "default": "",
+            "maxLength": 80,
+            "title": "Note",
+            "type": "string"
+          },
+          "size": {
+            "default": 1.0,
+            "maximum": 3.0,
+            "minimum": 0.2,
+            "title": "Size",
+            "type": "number"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "BodyAttachment",
+        "type": "object"
+      },
+      "BodyAttachment-Output": {
         "description": "CA0 (01 §9b N1): a rigid part that follows a joint of the figure — a tail, horns, folded wings. Shown on the Stage dummy and in its\nclay and depth passes; not in the pose pass (Wan Animate guesses its motion from the reference).",
         "properties": {
           "joint": {
@@ -1976,6 +2225,69 @@
           "changed"
         ],
         "title": "ChangedGroups",
+        "type": "object"
+      },
+      "ClayIn": {
+        "description": "CW3: what a free object in Clay is, as a variant's clay.",
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Body-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "height_m": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 100.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height M"
+          },
+          "kind": {
+            "enum": [
+              "figure",
+              "model"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "model_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Asset Id"
+          },
+          "shell_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shell Asset Id"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "ClayIn",
         "type": "object"
       },
       "ClayQueued": {
@@ -8456,7 +8768,48 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
-      "HandRest": {
+      "HandRest-Input": {
+        "description": "S2 (proto01_UIcast 03 §3.1): the character's hands at rest — what every pose of its Detailed figure starts from (a key's hand preset\nstill turns them): a preset's curl, scaled. The GLB's own flat, fanned hand is never the rest.",
+        "properties": {
+          "curl": {
+            "default": 1.0,
+            "maximum": 1.6,
+            "minimum": 0.0,
+            "title": "Curl",
+            "type": "number"
+          },
+          "preset": {
+            "default": "relaxed",
+            "enum": [
+              "open",
+              "relaxed",
+              "fist",
+              "point",
+              "grip",
+              "pinch"
+            ],
+            "title": "Preset",
+            "type": "string"
+          },
+          "spread": {
+            "default": 0.0,
+            "maximum": 30.0,
+            "minimum": -10.0,
+            "title": "Spread",
+            "type": "number"
+          },
+          "thumb": {
+            "default": 0.0,
+            "maximum": 40.0,
+            "minimum": -30.0,
+            "title": "Thumb",
+            "type": "number"
+          }
+        },
+        "title": "HandRest",
+        "type": "object"
+      },
+      "HandRest-Output": {
         "description": "S2 (proto01_UIcast 03 §3.1): the character's hands at rest — what every pose of its Detailed figure starts from (a key's hand preset\nstill turns them): a preset's curl, scaled. The GLB's own flat, fanned hand is never the rest.",
         "properties": {
           "curl": {
@@ -9464,6 +9817,41 @@
           }
         },
         "title": "IdeaCreate",
+        "type": "object"
+      },
+      "IdeaFromClay": {
+        "properties": {
+          "blob": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Blob",
+            "type": "string"
+          },
+          "clay": {
+            "$ref": "#/components/schemas/ClayIn"
+          },
+          "cls": {
+            "enum": [
+              "character",
+              "prop",
+              "place"
+            ],
+            "title": "Cls",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cls",
+          "name",
+          "blob",
+          "clay"
+        ],
+        "title": "IdeaFromClay",
         "type": "object"
       },
       "IdeaList": {
@@ -11174,6 +11562,75 @@
           "locations"
         ],
         "title": "LineageTree",
+        "type": "object"
+      },
+      "LineupBody": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LineupItem"
+            },
+            "maxItems": 12,
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "LineupBody",
+        "type": "object"
+      },
+      "LineupItem": {
+        "description": "One thing in the line-up: a Cast version (a character or a prop; its current version when none is named) or an idea (its variant in\nfocus, else the one named).",
+        "properties": {
+          "idea_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idea Id"
+          },
+          "profile_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Id"
+          },
+          "variant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variant Id"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "title": "LineupItem",
         "type": "object"
       },
       "LipsyncBody": {
@@ -14277,7 +14734,7 @@
           "body": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Body"
+                "$ref": "#/components/schemas/Body-Output"
               },
               {
                 "type": "null"
@@ -14354,6 +14811,19 @@
           "group_id": {
             "title": "Group Id",
             "type": "string"
+          },
+          "height_m": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 100.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height M"
           },
           "hero_asset_id": {
             "anyOf": [
@@ -14507,6 +14977,7 @@
           "poses",
           "model_asset_id",
           "model_from",
+          "height_m",
           "derived_from",
           "from_idea",
           "created_at",
@@ -17793,6 +18264,16 @@
             ],
             "title": "Ambient"
           },
+          "bound": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StageBound"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "cameras": {
             "items": {
               "$ref": "#/components/schemas/StageCamera"
@@ -17844,6 +18325,16 @@
             "title": "Passes",
             "type": "array"
           },
+          "purpose": {
+            "default": "stage",
+            "enum": [
+              "stage",
+              "bench",
+              "lineup"
+            ],
+            "title": "Purpose",
+            "type": "string"
+          },
           "range": {
             "$ref": "#/components/schemas/StageRange"
           },
@@ -17873,6 +18364,8 @@
           "schema_version",
           "id",
           "name",
+          "purpose",
+          "bound",
           "size",
           "objects",
           "cameras",
@@ -17996,6 +18489,25 @@
           "approx_gb"
         ],
         "title": "StageAnimateCaps",
+        "type": "object"
+      },
+      "StageBound": {
+        "description": "D142: the Cast version a bench stage is for.",
+        "properties": {
+          "profile_id": {
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile_id",
+          "version"
+        ],
+        "title": "StageBound",
         "type": "object"
       },
       "StageCamera": {
@@ -18323,7 +18835,7 @@
           "body": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Body"
+                "$ref": "#/components/schemas/Body-Output"
               },
               {
                 "type": "null"
@@ -18360,6 +18872,19 @@
               }
             ],
             "title": "Floor Y"
+          },
+          "height_m": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 100.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height M"
           },
           "id": {
             "title": "Id",
@@ -18594,7 +19119,8 @@
           "plate_camera_id",
           "level",
           "things",
-          "things_document_id"
+          "things_document_id",
+          "height_m"
         ],
         "title": "StageObject",
         "type": "object"
@@ -21264,7 +21790,7 @@
           "body": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Body"
+                "$ref": "#/components/schemas/Body-Output"
               },
               {
                 "type": "null"
@@ -21294,6 +21820,19 @@
             ],
             "title": "Error"
           },
+          "height_m": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 100.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height M"
+          },
           "job_id": {
             "anyOf": [
               {
@@ -21314,6 +21853,17 @@
             ],
             "title": "Kind",
             "type": "string"
+          },
+          "model_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Asset Id"
           },
           "note": {
             "anyOf": [
@@ -21358,6 +21908,8 @@
           "body_points",
           "note",
           "shell_asset_id",
+          "model_asset_id",
+          "height_m",
           "job_id",
           "error"
         ],
@@ -29221,7 +29773,26 @@
     },
     "/stages": {
       "get": {
+        "description": "The project's stages — D142: the stages proper by default; a Cast version's bench and the line-up only when asked for.",
         "operationId": "stages_list_stages_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "purpose",
+            "required": false,
+            "schema": {
+              "default": "stage",
+              "enum": [
+                "stage",
+                "bench",
+                "lineup",
+                "all"
+              ],
+              "title": "Purpose",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -29232,6 +29803,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Stages List",
@@ -29274,6 +29855,90 @@
           }
         },
         "summary": "Stage Create",
+        "tags": [
+          "stages"
+        ]
+      }
+    },
+    "/stages/bench": {
+      "post": {
+        "description": "D142: a Cast version's bench — Clay opened for it: the bench stage made once (a character's figure bound to the version; a prop's model\nat its height beside a 1.75 m figure) and kept, so the camera and light the author set stay.",
+        "operationId": "stage_bench_stages_bench_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BenchOpen"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenchOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stage Bench",
+        "tags": [
+          "stages"
+        ]
+      }
+    },
+    "/stages/lineup": {
+      "post": {
+        "description": "CW5 (02 §7): the line-up — Cast's characters and props, and ideas with clay, side by side at their sizes before 0.5 m marks; Clay\nopens on it (D142). A Cast version stands bound (its body and shell, or its model at its height, follow Cast); an idea's figure is its\nvariant's clay (free). An idea without clay, a prop without a model, and a place are left out (and named).",
+        "operationId": "stage_lineup_stages_lineup_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LineupBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stage Lineup",
         "tags": [
           "stages"
         ]
@@ -30700,6 +31365,48 @@
           }
         },
         "summary": "Idea Create",
+        "tags": [
+          "ideas"
+        ]
+      }
+    },
+    "/story/ideas/from-clay": {
+      "post": {
+        "description": "CW3 (06 §2.7): *Prototype ▸* on a free figure or mesh in Clay — a new idea whose first variant is Clay's view of it (a picture made\nfor it, on the idea's page) and whose clay is the object: a figure's body and shell, or a mesh's model and height.",
+        "operationId": "idea_from_clay_story_ideas_from_clay_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdeaFromClay"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Idea"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Idea From Clay",
         "tags": [
           "ideas"
         ]

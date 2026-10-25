@@ -7,7 +7,11 @@ from __future__ import annotations
 import asyncio
 
 from fastapi import APIRouter, HTTPException
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
+
+from ..body import Body
 
 from ..ideas import Idea, IdeaClass, IdeaStore, StaleIdea, keep, plan_clay
 from ..schemas import Deleted
@@ -30,6 +34,22 @@ class IdeaCreate(BaseModel):
 
 class VariantAdd(BaseModel):
     asset_id: str
+
+
+class ClayIn(BaseModel):
+    """CW3: what a free object in Clay is, as a variant's clay."""
+    kind: Literal["figure", "model"]
+    body: Body | None = None
+    shell_asset_id: str | None = None
+    model_asset_id: str | None = None
+    height_m: float | None = Field(None, gt=0.0, le=100.0)
+
+
+class IdeaFromClay(BaseModel):
+    cls: IdeaClass
+    name: str = Field(..., min_length=1, max_length=80)
+    blob: str = Field(..., pattern=r"^[0-9a-f]{64}$")   # Clay's view of it, a PNG uploaded first (PUT /blobs/{sha})
+    clay: ClayIn
 
 
 class ClayQueued(BaseModel):
@@ -66,6 +86,34 @@ async def idea_create(svc: Svc, body: IdeaCreate):
     groups = svc.require_groups()
     try:
         idea = await asyncio.to_thread(IdeaStore(ws).create, body.cls, groups, body.asset_id, body.name, body.note)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    svc.group_changed([idea.group_id])
+    _changed(svc, idea)
+    return idea.model_dump()
+
+
+@router.post("/story/ideas/from-clay", response_model=Idea)
+async def idea_from_clay(svc: Svc, body: IdeaFromClay):
+    """CW3 (06 §2.7): *Prototype ▸* on a free figure or mesh in Clay — a new idea whose first variant is Clay's view of it (a picture made
+    for it, on the idea's page) and whose clay is the object: a figure's body and shell, or a mesh's model and height."""
+    from ..origin import JobOrigin
+    ws, cat, _ = svc.require_project()
+    groups = svc.require_groups()
+    p = ws.temp_dir / "blobs" / body.blob
+    if not p.is_file():
+        raise HTTPException(422, f"blob {body.blob[:12]}… was not uploaded (PUT /blobs/{{sha}} first)")
+    if (body.cls == "character") != (body.clay.kind == "figure"):
+        raise HTTPException(422, "a figure is a character idea, a model a prop idea")
+    parents = [x for x in (body.clay.model_asset_id, body.clay.shell_asset_id) if x]
+    rec = await asyncio.to_thread(cat.ingest_file, p, kind="image", move=False, suite="stage", lineage_kind="clay-view", parents=parents,
+                                  origin=JobOrigin(suite="stage", surface="prototype", ref=None, payload=None), params={"view": "clay"})
+    store = IdeaStore(ws)
+    try:
+        idea = await asyncio.to_thread(store.create, body.cls, groups, rec.id, body.name, "", True)
+        idea = await asyncio.to_thread(store.set_clay, idea.id, idea.variants[0].id, kind=body.clay.kind, step="done",
+                                       body=body.clay.body.model_dump() if body.clay.body else None, shell_asset_id=body.clay.shell_asset_id,
+                                       model_asset_id=body.clay.model_asset_id, height_m=body.clay.height_m, job_id=None, error=None)
     except ValueError as e:
         raise HTTPException(422, str(e))
     svc.group_changed([idea.group_id])

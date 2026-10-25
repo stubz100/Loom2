@@ -80,7 +80,11 @@ export function SceneTab() {
   const templates = useStage((s) => s.templates)
   const profiles = useStory((s) => s.profiles)
   if (!current) return <span className="hint">Open or make a stage in the Shot section.</span>
-  const figures = Object.entries(MANNEQUIN_PRESETS).map(([p, m]) => ({ id: p, label: m.label, icon: <User size={18} /> }))
+  // CW3 (02 §9): Cast's characters first — a click adds the character's figure (its body and shell follow Cast), then the presets
+  const castFigures = profiles.filter((p) => p.cls === 'character').map((p) => { const v = p.versions.find((x) => x.id === p.current)
+    return { id: `char:${p.id}`, label: p.name, icon: <UserRound size={18} />, img: v?.hero_asset_id ? api.thumbUrl(v.hero_asset_id, 256) : null,
+      hint: current.objects.some((o) => o.kind === 'mannequin' && o.profile_id === p.id) ? 'on the stage — a click selects it' : `${p.name}'s figure, bound: its body${v?.shell_asset_id ? ' and shell' : ''} follow Cast` } })
+  const figures = [...castFigures, ...Object.entries(MANNEQUIN_PRESETS).map(([p, m]) => ({ id: p, label: m.label, icon: <User size={18} />, hint: 'a mannequin, free' }))]
   const sets = SET_PRESETS.map((p) => ({ id: p, label: p, icon: <Box size={18} />, hint: 'architecture only (D108)' }))
   const standins = PROP_PRESETS.map((p) => ({ id: p, label: p, icon: <Box size={18} />, hint: 'a grey stand-in shape (D109)' }))
   const names = new Map(current.objects.filter((o) => o.kind === 'mesh' && o.asset_id).reverse().map((o) => [o.asset_id!, o.name]))   // a thing keeps its name on its stage (the first object that shows it)
@@ -91,7 +95,8 @@ export function SceneTab() {
   const renameCam = (cam: StageCamera) => void askText({ title: 'Rename camera', initial: cam.name }).then((n) => { if (n?.trim()) st().updateCamera(cam.id, { name: n.trim() }) })
   const groups: { key: string; label: string; of: (o: StageObject) => boolean; add: React.ReactNode; help?: string }[] = [
     { key: 'figures', label: 'Figures', of: (o) => o.kind === 'mannequin',
-      add: <PresetPanel label="figure presets" items={figures} showText onPick={(id) => runCommand(`stage.add.mannequin.${id}`)} title="A figure at the viewport's centre: a mannequin to pose and bind to a character" /> },
+      add: <PresetPanel label="figure presets" items={figures} showText onPick={(id) => (id.startsWith('char:') ? st().placeCharacter(id.slice(5), centre()) : runCommand(`stage.add.mannequin.${id}`))}
+        title="A figure at the viewport's centre: a Cast character's (bound, it follows Cast) or a mannequin to pose" /> },
     { key: 'sets', label: 'Sets', of: (o) => o.kind === 'set',
       add: <><PresetPanel label="set presets" items={sets} showText onPick={(id) => runCommand(`stage.add.set.${id}`)} title="A set at the viewport's centre: architecture only — room, street, deck, empty (D108)" />
         <CommandButton id="stage.add.set.image" text label="From an image…" /></> },                                       /* SC3 (D120) */
@@ -863,16 +868,16 @@ function Viewport() {
       onMeshThumb: (assetId, view) => void st().uploadMeshThumbnail(assetId, view),
     })
     engineRef.current = engine
-    viewport.centre = () => engine.centre(); viewport.freePose = () => engine.freePose(); viewport.frame = (ids) => engine.frame(ids); useStage.setState({ worldOf: (id) => engine.worldOf(id) })
+    viewport.centre = () => engine.centre(); viewport.freePose = () => engine.freePose(); viewport.frame = (ids) => engine.frame(ids); viewport.snapshot = (id) => engine.snapshotOf(id); useStage.setState({ worldOf: (id) => engine.worldOf(id) })
     useStage.setState({ passRenderer: (cam, w, h) => engine.renderPasses(cam, w, h), sequenceRenderer: (fr, w, h, kind, restore, on) => engine.renderSequence(fr, w, h, kind, restore, on),
       plateProjector: (fr, w, h, plate, proj, aspect, restore, on, coverage) => engine.renderProjected(fr, w, h, plate, proj, aspect, restore, on, coverage) })   // ST3 / ST4, D111; D132: coverage
     viewport.handPreset = (id, side, preset) => engine.handPreset(id, side, preset)                                   // CA1
-    if (DEV_HOOKS) Object.assign(devHook(), { worldOf: (id: string) => engine.worldOf(id), screenOf: (at: string) => engine.screenOf(at as Joint), cameraScreen: (id: string) => engine.cameraScreen(id), gizmoMode: () => engine.gizmoMode(), pipRect: () => engine.pipRect(), imageSetLayers: (id: string) => engine.imageSetLayers(id),
+    if (DEV_HOOKS) Object.assign(devHook(), { worldOf: (id: string) => engine.worldOf(id), heightOf: (id: string) => engine.heightOf(id), screenOf: (at: string) => engine.screenOf(at as Joint), cameraScreen: (id: string) => engine.cameraScreen(id), gizmoMode: () => engine.gizmoMode(), pipRect: () => engine.pipRect(), imageSetLayers: (id: string) => engine.imageSetLayers(id),
       frameTime: (n: number, on: boolean) => { const was = useStage.getState().pip; engine.setPip(on); const t = engine.measureFrame(n); engine.setPip(was); return t }, meshes: () => ({ loaded: [...engine.meshesLoaded], failed: Object.fromEntries(engine.meshesFailed) }) })   // the smoke test aims the mouse at joints and handles; P18 asks which props loaded
     const ro = new ResizeObserver(() => { const r = host.getBoundingClientRect(); engine.resize(Math.round(r.width), Math.round(r.height)); setRect({ ...engine.frameRect() }); setPipRect(engine.pipRect()) })
     ro.observe(host)
     engine.start()
-    return () => { ro.disconnect(); engine.dispose(); engineRef.current = null; viewport.centre = undefined; viewport.freePose = undefined; viewport.frame = undefined; viewport.handPreset = undefined; useStage.setState({ worldOf: null }); useStage.setState({ passRenderer: null, sequenceRenderer: null, plateProjector: null }) }
+    return () => { ro.disconnect(); engine.dispose(); engineRef.current = null; viewport.centre = undefined; viewport.freePose = undefined; viewport.frame = undefined; viewport.handPreset = undefined; viewport.snapshot = undefined; useStage.setState({ worldOf: null }); useStage.setState({ passRenderer: null, sequenceRenderer: null, plateProjector: null }) }
   }, [])
   useEffect(() => { const e = engineRef.current; if (!e) return; if (active) e.start(); else e.stop() }, [active])
   const frame = useStage((s) => s.frame)

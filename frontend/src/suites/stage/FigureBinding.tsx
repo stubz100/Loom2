@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 import { Help } from '../../frame/Help'
 import { api } from '../../api/client'
 import type { Profile, StageObject } from '../../api/types'
-import { CommandRow } from '../../frame/CommandButton'
+import { CommandButton, CommandRow } from '../../frame/CommandButton'
 import { showMenu } from '../../frame/ContextMenu'
 import { PresetPanel } from '../../frame/PresetPanel'
 import { PresetIcons, type PresetIcon } from '../../frame/PresetIcons'
@@ -47,8 +47,9 @@ export function FigureCharacter({ o }: { o: StageObject }) {
       {p && <div className="kv"><span>body</span><span className="hint">{o.body
         ? `from Cast — ${o.body.height_m.toFixed(2)} m · ${o.body.build}${o.body.attachments.length ? ` · ${o.body.attachments.map((a) => a.kind).join(', ')}` : ''}`
         : 'the default dummy (no body on the Cast sheet)'}</span></div>}{/* CA0: the sheet's body shapes this figure */}
-      {p && <div className="verbs"><CommandRow ids={['stage.figure.unbind', 'stage.figure.openInCast', 'stage.figure.skeleton']} /></div>}
+      {p && <div className="verbs"><CommandRow ids={['stage.figure.unbind', 'stage.figure.openInCast', 'stage.figure.skeleton', 'stage.object.freeCopy']} /></div>}
       {p && <div className="verbs" aria-label="skeleton keys"><CommandRow ids={['stage.skeleton.hold', 'stage.skeleton.cast']} /></div>}{/* CS3: a change of body in a shot is a key */}
+      {!p && <div className="verbs"><CommandButton id="stage.object.prototype" text /></div>}{/* CW3: a free figure into an idea */}
     </>
   )
 }
@@ -78,6 +79,7 @@ export function LibraryProps({ centre }: { centre: () => number[] }) {
     onContext={(id, e) => { e.preventDefault(); const p = props.find((x) => x.id === id); if (p) showMenu(e, [{ label: 'Place in the scene', run: () => place(id), disabled: !modelOf(p) }, { label: 'Open in Story · Cast', run: () => openProp(id) }]) }} />
 }
 
+const heightWords = (h: number | null) => (h != null ? `${h.toFixed(2)} m` : 'its own size')   // CW4
 /** The Inspector's prop of a mesh: the Cast props with a model as tiles and "no prop"; a pinned version beside. */
 export function MeshProp({ o }: { o: StageObject }) {
   const profiles = useStory((x) => x.profiles)
@@ -95,10 +97,15 @@ export function MeshProp({ o }: { o: StageObject }) {
         onContext={(id, e) => { if (id !== NONE) showMenu(e, [{ label: 'Open in Story · Cast', run: () => openProp(id) }]) }} />
       {p && p.versions.length > 1 && <div className="kv"><span>version</span><select value={o.version ?? ''} aria-label="the prop's version" onChange={(e) => st().bindProp(o.id, p.id, e.target.value || null)}>
         <option value="">current ({p.current})</option>{p.versions.map((v) => <option key={v.id} value={v.id}>{v.label && v.label !== v.id ? `${v.id} · ${v.label}` : v.id}{v.model_asset_id ? '' : ' (no model)'}</option>)}</select></div>}
-      {p && <div className="verbs"><button className="quiet" onClick={() => openProp(p.id)} title="Open the prop in Story · Cast">Open in Story · Cast</button></div>}
+      <div className="kv"><span>height</span>{p                                                       /* CW4 (03 §4): the model at a height in metres */
+        ? <span className="hint">{heightWords(o.height_m ?? ver?.height_m ?? null)} — the prop's, set in Cast</span>
+        : <span><input type="number" key={`h${o.height_m ?? ''}`} defaultValue={o.height_m ?? ''} min={0.01} max={100} step={0.05} placeholder="its own size" aria-label="the mesh's height in metres"
+            onBlur={(e) => { const v = e.target.value.trim(), h = v ? Number(v) : null; if (h !== (o.height_m ?? null) && (h === null || h > 0)) st().setHeight(o.id, h) }}
+            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} /> m</span>}</div>
+      {p && <div className="verbs"><button className="quiet" onClick={() => openProp(p.id)} title="The prop's page in Story · Cast: its model, its height, its bench">Edit in Cast</button><CommandButton id="stage.object.freeCopy" text /></div>}
       {!p && o.asset_id && <div className="verbs"><button className="quiet" data-verb="cast-prop" title="A new Cast prop with this model (bound here), or this model for a prop you have"
         onClick={(e) => { const id = o.asset_id!; const a = useStage.getState().meshes.find((m) => m.id === id)
-          showMenu(e, castPropMenu({ id, parents: a?.parents ?? [] }, (pid) => st().bindProp(o.id, pid)).items) }}>Make it a Cast prop ▾</button></div>}   {/* proto01_UIcast CF8 */}
+          showMenu(e, castPropMenu({ id, parents: a?.parents ?? [] }, (pid) => st().bindProp(o.id, pid)).items) }}>Make it a Cast prop ▾</button><CommandButton id="stage.object.prototype" text /></div>}   {/* proto01_UIcast CF8; CW3: or an idea */}
     </>
   )
 }

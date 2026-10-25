@@ -13,7 +13,7 @@ import { HoldsChip, SceneField } from './GenerateColumn'
 import { cleanTree, DEFAULT_PANEL, heldWords, linkedSceneWords, panelFromRecipe, recipeFromPanel, useGenerate } from './generateStore'
 import { bindingLines, composedLines, keptSubject, slotsOf } from './subjectCast'
 
-const ver = (v: Partial<ProfileVersion>): ProfileVersion => ({ id: 'v1', label: 'v1', state: 'open', group_id: 'grp_1', candidates_group_id: null, hero_asset_id: null, body: null, anim_ref_asset_id: null, anim_ref_back_asset_id: null, anim_test_clip_id: null, shell_asset_id: null, shell_from: null, poses: {}, from_idea: null, model_asset_id: null, model_from: null, body_fit_from: null, body_points: null, anim_ref_note: null, appearance: '', outfit: '',
+const ver = (v: Partial<ProfileVersion>): ProfileVersion => ({ id: 'v1', label: 'v1', state: 'open', group_id: 'grp_1', candidates_group_id: null, hero_asset_id: null, body: null, anim_ref_asset_id: null, anim_ref_back_asset_id: null, anim_test_clip_id: null, shell_asset_id: null, shell_from: null, poses: {}, from_idea: null, height_m: null, model_asset_id: null, model_from: null, body_fit_from: null, body_points: null, anim_ref_note: null, appearance: '', outfit: '',
   colours: [], marks: '', trigger: null, lora: null, derived_from: null, created_at: '', locked_at: null, ...v })
 const prof = (id: string, name: string, cls: Profile['cls'], versions: ProfileVersion[]): Profile => ({ id, name, cls, current: versions[versions.length - 1].id, schema_version: 2, revision: 0, voice_id: null, created_at: '', updated_at: '', versions })
 const MARA = prof('prf_m', 'Mara', 'character', [ver({ group_id: 'grp_m', appearance: 'Mara, a wiry courier', hero_asset_id: 'ast_hm' })])

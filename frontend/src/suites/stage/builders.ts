@@ -126,6 +126,10 @@ export function set(kind: string, mat: THREE.Material): THREE.Group {
   else if (kind === 'deck') {
     box(12, 0.06, 6, 0, -0.03, 0); box(12, 0.08, 0.08, 0, 1.0, -2.6); box(12, 0.08, 0.08, 0, 1.0, 2.6)
     const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.15, 7, 16), mat); mast.position.set(2.6, 3.5, -1); g.add(mast)
+  } else if (kind === 'lineup') {                                       // CW5: a neutral floor before a wall marked every 0.5 m (the line-up stretches it sideways)
+    box(8, 0.02, 4, 0, -0.01, 0.6); box(8, 2.7, 0.06, 0, 1.35, -0.9)
+    const ink = new THREE.MeshBasicMaterial({ color: 0x3a3d44 })
+    for (let k = 1; k <= 5; k++) { const m = new THREE.Mesh(new THREE.BoxGeometry(8, k % 2 ? 0.006 : 0.014, 0.01), ink); m.position.set(0, k * 0.5, -0.865); g.add(m) }   // the metres bolder
   } else { box(12, 0.02, 12, 0, -0.01, 0) }
   return g
 }

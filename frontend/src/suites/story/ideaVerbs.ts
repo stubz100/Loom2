@@ -11,7 +11,7 @@ export function ideaMenu(i: Idea): MenuItem[] {
   const v = focusOf(i)
   const profiles = useStory.getState().profiles.filter((p) => p.cls === i.cls)
   return [
-    { cmd: 'story.idea.explore' }, { cmd: 'story.idea.clay' }, sep,
+    { cmd: 'story.idea.explore' }, { cmd: 'story.idea.clay' }, { cmd: 'story.idea.lineup' }, sep,
     { cmd: 'story.idea.keep' },
     { label: 'Keep as a new version of', items: profiles.length && v ? profiles.map((p): MenuItem => ({ label: `${p.name} (now ${p.current})`, run: () => void ideas().keep(i.id, v.id, p.id) }))
       : [{ heading: `No ${CLASS_LABEL[i.cls]} in Cast yet — Keep ▶ makes one` } as MenuItem] },

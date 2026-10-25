@@ -152,7 +152,7 @@ class SheetColour(BaseModel):
     object: str = Field("", max_length=80)
 
 
-SHEET_FIELDS = ("appearance", "outfit", "colours", "marks", "body")
+SHEET_FIELDS = ("appearance", "outfit", "colours", "marks", "body", "height_m")
 
 
 class IdeaRef(BaseModel):
@@ -194,6 +194,7 @@ class ProfileVersion(BaseModel):
                                                   # by name; one named as a starter pose ("crouch") stands in for it on this character's figures
     model_asset_id: str | None = None             # D110 (PS2): a prop version's 3D model (a Catalogue mesh, image → mesh, stood upright)
     model_from: str | None = None                 # D110: the image it was made from (an asset id); another reference now marks it stale
+    height_m: float | None = Field(None, gt=0.0, le=100.0)   # CW4 (03 §4): a prop's height in metres — its model is scaled to it in Stage (prefilled from its words)
     derived_from: str | None = None
     from_idea: IdeaRef | None = None              # CW1 (D136 U1): the idea and variant *Keep ▶* made this version from (the idea records it too)
     created_at: str = Field(default_factory=utc_now)
@@ -1927,6 +1928,9 @@ class StoryStore(_ShotMixin, _FlowMixin):
             raise ValueError("a profile needs a name")
         fields = {k: x for k, x in sheet.items() if k in (*SHEET_FIELDS, "label") and x is not None}
         fields.setdefault("appearance", stub.strip())                    # D93 (A9): empty by default — the name alone describes nothing
+        if cls == "prop" and fields.get("height_m") is None:               # CW4: a prop's height from its words (a cup 0.1 m, a door 2.1 m), else 1 m
+            from .sizes import prop_height
+            fields["height_m"] = prop_height(name, fields.get("appearance"))
         ProfileVersion.model_validate({"id": "v1", "group_id": "-", **fields})   # a bad colour is refused before the group is made
         g = groups.create(f"{name} · v1")
         if hero_asset_id:
@@ -2069,10 +2073,10 @@ class StoryStore(_ShotMixin, _FlowMixin):
         v.from_idea = IdeaRef.model_validate(ref)
         if anim_ref_asset_id:
             v.anim_ref_asset_id = anim_ref_asset_id
-            if body is not None:
-                v.body, v.body_fit_from, v.body_points, v.anim_ref_note = body, anim_ref_asset_id, body_points, note
-            if shell_asset_id:
-                v.shell_asset_id, v.shell_from = shell_asset_id, anim_ref_asset_id
+        if body is not None:                                           # fitted to that picture — or (Prototype ▸ on a figure in Clay) by hand
+            v.body, v.body_fit_from, v.body_points, v.anim_ref_note = body, anim_ref_asset_id, body_points if anim_ref_asset_id else None, note
+        if shell_asset_id:
+            v.shell_asset_id, v.shell_from = shell_asset_id, anim_ref_asset_id
         p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
         self.save_profile(p)
         return p

@@ -28,9 +28,43 @@ class StageCreate(BaseModel):
 
 
 @router.get("/stages", response_model=StageList)
-async def stages_list(svc: Svc):
+async def stages_list(svc: Svc, purpose: Literal["stage", "bench", "lineup", "all"] = "stage"):
+    """The project's stages — D142: the stages proper by default; a Cast version's bench and the line-up only when asked for."""
     ws, _, _ = svc.require_project()
-    return {"items": [s.model_dump() for s in await asyncio.to_thread(StageStore(ws).list)]}
+    return {"items": [s.model_dump() for s in await asyncio.to_thread(StageStore(ws).list) if purpose == "all" or s.purpose == purpose]}
+
+
+class BenchOpen(BaseModel):
+    profile_id: str
+    version: str | None = None                    # None: the current version
+
+
+class BenchOut(BaseModel):
+    stage: Stage
+    made: bool
+
+
+@router.post("/stages/bench", response_model=BenchOut)
+async def stage_bench(svc: Svc, body: BenchOpen):
+    """D142: a Cast version's bench — Clay opened for it: the bench stage made once (a character's figure bound to the version; a prop's model
+    at its height beside a 1.75 m figure) and kept, so the camera and light the author set stay."""
+    from ..story import StoryStore
+    ws, _, _ = svc.require_project()
+    p = await asyncio.to_thread(StoryStore(ws).profile, body.profile_id)
+    if p is None:
+        raise HTTPException(404, "profile not found")
+    try:
+        v = p.version(body.version)
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    fmt = ws.load().format
+    try:
+        st, made = await asyncio.to_thread(StageStore(ws).bench, p, v.id, {"w": fmt.width, "h": fmt.height, "fps": fmt.fps})
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    if made:
+        svc.hub.broadcast("stage.updated", {"id": st.id, "revision": st.revision})
+    return {"stage": st.model_dump(), "made": made}
 
 
 @router.post("/stages", response_model=Stage)
@@ -38,6 +72,70 @@ async def stage_create(svc: Svc, body: StageCreate):
     ws, _, _ = svc.require_project()
     fmt = ws.load().format
     st = await asyncio.to_thread(StageStore(ws).create, body.name, {"w": fmt.width, "h": fmt.height, "fps": fmt.fps})
+    svc.hub.broadcast("stage.updated", {"id": st.id, "revision": st.revision})
+    return st.model_dump()
+
+
+class LineupItem(BaseModel):
+    """One thing in the line-up: a Cast version (a character or a prop; its current version when none is named) or an idea (its variant in
+    focus, else the one named)."""
+    profile_id: str | None = None
+    version: str | None = None
+    idea_id: str | None = None
+    variant_id: str | None = None
+
+
+class LineupBody(BaseModel):
+    items: list[LineupItem] = Field(..., min_length=1, max_length=12)
+
+
+@router.post("/stages/lineup", response_model=Stage)
+async def stage_lineup(svc: Svc, body: LineupBody):
+    """CW5 (02 §7): the line-up — Cast's characters and props, and ideas with clay, side by side at their sizes before 0.5 m marks; Clay
+    opens on it (D142). A Cast version stands bound (its body and shell, or its model at its height, follow Cast); an idea's figure is its
+    variant's clay (free). An idea without clay, a prop without a model, and a place are left out (and named)."""
+    from ..ideas import IdeaStore, focus_variant
+    from ..story import StoryStore
+    ws, _, _ = svc.require_project()
+    stories, ideas = StoryStore(ws), IdeaStore(ws)
+
+    def plan() -> tuple[list[dict[str, Any]], list[str]]:
+        out: list[dict[str, Any]] = []
+        skipped: list[str] = []
+        for it in body.items:
+            if it.profile_id:
+                p = stories.profile(it.profile_id)
+                if p is None:
+                    raise KeyError(it.profile_id)
+                v = p.version(it.version)
+                if p.cls == "character":
+                    out.append({"kind": "figure", "name": p.name, "profile_id": p.id, "version": v.id, "body": v.body, "shell": v.shell_asset_id})
+                elif p.cls == "prop" and v.model_asset_id:
+                    out.append({"kind": "mesh", "name": p.name, "profile_id": p.id, "version": v.id, "asset_id": v.model_asset_id, "height_m": v.height_m})
+                else:
+                    skipped.append(p.name)
+            elif it.idea_id:
+                i = ideas.get(it.idea_id)
+                if i is None:
+                    raise KeyError(it.idea_id)
+                var = i.variant(it.variant_id) if it.variant_id else focus_variant(i)
+                clay = var.clay if var else None
+                if i.cls == "character" and clay is not None and clay.body is not None:
+                    out.append({"kind": "figure", "name": i.name, "body": clay.body, "shell": clay.shell_asset_id})
+                elif i.cls == "prop" and clay is not None and clay.model_asset_id:      # CW3: an idea's prop (Prototype ▸ on a mesh)
+                    out.append({"kind": "mesh", "name": i.name, "asset_id": clay.model_asset_id, "height_m": clay.height_m})
+                else:
+                    skipped.append(i.name)
+        return out, skipped
+
+    try:
+        entries, skipped = await asyncio.to_thread(plan)
+    except KeyError as e:
+        raise HTTPException(404, f"no profile, version, idea or variant {e.args[0]!r}")
+    if not entries:
+        raise HTTPException(422, "nothing to line up: " + ", ".join(skipped) + " — a character needs its clay (Make the clay ▶), a prop its 3D model")
+    fmt = ws.load().format
+    st = await asyncio.to_thread(StageStore(ws).lineup, entries, {"w": fmt.width, "h": fmt.height, "fps": fmt.fps})
     svc.hub.broadcast("stage.updated", {"id": st.id, "revision": st.revision})
     return st.model_dump()
 

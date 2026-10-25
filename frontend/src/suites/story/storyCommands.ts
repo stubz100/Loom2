@@ -1,6 +1,6 @@
 // 17 (D85): the Story suite's verbs — every one has a mouse home (the panel's buttons, the editor rows' tools, the Inspector, right-click
 // menus) per D32; Delete and the arrows are accelerators. SY1 adds the Cast tab's verbs (new profile, expand, add to the reference set, lock, copy, open).
-import { CopyPlus, Lightbulb, Group, Ungroup, Workflow, ArrowDown, ArrowLeft, Box, Ruler, ArrowUp, BookOpen, BookPlus, ChevronLeft, ChevronRight, Pencil, UserRoundPlus, Users, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImageOff, ImagePlus, ImageUp, Link, ListChecks, ListPlus, Lock, MapPinPlus, Maximize, MessageSquare, Mic, PackagePlus, Palette, PersonStanding, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
+import { CopyPlus, Hammer, Lightbulb, Group, Ungroup, Workflow, ArrowDown, ArrowLeft, Box, Ruler, ArrowUp, BookOpen, BookPlus, ChevronLeft, ChevronRight, Pencil, UserRoundPlus, Users, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImageOff, ImagePlus, ImageUp, Link, ListChecks, ListPlus, Lock, MapPinPlus, Maximize, MessageSquare, Mic, PackagePlus, Palette, PersonStanding, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
 import { command, isEnabled, registerCommands, runCommand, sep, type Command, type MenuItem } from '../../frame/commands'
 import { nextOwed, readinessOf, type ReadyCell, type ReadyItem } from './castReady'
 import { linesToVoice, spineTodo } from './episodeVerbs'
@@ -253,6 +253,22 @@ void import('./ideasStore').then((m) => { ideasMod = m })
 const ideaStore = () => ideasMod?.useIdeas.getState() ?? null
 const idea = () => ideaStore()?.idea()
 const focused = () => ideasMod?.focusOf(idea())
+/** CW5: the Cast board's line-up — the class shown (characters and props), searched, twelve at most. */
+function castLineup() {
+  const s = sy(), q = s.castSearch.trim().toLowerCase()
+  return s.profiles.filter((p) => (s.castFilter === 'all' ? p.cls !== 'place' : p.cls === s.castFilter) && p.cls !== 'place' && (!q || p.name.toLowerCase().includes(q))
+    && (p.cls === 'character' || !!p.versions.find((v) => v.id === p.current)?.model_asset_id)).slice(0, 12)
+}
+/** CW5: the Ideas board's line-up — the ideas picked, else the class shown that have clay. */
+function ideaLineup() {
+  const st = ideaStore(), s = sy(), q = s.castSearch.trim().toLowerCase()
+  if (!st) return []
+  if (st.picked.length) return st.ideas.filter((i) => st.picked.includes(i.id)).slice(0, 12)
+  return st.ideas.filter((i) => (s.castFilter === 'all' || i.cls === s.castFilter) && (!q || i.name.toLowerCase().includes(q)) && i.variants.some((v) => v.clay?.body)).slice(0, 12)
+}
+/** Back from the line-up: Cast's board it was opened from. */
+const backToBoard = (board: 'cast' | 'ideas') => () => void Promise.all([import('../../frame/suiteRegistry'), import('./ideasStore')]).then(([reg, m]) => {
+  useSession.getState().setSuite('story'); reg.setRailTab('story', 'cast'); m.useIdeas.setState({ board }) })
 /** CW2: Image for the idea — the chip, its picture in focus as reference 1, its prompt (a text prompt). */
 async function exploreIdea(i: NonNullable<ReturnType<typeof idea>>): Promise<void> {
   const v = ideasMod?.focusOf(i)
@@ -303,6 +319,15 @@ const cmds: Command[] = [
   { id: 'story.cast.newPlace', scope: 'story', label: 'New place…', icon: MapPinPlus, placement: ['panel', 'context'], when: () => !!useSession.getState().project?.open, run: () => void newProfile('place') },
   { id: 'story.cast.newProp', scope: 'story', label: 'New prop…', icon: PackagePlus, placement: ['panel', 'context'], when: () => !!useSession.getState().project?.open, run: () => void newProfile('prop') },
   // proto01_UIcast CW1–CW2 (06 §2.1–2.2): the Ideas board's verbs, on the idea open on the bench (its variant in focus)
+  // D142: Clay opened for the version (its bench); CW5: the line-up of what the board shows (or the ideas picked)
+  { id: 'story.cast.bench', scope: 'story', label: 'Bench ▶', icon: Hammer, placement: ['panel', 'inspector', 'context'],
+    hint: "Clay opened for this version: its figure (a prop: its model at its height beside a 1.75 m figure) on a scene of its own, with all of Clay's tools",
+    when: () => { const p = sy().profile(); const v = sy().version(); return !!p && !!v && (p.cls === 'character' || (p.cls === 'prop' && !!v.model_asset_id)) },
+    run: () => { const p = sy().profile(); const v = sy().version(); if (p && v) void import('../stage/stageStore').then((m) => m.st().openBench(p.id, v.id)) } },
+  { id: 'story.cast.lineup', scope: 'story', label: 'Line-up ▶', icon: Users, placement: ['panel', 'context'], hint: 'the characters and props shown, side by side at their sizes in Clay (twelve at most)',
+    when: () => castLineup().length > 0, run: () => { const items = castLineup().map((p) => ({ profile_id: p.id })); void import('../stage/stageStore').then((m) => m.st().openLineup(items, backToBoard('cast'))) } },
+  { id: 'story.idea.lineup', scope: 'story', label: 'Line-up ▶', icon: Users, placement: ['panel', 'context'], hint: 'the ideas picked (Ctrl-click), else those shown, in their clay side by side in Clay',
+    when: () => ideaLineup().length > 0, run: () => { const items = ideaLineup().map((i) => ({ idea_id: i.id })); void import('../stage/stageStore').then((m) => m.st().openLineup(items, backToBoard('ideas'))) } },
   { id: 'story.idea.new', scope: 'story', label: 'New idea…', icon: Lightbulb, placement: ['panel', 'context'], hint: "of the class shown; Prototype ▸ on a picture starts one with it",
     when: () => !!useSession.getState().project?.open,
     run: () => { const f = sy().castFilter; const cls = f === 'all' ? 'character' : f
@@ -640,7 +665,7 @@ registerCommands(cmds)
 
 /** The right-click menu of a row in the World editor: the row is selected first, so the Inspector shows it too. */
 /** The right-click menu of a Cast profile row (the profile is selected first). D90 (01 §11.3): the training and new-profile verbs too. */
-export const profileMenu = (): MenuItem[] => [{ cmd: 'story.cast.useAsSubject' }, sep, { cmd: 'cast.skeleton.open' }, { cmd: 'cast.shell.make' }, sep, { cmd: 'story.cast.expand' }, { cmd: 'story.cast.newVersion' }, { cmd: 'story.cast.lock' }, sep, { cmd: 'story.cast.openGroup' }, { cmd: 'story.cast.openCandidates' }, sep,
+export const profileMenu = (): MenuItem[] => [{ cmd: 'story.cast.useAsSubject' }, sep, { cmd: 'story.cast.bench' }, { cmd: 'cast.skeleton.open' }, { cmd: 'cast.shell.make' }, { cmd: 'story.cast.lineup' }, sep, { cmd: 'story.cast.expand' }, { cmd: 'story.cast.newVersion' }, { cmd: 'story.cast.lock' }, sep, { cmd: 'story.cast.openGroup' }, { cmd: 'story.cast.openCandidates' }, sep,
   { cmd: 'story.cast.train' }, { cmd: 'story.cast.useLora' }, { cmd: 'story.cast.checkLora' }, { cmd: 'story.cast.deleteLora' }, sep, { cmd: 'story.cast.new' }, { cmd: 'story.cast.newPlace' }, { cmd: 'story.cast.newProp' }, sep, { cmd: 'story.cast.delete' }]
 export function rowMenu(kind: NonNullable<ReturnType<typeof selected>>['kind'], id: string) {
   useStory.getState().select({ kind, id })

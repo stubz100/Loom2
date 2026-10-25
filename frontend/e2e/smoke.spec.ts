@@ -2758,6 +2758,100 @@ test("ideas (proto01_UIcast CW1–CW2): Prototype ▸ on a tile copies the pictu
   await page.screenshot({ path: 'node_modules/.e2e/cw1-kept.png' })
 })
 
+test("the bench and a prop's height (D142, CW4): Bench ▶ opens Clay for the character, bound, with its chip and the way back; a prop's height is read from its name, edited in Cast, and its model stands at it on its bench beside a 1.75 m figure", async ({ page }) => {
+  test.setTimeout(120_000)
+  const tag = Date.now().toString(36)
+  type V = { id: string; height_m: number | null; model_asset_id: string | null }
+  type ProfileLite = { id: string; current: string; versions: V[] }
+  type StageLite = { id: string; name: string; purpose: string; bound: { profile_id: string; version: string } | null; objects: { id: string; kind: string; profile_id: string | null; height_m: number | null; body: { height_m: number } | null }[] }
+  const mara = await api<ProfileLite>('POST', '/story/profiles', { name: `Mara ${tag}`, cls: 'character', appearance: 'a fisher' })
+  await api('PATCH', `/story/profiles/${mara.id}`, { revision: 0, versions: [{ id: 'v1', body: { height_m: 1.62 } }] })
+  await openApp(page, { suite: 'story', tab: 'cast' })
+  await page.locator(`.profile-row[data-id="${mara.id}"]`).click()
+  await page.locator('.cast-body button', { hasText: /^Bench/ }).first().click()
+  const chip = page.locator('[data-testid="bench-chip"]')
+  await expect(chip).toContainText(`Bench: Mara ${tag} v1`)
+  const benches = async () => (await api<{ items: StageLite[] }>('GET', '/stages?purpose=bench')).items
+  await expect.poll(async () => (await benches()).some((b) => b.bound?.profile_id === mara.id), { timeout: 10_000 }).toBe(true)
+  const bench = (await benches()).find((b) => b.bound?.profile_id === mara.id)!
+  expect(bench.objects[0].profile_id).toBe(mara.id)
+  expect(bench.objects[0].body?.height_m).toBe(1.62)
+  expect((await api<{ items: StageLite[] }>('GET', '/stages')).items.map((s) => s.id)).not.toContain(bench.id)          // out of the stage list
+  await expect(page.locator('.stage-picker select option')).toHaveCount(1 + (await api<{ items: StageLite[] }>('GET', '/stages')).items.length)   // the bench, then the stages
+  await page.screenshot({ path: 'node_modules/.e2e/cw3-bench.png' })
+  await chip.locator('button', { hasText: 'Back to Cast' }).click()
+  await expect(page.locator(`.profile-row[data-id="${mara.id}"]`)).toHaveClass(/active/)
+  // CW4: a prop's height — read from its name, edited in Cast; its bench stands the model at it
+  const cup = await api<ProfileLite>('POST', '/story/profiles', { name: `Grandma cup ${tag}`, cls: 'prop' })
+  expect(cup.versions[0].height_m).toBe(0.1)
+  const glb = `${process.cwd().replace(/\\/g, '/')}/../orchestrator/tests/fixtures/motion/test_rig.glb`      // a GLB import (D128): both builds, no job
+  await api('POST', `/story/profiles/${cup.id}/versions/v1/model/import`, { path: glb })
+  await page.locator('.cast-panel .segmented button', { hasText: /^props$/ }).click()
+  await page.locator(`.profile-row[data-id="${cup.id}"]`).click()
+  const h = page.locator('.prop-height input')
+  await expect(h).toHaveValue('0.1')
+  await h.fill('0.12'); await h.press('Enter')
+  await expect.poll(async () => (await api<ProfileLite>('GET', `/story/profiles/${cup.id}`)).versions[0].height_m, { timeout: 10_000 }).toBe(0.12)
+  await page.locator('.prop-model button', { hasText: /^Bench/ }).click()
+  await expect(chip).toContainText(`Bench: Grandma cup ${tag} v1`)
+  const pb = (await benches()).find((b) => b.bound?.profile_id === cup.id)!
+  expect(pb.objects.map((o) => o.kind)).toEqual(['mesh', 'mannequin'])
+  expect(pb.objects[0].height_m).toBe(0.12)
+  const drawn = async (id: string) => page.evaluate((x) => (window as unknown as { __loom2Stage: { heightOf: (id: string) => number | null } }).__loom2Stage.heightOf(x), id)
+  await expect.poll(async () => drawn(pb.objects[0].id), { timeout: 20_000 }).toBeCloseTo(0.12, 2)          // the model at its height (the GLB arrives)
+  await expect.poll(async () => (await drawn(pb.objects[1].id)) ?? 0, { timeout: 10_000 }).toBeGreaterThan(1.6)   // the figure beside it
+  await page.screenshot({ path: 'node_modules/.e2e/cw4-prop-bench.png' })
+})
+
+test("Cast in Clay and the line-up (CW3, CW5): a Cast character's card adds its figure bound; Make a free copy frees one with its body; Prototype ▸ makes that copy an idea; Line-up ▶ stands the characters side by side and Send to a stage ▸ copies them into a new stage", async ({ page }) => {
+  test.setTimeout(120_000)
+  const tag = Date.now().toString(36)
+  type StageLite = { id: string; name: string; purpose: string; objects: { id: string; kind: string; name: string; profile_id: string | null; preset: string | null; body: { height_m: number } | null }[] }
+  type IdeaLite = { id: string; name: string; variants: { clay: { body: { height_m: number } | null } | null }[] }
+  const ines = await api<{ id: string }>('POST', '/story/profiles', { name: `Ines ${tag}`, cls: 'character' })
+  await api('PATCH', `/story/profiles/${ines.id}`, { revision: 0, versions: [{ id: 'v1', body: { height_m: 1.58 } }] })
+  const st = await api<{ id: string } & Record<string, unknown>>('POST', '/stages', { name: `Market ${tag}` })
+  await openApp(page, { suite: 'stage' })
+  await openAnimate(page, 'Clay')
+  await page.locator('#anim-sec-shot .stage-picker select').selectOption({ label: `Market ${tag}` })
+  await openSection(page, 'Scene')
+  // CW3: Cast's characters are cards in Figures' +: a click adds the character's figure, bound
+  await libAdd(page, 'figures', `Ines ${tag}`)
+  await page.keyboard.press('Escape')                                                              // the + panel stays open for more; it would cover the rows
+  const doc = async () => api<StageLite>('GET', `/stages/${st.id}`)
+  await expect.poll(async () => (await doc()).objects.find((o) => o.profile_id === ines.id)?.body?.height_m ?? null, { timeout: 10_000 }).toBe(1.58)
+  // Make a free copy (the figure's right-click): free, its body as it is
+  await page.locator('.outl-row[data-row="object"] .name', { hasText: `Ines ${tag}` }).first().click({ button: 'right' })   // the row's name (its editor opens under it)
+  await page.locator('.ctx-menu button.item', { hasText: 'Make a free copy' }).click()
+  await expect.poll(async () => (await doc()).objects.filter((o) => o.kind === 'mannequin').length, { timeout: 10_000 }).toBe(2)
+  const free = (await doc()).objects.find((o) => o.kind === 'mannequin' && !o.profile_id)!
+  expect(free.body?.height_m).toBe(1.58)
+  expect(free.name).toBe(`Ines ${tag} (free)`)
+  // Prototype ▸ on the free copy: a new character idea, Clay's view its picture, the body its clay
+  const known = new Set((await api<{ items: IdeaLite[] }>('GET', '/story/ideas')).items.map((i) => i.id))
+  await page.locator('.outl-row[data-row="object"] .name', { hasText: `Ines ${tag} (free)` }).click({ button: 'right' })
+  await page.locator('.ctx-menu button.item', { hasText: 'Prototype ▸ a new idea' }).click()
+  await expect.poll(async () => (await api<{ items: IdeaLite[] }>('GET', '/story/ideas')).items.find((i) => !known.has(i.id))?.variants[0]?.clay?.body?.height_m ?? null, { timeout: 15_000 }).toBe(1.58)
+  // CW5: Line-up ▶ on the Cast board — the characters shown side by side before 0.5 m marks; Send to a stage ▸ copies them
+  await openApp(page, { suite: 'story', tab: 'cast' })
+  await page.locator('.cast-panel .segmented button', { hasText: /^characters$/ }).click()
+  await page.locator('.cast-panel input[type=search]').fill(tag)
+  await page.locator('.cast-panel button', { hasText: /^Line-up/ }).click()
+  const chip = page.locator('[data-testid="bench-chip"]')
+  await expect(chip).toContainText('Line-up · 1')
+  const lineup = (await api<{ items: StageLite[] }>('GET', '/stages?purpose=lineup')).items[0]
+  expect(lineup.objects.map((o) => o.preset ?? o.kind)).toEqual(['lineup', 'adult'])
+  expect(lineup.objects[1].profile_id).toBe(ines.id)
+  await page.screenshot({ path: 'node_modules/.e2e/cw5-lineup.png' })
+  await chip.locator('button', { hasText: 'Send to a stage' }).click()
+  await page.locator('.ctx-menu button.item', { hasText: 'Send to a new stage…' }).click()
+  const dialog = page.locator('.modal.ask')
+  await dialog.locator('input').fill(`From the line-up ${tag}`)
+  await dialog.locator('button.primary').click()
+  await expect(chip).toHaveCount(0)                                                                  // the new stage is a stage, not the line-up
+  await expect.poll(async () => (await api<{ items: StageLite[] }>('GET', '/stages')).items.find((s) => s.name === `From the line-up ${tag}`)?.objects.map((o) => o.profile_id) ?? [], { timeout: 10_000 }).toEqual([ines.id])
+})
+
 test('a body on the Cast sheet (CA0, 01 §9): height, build and an attachment saved with the sheet; a stage figure bound to the character takes the body when the stage opens', async ({ page }) => {
   const name = `Grak ${Date.now().toString(36)}`
   const src = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0]

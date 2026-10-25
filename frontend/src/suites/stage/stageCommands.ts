@@ -1,6 +1,6 @@
 // P13 / ST1 (D81): the Stage suite's verbs — every one has a mouse home (the gizmo bar, the panel, the Inspector, the viewport's
 // right-click menu) per D32; G / R / S / W, F, Delete, Ctrl+Z / Ctrl+Shift+Z are accelerators.
-import { Aperture, BookmarkPlus, Box, Hand, PersonStanding, Pin, PinOff, PictureInPicture2, Sun, UserRound, UserX, Camera, Clapperboard, Copy, Crosshair, Diamond, Eye, EyeOff, Focus, Frame, Grid3x3, ImagePlus, Layers, Pencil, Lock, LockOpen, Magnet, Move3d, MousePointer2, Play, Plus, Redo2, Rotate3d, Route, Scaling, Trash2, Undo2, User, Video, X } from 'lucide-react'
+import { Aperture, BookmarkPlus, Box, FlaskConical, Hand, PersonStanding, Pin, PinOff, PictureInPicture2, Sun, UserRound, UserX, Camera, Clapperboard, Copy, Crosshair, Diamond, Eye, EyeOff, Focus, Frame, Grid3x3, ImagePlus, Layers, Pencil, Lock, LockOpen, Magnet, Move3d, MousePointer2, Play, Plus, Redo2, Rotate3d, Route, Scaling, Trash2, Undo2, User, Video, X } from 'lucide-react'
 import { registerCommands, sep, type Command, type MenuItem } from '../../frame/commands'
 import { askConfirm, askText, useSession } from '../../store/session'
 import { MANNEQUIN_PRESETS, PROP_PRESETS, SET_PRESETS } from './builders'
@@ -17,6 +17,7 @@ const sel = () => st().object(st().selected)
 const hasSel = () => !!sel()
 /** The viewport engine registers itself so the commands can place, frame and read the free view (engine.ts is not a store). */
 export const viewport: { centre?: () => number[]; freePose?: () => { pos: number[]; target: number[] }; frame?: (ids: string[] | null) => void; lookThrough?: () => void
+  snapshot?: (id: string) => Promise<Blob | null>                                                       // CW3: one object alone, for Prototype ▸
   handPreset?: (id: string, side: 'r' | 'l', preset: HandPreset) => Record<string, number[]> | null } = {}   // CA1: the mounted viewport's Detailed figures
 
 const tool = (id: Tool, label: string, icon: typeof MousePointer2, key: string): Command => ({
@@ -122,7 +123,19 @@ registerCommands([
     run: () => { const o = sel(); if (o) st().setSkeletonKey(o.id, { frame: st().frame, transition: 0, body: null }) } },
   { id: 'stage.figure.skeleton', scope: 'stage', label: 'Fine-tune the skeleton in Cast…', icon: PersonStanding, placement: ['inspector', 'context'], when: () => !!sel()?.profile_id,   // CS2
     run: () => { const o = sel(); if (o?.profile_id) void Promise.all([import('../../store/origin'), import('../story/storyStore')]).then(([m, s]) => { m.goToStory({ tab: 'cast', id: o.profile_id!, ...(o.version ? { version: o.version } : {}) }); s.useStory.getState().setSkeleton(true) }) } },
-  { id: 'stage.figure.openInCast', scope: 'stage', label: 'Open the character in Story · Cast', icon: UserRound, placement: ['inspector', 'context'], when: () => !!sel()?.profile_id,
+  // D142 / CW3–CW5: the way back from a bench or the line-up; the line-up's verbs; a free copy of a bound thing
+  { id: 'stage.bench.back', scope: 'stage', label: 'Back to Cast', icon: X, placement: ['panel'], hint: 'where the bench or the line-up was opened from',
+    when: () => (st().current?.purpose ?? 'stage') !== 'stage', run: () => st().backFromBench() },
+  { id: 'stage.lineup.send', scope: 'stage', label: 'Send to a new stage…', icon: Plus, placement: ['panel'], hint: "the line-up's figures and props, where they stand, in a stage of their own",
+    when: () => st().current?.purpose === 'lineup', run: () => void st().sendLineup(null) },
+  { id: 'stage.lineup.pose', scope: 'stage', label: 'Stand them all', icon: PersonStanding, placement: ['panel'], when: () => st().current?.purpose === 'lineup', run: () => st().poseAll('stand') },
+  { id: 'stage.object.prototype', scope: 'stage', label: 'Prototype ▸ a new idea', icon: FlaskConical, placement: ['inspector', 'context'],
+    hint: "a new idea in Cast from this free figure (its body and shell) or mesh (its model and height), with Clay's view of it as its picture",
+    when: () => { const o = sel(); return !!o && !o.profile_id && (o.kind === 'mannequin' || (o.kind === 'mesh' && !!o.asset_id)) && !!viewport.snapshot },
+    run: () => void st().prototypeObject(st().selected!) },
+  { id: 'stage.object.freeCopy', scope: 'stage', label: 'Make a free copy', icon: Copy, placement: ['inspector', 'context'], hint: "beside it, free of Cast: its body and shell (or its model and height) as they are now, to experiment with",
+    when: () => !!sel()?.profile_id && (sel()?.kind === 'mannequin' || sel()?.kind === 'mesh'), run: () => st().freeCopy(st().selected!) },
+  { id: 'stage.figure.openInCast', scope: 'stage', label: 'Edit in Cast', icon: UserRound, placement: ['inspector', 'context'], when: () => !!sel()?.profile_id,
     run: () => { const o = sel(); if (o?.profile_id) void import('../../store/origin').then((m) => m.goToStory({ tab: 'cast', id: o.profile_id!, ...(o.version ? { version: o.version } : {}) })) } },
   // ST3: the frame (the Render tab; D90 02 §8.1: a shot is a Story shot)
   { id: 'stage.shot.generate', scope: 'stage', label: 'Render frame', icon: Aperture, placement: ['panel', 'context'], when: () => hasStage() && !!st().activeCamera() && !st().rendering,
@@ -188,6 +201,7 @@ export function viewportMenu(onObject: boolean): MenuItem[] {
     ? [{ cmd: 'stage.frameSel' }, { cmd: 'stage.object.rename' }, { cmd: 'stage.object.duplicate' }, { cmd: 'stage.object.lock' }, { cmd: 'stage.object.hide' }, { cmd: 'stage.object.reset' }, sep,
       ...holdItems(),
       ...(sel()?.kind === 'mannequin' ? [...bindItems(), { cmd: 'stage.pose.mode' }, { label: 'Pins', icon: Pin, items: [{ cmd: 'stage.pose.pinFeet' }, { cmd: 'stage.pose.pinHands' }, sep, { cmd: 'stage.pose.unpin' }] }, { cmd: 'stage.pose.mirror' }, { cmd: 'stage.pose.reset' }, { cmd: 'stage.pose.save' }, { cmd: 'stage.pose.saveForCharacter' }, { cmd: 'stage.motion.apply' }, { cmd: 'stage.path.clear' }, sep] : []),
+      ...(sel()?.profile_id ? [{ cmd: 'stage.object.freeCopy' }] : sel()?.kind === 'mannequin' || sel()?.kind === 'mesh' ? [{ cmd: 'stage.object.prototype' }] : []),
       { cmd: 'stage.anim.keyObject' }, sep, { cmd: 'stage.object.delete' }, sep, { cmd: 'stage.undo' }, { cmd: 'stage.redo' }]
     : [addMenu(), { cmd: 'stage.add.plane' }, { cmd: 'stage.camera.add' }, { cmd: 'stage.camera.setFromView' }, cameraShotItem(), sep, { cmd: 'stage.tool.select' }, { cmd: 'stage.tool.move' }, { cmd: 'stage.tool.rotate' }, { cmd: 'stage.tool.scale' }, { cmd: 'stage.tool.path' }, { cmd: 'stage.snap' }, sep, { cmd: 'stage.frameAll' }, sep,
       { cmd: 'stage.shot.passes' }, { cmd: 'stage.shot.generate' }, sep, { cmd: 'stage.anim.keyCamera' }, { cmd: 'stage.anim.removeKey' }, { cmd: 'stage.clip.guide' }, { cmd: 'stage.clip.animate' }, sep,

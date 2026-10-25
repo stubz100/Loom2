@@ -153,7 +153,7 @@ function CastTab() {
         {!shown.length && <div className="empty hint">{profiles.length ? (filter === 'prop' ? 'No props yet — New prop…' : 'No profile matches.')
           : 'No profiles yet — New character…, or "Make a character…" on a Catalogue tile'}</div>}
       </div>
-      <div className="verbs"><CommandButton id="story.cast.new" text /><CommandButton id="story.cast.newPlace" text /><CommandButton id="story.cast.newProp" text /></div>
+      <div className="verbs"><CommandButton id="story.cast.new" text /><CommandButton id="story.cast.newPlace" text /><CommandButton id="story.cast.newProp" text /><CommandButton id="story.cast.lineup" text /></div>
       </>}
     </div>
   )
@@ -576,7 +576,12 @@ function PropModel({ p, v }: { p: Profile; v: Profile['versions'][number] }) {
           : <div className="model-view empty"><span className="hint">{busy ? 'making…' : 'no model yet'}</span></div>}
         <div className="prop-model-side">
           <span className={`hint${modelStale(v) ? ' warn' : ''}`} data-status>{status}</span>
-          <div className="verbs"><CommandButton id="story.cast.makeModel" text /><CommandButton id="story.cast.importModel" text /><CommandButton id="story.cast.clearModel" text /></div>
+          <div className="verbs"><CommandButton id="story.cast.makeModel" text /><CommandButton id="story.cast.importModel" text /><CommandButton id="story.cast.clearModel" text /><CommandButton id="story.cast.bench" text /></div>
+          <div className="kv prop-height"><span>height</span>{/* CW4 (03 §4): the model scaled to it in Animate */}
+            <span><input type="number" key={`h${v.id}${v.height_m ?? ''}`} defaultValue={v.height_m ?? ''} min={0.01} max={100} step={0.05} disabled={v.state !== 'open'} aria-label="the prop's height in metres" placeholder="1.0"
+              onBlur={(e) => { const t = e.target.value.trim(), h = t ? Number(t) : null; if (h !== (v.height_m ?? null) && (h === null || h > 0)) sy().setSheet({ height_m: h }) }}
+              onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} /> m
+              <Help text={"An image → 3D model comes out at no particular size: Animate scales it to this height (its bench and the line-up show a 1.75 m figure beside it). Prefilled from the prop's name and look — a cup 0.1 m, a door 2.1 m — else 1 m."} /></span></div>
         </div>
       </div>
     </section>

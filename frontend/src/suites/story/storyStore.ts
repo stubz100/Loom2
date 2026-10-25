@@ -519,6 +519,7 @@ export const useStory = create<StoryState>()((set, get) => {
       }
       if (data?.kind === 'shot') { if (!shotPending) void get().loadShots(); return }   // SY2: a take arrived, a finalize, a copy (not while a typed name waits)
       if (data?.kind === 'voice') { void get().loadVoices(); return }
+      if (data?.kind === 'idea') { void import('./ideasStore').then((m) => m.useIdeas.getState().onChanged(data)); return }   // CW1: an idea's variant or clay moved
       if (data?.kind === 'templates') { void get().loadTemplates(); return }   // RC2e: a Shot template saved, renamed or deleted        // CN2: a voice made, changed, measured or deleted
       if (data?.kind === 'library') { useLibrary.getState().onChanged(data.revision); return }   // D92: the World library moved
       if (data?.kind === 'panels') { void import('../generate/generateStore').then((m) => void m.useGenerate.getState().loadPresets()); return }   // D92: a saved panel (its picture)

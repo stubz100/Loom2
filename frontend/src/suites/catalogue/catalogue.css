@@ -26,6 +26,8 @@
 /* D125 (I2): Image's results with the For chip — ✓ makes the image the shot's frame; the current frame wears a badge */
 .tile .tile-use { position: absolute; bottom: 4px; right: 4px; width: 24px; height: 22px; padding: 0; min-height: 0; display: grid; place-items: center; border-radius: var(--radius); background: rgba(0,0,0,.72); color: #eee; border: 1px solid var(--line2); opacity: 0; z-index: 2; }
 .tile:hover .tile-use, .tile.selected .tile-use, .tile .tile-use:focus-visible { opacity: 1; }
+.tile .tile-proto { position: absolute; bottom: 4px; left: 4px; width: 24px; height: 22px; padding: 0; min-height: 0; display: grid; place-items: center; font-size: 12px; border-radius: var(--radius); background: rgba(0,0,0,.72); border: 1px solid var(--line2); opacity: 0; z-index: 2; }   /* proto01_UIcast CW1: Prototype ▸ */
+.tile:hover .tile-proto, .tile.selected .tile-proto, .tile .tile-proto:focus-visible { opacity: 1; }
 .tile .tile-use:hover { background: var(--accent); color: #fff; }
 .tile .badges .badge-mark { padding: 0 5px; border-radius: var(--radius); background: var(--accent); color: #fff; font-size: 10px; font-weight: 600; line-height: 16px; }
 .bin-bar .meta.picking { color: var(--fg); display: inline-flex; align-items: center; gap: 6px; }

@@ -10,13 +10,14 @@ export interface TileProps {
   onEdit?: (id: string) => void                                    // D95 (IM1, UX0): Image's results — ✎ Edit on the tile, opened in place
   corner?: { icon?: React.ReactNode; label: string; run: () => void }   // a pick started from a panel (the Bin): the verb's button top right, always shown
   onUse?: (id: string) => void; useLabel?: string                 // D125 (I2): Image's results with the For chip — ✓ Use as the shot's frame
+  onPrototype?: (e: React.MouseEvent, id: string) => void          // proto01_UIcast CW1: the hover button 🧪 — Prototype ▸ (a picture into an idea)
   mark?: string                                                    // D125 (I2): "frame ✓" on the For chip's shot's current frame
 }
 
 /** The scene of a JSON prompt, else the prompt text, for the caption. */
 const promptLine = (a: Asset) => ((a.prompt_json as { scene?: string } | null)?.scene ?? a.prompt_text ?? '').trim()
 
-export const Tile = memo(function Tile({ a, size, fill, caption = 'off', selected, primary, pinned, onClick, onDouble, dragItems, onContext, onLineage, onEdit, corner, onUse, useLabel, mark }: TileProps) {
+export const Tile = memo(function Tile({ a, size, fill, caption = 'off', selected, primary, pinned, onClick, onDouble, dragItems, onContext, onLineage, onEdit, corner, onUse, useLabel, mark, onPrototype }: TileProps) {
   const thumb = api.thumbUrl(a.id, size > 256 ? 512 : 256)
   const derived = a.root_id && a.root_id !== a.id
   return (
@@ -41,6 +42,7 @@ export const Tile = memo(function Tile({ a, size, fill, caption = 'off', selecte
           : <span className="badge-dot" title="derived from another asset">⤷</span>)}
       </div>
       {onEdit && a.kind === 'image' && <button type="button" className="tile-edit" title="Edit this image (Image · Edit, in place) — or double-click it, or E" aria-label="Edit" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onEdit(a.id) }}>✎ Edit</button>}
+      {onPrototype && a.kind === 'image' && !a.trashed_at && <button type="button" className="tile-proto" title="Prototype ▸ — a new idea in Cast from this picture (a copy), or into an idea" aria-label="Prototype" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onPrototype(e, a.id) }}>🧪</button>}
       {onUse && a.kind === 'image' && <button type="button" className="tile-use" title={useLabel} aria-label={useLabel} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onUse(a.id) }}>✓</button>}
       {corner && <button type="button" className="tile-pick" title={corner.label} aria-label={corner.label} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); corner.run() }}>{corner.icon ?? '＋'}</button>}
       {pinned > 0 && <span className="pin">C{pinned}</span>}

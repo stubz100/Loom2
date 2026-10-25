@@ -1,7 +1,7 @@
 // The Inspector (D34, proto01_design/01 §6e): one scrolling column with collapsible sections instead of tabs — Tags,
 // Location, Actions, Lineage, Prompt, Details — for one asset, or the bulk subset for several. The single home for the actions
 // on the selection (the strip carries none); ids appear only under Details.
-import { BookOpen, ChevronDown, ChevronRight, Clapperboard, Columns2, Copy, ExternalLink, Film, FolderInput, GitBranch, Image, Images, Inbox, Layers, MoreHorizontal, Package, Pencil, Pin, RotateCcw, Shuffle, Trash, Undo, Ungroup, UserRoundPlus, Wand2, X } from 'lucide-react'
+import { BookOpen, ChevronDown, ChevronRight, Clapperboard, Columns2, Copy, ExternalLink, Film, FlaskConical, FolderInput, GitBranch, Image, Images, Inbox, Layers, MoreHorizontal, Package, Pencil, Pin, RotateCcw, Shuffle, Trash, Undo, Ungroup, UserRoundPlus, Wand2, X } from 'lucide-react'
 import { useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
@@ -22,6 +22,10 @@ import { CatalogueStoreCtx, useCat } from './catalogueContext'
 import { selectedOrPrimary } from './catalogueStore'
 import { notePlacements } from './placement'
 import { openInOtherPane, openPlaceFrom, type Place } from './split'
+import { madeForIdea, prototypeItems } from '../story/prototype'
+
+/** CW1: the selection's pictures (else the one shown). */
+const selectedOrPrimaryImages = (c: { selected: string[]; byId: (id: string) => { kind: string } | undefined }, id: string): string[] => { const sel = c.selected.filter((x) => c.byId(x)?.kind === 'image'); return sel.includes(id) ? sel : [id] }
 
 // ---------------------------------------------------------------- shared bits
 const usePrefs = create<{ closed: Record<string, boolean>; toggle: (k: string) => void }>()(persist((set, get) => ({
@@ -244,6 +248,7 @@ function One({ a }: { a: Asset }) {
           <Btn icon={<Shuffle size={14} />} label="Variations" run={() => runCommand('cat.variations')} disabled={!a.params?.recipe} title="New seeds (V)" />
           <CmdBtn id="cat.loadInGenerate" icon={<Wand2 size={14} />} label="Load in Image" />
           <Btn icon={<Pin size={14} />} label={c.compare.includes(a.id) ? 'Unpin' : 'Pin for compare'} run={() => runCommand('cat.pin')} title={c.compare.includes(a.id) ? `Unpin (C${c.compare.indexOf(a.id) + 1}, C)` : 'Pin for compare (C)'} />
+          {a.kind === 'image' && !a.trashed_at && <Btn icon={<FlaskConical size={14} />} label="Prototype ▾" run={(e) => showMenu(e, prototypeItems(selectedOrPrimaryImages(c, a.id), madeForIdea(a)))} title="A new idea in Cast with this picture as its first variant (a copy), or the picture added to an idea (proto01_UIcast CW1)" />}
           {a.kind === 'image' && !a.trashed_at && <Btn icon={<UserRoundPlus size={14} />} label="Add to Cast ▾" run={(e) => showMenu(e, addToCharacterMenu().items)} title="Into a Cast character, prop or place: as the hero, into the reference set or as a candidate (D93)" />}
           <Btn icon={<MoreHorizontal size={14} />} label="More ▾" run={(e) => showMenu(e, actionsMore(a))} />
         </div>}

@@ -2831,6 +2831,124 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/ideas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ideas List */
+        get: operations["ideas_list_story_ideas_get"];
+        put?: never;
+        /** Idea Create */
+        post: operations["idea_create_story_ideas_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/ideas/{iid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Idea Get */
+        get: operations["idea_get_story_ideas__iid__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Idea Delete
+         * @description The idea goes; its page and pictures stay in the album (as a deleted profile's do).
+         */
+        delete: operations["idea_delete_story_ideas__iid__delete"];
+        options?: never;
+        head?: never;
+        /** Idea Patch */
+        patch: operations["idea_patch_story_ideas__iid__patch"];
+        trace?: never;
+    };
+    "/story/ideas/{iid}/keep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Idea Keep
+         * @description *Keep ▶*: a variant becomes a Cast profile (v1) or a new version of one — the hero, a sheet drafted from its prompt, its clay.
+         */
+        post: operations["idea_keep_story_ideas__iid__keep_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/ideas/{iid}/variants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Idea Variant Add
+         * @description *Add to ‹idea›* (*Prototype ▸*), *Add as a variant* (CW2), a picture dropped on its card: a copy on the idea's page, in focus.
+         */
+        post: operations["idea_variant_add_story_ideas__iid__variants_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/ideas/{iid}/variants/{vid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Idea Variant Remove */
+        delete: operations["idea_variant_remove_story_ideas__iid__variants__vid__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/ideas/{iid}/variants/{vid}/clay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Idea Variant Clay
+         * @description *Make the clay ▶* (06 §2.3): a character variant's figure — an A-pose picture drawn from it (about a minute), the body fitted to it —
+         *     and then its shell (Pixal3D, about four minutes, full only), queued one after another; the variant's clay follows each step.
+         */
+        post: operations["idea_variant_clay_story_ideas__iid__variants__vid__clay_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/library": {
         parameters: {
             query?: never;
@@ -5014,6 +5132,12 @@ export interface components {
         ChangedGroups: {
             /** Changed */
             changed: string[];
+        };
+        /** ClayQueued */
+        ClayQueued: {
+            idea: components["schemas"]["Idea"];
+            /** Job Id */
+            job_id: string;
         };
         /** ClipExtract */
         ClipExtract: {
@@ -7955,6 +8079,78 @@ export interface components {
             /** Id */
             id: string;
         };
+        /** Idea */
+        Idea: {
+            /**
+             * Cls
+             * @default character
+             * @enum {string}
+             */
+            cls: "character" | "prop" | "place";
+            /** Created At */
+            created_at: string;
+            /** Focus */
+            focus: string | null;
+            /** Group Id */
+            group_id: string;
+            /** Id */
+            id: string;
+            /** Kept */
+            kept: components["schemas"]["loom2__ideas__Kept"][];
+            /** Made For */
+            made_for: string[];
+            /** Name */
+            name: string;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /**
+             * Revision
+             * @default 0
+             */
+            revision: number;
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: number;
+            /** Updated At */
+            updated_at: string;
+            /** Variants */
+            variants: components["schemas"]["Variant"][];
+        };
+        /** IdeaCreate */
+        IdeaCreate: {
+            /** Asset Id */
+            asset_id?: string | null;
+            /**
+             * Cls
+             * @default character
+             * @enum {string}
+             */
+            cls?: "character" | "prop" | "place";
+            /** Name */
+            name?: string | null;
+            /**
+             * Note
+             * @default
+             */
+            note?: string;
+        };
+        /** IdeaList */
+        IdeaList: {
+            /** Items */
+            items: components["schemas"]["Idea"][];
+        };
+        /** IdeaRef */
+        IdeaRef: {
+            /** Idea Id */
+            idea_id: string;
+            /** Variant Id */
+            variant_id: string;
+        };
         /** IdsReply */
         IdsReply: {
             /** Ids */
@@ -8466,6 +8662,15 @@ export interface components {
             /** Jobs */
             jobs: components["schemas"]["JobRecord"][];
         };
+        /** KeepBody */
+        KeepBody: {
+            /** Name */
+            name?: string | null;
+            /** Profile Id */
+            profile_id?: string | null;
+            /** Variant Id */
+            variant_id: string;
+        };
         /** KeyBody */
         KeyBody: {
             /** Frame */
@@ -8905,6 +9110,25 @@ export interface components {
              * @default 1
              */
             strength?: number;
+        };
+        /**
+         * MadeFrom
+         * @description Where a variant's picture came from (read from the source at the copy, lineage at write time).
+         */
+        MadeFrom: {
+            /** Asset Id */
+            asset_id: string | null;
+            /** For Idea */
+            for_idea: string | null;
+            /** Model */
+            model: string | null;
+            /**
+             * Prompt
+             * @default
+             */
+            prompt: string;
+            /** Seed */
+            seed: number | null;
         };
         /** MakeBody */
         MakeBody: {
@@ -9876,6 +10100,7 @@ export interface components {
             created_at: string;
             /** Derived From */
             derived_from: string | null;
+            from_idea: components["schemas"]["IdeaRef"] | null;
             /** Group Id */
             group_id: string;
             /** Hero Asset Id */
@@ -12713,6 +12938,61 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /** Variant */
+        Variant: {
+            /** Asset Id */
+            asset_id: string;
+            clay: components["schemas"]["VariantClay"] | null;
+            /** Created At */
+            created_at: string;
+            /** Id */
+            id: string;
+            made_from: components["schemas"]["MadeFrom"];
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+        };
+        /** VariantAdd */
+        VariantAdd: {
+            /** Asset Id */
+            asset_id: string;
+        };
+        /**
+         * VariantClay
+         * @description A character variant's clay: the A-pose picture drawn from it, the body fitted to that, the shell made from it — the same three a Cast
+         *     version holds (`anim_ref_asset_id`, `body` + `body_points`, `shell_asset_id`), carried over by *Keep ▶*.
+         */
+        VariantClay: {
+            /** Anim Ref Asset Id */
+            anim_ref_asset_id: string | null;
+            body: components["schemas"]["Body"] | null;
+            /** Body Points */
+            body_points: {
+                [key: string]: unknown;
+            } | null;
+            /** Error */
+            error: string | null;
+            /** Job Id */
+            job_id: string | null;
+            /**
+             * Kind
+             * @default figure
+             * @enum {string}
+             */
+            kind: "figure" | "model" | "set";
+            /** Note */
+            note: string | null;
+            /** Shell Asset Id */
+            shell_asset_id: string | null;
+            /**
+             * Step
+             * @default drawing
+             * @enum {string}
+             */
+            step: "drawing" | "fitting" | "shell" | "done" | "failed";
+        };
         /** VersionInfo */
         VersionInfo: {
             /** App */
@@ -13070,10 +13350,26 @@ export interface components {
             /** Variables */
             variables: components["schemas"]["StoryVariable"][];
         };
+        /** Kept */
+        loom2__ideas__Kept: {
+            /** At */
+            at: string;
+            /** Profile Id */
+            profile_id: string;
+            /** Variant Id */
+            variant_id: string;
+            /** Version Id */
+            version_id: string;
+        };
         /** SourceBody */
         loom2__routes__finals__SourceBody: {
             /** Take */
             take?: string | null;
+        };
+        /** Kept */
+        loom2__routes__ideas__Kept: {
+            idea: components["schemas"]["Idea"];
+            profile: components["schemas"]["Profile"];
         };
         /** SourceBody */
         loom2__routes__story__SourceBody: {
@@ -18433,6 +18729,292 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TtsQueued"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ideas_list_story_ideas_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdeaList"];
+                };
+            };
+        };
+    };
+    idea_create_story_ideas_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IdeaCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Idea"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    idea_get_story_ideas__iid__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                iid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Idea"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    idea_delete_story_ideas__iid__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                iid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Deleted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    idea_patch_story_ideas__iid__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                iid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Idea"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    idea_keep_story_ideas__iid__keep_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                iid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KeepBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["loom2__routes__ideas__Kept"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    idea_variant_add_story_ideas__iid__variants_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                iid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VariantAdd"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Idea"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    idea_variant_remove_story_ideas__iid__variants__vid__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                iid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Idea"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    idea_variant_clay_story_ideas__iid__variants__vid__clay_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                iid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClayQueued"];
                 };
             };
             /** @description Validation Error */

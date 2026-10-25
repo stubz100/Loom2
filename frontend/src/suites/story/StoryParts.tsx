@@ -5,6 +5,8 @@
 // version selector; Stage: the readiness row (D125), the version page (hero, the character sheet — D93 B4, the coverage grid, the candidates and Add to the reference set);
 // Inspector: the profile and the version. Mouse-first (D32): every verb is a button or a menu entry.
 import { Film, ImagePlus, Lock } from 'lucide-react'
+import { IdeaBench, IdeaInspector, IdeasList } from './Ideas'
+import { useIdeas } from './ideasStore'
 import { Help } from '../../frame/Help'
 import { lazy, Suspense, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { api, http, unwrap } from '../../api/client'
@@ -122,13 +124,19 @@ function CastTab() {
   const uses = useStory((s) => s.castUses)
   const shots = useStory((s) => s.shots)
   const flowNodes = useStory((s) => s.flowNodes)
+  const board = useIdeas((s) => s.board)
   useEffect(() => { void sy().loadCastUses() }, [profiles, shots, flowNodes])          // D125 (S5): each row says what it owes for its shots
   return (
     <div className="story-panel cast-panel">
+      <div className="segmented board-switch" role="group" aria-label="board">{/* proto01_UIcast CW1 (06 §2.1): the kept profiles, or the ideas before them */}
+        {(['cast', 'ideas'] as const).map((b) => <button key={b} type="button" className={board === b ? 'active' : ''} aria-pressed={board === b} onClick={() => useIdeas.getState().setBoard(b)}>{b === 'cast' ? 'Cast' : 'Ideas'}</button>)}
+        <Help text={"Ideas come before Cast: loose pictures gathered as variants, with their clay, nothing in production yet. Keep ▶ makes one a Cast profile (or a new version of one)."} />
+      </div>
       <div className="segmented" aria-label="class">
         {(['all', 'character', 'place', 'prop'] as const).map((c) => <button key={c} className={filter === c ? 'active' : ''} onClick={() => sy().setCastFilter(c)}>{c === 'all' ? 'all' : `${CLASS_LABEL[c]}s`}</button>)}
       </div>
-      <input type="search" value={search} aria-label="search profiles" placeholder="search" onChange={(e) => sy().setCastSearch(e.target.value)} />
+      <input type="search" value={search} aria-label={board === 'ideas' ? 'search ideas' : 'search profiles'} placeholder="search" onChange={(e) => sy().setCastSearch(e.target.value)} />
+      {board === 'ideas' ? <IdeasList filter={filter} q={q} /> : <>
       <div className="story-list" role="list">
         {shown.map((p) => {
           const v = p.versions.find((x) => x.id === p.current)
@@ -146,6 +154,7 @@ function CastTab() {
           : 'No profiles yet — New character…, or "Make a character…" on a Catalogue tile'}</div>}
       </div>
       <div className="verbs"><CommandButton id="story.cast.new" text /><CommandButton id="story.cast.newPlace" text /><CommandButton id="story.cast.newProp" text /></div>
+      </>}
     </div>
   )
 }
@@ -808,8 +817,10 @@ export function Stage() {
   const play = useStory((s) => s.play)
   const flowRecipe = useStory((s) => s.flowRecipe)                                  // RC1: the node's recipe in place of the canvas
   const skeleton = useStory((s) => s.skeleton)                                      // CS2: the skeleton bench in place of the page
+  const board = useIdeas((s) => s.board)                                            // CW1: the Ideas board's bench
   markUsed('story.world.addStyle'); markUsed('story.world.addBeat'); markUsed('story.world.addVariable'); markUsed('story.world.remove'); markUsed('story.cast.new'); markUsed('story.cast.newPlace'); markUsed('story.cast.newProp')
   if (!project?.open) return <div className="story-empty"><div>Open or create a project to begin.</div></div>
+  if (tab === 'cast' && board === 'ideas') return <IdeaBench />                                                                       // proto01_UIcast CW1
   if (tab === 'cast') return skeleton ? <Suspense fallback={<span className="hint">loading the bench…</span>}><SkeletonBench /></Suspense> : <CastPage />   // CS2
   if (tab === 'shots') return <div className="shots-stage"><ShotsBoard /><ShotBoard /><LinkStageSheet /></div>   // D125 (SP3): the board, the selected shot's page under it
   if (tab === 'flow') return play ? <PlayView /> : <>{flowRecipe ? <FlowRecipe /> : <FlowCanvas />}<LinkStageSheet /></>
@@ -820,6 +831,8 @@ export function Stage() {
 // ------------------------------------------------------------------ Inspector
 function CastInspector() {
   const skeleton = useStory((s) => s.skeleton)
+  const board = useIdeas((s) => s.board)
+  if (board === 'ideas') return <IdeaInspector />                                              // proto01_UIcast CW1
   if (skeleton) return <Suspense fallback={null}><SkeletonParts /></Suspense>                // CS2: the bench's parts
   return <CastSheetInspector />
 }

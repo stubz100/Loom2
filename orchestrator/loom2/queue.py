@@ -319,6 +319,7 @@ class JobQueue:
         rec.status, rec.finished_at = "cancelled", utc_now()
         self.persist()
         self.hub.broadcast("job.updated", rec.model_dump())
+        self._origin_stopped(rec, "cancelled")
         return True
 
     def requeue(self, job_id: str) -> JobRecord:
@@ -574,6 +575,13 @@ class JobQueue:
         self.catalogue.record_job(job.model_dump())
         self.persist()
         self.hub.broadcast("job.updated", job.model_dump())
+        self._origin_stopped(job, msg)
+
+    def _origin_stopped(self, job: JobRecord, msg: str) -> None:
+        """CW1: a job some record waits on failed or was cancelled — an idea variant's clay step says so (never raises)."""
+        from .ideas import IDEA_CLAY_SURFACE, clay_failed
+        if job.origin is not None and job.origin.surface == IDEA_CLAY_SURFACE:
+            clay_failed(self, job, msg)
 
     def _finish_cancelled(self, job: JobRecord) -> None:
         self._cancel_requested.discard(job.id)
@@ -582,6 +590,7 @@ class JobQueue:
         self.catalogue.record_job(job.model_dump())
         self.persist()
         self.hub.broadcast("job.updated", job.model_dump())
+        self._origin_stopped(job, "cancelled")
 
     def _cancelled(self, job: JobRecord) -> bool:
         """B5: a cancel that arrived while the job was still preparing (engine start, uploads, region crop)."""

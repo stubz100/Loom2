@@ -1978,6 +1978,23 @@
         "title": "ChangedGroups",
         "type": "object"
       },
+      "ClayQueued": {
+        "properties": {
+          "idea": {
+            "$ref": "#/components/schemas/Idea"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "idea"
+        ],
+        "title": "ClayQueued",
+        "type": "object"
+      },
       "ClipExtract": {
         "properties": {
           "frames": {
@@ -9303,6 +9320,186 @@
         "title": "IdOnly",
         "type": "object"
       },
+      "Idea": {
+        "properties": {
+          "cls": {
+            "default": "character",
+            "enum": [
+              "character",
+              "prop",
+              "place"
+            ],
+            "title": "Cls",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "focus": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Focus"
+          },
+          "group_id": {
+            "title": "Group Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kept": {
+            "items": {
+              "$ref": "#/components/schemas/loom2__ideas__Kept"
+            },
+            "title": "Kept",
+            "type": "array"
+          },
+          "made_for": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Made For",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "note": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Note",
+            "type": "string"
+          },
+          "revision": {
+            "default": 0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "schema_version": {
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "variants": {
+            "items": {
+              "$ref": "#/components/schemas/Variant"
+            },
+            "title": "Variants",
+            "type": "array"
+          }
+        },
+        "required": [
+          "schema_version",
+          "id",
+          "cls",
+          "name",
+          "note",
+          "focus",
+          "group_id",
+          "variants",
+          "kept",
+          "made_for",
+          "revision",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Idea",
+        "type": "object"
+      },
+      "IdeaCreate": {
+        "properties": {
+          "asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Id"
+          },
+          "cls": {
+            "default": "character",
+            "enum": [
+              "character",
+              "prop",
+              "place"
+            ],
+            "title": "Cls",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "note": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Note",
+            "type": "string"
+          }
+        },
+        "title": "IdeaCreate",
+        "type": "object"
+      },
+      "IdeaList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Idea"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "IdeaList",
+        "type": "object"
+      },
+      "IdeaRef": {
+        "properties": {
+          "idea_id": {
+            "title": "Idea Id",
+            "type": "string"
+          },
+          "variant_id": {
+            "title": "Variant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "idea_id",
+          "variant_id"
+        ],
+        "title": "IdeaRef",
+        "type": "object"
+      },
       "IdsReply": {
         "properties": {
           "ids": {
@@ -10488,6 +10685,42 @@
         "title": "JobsSubmitted",
         "type": "object"
       },
+      "KeepBody": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "profile_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Id"
+          },
+          "variant_id": {
+            "title": "Variant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "variant_id"
+        ],
+        "title": "KeepBody",
+        "type": "object"
+      },
       "KeyBody": {
         "properties": {
           "frame": {
@@ -11575,6 +11808,69 @@
           "model_id"
         ],
         "title": "LoraRef",
+        "type": "object"
+      },
+      "MadeFrom": {
+        "description": "Where a variant's picture came from (read from the source at the copy, lineage at write time).",
+        "properties": {
+          "asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Id"
+          },
+          "for_idea": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "For Idea"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "prompt": {
+            "default": "",
+            "title": "Prompt",
+            "type": "string"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed"
+          }
+        },
+        "required": [
+          "asset_id",
+          "prompt",
+          "model",
+          "seed",
+          "for_idea"
+        ],
+        "title": "MadeFrom",
         "type": "object"
       },
       "MakeBody": {
@@ -14045,6 +14341,16 @@
             ],
             "title": "Derived From"
           },
+          "from_idea": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IdeaRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "group_id": {
             "title": "Group Id",
             "type": "string"
@@ -14202,6 +14508,7 @@
           "model_asset_id",
           "model_from",
           "derived_from",
+          "from_idea",
           "created_at",
           "locked_at"
         ],
@@ -20882,6 +21189,181 @@
         "title": "ValidationError",
         "type": "object"
       },
+      "Variant": {
+        "properties": {
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "clay": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VariantClay"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "made_from": {
+            "$ref": "#/components/schemas/MadeFrom"
+          },
+          "note": {
+            "default": "",
+            "maxLength": 400,
+            "title": "Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "asset_id",
+          "made_from",
+          "clay",
+          "note",
+          "created_at"
+        ],
+        "title": "Variant",
+        "type": "object"
+      },
+      "VariantAdd": {
+        "properties": {
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "asset_id"
+        ],
+        "title": "VariantAdd",
+        "type": "object"
+      },
+      "VariantClay": {
+        "description": "A character variant's clay: the A-pose picture drawn from it, the body fitted to that, the shell made from it — the same three a Cast\nversion holds (`anim_ref_asset_id`, `body` + `body_points`, `shell_asset_id`), carried over by *Keep ▶*.",
+        "properties": {
+          "anim_ref_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anim Ref Asset Id"
+          },
+          "body": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Body"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "body_points": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body Points"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "kind": {
+            "default": "figure",
+            "enum": [
+              "figure",
+              "model",
+              "set"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "shell_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shell Asset Id"
+          },
+          "step": {
+            "default": "drawing",
+            "enum": [
+              "drawing",
+              "fitting",
+              "shell",
+              "done",
+              "failed"
+            ],
+            "title": "Step",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "step",
+          "anim_ref_asset_id",
+          "body",
+          "body_points",
+          "note",
+          "shell_asset_id",
+          "job_id",
+          "error"
+        ],
+        "title": "VariantClay",
+        "type": "object"
+      },
       "VersionInfo": {
         "additionalProperties": true,
         "properties": {
@@ -21683,6 +22165,34 @@
         "title": "World",
         "type": "object"
       },
+      "loom2__ideas__Kept": {
+        "properties": {
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "profile_id": {
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "variant_id": {
+            "title": "Variant Id",
+            "type": "string"
+          },
+          "version_id": {
+            "title": "Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile_id",
+          "version_id",
+          "variant_id",
+          "at"
+        ],
+        "title": "Kept",
+        "type": "object"
+      },
       "loom2__routes__finals__SourceBody": {
         "properties": {
           "take": {
@@ -21698,6 +22208,22 @@
           }
         },
         "title": "SourceBody",
+        "type": "object"
+      },
+      "loom2__routes__ideas__Kept": {
+        "properties": {
+          "idea": {
+            "$ref": "#/components/schemas/Idea"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/Profile"
+          }
+        },
+        "required": [
+          "profile",
+          "idea"
+        ],
+        "title": "Kept",
         "type": "object"
       },
       "loom2__routes__story__SourceBody": {
@@ -30116,6 +30642,410 @@
         "summary": "Flow Voice",
         "tags": [
           "story"
+        ]
+      }
+    },
+    "/story/ideas": {
+      "get": {
+        "operationId": "ideas_list_story_ideas_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdeaList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Ideas List",
+        "tags": [
+          "ideas"
+        ]
+      },
+      "post": {
+        "operationId": "idea_create_story_ideas_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdeaCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Idea"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Idea Create",
+        "tags": [
+          "ideas"
+        ]
+      }
+    },
+    "/story/ideas/{iid}": {
+      "delete": {
+        "description": "The idea goes; its page and pictures stay in the album (as a deleted profile's do).",
+        "operationId": "idea_delete_story_ideas__iid__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "iid",
+            "required": true,
+            "schema": {
+              "title": "Iid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deleted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Idea Delete",
+        "tags": [
+          "ideas"
+        ]
+      },
+      "get": {
+        "operationId": "idea_get_story_ideas__iid__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "iid",
+            "required": true,
+            "schema": {
+              "title": "Iid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Idea"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Idea Get",
+        "tags": [
+          "ideas"
+        ]
+      },
+      "patch": {
+        "operationId": "idea_patch_story_ideas__iid__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "iid",
+            "required": true,
+            "schema": {
+              "title": "Iid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Idea"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Idea Patch",
+        "tags": [
+          "ideas"
+        ]
+      }
+    },
+    "/story/ideas/{iid}/keep": {
+      "post": {
+        "description": "*Keep ▶*: a variant becomes a Cast profile (v1) or a new version of one — the hero, a sheet drafted from its prompt, its clay.",
+        "operationId": "idea_keep_story_ideas__iid__keep_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "iid",
+            "required": true,
+            "schema": {
+              "title": "Iid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeepBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/loom2__routes__ideas__Kept"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Idea Keep",
+        "tags": [
+          "ideas"
+        ]
+      }
+    },
+    "/story/ideas/{iid}/variants": {
+      "post": {
+        "description": "*Add to ‹idea›* (*Prototype ▸*), *Add as a variant* (CW2), a picture dropped on its card: a copy on the idea's page, in focus.",
+        "operationId": "idea_variant_add_story_ideas__iid__variants_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "iid",
+            "required": true,
+            "schema": {
+              "title": "Iid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VariantAdd"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Idea"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Idea Variant Add",
+        "tags": [
+          "ideas"
+        ]
+      }
+    },
+    "/story/ideas/{iid}/variants/{vid}": {
+      "delete": {
+        "operationId": "idea_variant_remove_story_ideas__iid__variants__vid__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "iid",
+            "required": true,
+            "schema": {
+              "title": "Iid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Idea"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Idea Variant Remove",
+        "tags": [
+          "ideas"
+        ]
+      }
+    },
+    "/story/ideas/{iid}/variants/{vid}/clay": {
+      "post": {
+        "description": "*Make the clay ▶* (06 §2.3): a character variant's figure — an A-pose picture drawn from it (about a minute), the body fitted to it —\nand then its shell (Pixal3D, about four minutes, full only), queued one after another; the variant's clay follows each step.",
+        "operationId": "idea_variant_clay_story_ideas__iid__variants__vid__clay_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "iid",
+            "required": true,
+            "schema": {
+              "title": "Iid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClayQueued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Idea Variant Clay",
+        "tags": [
+          "ideas"
         ]
       }
     },

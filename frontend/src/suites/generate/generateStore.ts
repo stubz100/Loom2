@@ -9,7 +9,7 @@ import { defaultModel, resolveModel } from '../../store/modelCaps'
 import type { DragPayload } from '../../frame/drag'
 import { runCommand, type OnItem } from '../../frame/commands'
 import { refDrop } from '../../frame/dropRules'
-import { FOR_SHOT, forLabel, originFor, useMakeFor } from '../../store/origin'
+import { FOR_SHOT, forLabel, originFor, useMakeFor, withIdea } from '../../store/origin'
 import { askConfirm, useSession } from '../../store/session'
 import { profilesForMentions as profilesNow, styleFor } from '../story/storyStore'
 import type { Profile } from '../../api/types'
@@ -609,7 +609,7 @@ export const useGenerate = create<GenerateState>()(
           const { useStory } = await import('../story/storyStore')
           const gid = await useStory.getState().ensureCandidates(prof.id, v.id)
           if (!gid) return null
-          origin = castOrigin(prof.id, v.id, gid)
+          origin = withIdea(castOrigin(prof.id, v.id, gid))                                  // CW2: the idea chip's stamp stays
         }
         const n = cells.length * p.count
         if (n > 8) {

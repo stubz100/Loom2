@@ -396,3 +396,13 @@
 .skel-parts .hands { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
 .skel-parts .skel-status { margin-top: 10px; font-size: 12px; color: var(--fg3); }
 .skel-parts .skel-status.warn { color: var(--warn, #d29922); }
+/* proto01_UIcast CW1–CW2: the Ideas board and the idea's bench */
+.cast-panel .board-switch { margin-bottom: 4px; align-items: center; }
+.idea-bench .made-from { display: grid; grid-template-columns: 64px 1fr; gap: 2px 8px; font-size: 12px; margin: 6px 0; }
+.idea-bench .made-from .prompt { color: var(--fg2); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.idea-bench .verbs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.idea-bench .kept { margin-top: 8px; font-size: 12px; color: var(--fg2); display: flex; gap: 8px; align-items: center; }
+.idea-clay { display: flex; gap: 12px; align-items: flex-start; }
+.idea-clay .aref { width: 160px; aspect-ratio: 16 / 9; object-fit: contain; background: var(--media-bg, var(--bg1)); border: 1px solid var(--line2); border-radius: var(--radius); }
+.idea-clay .kv { display: grid; grid-template-columns: 48px 1fr; gap: 2px 8px; font-size: 12px; }
+.idea-clay .warn { color: var(--warn, #e0a040); }

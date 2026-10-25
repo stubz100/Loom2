@@ -2685,6 +2685,79 @@ test('AN1 step 5 (D95): the Clay level adds an image plane from the Bin, renames
   await expect(page.locator('.from-stage')).toHaveCount(0)
 })
 
+test("ideas (proto01_UIcast CW1–CW2): Prototype ▸ on a tile copies the picture into a new character idea named from its prompt; Make the clay ▶ runs the A-pose picture, the fit and the shell; Explore in Image makes for it — listed, not a variant — and ＋ variant takes it; Keep ▶ makes a Cast character with the drafted sheet and the clay", async ({ page }) => {
+  test.setTimeout(180_000)
+  type Clay = { step: string; anim_ref_asset_id: string | null; body: { height_m: number } | null; shell_asset_id: string | null }
+  type Variant = { id: string; asset_id: string; made_from: { asset_id: string | null; prompt: string }; clay: Clay | null }
+  type IdeaLite = { id: string; name: string; variants: Variant[]; made_for: string[]; kept: { profile_id: string; version_id: string }[] }
+  const known = new Set((await api<{ items: IdeaLite[] }>('GET', '/story/ideas')).items.map((i) => i.id))
+  await openApp(page, { suite: 'catalogue' })
+  let tile = tiles(page).first(), src = ''
+  for (let k = 0; k < 16 && !src; k++) {                                                   // the first picture (not a clip or a model)
+    const t = tiles(page).nth(k), id = (await t.getAttribute('data-id'))!
+    if ((await api<{ kind: string }>('GET', `/assets/${id}`)).kind === 'image') { tile = t; src = id }
+  }
+  await tile.click({ button: 'right' })
+  await page.locator('.ctx-menu .item.sub', { hasText: 'Prototype' }).first().hover()
+  await page.screenshot({ path: 'node_modules/.e2e/cw1-prototype-menu.png' })
+  await page.locator('.ctx-menu .ctx-menu button.item', { hasText: /^New character idea/ }).click()
+  await page.locator('.toast', { hasText: 'New character idea “' }).locator('button', { hasText: 'Open' }).click()   // at once: a toast lasts 6 s, three at most
+  const fresh = async () => (await api<{ items: IdeaLite[] }>('GET', '/story/ideas')).items.find((i) => !known.has(i.id))
+  await expect.poll(async () => !!(await fresh()), { timeout: 10_000 }).toBe(true)
+  const idea = (await fresh())!
+  const get = async () => api<IdeaLite>('GET', `/story/ideas/${idea.id}`)
+  expect(idea.variants[0].made_from.asset_id).toBe(src)
+  expect(idea.variants[0].asset_id).not.toBe(src)                                            // copied (U2): the tile keeps its picture
+  const bench = page.locator(`.idea-bench[data-idea="${idea.id}"]`)
+  await expect(bench).toBeVisible()
+  await expect(page.locator(`.idea-row[data-id="${idea.id}"]`)).toHaveClass(/active/)
+  // Make the clay ▶: the A-pose picture, the fit, then (full) the shell — the fake engine answers each
+  await bench.locator('button', { hasText: /^Make the clay/ }).click()
+  await expect.poll(async () => (await get()).variants[0].clay?.step, { timeout: 120_000 }).toBe('done')
+  const clay = (await get()).variants[0].clay!
+  expect(clay.anim_ref_asset_id && clay.body).toBeTruthy()
+  if (env().variant === 'full') expect(clay.shell_asset_id).toBeTruthy()
+  await expect(bench.locator('.idea-clay')).toContainText('fitted')
+  await page.screenshot({ path: 'node_modules/.e2e/cw1-idea-bench.png' })
+  // CW2: Explore in Image — the chip names the idea; what it makes is listed on it, not a variant
+  await bench.locator('button', { hasText: /^Explore in Image/ }).click()
+  const chip = page.locator('[data-testid="for-chip"]')
+  await expect(chip).toContainText(`For: ${idea.name} · idea`)
+  await page.locator('nav.rail button[title^="Model"]').click()
+  await page.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()
+  const go = page.locator('.panel .foot button.primary', { hasText: /^Generate/ })
+  await expect(go).toBeEnabled()
+  await go.click()
+  await expect.poll(async () => (await get()).made_for.length, { timeout: 60_000 }).toBeGreaterThan(0)
+  expect((await get()).variants).toHaveLength(1)
+  await page.screenshot({ path: 'node_modules/.e2e/cw2-for-idea.png' })
+  await chip.locator('button', { hasText: `Back to ${idea.name}` }).click()
+  await expect(bench).toBeVisible()
+  await expect(chip).toHaveCount(0)
+  const made = (await get()).made_for[0]
+  const card = bench.locator(`.made-card[data-id="${made}"]`)
+  await card.hover()
+  await card.locator('button', { hasText: 'variant' }).click()
+  await expect.poll(async () => (await get()).variants.length, { timeout: 10_000 }).toBe(2)
+  expect((await get()).variants[1].made_from.asset_id).toBe(made)
+  // Keep ▶: a Cast character from the variant in focus — the hero a copy, the sheet drafted, the clay carried, from_idea
+  await bench.locator(`.variant-card[data-id="${idea.variants[0].id}"]`).click()
+  await expect(bench.locator(`.variant-card[data-id="${idea.variants[0].id}"]`)).toHaveClass(/picked/)
+  await bench.locator('button', { hasText: /^Keep ▶ as a new character/ }).click()
+  await expect.poll(async () => (await get()).kept.length, { timeout: 10_000 }).toBe(1)
+  const k = (await get()).kept[0]
+  type V = { id: string; hero_asset_id: string | null; anim_ref_asset_id: string | null; body: unknown; shell_asset_id: string | null; from_idea: { idea_id: string; variant_id: string } | null }
+  const prof = await api<{ id: string; name: string; versions: V[] }>('GET', `/story/profiles/${k.profile_id}`)
+  const v = prof.versions[0]
+  expect(prof.name).toBe(idea.name)
+  expect(v.from_idea).toEqual({ idea_id: idea.id, variant_id: idea.variants[0].id })
+  expect(v.hero_asset_id).not.toBe(idea.variants[0].asset_id)
+  expect(v.anim_ref_asset_id && v.body).toBeTruthy()
+  expect(v.shell_asset_id).toBe(clay.shell_asset_id)
+  await expect(page.locator(`.profile-row[data-id="${prof.id}"]`)).toHaveClass(/active/)    // Cast opens on it
+  await page.screenshot({ path: 'node_modules/.e2e/cw1-kept.png' })
+})
+
 test('a body on the Cast sheet (CA0, 01 §9): height, build and an attachment saved with the sheet; a stage figure bound to the character takes the body when the stage opens', async ({ page }) => {
   const name = `Grak ${Date.now().toString(36)}`
   const src = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0]

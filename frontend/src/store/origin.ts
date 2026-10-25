@@ -20,10 +20,17 @@ export type Maker = 'generate' | 'animate'
 /** What a maker was opened for: a shot version (its name for the chip; the owner node when Make came from the Flow). */
 export interface MakeFor { kind: 'shot'; shot_id: string; version: string; name: string; node_id?: string | null }
 
-interface ForState { generate: MakeFor | null; animate: MakeFor | null; set: (maker: Maker, f: MakeFor | null) => void }
-/** The For context of each maker (session only: a reload starts without one). */
-export const useMakeFor = create<ForState>()((set) => ({ generate: null, animate: null, set: (maker, f) => set({ [maker]: f } as Partial<ForState>) }))
-useSession.subscribe((s, prev) => { if (s.project?.path !== prev.project?.path) useMakeFor.setState({ generate: null, animate: null }) })   // another project: no shot of it
+/** proto01_UIcast CW2 (06 §2.2, U4): Image opened for an idea (*Explore in Image*) — what it makes stays free; each result's origin names the
+ *  idea (`payload.for_idea`, the server's `ideas.FOR_IDEA`) and the idea lists it under *Made for this idea*. */
+export interface ForIdea { idea_id: string; name: string }
+export const FOR_IDEA = 'for_idea'
+
+interface ForState { generate: MakeFor | null; animate: MakeFor | null; idea: ForIdea | null; set: (maker: Maker, f: MakeFor | null) => void; setIdea: (f: ForIdea | null) => void }
+/** The For context of each maker (session only: a reload starts without one). Image is for a shot or for an idea, not both. */
+export const useMakeFor = create<ForState>()((set) => ({ generate: null, animate: null, idea: null,
+  set: (maker, f) => set({ [maker]: f, ...(maker === 'generate' && f ? { idea: null } : {}) } as Partial<ForState>),
+  setIdea: (idea) => set(idea ? { idea, generate: null } : { idea: null }) }))
+useSession.subscribe((s, prev) => { if (s.project?.path !== prev.project?.path) useMakeFor.setState({ generate: null, animate: null, idea: null }) })   // another project: no shot of it
 
 /** The chip's words: "Shot 12 · v3". */
 export const forLabel = (f: MakeFor): string => `${f.name} · ${f.version}`
@@ -34,7 +41,29 @@ export function forOrigin(f: MakeFor, suite: Maker, ref: string | null = null): 
 /** The origin a maker submits with: the For origin while its chip is set, else its own (`fallback`). */
 export function originFor(maker: Maker, fallback: JobOrigin): JobOrigin {
   const f = useMakeFor.getState()[maker]
-  return f ? forOrigin(f, maker, fallback.ref ?? null) : fallback
+  return f ? forOrigin(f, maker, fallback.ref ?? null) : maker === 'generate' ? withIdea(fallback) : fallback
+}
+/** CW2: Image's own origin with the idea its chip names (the origin is otherwise as it was: the result goes where it always goes). */
+export function withIdea(o: JobOrigin): JobOrigin {
+  const i = useMakeFor.getState().idea
+  return i ? { ...o, payload: { ...(o.payload ?? {}), [FOR_IDEA]: i.idea_id } } : o
+}
+/** CW2: the idea chip's "← Back": Cast's Ideas board on the idea; the chip ends (later work in Image is free again). */
+export function goBackToIdea(): void {
+  const i = useMakeFor.getState().idea
+  if (!i) return
+  useMakeFor.getState().setIdea(null)
+  goToIdea(i.idea_id)
+}
+/** Story › Cast's Ideas board with an idea open on its bench. */
+export function goToIdea(id: string): void {
+  useSession.getState().setSuite('story')
+  void Promise.all([import('../suites/story/ideasStore'), import('../frame/suiteRegistry')]).then(async ([m, reg]) => {
+    reg.setRailTab('story', 'cast')
+    const st = m.useIdeas.getState()
+    if (!st.loaded) await st.load()
+    m.useIdeas.setState({ board: 'ideas', ideaId: id })
+  })
 }
 
 /** Where a Story job's result is shown (inventory F24): the tab and the thing to select there; null when the origin names none. */

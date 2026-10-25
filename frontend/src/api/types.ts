@@ -75,6 +75,7 @@ export type TrainCaps = S['TrainCaps']
 export type VoiceRecord = S['VoiceRecordOut']                // 19 (D87) CN2: a voice of the project
 export type VoiceCaps = S['VoiceCaps']
 export type ProfileVersion = S['ProfileVersion']
+export type Idea = S['Idea']                                  // proto01_UIcast CW1: an idea on Cast's Ideas board (story/ideas/)
 export type Shot = S['Shot']                                  // 17 (D85) SY2: a shot with versions
 export type ShotCard = S['ShotCard']                          // RC2b: a Shot card's take, length and stale count
 export type SceneOut = S['SceneOut']                          // RC2c: a scene group and its member nodes

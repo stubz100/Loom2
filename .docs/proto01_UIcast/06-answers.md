@@ -63,6 +63,57 @@ story/ideas/<id>.json   Idea    { schema_version, id, cls: character|prop|place,
 
 This replaces [02](02-the-workshop.md) §5's landing rule. The chip, *Explore in Image* and *Back to ‹idea›* stay.
 
+**As built (CW1–CW2, 2026-10-25).**
+
+- **The store.** `orchestrator/loom2/ideas.py` keeps `story/ideas/<id>.json` with a revision; the routes are under `/story/ideas`.
+  - A variant is a copy on the idea's own album page, "‹name› · idea". Its `made_from` is read from the source: the picture, its prompt,
+    model and seed, and `for_idea`.
+  - A name left out is the prompt's first noun phrase ("woman in a yellow raincoat").
+  - Deleting an idea keeps its page and pictures in the album, as deleting a profile does.
+- **Cast's panel** has a *Cast · Ideas* switch above the class chips. The Ideas board lists each idea with:
+  - its picture in focus;
+  - its variants' count;
+  - its clay's state;
+  - *kept ✓* once kept.
+
+  A picture dropped on a row is a variant; dropped on the list, it starts an idea of the class shown.
+- **The idea's bench:**
+  - the picture in focus with its prompt, model and seed;
+  - the verbs: *Make the clay ▶*, *Keep ▶*, *Keep as a new version ▾*, *Explore in Image*;
+  - the variant strip (a click puts one in focus, the right-click keeps it or removes it);
+  - the clay;
+  - *Made for this idea* (newest first, each with *＋ variant*).
+
+  The Inspector edits the name, the class, the note and the variant's note.
+- ***Make the clay ▶*** (a character's variant) runs three jobs one after another, each queued when the one before lands:
+  - the A-pose picture, drawn by the clay-reference model from the variant as reference 1, with the subject and CA0's reference
+    sentence;
+  - D104's fit on it (an arms-down picture stops, D140);
+  - Pixal3D's shell, front-on as CS2 makes it; `full` only, so in `open` the figure is the clay.
+
+  The variant's `clay` follows each step. A failed or cancelled job marks it *failed*, through a queue hook on the job's origin. A
+  prop's model and a place's set come with CW4 and CW6.
+- ***Keep ▶*** makes a new Cast profile, or a new version of one of the same class:
+  - the hero is a copy of the variant;
+  - the sheet is drafted from the prompt (the subject phrase is the appearance, what it wears the outfit);
+  - the clay is carried: the A-pose picture is copied onto the version as its animation reference, with the fitted body and its points,
+    and the shell;
+  - the version records `from_idea {idea_id, variant_id}`, and the idea records `kept`.
+
+  Cast then opens on the version.
+- ***Prototype ▸*** offers *New character / prop / place idea* and *Add to an idea ▸* (made-for first, then the newest). It is:
+  - the first entry of a picture tile's right-click, which the loupe shares;
+  - a hover button 🧪 on the Catalogue's and Image's tiles;
+  - in the Bin's right-click;
+  - a *Prototype ▾* button in the Inspector.
+- **CW2.**
+  - *Explore in Image* sets Image's For chip on the idea (Image is for a shot or for an idea, not both), puts the variant as reference 1
+    and its prompt as a text prompt.
+  - Every job submitted while the chip is on carries `payload.for_idea` on its own origin: Generate, Expand, a new angle, Re-run,
+    Variations.
+  - The finisher lists the results on the idea (`made_for`), and the assets' origins keep it.
+  - *Back to ‹idea›* ends the chip.
+
 ### 2.3 No TripoSR (U5)
 
 - **Characters.** The fitted figure comes in seconds and is usable at once. The **shell** is Pixal3D's (≈ 4 min), queued in the
@@ -275,6 +326,7 @@ About 9½ weeks in all, the spikes included.
 | **E39 · Poses and clips on characters' skeletons** | 2026-10-25 → D141: ten presets and ten starter clips on seven skeletons; slides 0 cm; the deep knee bends miss the floor by 3–7 cm already on the default adult, proportions move it; a vertical contact plus leg IK puts every foot within 0.3 cm; hands through the body only sitting on broad or dressed shells — contacts and IK, no retargeting model | journal 2026-10-25 14:05; `img/e39-*.jpg` |
 | **CS3 · The shell in the shots, the skeleton over time** | the passes from the shell, the pose pass's landmarks (§2.5); skeleton keys on the timeline, *the skeleton changed* with its two choices, the guide's hash per segment (§2.10) | yes (rig) | 4 |
 | **AP1 · Feet on the floor, the pose editor** | 2026-10-25 (§2.9 as built): AP1a — presets and clips on the character's feet (the pose's drop, the stances' vertical contact, leg IK); AP1b — pins on hands and feet held by twist-keeping two-bone IK in the figure's own space, red rings in Pose, the Pins row; *Save for ‹character›* into the Cast version's own poses, a starter pose's name standing in for the preset; the bench lists them | no | 1 |
+| **CW1–CW2 · Ideas** | 2026-10-25 (§2.2 as built): the ideas store and its routes; Cast's *Cast · Ideas* switch, the board, the idea's bench and Inspector; *Prototype ▸* on every picture (copied, named from the prompt); *Make the clay ▶* (the A-pose picture, the fit, the shell, chained); *Keep ▶* (a profile or a version: hero, drafted sheet, clay, `from_idea`); Image's For chip on an idea, `for_idea` on the results, *Made for this idea*, *＋ variant* | no (the clay's jobs: yes, through the queue) | 1 |
 | **E39 → AP1 · The pose editor** | §2.9: E39 first; then contacts and IK on every pose and clip, the pose editor in Animate › Clay and Cast's bench, the character's pose library | yes (rig) | 1.5 + 4 |
 | **CW1 · The ideas store** | §2.1: the store, the Ideas board, *Prototype ▸* (copy, U2) with a name from the prompt (U3), variants, *Make the clay ▶* on a variant, *Keep ▶* | no | 3 |
 | **CW2 · Lineage from Image** | §2.2: `for_idea` on results, *Made for this idea*, *Add as a variant* | no | 1 |

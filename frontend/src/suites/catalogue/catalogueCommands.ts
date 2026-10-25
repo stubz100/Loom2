@@ -13,6 +13,7 @@ import { catView } from './viewKeys'
 import { allPlaced } from './placement'
 import type { JobOrigin } from '../../api/types'
 import { originFor, useMakeFor } from '../../store/origin'
+import { madeForIdea, prototypeMenu } from '../story/prototype'
 import { selectedOrPrimary, useGenerateResults, type GroupMode } from './catalogueStore'
 import { addToCastMenu, castTarget, madeFor } from '../story/addToCast'
 import { castPropMenu } from '../story/castProp'
@@ -194,8 +195,10 @@ function meshTileMenu(a: NonNullable<ReturnType<typeof primary>>): MenuItem[] {
 export function tileMenu(): MenuItem[] {
   const a = primary()
   if (a?.kind === 'mesh') return meshTileMenu(a)
+  const pics = ids().filter((i) => cat().byId(i)?.kind === 'image')
   return [
     ...(forFrame() && !clipTile() ? [{ cmd: 'cat.useFrame', label: frameUseLabel() }, sep] : []),
+    ...(pics.length && !clipTile() && !inTrash() ? [prototypeMenu(pics, madeForIdea(a)), sep] : []),   // proto01_UIcast CW1: the first of a picture's verbs
     { cmd: 'cat.loupe' }, { cmd: 'cat.edit' }, sep,
     moveToMenu(), { cmd: 'cat.toUnprocessed' }, { cmd: 'cat.duplicate' }, { cmd: 'cat.showBatch' }, { cmd: 'cat.lineage' }, sep,
     { cmd: 'cat.tag' }, { cmd: 'cat.showRecipe' }, sep,

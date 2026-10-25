@@ -5,6 +5,7 @@
 // proto01_UIcast CW0: a Meshes filter, a 3D model's own verbs (on the stage, as a Cast prop's model, its lineage) and a picture's Cast
 // verbs (Add to Cast ▸, Make a character / place / prop…) — the Bin was the one place a picture had none.
 import { UserRound } from 'lucide-react'
+import { madeForIdea, prototypeMenu } from '../story/prototype'
 import { useEffect, useMemo, useState } from 'react'
 import type { Asset } from '../../api/types'
 import { showMenu } from '../../frame/ContextMenu'
@@ -72,7 +73,7 @@ function castItems(a: Asset): MenuItem[] {
   if (a.trashed_at) return []
   if (a.kind === 'mesh') return [sep, castPropMenu(a)]
   if (a.kind !== 'image') return []
-  return [sep, addToCastMenu(profilesForMentions(), madeFor(a), [a.id]),
+  return [sep, prototypeMenu([a.id], madeForIdea(a)), addToCastMenu(profilesForMentions(), madeFor(a), [a.id]),   // proto01_UIcast CW1: Prototype ▸
     { label: 'Make a profile from it', icon: UserRound, items: (['character', 'place', 'prop'] as const).map((cls): MenuItem => ({ label: `Make a ${cls}…`, run: () => startProfile(cls, a.id) })) }]
 }
 

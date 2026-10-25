@@ -1,10 +1,10 @@
 // 17 (D85): the Story suite's verbs — every one has a mouse home (the panel's buttons, the editor rows' tools, the Inspector, right-click
 // menus) per D32; Delete and the arrows are accelerators. SY1 adds the Cast tab's verbs (new profile, expand, add to the reference set, lock, copy, open).
-import { CopyPlus, Group, Ungroup, Workflow, ArrowDown, ArrowLeft, Box, Ruler, ArrowUp, BookOpen, BookPlus, ChevronLeft, ChevronRight, Pencil, UserRoundPlus, Users, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImageOff, ImagePlus, ImageUp, Link, ListChecks, ListPlus, Lock, MapPinPlus, Maximize, MessageSquare, Mic, PackagePlus, Palette, PersonStanding, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
+import { CopyPlus, Lightbulb, Group, Ungroup, Workflow, ArrowDown, ArrowLeft, Box, Ruler, ArrowUp, BookOpen, BookPlus, ChevronLeft, ChevronRight, Pencil, UserRoundPlus, Users, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImageOff, ImagePlus, ImageUp, Link, ListChecks, ListPlus, Lock, MapPinPlus, Maximize, MessageSquare, Mic, PackagePlus, Palette, PersonStanding, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
 import { command, isEnabled, registerCommands, runCommand, sep, type Command, type MenuItem } from '../../frame/commands'
 import { nextOwed, readinessOf, type ReadyCell, type ReadyItem } from './castReady'
 import { linesToVoice, spineTodo } from './episodeVerbs'
-import { goBack, useMakeFor } from '../../store/origin'
+import { goBack, goBackToIdea, useMakeFor } from '../../store/origin'
 import { bareNode, cellsOf, hasWork, nextStep, routeOf, type Cell, type Step } from './board'
 import { askConfirm, askConfirmCheck, askText, useSession } from '../../store/session'
 import { useAlbum } from '../catalogue/albumStore'
@@ -247,6 +247,21 @@ export async function newProfile(cls: ProfileClass = 'character', hero: string |
   if (p) { revealClass(cls); void import('../../frame/suiteRegistry').then((m) => m.setRailTab('story', 'cast')) }   // D125: Cast shows its class
 }
 
+// proto01_UIcast CW1: the ideas store, loaded with the board (the commands' `when` reads it synchronously once it is there)
+let ideasMod: typeof import('./ideasStore') | null = null
+void import('./ideasStore').then((m) => { ideasMod = m })
+const ideaStore = () => ideasMod?.useIdeas.getState() ?? null
+const idea = () => ideaStore()?.idea()
+const focused = () => ideasMod?.focusOf(idea())
+/** CW2: Image for the idea — the chip, its picture in focus as reference 1, its prompt (a text prompt). */
+async function exploreIdea(i: NonNullable<ReturnType<typeof idea>>): Promise<void> {
+  const v = ideasMod?.focusOf(i)
+  useMakeFor.getState().setIdea({ idea_id: i.id, name: i.name })
+  const g = (await import('../generate/generateStore')).useGenerate.getState()
+  g.set({ ...(v ? { refs: [{ asset_id: v.asset_id }] } : {}), prompt_mode: 'text', text: v?.made_from.prompt || i.name })   // 02 §5: the picture as reference 1, its prompt (the name without one)
+  useSession.getState().setSuite('generate')
+}
+
 const cmds: Command[] = [
   { id: 'story.world.addStyle', scope: 'story', label: 'Add style', icon: Palette, placement: ['panel', 'context'], when: hasWorld, run: () => { sy().addStyle() } },
   { id: 'story.world.addBeat', scope: 'story', label: 'Add beat', icon: ListPlus, placement: ['panel', 'context'], when: hasWorld, run: () => { sy().addBeat() } },
@@ -287,6 +302,23 @@ const cmds: Command[] = [
   { id: 'story.cast.new', scope: 'story', label: 'New character…', icon: UserPlus, placement: ['panel', 'context'], when: () => !!useSession.getState().project?.open, run: () => void newProfile('character') },
   { id: 'story.cast.newPlace', scope: 'story', label: 'New place…', icon: MapPinPlus, placement: ['panel', 'context'], when: () => !!useSession.getState().project?.open, run: () => void newProfile('place') },
   { id: 'story.cast.newProp', scope: 'story', label: 'New prop…', icon: PackagePlus, placement: ['panel', 'context'], when: () => !!useSession.getState().project?.open, run: () => void newProfile('prop') },
+  // proto01_UIcast CW1–CW2 (06 §2.1–2.2): the Ideas board's verbs, on the idea open on the bench (its variant in focus)
+  { id: 'story.idea.new', scope: 'story', label: 'New idea…', icon: Lightbulb, placement: ['panel', 'context'], hint: "of the class shown; Prototype ▸ on a picture starts one with it",
+    when: () => !!useSession.getState().project?.open,
+    run: () => { const f = sy().castFilter; const cls = f === 'all' ? 'character' : f
+      void askText({ title: `New ${cls} idea`, text: 'Its pictures come later: Prototype ▸ on any picture, a drop on its row, or Explore in Image.', placeholder: `${cls} idea` })
+        .then(async (n) => { if (n === null) return; const m = await import('./ideasStore'); const i = await m.useIdeas.getState().create(cls, null, n.trim() || null); if (i) m.useIdeas.getState().select(i.id) }) } },
+  { id: 'story.idea.clay', scope: 'story', label: 'Make the clay ▶', icon: Shapes, placement: ['panel', 'context'], hint: 'the A-pose picture, the body fitted to it, then the shell in the background (a character)',
+    when: () => { const i = idea(); const v = focused(); return i?.cls === 'character' && !!v && !(v.clay && v.clay.job_id && ['drawing', 'fitting', 'shell'].includes(v.clay.step)) },
+    run: () => { const i = idea(); const v = focused(); if (i && v) void ideaStore()?.makeClay(i.id, v.id) } },
+  { id: 'story.idea.keep', scope: 'story', label: 'Keep ▶', icon: Check, placement: ['panel', 'context'], hint: 'a new Cast profile from the variant in focus: the hero, a sheet drafted from its prompt, its clay',
+    when: () => !!focused(), run: () => { const i = idea(); const v = focused(); if (i && v) void ideaStore()?.keep(i.id, v.id) } },
+  { id: 'story.idea.explore', scope: 'story', label: 'Explore in Image', icon: Wand2, placement: ['panel', 'context'], hint: "Image with the For chip on the idea, its picture as reference 1 and its prompt — what it makes is listed on the idea",
+    when: () => !!idea(), run: () => { const i = idea(); if (i) void exploreIdea(i) } },
+  { id: 'story.idea.rename', scope: 'story', label: 'Rename the idea…', icon: Pencil, placement: ['inspector', 'context'], when: () => !!idea(),
+    run: () => { const i = idea(); if (i) void askText({ title: 'Rename the idea', initial: i.name }).then((n) => { if (n?.trim()) void ideaStore()?.patch(i.id, { name: n.trim() }) }) } },
+  { id: 'story.idea.delete', scope: 'story', label: 'Delete the idea…', icon: Trash2, placement: ['inspector', 'context'], danger: true, when: () => !!idea(),
+    run: () => { const i = idea(); if (i) void import('./ideaVerbs').then((m) => m.confirmDelete(i)).then((ok) => { if (ok) void ideaStore()?.remove(i.id) }) } },
   // D115: Expand lives in Image — the character as the subject, Full coverage pre-picked in the Poses section, Expand ▶ runs it
   { id: 'story.cast.expand', scope: 'story', label: 'Expand in Image…', icon: Sparkles, keys: 'Ctrl+Enter', placement: ['panel', 'inspector', 'context'],
     when: () => openVersion() && !!version()?.hero_asset_id && !!useSession.getState().capabilities?.story?.model_id && !sy().expanding,
@@ -442,6 +474,9 @@ const cmds: Command[] = [
   { id: 'gen.for.back', scope: 'generate', label: 'Back to the shot', icon: ArrowLeft, placement: ['panel'], hint: 'and stop making for it (D125)', when: () => !!useMakeFor.getState().generate, run: () => goBack('generate') },
   { id: 'gen.for.clear', scope: 'generate', label: 'Stop making for the shot (results stay in the Catalogue only)', icon: X, placement: ['panel'], when: () => !!useMakeFor.getState().generate,
     run: () => useMakeFor.getState().set('generate', null) },
+  // proto01_UIcast CW2: the idea chip's verbs
+  { id: 'gen.idea.back', scope: 'generate', label: 'Back to the idea', icon: ArrowLeft, placement: ['panel'], hint: 'its bench in Cast, and stop making for it', when: () => !!useMakeFor.getState().idea, run: () => goBackToIdea() },
+  { id: 'gen.idea.clear', scope: 'generate', label: 'Stop making for the idea', icon: X, placement: ['panel'], when: () => !!useMakeFor.getState().idea, run: () => useMakeFor.getState().setIdea(null) },
   // RC0 (D96): Run stale — the shown version in Story, the For chip's version in Animate (the recipe list under it shows the button)
   { id: 'story.shot.runStale', scope: 'story', label: 'Run stale steps…', icon: RotateCcw, hint: 'the plan and its cost first; the results become the frame and clip', placement: ['inspector', 'context'],
     when: () => { const s = shot(); const v = shotVersion(); return !!s && v?.state === 'open' && staleOf(s.id, v.id) > 0 }, run: () => { const s = shot(); const v = shotVersion(); if (s && v) void runStale(s.id, v.id) } },

@@ -9746,3 +9746,59 @@ on any skeleton (the preset itself): it goes to AP1's list of presets to correct
 - **Totals:** offline 603 passed; agents_check, model_literals_check and the settings audit clean; Vitest 521 + 3 skipped; typecheck,
   lint (0 errors, 79 warnings) and build clean; e2e full 68/68 and open 68/68.
 - Screenshots: `.docs/proto01_UIcast/img/ap1b-pins.jpg`, `ap1b-pins-row.jpg`, `ap1b-bench-poses.jpg`.
+
+## 2026-10-25 16:01 — CW1–CW2 built: ideas in their own store, Prototype ▸, the bench, Keep ▶, Image's For chip on an idea (D136 U1–U4; D137 stage 4)
+
+- **The store** (`orchestrator/loom2/ideas.py`; routes `routes/ideas.py`):
+  - The record is `story/ideas/<id>.json`: the idea, its variants (a copy on the idea's own page, "‹name› · idea", with `made_from` read
+    from the source), its kept profiles and `made_for`, with a revision (409 when stale).
+  - The routes: `GET/POST /story/ideas`; `GET/PATCH/DELETE /story/ideas/{iid}`; `POST …/variants` and `DELETE …/variants/{vid}`;
+    `POST …/variants/{vid}/clay`; `POST …/keep`.
+  - A name left out is the prompt's first noun phrase. The sheet is drafted from it too: the subject is the appearance, what it wears the
+    outfit ("woman" / "a yellow raincoat").
+- ***Make the clay ▶*** chains three jobs on the origin `idea_clay {variant, step}`:
+  - the A-pose picture: the clay-reference model with the variant as reference 1, the subject and CA0's sentence; it lands on the idea's
+    page;
+  - D104's fit on it; an arms-down picture stops (D140);
+  - Pixal3D's shell, front-on (`full`; in `open` the figure alone is the clay).
+
+  Each landing queues the next. A failed or cancelled step marks the variant's clay *failed* (a queue hook on the job's origin).
+- ***Keep ▶*** makes a new profile, or a new version of one of the same class:
+  - the hero is a copy of the variant;
+  - the sheet is drafted from its prompt;
+  - the clay is carried: the A-pose picture is copied onto the version as its animation reference, with the body and its points
+    (`body_fit_from` that copy) and the shell (`shell_from` the copy);
+  - `ProfileVersion.from_idea {idea_id, variant_id}`, and the idea's `kept`.
+- **Cast:**
+  - a *Cast · Ideas* switch above the class chips;
+  - the Ideas board: each row with its picture, its variants and clay, *kept ✓*; a picture dropped on a row is a variant, on the list a
+    new idea;
+  - the idea's bench: the picture in focus with its prompt, model and seed; *Make the clay ▶*, *Keep ▶ as a new ‹class›*, *Keep as a new
+    version ▾*, *Explore in Image*; the variants; the clay (the A-pose picture, the body, the shell); *Made for this idea*;
+  - its Inspector: the name, class, note, the variant's note, *Rename*, *Delete*;
+  - commands `story.idea.*`.
+- ***Prototype ▸*** (*New character / prop / place idea*, *Add to an idea ▸* with made-for first) is on every picture:
+  - the first entry of a tile's right-click, which the loupe shares;
+  - a hover 🧪 on the Catalogue's and Image's tiles;
+  - the Bin's right-click;
+  - an Inspector button.
+
+  The work in Image or the Catalogue goes on; a toast offers *Open*.
+- **CW2:**
+  - *Explore in Image* sets Image's For chip on the idea (`useMakeFor.idea`; a shot's chip and an idea's exclude each other), the variant as
+    reference 1 and its prompt as a text prompt.
+  - Image's own origin carries `payload.for_idea`: Generate, Expand, a new angle, and Re-run and Variations from Image's results.
+  - The finisher lists the results on the idea; the assets' origins keep it.
+  - *Back to ‹idea›* ends the chip; *＋ variant* on *Made for this idea* takes one.
+- Fixed on the way: *Explore in Image* now sets a text prompt (a JSON or tree panel would have kept its own words and left Generate
+  disabled).
+- **Tests:**
+  - `test_ideas_cw1.py` 3:
+    - the words;
+    - the routes: copy, name, revision, clay planned, failure hook, keep as a profile and as a version, class mismatch, delete;
+    - the whole chain on the fake engine: A-pose picture → fit → shell → Keep ▶ carrying it, and a for-idea result listed, not a variant.
+  - `ideas.test.ts` 3; the routes snapshot +9.
+  - e2e *ideas*: Prototype ▸ on a tile → Open → *Make the clay ▶* (full: figure and shell) → *Explore in Image* → Generate → listed →
+    *Back* → *＋ variant* → *Keep ▶* → Cast on the new character.
+- **Totals:** offline 606 passed, agents_check, model_literals_check and settings audit clean, Vitest 524 + 3 skipped, typecheck, lint (0 errors, 79 warnings) and build clean, e2e full 69/69 and open 69/69 (a first open run failed the ideas scenario once, uncaptured — its toast was clicked only after the API poll; it now clicks Open at once, and the scenario passed alone in both variants after).
+- Screenshots: `.docs/proto01_UIcast/img/cw1-*.jpg`, `cw2-for-idea.jpg`.

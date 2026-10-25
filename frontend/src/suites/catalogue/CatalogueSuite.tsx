@@ -18,6 +18,7 @@ import { useGenerateResults } from './catalogueStore'
 import { CommandButton, CommandCard, CommandRow } from '../../frame/CommandButton'
 import { handleKeyFor, runCommand } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
+import { madeForIdea, prototypeItems } from '../story/prototype'
 import { isMenuFromKeys } from '../../frame/useKeyboardMap'                // D90 (B16): Shift+F10 with a selection opens the tile menu
 import { frameUseLabel, gridMenu, headerMenu, tileMenu } from './catalogueCommands'
 import { useMakeFor } from '../../store/origin'
@@ -215,6 +216,10 @@ export function Stage() {
     if (!c.selected.includes(id)) c.select(id, 'single')
     showMenu(e, tileMenu())
   }
+  const onTilePrototype = (e: React.MouseEvent, id: string) => {                 // proto01_UIcast CW1: the hover 🧪 — the selection's pictures when it holds this one
+    const pics = c.selected.includes(id) ? selectedOrPrimary(c).filter((x) => c.byId(x)?.kind === 'image') : [id]
+    showMenu(e, prototypeItems(pics, madeForIdea(c.byId(id))))
+  }
 
   const onTileClick = (e: React.MouseEvent, id: string) => c.select(id, e.ctrlKey || e.metaKey ? 'toggle' : e.shiftKey ? 'range' : 'single')
   if (!s.project?.open) return <div className="placeholder"><div><h2>Catalogue</h2>open or create a project to begin</div></div>
@@ -247,7 +252,7 @@ export function Stage() {
           if (r.kind === 'note') return <div key={v.key} className="cat-header" style={st} data-index={v.index} ref={virt.measureElement}><span className="excerpt">{r.text}</span>{c.groupErrors[r.key] && <button className="quiet" onClick={(e) => { e.stopPropagation(); c.retryGroup(r.key) }}>retry</button>}</div>
           return (
             <div key={v.key} className="cat-row" data-index={v.index} ref={virt.measureElement} style={{ ...st, gridTemplateColumns: `repeat(${cols}, ${c.tile}px)`, gridAutoRows: `${cellH}px`, height: cellH + gap, paddingBottom: gap }}>
-              {r.items.map((a) => <Tile key={a.id} a={a} size={c.tile} fill={fill} caption={caption} selected={c.selected.includes(a.id)} primary={c.primary === a.id} pinned={c.compare.indexOf(a.id) + 1} onClick={onTileClick} onDouble={inResults ? editAsset : (id) => c.openLoupe(id)} onEdit={inResults ? editAsset : undefined} onLineage={(id) => c.openLineage(id)} onContext={onTileContext} onUse={forShot ? pickFrame : undefined} useLabel={frameLabel} mark={frameId === a.id ? 'frame ✓' : undefined} dragItems={() => selectedOrPrimary(c).map((id) => ({ kind: 'asset' as const, id, media: mediaOf(c.byId(id)?.kind) }))} />)}
+              {r.items.map((a) => <Tile key={a.id} a={a} size={c.tile} fill={fill} caption={caption} selected={c.selected.includes(a.id)} primary={c.primary === a.id} pinned={c.compare.indexOf(a.id) + 1} onClick={onTileClick} onDouble={inResults ? editAsset : (id) => c.openLoupe(id)} onEdit={inResults ? editAsset : undefined} onLineage={(id) => c.openLineage(id)} onContext={onTileContext} onPrototype={onTilePrototype} onUse={forShot ? pickFrame : undefined} useLabel={frameLabel} mark={frameId === a.id ? 'frame ✓' : undefined} dragItems={() => selectedOrPrimary(c).map((id) => ({ kind: 'asset' as const, id, media: mediaOf(c.byId(id)?.kind) }))} />)}
             </div>
           )
         })}

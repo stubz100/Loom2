@@ -155,6 +155,12 @@ class SheetColour(BaseModel):
 SHEET_FIELDS = ("appearance", "outfit", "colours", "marks", "body")
 
 
+class IdeaRef(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    idea_id: str
+    variant_id: str
+
+
 class ProfileVersion(BaseModel):
     """One version of a profile (loom §3.4): its reference set is an album group (`group_id`), its expansion candidates another; `open`
     is editable and expandable, `final` locks the group and the fields (a retake is a new version). `trigger` and `lora` wait for the
@@ -189,6 +195,7 @@ class ProfileVersion(BaseModel):
     model_asset_id: str | None = None             # D110 (PS2): a prop version's 3D model (a Catalogue mesh, image → mesh, stood upright)
     model_from: str | None = None                 # D110: the image it was made from (an asset id); another reference now marks it stale
     derived_from: str | None = None
+    from_idea: IdeaRef | None = None              # CW1 (D136 U1): the idea and variant *Keep ▶* made this version from (the idea records it too)
     created_at: str = Field(default_factory=utc_now)
     locked_at: str | None = None
 
@@ -2044,6 +2051,28 @@ class StoryStore(_ShotMixin, _FlowMixin):
         if v is None:
             raise KeyError(f"no version {vid!r}")
         v.poses = {k: x for k, x in v.poses.items() if k != name} | ({name: pose} if pose is not None else {})
+        p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
+        self.save_profile(p)
+        return p
+
+    def set_kept_from_idea(self, pid: str, vid: str, ref: dict[str, str], *, anim_ref_asset_id: str | None = None, body: Body | None = None,
+                           body_points: dict[str, Any] | None = None, note: str | None = None, shell_asset_id: str | None = None) -> Profile:
+        """CW1: a version made by *Keep ▶* — where it came from, and the variant's clay carried over: the A-pose picture as its animation
+        reference, the body fitted to it with its points, the shell made from it."""
+        cur = self.profile(pid)
+        if cur is None:
+            raise KeyError(pid)
+        versions = [v.model_copy() for v in cur.versions]
+        v = next((x for x in versions if x.id == vid), None)
+        if v is None:
+            raise KeyError(f"no version {vid!r}")
+        v.from_idea = IdeaRef.model_validate(ref)
+        if anim_ref_asset_id:
+            v.anim_ref_asset_id = anim_ref_asset_id
+            if body is not None:
+                v.body, v.body_fit_from, v.body_points, v.anim_ref_note = body, anim_ref_asset_id, body_points, note
+            if shell_asset_id:
+                v.shell_asset_id, v.shell_from = shell_asset_id, anim_ref_asset_id
         p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
         self.save_profile(p)
         return p

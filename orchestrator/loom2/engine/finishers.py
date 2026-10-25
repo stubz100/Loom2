@@ -36,6 +36,8 @@ from ..fsio import utc_now
 from ..body import Body
 from ..finals import FINAL_LAYER_SURFACE, FINAL_PLATE_KEY_SURFACE, FINAL_PLATE_PATH_SURFACE, FINAL_PLATE_SURFACE
 from ..story import BODY_FIT_SURFACE, FOR_SHOT, PROP_MODEL_SURFACE, SHELL_SURFACE, body_fit_origin
+from .. import ideas
+from ..ideas import FOR_IDEA, IDEA_CLAY_SURFACE
 from ..timelines import TimelineStore, at, duration, starts
 from ..tools import facesim
 from ..tools.upright import figure_box, set_scene_extras, stand_upright
@@ -119,6 +121,10 @@ class AssetFinisher:
         panel = (job.origin.payload or {}).get("saved_panel") if job.origin else None       # D92: made from an applied saved panel → its picture
         if assets and isinstance(panel, str) and panel:
             await asyncio.to_thread(_panel_thumb, q, panel, assets[0].id)
+        if assets and job.origin and job.origin.surface == IDEA_CLAY_SURFACE:                # CW1: a variant's A-pose picture → its fit
+            await asyncio.to_thread(ideas.clay_aref_landed, q, job, assets[0].id)
+        if assets and job.origin and FOR_IDEA in (job.origin.payload or {}):                 # CW2: made while Image's For chip named an idea
+            await asyncio.to_thread(ideas.made_for_landed, q, job, [a.id for a in assets])
         if assets and job.origin and job.origin.surface == "anim_ref":                        # CA0: the first result is the reference while there is none
             fit = await asyncio.to_thread(_anim_ref_result, q, job.origin.ref, job.origin.payload or {}, assets[0].id)
             if fit:
@@ -726,7 +732,7 @@ class MeshFinisher:
             except Exception as e:  # noqa: BLE001
                 job.log_tail.append(f"no figure box: {e}")
         upright = None
-        shell = bool(job.origin and job.origin.surface == SHELL_SURFACE)                       # CS2 (E36): a character's shell stays front-on as made
+        shell = bool(job.origin and (job.origin.surface == SHELL_SURFACE or job.origin.surface == IDEA_CLAY_SURFACE))   # CS2 (E36): a character's shell stays front-on as made
         try:                                                                                    # D109: stood upright (the reference camera's tilt off)
             if not shell:
                 upright = await asyncio.to_thread(stand_upright, glb)
@@ -749,6 +755,8 @@ class MeshFinisher:
             await asyncio.to_thread(_prop_model_result, q, job, rec.id)
         if job.origin and job.origin.surface == SHELL_SURFACE:                                 # CS2: a Cast character version's shell
             await asyncio.to_thread(_shell_result, q, job, rec.id)
+        if job.origin and job.origin.surface == IDEA_CLAY_SURFACE:                             # CW1: an idea variant's shell
+            await asyncio.to_thread(ideas.clay_shell_landed, q, job, rec.id)
         if job.origin and job.origin.surface == set_things.MODEL_SURFACE:                      # D123 (SC3c-3): a picture set's thing, stood on its relief
             await asyncio.to_thread(set_things.model_landed, q, job, rec.id)
 
@@ -852,6 +860,8 @@ class KeypointsFinisher:
         job.log_tail.append(f"{len(people)} {'person' if len(people) == 1 else 'people'} found")
         if job.origin and job.origin.surface == BODY_FIT_SURFACE:
             await asyncio.to_thread(_body_fit_result, q, job, recipe, people)
+        if job.origin and job.origin.surface == IDEA_CLAY_SURFACE:                             # CW1: an idea variant's fit → its shell
+            await asyncio.to_thread(ideas.clay_fit_landed, q, job, recipe, people)
 
 
 def _body_fit_result(q: JobQueue, job: JobRecord, recipe: Keypoints, people: list[dict]) -> None:

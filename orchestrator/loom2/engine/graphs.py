@@ -1179,6 +1179,10 @@ def build_mesh(recipe: ImageToMesh, roster: Roster, seed: int, out_prefix: str, 
     if final:
         g["900"] = {"class_type": "RenderMesh", "inputs": {"mesh": [final, 0], "mode": "auto", "width": 512, "height": 512, "background": "#2a2a2e"}}
         g["901"] = {"class_type": "SaveImage", "inputs": {"images": ["900", 0], "filename_prefix": out_prefix + "_view"}}
+    cut = next((k for k, n in g.items() if n["class_type"] == "RemoveBackground"), None)
+    if cut:                                                             # CS2 (E36): the cut-out Pixal3D is given — the figure's box in its picture
+        g["902"] = {"class_type": "MaskToImage", "inputs": {"mask": [cut, 0]}}
+        g["903"] = {"class_type": "SaveImage", "inputs": {"images": ["902", 0], "filename_prefix": out_prefix + "_matte"}}
     summary = {"model_id": spec.id, "resolution": recipe.resolution, "faces": recipe.faces, "seed": int(seed), "nodes": len(g), "template": fx.get("source")}
     return Compiled(graph=g, output_node=by_role.get("save", "322"), summary=summary, serialized_prompt="")
 

@@ -178,6 +178,29 @@ skeleton changed* on its character layer, with *Render the guide again*. For tha
   - the locks: a locked factor drops out of the unknowns.
 - The bench reads SDPose's points from `people[0]`, which the keypoints job already keeps (`finishers.py:825`).
 
+**As built (CS2 and CS3, 2026-10-25; screenshots `img/cs2-*.jpg`, journal 11:42 and CS3's entry).** Where the build differs from the
+design above:
+
+- **Not built:**
+  - *symmetric*, the fitted / by-hand dot, the shoulder slope (the carriage's *shoulder drop* stands for it), a bone's end
+    handle in the figure pane;
+  - the back view's points, the variant routes (no ideas store yet: CW1).
+- **The reference pane** is cropped to the figure. SDPose's points are white rings, and the figure's markers blue dots inside them.
+- **The figure pane** shows the shell in x-ray once it exists, and rings a joint the shell's volume does not hold (E36: thin limbs a
+  centimetre off).
+- **The refit** is its own route, `POST …/body/refit {points}` (not an option of `/body/fit`). SDPose's first read is kept in
+  `body_points.sdpose` for *Back to SDPose's points*. The fit does not depend on where it starts, and a lock rescales the other parts
+  (the factors only fix proportions).
+- **The shell:**
+  - *Make the shell ▶* (`POST …/shell`), or a Catalogue mesh picked (`PUT …/shell`, an un-turned copy);
+  - a bound figure's shell is its shadow proxy, then, in CS3, its clay;
+  - every guide is drawn on the shell: the bench's, the turn test's, the shots'.
+- ***The skeleton changed*** (CS3, 06 §2.10):
+  - each final's character layer stamps its body and one hash per frame;
+  - the chip on the layer offers *Re-render with the new skeleton ▶* and *Apply from the playhead…*;
+  - the second writes skeleton keys (the frames before held, Cast's from the playhead), draws the guide again and performs only the
+    batches from the first changed frame.
+
 ## 4. A prop's model
 
 | | Quick | Good | Already there |
@@ -232,6 +255,11 @@ For each one:
 - quick shell yes or no;
 - the weighting;
 - the amber threshold for §3.2.
+
+**Ran 2026-10-25 → D138** (as 06 §2.4 changed it: Pixal3D only, no TripoSR). Bone heat is the weighting: 0.2–4.3 % of the triangles
+stretched past 2× against proximity's 3.3–14.8 %. The shells score aligned IoU 0.80–0.95 against their pictures. 85 of 96 joints sit
+inside their shell. A shell is never stood upright, and its +X is the character's left. The bench's red tick is at 3 % of the height and
+its amber at an adult's range. Sheets `img/e36-*.jpg`; the journal 2026-10-25 11:42 has the table.
 
 **E37 · The skeleton on Mara and Ines** (GPU for the renders, about 2 days). It starts from A1, where the author saw the faults
 ([01](01-today.md) §1.6).

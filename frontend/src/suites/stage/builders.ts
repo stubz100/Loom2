@@ -63,17 +63,18 @@ export function mannequin(mat: THREE.Material, pose: Pose = POSES.stand, joints?
   const torso = new THREE.Mesh(new THREE.BoxGeometry(0.38 * w * x.shoulders, 0.42 * t, 0.2 * w), mat); torso.position.y = 0.22 * t; J.spine.add(torso)
   // S3 (proto01_UIcast CS1): ×1 an adult's neck — 0.12 from the neck joint to the head's pivot at the jaw, the head's points 0.06·head lower on
   // it than before (the nose 0.02 over the pivot), so a body of before (neck′ = (neck + head) / 2, body.py rebase_body) stands where it stood
-  const nk = 0.12 * (x.neck ?? 1)
+  const nk = 0.12 * (x.neck ?? 1), lean = THREE.MathUtils.degToRad(x.head_forward ?? 0)   // CS2: the head carried forward of the neck
+  const shY = 0.44 * t - 0.04 * t * (x.shoulder_drop ?? 1)                 // CS2: the shoulders under the neck joint (×1: 0.4 · torso)
   J.spine.add(J.neck); J.neck.position.set(0, 0.44 * t, 0)
-  J.neck.add(J.head); J.head.position.set(0, nk, 0)
+  J.neck.add(J.head); J.head.position.set(0, nk * Math.cos(lean), nk * Math.sin(lean))
   limb(J.head, nk + 0.04 * t, 0.045 * w, mat)                        // CB6: the neck, from the shoulders' line to the pivot (the Simple level drew none)
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.11 * hd, 20, 14), mat); head.position.y = 0.04 * hd; head.scale.set(0.9, 1.1, 1); J.head.add(head)
-  const neckMarker = marker(J.spine, 0, 0.4 * t, 0)                  // CA1b (D104): OpenPose's neck is the shoulders' midpoint, as SDPose and DWPose read people
+  const neckMarker = marker(J.spine, 0, shY, 0)                       // CA1b (D104): OpenPose's neck is the shoulders' midpoint, as SDPose and DWPose read people
   const nose = marker(J.head, 0, 0.02 * hd, 0.11 * hd), rEye = marker(J.head, -0.035 * hd, 0.06 * hd, 0.09 * hd), lEye = marker(J.head, 0.035 * hd, 0.06 * hd, 0.09 * hd)
   const rEar = marker(J.head, -0.095 * hd, 0.04 * hd, 0), lEar = marker(J.head, 0.095 * hd, 0.04 * hd, 0)
   const sx = 0.21 * x.shoulders * (b ? 0.5 + 0.5 * w : 1)
   const arm = (shoulder: Joint, elbow: Joint, side: number) => {
-    J.spine.add(J[shoulder]); J[shoulder].position.set(side * sx, 0.4 * t, 0)
+    J.spine.add(J[shoulder]); J[shoulder].position.set(side * sx, shY, 0)
     limb(J[shoulder], limbs.upper_arm, 0.055 * w, mat)
     J[shoulder].add(J[elbow]); J[elbow].position.set(0, -limbs.upper_arm, 0)
     limb(J[elbow], limbs.forearm, 0.045 * w, mat)

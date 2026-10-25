@@ -351,3 +351,43 @@
 .modal.assemble .row { display: grid; grid-template-columns: 110px 1fr; gap: 8px; align-items: center; }
 .modal.assemble .what { color: var(--fg2); font-size: 12px; }
 .anim-ref-slot .ref-note { position: absolute; left: 6px; top: 6px; right: 6px; text-align: left; font-size: 11px; color: var(--warn, #d29922); background: color-mix(in srgb, var(--bg1) 85%, transparent); border-radius: 4px; padding: 2px 6px; }   /* proto01_UIcast S8 */
+
+/* CS2 (proto01_UIcast 03 §3.2): the skeleton bench — the reference, the figure, the guide; its parts in the Inspector */
+.skel-bench { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.skel-strip, .skel-foot { display: flex; gap: 10px; align-items: center; padding: 6px 12px; }
+.skel-strip { border-bottom: 1px solid var(--line2); }
+.skel-foot { border-top: 1px solid var(--line2); flex-wrap: wrap; }
+.skel-strip .spacer, .skel-foot .spacer { flex: 1; }
+.skel-panes { flex: 1; display: grid; grid-template-columns: 1.15fr 1fr 0.8fr; gap: 8px; padding: 8px; min-height: 0; }
+.skel-pane { position: relative; border: 1px solid var(--line2); border-radius: var(--radius); background: var(--bg1); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.skel-pane .lab { position: absolute; left: 8px; top: 6px; font-size: 11px; color: var(--fg3); z-index: 2; pointer-events: none; }
+.skel-pane .tools { position: absolute; right: 6px; top: 4px; display: flex; gap: 6px; z-index: 2; }
+.skel-pane > .hint { padding: 6px 8px; }
+.skel-pane .hint.warn { color: var(--warn, #d29922); }
+.skel-ref { position: relative; flex: 1; min-height: 0; margin-top: 24px; }
+.skel-ref img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; user-select: none; }
+.skel-ref svg { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+.skel-ref circle { vector-effect: non-scaling-stroke; cursor: grab; }
+.skel-ref circle.white { fill: rgba(0, 0, 0, 0.2); stroke: #fff; stroke-width: 2px; }
+.skel-ref circle.white.moved { stroke: var(--accent); }
+.skel-ref circle.blue { fill: #2f9be8; stroke: #0b2a44; stroke-width: 1.5px; opacity: 0.9; }
+.skel-ref line.tick { stroke: #e5534b; stroke-width: 2px; vector-effect: non-scaling-stroke; }
+.skel-3d { flex: 1; min-height: 0; }
+.skel-3d canvas { display: block; width: 100%; height: 100%; }
+.skel-guide { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; padding-top: 26px; }
+.skel-guide .frame { position: relative; height: 100%; max-width: 100%; background: #000; overflow: hidden; }
+.skel-guide img.under { position: absolute; opacity: 0.45; }
+.skel-guide img.pose { position: absolute; inset: 0; width: 100%; height: 100%; mix-blend-mode: screen; }
+.skel-motions { display: flex; gap: 4px; padding: 6px; flex-wrap: wrap; justify-content: center; }
+.skel-motions button, .skel-parts .hands button { border: 1px solid var(--line2); border-radius: 5px; padding: 1px 7px; font-size: 11.5px; background: transparent; color: var(--fg2); }
+.skel-motions button.active, .skel-parts .hands button.active { border-color: var(--accent); color: var(--accent); }
+.skel-parts .skel-group { margin-top: 8px; }
+.skel-parts .grp { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--fg2); margin-bottom: 2px; }
+.skel-parts .skel-row { display: grid; grid-template-columns: 92px 1fr 58px 22px; gap: 6px; align-items: center; font-size: 12px; padding: 1px 2px; border-radius: 4px; }
+.skel-parts .skel-row.sel { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.skel-parts .skel-row.amber .mono { color: var(--warn, #d29922); }
+.skel-parts .skel-row input[type="range"] { width: 100%; background: linear-gradient(to right, transparent var(--band-lo, 0%), color-mix(in srgb, var(--fg3) 40%, transparent) var(--band-lo, 0%), color-mix(in srgb, var(--fg3) 40%, transparent) var(--band-hi, 0%), transparent var(--band-hi, 0%)); border-radius: 3px; }
+.skel-parts .lock[aria-pressed="true"] { color: var(--accent); }
+.skel-parts .hands { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+.skel-parts .skel-status { margin-top: 10px; font-size: 12px; color: var(--fg3); }
+.skel-parts .skel-status.warn { color: var(--warn, #d29922); }

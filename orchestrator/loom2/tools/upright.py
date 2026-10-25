@@ -135,6 +135,45 @@ def best_turn(pts: np.ndarray, samples: int = 4000) -> tuple[np.ndarray, list[fl
     return euler(*best[1]), [round(x, 1) for x in best[1]]
 
 
+def figure_box(matte: Path) -> list[int] | None:
+    """CS2 (E36): where the figure stands in its picture — the bounding box of the image → mesh graph's own BiRefNet matte (the cut-out
+    Pixal3D was given, at the picture's size): [x0, y0, x1, y1, width, height] in the picture's pixels; None for an empty matte."""
+    from PIL import Image
+    with Image.open(matte) as im:
+        a = np.asarray(im.convert("L")) > 127
+    ys, xs = np.nonzero(a)
+    if not len(xs):
+        return None
+    return [int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1, int(a.shape[1]), int(a.shape[0])]
+
+
+def set_scene_extras(path: Path, data: dict) -> None:
+    """Write `data` under the GLB's scene `extras.loom2` (three's GLTFLoader gives it as the scene's userData.loom2)."""
+    doc, binary = read_glb(path)
+    scenes = doc.setdefault("scenes", [{"nodes": [i for i, nd in enumerate(doc.get("nodes", []))]}])
+    sc = scenes[doc.get("scene", 0)]
+    sc.setdefault("extras", {}).setdefault("loom2", {}).update(data)
+    write_glb(path, doc, binary)
+
+
+def undo_upright(path: Path, angles: list[float]) -> None:
+    """CS2 (E36): the turn stand_upright wrote (its x, y, z angles) taken back. A character's shell is made front-on from an upright
+    reference, and the smallest upright box tilts a figure that holds its arms out — E36's six A-pose shells leaned 12–44°."""
+    doc, binary = read_glb(path)
+    idx, _ = node_points(doc, binary)
+    back = euler(*angles).T
+    for i in idx:
+        nd = doc["nodes"][i]
+        r = back @ (quat_to_matrix(nd["rotation"]) if "rotation" in nd else np.eye(3))
+        if np.allclose(r, np.eye(3), atol=1e-6):
+            nd.pop("rotation", None)
+        else:
+            nd["rotation"] = [round(float(v), 7) for v in matrix_to_quat(r)]
+        if "translation" in nd:
+            nd["translation"] = [round(float(v), 7) for v in back @ np.array(nd["translation"], float)]
+    write_glb(path, doc, binary)
+
+
 def stand_upright(path: Path) -> list[float]:
     """Rewrite the GLB with its mesh nodes turned upright; the angles (x, y, z degrees) applied."""
     doc, binary = read_glb(path)

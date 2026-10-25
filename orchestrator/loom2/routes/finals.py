@@ -32,6 +32,8 @@ class FinalLayerIn(BaseModel):
     version: str | None = None
     passes: dict[str, list[str]]                   # pass name → the frames' blob ids (sha256), in order
     keypoints: list[Any] | None = None             # a figure's per-frame keypoints (Stage's COCO-18 for that figure)
+    body: dict[str, Any] | None = None             # CS3: a figure's body as its guide was drawn
+    body_hashes: list[str] = Field(default_factory=list)   # CS3: per frame, the hash of the body the guide was drawn with
 
 
 class FinalCreate(BaseModel):
@@ -103,7 +105,7 @@ async def final_create(svc: Svc, body: FinalCreate):
     method = DEFAULT_METHOD | ({"plate": "picture"} if picture_plate(st) else {})
     pick = {x.id: method[x.kind] if x.kind == "plate" and method["plate"] == "picture" else x.method or method[x.kind] for x in body.layers}   # CA3: the client's plate method, a picture set's first
     data = body.model_dump(exclude={"layers"}) | {"layers": [FinalLayer(id=x.id, kind=x.kind, name=x.name, object_id=x.object_id, method=pick[x.id],  # type: ignore[arg-type]
-                                                                        profile_id=x.profile_id, version=x.version).model_dump() for x in body.layers]}
+                                                                        profile_id=x.profile_id, version=x.version, body=x.body, body_hashes=x.body_hashes).model_dump() for x in body.layers]}
     from ..shot_graph import stage_stamps
     data["stamps"] = stage_stamps(st, body.camera_id)                        # RC1: an edit marks only the layers it touches
     try:
@@ -429,7 +431,6 @@ async def final_layer_run(svc: Svc, fid: str, lid: str, body: RunBody):
     from ..catalogue import Catalogue  # noqa: F401  (typing)
     from ..finals import FINAL_LAYER_SURFACE, CHARACTER_TAIL, character_recipe, place_reference, plan_batches
     from ..origin import JobOrigin
-    from ..stages import encode_guide
     from ..story import StoryStore, compose_sheet
     from ..models import registry
     ws, cat, _ = svc.require_project()
@@ -477,13 +478,7 @@ async def final_layer_run(svc: Svc, fid: str, lid: str, body: RunBody):
         ref_id = rec.id
     else:
         ref_id = ref.id                                                       # the figure is not whole at the start: CN4's padded reference
-    pose = sorted(store.pass_dir(fid, lid, "pose").glob("*.png"))
-    guide_mp4 = folder / "pose.mp4"
-    await asyncio.to_thread(encode_guide, pose, guide_mp4, f.rate)
-    g = await asyncio.to_thread(cat.ingest_file, guide_mp4, kind="video", move=False, suite="stage", lineage_kind="stage-pass",
-                                origin=JobOrigin(suite="stage", surface=FINAL_LAYER_SURFACE, ref=fid), params={"final_id": fid, "layer": lid, "pass": "pose-sequence"},
-                                frames=len(pose), fps=float(f.rate), w=w, h=h)
-    g = await asyncio.to_thread(cat.make_thumbs, g, pose[0])
+    g = await _guide_video(cat, store, f, lid)
     seed = layer.seed if body.seed is None else body.seed
     layer.reference_asset_id, layer.guide_asset_id, layer.seed = ref_id, g.id, seed
     plan = plan_batches(f.frames)
@@ -498,6 +493,52 @@ async def final_layer_run(svc: Svc, fid: str, lid: str, body: RunBody):
                                 batches=[{"k": 0, "job_id": jobs[0].id, "clip_id": None}], job_ids=[*layer.job_ids, jobs[0].id], frames_done=0)
     svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
     return {"job_id": jobs[0].id, "batches": len(plan), "reference_asset_id": ref_id, "placed": placed}
+
+
+async def _guide_video(cat, store: FinalStore, f: Final, lid: str):
+    """PS5c: a character layer's pose pass as one video in the Catalogue (lineage stage-pass) — Wan Animate's guide."""
+    from ..finals import FINAL_LAYER_SURFACE
+    from ..origin import JobOrigin
+    from ..stages import encode_guide
+    pose = sorted(store.pass_dir(f.id, lid, "pose").glob("*.png"))
+    guide_mp4 = store.folder(f.id) / lid / "pose.mp4"
+    await asyncio.to_thread(encode_guide, pose, guide_mp4, f.rate)
+    g = await asyncio.to_thread(cat.ingest_file, guide_mp4, kind="video", move=False, suite="stage", lineage_kind="stage-pass",
+                                origin=JobOrigin(suite="stage", surface=FINAL_LAYER_SURFACE, ref=f.id), params={"final_id": f.id, "layer": lid, "pass": "pose-sequence"},
+                                frames=len(pose), fps=float(f.rate), w=f.size["w"], h=f.size["h"])
+    return await asyncio.to_thread(cat.make_thumbs, g, pose[0])
+
+
+class PassesBody(BaseModel):
+    passes: dict[str, list[str]]                   # pass name → the frames' blob ids (sha256), in order: the pose and the depth
+    keypoints: list[Any] | None = None
+    body: dict[str, Any] | None = None             # the figure's body as the guide was drawn now
+    body_hashes: list[str] = Field(default_factory=list)
+
+
+@router.put("/finals/{fid}/layers/{lid}/passes", response_model=Final)
+async def final_layer_passes(svc: Svc, fid: str, lid: str, body: PassesBody):
+    """CS3 (proto01_UIcast 06 §2.10, D136 U19): a character layer's passes drawn again by Stage — the skeleton changed. They replace the old
+    ones, and a performed layer's guide video is encoded again: a re-take from a batch then performs the new guide (*Apply from a frame…*:
+    the frames before the skeleton key unchanged), a run performs all of it (*Re-render with the new skeleton*)."""
+    ws, cat, _ = svc.require_project()
+    store = FinalStore(ws)
+    f = await asyncio.to_thread(store.get, fid)
+    layer = next((x for x in f.layers if x.id == lid), None) if f else None
+    if f is None or layer is None:
+        raise HTTPException(404, "final or layer not found")
+    if layer.status in ("queued", "running"):
+        raise HTTPException(409, "the layer is being performed — wait for it, or cancel its job")
+    files = {name: [_blob(ws, sha) for sha in shas] for name, shas in body.passes.items()}
+    try:
+        f = await asyncio.to_thread(store.set_passes, fid, lid, files, body.keypoints, body.body, body.body_hashes)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    if layer.guide_asset_id:
+        g = await _guide_video(cat, store, f, lid)
+        f = await asyncio.to_thread(store.update_layer, fid, lid, guide_asset_id=g.id)
+    svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
+    return f.model_dump()
 
 
 async def _retake_from(svc, store: FinalStore, f: Final, layer: FinalLayer, body: RunBody, model_id: str, prompt: str, anim_ref: str | None) -> dict:

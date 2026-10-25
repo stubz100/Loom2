@@ -8,7 +8,7 @@ import { goBack, useMakeFor } from '../../store/origin'
 import { bareNode, cellsOf, hasWork, nextStep, routeOf, type Cell, type Step } from './board'
 import { askConfirm, askConfirmCheck, askText, useSession } from '../../store/session'
 import { useAlbum } from '../catalogue/albumStore'
-import { CLASS_LABEL, latestModelJob, latestTrainJob, modelSource, nodesAfterWithoutPlace, revealClass, sy, ttsJobFor, useStory, type ProfileClass } from './storyStore'
+import { CLASS_LABEL, latestModelJob, latestTrainJob, modelSource, nodesAfterWithoutPlace, revealClass, sy, ttsJobFor, useStory, type ProfileClass, shellBlocked } from './storyStore'
 import { forShot, makeClipFor, makeFrameFor, makeTarget, speakersOf } from './makeFor'
 import { runStale, staleOf } from './runStale'
 import type { FlowNode, Profile, SceneOut, Shot, ShotVersion } from '../../api/types'
@@ -314,6 +314,23 @@ const cmds: Command[] = [
   { id: 'story.cast.fitBody', scope: 'story', label: 'Fit the body to the animation reference', icon: Ruler,
     hint: "the reference's proportions measured (neck, shoulders, torso, limbs, hands) so the stage figure moves with the character's build; the height and build stay",
     placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character' && !!version()?.anim_ref_asset_id && version()?.state === 'open', run: () => void sy().fitBody() },
+  // CS2 (proto01_UIcast 03 §3.2, D136 U17): the skeleton bench — its view, its foot's verbs (its code loads with the stage's)
+  { id: 'cast.skeleton.open', scope: 'story', label: 'Skeleton…', icon: PersonStanding, hint: "the character's skeleton against its reference, its figure and its guide — fit, tune and lock each part",
+    placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character' && !!version(), run: () => sy().setSkeleton(true) },
+  { id: 'cast.skeleton.close', scope: 'story', label: 'Back to the sheet', icon: ChevronLeft, placement: ['panel'], when: () => sy().skeleton, run: () => sy().setSkeleton(false) },
+  { id: 'cast.skeleton.fit', scope: 'story', label: 'Fit again ▶', icon: Ruler, hint: "the body fitted to the points as they are now — SDPose's, with those you moved; the locked parts stay",
+    placement: ['panel', 'context'], when: () => sy().skeleton && openVersion() && !!version()?.body_points,
+    run: () => void import('../stage/benchState').then((m) => { const pts = m.bench.points(); if (pts) void sy().refitBody(pts as never) }) },
+  { id: 'cast.skeleton.sdpose', scope: 'story', label: "Back to SDPose's points", icon: RotateCcw, placement: ['panel', 'context'], when: () => sy().skeleton && !!version()?.body_points,
+    run: () => { const v = version(); if (v) void import('../stage/benchState').then((m) => m.bench.resetPoints(v)) } },
+  { id: 'cast.skeleton.mirror', scope: 'story', label: 'Mirror left to right', icon: Copy, hint: 'the side you moved last, onto the other', placement: ['panel', 'context'], when: () => sy().skeleton && !!version()?.body_points,
+    run: () => void import('../stage/benchState').then((m) => m.bench.mirror()) },
+  { id: 'cast.skeleton.test', scope: 'story', label: 'Test in motion ▶', icon: Play, hint: "the turn test on the shots' own guide (a GPU job; its cost is asked first)", placement: ['panel'],
+    when: () => sy().skeleton && !!version()?.anim_ref_asset_id, run: () => runCommand('story.cast.testAnimRef') },
+  { id: 'cast.shell.make', scope: 'story', label: 'Make the shell ▶', icon: Shapes,
+    hint: "the 3D model of the animation reference in the A-pose (Pixal3D, about four minutes in the background): the clay the character's figures are drawn in — the reference fitted first; arms held against the body would be made part of it (D139)",
+    placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character' && !shellBlocked(version()) && !!useSession.getState().capabilities?.mesh?.model_id,
+    run: () => void sy().makeShell() },
   { id: 'story.cast.makeAnimRefBack', scope: 'story', label: 'Make a back view', icon: PersonStanding, hint: 'the same A-pose from behind — for a shot that starts with the character turned away',
     placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character' && !!useSession.getState().capabilities?.story?.model_id, run: () => void sy().makeAnimRef('back') },
   { id: 'story.cast.useAsAnimRef', scope: 'story', label: 'Use as the animation reference', icon: PersonStanding, placement: ['context', 'inspector'], when: () => animRefable() && picked().length === 1,
@@ -588,7 +605,7 @@ registerCommands(cmds)
 
 /** The right-click menu of a row in the World editor: the row is selected first, so the Inspector shows it too. */
 /** The right-click menu of a Cast profile row (the profile is selected first). D90 (01 §11.3): the training and new-profile verbs too. */
-export const profileMenu = (): MenuItem[] => [{ cmd: 'story.cast.useAsSubject' }, sep, { cmd: 'story.cast.expand' }, { cmd: 'story.cast.newVersion' }, { cmd: 'story.cast.lock' }, sep, { cmd: 'story.cast.openGroup' }, { cmd: 'story.cast.openCandidates' }, sep,
+export const profileMenu = (): MenuItem[] => [{ cmd: 'story.cast.useAsSubject' }, sep, { cmd: 'cast.skeleton.open' }, { cmd: 'cast.shell.make' }, sep, { cmd: 'story.cast.expand' }, { cmd: 'story.cast.newVersion' }, { cmd: 'story.cast.lock' }, sep, { cmd: 'story.cast.openGroup' }, { cmd: 'story.cast.openCandidates' }, sep,
   { cmd: 'story.cast.train' }, { cmd: 'story.cast.useLora' }, { cmd: 'story.cast.checkLora' }, { cmd: 'story.cast.deleteLora' }, sep, { cmd: 'story.cast.new' }, { cmd: 'story.cast.newPlace' }, { cmd: 'story.cast.newProp' }, sep, { cmd: 'story.cast.delete' }]
 export function rowMenu(kind: NonNullable<ReturnType<typeof selected>>['kind'], id: string) {
   useStory.getState().select({ kind, id })

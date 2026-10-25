@@ -98,6 +98,15 @@ registerCommands([
     run: () => void askText({ title: 'Save pose', text: "The figure's joints, as a preset of this project.", placeholder: 'pose name' }).then((n) => { if (n?.trim()) void st().savePose(n.trim(), st().selected!) }) },
   // D93 (C8): a figure bound to a Cast character (the Inspector's tiles, "Bind to a character ▸" pick it; these end it or open the character)
   { id: 'stage.figure.unbind', scope: 'stage', label: 'Unbind the character', icon: UserX, placement: ['inspector', 'context'], when: () => !!sel()?.profile_id, run: () => st().bindFigure(st().selected!, null) },
+  // CS3 (proto01_UIcast 06 §2.10, D136 U19): skeleton keys — a change of body in a shot is deliberate: held from a frame, or Cast's from it
+  { id: 'stage.skeleton.hold', scope: 'stage', label: 'Hold the skeleton from here', icon: Diamond, hint: "a skeleton key at the playhead: the figure keeps the body it has here, whatever Cast's becomes",
+    placement: ['inspector', 'context'], when: () => sel()?.kind === 'mannequin' && !!st().sampledDoc()?.objects.find((o) => o.id === sel()?.id)?.body,
+    run: () => { const o = st().sampledDoc()?.objects.find((x) => x.id === sel()?.id); if (o?.body) st().setSkeletonKey(o.id, { frame: st().frame, transition: 0, body: JSON.parse(JSON.stringify(o.body)) }) } },
+  { id: 'stage.skeleton.cast', scope: 'stage', label: "Cast's skeleton from here", icon: Diamond, hint: "a skeleton key at the playhead: from here the figure takes its character's body as Cast has it (a key before it holds the old one)",
+    placement: ['inspector', 'context'], when: () => sel()?.kind === 'mannequin' && !!sel()?.profile_id,
+    run: () => { const o = sel(); if (o) st().setSkeletonKey(o.id, { frame: st().frame, transition: 0, body: null }) } },
+  { id: 'stage.figure.skeleton', scope: 'stage', label: 'Fine-tune the skeleton in Cast…', icon: PersonStanding, placement: ['inspector', 'context'], when: () => !!sel()?.profile_id,   // CS2
+    run: () => { const o = sel(); if (o?.profile_id) void Promise.all([import('../../store/origin'), import('../story/storyStore')]).then(([m, s]) => { m.goToStory({ tab: 'cast', id: o.profile_id!, ...(o.version ? { version: o.version } : {}) }); s.useStory.getState().setSkeleton(true) }) } },
   { id: 'stage.figure.openInCast', scope: 'stage', label: 'Open the character in Story · Cast', icon: UserRound, placement: ['inspector', 'context'], when: () => !!sel()?.profile_id,
     run: () => { const o = sel(); if (o?.profile_id) void import('../../store/origin').then((m) => m.goToStory({ tab: 'cast', id: o.profile_id!, ...(o.version ? { version: o.version } : {}) })) } },
   // ST3: the frame (the Render tab; D90 02 §8.1: a shot is a Story shot)
@@ -145,7 +154,7 @@ export function bindItems(): MenuItem[] {
   const chars = profilesForMentions().filter((p) => p.cls === 'character')
   return [{ label: 'Bind to a character', icon: UserRound, items: [
     ...(chars.length ? chars.map((p): MenuItem => ({ label: p.name, checked: o.profile_id === p.id, run: () => st().bindFigure(o.id, p.id) })) : [{ label: 'no characters in the Cast yet', disabled: true, run: () => {} }]),
-    sep, { cmd: 'stage.figure.unbind' }, { cmd: 'stage.figure.openInCast' }] }]
+    sep, { cmd: 'stage.figure.unbind' }, { cmd: 'stage.figure.openInCast' }, { cmd: 'stage.figure.skeleton' }, sep, { cmd: 'stage.skeleton.hold' }, { cmd: 'stage.skeleton.cast' }] }]
 }
 
 /** D129 (HP1): *Hold ▸ <figure> · right hand / left hand* for a prop (a 3D model, a stand-in or an image plane), and *Take it out of the hand*. */

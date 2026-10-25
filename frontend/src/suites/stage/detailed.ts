@@ -15,11 +15,16 @@ export interface Detailed {
   bones: Map<string, THREE.Object3D>                  // by normalised name
   /** Pose the mannequin after the figure's joints (world transforms read from them); `extra`: bone name → Euler degrees YXZ on its rest. */
   follow: (J: Record<Joint, THREE.Object3D>, extra?: Record<string, number[]> | null) => void
-  /** A hand preset as `extra` turns of that hand's finger bones (by the rig's own bone names); `curl` scales it (S2's rest hand). */
-  handPreset: (side: 'r' | 'l', preset: HandPreset, curl?: number) => Record<string, number[]>
+  /** A hand preset as `extra` turns of that hand's finger bones (by the rig's own bone names); `curl` scales it (S2's rest hand), `spread`
+   *  fans the fingers at their knuckles and `thumb` opens the thumb from the palm, in degrees (CS2). */
+  handPreset: (side: 'r' | 'l', preset: HandPreset, curl?: number, spread?: number, thumb?: number) => Record<string, number[]>
   /** D101: markers on the mannequin's hands and feet for the pose pass (null when the rig has no fingers): COCO-WholeBody's feet (left big
    *  toe, small toe, heel, then the right's), OpenPose's 21 points per hand. */
   wholebody: { feet: THREE.Object3D[]; left: THREE.Object3D[]; right: THREE.Object3D[] } | null
+  /** CS3 (proto01_UIcast 06 §2.5): drawn as its hands only — the character's shell is its body, and Pixal3D's hands are mittens, so the
+   *  hand rig keeps its fingers. Each skinned mesh keeps the triangles whose three corners are weighted mostly (≥ 0.5) to a hand's bones;
+   *  false gives the whole mannequin back. A cut of the geometry, so every pass (an override material) draws the hands alone too. */
+  handsOnly: (on: boolean) => void
 }
 
 export const HAND_PRESETS = ['open', 'relaxed', 'fist', 'point', 'grip', 'pinch'] as const
@@ -48,7 +53,7 @@ const rad = THREE.MathUtils.degToRad
 /** The default dummy's leg (hip joint → ankle, builders.ts at ×1): the size the starter mannequin's head is drawn for. */
 const DEFAULT_LEG = 0.87
 /** What a figure's body gives its Detailed mannequin beyond the limb lengths (body.ts; none: the default adult, relaxed hands). */
-export interface DetailedBody { hands?: number; feet?: number; head?: number; handRest?: { preset: HandPreset; curl: number } | null }
+export interface DetailedBody { hands?: number; feet?: number; head?: number; handRest?: { preset: HandPreset; curl: number; spread?: number; thumb?: number } | null; feetOut?: number }
 
 function bonesOf(root: THREE.Object3D): Map<string, THREE.Object3D> {
   const m = new Map<string, THREE.Object3D>()
@@ -182,6 +187,7 @@ export function makeDetailed(mannequin: THREE.Object3D, rig: RigName, parent: TH
   // the curl axis of each finger joint, in its own rest frame: across the finger and the palm's normal (index → pinky × the finger's way,
   // turned per side so that a positive curl closes the hand)
   const curlAxis = new Map<string, THREE.Vector3>()
+  const fanAxis = new Map<string, THREE.Vector3>()                          // CS2: the palm's normal in each knuckle's rest frame (the fingers' spread)
   for (const side of ['r', 'l'] as const) {
     const hand = part(side === 'r' ? 'r_hand' : 'l_hand')
     const b = (f: Finger, k: number) => bones.get(norm(fingerBone(rig, side, f, k)))
@@ -196,16 +202,21 @@ export function makeDetailed(mannequin: THREE.Object3D, rig: RigName, parent: TH
       const axisFig = d.clone().cross(palm.normalize()).normalize()
       const restQ = rotIn(bone)
       curlAxis.set(bone.name, axisFig.applyQuaternion(restQ.clone().invert()))
+      if (k === 1) fanAxis.set(bone.name, palm.clone().normalize().applyQuaternion(restQ.clone().invert()))
     }
   }
-  const handPreset = (side: 'r' | 'l', preset: HandPreset, curl = 1) => {
+  const FAN: Record<Finger, number> = { thumb: 0, index: 1, middle: 0, ring: -1, pinky: -2 }   // CS2: each finger's share of the spread
+  const handPreset = (side: 'r' | 'l', preset: HandPreset, curl = 1, spread = 0, thumb = 0) => {
     const out: Record<string, number[]> = {}
     for (const f of FINGER_NAMES) for (const k of [1, 2, 3]) {
       const name = fingerBone(rig, side, f, k)
       const bone = bones.get(norm(name))
       const axis = bone && curlAxis.get(bone.name)
       if (!bone || !axis) continue
+      const fan = k === 1 ? fanAxis.get(bone.name) : undefined
+      const open = f === 'thumb' ? thumb : (FAN[f] * spread) / 2
       const q = new THREE.Quaternion().setFromAxisAngle(axis, rad(CURL[preset][f][k - 1] * curl))
+      if (fan && open) q.premultiply(new THREE.Quaternion().setFromAxisAngle(fan, rad(side === 'r' ? -open : open)))
       const e = new THREE.Euler().setFromQuaternion(q, 'YXZ')
       out[bone.name] = [e.x, e.y, e.z].map((v) => Math.round(THREE.MathUtils.radToDeg(v) * 100) / 100 || 0)   // no −0
     }
@@ -213,7 +224,13 @@ export function makeDetailed(mannequin: THREE.Object3D, rig: RigName, parent: TH
   }
   // S2: the hands at rest — the character's (relaxed unless its body says), never the GLB's flat, fanned hand; a key's finger turns win
   const rest = size.handRest ?? { preset: 'relaxed' as HandPreset, curl: 1 }
-  Object.assign(restHand, handPreset('r', rest.preset, rest.curl), handPreset('l', rest.preset, rest.curl))
+  Object.assign(restHand, handPreset('r', rest.preset, rest.curl, rest.spread ?? 0, rest.thumb ?? 0), handPreset('l', rest.preset, rest.curl, rest.spread ?? 0, rest.thumb ?? 0))
+  if (size.feetOut) for (const side of ['r', 'l'] as const) {               // CS2: the feet turned out at rest, about the figure's up
+    const foot = part(side === 'r' ? 'r_foot' : 'l_foot')
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(rotIn(foot).invert())
+    const e = new THREE.Euler().setFromQuaternion(new THREE.Quaternion().setFromAxisAngle(up, rad(side === 'r' ? -size.feetOut : size.feetOut)), 'YXZ')
+    restHand[foot.name] = [e.x, e.y, e.z].map((v) => Math.round(THREE.MathUtils.radToDeg(v) * 100) / 100 || 0)
+  }
   // D101: hand and foot markers, placed at their rest places and carried by their bones
   const markerAt = (bone: THREE.Object3D, figPoint: THREE.Vector3) => {
     const m = new THREE.Object3D()
@@ -261,6 +278,27 @@ export function makeDetailed(mannequin: THREE.Object3D, rig: RigName, parent: TH
     }
     wholebody = { feet, left: hands.l, right: hands.r }
   }
+  const handBones = new Set<THREE.Object3D>()
+  for (const h of [part('r_hand'), part('l_hand')]) h.traverse((b) => { handBones.add(b) })
+  const whole = new Map<THREE.BufferGeometry, THREE.BufferAttribute | null>()
+  const handsOnly = (on: boolean) => {
+    object.traverse((o) => {
+      const m = o as THREE.SkinnedMesh
+      if (!m.isSkinnedMesh) return
+      const g = m.geometry
+      if (!whole.has(g)) whole.set(g, g.index)
+      const full = whole.get(g) ?? null
+      if (!on) { g.setIndex(full); return }
+      const si = g.attributes.skinIndex, sw = g.attributes.skinWeight, n = g.attributes.position.count
+      const hand = m.skeleton.bones.map((b) => handBones.has(b))
+      const weight = new Float32Array(n)
+      for (let v = 0; v < n; v++) for (let k = 0; k < 4; k++) if (hand[si.getComponent(v, k)]) weight[v] += sw.getComponent(v, k)
+      const tri = full ? Array.from(full.array as ArrayLike<number>) : Array.from({ length: n }, (_, i) => i)
+      const kept: number[] = []
+      for (let t = 0; t + 2 < tri.length; t += 3) if (weight[tri[t]] >= 0.5 && weight[tri[t + 1]] >= 0.5 && weight[tri[t + 2]] >= 0.5) kept.push(tri[t], tri[t + 1], tri[t + 2])
+      g.setIndex(kept)
+    })
+  }
   follow(J)
-  return { object, bones, follow, handPreset, wholebody }
+  return { object, bones, follow, handPreset, wholebody, handsOnly }
 }

@@ -7,14 +7,15 @@ import { api, ApiError, http, sha256Hex, unwrap } from '../../api/client'
 import { isDocumentPreview, type Asset, type DocumentPreview, type Job, type StageCamera, type StageDoc, type StageObject, type StageTemplate } from '../../api/types'
 import { useSession } from '../../store/session'
 import { registerTransport } from '../animate/transport'
-import { clipFrames, EMPTY_KEYS, keyedFrames as keyedFramesOf, keyframesOf, sampleDoc, withKey, withoutKey, type CameraKey, type Keyframes, type ObjectKey } from './anim'
+import { clipFrames, EMPTY_KEYS, keyedFrames as keyedFramesOf, keyframesOf, sampleDoc, withKey, withoutKey, type CameraKey, type Keyframes, type ObjectKey, type SkeletonKey } from './anim'
 import { JOINTS, MANNEQUIN_PRESETS, POSES } from './builders'
 import { mirrorJoints } from './ik'
 import { lensGuess, parseLens } from './lens'
 import { figureMentions, prebind as prebindOf } from './figures'
 import { matrixOf, transformOf } from './held'
+import { setShellPoints } from './proxy'
 import type { Keypoint, WholeBody } from './passes'
-import { profilesForMentions, useStory } from '../story/storyStore'
+import { profilesForMentions, useStory, versionPointsOfShell } from '../story/storyStore'
 
 /** CA0: the body of a bound figure's Cast version (its pinned version, else the character's current one); null = the preset's dummy;
  *  undefined = the character is not loaded (the figure keeps what it has). */
@@ -37,13 +38,26 @@ function withModel(o: StageObject): StageObject {
   const m = castModel(o.profile_id, o.version)
   return m && m !== o.asset_id ? { ...o, asset_id: m } : o
 }
-/** A figure with its Cast body: a body sets the height, so a figure taking one stands at scale 1 (the Child preset's 0.7 would shrink it);
- *  U18 (proto01_UIcast): and its mannequin, ♀ or ♂, is the character's. */
-function withBody(o: StageObject, body: StageObject['body'] | undefined): StageObject {
-  if (body === undefined || JSON.stringify(o.body ?? null) === JSON.stringify(body)) return o
-  const scale = body && !o.body ? [1, 1, 1] : o.transform.scale
-  return { ...o, body, transform: { ...o.transform, scale }, ...(body?.figure ? { detail: body.figure } : {}) }
+/** CS2 (D136 U6): the shell of a bound figure's Cast version (pinned, else the current) — its shadow proxy; undefined while the character
+ *  is not loaded or the version has none (the figure keeps what it has). */
+function castShell(profileId: string | null | undefined, version: string | null | undefined): string | undefined {
+  if (!profileId) return undefined
+  const p = useStory.getState().profiles.find((x) => x.id === profileId)
+  return p?.versions.find((x) => x.id === (version ?? p.current))?.shell_asset_id ?? undefined
 }
+/** A figure with its Cast body: a body sets the height, so a figure taking one stands at scale 1 (the Child preset's 0.7 would shrink it);
+ *  U18 (proto01_UIcast): and its mannequin, ♀ or ♂, is the character's; CS2: and its shell casts its shadow. */
+function withBody(o: StageObject, body: StageObject['body'] | undefined): StageObject {
+  const shell = castShell(o.profile_id, o.version)
+  const sameBody = body === undefined || JSON.stringify(o.body ?? null) === JSON.stringify(body)
+  const next = shell !== undefined && shell !== o.shadow_proxy ? { ...o, shadow_proxy: shell } : o
+  if (sameBody) return next
+  const scale = body && !o.body ? [1, 1, 1] : o.transform.scale
+  return { ...next, body, transform: { ...o.transform, scale }, ...(body?.figure ? { detail: body.figure } : {}) }
+}
+/** A figure bound to another character (or none): the last one's shell is not its shadow. */
+const rebound = (x: StageObject, profileId: string | null, version: string | null): StageObject =>
+  ({ ...x, profile_id: profileId, version, ...(x.profile_id !== profileId ? { shadow_proxy: null } : {}) })
 /** U18: the mannequin a new figure is — the Detailed ♀ unless the stage's figures are all ♂ (the Simple dummy is retired). */
 const newDetail = (objects: StageObject[]): 'male' | 'female' => { const f = objects.filter((o) => o.kind === 'mannequin'); return f.length && f.every((o) => o.detail === 'male') ? 'male' : 'female' }
 
@@ -166,7 +180,12 @@ interface StageState {
   addPathPoint: (id: string, p: [number, number]) => void
   clearPath: (id: string) => void
   removeKeyAt: (frame: number) => void
-  /** D121 (AW2): one row's key moved on the timeline (`cam:<id>` / `obj:<id>`) — the key's values kept, a key already there replaced. */
+  /** CS3 (proto01_UIcast 06 §2.10, D136 U19): a skeleton key on a figure, replacing one at its frame — `body` null: the figure's own (its
+   *  Cast version's) from there; a body: that one held. */
+  setSkeletonKey: (id: string, key: SkeletonKey) => void
+  /** CS3: a figure's skeleton keys replaced (one undo step; *Apply from a frame…*). */
+  setSkeletonKeys: (id: string, keys: SkeletonKey[], label: string) => void
+  /** D121 (AW2): one row's key moved on the timeline (`cam:<id>` / `obj:<id>`; CS3 `skl:<id>`) — the key's values kept, a key already there replaced. */
   moveKey: (row: string, from: number, to: number) => void
   /** D121 (AW2): one row's key removed (its right-click on the timeline). */
   removeRowKey: (row: string, frame: number) => void
@@ -358,13 +377,17 @@ export const useStage = create<StageState>()((set, get) => ({
     const k = keyframesOf(d)
     const camera = Object.fromEntries(Object.entries(k.camera).map(([id, ks]) => [id, d.active_camera === id ? withoutKey(ks, frame) : ks]).filter(([, ks]) => (ks as CameraKey[]).length))
     const objects = Object.fromEntries(Object.entries(k.objects).map(([id, ks]) => [id, withoutKey(ks, frame)]).filter(([, ks]) => (ks as ObjectKey[]).length))
-    return { ...d, keyframes: { camera, objects } }
+    const skeleton = Object.fromEntries(Object.entries(k.skeleton ?? {}).map(([id, ks]) => [id, withoutKey(ks, frame)]).filter(([, ks]) => (ks as SkeletonKey[]).length))   // CS3
+    return { ...d, keyframes: { camera, objects, skeleton } }
   }, 'remove keys'),
+  setSkeletonKey: (id, key) => get().apply((d) => { const k = keyframesOf(d); return { ...d, keyframes: { ...k, skeleton: { ...(k.skeleton ?? {}), [id]: withKey(k.skeleton?.[id], key) } } } }, 'skeleton key'),
+  setSkeletonKeys: (id, keys, label) => get().apply((d) => { const k = keyframesOf(d); return { ...d, keyframes: { ...k, skeleton: { ...(k.skeleton ?? {}), [id]: [...keys].sort((a, b) => a.frame - b.frame) } } } }, label),
   moveKey: (row, from, to) => {
     const at = row.indexOf(':'), kind = row.slice(0, at), id = row.slice(at + 1)
-    if (from === to || to < 0 || (kind !== 'cam' && kind !== 'obj')) return
+    if (from === to || to < 0 || (kind !== 'cam' && kind !== 'obj' && kind !== 'skl')) return
     get().apply((d) => {
       const k = keyframesOf(d)
+      if (kind === 'skl') { const ks = k.skeleton?.[id] ?? []; const key = ks.find((x) => x.frame === from); return key ? { ...d, keyframes: { ...k, skeleton: { ...k.skeleton, [id]: withKey(withoutKey(ks, from), { ...key, frame: to }) } } } : d }
       if (kind === 'cam') { const ks = k.camera[id] ?? []; const key = ks.find((x) => x.frame === from); return key ? { ...d, keyframes: { ...k, camera: { ...k.camera, [id]: withKey(withoutKey(ks, from), { ...key, frame: to }) } } } : d }
       const ks = k.objects[id] ?? []; const key = ks.find((x) => x.frame === from)
       return key ? { ...d, keyframes: { ...k, objects: { ...k.objects, [id]: withKey(withoutKey(ks, from), { ...key, frame: to }) } } } : d
@@ -375,7 +398,8 @@ export const useStage = create<StageState>()((set, get) => ({
     get().apply((d) => {
       const k = keyframesOf(d)
       const drop = <T extends { frame: number }>(rec: Record<string, T[]>) => { const ks = withoutKey(rec[id], frame); const out = { ...rec }; if (ks.length) out[id] = ks; else delete out[id]; return out }
-      return kind === 'cam' ? { ...d, keyframes: { ...k, camera: drop(k.camera) } } : kind === 'obj' ? { ...d, keyframes: { ...k, objects: drop(k.objects) } } : d
+      return kind === 'cam' ? { ...d, keyframes: { ...k, camera: drop(k.camera) } } : kind === 'obj' ? { ...d, keyframes: { ...k, objects: drop(k.objects) } }
+        : kind === 'skl' ? { ...d, keyframes: { ...k, skeleton: drop(k.skeleton ?? {}) } } : d
     }, 'remove key')
   },
   setGuideKind: (guideKind) => set({ guideKind: get().clipMethod === 'animate' ? 'pose' : guideKind }),
@@ -786,8 +810,8 @@ export const useStage = create<StageState>()((set, get) => ({
   bindFigure: (id, profileId, version = null) => {
     const o = get().object(id)
     if (!o || o.kind !== 'mannequin') return
-    get().apply((d) => ({ ...d, objects: d.objects.map((x) => (x.id === id ? withBody({ ...x, profile_id: profileId, version: profileId ? version : null }, castBody(profileId, version))
-      : profileId && x.profile_id === profileId ? { ...x, profile_id: null, version: null, body: null } : x)) }), profileId ? 'bind figure' : 'unbind figure')   // one figure per character: it moves
+    get().apply((d) => ({ ...d, objects: d.objects.map((x) => (x.id === id ? withBody(rebound(x, profileId, profileId ? version : null), castBody(profileId, version))
+      : profileId && x.profile_id === profileId ? { ...rebound(x, null, null), body: null } : x)) }), profileId ? 'bind figure' : 'unbind figure')   // one figure per character: it moves
     void get().refreshShotPreview()
   },
   placeProp: (profileId, pos) => {
@@ -811,7 +835,7 @@ export const useStage = create<StageState>()((set, get) => ({
     const map = prebindOf(d.objects, get().activeCamera(), speakers)
     if (!map) return null
     const pinOf = (pid: string) => speakers.find((s) => s.id === pid)?.version ?? null
-    get().apply((doc) => ({ ...doc, objects: doc.objects.map((x) => { if (!(x.id in map)) return x; const ver = x.profile_id === map[x.id] ? x.version : pinOf(map[x.id]); return withBody({ ...x, profile_id: map[x.id], version: ver }, castBody(map[x.id], ver)) }) }), 'bind the speakers')
+    get().apply((doc) => ({ ...doc, objects: doc.objects.map((x) => { if (!(x.id in map)) return x; const ver = x.profile_id === map[x.id] ? x.version : pinOf(map[x.id]); return withBody(rebound(x, map[x.id], ver), castBody(map[x.id], ver)) }) }), 'bind the speakers')
     void get().refreshShotPreview()
     return Object.keys(map).length
   },
@@ -824,6 +848,8 @@ export const useStage = create<StageState>()((set, get) => ({
   },
 }))
 
+// CS2: a character's shell binds in the stance of the reference it was made from
+setShellPoints(versionPointsOfShell)
 // CA0: a Cast sheet's body edited (or the profiles loaded) — the open stage's bound figures follow
 useStory.subscribe((s, prev) => { if (s.profiles !== prev.profiles) st().syncBodies() })
 // SC3 (D120): the image → set job landed (or failed) — the stage is reloaded with its relief and the picture's camera

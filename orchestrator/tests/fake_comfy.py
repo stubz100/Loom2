@@ -55,7 +55,8 @@ def fake_person(ratios: dict[str, float] | None = None, h: float = 400.0, cx: fl
             t = 0 if k == 0 else 4 if k == 9 else (k - 1) % 4 + 1        # 9: the middle finger's base, a palm's length from the wrist
             out += [wx + s * ax * r["palm"] * h * t / 4, wy + ay * r["palm"] * h * t / 4, 0.9]
         return out
-    return {"pose_keypoints_2d": body, "hand_right_keypoints_2d": hand(4, -1), "hand_left_keypoints_2d": hand(7, 1), "foot_keypoints_2d": [], "face_keypoints_2d": []}
+    # SDPose names the hands as the picture shows them (E36: `hand_left` at the r_wrist, the picture's left)
+    return {"pose_keypoints_2d": body, "hand_left_keypoints_2d": hand(4, -1), "hand_right_keypoints_2d": hand(7, 1), "foot_keypoints_2d": [], "face_keypoints_2d": []}
 
 
 class FakeComfy:

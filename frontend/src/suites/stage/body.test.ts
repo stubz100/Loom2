@@ -70,3 +70,19 @@ describe('×1 an adult (proto01_UIcast CS1 · S3)', () => {
     expect(bodyDims(DEFAULT_BODY).limbs).toEqual({ upper_arm: 0.29, forearm: 0.27, thigh: 0.44, shin: 0.43 })
   })
 })
+
+describe("the skeleton bench's rows (proto01_UIcast CS2)", () => {
+  const at = (m: ReturnType<typeof mannequin>, o: THREE.Object3D) => { m.joints.root.updateWorldMatrix(true, true); return m.joints.spine.worldToLocal(o.getWorldPosition(new THREE.Vector3())) }
+  it("the shoulders' drop lowers the shoulder joints and OpenPose's neck point with them; ×1 is the dummy of before", () => {
+    const one = mannequin(mat, POSES.stand, undefined, DEFAULT_BODY), two = mannequin(mat, POSES.stand, undefined, { ...DEFAULT_BODY, shoulder_drop: 2 })
+    expect(at(one, one.joints.r_shoulder).y).toBeCloseTo(0.4, 6)
+    expect(at(two, two.joints.r_shoulder).y).toBeCloseTo(0.36, 6)
+    expect(at(two, two.markers[1]).y).toBeCloseTo(0.36, 6)                         // the neck point is the shoulders' midpoint
+  })
+  it('the head carried forward puts its pivot ahead of the neck, a little lower', () => {
+    const m = mannequin(mat, POSES.stand, undefined, { ...DEFAULT_BODY, head_forward: 30 })
+    expect(m.joints.head.position.z).toBeCloseTo(0.12 * Math.sin(Math.PI / 6), 6)
+    expect(m.joints.head.position.y).toBeCloseTo(0.12 * Math.cos(Math.PI / 6), 6)
+    expect(bodyDims({ ...DEFAULT_BODY, head_forward: 30 }).top).toBeLessThan(bodyDims(DEFAULT_BODY).top)
+  })
+})

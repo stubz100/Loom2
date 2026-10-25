@@ -58,6 +58,7 @@ def test_frozen_graph_compiles_against_the_engine(tmp_path: Path, object_info: d
     assert next(n for n in c.graph.values() if n["class_type"] == "LoadImage")["inputs"]["image"] == IMG
     assert c.graph[c.output_node]["class_type"] == "Save3DAdvanced" and c.graph[c.output_node]["inputs"]["filename_prefix"] == "loom2/mesh"
     assert c.graph["901"]["inputs"]["filename_prefix"] == "loom2/mesh_view" and c.summary["faces"] == 40000 and c.summary["resolution"] == 1024
+    assert c.graph["903"]["inputs"]["filename_prefix"] == "loom2/mesh_matte" and c.graph[c.graph["902"]["inputs"]["mask"][0]]["class_type"] == "RemoveBackground"   # CS2: the cut-out kept
     with pytest.raises(graphs.CompileError):
         graphs.compile_recipe(r, roster, object_info, 7, "x", inputs={})
 

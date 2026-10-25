@@ -2705,6 +2705,139 @@ test('the body fitted to the animation reference (CA1b, D104): Fit the body meas
   await expect.poll(async () => (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0].body?.hand_rest.preset, { timeout: 10_000 }).toBe('fist')
 })
 
+test('the skeleton bench (proto01_UIcast CS2): Skeleton… opens the reference with SDPose\'s points and the figure\'s, a hip dragged and Fit again refits the body, a part locked stays, the guide follows a motion', async ({ page }) => {
+  test.setTimeout(120_000)
+  const name = `Bea ${Date.now().toString(36)}`
+  const src = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0]
+  const ref = (await api<{ ids: string[] }>('POST', '/assets/duplicate', { ids: [src.id] })).ids[0]
+  type Body = { torso: number; legs: number; neck: number; locks: string[] }
+  type ProfileLite = { id: string; versions: { id: string; body_fit_from: string | null; body: Body | null; body_points: { pose: number[][]; sdpose?: { pose: number[][] } } | null }[] }
+  const p = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', appearance: `${name}, a baker` })
+  await api('PUT', `/story/profiles/${p.id}/versions/v1/anim-ref`, { side: 'front', asset_id: ref })
+  await openApp(page, { suite: 'story', tab: 'cast' })
+  await page.locator(`.profile-row[data-id="${p.id}"]`).click()
+  await page.locator('.cast-body button', { hasText: /^Fit the body to the animation reference/ }).click()
+  const prof = async () => (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0]
+  await expect.poll(async () => (await prof()).body_points?.pose.length ?? 0, { timeout: 60_000 }).toBe(18)
+  const fitted = (await prof()).body!, read = (await prof()).body_points!.pose[8][1]
+  await page.locator('.cast-body button', { hasText: /^Skeleton…/ }).click()
+  const bench = page.locator('.skel-bench')
+  await expect(bench.locator('.skel-ref circle.white')).toHaveCount(18 + 42, { timeout: 15_000 })   // the body's 18 and both hands' 21 (the fake has no feet)
+  await expect(bench.locator('.skel-ref circle.blue')).toHaveCount(18)
+  await expect(page.locator('.skel-parts h4')).toContainText(`${name}'s skeleton`)
+  await expect(page.locator('.skel-parts .skel-row[data-row="neck"] .mono')).toContainText('cm')
+  // a hip dragged down (SDPose put it high), then Fit again: a longer torso, shorter legs
+  for (const k of [8, 11]) {                                                                          // by the white ring's edge (the figure's blue dot sits in its middle)
+    const box = (await bench.locator(`.skel-ref circle.white[data-k="${k}"]`).first().boundingBox())!
+    await page.mouse.move(box.x + box.width * 0.15, box.y + box.height / 2); await page.mouse.down()
+    await page.mouse.move(box.x + box.width * 0.15, box.y + box.height / 2 + 25, { steps: 5 }); await page.mouse.up()
+  }
+  await expect(bench.locator('.skel-foot')).toContainText('2 points moved')
+  await bench.locator('.skel-foot button', { hasText: /^Fit again/ }).click()
+  await expect.poll(async () => (await prof()).body!.torso, { timeout: 10_000 }).toBeGreaterThan(fitted.torso)
+  expect((await prof()).body!.legs).toBeLessThan(fitted.legs)
+  expect((await prof()).body_points!.pose[8][1]).toBeGreaterThan(read + 5)                           // the author's point kept…
+  expect((await prof()).body_points!.sdpose!.pose[8][1]).toBeCloseTo(read, 1)                         // …and SDPose's own read beside it
+  // a part locked keeps its value through Fit again; the others refit around it (the factors only fix proportions)
+  const movedTorso = (await prof()).body!.torso
+  await page.locator('.skel-parts .skel-row[data-row="neck"] button.lock').click()
+  await expect.poll(async () => (await prof()).body!.locks, { timeout: 10_000 }).toContain('neck')
+  const neck = (await prof()).body!.neck
+  await bench.locator('.skel-foot button', { hasText: /^Back to SDPose/ }).click()
+  await bench.locator('.skel-foot button', { hasText: /^Fit again/ }).click()
+  await expect.poll(async () => (await prof()).body!.torso, { timeout: 10_000 }).toBeLessThan(movedTorso - 0.1)   // SDPose's hips again: the torso back down
+  expect((await prof()).body!.neck).toBe(neck)
+  // the shell (D136 U6): Pixal3D on the reference in the background under full; greyed under open (DINOv3)
+  if (env().variant === 'open') await expect(bench.locator('.skel-foot button', { hasText: /^Make the shell/ })).toBeDisabled()   // greyed: no model in this build
+  else {
+    await bench.locator('.skel-foot button', { hasText: /^Make the shell/ }).click()
+    await expect.poll(async () => ((await prof()) as unknown as { shell_asset_id: string | null }).shell_asset_id, { timeout: 30_000 }).toBeTruthy()
+    await expect(bench.locator('.skel-foot')).toContainText('shell')
+    await expect(bench.locator('.skel-pane.fig button', { hasText: 'shell' })).toBeEnabled()
+  }
+  // the guide follows a motion; the bench closes back to the sheet
+  await bench.locator('.skel-motions button', { hasText: 'walk' }).click()
+  await expect(bench.locator('.skel-guide img.pose')).toHaveCount(1, { timeout: 20_000 })
+  await page.screenshot({ path: 'node_modules/.e2e/cs2-bench.png' })
+  await bench.locator('.skel-strip button', { hasText: /^Back to the sheet/ }).click()
+  await expect(page.locator('.cast-page')).toBeVisible()
+})
+
+test("the skeleton changed (proto01_UIcast CS3, D136 U19): a final's character layer stamps its body per frame; Cast's skeleton changing under it shows on the layer, nothing done by itself — Re-render draws the guide again and performs it; Apply from the playhead keys the skeleton (the frames before it held) and performs again", async ({ page }) => {
+  test.setTimeout(150_000)
+  await openApp(page)
+  await openAnimate(page, 'Clay')
+  await page.locator('.placeholder button', { hasText: /^New stage/ }).click()
+  const dialog = page.locator('.modal.ask')
+  const stageName = `Skeleton ${Date.now().toString(36)}`
+  await dialog.locator('input').fill(stageName)
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('canvas.stage-canvas')).toBeVisible()
+  const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
+  type Prof = { id: string; name: string; revision: number; versions: { id: string; body: Record<string, unknown> | null }[] }
+  const who = await api<Prof>('POST', '/story/profiles', { name: `Skel ${Date.now().toString(36)}`, cls: 'character', hero_asset_id: img, appearance: 'a courier' })
+  await api('PUT', `/story/profiles/${who.id}/versions/v1/anim-ref`, { side: 'front', asset_id: img })
+  const setNeck = async (neck: number) => {
+    const p = await api<Prof>('GET', `/story/profiles/${who.id}`)
+    await api('PATCH', `/story/profiles/${who.id}`, { revision: p.revision, versions: [{ id: 'v1', body: { ...(p.versions[0].body ?? { height_m: 1.7 }), neck } }] })
+  }
+  await setNeck(1.0)
+  await libAdd(page, 'sets', 'room')
+  await libAdd(page, 'figures', 'Adult')
+  await page.locator(`.panel [aria-label="the figure's character"] button[aria-label="${who.name}"]`).click()
+  await page.evaluate(() => (window as unknown as { __loom2Stage: { setRange: (a: number, b: number) => void } }).__loom2Stage.setRange(0, 12))   // 9 frames at F16: one batch
+  await perfCard(page, 'Final shot')
+  await page.locator('.final-section button', { hasText: /^Make the final shot/ }).click()
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('.final-section .final-row')).toBeVisible({ timeout: 60_000 })
+  type Lay = { id: string; kind: string; object_id: string | null; status: string; frames_done: number; body: Record<string, unknown> | null; body_hashes: string[]; batches: { job_id: string }[]; job_ids: string[]; guide_asset_id: string | null }
+  const stage = (await api<{ items: { id: string; name: string }[] }>('GET', '/stages')).items.find((x) => x.name === stageName)!
+  const fin = (await api<{ items: { id: string; layers: Lay[] }[] }>('GET', `/finals?stage_id=${stage.id}`)).items[0]
+  const figOf = async () => (await api<{ layers: Lay[] }>('GET', `/finals/${fin.id}`)).layers.find((l) => l.kind === 'figure')!
+  const first = await figOf()
+  expect(first.body?.neck).toBe(1.0); expect(first.body_hashes).toHaveLength(9); expect(new Set(first.body_hashes).size).toBe(1)
+  const row = page.locator('.final-section li[data-kind="figure"]')
+  await expect(row.locator('.skeleton-changed')).toHaveCount(0)
+  await row.locator('button', { hasText: 'Perform' }).click()
+  await expect.poll(async () => { const p = await figOf(); return `${p.status} ${p.frames_done}` }, { timeout: 60_000 }).toBe('done 9')
+  // Cast's skeleton changes under the drawn layer: the layer says so, nothing runs by itself
+  const performed = await figOf()
+  await setNeck(1.4)
+  await expect(row.locator('.skeleton-changed')).toBeVisible({ timeout: 15_000 })
+  expect((await figOf()).job_ids).toEqual(performed.job_ids)                                                 // nothing queued by itself
+  await page.screenshot({ path: 'node_modules/.e2e/cs3-skeleton-changed.png' })
+  // Re-render with the new skeleton: the guide drawn again (the server encodes it again) and the whole layer performed again
+  const guide1 = (await figOf()).guide_asset_id
+  await expect(row.locator('.status')).toHaveText(/done · 9 frames/, { timeout: 15_000 })                   // the panel has caught up with the run
+  await row.locator('.skeleton-changed').click()
+  await page.locator('.ctx-menu button.item', { hasText: /^Re-render with the new skeleton/ }).click()
+  await expect.poll(async () => (await figOf()).body?.neck, { timeout: 30_000 }).toBe(1.4)
+  await expect.poll(async () => { const p = await figOf(); return `${p.status} ${p.frames_done} ${p.batches[0].job_id !== performed.batches[0].job_id}` }, { timeout: 60_000 }).toBe('done 9 true')
+  const rerendered = await figOf()
+  expect(rerendered.guide_asset_id).not.toBe(guide1)
+  await expect(row.locator('.skeleton-changed')).toHaveCount(0)
+  // changed again, applied from the playhead: the frames before it keep the skeleton they were drawn with (keys), Cast's from it
+  await setNeck(0.8)
+  await expect(row.locator('.skeleton-changed')).toBeVisible({ timeout: 15_000 })
+  await page.evaluate(() => (window as unknown as { __loom2Stage: { setFrame: (f: number) => void } }).__loom2Stage.setFrame(6))
+  await expect(row.locator('.status')).toHaveText(/done · 9 frames/, { timeout: 15_000 })
+  await row.locator('.skeleton-changed').click()
+  await page.locator('.ctx-menu button.item', { hasText: /^Apply from the playhead \(frame 6\)/ }).click()
+  await expect(dialog).toContainText(/keep the skeleton they were drawn with/)
+  await dialog.locator('button.primary').click()
+  await expect.poll(async () => { const p = await figOf(); return `${p.status} ${p.frames_done} ${p.batches[0].job_id !== rerendered.batches[0].job_id}` }, { timeout: 60_000 }).toBe('done 9 true')
+  const after = await figOf()
+  expect(after.body_hashes.slice(0, 4)).toEqual(Array(4).fill(after.body_hashes[0])); expect(after.body_hashes[4]).not.toBe(after.body_hashes[0])   // F16: frame 6 is the 5th
+  type Doc = { objects: { id: string; kind: string }[]; keyframes: { skeleton?: Record<string, { frame: number; body: { neck?: number } | null }[]> } }
+  const doc = await api<Doc>('GET', `/stages/${stage.id}`)
+  const fid = doc.objects.find((o) => o.kind === 'mannequin')!.id
+  expect(doc.keyframes.skeleton?.[fid]?.map((k) => [k.frame, k.body?.neck ?? null])).toEqual([[0, 1.4], [6, null]])
+  await expect(row.locator('.skeleton-changed')).toHaveCount(0)
+  await page.locator('.animate-levels button', { hasText: 'Clay' }).click()
+  await expect(page.locator('.stage-tl .tl-row', { hasText: /skeleton/ })).toBeVisible()                   // the keys on the figure's skeleton row (Clay's timeline)
+  await page.screenshot({ path: 'node_modules/.e2e/cs3-skeleton-keys.png' })
+})
+
 test('a test animation in Cast (CA0, 01 step 2): Test it draws a turn on the spot from the body here, the pose-driven model performs it with the reference, the clip lands beside the reference', async ({ page }) => {
   test.setTimeout(120_000)
   const name = `Bram ${Date.now().toString(36)}`

@@ -1339,6 +1339,13 @@
             "title": "Feet",
             "type": "number"
           },
+          "feet_out": {
+            "default": 0.0,
+            "maximum": 45.0,
+            "minimum": -20.0,
+            "title": "Feet Out",
+            "type": "number"
+          },
           "figure": {
             "default": "female",
             "enum": [
@@ -1363,6 +1370,13 @@
             "maximum": 2.5,
             "minimum": 0.5,
             "title": "Head",
+            "type": "number"
+          },
+          "head_forward": {
+            "default": 0.0,
+            "maximum": 40.0,
+            "minimum": -30.0,
+            "title": "Head Forward",
             "type": "number"
           },
           "height_m": {
@@ -1393,11 +1407,26 @@
             "title": "Legs",
             "type": "number"
           },
+          "locks": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Locks",
+            "type": "array"
+          },
           "neck": {
             "default": 1.0,
             "maximum": 3.0,
             "minimum": 0.5,
             "title": "Neck",
+            "type": "number"
+          },
+          "shoulder_drop": {
+            "default": 1.0,
+            "maximum": 3.0,
+            "minimum": 0.0,
+            "title": "Shoulder Drop",
             "type": "number"
           },
           "shoulders": {
@@ -1431,6 +1460,10 @@
           "hands",
           "feet",
           "hand_rest",
+          "head_forward",
+          "shoulder_drop",
+          "feet_out",
+          "locks",
           "attachments"
         ],
         "title": "Body",
@@ -1512,6 +1545,44 @@
           "asset_id"
         ],
         "title": "BodyFitQueued",
+        "type": "object"
+      },
+      "BodyRefit": {
+        "description": "CS2: the skeleton bench's points — SDPose's as the version keeps them (`body_points`), some dragged by the author.",
+        "properties": {
+          "points": {
+            "additionalProperties": true,
+            "title": "Points",
+            "type": "object"
+          }
+        },
+        "required": [
+          "points"
+        ],
+        "title": "BodyRefit",
+        "type": "object"
+      },
+      "BodyRefitted": {
+        "properties": {
+          "fit": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            "title": "Fit",
+            "type": "object"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/Profile"
+          }
+        },
+        "required": [
+          "profile",
+          "fit"
+        ],
+        "title": "BodyRefitted",
         "type": "object"
       },
       "BulkPatch": {
@@ -6314,6 +6385,25 @@
             "title": "Batches",
             "type": "array"
           },
+          "body": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "body_hashes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Body Hashes",
+            "type": "array"
+          },
           "clip_id": {
             "anyOf": [
               {
@@ -6543,13 +6633,34 @@
           "guide_asset_id",
           "batches",
           "takes",
-          "source"
+          "source",
+          "body",
+          "body_hashes"
         ],
         "title": "FinalLayer",
         "type": "object"
       },
       "FinalLayerIn": {
         "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "body_hashes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Body Hashes",
+            "type": "array"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -8350,11 +8461,27 @@
             ],
             "title": "Preset",
             "type": "string"
+          },
+          "spread": {
+            "default": 0.0,
+            "maximum": 30.0,
+            "minimum": -10.0,
+            "title": "Spread",
+            "type": "number"
+          },
+          "thumb": {
+            "default": 0.0,
+            "maximum": 40.0,
+            "minimum": -30.0,
+            "title": "Thumb",
+            "type": "number"
           }
         },
         "required": [
           "preset",
-          "curl"
+          "curl",
+          "spread",
+          "thumb"
         ],
         "title": "HandRest",
         "type": "object"
@@ -12692,6 +12819,56 @@
         "title": "PassBody",
         "type": "object"
       },
+      "PassesBody": {
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "body_hashes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Body Hashes",
+            "type": "array"
+          },
+          "keypoints": {
+            "anyOf": [
+              {
+                "items": {},
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keypoints"
+          },
+          "passes": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Passes",
+            "type": "object"
+          }
+        },
+        "required": [
+          "passes"
+        ],
+        "title": "PassesBody",
+        "type": "object"
+      },
       "PassesUpload": {
         "description": "ST3 (16 §7): the passes the client rendered for one camera — each a PNG already put through `PUT /blobs/{sha}` — with the COCO-18\nkeypoints behind the pose pass and the mask pass's colour legend.",
         "properties": {
@@ -13860,6 +14037,28 @@
             "title": "Outfit",
             "type": "string"
           },
+          "shell_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shell Asset Id"
+          },
+          "shell_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shell From"
+          },
           "state": {
             "default": "open",
             "enum": [
@@ -13901,6 +14100,8 @@
           "body_points",
           "anim_ref_note",
           "anim_test_clip_id",
+          "shell_asset_id",
+          "shell_from",
           "model_asset_id",
           "model_from",
           "derived_from",
@@ -16495,6 +16696,46 @@
           "version"
         ],
         "title": "ShellBuild",
+        "type": "object"
+      },
+      "ShellPick": {
+        "properties": {
+          "asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Id"
+          }
+        },
+        "title": "ShellPick",
+        "type": "object"
+      },
+      "ShellQueued": {
+        "properties": {
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "source_asset_id": {
+            "title": "Source Asset Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "source_asset_id",
+          "model_id"
+        ],
+        "title": "ShellQueued",
         "type": "object"
       },
       "Shot": {
@@ -25636,6 +25877,68 @@
         ]
       }
     },
+    "/finals/{fid}/layers/{lid}/passes": {
+      "put": {
+        "description": "CS3 (proto01_UIcast 06 §2.10, D136 U19): a character layer's passes drawn again by Stage — the skeleton changed. They replace the old\nones, and a performed layer's guide video is encoded again: a re-take from a batch then performs the new guide (*Apply from a frame…*:\nthe frames before the skeleton key unchanged), a run performs all of it (*Re-render with the new skeleton*).",
+        "operationId": "final_layer_passes_finals__fid__layers__lid__passes_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "lid",
+            "required": true,
+            "schema": {
+              "title": "Lid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PassesBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Final"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Final Layer Passes",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
     "/finals/{fid}/layers/{lid}/run": {
       "post": {
         "description": "PS5c: perform a character layer — its figure's character (the bound Cast version's animation reference) placed where the figure\nstarts (E23c: no ghost), Wan Animate Move on the layer's pose sequence in 77-frame batches (E23a W1), each batch queuing the next.\nA run again is a re-take of this layer alone.",
@@ -30774,6 +31077,68 @@
         ]
       }
     },
+    "/story/profiles/{pid}/versions/{vid}/body/refit": {
+      "post": {
+        "description": "CS2 (proto01_UIcast 03 §3.2, *Fit again*): the body fitted to the given points at once, on the CPU — the bench's corrected points; the\nlocked factors stay; the points are kept on the version (the reference it was fitted to stays the same).",
+        "operationId": "profile_body_refit_story_profiles__pid__versions__vid__body_refit_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BodyRefit"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BodyRefitted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Body Refit",
+        "tags": [
+          "story"
+        ]
+      }
+    },
     "/story/profiles/{pid}/versions/{vid}/lock": {
       "post": {
         "operationId": "profile_lock_story_profiles__pid__versions__vid__lock_post",
@@ -30994,6 +31359,118 @@
           }
         },
         "summary": "Profile Model Import",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/profiles/{pid}/versions/{vid}/shell": {
+      "post": {
+        "description": "CS2 (D136 U6): a character version's shell — the image → 3D model (Pixal3D, about four minutes) of its animation reference, a\nbackground job; it becomes the version's when it lands, the clay its figures are drawn in, bound to the skeleton. D139: only from an\nA-pose picture — the reference fitted, its arms clear of the body.",
+        "operationId": "profile_shell_make_story_profiles__pid__versions__vid__shell_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShellQueued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Shell Make",
+        "tags": [
+          "story"
+        ]
+      },
+      "put": {
+        "description": "CS2: the author's pick — a mesh already in the Catalogue becomes the character version's shell (made from the image it was made from,\nwhen the Catalogue knows it); None clears it. A mesh D109 stood upright is turned back first, as a copy (lineage `shell` ← the mesh;\nthe Catalogue's own stays as it is): a shell is front-on as Pixal3D made it (E36).",
+        "operationId": "profile_shell_pick_story_profiles__pid__versions__vid__shell_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShellPick"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Shell Pick",
         "tags": [
           "story"
         ]

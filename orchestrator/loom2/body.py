@@ -35,6 +35,8 @@ class HandRest(BaseModel):
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
     preset: HandPresetName = "relaxed"
     curl: float = Field(1.0, ge=0.0, le=1.6)      # × the preset's curl (0: the open hand)
+    spread: float = Field(0.0, ge=-10.0, le=30.0)  # CS2: the fingers fanned (degrees at the knuckles, the index's way out; − closes them)
+    thumb: float = Field(0.0, ge=-30.0, le=40.0)   # CS2: the thumb opened from the palm (degrees)
 
 
 class Body(BaseModel):
@@ -56,6 +58,10 @@ class Body(BaseModel):
     hands: float = Field(1.0, ge=0.5, le=1.6)      # CA1b: the Detailed figure's hands (the pose pass draws them, D101)
     feet: float = Field(1.0, ge=0.5, le=1.6)       # CA1b: the feet (the dummy's and the Detailed figure's); fitted from the toes (S5)
     hand_rest: HandRest = Field(default_factory=HandRest)
+    head_forward: float = Field(0.0, ge=-30.0, le=40.0)   # CS2: the head carried forward of the neck (degrees: a stoop +, a proud stance −)
+    shoulder_drop: float = Field(1.0, ge=0.0, le=3.0)     # CS2: the shoulders under the neck joint (×1: 0.04 · torso; 0 square, 2–3 sloped)
+    feet_out: float = Field(0.0, ge=-20.0, le=45.0)       # CS2: the feet turned out at rest (degrees)
+    locks: list[str] = Field(default_factory=list, max_length=16)   # CS2: the factors *Fit again* leaves as the author set them
     attachments: list[BodyAttachment] = Field(default_factory=list, max_length=6)
 
 
@@ -82,10 +88,11 @@ def dummy_ratios(b: Body) -> dict[str, float]:
     of the height from the nose to the ankles. Kept in step with builders.ts by tests/test_body_fit_ca1b.py's numbers."""
     w = BUILD_WIDTH.get(b.build, 1.0)
     hip = 0.07 + 0.88 * b.legs
+    import math
     leg, arm = 0.87 * b.legs, 0.56 * b.arms
     spine = hip + 0.06
-    shoulder_y = spine + 0.4 * b.torso                        # the shoulders' midpoint = OpenPose's neck point (CA1b)
-    nose_y = spine + 0.44 * b.torso + 0.12 * b.neck + 0.02 * b.head      # S3: the neck joint, the neck to the head's pivot, the nose above it
+    shoulder_y = spine + 0.44 * b.torso - 0.04 * b.torso * b.shoulder_drop   # the shoulders' midpoint = OpenPose's neck point (CA1b); CS2's drop
+    nose_y = spine + 0.44 * b.torso + 0.12 * b.neck * math.cos(math.radians(b.head_forward)) + 0.02 * b.head   # S3: the neck to the pivot (CS2: leaning), the nose
     hip_y = hip - 0.04
     ankle_y = hip_y - leg
     h = nose_y - ankle_y
@@ -157,6 +164,13 @@ def stance_note(person: dict) -> str | None:
     h = float(np.linalg.norm(b[0, :2] - (b[10, :2] + b[13, :2]) / 2))
     gaps = [abs(b[w, 0] - b[hp, 0]) / h for w, hp in ((4, 8), (7, 11)) if b[w, 2] >= 0.3 and b[hp, 2] >= 0.3 and h > 1]
     return "arms_close" if gaps and min(gaps) < ARMS_CLOSE else None
+
+
+def person_of(points: dict[str, Any]) -> dict[str, Any]:
+    """CS2: points as the version keeps them (body_points) back into an SDPose person — the skeleton bench's corrected points refitted."""
+    flat = lambda rows: [float(v) for r in (rows or []) for v in (list(r) + [1.0, 1.0, 1.0])[:3]]  # noqa: E731
+    return {"pose_keypoints_2d": flat(points.get("pose")), "hand_left_keypoints_2d": flat(points.get("hand_left")),
+            "hand_right_keypoints_2d": flat(points.get("hand_right")), "foot_keypoints_2d": flat(points.get("feet"))}
 
 
 def body_points(person: dict, canvas: list | tuple | None) -> dict[str, Any]:

@@ -2,12 +2,17 @@
 // of keys; a key holds the state at its frame and how to reach it from the previous key (`linear` or `ease` = smoothstep). Between
 // keys the state interpolates; before the first and after the last it holds. Without keys an object or camera is what the document
 // says (the base state). Frames are integers at the project's fps (D18: 24); `range {start, end}` is inclusive.
+// CS3 (proto01_UIcast 06 §2.10, D136 U19): `keyframes.skeleton[objId]` — skeleton keys: from a key's frame the figure's body is the key's
+// (or, with none, the figure's own: Cast's), reached over the key's transition from the body before it; before the first key its own.
 import type { StageCamera, StageDoc, StageObject } from '../../api/types'
 
 export type Ease = 'linear' | 'ease'
 export interface CameraKey { frame: number; ease: Ease; pos: number[]; target: number[]; focal_mm: number }
 export interface ObjectKey { frame: number; ease: Ease; transform: { pos: number[]; rot: number[]; scale: number[] }; pose?: { preset?: string | null; joints: Record<string, number[]>; extra?: Record<string, number[]> } | null }
-export interface Keyframes { camera: Record<string, CameraKey[]>; objects: Record<string, ObjectKey[]> }
+/** CS3: from `frame` the figure's body is `body` (null: the figure's own — its Cast version's, whatever it is now), reached over
+ *  `transition` frames from the body before it (0: a cut). */
+export interface SkeletonKey { frame: number; transition: number; body: StageObject['body'] | null }
+export interface Keyframes { camera: Record<string, CameraKey[]>; objects: Record<string, ObjectKey[]>; skeleton?: Record<string, SkeletonKey[]> }
 
 export const EMPTY_KEYS: Keyframes = { camera: {}, objects: {} }
 export const smoothstep = (t: number) => t * t * (3 - 2 * t)
@@ -20,7 +25,8 @@ const lerpDeg = (a: number[], b: number[], w: number) => a.map((x, i) => { let d
 export function keyframesOf(doc: Pick<StageDoc, 'keyframes'>): Keyframes {
   const k = (doc.keyframes ?? {}) as Partial<Keyframes>
   const sortBy = <T extends { frame: number }>(xs: T[] | undefined) => [...(xs ?? [])].sort((a, b) => a.frame - b.frame)
-  return { camera: Object.fromEntries(Object.entries(k.camera ?? {}).map(([id, ks]) => [id, sortBy(ks)])), objects: Object.fromEntries(Object.entries(k.objects ?? {}).map(([id, ks]) => [id, sortBy(ks)])) }
+  return { camera: Object.fromEntries(Object.entries(k.camera ?? {}).map(([id, ks]) => [id, sortBy(ks)])), objects: Object.fromEntries(Object.entries(k.objects ?? {}).map(([id, ks]) => [id, sortBy(ks)])),
+    skeleton: Object.fromEntries(Object.entries(k.skeleton ?? {}).filter(([, ks]) => ks?.length).map(([id, ks]) => [id, sortBy(ks)])) }
 }
 
 /** The two keys around a frame and the eased weight between them; null without keys. */
@@ -66,11 +72,51 @@ export function sampleObject(o: StageObject, keys: ObjectKey[] | undefined, fram
   return { ...o, transform, pose }
 }
 
-/** The document as it stands at a frame: keyed cameras and objects sampled, the rest as they are. */
+type Body = NonNullable<StageObject['body']>
+/** Two bodies blended factor by factor (the hands at rest too); what is not a number switches at the half. */
+function lerpBody(a: Body, b: Body, w: number): Body {
+  const blend = (x: Record<string, unknown>, y: Record<string, unknown>): Record<string, unknown> => {
+    const out: Record<string, unknown> = { ...(w < 0.5 ? x : y) }
+    for (const key of Object.keys(y)) {
+      const u = x[key], v = y[key]
+      if (typeof u === 'number' && typeof v === 'number') out[key] = lerp(u, v, w)
+      else if (u && v && typeof u === 'object' && typeof v === 'object' && !Array.isArray(u)) out[key] = blend(u as Record<string, unknown>, v as Record<string, unknown>)
+    }
+    return out
+  }
+  return blend(a as unknown as Record<string, unknown>, b as unknown as Record<string, unknown>) as unknown as Body
+}
+
+/** CS3: the figure's body at a frame under its skeleton keys — the last key at or before it, reached (smoothstep) over its transition from
+ *  the body before it; before the first key, or without keys, the figure's own. */
+export function sampleBody(o: StageObject, keys: SkeletonKey[] | undefined, frame: number): StageObject {
+  if (!keys?.length) return o
+  const own = o.body ?? null
+  const of = (k: SkeletonKey) => k.body ?? own
+  let i = -1
+  while (i + 1 < keys.length && keys[i + 1].frame <= frame) i++
+  if (i < 0) return o
+  const k = keys[i], to = of(k), from = i > 0 ? of(keys[i - 1]) : own
+  const t = k.transition > 0 ? Math.min(1, (frame - k.frame) / k.transition) : 1
+  const body = t >= 1 || !from || !to ? to : lerpBody(from, to, smoothstep(t))
+  return body === own ? o : { ...o, body }
+}
+
+/** CS3: a body's fingerprint (FNV-1a over its fields in order, numbers to 4 places) — a final's guide stamps one per frame. */
+export function bodyHash(body: unknown): string {
+  const stable = (v: unknown): string => typeof v === 'number' ? String(Math.round(v * 1e4) / 1e4) : v === null || typeof v !== 'object' ? JSON.stringify(v ?? null)
+    : Array.isArray(v) ? `[${v.map(stable).join(',')}]` : `{${Object.keys(v).sort().map((key) => `${JSON.stringify(key)}:${stable((v as Record<string, unknown>)[key])}`).join(',')}}`
+  const s = stable(body)
+  let h = 0x811c9dc5
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0 }
+  return h.toString(16).padStart(8, '0')
+}
+
+/** The document as it stands at a frame: keyed cameras and objects sampled (CS3: the figures' bodies too), the rest as they are. */
 export function sampleDoc(doc: StageDoc, frame: number): StageDoc {
-  const k = keyframesOf(doc)
-  if (!Object.keys(k.camera).length && !Object.keys(k.objects).length) return doc
-  return { ...doc, cameras: doc.cameras.map((c) => sampleCamera(c, k.camera[c.id], frame)), objects: doc.objects.map((o) => sampleObject(o, k.objects[o.id], frame)) }
+  const k = keyframesOf(doc), sk = k.skeleton ?? {}
+  if (!Object.keys(k.camera).length && !Object.keys(k.objects).length && !Object.keys(sk).length) return doc
+  return { ...doc, cameras: doc.cameras.map((c) => sampleCamera(c, k.camera[c.id], frame)), objects: doc.objects.map((o) => sampleBody(sampleObject(o, k.objects[o.id], frame), sk[o.id], frame)) }
 }
 
 /** A key written at its frame (replacing one already there), the list kept sorted. */
@@ -85,6 +131,7 @@ export function keyedFrames(k: Keyframes, cameraId: string | null): number[] {
   const out = new Set<number>()
   if (cameraId) for (const key of k.camera[cameraId] ?? []) out.add(key.frame)
   for (const ks of Object.values(k.objects)) for (const key of ks) out.add(key.frame)
+  for (const ks of Object.values(k.skeleton ?? {})) for (const key of ks) out.add(key.frame)
   return [...out].sort((a, b) => a - b)
 }
 /** The previous / next keyed frame from `frame`, or null. */

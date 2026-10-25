@@ -692,7 +692,8 @@ function Timeline() {
   const cam = current.cameras.find((c) => c.id === current.active_camera) ?? null
   const camKeys = cam ? (k.camera[cam.id] ?? []).map((x) => x.frame) : []
   const objects = current.objects.filter((o) => (k.objects[o.id] ?? []).length > 0)
-  const span = stageSpan(end, [...camKeys, ...objects.flatMap((o) => k.objects[o.id].map((x) => x.frame))])
+  const skeletons = current.objects.filter((o) => (k.skeleton?.[o.id] ?? []).length > 0)        // CS3: the figures with skeleton keys
+  const span = stageSpan(end, [...camKeys, ...objects.flatMap((o) => k.objects[o.id].map((x) => x.frame)), ...skeletons.flatMap((o) => k.skeleton![o.id].map((x) => x.frame + x.transition))])
   markUsed('stage.anim.keyCamera'); markUsed('stage.anim.keyObject'); markUsed('stage.anim.removeKey')
   const row = (id: string, label: string, frames: number[], sel: boolean, onSelect: () => void): TLRow => {
     const { runs, singles } = keyRuns(frames)
@@ -703,9 +704,23 @@ function Timeline() {
   const rows: TLRow[] = []
   if (cam && camKeys.length) rows.push(row(`cam:${cam.id}`, `camera · ${cam.name}`, camKeys, selectedCamera === cam.id, () => st().selectCamera(cam.id)))
   for (const o of objects) rows.push(row(`obj:${o.id}`, o.name, k.objects[o.id].map((x) => x.frame), selected === o.id, () => st().select(o.id)))
-  const keyMenu = (e: React.MouseEvent, r: string, f: number) => showMenu(e, [{ label: `Go to frame ${f}`, run: () => { st().setPlaying(false); st().setFrame(f) } },
-    { label: `Move this key to the playhead (frame ${frame})`, disabled: frame === f, run: () => st().moveKey(r, f, frame) },   // D32: the drag's menu equivalent
-    { label: 'Remove this key', danger: true, run: () => st().removeRowKey(r, f) }])
+  for (const o of skeletons) {                                                    // CS3: a skeleton key a diamond, its transition a bar after it
+    const ks = k.skeleton![o.id]
+    const what = (x: { body: unknown; transition: number }) => `${x.body ? 'the body held as it was keyed' : "Cast's skeleton"}${x.transition ? `, reached over ${x.transition} frames` : ', a cut'}`
+    rows.push({ id: `skl:${o.id}`, label: `${o.name} · skeleton`, selected: selected === o.id, onSelect: () => st().select(o.id), data: { kind: 'skl' },
+      bars: ks.filter((x) => x.transition > 0).map((x) => ({ id: `t${x.frame}`, from: x.frame, to: x.frame + x.transition, label: x.body ? '→ held' : '→ Cast', className: 'transition', title: `frames ${x.frame}–${x.frame + x.transition}: ${what(x)}` })),
+      keys: ks.map((x) => ({ frame: x.frame, title: `skeleton key at frame ${x.frame}: ${what(x)} — right-click: its transition, held or Cast's, remove it` })) })
+  }
+  const keyMenu = (e: React.MouseEvent, r: string, f: number) => {
+    const skl = r.startsWith('skl:') ? (k.skeleton?.[r.slice(4)] ?? []).find((x) => x.frame === f) : undefined
+    const id = r.slice(4)
+    showMenu(e, [{ label: `Go to frame ${f}`, run: () => { st().setPlaying(false); st().setFrame(f) } },
+      { label: `Move this key to the playhead (frame ${frame})`, disabled: frame === f, run: () => st().moveKey(r, f, frame) },   // D32: the drag's menu equivalent
+      ...(skl ? [sep, ...[0, 12, 24, 48].map((n) => ({ label: n ? `Reached over ${n} frames` : 'A cut', checked: skl.transition === n, run: () => st().setSkeletonKey(id, { ...skl, transition: n }) })), sep,
+        { label: "Cast's skeleton from here", checked: !skl.body, run: () => st().setSkeletonKey(id, { ...skl, body: null }) },
+        { label: 'Hold the body it has here', checked: !!skl.body, disabled: !!skl.body, run: () => { const b = sampleDoc(current, f).objects.find((o) => o.id === id)?.body; if (b) st().setSkeletonKey(id, { ...skl, body: JSON.parse(JSON.stringify(b)) }) } }] : []),
+      sep, { label: 'Remove this key', danger: true, run: () => st().removeRowKey(r, f) }])
+  }
   return (
     <div className="stage-timeline" onPointerDown={(e) => e.stopPropagation()}>
       <TransportBar frame={frame} last={span[1]} playing={playing} onFrame={(f) => st().setFrame(f)} counter={`${(frame / Math.max(1, current.size.fps)).toFixed(2)} s`}>

@@ -181,6 +181,8 @@ class ProfileVersion(BaseModel):
                                                   # the turn test's stance (S4), the skeleton bench's points (CS2)
     anim_ref_note: str | None = None              # S8: what the fit saw wrong in the reference's stance ("arms_close"); None = fine or not fitted
     anim_test_clip_id: str | None = None          # CA0: the last test animation of the reference (a turn on the spot, Wan Animate) — a clip id
+    shell_asset_id: str | None = None             # CS2 (D136 U6): a character version's shell — the image → 3D model of its animation reference, the clay
+    shell_from: str | None = None                 #   its figures are drawn in (bound to the skeleton); the reference it was made from (a newer one marks it stale)
     model_asset_id: str | None = None             # D110 (PS2): a prop version's 3D model (a Catalogue mesh, image → mesh, stood upright)
     model_from: str | None = None                 # D110: the image it was made from (an asset id); another reference now marks it stale
     derived_from: str | None = None
@@ -750,6 +752,32 @@ PROP_MODEL_SURFACE = "prop_model"              # D110 (PS2): origin.surface of a
 
 def prop_model_origin(pid: str, vid: str, source: str) -> JobOrigin:
     return JobOrigin(suite="story", surface=PROP_MODEL_SURFACE, ref=pid, payload={"version": vid, "from": source})
+
+
+SHELL_SURFACE = "character_shell"              # CS2: origin.surface of an image → mesh job made for a character version's shell; payload {version, from}
+
+
+def shell_blocked(v: ProfileVersion) -> str | None:
+    """D139: why a character version's shell cannot be made from its animation reference now (None: it can). The shell is made only
+    from an A-pose picture: arms held against the body come out fused to it, and no binding parts them again. The fit reads the stance
+    (S8's check, from SDPose's own points)."""
+    if not v.anim_ref_asset_id:
+        return "make the animation reference first: the shell is made from it"
+    if not v.body_points or v.body_fit_from != v.anim_ref_asset_id:
+        return "fit the body to the animation reference first: the fit reads its stance, and the shell needs the A-pose"
+    if v.anim_ref_note == "arms_close":
+        return ("the animation reference holds its arms against the body, and Pixal3D would make them part of it: draw the reference "
+                "again in the A-pose (arms about 30° out), fit the body, then make the shell")
+    return None
+
+
+def shell_from_arms_down(v: ProfileVersion) -> bool:
+    """D139: the version's shell was made from the reference it has now, and that reference holds its arms against the body."""
+    return bool(v.shell_asset_id and v.shell_from and v.shell_from == v.anim_ref_asset_id and v.anim_ref_note == "arms_close")
+
+
+def shell_origin(pid: str, vid: str, source: str) -> JobOrigin:
+    return JobOrigin(suite="story", surface=SHELL_SURFACE, ref=pid, payload={"version": vid, "from": source})
 
 
 def model_source(v: ProfileVersion) -> str | None:
@@ -1964,6 +1992,23 @@ class StoryStore(_ShotMixin, _FlowMixin):
         if v is None:
             raise KeyError(f"no version {vid!r}")
         v.body, v.body_fit_from, v.body_points, v.anim_ref_note = body, asset_id, points, note
+        p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
+        self.save_profile(p)
+        return p
+
+    def set_shell(self, pid: str, vid: str, asset_id: str | None, source: str | None) -> Profile:
+        """CS2: a character version's shell and the reference it was made from (None clears both). A product of the version like its
+        animation reference: no revision guard, a final version takes it too."""
+        cur = self.profile(pid)
+        if cur is None:
+            raise KeyError(pid)
+        if cur.cls != "character":
+            raise ValueError("only a character has a shell (a prop has its 3D model)")
+        versions = [v.model_copy() for v in cur.versions]
+        v = next((x for x in versions if x.id == vid), None)
+        if v is None:
+            raise KeyError(f"no version {vid!r}")
+        v.shell_asset_id, v.shell_from = asset_id, (source if asset_id else None)
         p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
         self.save_profile(p)
         return p

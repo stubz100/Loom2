@@ -22,7 +22,7 @@ from ..schemas import Deleted, ProfileAdded, LibraryChange, LibraryRemoved, Expa
 from ..stages import StageStore, encode_guide
 from ..shot_recipe import TEMPLATES, StampReader, Template, recipe_state, rerun_recipe, stale_plan, used_run
 from ..shot_graph import ShotGraph, clay_rows, final_for, shot_graph
-from ..story import FOR_SHOT, NODE_TYPES, VISUAL_TYPES, StaleScenes, CastUse, cast_uses, body_fit_origin, model_source, prop_model_origin, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
+from ..story import FOR_SHOT, NODE_TYPES, VISUAL_TYPES, StaleScenes, CastUse, cast_uses, body_fit_origin, model_source, prop_model_origin, shell_origin, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
 from ..voices import VoiceRecord, VoiceStore, check_voice
 from .deps import Svc
 
@@ -453,6 +453,133 @@ async def profile_body_fit(svc: Svc, pid: str, vid: str):
         raise HTTPException(422, str(e))
     await svc.queue.flush()
     return {"job_id": jobs[0].id, "asset_id": v.anim_ref_asset_id}
+
+
+class BodyRefit(BaseModel):
+    """CS2: the skeleton bench's points — SDPose's as the version keeps them (`body_points`), some dragged by the author."""
+    points: dict[str, Any]
+
+
+class BodyRefitted(BaseModel):
+    profile: Profile
+    fit: dict[str, dict[str, float]]
+
+
+@router.post("/story/profiles/{pid}/versions/{vid}/body/refit", response_model=BodyRefitted)
+async def profile_body_refit(svc: Svc, pid: str, vid: str, body: BodyRefit):
+    """CS2 (proto01_UIcast 03 §3.2, *Fit again*): the body fitted to the given points at once, on the CPU — the bench's corrected points; the
+    locked factors stay; the points are kept on the version (the reference it was fitted to stays the same)."""
+    from ..body import Body, fit_body, person_of, reference_ratios, stance_note
+    ws, _, _ = svc.require_project()
+    store = StoryStore(ws)
+    p = await asyncio.to_thread(store.profile, pid)
+    if p is None:
+        raise HTTPException(404, "profile not found")
+    try:
+        v = p.version(vid)
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    if p.cls != "character":
+        raise HTTPException(422, "only a character has a body to fit")
+    person = person_of(body.points)
+    try:
+        measured = reference_ratios(person)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    cur = v.body or Body()
+    fitted, report = fit_body(measured, cur, cur.locks)
+    before = v.body_points or {}
+    sdpose = before.get("sdpose") or {k: before.get(k) for k in ("pose", "hand_left", "hand_right", "feet") if k in before}   # SDPose's own read, kept for *Back to SDPose's points*
+    pts = {**{k: x for k, x in body.points.items() if k != "sdpose"}, "canvas": body.points.get("canvas") or before.get("canvas") or [], "sdpose": sdpose}
+    note = stance_note(person_of(sdpose)) if sdpose.get("pose") else stance_note(person)   # D139: the picture's stance, not the points dragged
+    p = await asyncio.to_thread(store.set_fitted_body, pid, v.id, fitted, v.body_fit_from or v.anim_ref_asset_id or "", pts, note)
+    _changed(svc, p)
+    return {"profile": p.model_dump(), "fit": report}
+
+
+class ShellQueued(BaseModel):
+    job_id: str
+    source_asset_id: str
+    model_id: str
+
+
+@router.post("/story/profiles/{pid}/versions/{vid}/shell", response_model=ShellQueued)
+async def profile_shell_make(svc: Svc, pid: str, vid: str):
+    """CS2 (D136 U6): a character version's shell — the image → 3D model (Pixal3D, about four minutes) of its animation reference, a
+    background job; it becomes the version's when it lands, the clay its figures are drawn in, bound to the skeleton. D139: only from an
+    A-pose picture — the reference fitted, its arms clear of the body."""
+    from ..models import registry
+    ws, _, _ = svc.require_project()
+    if svc.queue is None:
+        raise HTTPException(409, "no queue")
+    p = await asyncio.to_thread(StoryStore(ws).profile, pid)
+    if p is None:
+        raise HTTPException(404, "profile not found")
+    try:
+        v = p.version(vid)
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    if p.cls != "character":
+        raise HTTPException(422, "only a character has a shell (a prop has its 3D model)")
+    from ..story import shell_blocked
+    if (why := shell_blocked(v)) is not None:                                # D139: only from an A-pose picture
+        raise HTTPException(422, why)
+    spec = next((s for s in registry.mesh_specs() if registry.offered(s, svc.app.settings.variant)), None)
+    if spec is None:
+        raise HTTPException(422, "no image → 3D model is offered in this build (Pixal3D needs DINOv3, full only)")
+    try:
+        jobs = svc.queue.submit({"kind": "image_to_mesh", "asset_id": v.anim_ref_asset_id, "model_id": spec.id}, origin=shell_origin(p.id, v.id, v.anim_ref_asset_id))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await svc.queue.flush()
+    return {"job_id": jobs[0].id, "source_asset_id": v.anim_ref_asset_id, "model_id": spec.id}
+
+
+class ShellPick(BaseModel):
+    asset_id: str | None = None                   # a mesh in the Catalogue; None clears the version's shell
+
+
+@router.put("/story/profiles/{pid}/versions/{vid}/shell", response_model=Profile)
+async def profile_shell_pick(svc: Svc, pid: str, vid: str, body: ShellPick):
+    """CS2: the author's pick — a mesh already in the Catalogue becomes the character version's shell (made from the image it was made from,
+    when the Catalogue knows it); None clears it. A mesh D109 stood upright is turned back first, as a copy (lineage `shell` ← the mesh;
+    the Catalogue's own stays as it is): a shell is front-on as Pixal3D made it (E36)."""
+    ws, cat, _ = svc.require_project()
+    source, shell_id = None, body.asset_id
+    if body.asset_id:
+        rec = await asyncio.to_thread(cat.get, body.asset_id)
+        if rec is None or rec.trashed_at is not None or rec.kind != "mesh":
+            raise HTTPException(422, "the shell must be a 3D mesh in the Catalogue")
+        source = rec.parents[0] if rec.parents else None
+        turned = (rec.params or {}).get("upright_deg") or []
+        if any(abs(float(a)) > 0.05 for a in turned):
+            shell_id = (await asyncio.to_thread(_unturned_copy, ws, cat, rec, [float(a) for a in turned])).id
+    try:
+        p = await asyncio.to_thread(StoryStore(ws).set_shell, pid, vid, shell_id, source)
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0]))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    _changed(svc, p)
+    return p.model_dump()
+
+
+def _unturned_copy(ws, cat, rec, angles: list[float]):
+    """A copy of a mesh with D109's turn taken back (tools/upright.undo_upright), in the Catalogue beside it."""
+    import shutil
+    import tempfile
+    from ..tools.upright import undo_upright
+    tmp = Path(tempfile.mkdtemp(prefix="loom2-shell-")) / "shell.glb"
+    shutil.copyfile(ws.path / rec.path, tmp)
+    undo_upright(tmp, angles)
+    copy = cat.ingest_file(tmp, kind="mesh", move=True, suite="story", model_id=rec.model_id, prompt_text=None,
+                           params={**(rec.params or {}), "upright_deg": None, "unturned_from": rec.id}, variant=rec.variant,
+                           parents=[rec.id], lineage_kind="shell")
+    view = ws.thumb_path(rec.id, max(cat.thumb_sizes))                         # the mesh's own view (a turn about the view axis aside)
+    if view.is_file():
+        copy = cat.make_thumbs(copy, view)
+    shutil.rmtree(tmp.parent, ignore_errors=True)
+    return copy
 
 
 class PropModelQueued(BaseModel):

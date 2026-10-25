@@ -1,6 +1,6 @@
 // proto01_UIcast CS1 (S4): the turn test starts in the reference's own stance — its arms' angles read from SDPose's points.
 import { describe, expect, it } from 'vitest'
-import { stanceOf } from './turnTest'
+import { stanceOf } from './proxy'
 
 const person = (armOut: number, foreOut = armOut) => {                    // a figure facing the picture: its right side on the picture's left
   const r = (deg: number) => (deg * Math.PI) / 180

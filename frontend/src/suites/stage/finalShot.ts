@@ -10,7 +10,7 @@ import type { BatchPlan, Composition, Final, RenderSettings, StageDoc, StageObje
 import { useComposition } from '../animate/compositionStore'
 import { askConfirm, useSession } from '../../store/session'
 import { forLabel, useMakeFor } from '../../store/origin'
-import { sampleDoc } from './anim'
+import { bodyHash, keyframesOf, sampleDoc, withKey, type SkeletonKey } from './anim'
 import { st, type SequenceRenderer } from './stageStore'
 
 export type Rate = 16 | 24
@@ -123,24 +123,84 @@ export async function makeFinal(opts: MakeOptions): Promise<Final> {
   const total = todo.length * plan.times.length
   for (const { l, p } of todo) {
     const keep = p.keep === 'all' ? actors : p.keep === 'self' ? [l.object_id!] : []
-    const frames = sampled.map((f) => ({ cam: f.cam, doc: only(f.doc, keep) }))
-    const out = await render(frames, w, h, p.kind, sampleDoc(doc, st().frame), (n) => opts.onProgress?.(done + n, total, `${l.name} · ${p.name}`))
-    const shas: string[] = []
-    for (const blob of out.blobs) {
-      const sha = await sha256Hex(await blob.arrayBuffer())
-      if (!uploaded.has(sha)) { await api.putBlob(sha, blob); uploaded.add(sha) }
-      shas.push(sha)
-    }
+    const out = await renderPass(render, sampled, keep, w, h, p.kind, doc, uploaded, (n) => opts.onProgress?.(done + n, total, `${l.name} · ${p.name}`))
     done += plan.times.length
     const entry = layers[l.id] ??= { passes: {} }
-    entry.passes[p.name] = shas
-    if (l.kind === 'figure' && p.kind === 'pose') entry.keypoints = out.keypoints.map((perFigure) => perFigure[0] ?? [])   // the figure alone: its own keypoints
+    entry.passes[p.name] = out.shas
+    if (l.kind === 'figure' && p.kind === 'pose') entry.keypoints = out.keypoints
   }
   return unwrap(http.POST('/finals', { body: {
     name: opts.name, stage_id: doc.id, camera_id: cam.id, stage_revision: doc.revision, range: { start: doc.range.start, end: doc.range.end }, rate: opts.rate,
     size: { w, h }, frames: plan.times.length, shot_id: opts.shotId ?? null, shot_version: opts.shotId ? opts.shotVersion ?? null : null,
     layers: plan.layers.map((l) => ({ id: l.id, kind: l.kind, name: l.name, object_id: l.object_id, profile_id: l.profile_id, version: l.version, method: l.kind === 'plate' ? plate : null,
-      passes: layers[l.id].passes, keypoints: (layers[l.id].keypoints ?? null) as never })) } }))
+      passes: layers[l.id].passes, keypoints: (layers[l.id].keypoints ?? null) as never, ...(l.kind === 'figure' ? bodyStamp(doc, l.object_id!, plan.times) : {}) })) } }))
+}
+
+/** One pass of a layer over the final's frames — rendered with only `keep`'s actors, each frame uploaded once (by its hash). */
+async function renderPass(render: SequenceRenderer, sampled: { cam: NonNullable<StageDoc['cameras'][number]>; doc: StageDoc }[], keep: string[], w: number, h: number,
+                          kind: 'depth' | 'clay' | 'pose' | 'beauty', doc: StageDoc, uploaded: Set<string>, onProgress?: (n: number) => void): Promise<{ shas: string[]; keypoints: unknown[] }> {
+  const frames = sampled.map((f) => ({ cam: f.cam, doc: only(f.doc, keep) }))
+  const out = await render(frames, w, h, kind, sampleDoc(doc, st().frame), onProgress)
+  const shas: string[] = []
+  for (const blob of out.blobs) {
+    const sha = await sha256Hex(await blob.arrayBuffer())
+    if (!uploaded.has(sha)) { await api.putBlob(sha, blob); uploaded.add(sha) }
+    shas.push(sha)
+  }
+  return { shas, keypoints: out.keypoints.map((perFigure) => perFigure[0] ?? []) }        // a figure alone: its own keypoints
+}
+
+// ---- CS3 (proto01_UIcast 06 §2.10, D136 U19): the skeleton changed under a rendered character ------------------------------------------
+/** What a figure layer stamps: the figure's own body (Cast's) and, per frame of the final, the body its guide is drawn with (skeleton keys
+ *  sampled) as a hash. */
+export function bodyStamp(doc: StageDoc, objectId: string, times: number[]): { body: Record<string, unknown> | null; body_hashes: string[] } {
+  const own = doc.objects.find((o) => o.id === objectId)?.body ?? null
+  return { body: own as Record<string, unknown> | null, body_hashes: times.map((t) => bodyHash(sampleDoc(doc, t).objects.find((o) => o.id === objectId)?.body ?? null)) }
+}
+
+/** Whether a final's character layer was drawn with another skeleton than the stage's now: the first frame (its index and Stage time) whose
+ *  body differs, and the batch it falls in (finals.py plan_batches: 77 frames, then 72 more each). Null when nothing changed or the layer
+ *  stamped nothing (a final made before CS3). */
+export function skeletonChange(f: Final, doc: StageDoc, lid: string): { index: number; frame: number; batch: number } | null {
+  const l = f.layers.find((x) => x.id === lid)
+  if (!l || l.kind !== 'figure' || !l.object_id || l.body_hashes.length !== f.frames || doc.id !== f.stage_id) return null
+  const times = framesAt(f.range.start, f.range.end, f.rate as Rate)
+  const now = bodyStamp(doc, l.object_id, times).body_hashes
+  const index = now.findIndex((h, i) => h !== l.body_hashes[i])
+  return index < 0 ? null : { index, frame: times[index], batch: batchOf(index) }
+}
+/** The batch a frame index of a performance falls in (finals.py plan_batches). */
+export const batchOf = (index: number): number => (index < 77 ? 0 : 1 + Math.floor((index - 77) / 72))
+
+/** CS3: a character layer's passes drawn again from the stage as it is now (its pose and depth, the figure alone with the set) and sent with
+ *  the body they were drawn with; the server encodes a performed layer's guide again. */
+async function redrawLayer(f: Final, lid: string): Promise<Final> {
+  if (!st().sequenceRenderer) (await import('./headless')).ensureHeadless()
+  const render = st().sequenceRenderer as SequenceRenderer | null
+  await st().flush()
+  const doc = st().current, l = f.layers.find((x) => x.id === lid)
+  const cam = doc?.cameras.find((c) => c.id === f.camera_id)
+  if (!render || !doc || doc.id !== f.stage_id || !l?.object_id || !cam) throw new Error("open the final's stage to draw its guide again")
+  const times = framesAt(f.range.start, f.range.end, f.rate as Rate)
+  const sampled = times.map((t) => { const d = sampleDoc(doc, t); return { cam: d.cameras.find((c) => c.id === cam.id) ?? cam, doc: d } })
+  const uploaded = new Set<string>(), passes: Record<string, string[]> = {}
+  let keypoints: unknown[] = []
+  for (const p of passesOf({ id: lid, kind: 'figure', name: l.name, object_id: l.object_id, profile_id: l.profile_id, version: l.version })) {
+    const out = await renderPass(render, sampled, [l.object_id], f.size.w, f.size.h, p.kind, doc, uploaded)
+    passes[p.name] = out.shas
+    if (p.kind === 'pose') keypoints = out.keypoints
+  }
+  return unwrap(http.PUT('/finals/{fid}/layers/{lid}/passes', { params: { path: { fid: f.id, lid } }, body: { passes, keypoints: keypoints as never, ...bodyStamp(doc, l.object_id, times) } }))
+}
+
+/** *Apply from a frame…*: the skeleton keys that keep every frame before `frame` as the layer was drawn — the figure's keys that took
+ *  Cast's body before it now hold the old one (the layer's), and a key at the range's start holds it where none did — and from `frame` on
+ *  Cast's skeleton. */
+export function keysFrom(doc: StageDoc, objectId: string, old: StageObject['body'], frame: number): SkeletonKey[] {
+  const ks = keyframesOf(doc).skeleton?.[objectId] ?? []
+  let out: SkeletonKey[] = ks.map((x) => (x.frame < frame && x.body === null ? { ...x, body: old } : x))
+  if (!out.some((x) => x.frame <= doc.range.start)) out = withKey(out, { frame: doc.range.start, transition: 0, body: old })
+  return withKey(out, { frame, transition: 0, body: null })                    // replaces a key already at the frame
 }
 
 // ---- PS5b: the plate --------------------------------------------------------------------------------------------------------------
@@ -244,6 +304,12 @@ interface FinalsState {
   fill: (id: string) => Promise<void>
   /** PS5c: perform a character layer (Wan Animate in chained batches); a seed given is a re-take. */
   perform: (id: string, layer: string, seed?: number, opts?: { fromBatch?: number; stage?: boolean }) => Promise<void>
+  /** CS3 (proto01_UIcast 06 §2.10): *the skeleton changed* — the layer's guide drawn again with the stage's skeleton now, then the whole
+   *  layer performed again (its seed kept). */
+  skeletonRerender: (id: string, layer: string) => Promise<void>
+  /** CS3: *Apply from a frame…* — skeleton keys keep every frame before `frame` as the layer was drawn and take Cast's skeleton from it; the
+   *  guide drawn again; the layer performed again from the batch the first changed frame falls in (the batches before it kept). */
+  skeletonFrom: (id: string, layer: string, frame: number) => Promise<void>
   /** CA4: each final's batch plan (its states and costs), loaded with the finals. */
   plans: Record<string, BatchPlan>
   loadPlan: (id: string) => Promise<void>
@@ -337,6 +403,32 @@ export const useFinals = create<FinalsState>((set, get) => ({
         ? 'then generated along the camera path from it (LTX-2.3 on the bare set\'s depth)' : 'Stage projects it along the camera path when it lands'}`, 'info')
       await get().load()
     } catch (e) { useSession.getState().toast(`Make the plate: ${(e as ApiError).detail ?? (e as Error).message ?? e}`, 'error') }
+  },
+  skeletonRerender: async (id, layer) => {
+    const f = get().finals.find((x) => x.id === id), l = f?.layers.find((x) => x.id === layer)
+    if (!f || !l) return
+    try {
+      const f2 = await redrawLayer(f, layer)
+      set({ finals: replace(get().finals, f2) })
+      if (l.batches.length) await get().perform(id, layer, l.seed)
+      else useSession.getState().toast(`${l.name}: the guide drawn again with the new skeleton — Perform when ready`, 'info')
+    } catch (e) { useSession.getState().toast(`${l.name}: ${(e as ApiError).detail ?? (e as Error).message ?? e}`, 'error') }
+  },
+  skeletonFrom: async (id, layer, frame) => {
+    const f = get().finals.find((x) => x.id === id), l = f?.layers.find((x) => x.id === layer)
+    const doc = st().current
+    if (!f || !l?.object_id || !doc) return
+    try {
+      st().setSkeletonKeys(l.object_id, keysFrom(doc, l.object_id, (l.body ?? null) as StageObject['body'], frame), 'apply the skeleton from a frame')
+      const f2 = await redrawLayer(f, layer)
+      set({ finals: replace(get().finals, f2) })
+      const after = f2.layers.find((x) => x.id === layer)!.body_hashes
+      const first = after.findIndex((h, i) => h !== l.body_hashes[i])
+      if (first < 0) { useSession.getState().toast(`${l.name}: the frames are as they were — nothing to perform again`, 'info'); return }
+      const k = batchOf(first)
+      if (!l.batches.length) useSession.getState().toast(`${l.name}: the guide drawn again from frame ${frame} — Perform when ready`, 'info')
+      else await get().perform(id, layer, l.seed, k ? { fromBatch: k } : undefined)
+    } catch (e) { useSession.getState().toast(`${l.name}: ${(e as ApiError).detail ?? (e as Error).message ?? e}`, 'error') }
   },
   perform: async (id, layer, seed, opts) => {
     const f = get().finals.find((x) => x.id === id)

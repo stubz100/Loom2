@@ -15,7 +15,7 @@ import { HAND_MARKER, heldWorld, onHand, ownTraverse, transformOf } from './held
 import { CHAINS, eulerDeg, figureChain, solveTwoBone, type Chain } from './ik'
 import { makeDetailed, type Detailed, type HandPreset } from './detailed'
 import { measure } from './motion/path'
-import { bindProxy, type Proxy } from './proxy'
+import { bindProxy, FACE_LANDMARKS, FEET_LANDMARKS, shellStance, type Landmark, type Proxy } from './proxy'
 import { depthMaterial, depthRange, drawPose, maskColour, projectMarkers, toBlob, type Keypoint, type PassName, type WholeBody } from './passes'
 import type { RenderedPasses, Tool, Transform, View } from './stageStore'
 
@@ -35,7 +35,7 @@ export interface EngineHooks {
 }
 export interface Pick { id: string | null; joint?: Joint; ik?: Chain; camera?: string }
 
-interface Entry { holder: THREE.Group; body: THREE.Object3D; doc: StageObject; figure?: Mannequin; pickers?: THREE.Object3D[]; detailed?: Detailed; proxy?: Proxy }
+interface Entry { holder: THREE.Group; body: THREE.Object3D; doc: StageObject; figure?: Mannequin; pickers?: THREE.Object3D[]; detailed?: Detailed; proxy?: Proxy; unmark?: () => void }
 
 const deg = THREE.MathUtils.radToDeg, rad = THREE.MathUtils.degToRad
 const BEAUTY_ENV = 0.8                            // D109: the beauty pass's room-environment intensity (E28c: the models read near the plate's brightness)
@@ -387,7 +387,8 @@ export class StageEngine {
       const hit = this.ray.intersectObjects(sel.pickers.filter((p) => p.visible), false)[0]
       if (hit) return hit.object.userData.joint ? { id: this.selectedId, joint: hit.object.userData.joint as Joint } : { id: this.selectedId, ik: hit.object.userData.ik as Chain }
     }
-    const hits = this.ray.intersectObjects([...[...this.entries.values()].map((e) => e.body), ...this.camHelpers.values()], true)   // D119: the cameras' bodies too
+    const shells = [...this.entries.values()].flatMap((e) => (e.doc.visible ? e.proxy?.meshes ?? [] : []))                // CS3: a figure is its shell
+    const hits = this.ray.intersectObjects([...[...this.entries.values()].map((e) => e.body), ...shells, ...this.camHelpers.values()], true)   // D119: the cameras' bodies too
     for (const h of hits) {
       let hidden = false
       for (let p: THREE.Object3D | null = h.object; p; p = p.parent) if (!p.visible) { hidden = true; break }
@@ -674,19 +675,35 @@ export class StageEngine {
     })
     return { surfaces, catchers, backdrop }
   }
-  /** E23d (D105): the figure's shadow proxy — a mesh asset bound to its joints, seen by the light only; the dummy then casts nothing. */
+  /** E23d (D105): the figure's shadow proxy — a mesh asset bound to its joints; the dummy then casts nothing. CS3 (proto01_UIcast 06 §2.5,
+   *  D136 U6/U8): it is the character's shell, so it is the figure — drawn in clay in the viewport and in every pass (clay, depth, the
+   *  masks), bound in its reference's stance by bone heat, its mittens folded into the wrists for the hand rig's hands, and the pose pass's
+   *  face and feet points landmarks on it (dressShell). */
   private attachProxy(e: Entry, assetId: string): void {
     const id = e.doc.id
     this.track(new GLTFLoader().loadAsync(api.assetUrl(assetId)).then((gltf) => {
       if (this.disposed || this.entries.get(id) !== e || !e.figure) return
       e.holder.updateMatrixWorld(true)
-      const px = bindProxy(gltf.scene, e.figure.joints, e.figure.limbs, e.holder, e.doc.pose ?? null)
-      for (const m of px.meshes) this.scene.add(m)
+      const px = bindProxy(gltf.scene, e.figure.joints, e.figure.limbs, e.holder, e.doc.pose ?? null, { stance: shellStance(assetId), visible: true, hands: true })   // CS2: in its reference's stance
+      for (const m of px.meshes) { m.material = this.clayMat; m.userData.stageId = id; m.visible = e.doc.visible; this.scene.add(m) }
       e.proxy = px
       ownTraverse(e.holder, id, (c) => { const m = c as THREE.Mesh; if (m.isMesh) m.castShadow = false })
+      this.dressShell(e)
       this.followAll()
       this.dirty = true
     }).catch((err) => this.hooks.onDetailError?.(id, `shadow proxy: ${err instanceof Error ? err.message : String(err)}`)))
+  }
+  /** CS3: a figure drawn as its shell — the Detailed mannequin cut to its hands (they cast their shadows), the face's and (once the
+   *  mannequin is there) the feet's pose-pass points moved onto the shell's surface. Run when either of the two arrives. */
+  private dressShell(e: Entry): void {
+    if (!e.proxy || !e.figure) return
+    e.unmark?.()
+    const fig = e.figure
+    const list: Landmark[] = FACE_LANDMARKS.map(([k, ray]) => ({ m: fig.markers[k], ray }))
+    e.detailed?.wholebody?.feet.forEach((m, i) => list.push({ m, ray: FEET_LANDMARKS[i] }))
+    const d = e.detailed
+    e.unmark = e.proxy.landmark(list, e.doc.pose ?? null, d ? () => d.follow(fig.joints, e.doc.pose?.extra) : undefined)
+    if (d) { d.handsOnly(true); d.object.traverse((c) => { const m = c as THREE.Mesh; if (m.isMesh) m.castShadow = true }) }
   }
   /** CA1: the Detailed level — the starter set's mannequin, loaded once and cloned, follows the figure's joints; the Simple shapes hide
    *  (the joints, pickers and markers stay: they drive the pose and carry the pose pass). Until it loads, or without it, the figure is Simple. */
@@ -696,12 +713,13 @@ export class StageEngine {
       if (this.disposed || this.entries.get(id) !== e || !e.figure) return
       e.holder.updateMatrixWorld(true)
       const b = e.doc.body
-      const d = makeDetailed(root, rig, e.figure.joints.root.parent!, e.figure.joints, e.figure.limbs, { hands: b?.hands, feet: b?.feet, head: b?.head, handRest: b?.hand_rest ?? null })   // CS1 (S1, S2)
+      const d = makeDetailed(root, rig, e.figure.joints.root.parent!, e.figure.joints, e.figure.limbs, { hands: b?.hands, feet: b?.feet, head: b?.head, handRest: b?.hand_rest ?? null, feetOut: b?.feet_out ?? 0 })   // CS1 (S1, S2); CS2
       d.object.traverse((c) => { c.userData.stageId = id; const m = c as THREE.Mesh; if (m.isMesh) { m.castShadow = !e.proxy; m.receiveShadow = true } })
       const inside = (o: THREE.Object3D) => { for (let p: THREE.Object3D | null = o; p; p = p.parent) if (p === d.object) return true; return false }
       e.figure.root.traverse((c) => { const mesh = c as THREE.Mesh; if (mesh.isMesh && !mesh.userData.joint && !mesh.userData.ik && !inside(mesh)) mesh.visible = false })
       e.detailed = d
       d.follow(e.figure.joints, e.doc.pose?.extra)
+      if (e.proxy) this.dressShell(e)                                                 // CS3: the shell arrived first
       this.dirty = true
     }).catch((err) => this.hooks.onDetailError?.(id, err instanceof Error ? err.message : String(err))))
   }
@@ -794,6 +812,7 @@ export class StageEngine {
         const hex = maskColour(i++); legend[hex] = e.doc.id
         const m = new THREE.MeshBasicMaterial({ color: hex })
         ownTraverse(e.holder, e.doc.id, (o) => { const mesh = o as THREE.Mesh; if (mesh.isMesh && !mesh.userData.joint && !mesh.userData.ik) { swapped.push([mesh, mesh.material]); mesh.material = m } })   // CA1: the holder, so a Detailed mannequin is in its mask (its children keep their own colour)
+        for (const mesh of e.proxy?.meshes ?? []) { swapped.push([mesh, mesh.material]); mesh.material = m }                      // CS3: the shell is the figure
       }
       blobs.mask = await this.shotWith(r, camera, null, 0x000000)
       for (const [mesh, mat] of swapped) mesh.material = mat
@@ -840,6 +859,7 @@ export class StageEngine {
       for (let i = 0; i < frames.length; i++) {
         const { cam, doc } = frames[i]
         this.sync(doc)
+        if (this.loading.size) await this.settled()                                 // CS3: a skeleton key rebuilt a figure (its mannequin and shell load again)
         const camera = this.shotCamera(cam, w / h)
         restore(); restore = this.hideHelpers(camera)
         if (kind !== 'beauty') { const helpers = restore, back = this.hideBackdrops(); restore = () => { back(); helpers() } }   // SC3b
@@ -967,7 +987,16 @@ export class StageEngine {
   /** E23e: the shadow proxies' silhouette, white on black (everything else hidden) — the character mask a Replace layer fills. */
   private proxyMask(r: THREE.WebGLRenderer, camera: THREE.Camera): Promise<Blob> {
     const hidden: THREE.Object3D[] = []
-    for (const e of this.entries.values()) if (e.holder.visible) { e.holder.visible = false; hidden.push(e.holder) }
+    for (const e of this.entries.values()) {
+      if (!e.holder.visible) continue
+      const hands = e.proxy && e.detailed ? e.detailed.object : null                 // CS3: a shell figure's hands are the hand rig's
+      if (!hands) { e.holder.visible = false; hidden.push(e.holder); continue }
+      ownTraverse(e.holder, e.doc.id, (o) => {
+        let mine = false
+        for (let q: THREE.Object3D | null = o; q; q = q.parent) if (q === hands) { mine = true; break }
+        if ((o as THREE.Mesh).isMesh && o.visible && !mine) { o.visible = false; hidden.push(o) }
+      })
+    }
     const keyShadow = r.shadowMap.enabled
     r.shadowMap.enabled = false
     this.scene.overrideMaterial = this.whiteMat; this.scene.background = new THREE.Color(0x000000)
@@ -984,7 +1013,7 @@ export class StageEngine {
     this.scene.environment = env
     // E23d: the shadow proxies cast but are never seen. An override material would draw them, so the shadow map is made with them and
     // the picture without them (the map kept); `showProxies` draws them (the fit check)
-    const proxies = showProxies ? [] : [...this.entries.values()].flatMap((e) => e.proxy?.meshes ?? []).filter((m) => m.visible)
+    const proxies = showProxies ? [] : [...this.entries.values()].flatMap((e) => e.proxy?.meshes ?? []).filter((m) => m.visible && m.userData.proxy)   // CS3: a shell is seen
     if (proxies.length && r.shadowMap.enabled) {
       r.shadowMap.autoUpdate = false; r.shadowMap.needsUpdate = true
       r.render(this.scene, camera)

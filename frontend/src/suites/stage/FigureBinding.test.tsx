@@ -11,7 +11,7 @@ import { BoundTag, FigureCharacter } from './FigureBinding'
 import { bindItems } from './stageCommands'
 import { st, useStage } from './stageStore'
 
-const ver = (v: Partial<ProfileVersion>): ProfileVersion => ({ id: 'v1', label: 'v1', state: 'open', group_id: 'grp_1', candidates_group_id: null, hero_asset_id: null, body: null, anim_ref_asset_id: null, anim_ref_back_asset_id: null, anim_test_clip_id: null, model_asset_id: null, model_from: null, body_fit_from: null, body_points: null, anim_ref_note: null, appearance: '', outfit: '',
+const ver = (v: Partial<ProfileVersion>): ProfileVersion => ({ id: 'v1', label: 'v1', state: 'open', group_id: 'grp_1', candidates_group_id: null, hero_asset_id: null, body: null, anim_ref_asset_id: null, anim_ref_back_asset_id: null, anim_test_clip_id: null, shell_asset_id: null, shell_from: null, model_asset_id: null, model_from: null, body_fit_from: null, body_points: null, anim_ref_note: null, appearance: '', outfit: '',
   colours: [], marks: '', trigger: null, lora: null, derived_from: null, created_at: '', locked_at: null, ...v })
 const prof = (id: string, name: string, cls: Profile['cls'], versions: ProfileVersion[]): Profile => ({ id, name, cls, current: versions[0].id, schema_version: 2, revision: 0, voice_id: null, created_at: '', updated_at: '', versions })
 const MARA = prof('prf_m', 'Mara', 'character', [ver({ group_id: 'grp_m', hero_asset_id: 'ast_hm' }), ver({ id: 'v2', label: 'winter', group_id: 'grp_m2', hero_asset_id: 'ast_hm2' })])
@@ -66,12 +66,23 @@ describe('D93 (C8) a figure bound to a character', () => {
     expect(obj('fig_r').profile_id).toBeNull()
     expect(useStage.getState().undo.length).toBe(5)                                                             // every binding is an undoable edit
   })
+  it("CS2: a figure bound to a character with a shell casts the shell's shadow; bound elsewhere or unbound, it does not", () => {
+    useStory.setState({ profiles: [{ ...MARA, versions: [ver({ group_id: 'grp_m', shell_asset_id: 'ast_shell' }), MARA.versions[1]] }, INES, HARBOUR] })
+    st().bindFigure('fig_l', 'prf_m')
+    expect(obj('fig_l').shadow_proxy).toBe('ast_shell')
+    st().bindFigure('fig_l', 'prf_m', 'v2')
+    expect(obj('fig_l').shadow_proxy).toBe('ast_shell')                                                         // v2 has no shell: the figure keeps the one it has
+    st().bindFigure('fig_l', 'prf_i')
+    expect(obj('fig_l').shadow_proxy).toBeNull()                                                                // Ines' figure: not Mara's shadow
+    st().bindFigure('fig_r', 'prf_m'); st().bindFigure('fig_r', null)
+    expect(obj('fig_r').shadow_proxy).toBeNull()
+  })
   it('"Bind to a character ▸": the characters (the bound one checked), then unbind and open in Cast; a prop has none', () => {
     st().bindFigure('fig_l', 'prf_i')
     const [menu] = bindItems() as { label: string; items: { label?: string; checked?: boolean; cmd?: string }[] }[]
     expect(menu.label).toBe('Bind to a character')
     expect(menu.items.filter((x) => x.label).map((x) => [x.label, !!x.checked])).toEqual([['Mara', false], ['Ines', true]])
-    expect(menu.items.filter((x) => x.cmd).map((x) => x.cmd)).toEqual(['stage.figure.unbind', 'stage.figure.openInCast'])
+    expect(menu.items.filter((x) => x.cmd).map((x) => x.cmd)).toEqual(['stage.figure.unbind', 'stage.figure.openInCast', 'stage.figure.skeleton', 'stage.skeleton.hold', 'stage.skeleton.cast'])   // CS2: the bench; CS3: skeleton keys
     useStage.setState({ current: { ...DOC, objects: [{ ...fig('crate', 0), kind: 'prop' }] }, selected: 'crate' })
     expect(bindItems()).toEqual([])
   })

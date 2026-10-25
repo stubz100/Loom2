@@ -19,6 +19,7 @@
 .tl-bar[draggable], .tl-bar:has(.h) { cursor: grab; }
 .tl-bar.dragging { opacity: .75; cursor: grabbing; }
 .tl-bar.motion { background: color-mix(in srgb, var(--info) 25%, var(--bg3)); border-color: var(--info); }
+.tl-bar.transition { background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 30%, var(--bg3))); border-color: var(--accent); border-style: dashed; }   /* CS3: a skeleton key reached over frames */
 .tl-bar .h { position: absolute; top: 0; bottom: 0; width: 6px; cursor: ew-resize; }
 .tl-bar .h-in { left: 0; }
 .tl-bar .h-out { right: 0; }

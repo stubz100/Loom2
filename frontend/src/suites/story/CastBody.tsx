@@ -7,7 +7,8 @@ import { Help } from '../../frame/Help'
 import type { Profile, ProfileVersion } from '../../api/types'
 import { BUILD_WIDTH, DEFAULT_BODY, ELBOW_AT, KNEE_AT, bodyDims, type Body } from '../stage/body'
 import { CommandButton } from '../../frame/CommandButton'
-import { useStory } from './storyStore'
+import { shellBlocked, shellFromArmsDown, useStory } from './storyStore'
+import { runCommand } from '../../frame/commands'
 
 const PROPORTIONS: [keyof Pick<Body, 'head' | 'neck' | 'torso' | 'shoulders' | 'hips' | 'arms' | 'legs' | 'hands' | 'feet'>, string, number, number][] = [
   ['head', 'head size', 0.5, 2.5], ['neck', 'neck length', 0.5, 3.0], ['torso', 'torso length', 0.6, 1.6], ['shoulders', 'shoulder width', 0.6, 1.8],
@@ -67,7 +68,7 @@ export function CastBody({ p, v }: { p: Profile; v: ProfileVersion }) {
           ))}
           <div className="body-row">
             <span>hands at rest <Help text={"How the hands are held when a pose does not turn the fingers: every figure of this character starts from it (a hand preset keyed in Clay still turns them)."} /></span>
-            <select aria-label="hands at rest" disabled={!open} value={b.hand_rest?.preset ?? 'relaxed'} onChange={(e) => set({ hand_rest: { curl: b.hand_rest?.curl ?? 1, preset: e.target.value as Body['hand_rest']['preset'] } })}>
+            <select aria-label="hands at rest" disabled={!open} value={b.hand_rest?.preset ?? 'relaxed'} onChange={(e) => set({ hand_rest: { ...DEFAULT_BODY.hand_rest, ...b.hand_rest, preset: e.target.value as Body['hand_rest']['preset'] } })}>
               {HAND_RESTS.map((h) => <option key={h} value={h}>{h}</option>)}
             </select>
           </div>
@@ -94,6 +95,8 @@ export function CastBody({ p, v }: { p: Profile; v: ProfileVersion }) {
             <span />
             <span>
               {v.anim_ref_asset_id && <CommandButton id="story.cast.fitBody" text size={12} />}
+              <CommandButton id="cast.skeleton.open" text size={12} />
+              <ShellState v={v} />
               <button type="button" className="quiet" title="Proportions and build back to the default adult (the height and attachments stay)" onClick={() => set({ build: 'average', head: 1, neck: 1, torso: 1, shoulders: 1, hips: 1, arms: 1, elbow: ELBOW_AT, legs: 1, knee: KNEE_AT, hands: 1, feet: 1 })}>Reset proportions</button>
               <button type="button" className="quiet" title="No body of its own: the default 1.75 m dummy" onClick={() => setSheet({ body: null as never })}>Remove the body</button>
             </span>
@@ -137,4 +140,14 @@ function Silhouette({ b }: { b: Body }) {
       <text x={60} y={H * px - 2} textAnchor="middle">{b.height_m.toFixed(2)} m · {b.build}{b.attachments.length ? ` · ${b.attachments.map((a) => a.kind).join(', ')}` : ''}</text>
     </svg>
   )
+}
+
+/** D139: the shell's state in a few words — made, made from a picture with the arms down (fused: draw the reference again), or why it
+ *  cannot be made yet (its tooltip says the whole). */
+function ShellState({ v }: { v: Profile['versions'][number] }) {
+  if (shellFromArmsDown(v)) return <button type="button" className="link ref-note" data-shell="arms-down" onClick={() => runCommand('story.cast.makeAnimRef')}
+    title="This shell was made from a reference whose arms touch the body: Pixal3D made them part of it. Draw the reference again in the A-pose, fit the body, then make the shell again (D139)">the shell's arms are fused — draw the reference in the A-pose?</button>
+  if (v.shell_asset_id) return <span className="hint" data-shell="made">shell made</span>
+  const why = shellBlocked(v)
+  return why && v.anim_ref_asset_id ? <span className="hint" data-shell="blocked" title={why}>{v.anim_ref_note === 'arms_close' ? 'the shell needs the A-pose' : 'the shell after the fit'}</span> : null
 }

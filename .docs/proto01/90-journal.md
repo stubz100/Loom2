@@ -9406,3 +9406,168 @@ patched (the Mid attenuated). A track with plugins is printed onto a hidden comp
   and build clean, e2e full 65/65 and open 65/65. Screenshots `.docs/proto01_UIcast/img/cs1-*.jpg`.
 - **For the author's own characters:** their bodies read on the adult dummy by themselves (nothing moves); *Fit the body* again gives
   them the new measures (hips, elbows, knees, feet) and the stance note; their shots' guides change only when rendered again.
+
+## 2026-10-25 11:42 — E36 → D138 and CS2 built: the shell bound by bone heat, the skeleton bench (D137 stage 2, first two parts)
+
+**E36 · the shell and the skeleton inside it** (`engine/spikes/e36_shell.py make | fix | measure | score`, `e36_browser.cjs`,
+`frontend/src/spikes/e36Shell.ts`; outputs `engine/spikes/out/e36/`, sheets `.docs/proto01_UIcast/img/e36-*.jpg`).
+
+- **The subjects.** A1's Mara and Ines (their E23d shells, imported) and six made through the app on a copy of A1 after CS1's rig, one
+  job at a time: a fisherman in a long oilskin coat, a dancer in a long dress, a traveller with a wide hat and a cape, Pip (a child,
+  1.2 m), Bruno (heavy build), Skink (a lizard of 1.4 m with a tail). Each: the animation reference (Klein, 18–52 s), the fit (SDPose,
+  3–5 s), the shell (Pixal3D, 223–265 s). **Every new reference came out arms-out with no stance note** — CS1's S8 prompt works.
+- **First run: two bugs.** The new shells lay tilted. D109's stand-upright turns every image → mesh result to its smallest upright box,
+  and a figure holding its arms out has a smaller box when tilted: −44°, −37°, −15°, 25°, 41° about z, and the lizard −18° / −35° / −18°.
+  A character's shell is made front-on from an upright reference, so **the shell job no longer turns it**. A mesh picked as a shell (it was
+  turned when made) becomes an un-turned copy (`tools/upright.undo_upright`, lineage `shell` ← the mesh, the Catalogue's own untouched).
+  The spike's `fix` step takes the turn back on the six. Second, `proxy.ts` took the wider horizontal axis for left-right (E23d's guess);
+  the lizard's snout and tail are deeper than it is wide, so it was bound turned 90°. **A shell's +X is the character's left, always.**
+  The IoU's first figure mask (a colour key) failed too: Mara's grey coat on the grey wall. It now uses BiRefNet cut-outs, as E14 did.
+- **The results** (heat = Pinocchio's bone heat, `(L + H) w = H p` on the surface graph, the four largest weights kept):
+
+  | | IoU | joints inside | off the shell's middle | front points (median · worst) | > 2× walk / sit / crouch, heat | proximity | bind, heat |
+  | --- | --- | --- | --- | --- | --- | --- | --- |
+  | Mara | 0.946 | 12/12 | 1.1 cm | 0.4 % · r ankle 1.8 % | 1.4 / 2.7 / 4.3 % | 9.4 / 10.9 / 14.8 % | 708 ms |
+  | Ines | 0.944 | 11/12 | 2.8 cm | 0.4 % · r ear 1.1 % | 0.8 / 1.5 / 2.0 % | 6.9 / 9.3 / 11.5 % | 626 ms |
+  | Fisherman | 0.873 | 12/12 | 4.0 cm | 0.3 % · r ankle 1.0 % | 0.2 / 1.3 / 1.9 % | 4.0 / 5.6 / 6.3 % | 765 ms |
+  | Dancer | 0.802 | 8/12 | 1.9 cm | 0.4 % · r ankle 3.5 % | 3.2 / 0.8 / 1.3 % | 12.2 / 6.0 / 6.8 % | 861 ms |
+  | Wanderer | 0.851 | 12/12 | 0.9 cm | 0.3 % · r ankle 2.1 % | 0.2 / 1.0 / 1.9 % | 5.8 / 7.8 / 8.7 % | 833 ms |
+  | Pip | 0.921 | 11/12 | 2.8 cm | 1.2 % · l ear 2.3 % | 0.3 / 1.3 / 1.9 % | 3.3 / 4.5 / 4.9 % | 571 ms |
+  | Bruno | 0.880 | 12/12 | 4.2 cm | 0.3 % · r ankle 4.2 % | 0.5 / 1.6 / 2.1 % | 4.7 / 5.8 / 6.4 % | 1164 ms |
+  | Skink | 0.798 | 7/12 | 4.1 cm | 1.0 % · r knee 11.4 % | 0.4 / 0.8 / 1.1 % | 4.5 / 5.0 / 5.7 % | 1175 ms |
+
+  On the sheets proximity tears Mara's coat in the walk and the lizard's vest in the sit; bone heat keeps both whole. The joints outside
+  are thin limbs a centimetre or two off: the dancer's shoulders and elbows (SDPose puts a shoulder on its top, not at the joint), the
+  lizard's arms and backward knees.
+- **The shell placed by its picture, tried and not kept.** The mesh graph's own BiRefNet matte gives the figure's box in its picture (the
+  hair or hat top, the soles). Mapped by SDPose's nose and ankles, the shells sank 11 cm into the floor: SDPose's ankles sit ≈ 10 cm over
+  the soles (the ankle bone and the shoe), the dummy's marker 4 cm. With the soles on the floor and the nose on the nose, it held 76 of 96
+  joints, against the head-top scaling's 86 (and 83 for the ankle map). The head-top scaling stays. The box is kept: the mesh graph saves
+  the matte, and the finisher writes the box into the GLB (`extras.loom2.figure_box`) and the asset's params. CS3's landmarks need the
+  picture ↔ shell map; the joints' depth lift waits for them too.
+- **E37 step 5, *From the picture*** on the eight: relaxed for Mara (×1.0), Ines (×1.4), the dancer and Pip (×0.6); open for the fisherman,
+  the traveller, Bruno and Skink (×0.6); ≈ 17 ms each. The four I looked at against their pictures agree. The author's comparison is
+  owed. Step 4 (five bad fits corrected by dragging) had nothing to correct: E36's fits sit within 0.3–1.2 % of SDPose's points. The one
+  real miss is the lizard's knee, which bends backwards. The drag itself is CS2's e2e scenario.
+- The fake engine named the hands the other way round from SDPose (real SDPose's `hand_left` sits at the r_wrist, the picture's left).
+  The fake now matches.
+- → **D138**.
+
+**CS2 · the skeleton bench** (proto01_UIcast 03 §3.2, 06 §2.4; screenshots `img/cs2-*.jpg` on E36's project).
+
+- **Cast › a character › *Skeleton…*** (the body section's button, the profile's right-click; from Clay *Fine-tune the skeleton in Cast…*
+  on a bound figure) replaces the sheet with three panes:
+  - **The reference**, cropped to the figure: SDPose's points as white rings, with the figure's markers as blue dots inside them. A red
+    tick marks a pair more than 3 % of the height apart. Dragging a white ring corrects SDPose (*Fit again* refits). Dragging a blue dot
+    sets the part it ends and locks it.
+  - **The figure**: the Detailed mannequin, or the shell in x-ray with the skeleton inside, front or side, orbited, framed whole in a
+    narrow pane. A joint the shell's volume does not hold turns red (*4 joints outside the shell*). A joint clicked picks its row.
+  - **The guide**: the pose pass on the A-pose, walk, sit, point, wave or the turn, with the reference under the A-pose frame (*onion
+    skin*).
+- The **foot**: *Fit again ▶* (`POST …/body/refit`: no job, the fit on the points as they are, the locks kept, SDPose's own read kept in
+  `body_points.sdpose`), *Back to SDPose's points*, *Mirror left to right*, *Test in motion ▶*, *Make the shell ▶* (`POST …/shell`: the
+  image → 3D job on the reference, `character_shell`, set on the version when it lands; `PUT …/shell` picks one). The Inspector shows
+  **the parts**: each a length in centimetres at the figure's height, an adult's band (amber outside), a lock; the carriage (head
+  forward, shoulder drop, feet turned out — new Body fields); the hands at rest with *From the picture*, spread and thumb; *copy from*
+  another character.
+- **The shell in the shots.** A figure bound to a character takes the version's shell as its shadow proxy, and drops it when it is bound
+  to someone else or unbound. Every shell binds in its reference's own stance (`proxy.ts` `setShellPoints`, `stanceOf` moved there) and by
+  bone heat. Its clay, depth and mask passes are CS3's.
+- Fixed on the way: the coverage grid's header row had a stray space (React's whitespace warning in a `<tr>`).
+- Tests: `test_skeleton_bench_cs2.py` 8 (rows, points ↔ person, Fit again with a lock and SDPose's read kept, the shell routes incl. the
+  un-turned copy, the shell landing never stood upright, the A-pose shell's turn undone, the figure box in the GLB), `test_mesh_d84.py`
+  (the matte saved), `routes_d37` +3; `skeleton.test.ts` 5, `proxy.test.ts` 2, `FigureBinding.test.tsx` +1 (the shell as the shadow);
+  a new e2e scenario (Skeleton… → both hips dragged → Fit again: a longer torso, SDPose's read kept → the neck locked → Back to SDPose's
+  points + Fit again: the torso back down, the neck held → the shell made under full, greyed under open → the guide walks → back to the
+  sheet). A lock rescales the other parts (the factors only fix proportions; the fit itself does not depend on where it starts).
+  Offline 598 passed, agents_check, model_literals_check and settings audit clean, Vitest 503 + 3 skipped, typecheck, lint
+  (0 errors, 79 warnings) and build clean, e2e full 66/66 and open 66/66.
+- Next: CS3 — the shell's clay, depth and mask passes; the pose pass's landmarks on the shell; skeleton keys on the timeline and *the
+  skeleton changed* with its two choices.
+
+## 2026-10-25 12:50 — CS3 built: the shell in the shots, the skeleton over time; D139: the shell only from an A-pose (D137 stage 2 done)
+
+**CS3 · the shell in the shots** (proto01_UIcast 06 §2.5, D136 U6/U8):
+
+- **The figure is its shell.** A bound figure whose version has a shell is drawn as it, in clay, in the viewport and in every pass: clay,
+  depth, and the masks (it is in the figure's colour). The shell is bound by bone heat in the reference's stance (D138).
+- **The hands.** Pixal3D's hands are mittens, so the shell's hands fold into the wrists (`proxy.collapseHands`: past the wrist, along the
+  forearm, within 25 cm; a coat's side beside a hanging hand stays). The Detailed mannequin is cut to its hands (`Detailed.handsOnly`:
+  the triangles weighted to the hand bones, a cut of the geometry, so every pass draws them too). The character matte (proxymask) keeps
+  them.
+- **The landmarks.** The pose pass's face and feet points sit on the shell's surface (`Proxy.landmark`). In the bind pose each marker
+  moves to the shell's outermost surface along its ray within 25 cm: the nose and eyes from the front, the ears from the sides, the toes
+  forward, the heels back. It then rides its joint. Every guide is drawn on the shell: the shots', the bench's guide pane, Cast's turn
+  test.
+- The shell can be picked in the viewport. A sequence render waits for a figure that a skeleton key rebuilds mid-sequence.
+
+**CS3 · the skeleton over time** (06 §2.10, D136 U19):
+
+- **Skeleton keys** (`keyframes.skeleton[obj]`, anim.ts `SkeletonKey`). From a key's frame the figure's body is the key's, or, with none,
+  its own (Cast's). It is reached over the key's transition from the body before it, the factors blended. Before the first key, the
+  figure's own body.
+- **On the timeline** they are a *‹figure› · skeleton* row: diamonds, with the transition as a dashed bar. A key's right-click sets the
+  transition (a cut, 12, 24 or 48 frames), switches it between held and Cast's, moves it to the playhead or removes it.
+- **The figure's Inspector and right-click** have *Hold the skeleton from here* and *Cast's skeleton from here*.
+- **The stamp.** A final's character layer stamps its body and one hash per frame (`FinalLayer.body`, `.body_hashes`).
+- ***The skeleton changed.*** When Cast's skeleton changes under the layer, it shows *the skeleton changed ▾*. Nothing is done by
+  itself. The two choices:
+  - *Re-render with the new skeleton ▶*: the guide drawn again (`PUT /finals/{fid}/layers/{lid}/passes`; a performed layer's guide
+    video is encoded again), then the whole layer performed with its seed;
+  - *Apply from the playhead…*: skeleton keys hold every frame before it as drawn, Cast's from it; the guide drawn again; only the
+    batches from the first changed frame performed again.
+
+**The rig** (`scripts/cs3_acceptance.py` + `cs3_browser.cjs`, on a fresh copy of E36's project; the real engine, one job at a time):
+
+- **9/9.** The first run read 8/9: its silhouette measure thresholded the figure layer's depth, which holds the set too, so both IoUs
+  came out as the set's share (0.047). `--silhouettes` measured again on the same run: the figure is where its depth differs from the
+  bare plate's.
+- **The guide.** Stage made the new final in 36 s, Mara's figure her shell (the version's).
+- **The silhouette.** Against the SAM 3 matte of Wan's figure from CS1's performance, the IoU rose from 0.623 (the Detailed mannequin) to
+  0.762 (the shell). Against its own new performance's matte it is 0.793.
+- **The landmarks.** The guide's nose moved a median 10 px onto the shell.
+- **Wan Animate again**, the same seed, 262 s. Hand reach 0.115 → 0.122 (the reference 0.106). Nose → neck 0.160 → 0.161 (0.161). The
+  guide's nose to Wan's 0.008 → 0.010 of the height. The landmarks gain nothing on this front-on walk (the face points are within 1 %
+  either way); the silhouette is the gain.
+- ***Apply from a frame…*** at frame 118 after Mara's neck changed in Cast:
+  - the keys held frame 0 as drawn, with Cast's from 118;
+  - the guide changed only from frame 79 on (the F16 index of 118);
+  - batch 1 was kept (its job and its clip) and batch 2 performed again, 85.6 s.
+- Sheets: `img/cs3-1-mara-shell.jpg` (the depth silhouettes, Wan's figure, the new guide), `cs3-2-skeleton-key.jpg` (frames 60–80, before
+  and after).
+
+**D139 · the shell only from an A-pose** (the author, on CS2's screenshots: "where Pixal3D thinks the arms are part of the body"):
+
+- **The problem.** The shells of A1's Mara and Ines came from their arms-down references (the fit noted *arms close* on both). Their arms
+  are one piece with the coat: CS3's depth sheet shows it, and the coat tears in a sit.
+- **The rule.** *Make the shell* now needs the version's reference fitted and in the A-pose (`story.shell_blocked`). Otherwise the
+  command is greyed, the reason shows beside it, and the route refuses with the way out. The refit reads the stance from SDPose's own
+  points, so a wrist dragged out does not lift the note.
+- **A shell already made from the arms-down picture** says so in Cast's body section and in the bench's foot (*the shell's arms are
+  fused — draw the reference in the A-pose?*). Clay keeps using it until it is made again.
+- **The rig** (`cs3_acceptance.py --apose`, 4/4):
+  - Mara's shell was refused on her arms-down reference;
+  - her reference was drawn again by Klein with CS1's A-pose prompt and fitted (41.8 s), with no note;
+  - the shell was made from it (225 s);
+  - across the forearms the old shell's front silhouette is one piece (the arms fused) and the new one three (arm, body, arm), with
+    12/12 joints inside both. On the sheet the new shell walks and sits with its arms free (`img/cs3-3-mara-apose-shell.jpg`).
+- The first `--apose` run never redrew the reference: a version that has a reference takes a new one as a candidate, the author's pick.
+  The script now picks it.
+- **Owed by the author:** their own characters' references drawn again in the A-pose before making shells (Mara and Ines in their
+  projects).
+
+**Tests.**
+
+- Offline: `test_skeleton_keys_cs3.py` (a layer's body and hashes; the passes replaced, the guide encoded again, the refusals);
+  `test_skeleton_bench_cs2.py` 8 (+D139: the refusals in order, the dragged wrist, the fused shell); `routes_d37` +1. (11:42's count of
+  8 was 7.)
+- Vitest: `proxy.test.ts` +2 (the hands folded in, the landmarks), `detailed.test.ts` +1 (hands only), `anim.test.ts` +2 (sampling, the
+  hash), `finalShot.test.ts` +2 (the stamp, the change, *Apply from a frame*'s keys), `shell.test.ts` 2 (D139),
+  `FigureBinding.test.tsx` (+1 at CS2: the bound figure's shadow from its shell; at CS3: the skeleton key commands in its menu).
+- E2E: a new scenario (a final made, performed; Cast's neck changed → the chip; *Re-render* → the guide and the layer again; changed
+  again → *Apply from the playhead (frame 6)* → keys [0 held, 6 Cast's], performed again, the skeleton row on Clay's timeline).
+- Totals: offline 600 passed; agents_check, model_literals_check and settings audit clean; Vitest 512 + 3 skipped; typecheck, lint
+  (0 errors, 79 warnings) and build clean; e2e full 67/67 and open 67/67.
+
+**Asked of the author** (not built): D140 — the fit, too, only on an A-pose with straight, spread fingers, the rest hand read from the
+hero instead; and the bench's figure pane folded into the reference pane.

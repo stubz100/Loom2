@@ -76,6 +76,8 @@ class FinalLayer(BaseModel):
     batches: list[dict[str, Any]] = Field(default_factory=list)   # PS5c: [{k, job_id, clip_id}] in order
     takes: list[dict[str, Any]] = Field(default_factory=list)     # D118 (AE4a): the layer's passes — [{id, preset, strength, model_id, job_id, frames, seed, made_at}]
     source: str | None = None                                      # D118: the take the layer shows (its frames under passes/<id>/), None = the original frames
+    body: dict[str, Any] | None = None             # CS3 (proto01_UIcast 06 §2.10): a figure layer's body as its guide was drawn (the figure's own: Cast's then)
+    body_hashes: list[str] = Field(default_factory=list)   # CS3: per frame, the body the guide was drawn with (skeleton keys sampled) — Stage says *the skeleton changed* where they differ
 
 
 class ProcessingLayer(BaseModel):
@@ -468,6 +470,42 @@ class FinalStore:
         except Exception:
             shutil.rmtree(self.folder(f.id), ignore_errors=True)
             raise
+        return f
+
+    def set_passes(self, fid: str, lid: str, passes: dict[str, list[Path]], keypoints: list[Any] | None, body: dict[str, Any] | None,
+                   body_hashes: list[str]) -> Final:
+        """CS3: a character layer's passes drawn again (the skeleton changed) — its pass folders and keypoints replaced, the body they were
+        drawn with recorded. The frames it performed stay: a re-take from a batch replaces the ones after it."""
+        f = self.get(fid)
+        if f is None:
+            raise KeyError(fid)
+        layer = next((x for x in f.layers if x.id == lid), None)
+        if layer is None:
+            raise KeyError(f"{fid} has no layer {lid}")
+        if layer.kind != "figure":
+            raise ValueError("only a character layer's passes are drawn again")
+        counts = {name: len(files) for name, files in passes.items()}
+        for name in LAYER_PASSES["figure"]:
+            if counts.get(name) != f.frames:
+                raise ValueError(f"its {name} pass has {counts.get(name, 0)} frames, the final {f.frames}")
+        if body_hashes and len(body_hashes) != f.frames:
+            raise ValueError(f"{len(body_hashes)} body hashes for {f.frames} frames")
+        for name, files in passes.items():
+            d = self.pass_dir(fid, lid, name)
+            new = d.with_name(name + ".new")
+            shutil.rmtree(new, ignore_errors=True)
+            new.mkdir(parents=True)
+            for i, src in enumerate(files):
+                shutil.copyfile(src, new / f"{i:04d}.png")
+            shutil.rmtree(d, ignore_errors=True)
+            new.rename(d)
+        if keypoints is not None:
+            atomic_write_json(self.folder(fid) / lid / "keypoints.json", {"schema_version": 1, "frames": keypoints})
+            layer.keypoints = True
+        layer.passes, layer.body, layer.body_hashes = counts, body, list(body_hashes)
+        f.revision += 1
+        f.updated_at = utc_now()
+        self.save(f)
         return f
 
     def update_layer(self, fid: str, lid: str, **patch: Any) -> Final:

@@ -49,6 +49,10 @@ import { CommandRow } from '../../frame/CommandButton'
 import './story.css'
 
 /** Dev hook (`window.__loom2Story`, DEV_HOOKS only): the smoke test and scripts/sy_acceptance.py drive the suite through the store. */
+// CS2: the skeleton bench loads with the stage's code (three.js), only when opened
+const SkeletonBench = lazy(() => import('../stage/SkeletonBench'))
+const SkeletonParts = lazy(() => import('../stage/SkeletonBench').then((m) => ({ default: m.SkeletonParts })))
+
 function devHook(): Record<string, unknown> {
   const w = window as unknown as { __loom2Story?: Record<string, unknown> }
   w.__loom2Story ??= { state: () => ({ world: sy().world, selected: sy().selected, section: sy().section, profileId: sy().profileId, versionId: sy().versionId, refPage: sy().refPage, candPage: sy().candPage }),
@@ -577,7 +581,7 @@ function AnimRef({ p, v }: { p: Profile; v: Profile['versions'][number] }) {
       {id ? <img src={api.thumbUrl(id, 512)} alt={label} /> : <span className="hint">{label}: none yet</span>}
       <span className="cell">{label}</span>
       {side === 'front' && id && v.anim_ref_note === 'arms_close' && <button type="button" className="link ref-note" data-note="arms_close"
-        title="The fit reads a figure whose arms stand clear of the body best (the prompt now asks for that): draw the reference again, then fit the body"
+        title="The fit reads a figure whose arms stand clear of the body best (the prompt now asks for that), and the shell is made only from the A-pose (D139): draw the reference again, then fit the body"
         onClick={(e) => { e.stopPropagation(); runCommand('story.cast.makeAnimRef') }}>The arms touch the body — draw it again?</button>}   {/* proto01_UIcast S8 */}
     </div>
   )
@@ -677,7 +681,7 @@ function CastPage() {
       <section>
         <h3>Coverage <Help text={"Kept references per shot size × angle; thin cells are tinted (advisory)."} /></h3>
         <table className="cov-grid" aria-label="coverage">
-          <thead><tr><th /> {grid.angles.map((a) => <th key={a}>{a}</th>)}</tr></thead>
+          <thead><tr><th />{grid.angles.map((a) => <th key={a}>{a}</th>)}</tr></thead>
           <tbody>
             {grid.shots.map((s) => <tr key={s}><th>{s}</th>{grid.angles.map((a) => { const n = grid.counts[s]?.[a] ?? 0; return <td key={a} className={n ? (n >= 2 ? 'full' : 'one') : 'thin'}>{n || '–'}</td> })}</tr>)}
           </tbody>
@@ -803,9 +807,10 @@ export function Stage() {
   const { active: tab } = useSuiteRail()
   const play = useStory((s) => s.play)
   const flowRecipe = useStory((s) => s.flowRecipe)                                  // RC1: the node's recipe in place of the canvas
+  const skeleton = useStory((s) => s.skeleton)                                      // CS2: the skeleton bench in place of the page
   markUsed('story.world.addStyle'); markUsed('story.world.addBeat'); markUsed('story.world.addVariable'); markUsed('story.world.remove'); markUsed('story.cast.new'); markUsed('story.cast.newPlace'); markUsed('story.cast.newProp')
   if (!project?.open) return <div className="story-empty"><div>Open or create a project to begin.</div></div>
-  if (tab === 'cast') return <CastPage />
+  if (tab === 'cast') return skeleton ? <Suspense fallback={<span className="hint">loading the bench…</span>}><SkeletonBench /></Suspense> : <CastPage />   // CS2
   if (tab === 'shots') return <div className="shots-stage"><ShotsBoard /><ShotBoard /><LinkStageSheet /></div>   // D125 (SP3): the board, the selected shot's page under it
   if (tab === 'flow') return play ? <PlayView /> : <>{flowRecipe ? <FlowRecipe /> : <FlowCanvas />}<LinkStageSheet /></>
   if (tab === 'episode') return <SequenceStage />
@@ -814,6 +819,12 @@ export function Stage() {
 
 // ------------------------------------------------------------------ Inspector
 function CastInspector() {
+  const skeleton = useStory((s) => s.skeleton)
+  if (skeleton) return <Suspense fallback={null}><SkeletonParts /></Suspense>                // CS2: the bench's parts
+  return <CastSheetInspector />
+}
+
+function CastSheetInspector() {
   const profiles = useStory((s) => s.profiles)
   const profileId = useStory((s) => s.profileId)
   const versionId = useStory((s) => s.versionId)

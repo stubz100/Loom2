@@ -53,6 +53,25 @@ describe('the Detailed level follows the figure (CA1)', () => {
     expect(len(b('upperarm_l'), b('lowerarm_l'))).toBeCloseTo(len(fig.joints.l_shoulder, fig.joints.l_elbow), 4)
   })
 
+  it("CS3: drawn as its hands only for a figure whose shell is its body, whole again after", () => {
+    const rig = synthetic()
+    const bones: THREE.Bone[] = []; rig.traverse((o) => { if ((o as THREE.Bone).isBone) bones.push(o as THREE.Bone) })
+    const at = (n: string) => bones.findIndex((b) => b.name === n)
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.Float32BufferAttribute(new Array(18).fill(0).map((_, i) => i * 0.01), 3))
+    g.setIndex([0, 1, 2, 3, 4, 5])
+    const hand = at('index_02_r'), torso = at('spine_02')                       // a finger's triangle and the chest's
+    g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute([hand, 0, 0, 0, hand, 0, 0, 0, hand, 0, 0, 0, torso, 0, 0, 0, torso, 0, 0, 0, torso, 0, 0, 0], 4))
+    g.setAttribute('skinWeight', new THREE.Float32BufferAttribute([1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0], 4))
+    const skin = new THREE.SkinnedMesh(g, new THREE.MeshBasicMaterial()); rig.add(skin); skin.bind(new THREE.Skeleton(bones))
+    const fig = mannequin(new THREE.MeshBasicMaterial(), POSES.stand)
+    const holder = new THREE.Group(); holder.add(fig.root); holder.updateMatrixWorld(true)
+    const d = makeDetailed(rig, 'unreal', holder, fig.joints, fig.limbs)
+    d.handsOnly(true)
+    expect(Array.from(g.index!.array)).toEqual([0, 1, 2])
+    d.handsOnly(false)
+    expect(Array.from(g.index!.array)).toEqual([0, 1, 2, 3, 4, 5])
+  })
   it('keeps following when the pose changes, and turns a bone of its own', () => {
     const mat = new THREE.MeshBasicMaterial()
     const fig = mannequin(mat, POSES.stand)
@@ -148,5 +167,27 @@ describe('one body (proto01_UIcast CS1 · S1, S2)', () => {
     const flat = makeDetailed(synthetic(), 'unreal', holder, fig.joints, fig.limbs, { handRest: { preset: 'relaxed', curl: 0 } })
     flat.follow(fig.joints, {})
     expect(tip(flat)).toBeCloseTo(tip(relaxed), 4)                                 // curl 0: the open hand
+  })
+})
+
+describe("the hands' and feet's rest rows (proto01_UIcast CS2)", () => {
+  const at = (o: THREE.Object3D) => o.getWorldPosition(new THREE.Vector3())
+  it('the spread fans the fingers apart at the knuckles; the thumb opens; the feet turn out', () => {
+    const fig = mannequin(new THREE.MeshBasicMaterial(), POSES.stand)
+    const holder = new THREE.Group(); holder.add(fig.root)
+    const gap = (spread: number) => {
+      const d = makeDetailed(synthetic(), 'unreal', holder, fig.joints, fig.limbs, { handRest: { preset: 'open', curl: 1, spread } })
+      const b = (n: string) => d.bones.get(n.replace(/[_\s.:-]/g, '').toLowerCase())!
+      d.follow(fig.joints, {}); holder.updateMatrixWorld(true)
+      return at(b('index_03_r')).distanceTo(at(b('pinky_01_r')))
+    }
+    expect(gap(20)).toBeGreaterThan(gap(0) + 0.005)                                  // the index fans away from the pinky
+    const turn = (out: number) => {
+      const d = makeDetailed(synthetic(), 'unreal', holder, fig.joints, fig.limbs, { feetOut: out })
+      d.follow(fig.joints, {}); holder.updateMatrixWorld(true)
+      const b = (n: string) => d.bones.get(n.replace(/[_\s.:-]/g, '').toLowerCase())!
+      return b('foot_r').getWorldQuaternion(new THREE.Quaternion())
+    }
+    expect(turn(20).angleTo(turn(0))).toBeCloseTo((20 * Math.PI) / 180, 2)          // the foot turned 20° about the figure's up
   })
 })

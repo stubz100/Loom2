@@ -47,7 +47,8 @@ export function FigureCharacter({ o }: { o: StageObject }) {
       {p && <div className="kv"><span>body</span><span className="hint">{o.body
         ? `from Cast — ${o.body.height_m.toFixed(2)} m · ${o.body.build}${o.body.attachments.length ? ` · ${o.body.attachments.map((a) => a.kind).join(', ')}` : ''}`
         : 'the default dummy (no body on the Cast sheet)'}</span></div>}{/* CA0: the sheet's body shapes this figure */}
-      {p && <div className="verbs"><CommandRow ids={['stage.figure.unbind', 'stage.figure.openInCast']} /></div>}
+      {p && <div className="verbs"><CommandRow ids={['stage.figure.unbind', 'stage.figure.openInCast', 'stage.figure.skeleton']} /></div>}
+      {p && <div className="verbs" aria-label="skeleton keys"><CommandRow ids={['stage.skeleton.hold', 'stage.skeleton.cast']} /></div>}{/* CS3: a change of body in a shot is a key */}
     </>
   )
 }

@@ -35,10 +35,10 @@ from ..roster import ROSTER_BY_ID
 from ..fsio import utc_now
 from ..body import Body
 from ..finals import FINAL_LAYER_SURFACE, FINAL_PLATE_KEY_SURFACE, FINAL_PLATE_PATH_SURFACE, FINAL_PLATE_SURFACE
-from ..story import BODY_FIT_SURFACE, FOR_SHOT, PROP_MODEL_SURFACE, body_fit_origin
+from ..story import BODY_FIT_SURFACE, FOR_SHOT, PROP_MODEL_SURFACE, SHELL_SURFACE, body_fit_origin
 from ..timelines import TimelineStore, at, duration, starts
 from ..tools import facesim
-from ..tools.upright import stand_upright
+from ..tools.upright import figure_box, set_scene_extras, stand_upright
 from .pipeline import AnyRecipe, Submission
 
 
@@ -713,20 +713,31 @@ class MeshFinisher:
         from .graphs import recipe_weights
         paths = [output_path(q, f) for f in files]
         glb = next((p for p in paths if p.suffix.lower() in (".glb", ".gltf") and p.is_file()), None)
-        view = next((p for p in paths if p.suffix.lower() == ".png" and p.is_file()), None)
+        view = next((p for p in paths if p.suffix.lower() == ".png" and "_matte" not in p.name and p.is_file()), None)
+        matte = next((p for p in paths if p.suffix.lower() == ".png" and "_matte" in p.name and p.is_file()), None)
         if glb is None:
             raise ValueError("the engine finished but produced no mesh (no .glb among its outputs)")
+        box = None
+        if matte is not None:                                                                   # CS2 (E36): the figure's box in its picture, in the GLB too
+            try:
+                box = await asyncio.to_thread(figure_box, matte)
+                if box:
+                    await asyncio.to_thread(set_scene_extras, glb, {"figure_box": box})
+            except Exception as e:  # noqa: BLE001
+                job.log_tail.append(f"no figure box: {e}")
         upright = None
+        shell = bool(job.origin and job.origin.surface == SHELL_SURFACE)                       # CS2 (E36): a character's shell stays front-on as made
         try:                                                                                    # D109: stood upright (the reference camera's tilt off)
-            upright = await asyncio.to_thread(stand_upright, glb)
-            job.log_tail.append(f"stood upright: turned {upright[0]}° / {upright[1]}° / {upright[2]}° about x / y / z")
+            if not shell:
+                upright = await asyncio.to_thread(stand_upright, glb)
+                job.log_tail.append(f"stood upright: turned {upright[0]}° / {upright[1]}° / {upright[2]}° about x / y / z")
         except Exception as e:  # noqa: BLE001  (an unusual GLB is kept as it came)
             job.log_tail.append(f"not stood upright: {e}")
         compiled = sub.compiled
         licences = {rid: ROSTER_BY_ID[rid].license for rid in recipe_weights(recipe) if rid in ROSTER_BY_ID}
         rec = await asyncio.to_thread(q.catalogue.ingest_file, glb, kind="mesh", move=True, job_id=job.id, batch_id=job.batch_id, suite="generate",
                                       model_id=recipe.model_id, seed=job.seed, prompt_text=None,
-                                      params=compiled.summary | {"recipe": recipe.model_dump(), "licences": licences, "format": "glb", "upright_deg": upright},
+                                      params=compiled.summary | {"recipe": recipe.model_dump(), "licences": licences, "format": "glb", "upright_deg": upright, "figure_box": box},
                                       timings={"wall_s": q.wall_s(), "node_s": job.node_times}, compiled_graph_hash=compiled.graph_hash, variant=job.variant,
                                       parents=[recipe.asset_id], lineage_kind="image-to-mesh", origin=job.origin)
         if view is not None:
@@ -736,6 +747,8 @@ class MeshFinisher:
         job.log_tail.append(f"mesh {rec.id}: {glb.name} ({(rec.bytes or 0) / 2**20:.1f} MiB)" + (" with its view" if view else ", no view for the thumbnail"))
         if job.origin and job.origin.surface == PROP_MODEL_SURFACE:                            # D110 (PS2): a Cast prop version's own model
             await asyncio.to_thread(_prop_model_result, q, job, rec.id)
+        if job.origin and job.origin.surface == SHELL_SURFACE:                                 # CS2: a Cast character version's shell
+            await asyncio.to_thread(_shell_result, q, job, rec.id)
         if job.origin and job.origin.surface == set_things.MODEL_SURFACE:                      # D123 (SC3c-3): a picture set's thing, stood on its relief
             await asyncio.to_thread(set_things.model_landed, q, job, rec.id)
 
@@ -809,6 +822,18 @@ def _prop_model_result(q: JobQueue, job: JobRecord, asset_id: str) -> None:
         q.hub.broadcast("story.changed", {"kind": "profile", "id": pid, "revision": 0, "error": f"3D model not set: {e}"})
 
 
+def _shell_result(q: JobQueue, job: JobRecord, asset_id: str) -> None:
+    """CS2: the mesh becomes its character version's shell, with the reference it was made from. Never the job's failure."""
+    from ..story import StoryStore
+    pid, payload = str(job.origin.ref or ""), job.origin.payload or {}
+    try:
+        p = StoryStore(q.ws).set_shell(pid, str(payload.get("version") or ""), asset_id, str(payload.get("from") or "") or None)
+        q.hub.broadcast("story.changed", {"kind": "profile", "id": p.id, "revision": p.revision})
+    except Exception as e:  # noqa: BLE001
+        job.log_tail.append(f"the shell was not set on the character: {e}")
+        q.hub.broadcast("story.changed", {"kind": "profile", "id": pid, "revision": 0, "error": f"shell not set: {e}"})
+
+
 class KeypointsFinisher:
     """CA1b (D104): the people SDPose found go on the job's result (largest first); a `body_fit` job fits its Cast version's body to the
     largest one. Nothing enters the Catalogue."""
@@ -843,7 +868,7 @@ def _body_fit_result(q: JobQueue, job: JobRecord, recipe: Keypoints, people: lis
     if cur is None:
         raise ValueError(f"the profile {pid} is gone")
     v = cur.version(vid)
-    body, report = fit_body(measured, v.body or Body())
+    body, report = fit_body(measured, v.body or Body(), (v.body.locks if v.body else ()))   # CS2: the locked factors stay the author's
     note = stance_note(people[0])
     p = store.set_fitted_body(pid, v.id, body, recipe.asset_id, body_points(people[0], job.result.get("canvas")), note)
     if note:

@@ -112,6 +112,14 @@ export interface StoryState {
   profiles: Profile[]; profilesLoaded: boolean
   profileId: string | null; versionId: string | null
   refPage: GroupPage | null; candPage: GroupPage | null; pagesFor: string | null
+  /** CS2 (proto01_UIcast 03 §3.2): the character's skeleton bench in place of its page (the Inspector shows its parts). */
+  skeleton: boolean
+  setSkeleton: (on: boolean) => void
+  /** CS2: *Fit again* — the body fitted at once to the bench's points (SDPose's, some dragged); the locked factors stay. */
+  refitBody: (points: Record<string, unknown>) => Promise<boolean>
+  /** CS2: the character's shell — made from its animation reference (a background job), or picked / cleared. */
+  makeShell: () => Promise<void>
+  setShell: (assetId: string | null) => Promise<void>
   /** LT2 (18 §3a / §3c): the project's trained LoRAs and the options the next training job runs with. */
   loras: LoraRecord[]
   trainOpts: TrainOpts
@@ -422,7 +430,7 @@ export const useStory = create<StoryState>()((set, get) => {
   }
   return {
     world: null, loading: false, saving: false, section: 'logline', selected: null,
-    profiles: [], profilesLoaded: false, profileId: null, versionId: null, refPage: null, candPage: null, pagesFor: null,
+    profiles: [], profilesLoaded: false, profileId: null, versionId: null, refPage: null, candPage: null, pagesFor: null, skeleton: false,
     loras: [], trainOpts: DEFAULT_TRAIN, voices: [], voiceId: null, voiceForm: false, lipsyncOpts: { node_id: null, index: null, preset: 'draft' }, audioSecs: {},
     castFilter: 'all', castSearch: '', castUses: {}, flowRecipe: null, picked: [], expanding: false, busy: false, boardFinals: [], boardCuts: [], boardFilter: 'all', cards: {}, cardGuide: 30, scenes: [], sceneId: null, flowSel: [], boardSearch: '', boardSort: 'story', shotTemplates: [], linkFor: null,
     shots: [], shotsLoaded: false, shotId: null, shotVersionId: null, clipsById: {}, stagesLite: [],
@@ -599,6 +607,27 @@ export const useStory = create<StoryState>()((set, get) => {
         await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/model', { params: { path: { pid: p.id, vid: v.id } } }))
         useSession.getState().toast(`Making ${p.name}'s 3D model in the background — it is stood upright and shown here when it lands (minutes)`, 'info')
       } catch (e) { toast(`3D model: ${detail(e)}`) }
+    },
+    setSkeleton: (on) => set({ skeleton: on }),
+    refitBody: async (points) => {
+      const p = get().profile(); const v = get().version(); if (!p || !v) return false
+      try {
+        const r = await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/body/refit', { params: { path: { pid: p.id, vid: v.id } }, body: { points: points as never } }))
+        replaceProfile(r.profile as Profile)
+        return true
+      } catch (e) { toast(`Fit again: ${detail(e)}`); return false }
+    },
+    makeShell: async () => {
+      const p = get().profile(); const v = get().version(); if (!p || !v) return
+      try {
+        await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/shell', { params: { path: { pid: p.id, vid: v.id } } }))
+        useSession.getState().toast(`Making ${p.name}'s shell in the background — the 3D model of the animation reference, about four minutes; the bench shows it when it lands`, 'info')
+      } catch (e) { toast(`Shell: ${detail(e)}`) }
+    },
+    setShell: async (assetId) => {
+      const p = get().profile(); const v = get().version(); if (!p || !v) return
+      try { replaceProfile(await unwrap(http.PUT('/story/profiles/{pid}/versions/{vid}/shell', { params: { path: { pid: p.id, vid: v.id } }, body: { asset_id: assetId } }))) }
+      catch (e) { toast(`Shell: ${detail(e)}`) }
     },
     setModel: async (assetId) => {
       const p = get().profile(); const v = get().version(); if (!p || !v) return
@@ -1205,6 +1234,25 @@ export function styleFor(choice: string | null | undefined): string | null {
 }
 
 /** The profiles Generate's @ picker offers (loaded on first ask). */
+/** CS2 / CS3: the points of the Cast version a shell asset is (its reference's SDPose read) — proxy.ts binds the shell in that stance. */
+type ShellVersion = Pick<Profile['versions'][number], 'anim_ref_asset_id' | 'body_points' | 'body_fit_from' | 'anim_ref_note' | 'shell_asset_id' | 'shell_from'>
+/** D139 (story.py shell_blocked): why the version's shell cannot be made from its animation reference now — the shell is made only from an
+ *  A-pose picture, which the fit has read; null: it can. */
+export function shellBlocked(v: ShellVersion | undefined | null): string | null {
+  if (!v?.anim_ref_asset_id) return 'make the animation reference first: the shell is made from it'
+  if (!v.body_points || v.body_fit_from !== v.anim_ref_asset_id) return 'fit the body to the animation reference first: the fit reads its stance, and the shell needs the A-pose'
+  if (v.anim_ref_note === 'arms_close') return 'the animation reference holds its arms against the body, and Pixal3D would make them part of it: draw the reference again in the A-pose (arms about 30° out), fit the body, then make the shell'
+  return null
+}
+/** D139: the version's shell was made from the reference it has now, and that reference holds its arms against the body (fused arms). */
+export const shellFromArmsDown = (v: ShellVersion | undefined | null): boolean =>
+  !!(v?.shell_asset_id && v.shell_from && v.shell_from === v.anim_ref_asset_id && v.anim_ref_note === 'arms_close')
+
+export function versionPointsOfShell(asset: string): { pose?: number[][] } | null {
+  for (const p of useStory.getState().profiles) for (const v of p.versions) if (v.shell_asset_id === asset) return (v.body_points ?? null) as { pose?: number[][] } | null
+  return null
+}
+
 export function profilesForMentions(): Profile[] {
   const s = useStory.getState()
   if (!s.profilesLoaded) void s.loadProfiles()

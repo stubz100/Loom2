@@ -212,3 +212,4 @@
 .final-section .final-layers .batches .owed { color: var(--fg3); font-size: 11px; margin-left: 4px; }
 .final-section .final-plan { display: flex; gap: 8px; align-items: center; margin: 4px 0; }
 .final-section .final-layers .plate-method { padding: 0 6px; font-size: 11px; line-height: 16px; }   /* CA3 (D130): the plate's method, its menu on a click */
+.final-section .final-layers .skeleton-changed { padding: 0 6px; font-size: 11px; line-height: 16px; border-color: var(--warn, #d29922); color: var(--warn, #d29922); }   /* CS3: the skeleton changed under a drawn layer */

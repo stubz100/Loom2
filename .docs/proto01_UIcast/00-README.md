@@ -2,7 +2,7 @@
 
 Status: **proposal, 2026-10-25; answered the same day → D136** ([06](06-answers.md)). The author changed or extended nine of the recommendations, and
 06 holds where it differs from 02–05. The build order, explained as a workflow in 06 §3, was accepted as D137 (the skeleton first);
-stage 1 started 2026-10-25. Read from the code at `6cafacc`.
+stage 1 (CW0, CS1) was built on 2026-10-25, and stage 2 (E36 → D138, CS2, CS3; D139: the shell only from an A-pose) the same day. Read from the code at `6cafacc`.
 
 ## The request
 

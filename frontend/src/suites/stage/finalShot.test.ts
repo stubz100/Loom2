@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setBackend } from '../../api/client'
 import type { Final, StageDoc, StageObject } from '../../api/types'
 import { useSession } from '../../store/session'
-import { batchCount, cameraTravel, framesAt, hasPictureSet, nextFinalStep, picturePlate, planFinal, plateChoice, useFinals } from './finalShot'
+import { batchCount, batchOf, bodyStamp, cameraTravel, framesAt, hasPictureSet, keysFrom, nextFinalStep, picturePlate, planFinal, plateChoice, skeletonChange, useFinals } from './finalShot'
 import { useStage } from './stageStore'
 
 const obj = (id: string, kind: StageObject['kind'], extra: Partial<StageObject> = {}): StageObject => ({ id, kind, name: id, preset: null, asset_id: null, transform: { pos: [0, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] },
@@ -110,5 +110,32 @@ describe('CA3 (D130) the plate by the camera’s travel', () => {
     expect(plateChoice({ turn: 50, orbit: 50, widen: 1 })).toEqual({ method: 'filled', why: 'the camera turns 50°' })    // D135: projected and filled
     expect(plateChoice({ turn: 0, orbit: 0, widen: 1.3 })).toEqual({ method: 'filled', why: 'the camera sees 30% more' })
     expect(plateChoice({ turn: 8, orbit: 5, widen: 1.05 })).toEqual({ method: 'projected', why: 'the camera moves little' })
+  })
+})
+
+describe('CS3 (proto01_UIcast 06 §2.10): the skeleton changed under a drawn character', () => {
+  const old = { height_m: 1.66, neck: 1.54 }, now = { height_m: 1.66, neck: 1.0 }
+  const stage = (body: object, skeleton: object = {}, end = 240) => ({ id: 'stg', objects: [obj('fig_m', 'mannequin', { name: 'Mara', profile_id: 'prf_m', body: body as never })], cameras: [],
+    range: { start: 0, end }, keyframes: { camera: {}, objects: {}, skeleton } }) as unknown as StageDoc
+  const final = (d: StageDoc) => {
+    const times = framesAt(0, 240, 16)
+    return { id: 'fin', stage_id: 'stg', range: { start: 0, end: 240 }, rate: 16, frames: times.length, layers: [{ id: 'fig_m', kind: 'figure', object_id: 'fig_m', ...bodyStamp(d, 'fig_m', times) }] } as unknown as Final
+  }
+  it('stamps the body per frame, and finds where it changed and the batch that holds it', () => {
+    const f = final(stage(old))
+    expect(f.layers[0].body).toEqual(old); expect(new Set(f.layers[0].body_hashes).size).toBe(1)
+    expect(skeletonChange(f, stage(old), 'fig_m')).toBeNull()                                         // nothing changed
+    expect(skeletonChange(f, stage(now), 'fig_m')).toEqual({ index: 0, frame: 0, batch: 0 })          // Cast's changed: from the start
+    expect(skeletonChange({ ...f, stage_id: 'other' }, stage(now), 'fig_m')).toBeNull()                // another stage open: no claim
+    expect([batchOf(0), batchOf(76), batchOf(77), batchOf(148), batchOf(149)]).toEqual([0, 0, 1, 1, 2])
+  })
+  it("*Apply from a frame…*: the frames before it held as drawn, Cast's from it — only the batches from there change", () => {
+    const d = stage(now)
+    const keys = keysFrom(d, 'fig_m', old as never, 150)
+    expect(keys).toEqual([{ frame: 0, transition: 0, body: old }, { frame: 150, transition: 0, body: null }])
+    const ch = skeletonChange(final(stage(old)), stage(now, { fig_m: keys }), 'fig_m')!
+    expect(ch.frame).toBe(150); expect(ch.index).toBe(100); expect(ch.batch).toBe(1)                // F16: frame 150 is the 101st; batch 2 of 3
+    const earlier = keysFrom(stage(now, { fig_m: [{ frame: 0, transition: 0, body: null }, { frame: 200, transition: 0, body: { neck: 2 } }] }), 'fig_m', old as never, 150)
+    expect(earlier).toEqual([{ frame: 0, transition: 0, body: old }, { frame: 150, transition: 0, body: null }, { frame: 200, transition: 0, body: { neck: 2 } }])   // a key that took Cast's before it holds the old body
   })
 })

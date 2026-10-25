@@ -1,7 +1,7 @@
 // ST4: keyframe sampling, pure (16 §12).
 import { describe, expect, it } from 'vitest'
 import type { StageCamera, StageDoc, StageObject } from '../../api/types'
-import { bracket, clipFrames, keyedFrames, keyframesOf, neighbourKey, sampleCamera, sampleDoc, sampleObject, withKey, withoutKey, type CameraKey, type ObjectKey } from './anim'
+import { bodyHash, bracket, clipFrames, keyedFrames, keyframesOf, neighbourKey, sampleBody, sampleCamera, sampleDoc, sampleObject, withKey, withoutKey, type CameraKey, type ObjectKey, type SkeletonKey } from './anim'
 
 const cam: StageCamera = { id: 'cam', name: 'Camera 1', pos: [0, 1.5, 4], target: [0, 1, 0], roll: 0, focal_mm: 35, sensor_mm: 36 }
 const obj = { id: 'fig', kind: 'mannequin', name: 'Figure 1', preset: 'adult', asset_id: null, transform: { pos: [0, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] }, parent: null, parent_joint: null, locked: false, visible: true, colour_id: 1, pose: { preset: 'stand', joints: {} }, billboard: false } as unknown as StageObject
@@ -55,5 +55,27 @@ describe('anim', () => {
   })
   it('snaps a range to the clip grid (8n + 1) within the range', () => {
     expect(clipFrames(0, 120)).toBe(121); expect(clipFrames(0, 100)).toBe(97); expect(clipFrames(10, 20)).toBe(9); expect(clipFrames(0, 2)).toBe(9)
+  })
+})
+
+describe('skeleton keys (CS3, D136 U19)', () => {
+  const old = { height_m: 1.66, neck: 1.54, torso: 1.2, figure: 'female', hand_rest: { preset: 'relaxed', curl: 1, spread: 0, thumb: 0 } }
+  const now = { ...old, neck: 1.0, torso: 1.0, hand_rest: { ...old.hand_rest, curl: 1.4 } }
+  const fig = { ...obj, body: now } as unknown as StageObject
+  it("holds the figure's own body before the first key, the key's from it, a transition blending factor by factor", () => {
+    const keys: SkeletonKey[] = [{ frame: 0, transition: 0, body: old as never }, { frame: 48, transition: 24, body: null }]
+    expect(sampleBody(fig, keys, -1)).toBe(fig)                                                      // before every key: its own
+    expect(sampleBody(fig, keys, 30).body).toEqual(old)                                               // the frame-0 key: the body as rendered
+    const mid = sampleBody(fig, keys, 60).body as unknown as typeof old                                // half way through the transition to Cast's
+    expect(mid.neck).toBeCloseTo(1.54 + (1.0 - 1.54) * 0.5, 6); expect(mid.hand_rest.curl).toBeCloseTo(1.2, 6); expect(mid.figure).toBe('female')
+    expect(sampleBody(fig, keys, 72)).toBe(fig)                                                       // from 72 on, the figure's own again: the same object
+    expect(sampleBody(fig, [{ frame: 10, transition: 0, body: old as never }], 10).body).toEqual(old)  // a cut
+  })
+  it("samples the document's figures with the rest of its keys, and stamps a body", () => {
+    const doc = { objects: [fig], cameras: [], keyframes: { camera: {}, objects: {}, skeleton: { fig: [{ frame: 0, transition: 0, body: old }] } } } as unknown as StageDoc
+    expect(sampleDoc(doc, 5).objects[0].body).toEqual(old)
+    expect(keyedFrames(keyframesOf(doc), null)).toEqual([0])
+    expect(bodyHash(old)).toBe(bodyHash({ ...old, hand_rest: { thumb: 0, spread: 0, curl: 1, preset: 'relaxed' }, figure: 'female' }))   // the fields' order does not count
+    expect(bodyHash(old)).not.toBe(bodyHash(now)); expect(bodyHash({ neck: 1.54 })).toBe(bodyHash({ neck: 1.5400000001 }))
   })
 })

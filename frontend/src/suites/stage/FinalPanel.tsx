@@ -1,7 +1,7 @@
 // D111 (PS5): the final shot in Animate's Shot section — *Make the final shot…* splits the finished scene into layers (their passes rendered
 // here and stored with the final); the stage's finals listed with their layers. PS5b: the plate's still (*Make the plate*) and its
 // projection along the camera path, which runs here when the still lands. PS5c–f add the characters, mattes, assembly and re-takes.
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { Help } from '../../frame/Help'
 import { api } from '../../api/client'
 import type { Final, FinalLayer } from '../../api/types'
@@ -9,7 +9,8 @@ import { CommandButton } from '../../frame/CommandButton'
 import { markUsed, runCommand } from '../../frame/commands'
 import { useSession } from '../../store/session'
 import { showMenu } from '../../frame/ContextMenu'
-import { assembling, batchCount, nextFinalStep, PLATE_PATH_MAX, readyToAssemble, rendering, useFinals, useFinalsPoll } from './finalShot'
+import { assembling, batchCount, nextFinalStep, PLATE_PATH_MAX, readyToAssemble, rendering, skeletonChange, useFinals, useFinalsPoll } from './finalShot'
+import { askConfirm } from '../../store/session'
 import { useStage } from './stageStore'
 
 const KIND_LABEL: Record<string, string> = { plate: 'plate', figure: 'character', prop: 'prop', shadows: 'shadows' }
@@ -66,6 +67,16 @@ function LayerRow({ f, l }: { f: Final; l: FinalLayer }) {
   const plate = l.kind === 'plate'
   const working = l.status === 'queued' || l.status === 'running'
   const retake = () => void useFinals.getState().perform(f.id, l.id, l.seed + 1)
+  const doc = useStage((s) => s.current)
+  const playhead = useStage((s) => s.frame)
+  const change = useMemo(() => (l.kind === 'figure' && doc ? skeletonChange(f, doc, l.id) : null), [f, l, doc])   // CS3: Cast's skeleton is not the one drawn
+  const inRange = playhead >= f.range.start && playhead <= f.range.end
+  const skeleton = change ? [
+    { label: 'Re-render with the new skeleton ▶', disabled: working, run: () => void useFinals.getState().skeletonRerender(f.id, l.id) },
+    { label: `Apply from the playhead (frame ${playhead})…`, disabled: working || !inRange, run: () => void askConfirm({ title: `${l.name}: the new skeleton from frame ${playhead}`,
+      text: `The frames before ${playhead} keep the skeleton they were drawn with (skeleton keys on the figure's timeline); from ${playhead} the figure takes Cast's. The guide is drawn again, and the batches from the one frame ${playhead} falls in are performed again (the ones before kept).`,
+      okLabel: 'Apply' }).then((ok) => { if (ok) void useFinals.getState().skeletonFrom(f.id, l.id, playhead) }) },
+  ] : []
   const picture = plate && l.method === 'picture'                                // SC3e: the plate is the set's picture, rendered here
   const generated = plate && l.method === 'generated'                            // CA3 (D130): generated along the path from the still
   const filled = plate && l.method === 'filled'                                  // PF1 (D135): projected and filled at keyframes
@@ -84,7 +95,7 @@ function LayerRow({ f, l }: { f: Final; l: FinalLayer }) {
   const menu = picture ? [{ label: l.status === 'done' ? 'Render the plate again' : 'Render the plate', run: () => void useFinals.getState().plate(f.id), disabled: projecting }]
     : plate ? [{ label: l.still_asset_id ? 'Make the plate again' : 'Make the plate', run: () => void useFinals.getState().plate(f.id), disabled: l.status === 'queued' }, { sep: true as const }, ...methods]
     : l.kind === 'figure' ? [{ label: l.batches.length ? 'Re-take this layer (a new seed)' : 'Perform this layer', run: l.batches.length ? retake : () => void useFinals.getState().perform(f.id, l.id), disabled: working },
-      { label: 'Matte it again', run: () => void useFinals.getState().matte(f.id, l.id), disabled: working || l.frames_done !== f.frames }] : []
+      { label: 'Matte it again', run: () => void useFinals.getState().matte(f.id, l.id), disabled: working || l.frames_done !== f.frames }, ...(skeleton.length ? [{ sep: true as const }, ...skeleton] : [])] : []
   return (
     <li data-kind={l.kind} data-id={l.id} title={`${l.name} — ${KIND_LABEL[l.kind]}, ${METHOD_LABEL[l.method] ?? l.method}; passes: ${Object.entries(l.passes).map(([k, n]) => `${k} ${n}`).join(', ')}`}
       onContextMenu={menu.length ? (e) => { e.preventDefault(); e.stopPropagation(); showMenu(e, menu) } : undefined}>
@@ -92,6 +103,9 @@ function LayerRow({ f, l }: { f: Final; l: FinalLayer }) {
       <span className="name">{plate && l.still_asset_id ? <img className="still" src={api.thumbUrl(l.still_asset_id, 256)} alt="" /> : null}{l.name}</span>
       <span className={`status s-${l.status}`}>{statusText(l, projecting, f.frames, filling)}</span>
       {l.kind === 'figure' && <Batches f={f} l={l} />}
+      {change && <button className="chip skeleton-changed" data-from={change.frame} onClick={(e) => { e.stopPropagation(); showMenu(e, skeleton) }}
+        title={`The skeleton changed from frame ${change.frame} (batch ${change.batch + 1}): Cast's body is not the one this layer was drawn with. Nothing is done by itself — click to re-render it, or to apply the new skeleton from a frame`}>
+        the skeleton changed ▾</button>}
       {plate && !picture && <button className="chip plate-method" data-method={l.method} onClick={(e) => { e.stopPropagation(); showMenu(e, methods) }}
         title={generated ? "Generated along the path: LTX-2.3 from the still on the bare set's depth — draws what comes into view, but drifts against the set. Click for the plate's other ways"
           : filled ? `Projected and filled: the still projected along the path, what it never saw filled by Klein at keyframes Stage places — it stays on the set${l.heal ? '; the frames between healed' : ''}. Click for the plate's other ways`

@@ -1231,6 +1231,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/finals/{fid}/layers/{lid}/passes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Final Layer Passes
+         * @description CS3 (proto01_UIcast 06 §2.10, D136 U19): a character layer's passes drawn again by Stage — the skeleton changed. They replace the old
+         *     ones, and a performed layer's guide video is encoded again: a re-take from a batch then performs the new guide (*Apply from a frame…*:
+         *     the frames before the skeleton key unchanged), a run performs all of it (*Re-render with the new skeleton*).
+         */
+        put: operations["final_layer_passes_finals__fid__layers__lid__passes_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/finals/{fid}/layers/{lid}/run": {
         parameters: {
             query?: never;
@@ -3150,6 +3172,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/profiles/{pid}/versions/{vid}/body/refit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Profile Body Refit
+         * @description CS2 (proto01_UIcast 03 §3.2, *Fit again*): the body fitted to the given points at once, on the CPU — the bench's corrected points; the
+         *     locked factors stay; the points are kept on the version (the reference it was fitted to stays the same).
+         */
+        post: operations["profile_body_refit_story_profiles__pid__versions__vid__body_refit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/profiles/{pid}/versions/{vid}/lock": {
         parameters: {
             query?: never;
@@ -3208,6 +3251,34 @@ export interface paths {
          *     orientation and scale), then set on the version. Any build: no model weights involved.
          */
         post: operations["profile_model_import_story_profiles__pid__versions__vid__model_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/profiles/{pid}/versions/{vid}/shell": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Profile Shell Pick
+         * @description CS2: the author's pick — a mesh already in the Catalogue becomes the character version's shell (made from the image it was made from,
+         *     when the Catalogue knows it); None clears it. A mesh D109 stood upright is turned back first, as a copy (lineage `shell` ← the mesh;
+         *     the Catalogue's own stays as it is): a shell is front-on as Pixal3D made it (E36).
+         */
+        put: operations["profile_shell_pick_story_profiles__pid__versions__vid__shell_put"];
+        /**
+         * Profile Shell Make
+         * @description CS2 (D136 U6): a character version's shell — the image → 3D model (Pixal3D, about four minutes) of its animation reference, a
+         *     background job; it becomes the version's when it lands, the clay its figures are drawn in, bound to the skeleton. D139: only from an
+         *     A-pose picture — the reference fitted, its arms clear of the body.
+         */
+        post: operations["profile_shell_make_story_profiles__pid__versions__vid__shell_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4663,6 +4734,11 @@ export interface components {
              */
             feet: number;
             /**
+             * Feet Out
+             * @default 0
+             */
+            feet_out: number;
+            /**
              * Figure
              * @default female
              * @enum {string}
@@ -4679,6 +4755,11 @@ export interface components {
              * @default 1
              */
             head: number;
+            /**
+             * Head Forward
+             * @default 0
+             */
+            head_forward: number;
             /**
              * Height M
              * @default 1.75
@@ -4699,11 +4780,18 @@ export interface components {
              * @default 1
              */
             legs: number;
+            /** Locks */
+            locks: string[];
             /**
              * Neck
              * @default 1
              */
             neck: number;
+            /**
+             * Shoulder Drop
+             * @default 1
+             */
+            shoulder_drop: number;
             /**
              * Shoulders
              * @default 1
@@ -4745,6 +4833,26 @@ export interface components {
             asset_id: string;
             /** Job Id */
             job_id: string;
+        };
+        /**
+         * BodyRefit
+         * @description CS2: the skeleton bench's points — SDPose's as the version keeps them (`body_points`), some dragged by the author.
+         */
+        BodyRefit: {
+            /** Points */
+            points: {
+                [key: string]: unknown;
+            };
+        };
+        /** BodyRefitted */
+        BodyRefitted: {
+            /** Fit */
+            fit: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            profile: components["schemas"]["Profile"];
         };
         /** BulkPatch */
         BulkPatch: {
@@ -6642,6 +6750,12 @@ export interface components {
             batches: {
                 [key: string]: unknown;
             }[];
+            /** Body */
+            body: {
+                [key: string]: unknown;
+            } | null;
+            /** Body Hashes */
+            body_hashes: string[];
             /** Clip Id */
             clip_id: string | null;
             /** Error */
@@ -6719,6 +6833,12 @@ export interface components {
         };
         /** FinalLayerIn */
         FinalLayerIn: {
+            /** Body */
+            body?: {
+                [key: string]: unknown;
+            } | null;
+            /** Body Hashes */
+            body_hashes?: string[];
             /** Id */
             id: string;
             /** Keypoints */
@@ -7440,6 +7560,16 @@ export interface components {
              * @enum {string}
              */
             preset: "open" | "relaxed" | "fist" | "point" | "grip" | "pinch";
+            /**
+             * Spread
+             * @default 0
+             */
+            spread: number;
+            /**
+             * Thumb
+             * @default 0
+             */
+            thumb: number;
         };
         /** HealBody */
         HealBody: {
@@ -9249,6 +9379,21 @@ export interface components {
              */
             strength?: number;
         };
+        /** PassesBody */
+        PassesBody: {
+            /** Body */
+            body?: {
+                [key: string]: unknown;
+            } | null;
+            /** Body Hashes */
+            body_hashes?: string[];
+            /** Keypoints */
+            keypoints?: unknown[] | null;
+            /** Passes */
+            passes: {
+                [key: string]: string[];
+            };
+        };
         /**
          * PassesUpload
          * @description ST3 (16 §7): the passes the client rendered for one camera — each a PNG already put through `PUT /blobs/{sha}` — with the COCO-18
@@ -9707,6 +9852,10 @@ export interface components {
              * @default
              */
             outfit: string;
+            /** Shell Asset Id */
+            shell_asset_id: string | null;
+            /** Shell From */
+            shell_from: string | null;
             /**
              * State
              * @default open
@@ -10831,6 +10980,20 @@ export interface components {
             version: string;
         } & {
             [key: string]: unknown;
+        };
+        /** ShellPick */
+        ShellPick: {
+            /** Asset Id */
+            asset_id?: string | null;
+        };
+        /** ShellQueued */
+        ShellQueued: {
+            /** Job Id */
+            job_id: string;
+            /** Model Id */
+            model_id: string;
+            /** Source Asset Id */
+            source_asset_id: string;
         };
         /** Shot */
         Shot: {
@@ -15248,6 +15411,42 @@ export interface operations {
             };
         };
     };
+    final_layer_passes_finals__fid__layers__lid__passes_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+                lid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PassesBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Final"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     final_layer_run_finals__fid__layers__lid__run_post: {
         parameters: {
             query?: never;
@@ -18923,6 +19122,42 @@ export interface operations {
             };
         };
     };
+    profile_body_refit_story_profiles__pid__versions__vid__body_refit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BodyRefit"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BodyRefitted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     profile_lock_story_profiles__pid__versions__vid__lock_post: {
         parameters: {
             query?: never;
@@ -19046,6 +19281,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Profile"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_shell_pick_story_profiles__pid__versions__vid__shell_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShellPick"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Profile"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_shell_make_story_profiles__pid__versions__vid__shell_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShellQueued"];
                 };
             };
             /** @description Validation Error */

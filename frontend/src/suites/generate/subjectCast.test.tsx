@@ -9,7 +9,7 @@ import { CastButton, SubjectSlots, SubjectWarn } from './SubjectLink'
 
 const prof = (v: Partial<Profile['versions'][number]> = {}, name = 'char01'): Profile => ({
   id: 'prf_1', name, cls: 'character', current: 'v1', schema_version: 2, revision: 3, voice_id: null, created_at: '', updated_at: '',
-  versions: [{ id: 'v1', label: 'v1', state: 'open', group_id: 'grp_1', candidates_group_id: null, hero_asset_id: null, body: null, anim_ref_asset_id: null, anim_ref_back_asset_id: null, anim_test_clip_id: null, model_asset_id: null, model_from: null, body_fit_from: null, body_points: null, anim_ref_note: null, appearance: '', outfit: '', colours: [], marks: '', trigger: null, lora: null, derived_from: null, created_at: '', locked_at: null, ...v }],
+  versions: [{ id: 'v1', label: 'v1', state: 'open', group_id: 'grp_1', candidates_group_id: null, hero_asset_id: null, body: null, anim_ref_asset_id: null, anim_ref_back_asset_id: null, anim_test_clip_id: null, shell_asset_id: null, shell_from: null, model_asset_id: null, model_from: null, body_fit_from: null, body_points: null, anim_ref_note: null, appearance: '', outfit: '', colours: [], marks: '', trigger: null, lora: null, derived_from: null, created_at: '', locked_at: null, ...v }],
 })
 const html = (el: React.ReactElement) => { const host = document.createElement('div'); host.innerHTML = renderToStaticMarkup(el); return host }
 

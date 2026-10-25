@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setBackend } from '../../api/client'
 import type { Final, StageDoc, StageObject } from '../../api/types'
 import { useSession } from '../../store/session'
-import { AUTO_GENERATE, batchCount, cameraTravel, framesAt, hasPictureSet, nextFinalStep, picturePlate, planFinal, plateChoice, useFinals } from './finalShot'
+import { batchCount, cameraTravel, framesAt, hasPictureSet, nextFinalStep, picturePlate, planFinal, plateChoice, useFinals } from './finalShot'
 import { useStage } from './stageStore'
 
 const obj = (id: string, kind: StageObject['kind'], extra: Partial<StageObject> = {}): StageObject => ({ id, kind, name: id, preset: null, asset_id: null, transform: { pos: [0, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] },
@@ -106,12 +106,9 @@ describe('CA3 (D130) the plate by the camera’s travel', () => {
     expect(cameraTravel(moving({ focal_mm: 24 }), 'cam', times).widen).toBeGreaterThan(1.4)          // zooming out
     expect(cameraTravel(moving({ pos: [0, 1.6, 3] }), 'cam', times).widen).toBe(1)                    // pushing in shows nothing new
   })
-  it('advises a large move generated along the path and a small one, a long one or one without the model projected', () => {
-    const large = plateChoice({ turn: 50, orbit: 50, widen: 1 }, 81, true)                           // D130 held: advised, not made (AUTO_GENERATE off)
-    expect(large).toMatchObject({ method: AUTO_GENERATE ? 'generated' : 'projected', advice: 'generated' }); expect(large.why).toMatch(/^the camera turns 50°/)
-    expect(plateChoice({ turn: 0, orbit: 0, widen: 1.3 }, 81, true)).toMatchObject({ advice: 'generated' }); expect(plateChoice({ turn: 0, orbit: 0, widen: 1.3 }, 81, true).why).toMatch(/^the camera sees 30% more/)
-    expect(plateChoice({ turn: 8, orbit: 5, widen: 1.05 }, 81, true)).toEqual({ method: 'projected', advice: 'projected', why: 'the camera moves little' })
-    expect(plateChoice({ turn: 50, orbit: 50, widen: 1 }, 300, true).advice).toBe('projected')
-    expect(plateChoice({ turn: 50, orbit: 50, widen: 1 }, 81, false).why).toMatch(/no video model/)
+  it("makes a large move's plate projected and filled and a small one's projected (D135)", () => {
+    expect(plateChoice({ turn: 50, orbit: 50, widen: 1 })).toEqual({ method: 'filled', why: 'the camera turns 50°' })    // D135: projected and filled
+    expect(plateChoice({ turn: 0, orbit: 0, widen: 1.3 })).toEqual({ method: 'filled', why: 'the camera sees 30% more' })
+    expect(plateChoice({ turn: 8, orbit: 5, widen: 1.05 })).toEqual({ method: 'projected', why: 'the camera moves little' })
   })
 })

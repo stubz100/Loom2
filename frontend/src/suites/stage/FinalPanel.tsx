@@ -13,11 +13,16 @@ import { assembling, batchCount, nextFinalStep, PLATE_PATH_MAX, readyToAssemble,
 import { useStage } from './stageStore'
 
 const KIND_LABEL: Record<string, string> = { plate: 'plate', figure: 'character', prop: 'prop', shadows: 'shadows' }
-const METHOD_LABEL: Record<string, string> = { projected: 'the set, projected', generated: 'the set, generated along the path', picture: 'the picture, through its relief', move: 'Wan Animate', rendered: 'its 3D model', drawn: 'drawn on its model', stage: "Stage's" }
+const METHOD_LABEL: Record<string, string> = { projected: 'the set, projected', filled: 'the set, projected and filled', generated: 'the set, generated along the path', picture: 'the picture, through its relief', move: 'Wan Animate', rendered: 'its 3D model', drawn: 'drawn on its model', stage: "Stage's" }
 
-function statusText(l: FinalLayer, projecting: boolean, frames: number): string {
+function statusText(l: FinalLayer, projecting: boolean, frames: number, filling: string | null): string {
   if (l.kind === 'plate') {
     if (projecting) return l.method === 'picture' ? 'rendering the picture…' : 'projecting…'
+    if (l.method === 'filled' && l.status === 'running' && l.still_asset_id) {                                   // PF1 (D135)
+      const keys = l.keys as unknown as { frame: number; asset_id: string | null }[]
+      const pending = keys.find((k) => !k.asset_id)
+      return pending ? `filling the keyframe at frame ${pending.frame} · ${keys.length} so far` : filling ? `filling · ${filling}` : `filling · ${keys.length} keyframe${keys.length === 1 ? '' : 's'}`
+    }
     if (l.method === 'generated' && (l.status === 'queued' || l.status === 'running') && l.still_asset_id) return 'generating along the path'   // CA3: LTX on the depth
     if (l.status === 'queued') return 'the still is queued'
     if (l.status === 'running') return l.still_asset_id ? 'projecting next' : 'making the still'
@@ -57,17 +62,25 @@ function Batches({ f, l }: { f: Final; l: FinalLayer }) {
 
 function LayerRow({ f, l }: { f: Final; l: FinalLayer }) {
   const projecting = useFinals((s) => s.projecting === f.id)
+  const filling = useFinals((s) => (s.filling?.id === f.id ? s.filling.what : null))
   const plate = l.kind === 'plate'
   const working = l.status === 'queued' || l.status === 'running'
   const retake = () => void useFinals.getState().perform(f.id, l.id, l.seed + 1)
   const picture = plate && l.method === 'picture'                                // SC3e: the plate is the set's picture, rendered here
   const generated = plate && l.method === 'generated'                            // CA3 (D130): generated along the path from the still
+  const filled = plate && l.method === 'filled'                                  // PF1 (D135): projected and filled at keyframes
   const clip = useSession((s) => s.capabilities?.stage?.clip)
   const cannot = !clip || clip.health === 'missing' ? ' (no depth-guided video model here)' : f.frames > PLATE_PATH_MAX ? ` (over ${PLATE_PATH_MAX} frames)` : ''
-  const methods = [{ label: `${generated ? 'Generate it along the path again' : 'Generate it along the path'}${cannot}`, run: () => void useFinals.getState().setPlateMethod(f.id, 'generated'),
-    disabled: !!cannot || (working && !(l.status === 'running' && !generated)) },
-  generated ? { label: 'Project the still instead', run: () => void useFinals.getState().setPlateMethod(f.id, 'projected'), disabled: working }
-    : { label: 'Project the plate again', run: () => void useFinals.getState().project(f.id), disabled: !l.still_asset_id || projecting }]
+  const pending = filled && (l.keys as unknown as { asset_id: string | null }[]).some((k) => !k.asset_id)
+  const busy = working && !(l.status === 'running' && !generated && !pending)    // a running projection or fill may change course; a queued job may not
+  const methods = [
+    { label: filled ? 'Project and fill again' : 'Project and fill', run: () => void useFinals.getState().setPlateMethod(f.id, 'filled'), disabled: busy || !!filling, checked: filled },
+    { label: `${generated ? 'Generate it along the path again' : 'Generate it along the path'}${cannot}`, run: () => void useFinals.getState().setPlateMethod(f.id, 'generated'),
+      disabled: !!cannot || busy || !!filling, checked: generated },
+    { label: l.method === 'projected' ? 'Project the still again' : 'Project the still', run: () => (l.method === 'projected' ? void useFinals.getState().project(f.id) : void useFinals.getState().setPlateMethod(f.id, 'projected')),
+      disabled: busy || !!filling || (l.method === 'projected' && (!l.still_asset_id || projecting)), checked: l.method === 'projected' },
+    ...(filled ? [{ sep: true as const }, { label: 'Heal the frames between', run: () => void useFinals.getState().setPlateHeal(f.id, !l.heal), checked: l.heal, disabled: !!filling }] : []),
+  ]
   const menu = picture ? [{ label: l.status === 'done' ? 'Render the plate again' : 'Render the plate', run: () => void useFinals.getState().plate(f.id), disabled: projecting }]
     : plate ? [{ label: l.still_asset_id ? 'Make the plate again' : 'Make the plate', run: () => void useFinals.getState().plate(f.id), disabled: l.status === 'queued' }, { sep: true as const }, ...methods]
     : l.kind === 'figure' ? [{ label: l.batches.length ? 'Re-take this layer (a new seed)' : 'Perform this layer', run: l.batches.length ? retake : () => void useFinals.getState().perform(f.id, l.id), disabled: working },
@@ -77,12 +90,13 @@ function LayerRow({ f, l }: { f: Final; l: FinalLayer }) {
       onContextMenu={menu.length ? (e) => { e.preventDefault(); e.stopPropagation(); showMenu(e, menu) } : undefined}>
       <span className="kind">{KIND_LABEL[l.kind]}</span>
       <span className="name">{plate && l.still_asset_id ? <img className="still" src={api.thumbUrl(l.still_asset_id, 256)} alt="" /> : null}{l.name}</span>
-      <span className={`status s-${l.status}`}>{statusText(l, projecting, f.frames)}</span>
+      <span className={`status s-${l.status}`}>{statusText(l, projecting, f.frames, filling)}</span>
       {l.kind === 'figure' && <Batches f={f} l={l} />}
       {plate && !picture && <button className="chip plate-method" data-method={l.method} onClick={(e) => { e.stopPropagation(); showMenu(e, methods) }}
-        title={generated ? "Generated along the path: LTX-2.3 from the still on the bare set's depth — draws what comes into view (a large camera move). Click to project the still instead"
-          : 'Projected: the still cast along the camera path by Stage, no GPU job — exact for a small move, smeared where a large one shows what the still never saw. Click to generate it along the path'}>
-        {generated ? 'along the path ▾' : 'projected ▾'}</button>}
+        title={generated ? "Generated along the path: LTX-2.3 from the still on the bare set's depth — draws what comes into view, but drifts against the set. Click for the plate's other ways"
+          : filled ? `Projected and filled: the still projected along the path, what it never saw filled by Klein at keyframes Stage places — it stays on the set${l.heal ? '; the frames between healed' : ''}. Click for the plate's other ways`
+          : 'Projected: the still cast along the camera path by Stage, no GPU job — exact for a small move, smeared where a large one shows what the still never saw. Click for the plate\'s other ways'}>
+        {generated ? 'along the path ▾' : filled ? `filled${l.heal ? ' · heal' : ''} ▾` : 'projected ▾'}</button>}
       {picture && (l.status === 'passes' || l.status === 'failed') && !projecting && <button className="quiet" onClick={() => void useFinals.getState().plate(f.id)} title="The set's picture through its relief along the camera path, rendered here in seconds (no Klein still: the picture is the place)">Render the plate</button>}
       {plate && !picture && (l.status === 'passes' || l.status === 'failed') && <button className="quiet" onClick={() => void useFinals.getState().plate(f.id)} title="A Klein Stage shot of the bare set at the first frame, with the Shot tab's prompt and references (no people, no objects: they are layers)">Make the plate</button>}
       {l.kind === 'figure' && !working && <button className="quiet" onClick={l.status === 'done' ? retake : () => void useFinals.getState().perform(f.id, l.id)}

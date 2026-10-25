@@ -20,13 +20,17 @@ FINAL_SCHEMA_VERSION = 1
 FINAL_PLATE_SURFACE = "final_plate"               # PS5b: origin.surface of the plate's Stage shot; ref = the final's id
 FINAL_LAYER_SURFACE = "final_layer"               # PS5c: origin.surface of a character layer's batch; ref = the final, payload {layer, batch, batches, seed}
 FINAL_PLATE_PATH_SURFACE = "final_plate_path"     # CA3 (D130): origin.surface of the plate generated along the path; ref = the final's id
+FINAL_PLATE_KEY_SURFACE = "final_plate_key"       # PF1 (D135): origin.surface of a filled plate's keyframe Fill; ref = the final, payload {frame}
 BATCH, CARRY = 77, 5                              # E23a W1: 77-frame batches, the last 5 frames carried into the next (72 new)
 CHARACTER_TAIL = "moving exactly as the pose shows. Plain studio background, static camera."
 PLATE_LEAD = "The room is empty: there are no people and no objects in it, only the bare walls and floor."   # E28: a plate without the lead grew people
 PLATE_PATH_TAIL = "The camera moves slowly through the place; nothing in it moves."   # CA3: E34's clip prompt ended on the camera's move
 PLATE_PATH_MAX = 257                               # CA3: LTX-2.3's longest clip (I2V.frames) — a longer plate is projected
+FILL_LEAD = ("Continue the surrounding surfaces seamlessly with the same materials and the same light; add nothing that is not already "
+             "there. The place:")                  # PF1 (D135, E35d): a keyframe's Fill continues the place's surfaces, it does not re-describe it
+KEY_FILL_MIN = 0.002                               # PF1: a keyframe whose bad share is below this is the keyframe as projected (no Fill)
 LayerKind = Literal["plate", "figure", "prop", "shadows"]
-LayerMethod = Literal["projected", "generated", "picture", "move", "rendered", "drawn", "stage"]
+LayerMethod = Literal["projected", "generated", "filled", "picture", "move", "rendered", "drawn", "stage"]
 LayerStatus = Literal["passes", "queued", "running", "done", "failed"]
 MAX_FRAMES = 721                                   # 30 s at 24 fps (D96: ≈ 30 s a Shot, a warning beyond)
 # the passes each kind of layer brings from Stage (PS5a); a pass with one frame is a still (the plate's frame-0 render)
@@ -61,6 +65,9 @@ class FinalLayer(BaseModel):
     error: str | None = None
     still_asset_id: str | None = None              # PS5b: the plate's still (a Klein Stage shot of the bare set at frame 0); SC3e: the set's picture
     clip_id: str | None = None                     # CA3 (D130): the plate generated along the path — its LTX clip (frames resized and trimmed into frames/)
+    prompt: str | None = None                      # PF1 (D135): the plate's place prompt (its still's) — the keyframes' Fills continue its surfaces
+    keys: list[dict[str, Any]] = Field(default_factory=list)   # PF1: the filled plate's keyframes — [{frame, asset_id, filled, job_id, heal}] by frame
+    heal: bool = False                             # PF1 (Q29): the frames between keyframes healed by small keyframes of their own
     frames_done: int = 0                           # the layer's own sequence on disk (`frames/`): the projected plate, a character's performance …
     job_ids: list[str] = Field(default_factory=list)   # the jobs that made (or make) the layer
     seed: int = 0                                  # PS5c: a character layer's performance seed (a re-take takes another)
@@ -124,9 +131,10 @@ def frames_at(start: int, end: int, rate: int) -> list[float]:
 
 
 def plate_method_check(method: str, frames: int) -> None:
-    """The plate is projected (PS5b), generated along the path (CA3, D130: at most LTX's longest clip) or a picture set's picture (SC3e)."""
-    if method not in ("projected", "generated", "picture"):
-        raise ValueError(f"the plate is projected, generated along the path or a picture set's picture (not {method!r})")
+    """The plate is projected (PS5b), projected and filled (PF1, D135), generated along the path (CA3, D130: at most LTX's longest clip) or
+    a picture set's picture (SC3e)."""
+    if method not in ("projected", "filled", "generated", "picture"):
+        raise ValueError(f"the plate is projected, projected and filled, generated along the path or a picture set's picture (not {method!r})")
     if method == "generated" and frames > PLATE_PATH_MAX:
         raise ValueError(f"a plate generated along the path is at most {PLATE_PATH_MAX} frames (LTX-2.3's longest clip); this final has {frames} — project it")
 
@@ -254,6 +262,11 @@ def place_reference(ref: Path, kp: list[list[float]] | None, w: int, h: int, out
     out.parent.mkdir(parents=True, exist_ok=True)
     Image.fromarray(np.clip(canvas, 0, 255).astype(np.uint8)).save(out)
     return True
+
+
+def plate_fill_prompt(place: str | None) -> str:
+    """PF1 (D135): a keyframe Fill's prompt — the lead (continue the surfaces, add nothing), then the place as the author wrote it."""
+    return f"{FILL_LEAD} {(place or '').strip()}".strip()
 
 
 def plate_path_frames(n: int) -> int:
@@ -493,6 +506,31 @@ class FinalStore:
         if f is None:
             raise KeyError(fid)
         f.clip_id, f.assembly, f.assembled_at = clip_id, stats, utc_now()
+        f.revision += 1
+        f.updated_at = utc_now()
+        self.save(f)
+        return f
+
+    def set_key(self, fid: str, key: dict[str, Any]) -> Final:
+        """PF1: a filled plate's keyframe recorded (replacing the one at its frame), the keyframes kept in frame order."""
+        f = self.get(fid)
+        if f is None:
+            raise KeyError(fid)
+        plate = next(x for x in f.layers if x.id == "plate")
+        plate.keys = sorted([k for k in plate.keys if k.get("frame") != key["frame"]] + [key], key=lambda k: k["frame"])
+        f.revision += 1
+        f.updated_at = utc_now()
+        self.save(f)
+        return f
+
+    def key_landed(self, fid: str, frame: int, job_id: str, asset_id: str) -> Final | None:
+        """PF1: a keyframe's Fill landed — its asset on the keyframe the job was made for (None when the plate was made again meanwhile)."""
+        f = self.get(fid)
+        plate = next((x for x in f.layers if x.id == "plate"), None) if f else None
+        k = next((k for k in plate.keys if k.get("frame") == frame and k.get("job_id") == job_id), None) if plate else None
+        if k is None:
+            return None
+        k["asset_id"] = asset_id
         f.revision += 1
         f.updated_at = utc_now()
         self.save(f)

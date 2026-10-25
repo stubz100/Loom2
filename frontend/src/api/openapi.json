@@ -6314,6 +6314,11 @@
             ],
             "title": "Guide Asset Id"
           },
+          "heal": {
+            "default": false,
+            "title": "Heal",
+            "type": "boolean"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -6330,6 +6335,14 @@
             "title": "Keypoints",
             "type": "boolean"
           },
+          "keys": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Keys",
+            "type": "array"
+          },
           "kind": {
             "enum": [
               "plate",
@@ -6344,6 +6357,7 @@
             "enum": [
               "projected",
               "generated",
+              "filled",
               "picture",
               "move",
               "rendered",
@@ -6385,6 +6399,17 @@
               }
             ],
             "title": "Profile Id"
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt"
           },
           "reference_asset_id": {
             "anyOf": [
@@ -6470,6 +6495,9 @@
           "error",
           "still_asset_id",
           "clip_id",
+          "prompt",
+          "keys",
+          "heal",
           "frames_done",
           "job_ids",
           "seed",
@@ -8260,6 +8288,19 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealBody": {
+        "properties": {
+          "heal": {
+            "title": "Heal",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "heal"
+        ],
+        "title": "HealBody",
         "type": "object"
       },
       "HealthInfo": {
@@ -10249,6 +10290,35 @@
           "jobs"
         ],
         "title": "JobsSubmitted",
+        "type": "object"
+      },
+      "KeyBody": {
+        "properties": {
+          "frame": {
+            "minimum": 1.0,
+            "title": "Frame",
+            "type": "integer"
+          },
+          "heal": {
+            "default": false,
+            "title": "Heal",
+            "type": "boolean"
+          },
+          "image": {
+            "title": "Image",
+            "type": "string"
+          },
+          "mask": {
+            "title": "Mask",
+            "type": "string"
+          }
+        },
+        "required": [
+          "frame",
+          "image",
+          "mask"
+        ],
+        "title": "KeyBody",
         "type": "object"
       },
       "LayoutReply": {
@@ -12859,6 +12929,7 @@
           "method": {
             "enum": [
               "projected",
+              "filled",
               "generated"
             ],
             "title": "Method",
@@ -25179,6 +25250,59 @@
         ]
       }
     },
+    "/finals/{fid}/layers/plate/heal": {
+      "put": {
+        "description": "PF1 (Q29): the filled plate's in-between heal on or off — kept on the layer; Stage heals the frames between keyframes when it is on\n(the next time it fills the plate: *Project and fill* again).",
+        "operationId": "final_plate_heal_finals__fid__layers_plate_heal_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HealBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Final"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Final Plate Heal",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
     "/finals/{fid}/layers/plate/method": {
       "put": {
         "description": "CA3 (D130): the plate projected (PS5b: the still cast along the path by Stage, no GPU job) or generated along the path (LTX-2.3 from the\nstill on the bare set's depth). A still already made is kept: projected, Stage projects it when the stage is open; generated, its clip is\nqueued now. Without a still the method waits for *Make the plate*.",
@@ -25805,6 +25929,59 @@
           }
         },
         "summary": "Final Plate",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
+    "/finals/{fid}/plate/keys": {
+      "post": {
+        "description": "PF1 (D135): a filled plate's keyframe — Stage's projection of the keyframes before it into this frame's view, and the pixels none of\nthem saw well. The composite becomes an Edit document with those pixels as its selection, and its Fill (Klein, expand 48, feather 32,\none seed for the plate, the place's surfaces as the prompt) is queued; its finisher flattens the document into the keyframe. A\nkeyframe with almost nothing to fill (< 0.2 %) is the composite itself.",
+        "operationId": "final_plate_key_finals__fid__plate_keys_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeyBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Final"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Final Plate Key",
         "tags": [
           "finals"
         ]

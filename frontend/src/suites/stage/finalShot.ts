@@ -62,26 +62,18 @@ export function cameraTravel(doc: StageDoc, camId: string, times: number[]): Tra
 export const PLATE_PATH_MAX = 257
 /** D130: a camera that turns or swings more than this, or sees this much more, shows what the plate's still never saw. */
 export const LARGE_MOVE = { degrees: 12, widen: 1.15 }
-/** D130 held (journal 2026-10-24, Q26): CA3's rig found the generated plate leading the set by 9–20 % of the width mid-move on described
- *  stills — the camera's travel advises, the plate stays projected until the author decides (the plate's row generates it on a click). */
-export const AUTO_GENERATE = false
-export interface PlateChoice { method: 'projected' | 'generated'; advice: 'projected' | 'generated'; why: string }
-/** CA3 (D130, E34): the plate generated along the path advised for a large move (a still projected smears the walls it never saw), projected
- *  for a small one (cheap and exact); projected when no video model has a depth guide here or the final is longer than LTX's longest clip.
- *  `method` is what is made: the advice while AUTO_GENERATE, else projected. */
-export function plateChoice(travel: Travel, frames: number, canGenerate: boolean): PlateChoice {
+export type PlateMethod = 'projected' | 'filled' | 'generated'
+export interface PlateChoice { method: PlateMethod; why: string }
+/** D135 (PF1, D133's E35d): a large move's plate is projected and filled — the still projected along the path, what it never saw filled
+ *  by Klein at keyframes Stage places (it stays on the set); a small move's is projected (cheap and exact). D130's generated plate
+ *  (CA3) stays on the plate's row: it draws the unseen but drifts against the set. */
+export function plateChoice(travel: Travel): PlateChoice {
   const turn = Math.round(Math.max(travel.turn, travel.orbit)), more = Math.round((travel.widen - 1) * 100)
   const large = turn > LARGE_MOVE.degrees || travel.widen > LARGE_MOVE.widen
   const move = turn > LARGE_MOVE.degrees ? `the camera turns ${turn}°` : travel.widen > LARGE_MOVE.widen ? `the camera sees ${more}% more` : 'the camera moves little'
-  if (!large) return { method: 'projected', advice: 'projected', why: move }
-  if (!canGenerate) return { method: 'projected', advice: 'projected', why: `${move}, but no video model with a depth guide is installed` }
-  if (frames > PLATE_PATH_MAX) return { method: 'projected', advice: 'projected', why: `${move}, but ${frames} frames are longer than LTX's ${PLATE_PATH_MAX}` }
-  return AUTO_GENERATE ? { method: 'generated', advice: 'generated', why: move }
-    : { method: 'projected', advice: 'generated', why: `${move} — the still smears what it never saw; Generate it along the path on the plate's row draws it (it may drift against the set)` }
+  return large ? { method: 'filled', why: move } : { method: 'projected', why: move }
 }
 
-/** Whether this build can generate a plate along the path (the guided clip model, its weights present). */
-export const canGeneratePlate = (): boolean => { const c = useSession.getState().capabilities?.stage?.clip; return !!c && c.health !== 'missing' }
 
 /** The layers of a scene: the plate (the sets), each visible figure, each visible prop (a 3D model, a stand-in or an image plane), the shadows. */
 export function planFinal(doc: StageDoc, rate: Rate): FinalPlan {
@@ -107,7 +99,7 @@ function passesOf(l: PlanLayer): { name: string; kind: 'depth' | 'clay' | 'pose'
   return [{ name: 'beauty', kind: 'beauty', keep: 'self' }, { name: 'depth', kind: 'depth', keep: 'self' }]
 }
 
-export interface MakeOptions { rate: Rate; name: string; shotId?: string | null; shotVersion?: string | null; size?: [number, number]; plate?: 'projected' | 'generated' | null; onProgress?: (done: number, total: number, what: string) => void }
+export interface MakeOptions { rate: Rate; name: string; shotId?: string | null; shotVersion?: string | null; size?: [number, number]; plate?: PlateMethod | null; onProgress?: (done: number, total: number, what: string) => void }
 
 /** Render every layer's passes and make the final (no confirm: the command asks; the dev hook and the rig call this). */
 export async function makeFinal(opts: MakeOptions): Promise<Final> {
@@ -121,7 +113,7 @@ export async function makeFinal(opts: MakeOptions): Promise<Final> {
   if (!doc) throw new Error('no stage open')
   const plan = planFinal(doc, opts.rate)
   const [w, h] = opts.size ?? finalSize()
-  const plate = opts.plate ?? (hasPictureSet(doc) ? null : plateChoice(cameraTravel(doc, cam.id, plan.times), plan.times.length, canGeneratePlate()).method)
+  const plate = opts.plate ?? (hasPictureSet(doc) ? null : plateChoice(cameraTravel(doc, cam.id, plan.times)).method)
   const sampled = plan.times.map((t) => { const d = sampleDoc(doc, t); return { cam: d.cameras.find((c) => c.id === cam.id) ?? cam, doc: d } })
   const actors = plan.layers.filter((l) => l.object_id).map((l) => l.object_id!)
   const todo = plan.layers.flatMap((l) => passesOf(l).map((p) => ({ l, p })))
@@ -242,8 +234,14 @@ interface FinalsState {
   remove: (id: string) => Promise<void>
   plate: (id: string) => Promise<void>
   project: (id: string) => Promise<void>
-  /** CA3 (D130): the plate projected or generated along the path (a still already made is kept). */
-  setPlateMethod: (id: string, method: 'projected' | 'generated') => Promise<void>
+  /** CA3 (D130) / PF1 (D135): the plate projected, projected and filled, or generated along the path (a still already made is kept). */
+  setPlateMethod: (id: string, method: PlateMethod) => Promise<void>
+  /** PF1 (Q29): the filled plate's in-between heal on or off. */
+  setPlateHeal: (id: string, heal: boolean) => Promise<void>
+  /** PF1: the final whose plate Stage is filling, and what it is doing. */
+  filling: { id: string; what: string } | null
+  /** PF1: one step of filling the plate (the poll drives it). */
+  fill: (id: string) => Promise<void>
   /** PS5c: perform a character layer (Wan Animate in chained batches); a seed given is a re-take. */
   perform: (id: string, layer: string, seed?: number, opts?: { fromBatch?: number; stage?: boolean }) => Promise<void>
   /** CA4: each final's batch plan (its states and costs), loaded with the finals. */
@@ -271,7 +269,7 @@ export const readyToAssemble = (f: Final): boolean => f.layers.every((l) => (l.k
 const replace = (list: Final[], f: Final) => list.map((x) => (x.id === f.id ? f : x))
 
 export const useFinals = create<FinalsState>((set, get) => ({
-  finals: [], making: null, projecting: null, awaiting: {}, compositions: {},
+  finals: [], making: null, projecting: null, filling: null, awaiting: {}, compositions: {},
   setRender: async (id, patch) => {
     const f = get().finals.find((x) => x.id === id)
     if (!f) return
@@ -395,8 +393,35 @@ export const useFinals = create<FinalsState>((set, get) => ({
       const p = next.layers.find((l) => l.id === 'plate')
       useSession.getState().toast(method === 'generated'
         ? `${f.name}: the plate is generated along the path${p?.status === 'queued' ? ' — its clip is queued (LTX-2.3 from the still on the bare set\'s depth)' : ' — Make the plate starts it'}`
+        : method === 'filled' ? `${f.name}: the plate is projected and filled${p?.still_asset_id ? ' — Stage places its keyframes and Klein fills what the still never saw' : ' — Make the plate starts it'}`
         : `${f.name}: the plate is projected${p?.still_asset_id ? ' — Stage projects the still along the camera path' : ''}`, 'info')
     } catch (e) { useSession.getState().toast(`The plate's method: ${(e as ApiError).detail ?? (e as Error).message ?? e}`, 'error') }
+  },
+  setPlateHeal: async (id, heal) => {
+    try {
+      const next = await unwrap(http.PUT('/finals/{fid}/layers/plate/heal', { params: { path: { fid: id } }, body: { heal } }))
+      set({ finals: replace(get().finals, next) })
+      useSession.getState().toast(heal ? 'The frames between keyframes are healed the next time the plate is filled (a few small Fills more)' : 'No heal: the frames between keyframes as projected', 'info')
+    } catch (e) { useSession.getState().toast(`Heal: ${(e as ApiError).detail ?? (e as Error).message ?? e}`, 'error') }
+  },
+  fill: async (id) => {
+    const f = get().finals.find((x) => x.id === id)
+    const doc = st().current
+    if (!f || !doc || doc.id !== f.stage_id || get().projecting || get().filling) return
+    set({ filling: { id, what: 'starting' } })
+    try {
+      if (!st().plateProjector) (await import('./headless')).ensureHeadless()
+      const camOf = (d: StageDoc) => d.cameras.find((c) => c.id === f.camera_id) ?? d.cameras[0]
+      const frames = framesAt(f.range.start, f.range.end, f.rate as Rate).map((t) => { const d = sampleDoc(doc, t); return { cam: camOf(d), doc: only(d, []) } })
+      const { fillStep } = await import('./fillPlate')
+      const r = await fillStep(f, frames, sampleDoc(doc, st().frame), (what) => set({ filling: { id, what } }))
+      if (r.step === 'done') {
+        set({ finals: replace(get().finals, r.final) })
+        useSession.getState().toast(`${f.name}: the plate is projected and filled — ${r.final.frames} frames`, 'success')
+      } else if (r.step === 'key') await get().load()
+    } catch (e) {
+      useSession.getState().toast(`Fill the plate: ${(e as ApiError).detail ?? (e as Error).message ?? e}`, 'error')
+    } finally { set({ filling: null }) }
   },
   project: async (id) => {
     const f = get().finals.find((x) => x.id === id)
@@ -417,6 +442,8 @@ export const useFinals = create<FinalsState>((set, get) => ({
     const doc = st().current
     const ready = get().finals.find((f) => f.stage_id === doc?.id && f.layers.some((l) => l.id === 'plate' && l.method === 'projected' && l.status === 'running' && l.still_asset_id && !l.frames_done))
     if (ready && !get().projecting) await get().project(ready.id)
+    const filled = get().finals.find((f) => f.stage_id === doc?.id && f.layers.some((l) => l.id === 'plate' && l.method === 'filled' && l.status === 'running' && l.still_asset_id && !l.frames_done))
+    if (filled && !get().projecting && !get().filling) await get().fill(filled.id)       // PF1: the next step (or waiting on a keyframe's Fill)
   },
   load: async () => {
     const doc = st().current
@@ -438,13 +465,13 @@ export const useFinals = create<FinalsState>((set, get) => ({
     const [w, h] = finalSize()
     const picture = hasPictureSet(doc)
     const cam = st().activeCamera()
-    const plate = picture || !cam ? null : plateChoice(cameraTravel(doc, cam.id, plan.times), plan.times.length, canGeneratePlate())
+    const plate = picture || !cam ? null : plateChoice(cameraTravel(doc, cam.id, plan.times))
     const forShot = useMakeFor.getState().animate           // D125 (A1, WB1): made for the For chip's shot version, its takes land there
     const ok = await askConfirm({ title: 'Make the final shot?', okLabel: 'Split into layers',
       text: `The scene through ${st().activeCamera()?.name ?? 'the camera'}, frames ${doc.range.start}–${doc.range.end} at ${rate} fps: ${plan.times.length} frames at ${w}×${h}. ` +
         `${plan.layers.length} layers — the plate, ${figures} figure${figures === 1 ? '' : 's'}, ${props} prop${props === 1 ? '' : 's'} and the shadows. Stage renders their passes here (a minute or two)` +
         (picture ? ', and the plate from the picture set\'s picture; the other layers are made next.' : '; the layers are made from them next.') +
-        (plate ? ` The plate is ${plate.method === 'generated' ? 'generated along the path (LTX-2.3, a few minutes on the GPU)' : 'its still projected along the path'}: ${plate.why}.` : '') +
+        (plate ? ` The plate is ${plate.method === 'filled' ? 'projected and filled (Klein fills what the still never saw at keyframes: a few minutes on the GPU)' : 'its still projected along the path'}: ${plate.why}.` : '') +
         (forShot ? ` The finished shot becomes a take of ${forLabel(forShot)}.` : ' Its clips become takes of the shots that use this camera.') })
     if (!ok) return null
     set({ making: { done: 0, total: 1, what: 'starting' } })

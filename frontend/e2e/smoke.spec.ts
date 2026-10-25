@@ -1807,6 +1807,57 @@ test('a flow (17 / SY3, D85): the Strip adds Start, Dialogue and Choice nodes, h
   for (const t of (await api<{ items: { id: string; name: string }[] }>('GET', '/story/shot-templates')).items) if (t.name === 'Gate talk') await api('DELETE', `/story/shot-templates/${t.id}`)
 })
 
+test("a plate projected and filled (D135 · PF1): a moving camera's final shot makes its plate projected and filled — Stage places keyframes along the path, the server fills what none saw (an Edit document's Fill on the fake engine), the frames are made from them; the plate row's chip and its heal tick", async ({ page }) => {
+  test.setTimeout(150_000)
+  await openApp(page)
+  await openAnimate(page, 'Clay')
+  await page.locator('.placeholder button', { hasText: /^New stage/ }).click()
+  const dialog = page.locator('.modal.ask')
+  await dialog.locator('input').fill('Filled plate')
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('canvas.stage-canvas')).toBeVisible()
+  await libAdd(page, 'sets', 'room')
+  type Hook = { setRange: (a: number, b: number) => void; setFrame: (f: number) => void; keyCamera: () => void; updateCamera: (id: string, p: object) => void
+    state: () => { current: { cameras: { id: string; pos: number[] }[] } } }
+  await page.evaluate(() => {                                                                              // the camera swings 3 m sideways over half a second
+    const h = (window as unknown as { __loom2Stage: Hook }).__loom2Stage
+    h.setRange(0, 12); h.setFrame(0); h.keyCamera()
+    const cam = h.state().current.cameras[0]
+    h.setFrame(12); h.updateCamera(cam.id, { pos: [cam.pos[0] + 3, cam.pos[1], cam.pos[2] - 1] }); h.keyCamera()
+  })
+  await perfCard(page, 'Final shot')
+  await page.locator('.final-section button', { hasText: /^Make the final shot/ }).click()
+  await expect(dialog).toContainText(/The plate is projected and filled .*: the camera turns \d+°/)            // D135: the camera's travel advises it
+  await page.screenshot({ path: 'node_modules/.e2e/pf1-make-confirm.png' })
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('.final-section .final-row')).toBeVisible({ timeout: 60_000 })
+  const stage = (await api<{ items: { id: string; name: string }[] }>('GET', '/stages')).items.find((s) => s.name === 'Filled plate')!
+  const fin = (await api<{ items: { id: string; layers: { id: string; method: string }[] }[] }>('GET', `/finals?stage_id=${stage.id}`)).items[0]
+  expect(fin.layers.find((l) => l.id === 'plate')!.method).toBe('filled')
+  await page.locator('.final-section li[data-kind="plate"] button', { hasText: 'Make the plate' }).click()
+  type Key = { frame: number; asset_id: string | null; job_id: string | null }
+  type Plate = { status: string; frames_done: number; keys: Key[]; heal: boolean }
+  const plateOf = async () => (await api<{ layers: (Plate & { id: string })[] }>('GET', `/finals/${fin.id}`)).layers.find((l) => l.id === 'plate')!
+  await expect.poll(async () => { const p = await plateOf(); return `${p.status} ${p.frames_done}` }, { timeout: 120_000 }).toBe('done 9')
+  const plate = await plateOf()
+  expect(plate.keys.length).toBeGreaterThan(0); expect(plate.keys.at(-1)!.frame).toBe(8)                    // the last frame is a keyframe
+  expect(plate.keys.every((k) => !!k.asset_id)).toBe(true)
+  expect(plate.keys.some((k) => !!k.job_id)).toBe(true)                                                      // at least one keyframe was filled
+  const pf = await fetch(`http://127.0.0.1:${env().port}/finals/${fin.id}/layers/plate/frames/8`, { headers: { 'X-Loom-Token': env().token } })
+  expect(pf.status).toBe(200)
+  const chip = page.locator('.final-section li[data-kind="plate"] .plate-method')
+  await expect(chip).toHaveText(/^filled ▾/)
+  await expect(page.locator('.final-section li[data-kind="plate"] .status')).toHaveText(/done · 9 frames/)
+  await chip.click()                                                                                         // Q29: the heal, a tick on the plate's row
+  await page.locator('.ctx-menu button.item', { hasText: /^Heal the frames between$/ }).click()
+  await expect.poll(async () => (await plateOf()).heal).toBe(true)
+  await expect(chip).toHaveText(/^filled · heal ▾/)
+  await chip.click()
+  await expect(page.locator('.ctx-menu button.item', { hasText: /Project and fill again$/ })).toBeVisible()        // ticked: the method it is
+  await page.screenshot({ path: 'node_modules/.e2e/pf1-plate-menu.png' })
+  await page.mouse.click(1100, 700)
+})
+
 test("an episode (17 / SY4, D85): the Shots bin lists a final shot and adds it stamped; the checklist names the plain clip; Export asks, writes the FCPXML with a chapter marker and markers.txt, and the SRT carries the node's line; the old deep link redirects", async ({ page }) => {
   test.setTimeout(120_000)
   // a final shot: a clip at the project format (the fake engine), a Dialogue node bound to it

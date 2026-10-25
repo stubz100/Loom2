@@ -9237,3 +9237,50 @@ patched (the Mid attenuated). A track with plugins is printed onto a hidden comp
 - **D134:** TripoSR is `open`'s image → 3D (the plan's rule); the build (OM1: a tool venv and setup script, a mesh job beside Pixal3D's,
   stood upright, its weights in the roster) is the author's to schedule. No loser's weights to delete (TRELLIS v1 never fetched; TRELLIS.2's
   transformer went in E14). Checks on this and E35d's changes: offline 586 passed, agents_check and model_literals_check clean, Vitest 470 + 3 skipped, typecheck, lint (0 errors, 79 warnings) and build clean, e2e full 64/64 and open 64/64.
+
+## 2026-10-25 03:21 — Q29 answered → D135: build PF1, the plate projected and filled (proto01_animate 31 §4h)
+
+- **The author:** (a) — build project and fill with the Fill's prompt the place's surfaces, and the in-between heal as an option (asked
+  for from Q28 (b): the pixels no keyframe saw in the frames between keyframes, filled by small keyframes of their own so they do not
+  shimmer; off by default).
+- **The plan** (31 §4h): the plate method *filled*; the keyframes on the server (`FinalLayer.keys`), each one's Fill an Edit document's
+  job whose finisher flattens it into the keyframe; Stage's part (the probes, the composites, the frames) in `fillPlate.ts`, driven by the
+  finals' poll like PS5b's projection and resumable from the keyframes made; the plate row's chip and right-click (*Project and fill*,
+  *Heal the frames between*); the camera's travel advising it for a large move. Tests, the e2e under both variants, the rig on E35d's two
+  moves, screenshots.
+
+## 2026-10-25 04:17 — PF1 built: the plate projected and filled (D135, proto01_animate 31 §4h)
+
+- **Server** (`finals.py`, `routes/finals.py`, `engine/finishers.py`): the plate method `filled`; `FinalLayer.keys` (`{frame, asset_id,
+  filled, job_id, heal}`), `.heal`, `.prompt` (the place, kept when the still is made or the method is switched); `POST
+  /finals/{fid}/plate/keys` — the keyframe's composite becomes a Catalogue image and an Edit document with the bad mask as its
+  selection, its Fill queued (Klein `fill`, expand 48, feather 32, one seed for the plate, `FILL_LEAD` + the place: "Continue the
+  surrounding surfaces seamlessly with the same materials and the same light; add nothing that is not already there. The place: …");
+  under 0.2 % the composite is the keyframe; the Fill's finisher flattens the document into the keyframe (lineage `plate-key`) and
+  closes it, a keyframe re-made meanwhile keeping its own; `PUT /finals/{fid}/layers/plate/heal`; the method route takes `filled` (the
+  still kept, the keyframes cleared). routes_d37 +2.
+- **Stage** (`fillPlate.ts`): one step per poll tick (`useFinals.fill`, as PS5b's projection): from the last keyframe each frame probed at
+  320 × 180 against the three keyframes before it (the coverage cosine; bad: unseen, or more than twice as head-on as the best below 70°);
+  the first frame past 8 % (and the last frame) is the next keyframe — its composite and mask at the still's size go up; with the heal on,
+  each span's worst frame above 0.5 % becomes a keyframe of its own; then the frames, runs sharing their keyframes projected together, the
+  most head-on per pixel, go up as the plate's own. `plateChoice`: a large move's plate is `filled` (*Make the final shot…* says it; D130's
+  automatic choice moves here). The plate row: the chip `projected ▾ / filled ▾ / along the path ▾`, its menu and right-click *Project and
+  fill*, *Generate it along the path*, *Project the still* (the current one ticked) and *Heal the frames between* (a tick, filled only).
+- **Rig** (`scripts/pf1_acceptance.py`, `pf1_browser.cjs`: the product's route on copies of E35d's projects, the place prompt as the still
+  was asked for, the real engine, one job at a time) — 8/8:
+
+  | move | keyframes (all filled) | time | travel against the set (projection) | step |
+  | --- | --- | --- | --- | --- |
+  | orbit, heal off | 7 at 29, 40, 48, 55, 63, 74, 80 (8–9 %, 45–61 s each) | 397 s | 3 px apart (4) | 4.46 |
+  | crane, heal on | 3 at 30, 50, 80 (8 %, 48–68 s each) | 217 s | 13 apart (13) | 6.60 |
+
+  The crane's heal found nothing to heal: its frames between keyframes keep 0.17 % bad pixels (median) and 0.38 % at most at the probe's
+  size, under 0.5 % — so no heal keyframe was made on the rig (the pick and the route are unit-tested). The sheets (img/31-pf1-*.jpg): the
+  crane clean (the near floor and the newly seen left wall drawn, no streaks); on the orbit the near floor keeps its planks (the neutral
+  prompt's coloured blocks gone) and, with "add nothing", a window still grows on the newly seen left wall at the end — where the set's
+  light is a window (E34's generated plate drew one there too); a faint light band at frame 60. The author's look owed.
+- Tests: `test_plate_fill_pf1.py` (3: the prompt and the method; a keyframe filled through the fake engine — the document, its selection,
+  the Fill's recipe, the landed keyframe, the closed document, a keyframe with nothing to fill, the refusals, the heal; the routes),
+  `fillPlate.test.ts` (5: the stacks, the best per pixel, the bad mask, the composite, the heal's pick), `finalShot.test.ts` (the advice),
+  a new e2e scenario (a moving camera's final: the confirm says *projected and filled*, the plate filled on the fake engine through its
+  keyframes, 9 frames, the chip `filled ▾`, the heal tick). The suites caught one bug under `open`: the keyframe's Fill took the Inpaint recipe's default (Klein 9B, flux-nc) — the route now takes the variant's own (`registry.default_model('inpaint', variant)`: Klein 4B under `open`), a test pins it. Offline 589 passed, agents_check, model_literals_check and settings audit clean, Vitest 475 + 3 skipped, typecheck, lint (0 errors, 79 warnings) and build clean, e2e full 65/65 and open 65/65. Screenshots img/31-pf1-make-confirm.jpg, img/31-pf1-plate-menu.jpg.

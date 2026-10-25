@@ -34,7 +34,7 @@ from ..recipes import I2I, I2V, TTS, AssembleFinal, CompRender, ImageToMesh, Ima
 from ..roster import ROSTER_BY_ID
 from ..fsio import utc_now
 from ..body import Body
-from ..finals import FINAL_LAYER_SURFACE, FINAL_PLATE_PATH_SURFACE, FINAL_PLATE_SURFACE
+from ..finals import FINAL_LAYER_SURFACE, FINAL_PLATE_KEY_SURFACE, FINAL_PLATE_PATH_SURFACE, FINAL_PLATE_SURFACE
 from ..story import BODY_FIT_SURFACE, FOR_SHOT, PROP_MODEL_SURFACE, body_fit_origin
 from ..timelines import TimelineStore, at, duration, starts
 from ..tools import facesim
@@ -215,6 +215,8 @@ class DocumentFinisher:
         label = recipe.mode.replace("_", " ") if isinstance(recipe, Inpaint) else f"refine {recipe.strength:.2f}"
         # D47: a paste-back's soft edge is a layer mask (repaintable); a refine of a whole layer keeps the layer's own alpha
         await add_result_layer(q, job, od, recipe, rgba, plan.x, plan.y, label, as_mask=isinstance(recipe, Inpaint) or recipe.source == "selection")
+        if isinstance(recipe, Inpaint) and getattr(job, "origin", None) and job.origin.surface == FINAL_PLATE_KEY_SURFACE:   # PF1 (D135): a filled plate's keyframe
+            await asyncio.to_thread(_final_plate_key, q, job, od)
         if isinstance(recipe, Inpaint) and getattr(job, "origin", None) and job.origin.surface == set_things.CLEAN_SURFACE:   # D123 (SC3c-3): a picture set's plate
             done = await asyncio.to_thread(set_things.clean_plate, q, job, od)
             q.hub.broadcast("asset.created", done["asset"].model_dump())
@@ -549,6 +551,32 @@ async def _plate_path_or_fail(q: JobQueue, job: JobRecord, fid: str, still_id: s
             q.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
         except Exception:  # noqa: BLE001
             pass
+
+
+def _final_plate_key(q: JobQueue, job: JobRecord, od: Any) -> None:
+    """PF1 (D135): a keyframe's Fill landed on its document — the document flattened is the keyframe (a Catalogue image, lineage `plate-key`
+    ← the projected composite), recorded on the plate's keyframe for that frame; the document is closed. A keyframe re-made meanwhile
+    keeps its own. Never the job's failure."""
+    from ..finals import FinalStore
+    fid, frame = str(job.origin.ref), int((job.origin.payload or {}).get("frame") or 0)
+    try:
+        merged = od.flatten()
+        path = q.ws.temp_dir / "plate_keys" / f"{new_id('pkey')}.png"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        Image.fromarray(merged[..., :3]).save(path, "PNG")
+        rec = q.catalogue.ingest_file(path, kind="image", move=True, job_id=job.id, suite="stage", lineage_kind="plate-key",
+                                      parents=[od.doc.source_asset_id] if od.doc.source_asset_id else [], params={"final_id": fid, "frame": frame}, origin=job.origin)
+        rec = q.catalogue.make_thumbs(rec)
+        q.hub.broadcast("asset.created", rec.model_dump())
+        f = FinalStore(q.ws).key_landed(fid, frame, job.id, rec.id)
+        job.result["asset_ids"] = [rec.id]
+        job.log_tail.append(f"the plate's keyframe {frame}: {rec.id}" if f else f"the plate's keyframe {frame} was made again meanwhile; {rec.id} not used")
+        if f is not None:
+            q.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
+        if q.documents is not None:
+            q.documents.close(od.doc.id)
+    except Exception as e:  # noqa: BLE001
+        job.log_tail.append(f"the plate's keyframe {frame}: {e}")
 
 
 def _final_plate_path(q: JobQueue, job: JobRecord, clip_id: str) -> None:

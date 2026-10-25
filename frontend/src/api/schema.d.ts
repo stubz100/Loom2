@@ -1124,6 +1124,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/finals/{fid}/layers/plate/heal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Final Plate Heal
+         * @description PF1 (Q29): the filled plate's in-between heal on or off — kept on the layer; Stage heals the frames between keyframes when it is on
+         *     (the next time it fills the plate: *Project and fill* again).
+         */
+        put: operations["final_plate_heal_finals__fid__layers_plate_heal_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/finals/{fid}/layers/plate/method": {
         parameters: {
             query?: never;
@@ -1350,6 +1371,29 @@ export interface paths {
          *     method), the lead first so the model draws no people or objects (they are layers). Stage then projects it along the camera path.
          */
         post: operations["final_plate_finals__fid__plate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finals/{fid}/plate/keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Final Plate Key
+         * @description PF1 (D135): a filled plate's keyframe — Stage's projection of the keyframes before it into this frame's view, and the pixels none of
+         *     them saw well. The composite becomes an Edit document with those pixels as its selection, and its Fill (Klein, expand 48, feather 32,
+         *     one seed for the plate, the place's surfaces as the prompt) is queued; its finisher flattens the document into the keyframe. A
+         *     keyframe with almost nothing to fill (< 0.2 %) is the composite itself.
+         */
+        post: operations["final_plate_key_finals__fid__plate_keys_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6587,6 +6631,11 @@ export interface components {
             frames_done: number;
             /** Guide Asset Id */
             guide_asset_id: string | null;
+            /**
+             * Heal
+             * @default false
+             */
+            heal: boolean;
             /** Id */
             id: string;
             /** Job Ids */
@@ -6596,6 +6645,10 @@ export interface components {
              * @default false
              */
             keypoints: boolean;
+            /** Keys */
+            keys: {
+                [key: string]: unknown;
+            }[];
             /**
              * Kind
              * @enum {string}
@@ -6605,7 +6658,7 @@ export interface components {
              * Method
              * @enum {string}
              */
-            method: "projected" | "generated" | "picture" | "move" | "rendered" | "drawn" | "stage";
+            method: "projected" | "generated" | "filled" | "picture" | "move" | "rendered" | "drawn" | "stage";
             /** Name */
             name: string;
             /** Object Id */
@@ -6616,6 +6669,8 @@ export interface components {
             };
             /** Profile Id */
             profile_id: string | null;
+            /** Prompt */
+            prompt: string | null;
             /** Reference Asset Id */
             reference_asset_id: string | null;
             /**
@@ -7345,6 +7400,11 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** HealBody */
+        HealBody: {
+            /** Heal */
+            heal: boolean;
         };
         /** HealthInfo */
         HealthInfo: {
@@ -8213,6 +8273,20 @@ export interface components {
         JobsSubmitted: {
             /** Jobs */
             jobs: components["schemas"]["JobRecord"][];
+        };
+        /** KeyBody */
+        KeyBody: {
+            /** Frame */
+            frame: number;
+            /**
+             * Heal
+             * @default false
+             */
+            heal?: boolean;
+            /** Image */
+            image: string;
+            /** Mask */
+            mask: string;
         };
         /** LayoutReply */
         LayoutReply: {
@@ -9263,7 +9337,7 @@ export interface components {
              * Method
              * @enum {string}
              */
-            method: "projected" | "generated";
+            method: "projected" | "filled" | "generated";
             /**
              * Prompt Text
              * @default
@@ -14950,6 +15024,41 @@ export interface operations {
             };
         };
     };
+    final_plate_heal_finals__fid__layers_plate_heal_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HealBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Final"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     final_plate_method_finals__fid__layers_plate_method_put: {
         parameters: {
             query?: never;
@@ -15316,6 +15425,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlateQueued"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    final_plate_key_finals__fid__plate_keys_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KeyBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Final"];
                 };
             };
             /** @description Validation Error */

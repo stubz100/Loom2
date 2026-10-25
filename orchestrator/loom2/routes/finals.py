@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import secrets
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -234,13 +235,14 @@ async def final_plate(svc: Svc, fid: str, body: PlateBody):
     except ValueError as e:
         raise HTTPException(422, str(e))
     await svc.queue.flush()
-    f = await asyncio.to_thread(store.update_layer, fid, "plate", status="queued", error=None, clip_id=None, frames_done=0, job_ids=[*plate.job_ids, jobs[0].id])
+    f = await asyncio.to_thread(store.update_layer, fid, "plate", status="queued", error=None, clip_id=None, frames_done=0, job_ids=[*plate.job_ids, jobs[0].id],
+                                prompt=body.prompt_text.strip(), keys=[])
     svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
     return {"job_id": jobs[0].id, "pass_asset_id": rec.id, "scene_plate": first}
 
 
 class PlateMethodBody(BaseModel):
-    method: Literal["projected", "generated"]
+    method: Literal["projected", "filled", "generated"]
     prompt_text: str = ""                          # what the place is (the Shot tab's prompt): a still already made is generated along the path with it
 
 
@@ -260,15 +262,17 @@ async def final_plate_method(svc: Svc, fid: str, body: PlateMethodBody):
     plate = next(x for x in f.layers if x.id == "plate")
     if plate.method == "picture":
         raise HTTPException(422, "the plate is the set's picture (SC3e): it is neither projected nor generated")
-    if plate.status in ("queued", "running") and not (plate.status == "running" and plate.method == "projected" and plate.still_asset_id):
+    if plate.status in ("queued", "running") and not (plate.status == "running" and plate.method in ("projected", "filled") and plate.still_asset_id
+                                                       and not any(k.get("asset_id") is None for k in plate.keys)):
         raise HTTPException(409, "the plate is being made — wait for it, or cancel its job")
     try:
         plate_method_check(body.method, f.frames)
     except ValueError as e:
         raise HTTPException(422, str(e))
     still = plate.still_asset_id
-    f = await asyncio.to_thread(store.update_layer, fid, "plate", method=body.method, error=None, clip_id=None,
-                                **({"status": "running", "frames_done": 0} if still and body.method == "projected" else {} if still else {"status": "passes"}))
+    f = await asyncio.to_thread(store.update_layer, fid, "plate", method=body.method, error=None, clip_id=None, keys=[],
+                                **({"prompt": body.prompt_text.strip()} if body.prompt_text.strip() else {}),      # PF1: the place the Fills continue
+                                **({"status": "running", "frames_done": 0} if still and body.method in ("projected", "filled") else {} if still else {"status": "passes"}))
     if still and body.method == "generated":
         if svc.queue is None:
             raise HTTPException(409, "no queue")
@@ -279,6 +283,97 @@ async def final_plate_method(svc: Svc, fid: str, body: PlateMethodBody):
             raise HTTPException(422, str(e))
         await svc.queue.flush()
         f = await asyncio.to_thread(store.get, fid)
+    svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
+    return f.model_dump()
+
+
+class HealBody(BaseModel):
+    heal: bool
+
+
+@router.put("/finals/{fid}/layers/plate/heal", response_model=Final)
+async def final_plate_heal(svc: Svc, fid: str, body: HealBody):
+    """PF1 (Q29): the filled plate's in-between heal on or off — kept on the layer; Stage heals the frames between keyframes when it is on
+    (the next time it fills the plate: *Project and fill* again)."""
+    ws, _, _ = svc.require_project()
+    try:
+        f = await asyncio.to_thread(FinalStore(ws).update_layer, fid, "plate", heal=body.heal)
+    except KeyError:
+        raise HTTPException(404, "final not found")
+    svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
+    return f.model_dump()
+
+
+class KeyBody(BaseModel):
+    frame: int = Field(ge=1)
+    image: str                                     # the keyframe's projected composite (a blob's sha256, PNG at the still's size)
+    mask: str                                      # its bad pixels (a blob's sha256, PNG: white = fill)
+    heal: bool = False                             # a heal keyframe (Q29) rather than a placed one
+
+
+@router.post("/finals/{fid}/plate/keys", response_model=Final)
+async def final_plate_key(svc: Svc, fid: str, body: KeyBody):
+    """PF1 (D135): a filled plate's keyframe — Stage's projection of the keyframes before it into this frame's view, and the pixels none of
+    them saw well. The composite becomes an Edit document with those pixels as its selection, and its Fill (Klein, expand 48, feather 32,
+    one seed for the plate, the place's surfaces as the prompt) is queued; its finisher flattens the document into the keyframe. A
+    keyframe with almost nothing to fill (< 0.2 %) is the composite itself."""
+    import numpy as np
+    from PIL import Image
+
+    from ..finals import FINAL_PLATE_KEY_SURFACE, KEY_FILL_MIN, plate_fill_prompt
+    from ..models import registry
+    from ..origin import JobOrigin
+    ws, cat, q = svc.require_project()
+    store = FinalStore(ws)
+    f = await asyncio.to_thread(store.get, fid)
+    if f is None:
+        raise HTTPException(404, "final not found")
+    plate = next(x for x in f.layers if x.id == "plate")
+    if plate.method != "filled":
+        raise HTTPException(422, "the plate is not projected and filled — pick *Project and fill* on its row")
+    if not plate.still_asset_id:
+        raise HTTPException(422, "the plate has no still yet")
+    if body.frame >= f.frames:
+        raise HTTPException(422, f"a keyframe is one of the final's frames 1–{f.frames - 1}")
+    image, mask_png = _blob(ws, body.image), _blob(ws, body.mask)
+
+    def prepare() -> tuple[Any, np.ndarray]:
+        rec = cat.ingest_file(image, kind="image", move=False, suite="stage", lineage_kind="stage-pass", parents=[plate.still_asset_id],
+                              params={"final_id": fid, "pass": "plate-key", "frame": body.frame, "heal": body.heal})
+        rec = cat.make_thumbs(rec)
+        with Image.open(mask_png) as m:
+            mask = np.asarray(m.convert("L")) > 127
+        return rec, mask
+    rec, mask = await asyncio.to_thread(prepare)
+    svc.hub.broadcast("asset.created", rec.model_dump())
+    if mask.shape != (rec.h, rec.w):
+        raise HTTPException(422, f"the mask ({mask.shape[1]}×{mask.shape[0]}) is not the keyframe's size ({rec.w}×{rec.h})")
+    share = float(mask.mean())
+    key: dict[str, Any] = {"frame": body.frame, "asset_id": rec.id, "filled": round(share, 4), "job_id": None, "heal": body.heal}
+    if share >= KEY_FILL_MIN:
+        docs = svc.require_documents()
+
+        def document() -> Any:
+            with Image.open(cat.abs_path(rec)) as im:
+                base = np.asarray(im.convert("RGBA"))
+            od = docs.create(f"{f.name} · plate key {body.frame}", int(base.shape[1]), int(base.shape[0]), "transparent", rec.id, base)
+            od.selection = np.where(mask, 255, 0).astype(np.uint8)
+            od.doc.has_selection = True
+            od.dirty = True
+            od.save()
+            return od
+        od = await asyncio.to_thread(document)
+        seed = plate.seed or secrets.randbelow(2**31 - 2) + 1
+        try:
+            job = q.submit({"kind": "inpaint", "mode": "fill", "model_id": registry.default_model("inpaint", svc.app.settings.variant),   # Klein 4B under `open` (D26)
+                            "document_id": od.doc.id, "prompt_text": plate_fill_prompt(plate.prompt), "seeds": [seed], "expand": 48, "feather": 32},
+                           origin=JobOrigin(suite="stage", surface=FINAL_PLATE_KEY_SURFACE, ref=fid, payload={"frame": body.frame, "document_id": od.doc.id}))[0]
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+        await q.flush()
+        key.update(asset_id=None, job_id=job.id)
+        await asyncio.to_thread(store.update_layer, fid, "plate", seed=seed, job_ids=[*plate.job_ids, job.id], status="running", error=None)
+    f = await asyncio.to_thread(store.set_key, fid, key)
     svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
     return f.model_dump()
 

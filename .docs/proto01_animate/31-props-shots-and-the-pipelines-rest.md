@@ -360,3 +360,25 @@ surfaces, a prompt spike first, or leave it.
 ![E35d orbit, 3 %, the place's prompt — thin Fills, a second window](img/31-e35d-orbit-3pct.jpg)
 ![E35d crane, 8 %, a neutral prompt](img/31-e35d-crane-8pct.jpg)
 ![E35d crane, 3 %, the place's prompt](img/31-e35d-crane-3pct.jpg)
+
+### 4h. PF1 — the plate projected and filled (D135)
+
+Q29 answered (2026-10-25): build it, the Fill's prompt the place's surfaces, the in-between heal optional.
+
+| Part | What it is |
+| --- | --- |
+| **The method** | `filled` beside `projected`, `generated` and `picture`; the camera's travel advises it for a large move and *Make the final shot…* makes it (D130's automatic choice moves here); the plate row's chip offers *Project and fill*, *Generate it along the path*, *Project the still* |
+| **The keyframes** | on the server: `FinalLayer.keys` — `{frame, asset_id, filled, job_id, heal}`; `POST /finals/{fid}/plate/keys` takes a keyframe's projected composite and its bad mask (blobs), makes an Edit document of it with the mask as its selection and queues its Fill (Klein, `fill`, expand 48, feather 32, one seed for the plate); the Fill's finisher flattens the document into the keyframe's asset; a mask under 0.2 % is the keyframe as projected (no job) |
+| **The Fill's prompt** | the place's surfaces: a lead asking to continue the surrounding surfaces with the same materials and light and to add nothing, then the Shot's place prompt (the plate's own prompt, kept on the layer) |
+| **Stage's part** | `fillPlate.ts`: from the last keyframe, probe each frame (the stack of the three keyframes before it, the coverage cosine; bad = seen by none, or more than twice as head-on as the best below 70°); the first frame past 8 % (and the last frame) is the next keyframe; the composite and mask at the still's size go up; when every keyframe is made (and healed), each frame is its neighbours projected, the most head-on per pixel, and the frames go up as the plate's own. Driven by the finals' poll, as PS5b's projection; resumable from the keyframes on the server |
+| **The heal (optional)** | *Heal the frames between* on the plate's row (a tick, off): in each span the frame with the most bad pixels left becomes a small keyframe of its own, until no frame keeps more than 0.5 % |
+| **Done when** | tests (the routes, the finisher, the pure picks: the next keyframe, the best layer per pixel, the heal's frame); the e2e (a moving camera's plate projected and filled on the fake engine, under both variants); the rig on E35d's orbit and crane (on the set as the projection; the time); screenshots |
+
+**Built (2026-10-25, journal 04:17), rig 8/8.** The orbit: 7 keyframes filled in 397 s, 3 px from the set (the projection 4); the crane with
+the heal on: 3 keyframes in 217 s, as the projection — nothing left to heal (0.38 % at most between keyframes). The crane is clean; on the
+orbit a window grows on the newly seen left wall at the end, where the set's light is a window. The author's look owed.
+
+![PF1 on the orbit: the set · projected · projected and filled](img/31-pf1-orbit.jpg)
+![PF1 on the crane, the heal on](img/31-pf1-crane.jpg)
+![Make the final shot… on a moving camera: the plate projected and filled](img/31-pf1-make-confirm.jpg)
+![The plate's row: filled · heal, its menu](img/31-pf1-plate-menu.jpg)

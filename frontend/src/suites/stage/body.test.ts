@@ -51,3 +51,22 @@ describe('the body on the dummy (CA0)', () => {
     expect(tailed.joints.head.children.length).toBe(plain.joints.head.children.length + 2)   // two horns on the head
   })
 })
+
+describe('×1 an adult (proto01_UIcast CS1 · S3)', () => {
+  it('a body of before, converted (neck = (neck + head) / 2), keeps every head point where it was', () => {
+    const head = 0.889, before = 2.317                                               // Mara's fit on the old dummy
+    const m = mannequin(mat, POSES.stand, undefined, { ...DEFAULT_BODY, head, neck: (before + head) / 2 })
+    const y = (k: number) => { m.joints.root.updateWorldMatrix(true, true); return m.joints.neck.worldToLocal(m.markers[k].getWorldPosition(new THREE.Vector3())).y }
+    expect(y(0)).toBeCloseTo(0.06 * before + 0.08 * head, 5)                        // the nose over the neck joint, as rig 1 drew it
+    expect(y(14)).toBeCloseTo(0.06 * before + 0.12 * head, 5)                       // an eye
+    expect(y(16)).toBeCloseTo(0.06 * before + 0.1 * head, 5)                        // an ear
+    expect(bodyDims({ ...DEFAULT_BODY, head, neck: (before + head) / 2 }).top).toBeCloseTo(0.07 + 0.88 + 0.06 + 0.44 + 0.06 * before + 0.221 * head, 5)
+  })
+  it('the elbow and knee factors place the joints along their limbs; ×1 is the old dummy exactly', () => {
+    const d = bodyDims({ ...DEFAULT_BODY, elbow: 0.6, knee: 0.45 })
+    expect(d.limbs.upper_arm / (d.limbs.upper_arm + d.limbs.forearm)).toBeCloseTo(0.6, 6)
+    expect(d.limbs.thigh / (d.limbs.thigh + d.limbs.shin)).toBeCloseTo(0.45, 6)
+    expect(d.limbs.upper_arm + d.limbs.forearm).toBeCloseTo(0.56, 6)
+    expect(bodyDims(DEFAULT_BODY).limbs).toEqual({ upper_arm: 0.29, forearm: 0.27, thigh: 0.44, shin: 0.43 })
+  })
+})

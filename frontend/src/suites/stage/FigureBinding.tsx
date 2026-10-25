@@ -10,7 +10,8 @@ import { PresetPanel } from '../../frame/PresetPanel'
 import { PresetIcons, type PresetIcon } from '../../frame/PresetIcons'
 import { fieldGlyph } from '../../frame/presetGlyphs'
 import { profilesForMentions, useStory } from '../story/storyStore'
-import { st } from './stageStore'
+import { st, useStage } from './stageStore'
+import { castPropMenu } from '../story/castProp'
 
 /** D93 (C8): the hero of the version a figure wears, as a thumbnail URL. */
 function heroOf(p: Profile | undefined, vid?: string | null): string | null {
@@ -94,6 +95,9 @@ export function MeshProp({ o }: { o: StageObject }) {
       {p && p.versions.length > 1 && <div className="kv"><span>version</span><select value={o.version ?? ''} aria-label="the prop's version" onChange={(e) => st().bindProp(o.id, p.id, e.target.value || null)}>
         <option value="">current ({p.current})</option>{p.versions.map((v) => <option key={v.id} value={v.id}>{v.label && v.label !== v.id ? `${v.id} · ${v.label}` : v.id}{v.model_asset_id ? '' : ' (no model)'}</option>)}</select></div>}
       {p && <div className="verbs"><button className="quiet" onClick={() => openProp(p.id)} title="Open the prop in Story · Cast">Open in Story · Cast</button></div>}
+      {!p && o.asset_id && <div className="verbs"><button className="quiet" data-verb="cast-prop" title="A new Cast prop with this model (bound here), or this model for a prop you have"
+        onClick={(e) => { const id = o.asset_id!; const a = useStage.getState().meshes.find((m) => m.id === id)
+          showMenu(e, castPropMenu({ id, parents: a?.parents ?? [] }, (pid) => st().bindProp(o.id, pid)).items) }}>Make it a Cast prop ▾</button></div>}   {/* proto01_UIcast CF8 */}
     </>
   )
 }

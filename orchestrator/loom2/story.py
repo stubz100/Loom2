@@ -40,7 +40,8 @@ if TYPE_CHECKING:
     from .workspace import Workspace
 
 WORLD_SCHEMA_VERSION = 1
-PROFILE_SCHEMA_VERSION = 2                         # D93 (B4): 2 — a version holds a sheet (appearance, outfit, colours, marks) and a label, not one stub
+PROFILE_SCHEMA_VERSION = 3                         # D93 (B4): 2 — a version holds a sheet (appearance, outfit, colours, marks) and a label, not one stub;
+                                                   # proto01_UIcast CS1 (S3): 3 — a body's factors are of the adult dummy (body.rebase_body)
 SHOT_SCHEMA_VERSION = 2                            # RC2a: 2 — the shot lives in its node's file (`Shot` is the API's view of it)
 FLOW_SCHEMA_VERSION = 2                            # RC2a: 2 — a visual node's file holds its shot
 _LOCK = threading.RLock()                          # RC2a: a node's fields and its shot share one file — every read-modify-write holds this
@@ -176,6 +177,9 @@ class ProfileVersion(BaseModel):
     anim_ref_asset_id: str | None = None          # CA0 (01 step 2): the animation reference — full body, A-pose, 16:9, plain ground (a prop: alone, ¾ view)
     anim_ref_back_asset_id: str | None = None     # CA0: its optional back view (a shot that starts with the character turned away)
     body_fit_from: str | None = None              # CA1b (D104): the animation reference the body was last fitted to (an asset id); None = by hand
+    body_points: dict[str, Any] | None = None     # proto01_UIcast CS1: SDPose's person on that reference ({canvas, pose, hand_left, hand_right, feet}) —
+                                                  # the turn test's stance (S4), the skeleton bench's points (CS2)
+    anim_ref_note: str | None = None              # S8: what the fit saw wrong in the reference's stance ("arms_close"); None = fine or not fitted
     anim_test_clip_id: str | None = None          # CA0: the last test animation of the reference (a turn on the spot, Wan Animate) — a clip id
     model_asset_id: str | None = None             # D110 (PS2): a prop version's 3D model (a Catalogue mesh, image → mesh, stood upright)
     model_from: str | None = None                 # D110: the image it was made from (an asset id); another reference now marks it stale
@@ -239,9 +243,15 @@ class Profile(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _migrate(cls, data: Any) -> Any:
-        """D93 (B4): a schema-1 record reads as schema 2 (each version's stub → its appearance, ProfileVersion._from_stub); nothing is written
-        by a read — the next save writes the new shape."""
+        """D93 (B4): a schema-1 record reads as schema 2 (each version's stub → its appearance, ProfileVersion._from_stub); CS1 (S3): a
+        schema-2 record's bodies read as the adult dummy's (body.rebase_body); nothing is written by a read — the next save writes the new
+        shape."""
         if isinstance(data, dict) and int(data.get("schema_version") or 1) < PROFILE_SCHEMA_VERSION:
+            from .body import rebase_body
+            versions = data.get("versions")
+            if isinstance(versions, list):
+                data = {**data, "versions": [{**v, "body": rebase_body(v["body"])} if isinstance(v, dict) and isinstance(v.get("body"), dict) else v
+                                             for v in versions]}
             data = {**data, "schema_version": PROFILE_SCHEMA_VERSION}
         return data
 
@@ -759,9 +769,10 @@ def anim_ref_sentence(cls: str, side: str) -> str:
         return ("The object alone, a three-quarter view, the whole object visible and centred with space around it, "
                 "on a plain light grey studio background, soft even light, no other objects, no text.")
     view = "seen from directly behind, the back of the figure" if side == "back" else "facing the camera, front view"
-    return (f"Full-body character reference, {view}, standing in a neutral A-pose with the arms held a little away from the body and the "
-            "feet slightly apart, the whole figure from the top of the head to the feet visible and centred with space around it, "
-            "on a plain light grey studio background, soft even light, no props, no other people, no text.")
+    return (f"Full-body character reference, {view}, standing in a neutral A-pose with both arms held straight about 30 degrees away from "
+            "the body, the hands open and clear of the clothes, the feet slightly apart, the whole figure from the top of the head to the "
+            "feet visible and centred with space around it, on a plain light grey studio background, soft even light, no props, no other "
+            "people, no text.")
 
 
 def plan_anim_ref(profile: Profile, version: ProfileVersion, side: str, variant: str, *, width: int, height: int, count: int, group_id: str,
@@ -1919,6 +1930,8 @@ class StoryStore(_ShotMixin, _FlowMixin):
         if side == "back" and cur.cls != "character":
             raise ValueError("only a character has a back view")
         setattr(v, field, asset_id)
+        if side != "back" and asset_id != v.body_fit_from:
+            v.anim_ref_note = None                                   # S8: the note was about the reference it replaces
         p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
         self.save_profile(p)
         return p
@@ -1940,9 +1953,9 @@ class StoryStore(_ShotMixin, _FlowMixin):
         self.save_profile(p)
         return p
 
-    def set_fitted_body(self, pid: str, vid: str, body: Body, asset_id: str) -> Profile:
-        """CA1b (D104): the version's body fitted to its animation reference (SDPose's proportions). Like the reference itself, a product of the
-        version (no revision guard, a final version too)."""
+    def set_fitted_body(self, pid: str, vid: str, body: Body, asset_id: str, points: dict[str, Any] | None = None, note: str | None = None) -> Profile:
+        """CA1b (D104): the version's body fitted to its animation reference (SDPose's proportions), with the points it was fitted to and what
+        the stance check saw (CS1: S4, S8). Like the reference itself, a product of the version (no revision guard, a final version too)."""
         cur = self.profile(pid)
         if cur is None:
             raise KeyError(pid)
@@ -1950,7 +1963,7 @@ class StoryStore(_ShotMixin, _FlowMixin):
         v = next((x for x in versions if x.id == vid), None)
         if v is None:
             raise KeyError(f"no version {vid!r}")
-        v.body, v.body_fit_from = body, asset_id
+        v.body, v.body_fit_from, v.body_points, v.anim_ref_note = body, asset_id, points, note
         p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
         self.save_profile(p)
         return p

@@ -21,8 +21,8 @@ function segmentEnd(j: Joint, limbs: Limbs): THREE.Vector3 {
     case 'r_hip': case 'l_hip': return new THREE.Vector3(0, -limbs.thigh, 0)
     case 'r_knee': case 'l_knee': return new THREE.Vector3(0, -limbs.shin - 0.06, 0.08)              // the foot rides on the shin
     case 'spine': return new THREE.Vector3(0, 0.42, 0)
-    case 'neck': return new THREE.Vector3(0, 0.08, 0)
-    case 'head': return new THREE.Vector3(0, 0.24, 0)
+    case 'neck': return new THREE.Vector3(0, 0.12, 0)                                                // CS1 (S3): the neck joint to the head's pivot at ×1
+    case 'head': return new THREE.Vector3(0, 0.16, 0)                                                // the pivot (the jaw) to the head's top
     case 'root': return new THREE.Vector3(0, -0.04, 0)
   }
 }

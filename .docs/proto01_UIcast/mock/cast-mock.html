@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cast workshop wireframes</title>
+<!-- proto01_UIcast 02: wireframes of the proposed Cast workshop (a static mock, not the app). Rendered to ../img/ui-*.jpg by
+     render.cjs (Playwright, Edge, 1600 × 1000): cast-mock.html?s=bench | image | skeleton | lineup | place | clay. -->
+<style>
+  :root { --bg: #121212; --panel: #181818; --raise: #202020; --line: #2c2c2c; --fg: #dcdcdc; --fg2: #a8a8a8; --fg3: #6f6f6f;
+    --acc: #f0a030; --acc2: #6b4a17; --ok: #3fb950; --warn: #d29922; --bad: #e5534b; --run: #58a6ff; --clay: #9a9a9e; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 13px/1.35 "Segoe UI", system-ui, sans-serif; width: 1600px; height: 1000px; overflow: hidden; position: relative; }
+  .top { height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-bottom: 1px solid var(--line); background: #151515; }
+  .top .tab { padding: 5px 12px; border-radius: 6px; color: var(--fg2); }
+  .top .tab.on { background: var(--raise); color: var(--fg); border: 1px solid #3a3a3a; }
+  .top kbd { font: 11px Consolas, monospace; color: var(--fg3); border: 1px solid #333; border-radius: 4px; padding: 0 4px; margin-left: 6px; }
+  .top .sp { flex: 1; }
+  .chip { border: 1px solid var(--line); border-radius: 12px; padding: 3px 10px; color: var(--fg2); font-size: 12px; white-space: nowrap; }
+  .chip i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); margin-right: 6px; }
+  .chip.for { border-color: var(--acc); color: var(--acc); background: #2a1d07; }
+  .main { display: grid; grid-template-columns: 56px 330px 1fr 340px; height: calc(1000px - 40px - 28px); }
+  .main.noinsp { grid-template-columns: 56px 360px 1fr; }
+  .rail { border-right: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; gap: 4px; padding-top: 8px; }
+  .rail .r { width: 46px; padding: 6px 0 4px; border-radius: 8px; text-align: center; color: var(--fg3); font-size: 10px; }
+  .rail .r b { display: block; font-size: 17px; font-weight: 400; color: var(--fg2); line-height: 20px; }
+  .rail .r.on { background: var(--raise); outline: 1px solid var(--acc); color: var(--fg); }
+  .rail .r.on b { color: var(--acc); }
+  .col { border-right: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+  .col .head { height: 36px; display: flex; align-items: center; padding: 0 12px; border-bottom: 1px solid var(--line); font-weight: 600; gap: 8px; }
+  .col .body { flex: 1; overflow: hidden; padding: 10px 12px; }
+  .col .foot { border-top: 1px solid var(--line); padding: 10px 12px; }
+  .primary { background: var(--acc); color: #1a1205; border-radius: 6px; text-align: center; padding: 7px 12px; font-weight: 600; display: inline-block; }
+  .btn { border: 1px solid #3a3a3a; border-radius: 6px; padding: 6px 11px; color: var(--fg); display: inline-block; background: #1e1e1e; }
+  .est { color: var(--fg3); font-size: 12px; margin-top: 4px; }
+  .stage { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; }
+  .strip { height: 36px; white-space: nowrap; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-bottom: 1px solid var(--line); color: var(--fg2); }
+  .strip b { color: var(--fg); }
+  .insp { background: var(--panel); padding: 10px 14px; overflow: hidden; }
+  .insp h4, .col h4, .stage h4 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--fg2); }
+  .kv { display: grid; grid-template-columns: 96px 1fr; gap: 6px 8px; align-items: center; font-size: 12.5px; }
+  .kv > span:nth-child(odd) { color: var(--fg3); }
+  .field { border: 1px solid #343434; border-radius: 5px; padding: 3px 7px; background: #1d1d1d; }
+  .verb { color: var(--fg2); margin: 6px 14px 0 0; display: inline-block; }
+  .verb::before { content: "▸ "; color: var(--fg3); }
+  .seg { display: inline-flex; border: 1px solid #363636; border-radius: 6px; overflow: hidden; font-size: 12px; }
+  .seg span { padding: 3px 9px; color: var(--fg2); }
+  .seg span.on { background: #2b2b2b; color: var(--fg); }
+  .dock { height: 28px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 12px; padding: 0 12px; color: var(--fg3); font-size: 12px; }
+  .new { outline: 2px dashed var(--acc); outline-offset: 2px; border-radius: 6px; }
+  .note { position: absolute; background: #2a1d07; color: #ffd28a; border: 1px solid var(--acc); border-radius: 6px; padding: 4px 8px; font-size: 11.5px; max-width: 270px; z-index: 5; }
+  .muted { color: var(--fg3); }
+  .ph { border-radius: 4px; position: relative; overflow: hidden; }
+  .ph.y { background: linear-gradient(160deg, #3a3a3e, #26262a); }
+  .ph.r { background: linear-gradient(160deg, #6b4632, #3a2418); }
+  .ph.b { background: linear-gradient(160deg, #39506b, #1f2c3c); }
+  .ph.g { background: linear-gradient(160deg, #4e6339, #29361d); }
+  .ph.p { background: linear-gradient(160deg, #57425f, #2e2335); }
+  /* idea cards */
+  .classes { display: flex; gap: 6px; margin-bottom: 10px; }
+  .ideas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .idea { border: 1px solid #2f2f2f; border-radius: 8px; padding: 6px; background: #1b1b1b; }
+  .idea.sel { border-color: var(--acc); box-shadow: 0 0 0 1px var(--acc); }
+  .idea .ph { height: 120px; }
+  .idea .n { margin-top: 5px; font-size: 12.5px; }
+  .idea .m { font-size: 11px; color: var(--fg3); display: flex; justify-content: space-between; }
+  .badge { font-size: 10.5px; border: 1px solid #3c3c3c; border-radius: 9px; padding: 0 6px; color: var(--fg2); }
+  .badge.c { color: #c9c9ce; border-color: #555; }
+  /* variant strip */
+  .vstrip { display: flex; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); align-items: center; }
+  .vstrip .v { width: 86px; height: 86px; border: 1px solid #333; border-radius: 6px; position: relative; }
+  .vstrip .v.on { border: 2px solid var(--acc); }
+  .vstrip .v .cb { position: absolute; right: 3px; bottom: 3px; font-size: 10px; background: #000a; border-radius: 4px; padding: 0 4px; color: #ddd; }
+  .viewer { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 10px 12px; min-height: 0; }
+  .pane { border: 1px solid #2c2c2c; border-radius: 8px; background: #161616; position: relative; overflow: hidden; }
+  .pane .lab { position: absolute; left: 8px; top: 6px; font-size: 11.5px; color: var(--fg3); }
+  .pane .tools { position: absolute; right: 8px; top: 6px; display: flex; gap: 6px; }
+  .floorgrid { background: radial-gradient(#2a2a2a 1px, transparent 1px) 0 0 / 22px 22px; }
+  .footrow { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-top: 1px solid var(--line); }
+  /* results */
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 12px; }
+  .tile { height: 150px; border-radius: 6px; position: relative; border: 1px solid #2c2c2c; }
+  .tile .hb { position: absolute; right: 6px; top: 6px; background: #000b; border: 1px solid var(--acc); color: var(--acc); border-radius: 5px; padding: 1px 6px; font-size: 12px; }
+  .menu { position: absolute; background: #1e1e1e; border: 1px solid #3a3a3a; border-radius: 7px; padding: 4px 0; min-width: 250px; z-index: 6; box-shadow: 0 8px 24px #000a; font-size: 12.5px; }
+  .menu .i { padding: 5px 14px; display: flex; justify-content: space-between; color: var(--fg); }
+  .menu .i.f { background: #2b2b2b; }
+  .menu .i .k { color: var(--fg3); }
+  .menu .sep { border-top: 1px solid #333; margin: 4px 0; }
+  .menu .h { padding: 4px 14px; color: var(--fg3); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  svg text { font-family: "Segoe UI", system-ui, sans-serif; }
+  /* the skeleton bench */
+  .viewer3 { flex: 1; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; padding: 10px 12px; min-height: 0; }
+  .grp { margin: 10px 0 2px; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--fg2); display: flex; justify-content: space-between; }
+  .prow { display: grid; grid-template-columns: 104px 1fr 62px 30px; gap: 8px; align-items: center; height: 25px; font-size: 12.5px; }
+  .prow > span:first-child { color: var(--fg2); }
+  .trk { position: relative; height: 4px; background: #2e2e2e; border-radius: 2px; }
+  .trk .band { position: absolute; top: -3px; height: 10px; background: #474747; border-radius: 3px; }
+  .trk .knob { position: absolute; top: -5px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: #d8d8d8; border: 1px solid #111; }
+  .trk .knob.amb { background: var(--warn); }
+  .val { text-align: right; font-variant-numeric: tabular-nums; }
+  .val.amb { color: var(--warn); }
+  .mk { font-size: 11px; color: var(--fg3); white-space: nowrap; }
+  .mk .f { color: var(--run); }
+  .mk .h { color: var(--acc); }
+  .hands { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 2px; }
+  .hands span { border: 1px solid #383838; border-radius: 5px; padding: 1px 7px; font-size: 11.5px; color: var(--fg2); }
+  .hands span.on { border-color: var(--acc); color: var(--acc); background: #2a1d07; }
+  .status { margin-top: 10px; font-size: 12px; color: var(--warn); display: flex; gap: 6px; align-items: center; }
+  .q { display: inline-block; width: 15px; height: 15px; border-radius: 50%; border: 1px solid #555; color: var(--fg3); font-size: 10px; text-align: center; line-height: 13px; }
+</style>
+</head>
+<body>
+
+<!-- ============ 1 · the character bench ============ -->
+<section id="bench" hidden>
+  <div class="top"><span>☰</span><span class="chip">Project · A1</span><span class="tab on">Story<kbd>Ctrl+1</kbd></span><span class="tab">Image<kbd>Ctrl+2</kbd></span><span class="tab">Animate<kbd>Ctrl+3</kbd></span><span class="tab">Catalogue<kbd>Ctrl+4</kbd></span><span class="sp"></span><span class="chip"><i></i>engine on</span><span class="chip">0 running · 0 queued</span></div>
+  <div class="main">
+    <div class="rail"><div class="r"><b>◎</b>World</div><div class="r on"><b>☺</b>Cast</div><div class="r"><b>⑂</b>Flow</div><div class="r"><b>▤</b>Shots</div><div class="r"><b>▶</b>Episode</div></div>
+    <div class="col">
+      <div class="head">Cast <span class="sp" style="flex:1"></span><span class="badge">ideas · kept</span></div>
+      <div class="body">
+        <div class="classes"><span class="seg"><span class="on">Characters</span><span>Props</span><span>Places</span></span><span class="btn new" style="padding:3px 9px">+ New idea</span></div>
+        <div class="ideas new">
+          <div class="idea sel"><div class="ph r"></div><div class="n">Woman in a yellow raincoat</div><div class="m"><span>6 variants</span><span class="badge c">clay ✓</span></div></div>
+          <div class="idea"><div class="ph b"></div><div class="n">Old fisherman</div><div class="m"><span>3 variants</span><span class="badge c">clay</span></div></div>
+          <div class="idea"><div class="ph p"></div><div class="n">Courier, bike helmet</div><div class="m"><span>4 variants</span><span class="badge">no clay</span></div></div>
+          <div class="idea"><div class="ph g"></div><div class="n">Child with a kite</div><div class="m"><span>2 variants</span><span class="badge c">clay ✓</span></div></div>
+          <div class="idea"><div class="ph y"></div><div class="n">Mara</div><div class="m"><span>kept · v1</span><span class="badge c">clay ✓</span></div></div>
+          <div class="idea"><div class="ph y"></div><div class="n">Ines</div><div class="m"><span>kept · v1</span><span class="badge c">clay ✓</span></div></div>
+        </div>
+      </div>
+      <div class="foot"><span class="btn">Line-up of the selected (3)</span></div>
+    </div>
+    <div class="stage">
+      <div class="strip"><b>Woman in a yellow raincoat</b> <span class="muted">· idea · 6 variants</span><span class="sp" style="flex:1"></span><span class="btn" style="padding:3px 10px">Explore in Image</span><span class="btn" style="padding:3px 10px">More like this</span></div>
+      <div class="vstrip new">
+        <div class="v ph r"></div><div class="v ph r on"><span class="cb">clay</span></div><div class="v ph r"></div><div class="v ph b"></div><div class="v ph r"><span class="cb">clay</span></div><div class="v ph p"></div>
+        <span class="muted" style="margin-left:8px">drop a picture here to add a variant</span>
+      </div>
+      <div class="viewer">
+        <div class="pane"><span class="lab">the variant · A-pose (made from it, Klein)</span>
+          <svg width="100%" height="100%" viewBox="0 0 520 560"><rect width="520" height="560" fill="#bdbdc2"/>
+            <g transform="translate(260,70)" fill="#d8a82a" stroke="#8a6512" stroke-width="2">
+              <circle cx="0" cy="20" r="26" fill="#e7c4a4" stroke="#9b7656"/><path d="M-30,6 Q0,-26 30,6 L34,40 L-34,40 Z" fill="#6b3b22" stroke="#4a2716"/>
+              <path d="M-48,60 L48,60 L62,300 L-62,300 Z"/><path d="M-48,64 L-104,210 L-90,216 L-36,96 Z"/><path d="M48,64 L104,210 L90,216 L36,96 Z"/>
+              <rect x="-40" y="300" width="28" height="140" fill="#2b3a55" stroke="#1a2436"/><rect x="12" y="300" width="28" height="140" fill="#2b3a55" stroke="#1a2436"/>
+              <rect x="-46" y="438" width="36" height="16" rx="5" fill="#5a3a22" stroke="none"/><rect x="10" y="438" width="36" height="16" rx="5" fill="#5a3a22" stroke="none"/></g>
+          </svg></div>
+        <div class="pane floorgrid"><span class="lab">its clay · the shell bound to the skeleton</span><div class="tools"><span class="seg"><span class="on">clay</span><span>colour</span></span><span class="seg"><span class="on">skeleton</span></span><span class="seg"><span>A-pose ▾</span></span></div>
+          <svg width="100%" height="100%" viewBox="0 0 520 560"><g transform="translate(260,90)" fill="#a5a5aa" stroke="#6d6d72" stroke-width="2">
+              <circle cx="0" cy="20" r="26"/><path d="M-30,6 Q0,-26 30,6 L34,40 L-34,40 Z" fill="#9a9a9f"/>
+              <path d="M-48,60 L48,60 L62,300 L-62,300 Z"/><path d="M-48,64 L-104,210 L-90,216 L-36,96 Z"/><path d="M48,64 L104,210 L90,216 L36,96 Z"/>
+              <rect x="-40" y="300" width="28" height="140"/><rect x="12" y="300" width="28" height="140"/></g>
+            <g stroke="#f0a030" stroke-width="2" fill="#f0a030"><line x1="260" y1="150" x2="260" y2="250"/><line x1="214" y1="160" x2="306" y2="160"/><line x1="214" y1="160" x2="172" y2="226"/><line x1="172" y1="226" x2="160" y2="300"/><line x1="306" y1="160" x2="348" y2="226"/><line x1="348" y1="226" x2="360" y2="300"/>
+              <line x1="236" y1="390" x2="284" y2="390"/><line x1="236" y1="390" x2="234" y2="460"/><line x1="234" y1="460" x2="232" y2="530"/><line x1="284" y1="390" x2="286" y2="460"/><line x1="286" y1="460" x2="288" y2="530"/>
+              <circle cx="260" cy="110" r="5"/><circle cx="260" cy="150" r="5"/><circle cx="214" cy="160" r="5"/><circle cx="306" cy="160" r="5"/><circle cx="172" cy="226" r="5"/><circle cx="348" cy="226" r="5"/><circle cx="236" cy="390" r="5"/><circle cx="284" cy="390" r="5"/><circle cx="234" cy="460" r="5"/><circle cx="286" cy="460" r="5"/></g>
+            <text x="20" y="545" fill="#8a8a8a" font-size="12">1.68 m · slim · fitted (SDPose) · shell: TripoSR, quick</text></svg></div>
+      </div>
+      <div class="footrow"><span class="primary new">Make the clay ▶</span><span class="est">quick · A-pose, fit, shell ≈ 45 s</span><span class="btn">Make it good ▶</span><span class="est">Pixal3D shell ≈ 4 min</span><span class="sp" style="flex:1"></span><span class="btn">Line-up</span><span class="btn">Send to a stage ▸</span><span class="primary">Keep as v1 ▶</span></div>
+    </div>
+    <div class="insp">
+      <h4>Idea</h4>
+      <div class="kv"><span>name</span><span class="field">Woman in a yellow raincoat</span><span>class</span><span>character · idea</span><span>made from</span><span class="muted">"a young woman in a yellow raincoat, red hair, jeans" · Klein 9B · seed 4185</span><span>variants</span><span>6 (2 with clay)</span></div>
+      <h4>This variant's clay</h4>
+      <div class="kv"><span>A-pose</span><span>made · 31 s</span><span>skeleton</span><span>fitted · 2 markers moved</span><span>body</span><span>1.68 m · slim</span><span>shell</span><span>TripoSR · 4 s · 50k</span></div>
+      <span class="verb">Skeleton…</span><span class="verb">Fit again</span><br><span class="verb">Restyle ▸</span><span class="verb">A new angle</span>
+      <h4>When kept</h4>
+      <div class="muted" style="font-size:12px">v1 takes this picture as its hero, the sheet drafted from the prompt, the clay as its body and shell; the readiness row, references, Expand, LoRA and Mark final follow as today.</div>
+    </div>
+  </div>
+  <div class="dock">Queue · Bin</div>
+  <div class="note" style="left:400px; top:640px">ideas: cheap, many, each with variants (P1)</div>
+  <div class="note" style="left:700px; top:130px">variants: any picture dropped or made for the idea</div>
+  <div class="note" style="left:470px; top:930px">one click to clay (P3), quick first (P4)</div>
+</section>
+
+<!-- ============ 2 · Image: For an idea, and Prototype ▸ ============ -->
+<section id="image" hidden>
+  <div class="top"><span>☰</span><span class="chip">Project · A1</span><span class="tab">Story<kbd>Ctrl+1</kbd></span><span class="tab on">Image<kbd>Ctrl+2</kbd></span><span class="tab">Animate<kbd>Ctrl+3</kbd></span><span class="tab">Catalogue<kbd>Ctrl+4</kbd></span><span class="sp"></span><span class="chip"><i></i>engine on</span><span class="chip">1 running · 3 queued</span></div>
+  <div class="main noinsp">
+    <div class="rail"><div class="r on"><b>✎</b>Make</div><div class="r"><b>▦</b>Edit</div></div>
+    <div class="col">
+      <div class="head">Image · Make</div>
+      <div class="body">
+        <div class="chip for new" style="display:inline-block;margin-bottom:10px">For: Woman in a yellow raincoat · ideas &nbsp;✕ &nbsp;← Back</div>
+        <h4>Prompt</h4><div class="field" style="height:90px">a young woman in a yellow raincoat, red hair, jeans — <span class="muted">this time with a hood up and rubber boots</span></div>
+        <h4>References</h4><div style="display:flex;gap:6px"><div class="ph r" style="width:64px;height:64px"></div><span class="muted" style="font-size:12px">1 · the idea's focus variant</span></div>
+        <h4>Model</h4><div class="field">Klein 9B · Draft</div>
+      </div>
+      <div class="foot"><span class="primary" style="display:block">Generate 4 ▶</span><div class="est">each result lands as a variant of the idea</div></div>
+    </div>
+    <div class="stage">
+      <div class="strip"><b>Results</b> <span class="muted">· this batch</span></div>
+      <div class="grid">
+        <div class="tile ph r"></div><div class="tile ph r"><span class="hb new">🧪</span></div><div class="tile ph b"></div><div class="tile ph r"></div>
+        <div class="tile ph g"></div><div class="tile ph p"></div><div class="tile ph r"></div><div class="tile ph y"></div>
+      </div>
+      <div class="menu new" style="left:520px; top:140px">
+        <div class="h">Prototype</div>
+        <div class="i f"><span>New character idea</span><span class="k"></span></div>
+        <div class="i"><span>New prop idea</span></div>
+        <div class="i"><span>New place idea</span></div>
+        <div class="sep"></div>
+        <div class="i"><span>Add to Woman in a yellow raincoat</span><span class="k">made for</span></div>
+        <div class="i"><span>Add to an idea ▸</span></div>
+        <div class="i"><span>Add to Cast ▸</span><span class="k">hero · references · candidate</span></div>
+      </div>
+      <div class="note" style="left:790px; top:120px">one click from the tile's 🧪; the picture is copied, Image keeps going (P2)</div>
+      <div class="note" style="left:30px; top:700px">today: two levels deep, and Make a character… leaves Image (CF1, CF3)</div>
+    </div>
+  </div>
+  <div class="dock">Queue · Bin</div>
+</section>
+
+<!-- ============ 3 · the skeleton bench ============ -->
+<section id="skeleton" hidden>
+  <div class="top"><span>☰</span><span class="chip">Project · A1</span><span class="tab on">Story<kbd>Ctrl+1</kbd></span><span class="tab">Image<kbd>Ctrl+2</kbd></span><span class="tab">Animate<kbd>Ctrl+3</kbd></span><span class="tab">Catalogue<kbd>Ctrl+4</kbd></span><span class="sp"></span><span class="chip"><i></i>engine on</span><span class="chip">0 running · 0 queued</span></div>
+  <div class="main" style="grid-template-columns: 56px 1fr 400px">
+    <div class="rail"><div class="r"><b>◎</b>World</div><div class="r on"><b>☺</b>Cast</div><div class="r"><b>⑂</b>Flow</div><div class="r"><b>▤</b>Shots</div><div class="r"><b>▶</b>Episode</div></div>
+    <div class="stage">
+      <div class="strip"><b>Mara</b> <span class="muted">· v1 · kept</span><span class="seg"><span>Picture</span><span>Clay</span><span class="on">Skeleton</span></span><span class="sp" style="flex:1"></span><span class="seg"><span class="on">Front</span><span>Back</span></span></div>
+      <div class="viewer3">
+        <!-- the reference, both point sets -->
+        <div class="pane new"><span class="lab">the reference · SDPose's points ○ · the figure's ●</span>
+          <svg width="100%" height="100%" viewBox="0 0 360 800"><rect width="360" height="800" fill="#c6c6c9"/>
+            <g stroke-linejoin="round">
+              <rect x="152" y="470" width="26" height="200" fill="#1c1c1e"/><rect x="182" y="470" width="26" height="200" fill="#1c1c1e"/>
+              <rect x="146" y="664" width="34" height="14" rx="6" fill="#111"/><rect x="180" y="664" width="34" height="14" rx="6" fill="#111"/>
+              <rect x="172" y="138" width="16" height="34" fill="#c49274"/>
+              <path d="M128,172 L232,172 L242,470 L118,470 Z" fill="#7c7c80" stroke="#5c5c60" stroke-width="2"/>
+              <path d="M164,172 L180,250 L196,172" fill="#2a2a2a" stroke="#5c5c60" stroke-width="2"/>
+              <path d="M128,174 L112,182 L102,402 L122,404 L140,206 Z" fill="#757579" stroke="#5c5c60" stroke-width="2"/>
+              <path d="M232,174 L248,182 L258,402 L238,404 L220,206 Z" fill="#757579" stroke="#5c5c60" stroke-width="2"/>
+              <ellipse cx="112" cy="420" rx="9" ry="17" fill="#c49274"/><ellipse cx="248" cy="420" rx="9" ry="17" fill="#c49274"/>
+              <circle cx="180" cy="118" r="23" fill="#c99a7a"/>
+              <path d="M154,126 Q150,86 180,84 Q210,86 206,126 L207,144 L195,144 L196,110 Q180,101 164,110 L165,144 L153,144 Z" fill="#141414"/></g>
+            <!-- the figure's markers and skeleton (blue) -->
+            <g stroke="#2f9be8" stroke-width="2" fill="#2f9be8">
+              <line x1="180" y1="124" x2="180" y2="168"/><line x1="131" y1="170" x2="229" y2="170"/><line x1="131" y1="170" x2="119" y2="291"/><line x1="119" y1="291" x2="113" y2="401"/><line x1="229" y1="170" x2="241" y2="291"/><line x1="241" y1="291" x2="247" y2="401"/>
+              <line x1="180" y1="168" x2="161" y2="414"/><line x1="180" y1="168" x2="199" y2="414"/><line x1="161" y1="414" x2="164" y2="558"/><line x1="164" y1="558" x2="165" y2="667"/><line x1="199" y1="414" x2="196" y2="558"/><line x1="196" y1="558" x2="195" y2="667"/>
+              <circle cx="180" cy="124" r="4"/><circle cx="180" cy="168" r="4"/><circle cx="131" cy="170" r="4"/><circle cx="229" cy="170" r="4"/><circle cx="119" cy="291" r="4"/><circle cx="241" cy="291" r="4"/><circle cx="113" cy="401" r="4"/><circle cx="247" cy="401" r="4"/><circle cx="161" cy="414" r="4"/><circle cx="199" cy="414" r="4"/><circle cx="164" cy="558" r="4"/><circle cx="196" cy="558" r="4"/><circle cx="165" cy="667" r="4"/><circle cx="195" cy="667" r="4"/></g>
+            <!-- SDPose's points (white) -->
+            <g fill="#fff" stroke="#111" stroke-width="1.3">
+              <circle cx="180" cy="125" r="4.5"/><circle cx="180" cy="171" r="4.5"/><circle cx="130" cy="171" r="4.5"/><circle cx="230" cy="171" r="4.5"/><circle cx="118" cy="290" r="4.5"/><circle cx="242" cy="290" r="4.5"/><circle cx="112" cy="403" r="4.5"/><circle cx="248" cy="403" r="4.5"/>
+              <circle cx="162" cy="415" r="4.5"/><circle cx="164" cy="559" r="4.5"/><circle cx="196" cy="559" r="4.5"/><circle cx="165" cy="668" r="4.5"/><circle cx="195" cy="668" r="4.5"/><circle cx="158" cy="119" r="4"/><circle cx="202" cy="119" r="4"/></g>
+            <!-- the left hip: SDPose read it low on the coat; the author dragged it up -->
+            <circle cx="200" cy="446" r="4.5" fill="none" stroke="#fff" stroke-width="1.5" stroke-dasharray="2 2"/><line x1="200" y1="442" x2="200" y2="419" stroke="#f0a030" stroke-width="1.5" stroke-dasharray="3 3"/>
+            <circle cx="200" cy="415" r="6" fill="#f0a030" stroke="#fff" stroke-width="2"/>
+            <line x1="207" y1="415" x2="264" y2="415" stroke="#f0a030" stroke-width="1.2"/>
+            <text x="268" y="412" fill="#5a3500" font-size="12">left hip</text><text x="268" y="426" fill="#5a3500" font-size="12">moved up 4 cm</text><text x="268" y="440" fill="#5a3500" font-size="12">(the coat hid it)</text>
+            <!-- the shoulders, ringed by the neck's warning -->
+            <circle cx="130" cy="171" r="10" fill="none" stroke="#d29922" stroke-width="2"/><circle cx="230" cy="171" r="10" fill="none" stroke="#d29922" stroke-width="2"/>
+            <!-- hands' and feet's points -->
+            <g fill="#3d6df2"><circle cx="110" cy="410" r="2.2"/><circle cx="106" cy="420" r="2.2"/><circle cx="108" cy="430" r="2.2"/><circle cx="113" cy="434" r="2.2"/><circle cx="117" cy="428" r="2.2"/><circle cx="118" cy="416" r="2.2"/>
+              <circle cx="250" cy="410" r="2.2"/><circle cx="254" cy="420" r="2.2"/><circle cx="252" cy="430" r="2.2"/><circle cx="247" cy="434" r="2.2"/><circle cx="243" cy="428" r="2.2"/><circle cx="242" cy="416" r="2.2"/></g>
+            <g fill="#3fd25a" stroke="#111"><circle cx="152" cy="676" r="3.2"/><circle cx="162" cy="678" r="3.2"/><circle cx="168" cy="672" r="3.2"/><circle cx="208" cy="676" r="3.2"/><circle cx="198" cy="678" r="3.2"/><circle cx="192" cy="672" r="3.2"/></g>
+          </svg></div>
+        <!-- the figure, its bones -->
+        <div class="pane floorgrid new"><span class="lab">the figure</span><div class="tools"><span class="seg"><span class="on">Detailed</span><span>Simple</span><span>shell</span></span><span class="seg"><span class="on">bones</span></span></div>
+          <svg width="100%" height="100%" viewBox="0 0 360 800">
+            <g fill="#a9a9ae" stroke="#6d6d72" stroke-width="2" stroke-linejoin="round">
+              <path d="M152,416 L164,560 L162,664 L172,664 L176,560 L178,420 Z"/><path d="M208,416 L196,560 L198,664 L188,664 L184,560 L182,420 Z"/>
+              <ellipse cx="160" cy="676" rx="11" ry="7"/><ellipse cx="200" cy="676" rx="11" ry="7"/>
+              <path d="M136,174 Q180,160 224,174 L214,300 Q214,350 212,420 L148,420 Q146,350 146,300 Z"/>
+              <rect x="171" y="132" width="18" height="44" rx="6"/>
+              <ellipse cx="180" cy="114" rx="20" ry="25"/>
+              <path d="M136,176 L124,182 L114,290 L106,398 L118,400 L128,292 L142,200 Z"/><path d="M224,176 L236,182 L246,290 L254,398 L242,400 L232,292 L218,200 Z"/>
+              <path d="M104,398 Q100,420 108,432 Q118,436 120,422 Q122,408 118,400 Z"/><path d="M256,398 Q260,420 252,432 Q242,436 240,422 Q238,408 242,400 Z"/>
+              <path d="M110,430 q-4,6 2,9 M115,432 q-2,6 4,8" fill="none"/><path d="M250,430 q4,6 -2,9 M245,432 q2,6 -4,8" fill="none"/></g>
+            <g stroke="#2f9be8" stroke-width="2.4" fill="#2f9be8">
+              <line x1="180" y1="414" x2="180" y2="176"/><line x1="180" y1="176" x2="132" y2="180"/><line x1="180" y1="176" x2="228" y2="180"/>
+              <line x1="132" y1="180" x2="120" y2="292"/><line x1="120" y1="292" x2="112" y2="400"/><line x1="228" y1="180" x2="240" y2="292"/><line x1="240" y1="292" x2="248" y2="400"/>
+              <line x1="180" y1="414" x2="162" y2="418"/><line x1="180" y1="414" x2="198" y2="418"/><line x1="162" y1="418" x2="168" y2="560"/><line x1="168" y1="560" x2="167" y2="666"/><line x1="198" y1="418" x2="192" y2="560"/><line x1="192" y1="560" x2="193" y2="666"/>
+              <line x1="112" y1="400" x2="110" y2="430"/><line x1="248" y1="400" x2="250" y2="430"/><line x1="167" y1="666" x2="158" y2="680"/><line x1="193" y1="666" x2="202" y2="680"/>
+              <circle cx="180" cy="414" r="4"/><circle cx="180" cy="290" r="3.5"/><circle cx="132" cy="180" r="4"/><circle cx="228" cy="180" r="4"/><circle cx="120" cy="292" r="4"/><circle cx="240" cy="292" r="4"/><circle cx="112" cy="400" r="4"/><circle cx="248" cy="400" r="4"/>
+              <circle cx="162" cy="418" r="4"/><circle cx="198" cy="418" r="4"/><circle cx="168" cy="560" r="4"/><circle cx="192" cy="560" r="4"/><circle cx="167" cy="666" r="4"/><circle cx="193" cy="666" r="4"/></g>
+            <!-- the neck bone, selected, with its end's handle -->
+            <line x1="180" y1="176" x2="180" y2="128" stroke="#f0a030" stroke-width="4"/><circle cx="180" cy="176" r="4.5" fill="#f0a030"/>
+            <circle cx="180" cy="128" r="7" fill="#1a1205" stroke="#f0a030" stroke-width="2.5"/><path d="M180,108 l-5,7 h10 Z M180,148 l-5,-7 h10 Z" fill="#f0a030"/>
+            <g transform="translate(206,96)"><rect width="128" height="40" rx="5" fill="#1e1e1e" stroke="#3a3a3a"/><text x="9" y="17" fill="#ddd" font-size="12">neck · 13.7 cm</text><text x="9" y="32" fill="#8a8a8a" font-size="11">drag the end · ×1.38</text></g>
+          </svg></div>
+        <!-- the guide Wan Animate gets -->
+        <div class="pane new" style="background:#000"><span class="lab" style="color:#9a9a9a">the guide · what Wan Animate gets · no GPU</span><div class="tools"><span class="seg"><span>onion skin</span></span></div>
+          <svg width="100%" height="100%" viewBox="0 0 360 800">
+            <g stroke-width="5" stroke-linecap="round" fill="none">
+              <line x1="180" y1="122" x2="180" y2="172" stroke="#0028c8"/><line x1="180" y1="122" x2="170" y2="112" stroke="#aa00ff"/><line x1="180" y1="122" x2="190" y2="112" stroke="#ff00aa"/><line x1="170" y1="112" x2="160" y2="118" stroke="#aa00ff"/><line x1="190" y1="112" x2="200" y2="118" stroke="#ff0055"/>
+              <line x1="180" y1="172" x2="134" y2="174" stroke="#c80000"/><line x1="180" y1="172" x2="226" y2="174" stroke="#c85000"/>
+              <line x1="134" y1="174" x2="122" y2="282" stroke="#c88c00"/><line x1="122" y1="282" x2="136" y2="384" stroke="#b4c800"/>
+              <line x1="226" y1="174" x2="242" y2="278" stroke="#78c800"/><line x1="242" y1="278" x2="230" y2="382" stroke="#3cc800"/>
+              <line x1="180" y1="172" x2="162" y2="410" stroke="#00c800"/><line x1="162" y1="410" x2="148" y2="540" stroke="#00c850"/><line x1="148" y1="540" x2="138" y2="660" stroke="#00c88c"/>
+              <line x1="180" y1="172" x2="198" y2="410" stroke="#00c8c8"/><line x1="198" y1="410" x2="208" y2="548" stroke="#008cc8"/><line x1="208" y1="548" x2="226" y2="652" stroke="#0050c8"/></g>
+            <g stroke="#000" stroke-width="1">
+              <circle cx="180" cy="122" r="5" fill="#ff0000"/><circle cx="180" cy="172" r="5" fill="#ff5500"/><circle cx="134" cy="174" r="5" fill="#ffaa00"/><circle cx="122" cy="282" r="5" fill="#ffff00"/><circle cx="136" cy="384" r="5" fill="#aaff00"/>
+              <circle cx="226" cy="174" r="5" fill="#55ff00"/><circle cx="242" cy="278" r="5" fill="#00ff00"/><circle cx="230" cy="382" r="5" fill="#00ff55"/><circle cx="162" cy="410" r="5" fill="#00ffaa"/><circle cx="148" cy="540" r="5" fill="#00ffff"/><circle cx="138" cy="660" r="5" fill="#00aaff"/>
+              <circle cx="198" cy="410" r="5" fill="#0055ff"/><circle cx="208" cy="548" r="5" fill="#0000ff"/><circle cx="226" cy="652" r="5" fill="#5500ff"/></g>
+            <!-- relaxed hands: short, curled fingers starting at the wrist -->
+            <g stroke-width="2" fill="none" stroke-linecap="round">
+              <path d="M136,384 l-3,9 l1,7 l4,4" stroke="#ff3c3c"/><path d="M136,384 l0,12 l3,8 l4,3" stroke="#ffb43c"/><path d="M136,384 l3,12 l4,7 l4,2" stroke="#c8ff3c"/><path d="M136,384 l5,10 l5,6 l4,1" stroke="#3cffb4"/><path d="M136,384 l7,7 l5,4 l3,0" stroke="#3c78ff"/>
+              <path d="M230,382 l3,9 l-1,7 l-4,4" stroke="#ff3c3c"/><path d="M230,382 l0,12 l-3,8 l-4,3" stroke="#ffb43c"/><path d="M230,382 l-3,12 l-4,7 l-4,2" stroke="#c8ff3c"/><path d="M230,382 l-5,10 l-5,6 l-4,1" stroke="#3cffb4"/><path d="M230,382 l-7,7 l-5,4 l-3,0" stroke="#3c78ff"/></g>
+            <g stroke="#000"><circle cx="128" cy="668" r="4" fill="#ffd200"/><circle cx="136" cy="672" r="4" fill="#ff8c00"/><circle cx="142" cy="664" r="4" fill="#ff3200"/><circle cx="236" cy="660" r="4" fill="#ffd200"/><circle cx="230" cy="666" r="4" fill="#ff8c00"/><circle cx="220" cy="656" r="4" fill="#ff3200"/></g>
+            <g transform="translate(14,712)"><rect width="332" height="26" rx="6" fill="#151515" stroke="#2c2c2c"/>
+              <text x="12" y="17" fill="#888" font-size="12">A-pose</text><text x="66" y="17" fill="#888" font-size="12">turn</text><rect x="100" y="4" width="40" height="18" rx="4" fill="#2a1d07" stroke="#f0a030"/><text x="108" y="17" fill="#f0a030" font-size="12">walk</text><text x="150" y="17" fill="#888" font-size="12">sit</text><text x="180" y="17" fill="#888" font-size="12">wave</text><text x="222" y="17" fill="#888" font-size="12">hands</text><text x="282" y="17" fill="#aaa" font-size="12">▶ 24/48</text></g>
+            <g transform="translate(14,748)"><rect width="332" height="4" rx="2" fill="#2c2c2c"/><rect width="166" height="4" rx="2" fill="#6f6f6f"/><circle cx="166" cy="2" r="6" fill="#ddd"/></g>
+          </svg></div>
+      </div>
+      <div class="footrow"><span class="primary">Fit again ▶</span><span class="btn">Back to SDPose's points</span><span class="btn">Mirror left to right</span><span class="btn">Test in motion ▶ <span class="muted">· Wan, ≈ 2 min</span></span><span class="sp" style="flex:1"></span><span class="muted">1 point moved · 1 length locked</span></div>
+    </div>
+    <div class="insp new">
+      <div class="grp" style="margin-top:2px"><span>The body · Mara v1</span><span style="text-transform:none;letter-spacing:0;color:var(--fg2)">Copy from… ▾</span></div>
+      <div class="kv" style="margin-top:6px"><span>height</span><span class="field" style="width:90px">1.75 m</span><span>build</span><span class="seg"><span>Slim</span><span class="on">Average</span><span>Broad</span><span>Heavy</span></span><span>symmetric</span><span>☑ left = right</span></div>
+      <div class="grp"><span>Head and neck</span></div>
+      <div class="prow"><span>head size</span><div class="trk"><div class="band" style="left:35%;width:30%"></div><div class="knob" style="left:44%"></div></div><span class="val">22 cm</span><span class="mk"><span class="f">●</span></span></div>
+      <div class="prow"><span>neck length</span><div class="trk"><div class="band" style="left:30%;width:28%"></div><div class="knob amb" style="left:74%"></div></div><span class="val amb">13.7 cm</span><span class="mk"><span class="f">●</span></span></div>
+      <div class="prow"><span>head forward</span><div class="trk"><div class="band" style="left:38%;width:24%"></div><div class="knob" style="left:50%"></div></div><span class="val">0°</span><span class="mk"></span></div>
+      <div class="grp"><span>Torso</span></div>
+      <div class="prow"><span>torso length</span><div class="trk"><div class="band" style="left:32%;width:30%"></div><div class="knob" style="left:52%"></div></div><span class="val">49 cm</span><span class="mk"><span class="f">●</span></span></div>
+      <div class="prow"><span>shoulder width</span><div class="trk"><div class="band" style="left:34%;width:30%"></div><div class="knob" style="left:40%"></div></div><span class="val">34 cm</span><span class="mk"><span class="f">●</span></span></div>
+      <div class="prow"><span>shoulder slope</span><div class="trk"><div class="band" style="left:30%;width:36%"></div><div class="knob" style="left:48%"></div></div><span class="val">14°</span><span class="mk"></span></div>
+      <div class="prow"><span>hip width</span><div class="trk"><div class="band" style="left:34%;width:30%"></div><div class="knob" style="left:47%"></div></div><span class="val">25 cm</span><span class="mk"><span class="f">●</span></span></div>
+      <div class="grp"><span>Arms</span></div>
+      <div class="prow"><span>upper arm</span><div class="trk"><div class="band" style="left:34%;width:30%"></div><div class="knob" style="left:47%"></div></div><span class="val">29 cm</span><span class="mk"><span class="f">●</span></span></div>
+      <div class="prow"><span>forearm</span><div class="trk"><div class="band" style="left:34%;width:30%"></div><div class="knob" style="left:45%"></div></div><span class="val">26 cm</span><span class="mk"><span class="f">●</span></span></div>
+      <div class="grp"><span>Legs</span></div>
+      <div class="prow"><span>thigh</span><div class="trk"><div class="band" style="left:34%;width:30%"></div><div class="knob" style="left:46%"></div></div><span class="val">42 cm</span><span class="mk"><span class="f">●</span></span></div>
+      <div class="prow"><span>shin</span><div class="trk"><div class="band" style="left:34%;width:30%"></div><div class="knob" style="left:45%"></div></div><span class="val">41 cm</span><span class="mk"><span class="f">●</span></span></div>
+      <div class="grp"><span>Hands</span></div>
+      <div class="prow"><span>hand size</span><div class="trk"><div class="band" style="left:34%;width:30%"></div><div class="knob" style="left:43%"></div></div><span class="val">17 cm</span><span class="mk"><span class="f">●</span></span></div>
+      <div class="hands"><span class="on">From the picture</span><span>open</span><span>relaxed</span><span>fist</span><span>point</span><span>grip</span><span>pinch</span></div>
+      <div class="prow"><span>curl</span><div class="trk"><div class="knob" style="left:45%"></div></div><span class="val">45 %</span><span class="mk"><span class="f">●</span></span></div>
+      <div class="prow"><span>spread</span><div class="trk"><div class="knob" style="left:15%"></div></div><span class="val">15 %</span><span class="mk"><span class="f">●</span></span></div>
+      <div class="grp"><span>Feet</span></div>
+      <div class="prow"><span>foot length</span><div class="trk"><div class="band" style="left:34%;width:30%"></div><div class="knob" style="left:42%"></div></div><span class="val">24 cm</span><span class="mk"><span class="h">✎</span> 🔒</span></div>
+      <div class="prow"><span>turn-out</span><div class="trk"><div class="band" style="left:30%;width:36%"></div><div class="knob" style="left:44%"></div></div><span class="val">8°</span><span class="mk"></span></div>
+      <div class="status">⚠ neck long for an adult — check the shoulder points <span class="q">?</span></div>
+      <div class="mk" style="margin-top:6px"><span class="f">●</span> fitted · <span class="h">✎</span> by hand · 🔒 kept by Fit again · grey band: an adult's range</div>
+    </div>
+  </div>
+  <div class="dock">Queue · Bin</div>
+  <div class="note" style="left:76px; top:842px">drag either set: white corrects what SDPose read, blue sets a length by hand (03 §3.2)</div>
+  <div class="note" style="left:822px; top:132px">the guide Wan Animate will get, hands and feet included, before any GPU job</div>
+</section>
+
+<!-- ============ 4 · the line-up ============ -->
+<section id="lineup" hidden>
+  <div class="top"><span>☰</span><span class="chip">Project · A1</span><span class="tab on">Story<kbd>Ctrl+1</kbd></span><span class="tab">Image<kbd>Ctrl+2</kbd></span><span class="tab">Animate<kbd>Ctrl+3</kbd></span><span class="tab">Catalogue<kbd>Ctrl+4</kbd></span><span class="sp"></span><span class="chip"><i></i>engine on</span></div>
+  <div class="main noinsp">
+    <div class="rail"><div class="r"><b>◎</b>World</div><div class="r on"><b>☺</b>Cast</div><div class="r"><b>⑂</b>Flow</div><div class="r"><b>▤</b>Shots</div><div class="r"><b>▶</b>Episode</div></div>
+    <div class="col"><div class="head">Cast · line-up</div><div class="body"><h4>In the line-up</h4>
+      <div class="kv"><span>☑</span><span>Woman in a yellow raincoat · v2</span><span>☑</span><span>Old fisherman · v1</span><span>☑</span><span>Courier · v3</span><span>☑</span><span>Child with a kite · v1</span><span>☐</span><span>Mara (kept)</span></div>
+      <h4>Pose them all</h4><span class="seg"><span>A-pose</span><span class="on">Stand</span><span>Walk</span><span>Sit</span></span>
+      <h4>Look</h4><span class="seg"><span class="on">Clay</span><span>Colour</span></span> &nbsp;<span class="seg"><span class="on">Turntable</span></span>
+      </div><div class="foot"><span class="btn">Send to a stage ▸</span></div></div>
+    <div class="stage"><div class="strip"><b>4 characters</b> <span class="muted">· the same light · height marks every 0.5 m · drag to turn</span></div>
+      <div class="pane floorgrid new" style="flex:1;margin:12px">
+        <svg width="100%" height="100%" viewBox="0 0 1100 820">
+          <g stroke="#333" stroke-dasharray="4 6"><line x1="40" y1="700" x2="1060" y2="700"/><line x1="40" y1="580" x2="1060" y2="580"/><line x1="40" y1="460" x2="1060" y2="460"/><line x1="40" y1="340" x2="1060" y2="340"/><line x1="40" y1="220" x2="1060" y2="220"/></g>
+          <g fill="#666" font-size="12"><text x="8" y="704">0</text><text x="8" y="584">0.5</text><text x="8" y="464">1.0</text><text x="8" y="344">1.5</text><text x="8" y="224">2.0</text></g>
+          <g fill="#a5a5aa" stroke="#6d6d72" stroke-width="2">
+            <g transform="translate(200,300)"><circle cx="0" cy="16" r="20"/><path d="M-36,46 L36,46 L48,230 L-48,230 Z"/><rect x="-30" y="230" width="22" height="170"/><rect x="8" y="230" width="22" height="170"/></g>
+            <g transform="translate(450,280)"><circle cx="0" cy="18" r="22"/><path d="M-30,-4 L30,-4 L26,8 L-26,8 Z" fill="#8e8e93"/><path d="M-44,48 L44,48 L54,250 L-54,250 Z"/><rect x="-34" y="250" width="26" height="170"/><rect x="8" y="250" width="26" height="170"/></g>
+            <g transform="translate(700,290)"><circle cx="0" cy="18" r="24"/><path d="M-26,0 Q0,-22 26,0 L22,14 L-22,14 Z" fill="#8e8e93"/><path d="M-40,50 L40,50 L44,200 L-44,200 Z"/><rect x="-34" y="200" width="28" height="210"/><rect x="6" y="200" width="28" height="210"/></g>
+            <g transform="translate(920,440)"><circle cx="0" cy="14" r="17"/><path d="M-28,36 L28,36 L34,150 L-34,150 Z"/><rect x="-24" y="150" width="18" height="110"/><rect x="6" y="150" width="18" height="110"/><path d="M40,40 L120,-60 L150,-20 Z" fill="#8e8e93"/></g></g>
+          <g fill="#bbb" font-size="14" text-anchor="middle"><text x="200" y="740">Raincoat · 1.68 m</text><text x="450" y="740">Fisherman · 1.80 m</text><text x="700" y="740">Courier · 1.74 m</text><text x="920" y="740">Child · 1.10 m</text></g>
+        </svg></div></div>
+  </div>
+  <div class="dock">Queue · Bin</div>
+  <div class="note" style="left:470px; top:120px">compare ideas in 3D (P5) — Stage's engine on a scratch scene, never saved as a stage</div>
+</section>
+
+<!-- ============ 5 · the place bench: the set builder ============ -->
+<section id="place" hidden>
+  <div class="top"><span>☰</span><span class="chip">Project · A1</span><span class="tab on">Story<kbd>Ctrl+1</kbd></span><span class="tab">Image<kbd>Ctrl+2</kbd></span><span class="tab">Animate<kbd>Ctrl+3</kbd></span><span class="tab">Catalogue<kbd>Ctrl+4</kbd></span><span class="sp"></span><span class="chip"><i></i>engine on</span></div>
+  <div class="main">
+    <div class="rail"><div class="r"><b>◎</b>World</div><div class="r on"><b>☺</b>Cast</div><div class="r"><b>⑂</b>Flow</div><div class="r"><b>▤</b>Shots</div><div class="r"><b>▶</b>Episode</div></div>
+    <div class="col"><div class="head">Cast</div><div class="body"><div class="classes"><span class="seg"><span>Characters</span><span>Props</span><span class="on">Places</span></span></div>
+      <div class="ideas"><div class="idea sel"><div class="ph y"></div><div class="n">Whitewashed room</div><div class="m"><span>2 pictures</span><span class="badge c">set · room</span></div></div><div class="idea"><div class="ph g"></div><div class="n">Harbour alley</div><div class="m"><span>3</span><span class="badge c">set · street</span></div></div><div class="idea"><div class="ph b"></div><div class="n">Night corridor</div><div class="m"><span>1</span><span class="badge">relief</span></div></div></div></div></div>
+    <div class="stage">
+      <div class="strip"><b>Whitewashed room</b> <span class="muted">· the set builder</span><span class="sp" style="flex:1"></span><span class="seg"><span class="on">Room</span><span>Street</span><span>Corridor</span><span>Open ground</span></span></div>
+      <div class="viewer">
+        <div class="pane new"><span class="lab">the picture · the set's edges over it (drag a corner)</span>
+          <svg width="100%" height="100%" viewBox="0 0 560 560"><rect width="560" height="560" fill="#d9d6cf"/>
+            <polygon points="140,140 420,140 420,380 140,380" fill="#e8e5de"/><polygon points="0,0 140,140 140,380 0,520" fill="#cfcbc2"/><polygon points="420,140 560,0 560,520 420,380" fill="#d3cfc6"/>
+            <polygon points="0,520 140,380 420,380 560,520 560,560 0,560" fill="#9c7a55"/><rect x="200" y="180" width="80" height="140" fill="#f6f7f8" stroke="#bbb"/>
+            <g stroke="#f0a030" stroke-width="2.5" fill="none"><polyline points="0,520 140,380 420,380 560,520"/><line x1="140" y1="140" x2="140" y2="380"/><line x1="420" y1="140" x2="420" y2="380"/><polyline points="0,0 140,140 420,140 560,0"/><rect x="200" y="180" width="80" height="140" stroke-dasharray="5 4"/></g>
+            <g fill="#f0a030" stroke="#fff" stroke-width="2"><circle cx="140" cy="380" r="8"/><circle cx="420" cy="380" r="8"/><circle cx="140" cy="140" r="8"/><circle cx="420" cy="140" r="8"/></g>
+            <text x="206" y="174" fill="#7a4a00" font-size="12">window · found</text></svg></div>
+        <div class="pane floorgrid"><span class="lab">the set in 3D · free camera</span><div class="tools"><span class="btn" style="padding:2px 8px">Look through the picture's camera</span></div>
+          <svg width="100%" height="100%" viewBox="0 0 560 560">
+            <polygon points="120,360 300,440 470,330 290,260" fill="#9c7a55" stroke="#555"/><polygon points="290,260 470,330 470,120 290,60" fill="#e8e5de" stroke="#555"/>
+            <polygon points="120,360 290,260 290,60 120,150" fill="#cfcbc2" stroke="#555"/><rect x="345" y="140" width="55" height="105" fill="#f6f7f8" stroke="#888" transform="skewY(20) translate(0,-125)"/>
+            <defs><pattern id="hatch" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="10" stroke="#e5534b" stroke-width="3"/></pattern></defs>
+            <polygon points="120,360 300,440 300,240 120,150" fill="url(#hatch)" opacity=".55" stroke="#e5534b"/>
+            <text x="130" y="470" fill="#e5534b" font-size="12">the front wall: the picture never saw it</text>
+            <g fill="#f0a030"><rect x="286" y="52" width="10" height="10"/><rect x="465" y="226" width="10" height="10"/><rect x="200" y="300" width="10" height="10"/></g>
+            <g transform="translate(250,300)" fill="#a5a5aa" stroke="#6d6d72"><circle cx="0" cy="-8" r="6"/><rect x="-7" y="0" width="14" height="40"/></g><text x="262" y="296" fill="#888" font-size="11">1.75 m</text></svg></div>
+      </div>
+      <div class="footrow"><span class="btn">Build the set ✓</span><span class="primary new">Fill what the picture never saw ▶</span><span class="est">23 % of the faces · ≈ 3 min</span><span class="btn">Next picture ▸</span><span class="sp" style="flex:1"></span><span class="btn">Send to a stage ▸</span><span class="primary">Keep ▶</span></div>
+    </div>
+    <div class="insp"><h4>The set · room</h4>
+      <div class="kv"><span>width</span><span class="field">6.2 m</span><span>depth</span><span class="field">4.8 m</span><span>height</span><span class="field">3.0 m</span><span>walls</span><span>back ☑ · left ☑ · right ☑ · front ☑</span><span>ceiling</span><span>☐</span></div>
+      <h4>Openings</h4><div class="kv"><span>window</span><span>back wall · 0.9 × 1.6 m · sill 0.9</span></div><span class="verb">+ Door</span><span class="verb">+ Window</span><span class="verb">+ Arch</span>
+      <h4>Pictures</h4><div class="kv"><span>1</span><span>"a whitewashed room…" · 66° · matched</span></div><span class="verb">Next picture ▸</span><span class="verb">New angle of it</span>
+      <h4>The skin</h4><div class="kv"><span>texels</span><span>1 cm · 5 faces</span><span>unseen</span><span style="color:var(--bad)">23 % (the front wall, the floor's near strip)</span></div>
+      <span class="verb">Just the picture (a relief)</span></div>
+  </div>
+  <div class="dock">Queue · Bin</div>
+  <div class="note" style="left:470px; top:620px">the basic 3D suite: a room fitted to the picture, its walls skinned with it (04)</div>
+</section>
+
+<!-- ============ 6 · Clay: Cast's cards in the Scene panel ============ -->
+<section id="clay" hidden>
+  <div class="top"><span>☰</span><span class="chip">Project · A1</span><span class="tab">Story<kbd>Ctrl+1</kbd></span><span class="tab">Image<kbd>Ctrl+2</kbd></span><span class="tab on">Animate<kbd>Ctrl+3</kbd></span><span class="tab">Catalogue<kbd>Ctrl+4</kbd></span><span class="sp"></span><span class="chip"><i></i>engine on</span></div>
+  <div class="main noinsp">
+    <div class="rail"><div class="r"><b>▤</b>Shot</div><div class="r on"><b>◇</b>Scene</div><div class="r"><b>✦</b>Motion</div><div class="r"><b>◉</b>Camera</div></div>
+    <div class="col"><div class="head">Animate · Clay</div><div class="body">
+      <h4>Scene · Whitewashed room stage</h4>
+      <div class="kv"><span>Figures · 2</span><span><span class="btn" style="padding:0 7px">+</span></span></div>
+      <div class="new" style="border:1px solid #333;border-radius:8px;padding:8px;margin:6px 0 10px;background:#1c1c1c">
+        <div class="muted" style="font-size:11px;margin-bottom:6px">CAST · CHARACTERS (with their clay)</div>
+        <div style="display:flex;gap:8px"><div><div class="ph r" style="width:62px;height:62px"></div><div style="font-size:11px">Raincoat</div></div><div><div class="ph y" style="width:62px;height:62px"></div><div style="font-size:11px">Mara</div></div><div><div class="ph y" style="width:62px;height:62px"></div><div style="font-size:11px">Ines</div></div><div><div class="ph b" style="width:62px;height:62px"></div><div style="font-size:11px">Fisherman</div></div></div>
+        <div class="muted" style="font-size:11px;margin:8px 0 4px">PRESETS</div><span class="badge">Adult (1.75 m)</span> <span class="badge">Child (1.2 m)</span></div>
+      <div class="kv"><span>Sets · 1</span><span><span class="btn" style="padding:0 7px">+</span></span></div>
+      <div class="new" style="border:1px solid #333;border-radius:8px;padding:8px;margin:6px 0 10px;background:#1c1c1c">
+        <div class="muted" style="font-size:11px;margin-bottom:6px">CAST · PLACES (their sets)</div>
+        <div style="display:flex;gap:8px"><div><div class="ph y" style="width:62px;height:62px"></div><div style="font-size:11px">Whitewashed room</div></div><div><div class="ph g" style="width:62px;height:62px"></div><div style="font-size:11px">Harbour alley</div></div></div>
+        <div class="muted" style="font-size:11px;margin:8px 0 4px">PRESETS</div><span class="badge">room</span> <span class="badge">street</span> <span class="badge">deck</span> <span class="badge">empty</span> <span class="badge">From an image…</span></div>
+      <div class="kv"><span>Props · 1</span><span><span class="btn" style="padding:0 7px">+</span></span><span>Stand-ins</span><span><span class="btn" style="padding:0 7px">+</span></span></div>
+    </div></div>
+    <div class="stage"><div class="strip"><b>Clay</b> · Performance · Final <span class="muted">· Whitewashed room · 1920×1080</span></div>
+      <div class="pane" style="flex:1;margin:12px">
+        <svg width="100%" height="100%" viewBox="0 0 1100 820">
+          <polygon points="80,640 560,780 1040,600 560,470" fill="#9c7a55"/><polygon points="560,470 1040,600 1040,170 560,60" fill="#e8e5de"/><polygon points="80,640 560,470 560,60 80,260" fill="#cfcbc2"/>
+          <rect x="700" y="210" width="110" height="210" fill="#f6f7f8" stroke="#bbb"/>
+          <g fill="#a5a5aa" stroke="#6d6d72" stroke-width="2"><g transform="translate(500,400)"><circle cx="0" cy="14" r="18"/><path d="M-30,40 L30,40 L40,210 L-40,210 Z"/><rect x="-26" y="210" width="20" height="150"/><rect x="6" y="210" width="20" height="150"/></g>
+            <g transform="translate(720,430)"><circle cx="0" cy="14" r="18"/><path d="M-20,-2 Q0,-20 20,-2 L18,10 L-18,10 Z" fill="#8e8e93"/><path d="M-26,40 L26,40 L30,170 L-30,170 Z"/><rect x="-24" y="170" width="20" height="160"/><rect x="4" y="170" width="20" height="160"/></g></g>
+          <text x="440" y="800" fill="#888" font-size="13">the place's set (bound) · two characters as their shells (bound), in clay</text></svg></div></div>
+  </div>
+  <div class="dock">Queue · Bin</div>
+  <div class="note" style="left:430px; top:560px">what Cast makes, Clay uses as is (P6): characters and places as cards, bound</div>
+</section>
+
+<script>
+  const s = new URLSearchParams(location.search).get('s') || 'bench'
+  document.getElementById(s).hidden = false
+</script>
+</body>
+</html>

@@ -1325,12 +1325,31 @@
             "title": "Build",
             "type": "string"
           },
+          "elbow": {
+            "default": 0.5178571428571429,
+            "maximum": 0.65,
+            "minimum": 0.35,
+            "title": "Elbow",
+            "type": "number"
+          },
           "feet": {
             "default": 1.0,
             "maximum": 1.6,
             "minimum": 0.5,
             "title": "Feet",
             "type": "number"
+          },
+          "figure": {
+            "default": "female",
+            "enum": [
+              "female",
+              "male"
+            ],
+            "title": "Figure",
+            "type": "string"
+          },
+          "hand_rest": {
+            "$ref": "#/components/schemas/HandRest"
           },
           "hands": {
             "default": 1.0,
@@ -1351,6 +1370,20 @@
             "maximum": 4.0,
             "minimum": 0.3,
             "title": "Height M",
+            "type": "number"
+          },
+          "hips": {
+            "default": 1.0,
+            "maximum": 1.6,
+            "minimum": 0.6,
+            "title": "Hips",
+            "type": "number"
+          },
+          "knee": {
+            "default": 0.5057471264367817,
+            "maximum": 0.65,
+            "minimum": 0.35,
+            "title": "Knee",
             "type": "number"
           },
           "legs": {
@@ -1385,14 +1418,19 @@
         "required": [
           "height_m",
           "build",
+          "figure",
           "head",
           "torso",
           "shoulders",
+          "hips",
           "arms",
+          "elbow",
           "legs",
+          "knee",
           "neck",
           "hands",
           "feet",
+          "hand_rest",
           "attachments"
         ],
         "title": "Body",
@@ -8290,6 +8328,37 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "HandRest": {
+        "description": "S2 (proto01_UIcast 03 §3.1): the character's hands at rest — what every pose of its Detailed figure starts from (a key's hand preset\nstill turns them): a preset's curl, scaled. The GLB's own flat, fanned hand is never the rest.",
+        "properties": {
+          "curl": {
+            "default": 1.0,
+            "maximum": 1.6,
+            "minimum": 0.0,
+            "title": "Curl",
+            "type": "number"
+          },
+          "preset": {
+            "default": "relaxed",
+            "enum": [
+              "open",
+              "relaxed",
+              "fist",
+              "point",
+              "grip",
+              "pinch"
+            ],
+            "title": "Preset",
+            "type": "string"
+          }
+        },
+        "required": [
+          "preset",
+          "curl"
+        ],
+        "title": "HandRest",
+        "type": "object"
+      },
       "HealBody": {
         "properties": {
           "heal": {
@@ -13372,7 +13441,7 @@
             "type": "integer"
           },
           "schema_version": {
-            "default": 2,
+            "default": 3,
             "title": "Schema Version",
             "type": "integer"
           },
@@ -13615,6 +13684,17 @@
             ],
             "title": "Anim Ref Back Asset Id"
           },
+          "anim_ref_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anim Ref Note"
+          },
           "anim_test_clip_id": {
             "anyOf": [
               {
@@ -13652,6 +13732,18 @@
               }
             ],
             "title": "Body Fit From"
+          },
+          "body_points": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body Points"
           },
           "candidates_group_id": {
             "anyOf": [
@@ -13806,6 +13898,8 @@
           "anim_ref_asset_id",
           "anim_ref_back_asset_id",
           "body_fit_from",
+          "body_points",
+          "anim_ref_note",
           "anim_test_clip_id",
           "model_asset_id",
           "model_from",
@@ -17114,7 +17208,7 @@
             "type": "integer"
           },
           "schema_version": {
-            "default": 2,
+            "default": 3,
             "title": "Schema Version",
             "type": "integer"
           },

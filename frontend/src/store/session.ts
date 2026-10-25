@@ -308,8 +308,10 @@ export function applyEvent(f: EventFrame, set: (p: Partial<SessionState>) => voi
       break
     case 'asset.created': case 'asset.updated': case 'asset.deleted':
       void import('../suites/catalogue/catalogueStore').then((m) => { for (const h of m.allCatalogueStores()) h.getState().applyEvent(f) })
-      if (f.type === 'asset.created' && (f.data as { origin?: { suite?: string } } | null)?.origin?.suite === 'stage')      // ST3: a shot or a pass of a stage
+      if (f.type === 'asset.created' && ((f.data as { origin?: { suite?: string } } | null)?.origin?.suite === 'stage' || (f.data as { kind?: string } | null)?.kind === 'mesh'))   // ST3: a shot or a pass of a stage; proto01_UIcast CB2: a mesh made anywhere joins Clay's Meshes
         void import('../suites/stage/stageStore').then((m) => m.useStage.getState().onAssetCreated(f.data as never))
+      if (f.type === 'asset.deleted')
+        void import('../suites/stage/stageStore').then((m) => m.useStage.getState().onAssetDeleted(String((f.data as { id?: string } | null)?.id ?? '')))
       break
     case 'clip.updated':
       void import('../suites/animate/animateStore').then((m) => m.useAnimate.getState().onClipUpdated(f.data))

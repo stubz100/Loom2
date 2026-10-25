@@ -12,6 +12,7 @@ import { JOINTS, MANNEQUIN_PRESETS, POSES } from './builders'
 import { mirrorJoints } from './ik'
 import { lensGuess, parseLens } from './lens'
 import { figureMentions, prebind as prebindOf } from './figures'
+import { matrixOf, transformOf } from './held'
 import type { Keypoint, WholeBody } from './passes'
 import { profilesForMentions, useStory } from '../story/storyStore'
 
@@ -36,12 +37,15 @@ function withModel(o: StageObject): StageObject {
   const m = castModel(o.profile_id, o.version)
   return m && m !== o.asset_id ? { ...o, asset_id: m } : o
 }
-/** A figure with its Cast body: a body sets the height, so a figure taking one stands at scale 1 (the Child preset's 0.7 would shrink it). */
+/** A figure with its Cast body: a body sets the height, so a figure taking one stands at scale 1 (the Child preset's 0.7 would shrink it);
+ *  U18 (proto01_UIcast): and its mannequin, ♀ or ♂, is the character's. */
 function withBody(o: StageObject, body: StageObject['body'] | undefined): StageObject {
   if (body === undefined || JSON.stringify(o.body ?? null) === JSON.stringify(body)) return o
   const scale = body && !o.body ? [1, 1, 1] : o.transform.scale
-  return { ...o, body, transform: { ...o.transform, scale } }
+  return { ...o, body, transform: { ...o.transform, scale }, ...(body?.figure ? { detail: body.figure } : {}) }
 }
+/** U18: the mannequin a new figure is — the Detailed ♀ unless the stage's figures are all ♂ (the Simple dummy is retired). */
+const newDetail = (objects: StageObject[]): 'male' | 'female' => { const f = objects.filter((o) => o.kind === 'mannequin'); return f.length && f.every((o) => o.detail === 'male') ? 'male' : 'female' }
 
 export interface PoseDef { preset?: string | null; joints: Record<string, number[]> }
 // ---- ST3 (16 §3e / §7): the Shot tab ----
@@ -134,6 +138,7 @@ interface StageState {
   generateShot: () => Promise<Job[] | null>
   loadShots: () => Promise<void>
   onAssetCreated: (a: Asset) => void
+  onAssetDeleted: (id: string) => void
   // ST4: keyframes (the document's `keyframes` and `range`), the frame the viewport shows, the pass sequence and the clip
   frame: number
   playing: boolean
@@ -152,7 +157,7 @@ interface StageState {
   keyCamera: () => void
   keyObject: (id: string) => void
   /** CA1: the figure's level — Simple (null) or Detailed (the starter set's male / female mannequin follows its joints). */
-  setDetail: (id: string, detail: 'male' | 'female' | null) => void
+  setDetail: (id: string, detail: 'male' | 'female') => void
   /** CA1: turns of the Detailed level's own bones (fingers, wrists, feet …) merged into the figure's pose. */
   setExtra: (id: string, extra: Record<string, number[]>, label?: string) => void
   /** CA1: a library clip's baked keys on a figure — the figure's keys in their frames replaced, the range grown to hold them (one undo step). */
@@ -212,6 +217,7 @@ interface StageState {
   /** D129 (HP1): a prop put in a figure's hand (it moves with the hand; its transform is its place on the hand), or taken out where it stands. */
   hold: (id: string, figureId: string, hand: 'r_hand' | 'l_hand') => void
   letGo: (id: string) => void
+  setParent: (id: string, parentId: string | null) => void
   worldOf: ((id: string) => Transform | null) | null                    // D129: the mounted viewport registers it (an object's world transform now)
   /** D110 (PS4): the sky light's strength (null = the default: 0.85 under lights, 1.1 without). */
   setAmbient: (v: number | null) => void
@@ -337,7 +343,7 @@ export const useStage = create<StageState>()((set, get) => ({
   },
   addPathPoint: (id, p) => get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id ? { ...o, path: [...(o.path ?? []), [Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000]] } : o)) }), 'path point'),
   clearPath: (id) => get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id ? { ...o, path: null, shadow_proxy: null } : o)) }), 'clear path'),
-  setDetail: (id, detail) => get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id && o.kind === 'mannequin' ? { ...o, detail } : o)) }), detail ? 'Detailed level' : 'Simple level'),
+  setDetail: (id, detail) => get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id && o.kind === 'mannequin' ? { ...o, detail } : o)) }), detail === 'male' ? 'figure ♂' : 'figure ♀'),
   setExtra: (id, extra, label = 'hand') => editPose(get, id, (p) => ({ preset: p?.preset ?? 'stand', joints: p?.joints ?? {}, extra: { ...(p?.extra ?? {}), ...extra } }), label),
   applyMotion: (id, keys, label) => {
     if (!keys.length) return
@@ -531,6 +537,10 @@ export const useStage = create<StageState>()((set, get) => ({
     if (!cur || a.lineage_kind !== 'stage-shot' || !ofStage(a, cur.id) || get().shots.some((x) => x.id === a.id)) return
     set({ shots: [a, ...get().shots] })
   },
+  onAssetDeleted: (id) => {                                                                                    // proto01_UIcast CB2: a trashed mesh or shot leaves the lists
+    if (get().meshes.some((x) => x.id === id)) set({ meshes: get().meshes.filter((x) => x.id !== id) })
+    if (get().shots.some((x) => x.id === id)) set({ shots: get().shots.filter((x) => x.id !== id) })
+  },
 
   selectJoint: (j) => set(j ? { selectedJoint: j, posing: true } : { selectedJoint: null }),   // D121: a joint picked by name enters pose mode
   setPosing: (on) => set(on && get().object(get().selected)?.kind === 'mannequin' ? { posing: true } : { posing: false, selectedJoint: null }),
@@ -656,7 +666,7 @@ export const useStage = create<StageState>()((set, get) => ({
     const name = `${NAMES[kind] ?? kind} ${n}`
     const scale = kind === 'mannequin' ? (MANNEQUIN_PRESETS[preset ?? 'adult']?.scale ?? 1) : 1
     const o: StageObject = { id, kind, name, preset, asset_id: assetId, transform: { pos: pos ?? [0, 0, 0], rot: [0, 0, 0], scale: [scale, scale, scale] }, parent: null, parent_joint: null,
-      locked: false, visible: true, colour_id: (cur.objects.length % 12) + 1, pose: kind === 'mannequin' ? { preset: 'stand', joints: {}, extra: {} } : null, billboard: kind === 'plane', profile_id: null, version: null, body: null, detail: null, path: null, shadow_proxy: null,
+      locked: false, visible: true, colour_id: (cur.objects.length % 12) + 1, pose: kind === 'mannequin' ? { preset: 'stand', joints: {}, extra: {} } : null, billboard: kind === 'plane', profile_id: null, version: null, body: null, detail: kind === 'mannequin' ? newDetail(cur.objects) : null, path: null, shadow_proxy: null,
       light: kind === 'light' ? { ...NEW_LIGHT, target: [...NEW_LIGHT.target] } : null,
       lens_deg: null, plate_asset_id: null, floor_y: null, plate_camera_id: null, level: null, things: [], things_document_id: null }
     get().apply((d) => ({ ...d, objects: [...d.objects, o] }), 'add')
@@ -704,6 +714,12 @@ export const useStage = create<StageState>()((set, get) => ({
   letGo: (id) => {
     const world = get().worldOf?.(id) ?? null                                                       // where it stands now (the viewport's engine)
     get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id ? { ...o, parent: null, parent_joint: null, ...(world ? { transform: world } : {}) } : o)) }), 'let go')
+  },
+  setParent: (id, parentId) => {                                     // proto01_UIcast CB4: it stays where it stands — its transform re-expressed in the new parent's frame
+    const worldOf = get().worldOf
+    const world = worldOf?.(id) ?? null, pw = parentId ? worldOf?.(parentId) ?? null : null
+    const local = !world ? null : !parentId ? world : pw ? transformOf(matrixOf(pw).invert().multiply(matrixOf(world))) : null
+    get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id ? { ...o, parent: parentId, parent_joint: null, ...(local ? { transform: local } : {}) } : o)) }), parentId ? 'parent' : 'unparent')
   },
   setAmbient: (v) => get().apply((d) => ({ ...d, ambient: v }), 'ambient'),
   addLight: (at) => {

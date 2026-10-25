@@ -37,7 +37,8 @@ import { ThingsSheet } from './ThingsSheet'
 import { useThings } from './thingsStore'
 import { StageEngine } from './engine'
 import { viewport, viewportMenu, cameraMenu } from './stageCommands'
-import { HAND_LABEL } from './held'
+import { descendsFrom, HAND_LABEL } from './held'
+import { meshLabel, propMeshes } from './meshes'
 import { effectiveJoints, st, TEMPLATE_KINDS, useStage, type ShotState, imageSetBudget } from './stageStore'
 import './stage.css'
 
@@ -76,11 +77,13 @@ export function SceneTab() {
   const saving = useStage((s) => s.saving)
   const meshes = useStage((s) => s.meshes)
   const templates = useStage((s) => s.templates)
+  const profiles = useStory((s) => s.profiles)
   if (!current) return <span className="hint">Open or make a stage in the Shot section.</span>
   const figures = Object.entries(MANNEQUIN_PRESETS).map(([p, m]) => ({ id: p, label: m.label, icon: <User size={18} /> }))
   const sets = SET_PRESETS.map((p) => ({ id: p, label: p, icon: <Box size={18} />, hint: 'architecture only (D108)' }))
   const standins = PROP_PRESETS.map((p) => ({ id: p, label: p, icon: <Box size={18} />, hint: 'a grey stand-in shape (D109)' }))
-  const meshItems = meshes.slice(0, 48).map((m) => ({ id: m.id, label: `prop ${m.id.slice(-6)}`, icon: <Box size={18} />, img: api.thumbUrl(m.id, 256), hint: 'a Catalogue 3D model (Make a 3D prop…)' }))
+  const names = new Map(current.objects.filter((o) => o.kind === 'mesh' && o.asset_id).reverse().map((o) => [o.asset_id!, o.name]))   // a thing keeps its name on its stage (the first object that shows it)
+  const meshItems = propMeshes(meshes).slice(0, 48).map((m) => { const l = meshLabel(m, profiles, names); return { id: m.id, label: l.label, icon: <Box size={18} />, img: api.thumbUrl(m.id, 256), hint: l.hint } })   // proto01_UIcast CF9: named by source
   const tmpl = templates.map((t) => ({ id: t.name, label: t.name, icon: <LayoutTemplate size={18} />, hint: `${t.objects.length} object${t.objects.length === 1 ? '' : 's'}`, img: t.thumb_asset_id ? api.thumbUrl(t.thumb_asset_id, 256) : null }))
   const holds = current.objects.filter((o) => TEMPLATE_KINDS.has(o.kind)).length
   const centre = () => viewport.centre?.() ?? [0, 0, 0]
@@ -94,7 +97,7 @@ export function SceneTab() {
     { key: 'props', label: 'Props', of: (o) => o.kind === 'mesh' && !!o.profile_id, add: <LibraryProps centre={centre} /> },      /* D110 (PS3): Story · Props, each its 3D model bound to the prop */
     { key: 'standins', label: 'Stand-ins', of: (o) => o.kind === 'prop', help: 'Grey shapes for blocking (D109).',
       add: <PresetPanel label="stand-in presets" items={standins} showText onPick={(id) => runCommand(`stage.add.prop.${id}`)} title="A grey stand-in shape at the viewport's centre" /> },
-    { key: 'meshes', label: 'Meshes', of: (o) => o.kind === 'mesh' && !o.profile_id, help: `A Catalogue image's "Make a 3D prop…" (Pixal3D) lands here, not bound to a Cast prop.`,
+    { key: 'meshes', label: 'Meshes', of: (o) => o.kind === 'mesh' && !o.profile_id, help: `3D models not bound to a Cast prop, named by where they came from: a picture's "Make a 3D prop…", a picture set's thing, an imported GLB. A mesh's editor makes it a Cast prop.`,
       add: <PresetPanel label="mesh models" items={meshItems} showText onPick={(id) => st().addObject('mesh', null, centre(), id)} empty="None yet — a Catalogue image's Make a 3D prop… lands here." title="A Catalogue 3D model at the viewport's centre" /> },
     { key: 'lights', label: 'Lights', of: (o) => o.kind === 'light', add: <CommandButton id="stage.add.light" text /> },           /* D110 (PS4) */
     { key: 'planes', label: 'Image planes', of: (o) => o.kind === 'plane', help: "A Catalogue image standing in the scene, facing the camera. Also from the Bin: drag an image onto the viewport (it lands where the pointer is), or double-click it there (the viewport's centre).",
@@ -290,7 +293,7 @@ function ObjectEditor({ o }: { o: StageObject }) {
       {o.kind === 'set' && o.preset === 'image' && <ImageSetFields key={`${o.id}:${o.lens_deg}`} o={o} />}
       {o.kind === 'mannequin' && <div className="kv"><span>pose</span><span><select value={o.pose?.preset ?? 'stand'} onChange={(e) => st().applyPose(o.id, e.target.value)}>{POSE_NAMES.map((p) => <option key={p} value={p}>{p}</option>)}</select> <span className="hint">(Pose, over the viewport, poses the joints)</span></span></div>}
       {o.kind === 'plane' && <div className="kv"><span>faces camera</span><input type="checkbox" checked={o.billboard} onChange={(e) => st().updateObject(o.id, { billboard: e.target.checked })} /></div>}
-      {!o.parent_joint && <div className="kv"><span>parent</span><select value={o.parent ?? ''} onChange={(e) => st().updateObject(o.id, { parent: e.target.value || null })}><option value="">— none —</option>{current.objects.filter((x) => x.id !== o.id).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></div>}
+      {!o.parent_joint && <div className="kv"><span>parent <Help text="It moves with its parent and stays where it stands when you pick one; its transform below is then its place on the parent." /></span><select value={o.parent ?? ''} onChange={(e) => st().setParent(o.id, e.target.value || null)}><option value="">— none —</option>{current.objects.filter((x) => x.id !== o.id && !descendsFrom(current.objects, x.id, o.id)).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></div>}
       <div className="verbs"><CommandRow ids={['stage.object.duplicate', 'stage.object.lock', 'stage.object.hide', 'stage.frameSel', 'stage.object.reset', 'stage.object.delete']} /></div>
     </div>
   )
@@ -365,10 +368,10 @@ function DetailLevel({ o }: { o: StageObject }) {
   }
   return (
     <div className="detail-level">
-      <div className="kv"><span>level</span>
-        <span className="segmented" role="group" aria-label="figure level">
-          {([[null, 'Simple'], ['male', 'Detailed ♂'], ['female', 'Detailed ♀']] as const).map(([k, label]) => (
-            <button key={label} type="button" className={detail === k ? 'active' : ''} aria-pressed={detail === k} title={k ? 'the starter set\'s skinned mannequin (fingers, feet, a spine of three) follows this figure' : 'the 12-joint dummy (blocking)'}
+      <div className="kv"><span>figure</span>
+        <span className="segmented" role="group" aria-label="figure">
+          {([['female', '♀'], ['male', '♂']] as const).map(([k, label]) => (
+            <button key={k} type="button" className={detail === k ? 'active' : ''} aria-pressed={detail === k} title={`the starter set's skinned mannequin, ${k} (fingers, feet, a spine of three) — it follows this figure's joints${o.profile_id ? '; a bound character\'s is set in Cast' : ''}`}
               onClick={() => st().setDetail(o.id, k)}>{label}</button>))}
         </span>
       </div>

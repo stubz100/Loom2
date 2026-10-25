@@ -1,14 +1,22 @@
 """CA0 (D94, proto01_animate 01 §9): a character's body — on its Cast version's sheet (story.ProfileVersion.body) and copied onto the Stage
-figure bound to that version (stages.StageObject.body), where it shapes the dummy: height, build, proportions, rigid attachments."""
+figure bound to that version (stages.StageObject.body), where it shapes the dummy: height, build, proportions, rigid attachments.
+
+proto01_UIcast CS1 (D136, D137): ×1 is an adult (S3 — the dummy's neck 12 cm at 1.75 m, the head's pivot at the jaw), the elbows', knees',
+hips' and feet's own factors (S5, S6), the figure (♀ / ♂: the Detailed mannequin, the Simple dummy retired, U18), the rest hand (S2) and a
+fit that stays human unless the picture insists (S7)."""
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 BodyBuild = Literal["slim", "average", "broad", "heavy"]
 AttachmentKind = Literal["tail", "horns", "ears", "wings", "antennae", "hat", "backpack", "other"]
 BodyJoint = Literal["root", "spine", "head", "r_shoulder", "l_shoulder", "r_elbow", "l_elbow"]
+FigureKind = Literal["female", "male"]
+HandPresetName = Literal["open", "relaxed", "fist", "point", "grip", "pinch"]
+ELBOW_AT = 29 / 56               # the upper arm's share of the arm (builders.ts: 0.29 + 0.27 at ×1)
+KNEE_AT = 44 / 87                # the thigh's share of the leg (0.44 + 0.43)
 
 
 class BodyAttachment(BaseModel):
@@ -21,48 +29,74 @@ class BodyAttachment(BaseModel):
     note: str = Field("", max_length=80)
 
 
+class HandRest(BaseModel):
+    """S2 (proto01_UIcast 03 §3.1): the character's hands at rest — what every pose of its Detailed figure starts from (a key's hand preset
+    still turns them): a preset's curl, scaled. The GLB's own flat, fanned hand is never the rest."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    preset: HandPresetName = "relaxed"
+    curl: float = Field(1.0, ge=0.0, le=1.6)      # × the preset's curl (0: the open hand)
+
+
 class Body(BaseModel):
     """CA0 (D94, 01 §9 answer 3): the body on the Cast sheet — it shapes the figure's Stage dummy when the figure is bound to this version.
     Height in metres; the proportions are factors of the default dummy (1 = the 1.75 m adult); the build widens or narrows it."""
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
     height_m: float = Field(1.75, ge=0.3, le=4.0)
     build: BodyBuild = "average"
+    figure: FigureKind = "female"                  # U18: the Detailed mannequin the character's figures are (♀ / ♂)
     head: float = Field(1.0, ge=0.5, le=2.5)
     torso: float = Field(1.0, ge=0.6, le=1.6)
     shoulders: float = Field(1.0, ge=0.6, le=1.8)
+    hips: float = Field(1.0, ge=0.6, le=1.6)       # S7: the hips' width (no longer the fit's fixed anchor)
     arms: float = Field(1.0, ge=0.6, le=1.6)
+    elbow: float = Field(ELBOW_AT, ge=0.35, le=0.65)   # S6: the elbow's place, the upper arm's share of the arm
     legs: float = Field(1.0, ge=0.5, le=1.6)
-    neck: float = Field(1.0, ge=0.5, le=3.0)       # CA1b (D104): the neck's length (the head above the shoulders); fitted from the reference
+    knee: float = Field(KNEE_AT, ge=0.35, le=0.65)     # S6: the knee's place, the thigh's share of the leg
+    neck: float = Field(1.0, ge=0.5, le=3.0)       # CA1b (D104): the neck's length (the head above the shoulders); ×1 an adult's (S3)
     hands: float = Field(1.0, ge=0.5, le=1.6)      # CA1b: the Detailed figure's hands (the pose pass draws them, D101)
-    feet: float = Field(1.0, ge=0.5, le=1.6)       # CA1b: the feet (the dummy's and the Detailed figure's)
+    feet: float = Field(1.0, ge=0.5, le=1.6)       # CA1b: the feet (the dummy's and the Detailed figure's); fitted from the toes (S5)
+    hand_rest: HandRest = Field(default_factory=HandRest)
     attachments: list[BodyAttachment] = Field(default_factory=list, max_length=6)
+
+
+def rebase_body(raw: dict[str, Any]) -> dict[str, Any]:
+    """S3: a body stored before ×1 was an adult (the profile record's schema 2, the stage's 2: the neck 0.06, the head's pivot 0.08·head under
+    the nose) as one of now (the neck 0.12, the pivot 0.02·head under the nose, every head point 0.06·head lower on it) — every point of
+    the figure where it was: neck = (neck + head) / 2. The records' migrations call it on read (story.Profile, stages.migrate)."""
+    n, hd = float(raw.get("neck", 1.0)), float(raw.get("head", 1.0))
+    return {**raw, "neck": round(min(3.0, max(0.5, (n + hd) / 2)), 4)}
 
 
 # ---- CA1b (D104): the body fitted to the character's animation reference -------------------------------------------------------------
 BUILD_WIDTH = {"slim": 0.85, "average": 1.0, "broad": 1.15, "heavy": 1.3}      # frontend stage/body.ts
-PALM_PER_LEG = 0.149          # the Detailed figure's palm (wrist → the middle finger's base) per leg length, measured on Stage (journal 2026-10-19)
+PALM_PER_LEG = 0.147          # the Detailed figure's palm (wrist → the middle finger's base) per leg length, measured on Stage in the A-pose front (CS1, journal 2026-10-25; 0.149 before)
+TOES_PER_LEG = 0.058          # S5: the Detailed figure's toes (big toe ↔ small toe, front view) per leg length, measured on Stage (CS1, journal 2026-10-25)
 A_POSE_DEG = 22.0             # the reference's stance (frontend stage/turnTest.ts A_POSE): arms 22° away from the body
-FITTED = ("head_w", "head_neck", "torso", "shoulders", "hips", "leg", "arm", "palm")
+FITTED = ("head_w", "head_neck", "torso", "shoulders", "hips", "leg", "arm", "palm", "elbow_at", "knee_at", "toes")
+PULL = 0.02                   # S7: the weight of each factor's pull toward its adult value, against log-ratio residuals (≈ 2 % of a measure)
+DEFAULTS = {"elbow": ELBOW_AT, "knee": KNEE_AT}
 
 
 def dummy_ratios(b: Body) -> dict[str, float]:
     """The Stage dummy (frontend builders.ts `mannequin`) seen from the front in the A-pose, as SDPose would read it: each measure a fraction
     of the height from the nose to the ankles. Kept in step with builders.ts by tests/test_body_fit_ca1b.py's numbers."""
-    import math
     w = BUILD_WIDTH.get(b.build, 1.0)
     hip = 0.07 + 0.88 * b.legs
-    thigh, shin, upper, fore = 0.44 * b.legs, 0.43 * b.legs, 0.29 * b.arms, 0.27 * b.arms
+    leg, arm = 0.87 * b.legs, 0.56 * b.arms
     spine = hip + 0.06
     shoulder_y = spine + 0.4 * b.torso                        # the shoulders' midpoint = OpenPose's neck point (CA1b)
-    nose_y = spine + 0.44 * b.torso + 0.06 * b.neck + 0.08 * b.head
+    nose_y = spine + 0.44 * b.torso + 0.12 * b.neck + 0.02 * b.head      # S3: the neck joint, the neck to the head's pivot, the nose above it
     hip_y = hip - 0.04
-    ankle_y = hip_y - thigh - shin
+    ankle_y = hip_y - leg
     h = nose_y - ankle_y
     sx = 0.21 * b.shoulders * (0.5 + 0.5 * w)
-    arm = (upper + fore) * (math.cos(math.radians(A_POSE_DEG)) ** 2 + math.sin(math.radians(A_POSE_DEG)) ** 2) ** 0.5
-    return {"head_neck": (nose_y - shoulder_y) / h, "torso": (shoulder_y - hip_y) / h, "shoulders": 2 * sx / h, "hips": 0.2 * w / h,
-            "leg": (thigh + shin) / h, "arm": arm / h, "palm": PALM_PER_LEG * (thigh + shin) * b.hands / h,
-            "head_w": 0.19 * b.head / h}                              # ear to ear (builders.ts: the ear markers at ±0.095·head)
+    r = {"head_neck": (nose_y - shoulder_y) / h, "torso": (shoulder_y - hip_y) / h, "shoulders": 2 * sx / h, "hips": 0.2 * w * b.hips / h,
+         "leg": leg / h, "arm": arm / h, "palm": PALM_PER_LEG * leg * b.hands / h,
+         "head_w": 0.19 * b.head / h,                               # ear to ear (builders.ts: the ear markers at ±0.095·head)
+         "elbow_at": b.elbow, "knee_at": b.knee}                    # the joints' places along their limbs (S6)
+    if TOES_PER_LEG:
+        r["toes"] = TOES_PER_LEG * leg * b.feet / h
+    return r
 
 
 def reference_ratios(person: dict) -> dict[str, float]:
@@ -95,36 +129,75 @@ def reference_ratios(person: dict) -> dict[str, float]:
     if palms:
         r["palm"] = float(np.median(palms)) / h
     if ok(16, 17):
-        r["head_w"] = d(16, 17) / h                                  # ear to ear: the head's size, which anchors the fit's scale
+        r["head_w"] = d(16, 17) / h                                  # ear to ear: the head's size
+    elbows = [d(s, e) / (d(s, e) + d(e, wr)) for s, e, wr in ((2, 3, 4), (5, 6, 7)) if ok(s, e, wr) and d(s, e) + d(e, wr) > 1]
+    if elbows:
+        r["elbow_at"] = float(np.mean(elbows))                     # S6: the elbow's place along the arm
+    knees = [d(hp, k) / (d(hp, k) + d(k, a)) for hp, k, a in ((8, 9, 10), (11, 12, 13)) if ok(hp, k, a) and d(hp, k) + d(k, a) > 1]
+    if knees:
+        r["knee_at"] = float(np.mean(knees))                       # S6: the knee's place along the leg
+    f = np.array(person.get("foot_keypoints_2d") or [], float).reshape(-1, 3)
+    if len(f) >= 6:                                                # S5: COCO-WholeBody's feet — big toe, small toe, heel; left then right
+        toes = [float(np.linalg.norm(f[i, :2] - f[i + 1, :2])) for i in (0, 3) if f[i, 2] >= 0.3 and f[i + 1, 2] >= 0.3]
+        if toes:
+            r["toes"] = float(np.median(toes)) / h
     return r
 
 
-def fit_body(measured: dict[str, float], body: Body | None = None) -> tuple[Body, dict[str, dict[str, float]]]:
-    """The body whose dummy shows the reference's proportions: head (from the ears), neck, torso, shoulders, legs, arms and hands moved
-    (within the field bounds) until the dummy's ratios meet the measured ones; the height, build, feet and attachments stay the author's.
-    The factors are relative to a dummy that is scaled to the height afterwards, so their overall size is nearly free (only the fixed
-    offsets of builders.ts move the ratios): the hips' width, which no factor scales, anchors it (E23b's Mara, fitted without it, ran to
-    the bounds with every ratio met).
+ARMS_CLOSE = 0.10            # S8: a wrist nearer a hip than this share of the height (across the picture): the arms touch the body
+
+
+def stance_note(person: dict) -> str | None:
+    """S8: what the reference's stance gets wrong for a fit and a test — "arms_close" when a wrist sits within ARMS_CLOSE of the height of
+    its hip, across the picture (A1's Mara 0.088, Ines 0.080: arms down, hands on the coat; an A-pose's are ≈ 0.15–0.2 out). None = fine."""
+    import numpy as np
+    b = np.array(person.get("pose_keypoints_2d") or [], float).reshape(-1, 3)
+    if len(b) < 14:
+        return None
+    h = float(np.linalg.norm(b[0, :2] - (b[10, :2] + b[13, :2]) / 2))
+    gaps = [abs(b[w, 0] - b[hp, 0]) / h for w, hp in ((4, 8), (7, 11)) if b[w, 2] >= 0.3 and b[hp, 2] >= 0.3 and h > 1]
+    return "arms_close" if gaps and min(gaps) < ARMS_CLOSE else None
+
+
+def body_points(person: dict, canvas: list | tuple | None) -> dict[str, Any]:
+    """CS1: the points a body was fitted to, as the version keeps them (S4's stance, CS2's bench): the body's 18, both hands' 21, the feet's
+    6, each [x, y, confidence], and the picture's size."""
+    def rows(key: str) -> list[list[float]]:
+        flat = [float(v) for v in (person.get(key) or [])]
+        return [[round(flat[i], 2), round(flat[i + 1], 2), round(flat[i + 2], 3)] for i in range(0, len(flat) - 2, 3)]
+    return {"canvas": list(canvas or []), "pose": rows("pose_keypoints_2d"), "hand_left": rows("hand_left_keypoints_2d"),
+            "hand_right": rows("hand_right_keypoints_2d"), "feet": rows("foot_keypoints_2d")}
+
+
+def fit_body(measured: dict[str, float], body: Body | None = None, locks: tuple[str, ...] | list[str] = ()) -> tuple[Body, dict[str, dict[str, float]]]:
+    """The body whose dummy shows the reference's proportions: head (from the ears), neck, torso, shoulders, hips, legs, arms, the elbows'
+    and knees' places, hands and feet moved (within the field bounds) until the dummy's ratios meet the measured ones; the height, build,
+    figure, rest hand and attachments stay the author's, and so does every factor in `locks` (the skeleton bench's, CS2).
+    The factors are relative to a dummy that is scaled to the height afterwards, so their overall size is loosely determined (only the
+    fixed offsets of builders.ts move the ratios): S7's pull — each factor drawn toward its adult value with a small weight — holds that
+    direction near an adult instead of letting it run to a bound (E23b's Mara, fitted without an anchor, ran to the bounds with every ratio
+    met), and keeps a loosely read length human unless the picture insists.
     Returns the body and, per measure, the reference's value against the fitted dummy's."""
     import numpy as np
     b = (body or Body()).model_copy()
-    keys = ("head", "neck", "torso", "shoulders", "legs", "arms", "hands")
+    needs = {"head": "head_w", "hands": "palm", "elbow": "elbow_at", "knee": "knee_at", "feet": "toes"}
+    keys = ("head", "neck", "torso", "shoulders", "hips", "legs", "arms", "elbow", "knee", "hands", "feet")
     lim = {k: (Body.model_fields[k].metadata[0].ge, Body.model_fields[k].metadata[1].le) for k in keys}
-    meas = [k for k in FITTED if k in measured]
-    unknown = [k for k in keys if (k != "head" or "head_w" in measured) and (k != "hands" or "palm" in measured)]
+    unknown = [k for k in keys if k not in locks and (k not in needs or needs[k] in measured) and (k != "feet" or TOES_PER_LEG)]
+    meas = [k for k in FITTED if k in measured and k in dummy_ratios(b)]
+    home = np.log([DEFAULTS.get(k, 1.0) for k in unknown])
 
     def at(x: np.ndarray) -> Body:
         return b.model_copy(update={k: float(np.clip(np.exp(v), *lim[k])) for k, v in zip(unknown, x)})
 
     def resid(x: np.ndarray) -> np.ndarray:
         d = dummy_ratios(at(x))
-        return np.array([np.log(d[k] / measured[k]) for k in meas])
+        return np.concatenate([[np.log(d[k] / measured[k]) for k in meas], PULL * (x - home)])
 
-    # Levenberg–Marquardt in log factors: damped, each step at most 0.2 (≈ 22 %), held inside the bounds; the damping keeps a loosely
-    # determined direction (no ears: the scale) near where it started instead of running to a bound
+    # Levenberg–Marquardt in log factors: damped, each step at most 0.2 (≈ 22 %), held inside the bounds
     x = np.log([getattr(b, k) for k in unknown])
     lam = 1e-3
-    for _ in range(200):
+    for _ in range(300):
         r = resid(x)
         jac = np.stack([(resid(x + e) - r) / 1e-6 for e in np.eye(len(x)) * 1e-6], axis=1)
         step = np.linalg.solve(jac.T @ jac + lam * np.eye(len(x)), -jac.T @ r)
@@ -137,7 +210,7 @@ def fit_body(measured: dict[str, float], body: Body | None = None) -> tuple[Body
         if float(np.abs(step).max()) < 1e-8 or lam > 1e6:
             break
     b = at(x)
-    b = b.model_copy(update={k: round(getattr(b, k), 3) for k in unknown})
+    b = b.model_copy(update={k: round(getattr(b, k), 4 if k in DEFAULTS else 3) for k in unknown})
     d = dummy_ratios(b)
-    report = {k: {"reference": round(measured[k], 4), "fitted": round(d[k], 4)} for k in FITTED if k in measured}
+    report = {k: {"reference": round(measured[k], 4), "fitted": round(d[k], 4)} for k in meas}
     return b, report

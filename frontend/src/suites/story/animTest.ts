@@ -36,7 +36,7 @@ export async function runAnimTest(pid: string, vid: string, stage = false): Prom
   const frames = caps.frames_max ?? 77, fps = caps.fps ?? 16
   const [w, h] = (caps.size?.length ? caps.size : [832, 480]) as [number, number]
   const { renderTurn } = await import('../stage/turnTest')
-  const out = await renderTurn((v.body ?? null) as never, frames, fps, w, h)
+  const out = await renderTurn((v.body ?? null) as never, frames, fps, w, h, undefined, v.body_points as never)   // S4: in the reference's stance
   const shas: string[] = []
   for (const blob of out.blobs) {
     const sha = await sha256Hex(await blob.arrayBuffer())

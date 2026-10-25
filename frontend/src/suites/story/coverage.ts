@@ -3,7 +3,7 @@
 export interface CoverageCell { shot: string; angle: string; expression?: string; take?: number }
 export interface CoverageGrid { shots: string[]; angles: string[]; counts: Record<string, Record<string, number>>; total: number; uncelled: number }
 
-const cellOf = (a: { params?: Record<string, unknown> | null }): CoverageCell | null => {
+export const cellOf = (a: { params?: Record<string, unknown> | null }): CoverageCell | null => {
   const c = a.params?.coverage_cell
   if (!c || typeof c !== 'object') return null
   const { shot, angle } = c as Record<string, unknown>

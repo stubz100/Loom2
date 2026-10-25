@@ -832,7 +832,7 @@ class KeypointsFinisher:
 def _body_fit_result(q: JobQueue, job: JobRecord, recipe: Keypoints, people: list[dict]) -> None:
     """CA1b: the version's body fitted to the reference's proportions (the height, build, head, feet and attachments stay). A reference that
     shows no whole figure fails the job, so the author sees why."""
-    from ..body import Body, fit_body, reference_ratios
+    from ..body import Body, body_points, fit_body, reference_ratios, stance_note
     from ..story import StoryStore
     if not people:
         raise ValueError("no figure found in the animation reference")
@@ -844,7 +844,10 @@ def _body_fit_result(q: JobQueue, job: JobRecord, recipe: Keypoints, people: lis
         raise ValueError(f"the profile {pid} is gone")
     v = cur.version(vid)
     body, report = fit_body(measured, v.body or Body())
-    p = store.set_fitted_body(pid, v.id, body, recipe.asset_id)
+    note = stance_note(people[0])
+    p = store.set_fitted_body(pid, v.id, body, recipe.asset_id, body_points(people[0], job.result.get("canvas")), note)
+    if note:
+        job.log_tail.append("the reference's arms touch the body — draw it again for a cleaner fit (the prompt asks for an A-pose)")
     job.result["body"] = body.model_dump()
     job.result["fit"] = report
     job.log_tail.append("body fitted: " + ", ".join(f"{k} {body.model_dump()[k]}" for k in ("neck", "torso", "shoulders", "arms", "legs", "hands")))

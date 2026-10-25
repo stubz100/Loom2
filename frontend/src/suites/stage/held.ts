@@ -35,6 +35,23 @@ export function onHand(hand: THREE.Object3D, world: THREE.Matrix4): Transform {
   return transformOf(hand.matrixWorld.clone().invert().multiply(world))
 }
 
+// proto01_UIcast CB4: a thing can also hang under any other object (`parent` without a hand): the engine puts its holder under the
+// parent's, so its transform is local to the parent; the helpers below keep loops out and keep each object's own nodes apart.
+
+/** An object's own nodes: its holder's subtree without the objects parented under it (their nodes carry their own `stageId`). */
+export function ownTraverse(root: THREE.Object3D, id: string, fn: (o: THREE.Object3D) => void): void {
+  fn(root)
+  for (const c of root.children) if (!c.userData.stageId || c.userData.stageId === id) ownTraverse(c, id, fn)
+}
+
+/** Whether `id` hangs (through parents, not hands) under `ancestor` — a parent picker leaves those out, so no loop is made. */
+export function descendsFrom(objects: Pick<StageObject, 'id' | 'parent' | 'parent_joint'>[], id: string, ancestor: string): boolean {
+  const by = new Map(objects.map((o) => [o.id, o]))
+  const seen = new Set<string>()
+  for (let o = by.get(id); o && o.parent && !o.parent_joint && !seen.has(o.id); o = by.get(o.parent)) { seen.add(o.id); if (o.parent === ancestor) return true }
+  return false
+}
+
 /** The figures a thing can be put in the hand of (the stage's visible mannequins), and whether a thing can be held at all. */
 export const canHold = (o: Pick<StageObject, 'kind'>): boolean => o.kind === 'mesh' || o.kind === 'prop' || o.kind === 'plane'
 export const holders = (objects: StageObject[]): StageObject[] => objects.filter((o) => o.kind === 'mannequin' && o.visible)

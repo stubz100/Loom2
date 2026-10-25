@@ -57,15 +57,20 @@ export function mannequin(mat: THREE.Material, pose: Pose = POSES.stand, joints?
   const root = J.root
   root.userData.hip = hip
   const marker = (parent: THREE.Object3D, mx: number, my: number, mz: number) => { const o = new THREE.Object3D(); o.position.set(mx, my, mz); parent.add(o); return o }
-  const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.32 * w, 0.16, 0.18 * w), mat); root.add(pelvis)
+  const hp = x.hips ?? 1                                              // S7: the hips' width
+  const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.32 * w * hp, 0.16, 0.18 * w), mat); root.add(pelvis)
   root.add(J.spine); J.spine.position.set(0, 0.06, 0)
   const torso = new THREE.Mesh(new THREE.BoxGeometry(0.38 * w * x.shoulders, 0.42 * t, 0.2 * w), mat); torso.position.y = 0.22 * t; J.spine.add(torso)
+  // S3 (proto01_UIcast CS1): ×1 an adult's neck — 0.12 from the neck joint to the head's pivot at the jaw, the head's points 0.06·head lower on
+  // it than before (the nose 0.02 over the pivot), so a body of before (neck′ = (neck + head) / 2, body.py rebase_body) stands where it stood
+  const nk = 0.12 * (x.neck ?? 1)
   J.spine.add(J.neck); J.neck.position.set(0, 0.44 * t, 0)
-  J.neck.add(J.head); J.head.position.set(0, 0.06 * (x.neck ?? 1), 0)
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.11 * hd, 20, 14), mat); head.position.y = 0.1 * hd; head.scale.set(0.9, 1.1, 1); J.head.add(head)
+  J.neck.add(J.head); J.head.position.set(0, nk, 0)
+  limb(J.head, nk + 0.04 * t, 0.045 * w, mat)                        // CB6: the neck, from the shoulders' line to the pivot (the Simple level drew none)
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.11 * hd, 20, 14), mat); head.position.y = 0.04 * hd; head.scale.set(0.9, 1.1, 1); J.head.add(head)
   const neckMarker = marker(J.spine, 0, 0.4 * t, 0)                  // CA1b (D104): OpenPose's neck is the shoulders' midpoint, as SDPose and DWPose read people
-  const nose = marker(J.head, 0, 0.08 * hd, 0.11 * hd), rEye = marker(J.head, -0.035 * hd, 0.12 * hd, 0.09 * hd), lEye = marker(J.head, 0.035 * hd, 0.12 * hd, 0.09 * hd)
-  const rEar = marker(J.head, -0.095 * hd, 0.1 * hd, 0), lEar = marker(J.head, 0.095 * hd, 0.1 * hd, 0)
+  const nose = marker(J.head, 0, 0.02 * hd, 0.11 * hd), rEye = marker(J.head, -0.035 * hd, 0.06 * hd, 0.09 * hd), lEye = marker(J.head, 0.035 * hd, 0.06 * hd, 0.09 * hd)
+  const rEar = marker(J.head, -0.095 * hd, 0.04 * hd, 0), lEar = marker(J.head, 0.095 * hd, 0.04 * hd, 0)
   const sx = 0.21 * x.shoulders * (b ? 0.5 + 0.5 * w : 1)
   const arm = (shoulder: Joint, elbow: Joint, side: number) => {
     J.spine.add(J[shoulder]); J[shoulder].position.set(side * sx, 0.4 * t, 0)
@@ -76,7 +81,7 @@ export function mannequin(mat: THREE.Material, pose: Pose = POSES.stand, joints?
   }
   const [rS, rE, rW] = arm('r_shoulder', 'r_elbow', -1), [lS, lE, lW] = arm('l_shoulder', 'l_elbow', 1)
   const leg = (hipJ: Joint, knee: Joint, side: number) => {
-    root.add(J[hipJ]); J[hipJ].position.set(side * 0.1 * w, -0.04, 0)
+    root.add(J[hipJ]); J[hipJ].position.set(side * 0.1 * w * hp, -0.04, 0)
     limb(J[hipJ], limbs.thigh, 0.07 * w, mat)
     J[hipJ].add(J[knee]); J[knee].position.set(0, -limbs.thigh, 0)
     limb(J[knee], limbs.shin, 0.055 * w, mat)
@@ -99,10 +104,10 @@ function attach(J: Record<Joint, THREE.Object3D>, a: Body['attachments'][number]
   const mesh = (geo: THREE.BufferGeometry, parent: THREE.Object3D, px: number, py: number, pz: number, rx = 0, rz = 0) => {
     const m = new THREE.Mesh(geo, mat); m.position.set(px, py, pz); m.rotation.set(rx, 0, rz); parent.add(m)
   }
-  if (a.kind === 'horns') for (const side of [-1, 1]) mesh(new THREE.ConeGeometry(0.025 * s, 0.1 * s, 10), at(a.joint, 'head'), side * 0.06 * hd, 0.2 * hd + 0.04 * s, 0.02, 0, -side * 0.35)
-  else if (a.kind === 'ears') for (const side of [-1, 1]) mesh(new THREE.SphereGeometry(0.035 * s, 10, 8), at(a.joint, 'head'), side * 0.11 * hd, 0.15 * hd, 0)
-  else if (a.kind === 'antennae') for (const side of [-1, 1]) mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.16 * s, 6), at(a.joint, 'head'), side * 0.04 * hd, 0.22 * hd + 0.08 * s, 0, 0, -side * 0.3)
-  else if (a.kind === 'hat') mesh(new THREE.CylinderGeometry(0.11 * hd, 0.13 * hd, 0.12 * s, 20), at(a.joint, 'head'), 0, 0.21 * hd + 0.05 * s, 0)
+  if (a.kind === 'horns') for (const side of [-1, 1]) mesh(new THREE.ConeGeometry(0.025 * s, 0.1 * s, 10), at(a.joint, 'head'), side * 0.06 * hd, 0.14 * hd + 0.04 * s, 0.02, 0, -side * 0.35)
+  else if (a.kind === 'ears') for (const side of [-1, 1]) mesh(new THREE.SphereGeometry(0.035 * s, 10, 8), at(a.joint, 'head'), side * 0.11 * hd, 0.09 * hd, 0)
+  else if (a.kind === 'antennae') for (const side of [-1, 1]) mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.16 * s, 6), at(a.joint, 'head'), side * 0.04 * hd, 0.16 * hd + 0.08 * s, 0, 0, -side * 0.3)
+  else if (a.kind === 'hat') mesh(new THREE.CylinderGeometry(0.11 * hd, 0.13 * hd, 0.12 * s, 20), at(a.joint, 'head'), 0, 0.15 * hd + 0.05 * s, 0)
   else if (a.kind === 'wings') for (const side of [-1, 1]) mesh(new THREE.BoxGeometry(0.4 * s, 0.5 * s, 0.02), at(a.joint, 'spine'), side * 0.22 * s, 0.32 * t, -0.13, 0, side * 0.35)
   else if (a.kind === 'backpack') mesh(new THREE.BoxGeometry(0.3 * s, 0.36 * s, 0.14 * s), at(a.joint, 'spine'), 0, 0.24 * t, -0.17)
   else if (a.kind === 'tail') mesh(new THREE.CylinderGeometry(0.015 * s, 0.04 * s, 0.6 * s, 10), at(a.joint, 'root'), 0, -0.05 - 0.2 * s, -0.12 - 0.2 * s, -0.9)

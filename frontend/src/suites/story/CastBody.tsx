@@ -5,13 +5,14 @@
 import { Plus, X } from 'lucide-react'
 import { Help } from '../../frame/Help'
 import type { Profile, ProfileVersion } from '../../api/types'
-import { BUILD_WIDTH, DEFAULT_BODY, bodyDims, type Body } from '../stage/body'
+import { BUILD_WIDTH, DEFAULT_BODY, ELBOW_AT, KNEE_AT, bodyDims, type Body } from '../stage/body'
 import { CommandButton } from '../../frame/CommandButton'
 import { useStory } from './storyStore'
 
-const PROPORTIONS: [keyof Pick<Body, 'head' | 'neck' | 'torso' | 'shoulders' | 'arms' | 'legs' | 'hands' | 'feet'>, string, number, number][] = [
+const PROPORTIONS: [keyof Pick<Body, 'head' | 'neck' | 'torso' | 'shoulders' | 'hips' | 'arms' | 'legs' | 'hands' | 'feet'>, string, number, number][] = [
   ['head', 'head size', 0.5, 2.5], ['neck', 'neck length', 0.5, 3.0], ['torso', 'torso length', 0.6, 1.6], ['shoulders', 'shoulder width', 0.6, 1.8],
-  ['arms', 'arm length', 0.6, 1.6], ['legs', 'leg length', 0.5, 1.6], ['hands', 'hand size', 0.5, 1.6], ['feet', 'foot size', 0.5, 1.6]]
+  ['hips', 'hip width', 0.6, 1.6], ['arms', 'arm length', 0.6, 1.6], ['legs', 'leg length', 0.5, 1.6], ['hands', 'hand size', 0.5, 1.6], ['feet', 'foot size', 0.5, 1.6]]
+const HAND_RESTS: Body['hand_rest']['preset'][] = ['relaxed', 'open', 'fist', 'point', 'grip', 'pinch']
 const BUILDS: Body['build'][] = ['slim', 'average', 'broad', 'heavy']
 const KINDS: Body['attachments'][number]['kind'][] = ['tail', 'horns', 'ears', 'wings', 'antennae', 'hat', 'backpack', 'other']
 const JOINT_LABEL: Record<string, string> = { head: 'head', spine: 'back', root: 'hips', r_shoulder: 'right shoulder', l_shoulder: 'left shoulder', r_elbow: 'right forearm', l_elbow: 'left forearm' }
@@ -51,13 +52,25 @@ export function CastBody({ p, v }: { p: Profile; v: ProfileVersion }) {
               {BUILDS.map((k) => <button key={k} type="button" disabled={!open} className={b.build === k ? 'active' : ''} aria-pressed={b.build === k} onClick={() => set({ build: k })}>{k}</button>)}
             </span>
           </div>
+          <div className="body-row">
+            <span>figure <Help text={"The Detailed mannequin this character's figures are on every stage (the Simple dummy is retired, proto01_UIcast U18)."} /></span>
+            <span className="segmented" role="group" aria-label="figure">
+              {(['female', 'male'] as const).map((k) => <button key={k} type="button" disabled={!open} className={(b.figure ?? 'female') === k ? 'active' : ''} aria-pressed={(b.figure ?? 'female') === k} onClick={() => set({ figure: k })}>{k === 'female' ? '♀' : '♂'}</button>)}
+            </span>
+          </div>
           {PROPORTIONS.map(([k, label, lo, hi]) => (
             <div key={k} className="body-row">
               <span>{label}</span>
               <input type="range" aria-label={label} min={lo} max={hi} step={0.05} value={b[k]} disabled={!open} onChange={(e) => set({ [k]: Number(e.target.value) } as Partial<Body>)} />
-              <span className="mono">×{b[k].toFixed(2)}</span>
+              <span className="mono">×{(b[k] ?? 1).toFixed(2)}</span>
             </div>
           ))}
+          <div className="body-row">
+            <span>hands at rest <Help text={"How the hands are held when a pose does not turn the fingers: every figure of this character starts from it (a hand preset keyed in Clay still turns them)."} /></span>
+            <select aria-label="hands at rest" disabled={!open} value={b.hand_rest?.preset ?? 'relaxed'} onChange={(e) => set({ hand_rest: { curl: b.hand_rest?.curl ?? 1, preset: e.target.value as Body['hand_rest']['preset'] } })}>
+              {HAND_RESTS.map((h) => <option key={h} value={h}>{h}</option>)}
+            </select>
+          </div>
           <div className="body-row attachments">
             <span>attachments</span>
             <div>
@@ -81,7 +94,7 @@ export function CastBody({ p, v }: { p: Profile; v: ProfileVersion }) {
             <span />
             <span>
               {v.anim_ref_asset_id && <CommandButton id="story.cast.fitBody" text size={12} />}
-              <button type="button" className="quiet" title="Proportions and build back to the default adult (the height and attachments stay)" onClick={() => set({ build: 'average', head: 1, neck: 1, torso: 1, shoulders: 1, arms: 1, legs: 1, hands: 1, feet: 1 })}>Reset proportions</button>
+              <button type="button" className="quiet" title="Proportions and build back to the default adult (the height and attachments stay)" onClick={() => set({ build: 'average', head: 1, neck: 1, torso: 1, shoulders: 1, hips: 1, arms: 1, elbow: ELBOW_AT, legs: 1, knee: KNEE_AT, hands: 1, feet: 1 })}>Reset proportions</button>
               <button type="button" className="quiet" title="No body of its own: the default 1.75 m dummy" onClick={() => setSheet({ body: null as never })}>Remove the body</button>
             </span>
           </div>}
@@ -105,12 +118,14 @@ function Silhouette({ b }: { b: Body }) {
     const neck = d.hip + 0.06 + 0.44 * x.torso, shoulderY = d.hip + 0.06 + 0.4 * x.torso
     const sx = 0.21 * x.shoulders * (body ? 0.5 + 0.5 * w : 1)
     const armLen = d.limbs.upper_arm + d.limbs.forearm, legLen = d.limbs.thigh + d.limbs.shin
+    const pivot = neck + 0.12 * (x.neck ?? 1)                                     // S3: the head's pivot at the jaw, ×1 an adult's neck
     return (
       <>
-        <circle cx={cx} cy={y(neck + 0.06 * (x.neck ?? 1) + 0.1 * x.head)} r={hw(0.11 * x.head)} />
+        <line x1={cx} y1={y(shoulderY)} x2={cx} y2={y(pivot)} strokeWidth={hw(0.09 * w)} />
+        <circle cx={cx} cy={y(pivot + 0.04 * x.head)} r={hw(0.11 * x.head)} />
         <rect x={cx - hw(0.19 * w * x.shoulders)} y={y(neck)} width={hw(0.38 * w * x.shoulders)} height={hw(0.42 * x.torso + 0.06)} rx={2} />
         {[-1, 1].map((side) => <line key={`a${side}`} x1={cx + side * hw(sx)} y1={y(shoulderY)} x2={cx + side * hw(sx + 0.05)} y2={y(shoulderY - armLen)} strokeWidth={hw(0.1 * w)} />)}
-        {[-1, 1].map((side) => <line key={`l${side}`} x1={cx + side * hw(0.1 * w)} y1={y(d.hip - 0.04)} x2={cx + side * hw(0.11 * w)} y2={y(d.hip - 0.04 - legLen)} strokeWidth={hw(0.13 * w)} />)}
+        {[-1, 1].map((side) => <line key={`l${side}`} x1={cx + side * hw(0.1 * w * (x.hips ?? 1))} y1={y(d.hip - 0.04)} x2={cx + side * hw(0.11 * w * (x.hips ?? 1))} y2={y(d.hip - 0.04 - legLen)} strokeWidth={hw(0.13 * w)} />)}
       </>
     )
   }

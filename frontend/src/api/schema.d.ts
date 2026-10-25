@@ -4653,10 +4653,22 @@ export interface components {
              */
             build: "slim" | "average" | "broad" | "heavy";
             /**
+             * Elbow
+             * @default 0.5178571428571429
+             */
+            elbow: number;
+            /**
              * Feet
              * @default 1
              */
             feet: number;
+            /**
+             * Figure
+             * @default female
+             * @enum {string}
+             */
+            figure: "female" | "male";
+            hand_rest: components["schemas"]["HandRest"];
             /**
              * Hands
              * @default 1
@@ -4672,6 +4684,16 @@ export interface components {
              * @default 1.75
              */
             height_m: number;
+            /**
+             * Hips
+             * @default 1
+             */
+            hips: number;
+            /**
+             * Knee
+             * @default 0.5057471264367817
+             */
+            knee: number;
             /**
              * Legs
              * @default 1
@@ -7401,6 +7423,24 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /**
+         * HandRest
+         * @description S2 (proto01_UIcast 03 §3.1): the character's hands at rest — what every pose of its Detailed figure starts from (a key's hand preset
+         *     still turns them): a preset's curl, scaled. The GLB's own flat, fanned hand is never the rest.
+         */
+        HandRest: {
+            /**
+             * Curl
+             * @default 1
+             */
+            curl: number;
+            /**
+             * Preset
+             * @default relaxed
+             * @enum {string}
+             */
+            preset: "open" | "relaxed" | "fist" | "point" | "grip" | "pinch";
+        };
         /** HealBody */
         HealBody: {
             /** Heal */
@@ -9524,7 +9564,7 @@ export interface components {
             revision: number;
             /**
              * Schema Version
-             * @default 2
+             * @default 3
              */
             schema_version: number;
             /** Updated At */
@@ -9614,6 +9654,8 @@ export interface components {
             anim_ref_asset_id: string | null;
             /** Anim Ref Back Asset Id */
             anim_ref_back_asset_id: string | null;
+            /** Anim Ref Note */
+            anim_ref_note: string | null;
             /** Anim Test Clip Id */
             anim_test_clip_id: string | null;
             /**
@@ -9624,6 +9666,10 @@ export interface components {
             body: components["schemas"]["Body"] | null;
             /** Body Fit From */
             body_fit_from: string | null;
+            /** Body Points */
+            body_points: {
+                [key: string]: unknown;
+            } | null;
             /** Candidates Group Id */
             candidates_group_id: string | null;
             /** Colours */
@@ -11036,7 +11082,7 @@ export interface components {
             revision: number;
             /**
              * Schema Version
-             * @default 2
+             * @default 3
              */
             schema_version: number;
             /** Size */

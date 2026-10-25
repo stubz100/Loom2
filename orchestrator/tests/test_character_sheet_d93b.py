@@ -60,12 +60,12 @@ def test_a_schema_1_stub_reads_as_the_appearance_and_the_file_waits_for_the_next
     before = path.read_bytes()
     p = st.profile(rec["id"])
     v = p.version()
-    assert p.schema_version == PROFILE_SCHEMA_VERSION == 2 and v.appearance == "char01, a diver." and v.label == "v1" and v.outfit == "" and v.colours == []
+    assert p.schema_version == PROFILE_SCHEMA_VERSION == 3 and v.appearance == "char01, a diver." and v.label == "v1" and v.outfit == "" and v.colours == []
     assert v.stub == "char01, a diver" and "stub" not in v.model_dump()                                     # the composed clause; no stub in the new shape
     assert [x.id for x in st.profiles()] == [rec["id"]] and path.read_bytes() == before                      # reads write nothing
     p2 = st.patch_profile(p.id, {"revision": 0, "versions": [{"id": "v1", "outfit": "a yellow wetsuit"}]})
     on_disk = json.loads(path.read_text(encoding="utf-8"))
-    assert on_disk["schema_version"] == 2 and "stub" not in on_disk["versions"][0] and on_disk["versions"][0]["appearance"] == "char01, a diver."
+    assert on_disk["schema_version"] == PROFILE_SCHEMA_VERSION and "stub" not in on_disk["versions"][0] and on_disk["versions"][0]["appearance"] == "char01, a diver."
     assert on_disk["versions"][0]["outfit"] == "a yellow wetsuit" and p2.revision == 1
     # a mention of it carries the composed sheet on its references' note
     hero = cat.ingest_file(_png(tmp_path / "h.png")).id
@@ -85,7 +85,7 @@ def test_the_sheet_round_trips_through_the_routes_with_revisions(tmp_path: Path)
         hero = svc.catalogue.ingest_file(_png(tmp_path / "h.png")).id
         p = cl.post("/story/profiles", json={"name": "Mara", "cls": "character", "hero_asset_id": hero, **SHEET, "label": "rain gear"}).json()
         v = p["versions"][0]
-        assert p["schema_version"] == 2 and v["label"] == "rain gear" and v["colours"] == [{"hex": "#c0392b", "object": "rain jacket"}] and v["marks"] == SHEET["marks"]
+        assert p["schema_version"] == PROFILE_SCHEMA_VERSION and v["label"] == "rain gear" and v["colours"] == [{"hex": "#c0392b", "object": "rain jacket"}] and v["marks"] == SHEET["marks"]
         assert cl.post("/story/profiles", json={"name": "Bad", "colours": [{"hex": "red", "object": "coat"}]}).status_code == 422      # a colour is a hex code
         assert cl.post("/story/profiles", json={"name": "Old", "stub": "Old, a sailor"}).json()["versions"][0]["appearance"] == "Old, a sailor"   # the schema-1 word
         # PATCH: each field, with the revision; a stale one is refused; `stub` is the appearance

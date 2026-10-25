@@ -1,7 +1,7 @@
 // The Inspector (D34, proto01_design/01 §6e): one scrolling column with collapsible sections instead of tabs — Tags,
 // Location, Actions, Lineage, Prompt, Details — for one asset, or the bulk subset for several. The single home for the actions
 // on the selection (the strip carries none); ids appear only under Details.
-import { BookOpen, ChevronDown, ChevronRight, Clapperboard, Columns2, Copy, ExternalLink, Film, FolderInput, GitBranch, Image, Images, Inbox, Layers, MoreHorizontal, Pencil, Pin, RotateCcw, Shuffle, Trash, Undo, Ungroup, UserRoundPlus, Wand2, X } from 'lucide-react'
+import { BookOpen, ChevronDown, ChevronRight, Clapperboard, Columns2, Copy, ExternalLink, Film, FolderInput, GitBranch, Image, Images, Inbox, Layers, MoreHorizontal, Package, Pencil, Pin, RotateCcw, Shuffle, Trash, Undo, Ungroup, UserRoundPlus, Wand2, X } from 'lucide-react'
 import { useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
@@ -17,6 +17,7 @@ import { useMakeFor } from '../../store/origin'
 import { confirmDeleteGroup, confirmUngroup } from './groupUsers'
 import { useAlbum, type PathStep } from './albumStore'
 import { addToCharacterMenu, moveToMenu, forFrame, frameUseLabel } from './catalogueCommands'
+import { castPropMenu } from '../story/castProp'
 import { CatalogueStoreCtx, useCat } from './catalogueContext'
 import { selectedOrPrimary } from './catalogueStore'
 import { notePlacements } from './placement'
@@ -220,7 +221,7 @@ function One({ a }: { a: Asset }) {
     <div className="insp">
       <img className="insp-thumb" src={api.thumbUrl(a.id, 512)} alt="" onDoubleClick={() => runCommand('cat.loupe')} />
       {a.kind === 'audio' && <audio className="insp-audio" controls src={api.assetUrl(a.id)} aria-label="the spoken line" />}
-      <div className="meta-line">{a.model_id ?? a.suite} · {a.kind === 'audio' ? `${a.duration_s ?? '?'} s` : `${a.w}×${a.h}`} · {relTime(a.created_at)}</div>
+      <div className="meta-line">{a.model_id ?? a.suite} · {a.kind === 'audio' ? `${a.duration_s ?? '?'} s` : a.kind === 'mesh' ? '3D model' : `${a.w}×${a.h}`} · {relTime(a.created_at)}</div>
       <Section id="tags" title="Tags"><Tags ids={ids} shared={a.tags} recs={[a]} /></Section>
       <Section id="location" title="Location">
         <div className="loc">{a.trashed_at ? <span className="muted">In Trash{here ? ' (back on its page when restored)' : ''}</span> : here ? <Crumbs path={here.path} /> : <span className="crumbs-i"><Inbox size={13} /><button className="link" onClick={() => open('unprocessed')}>Unprocessed</button></span>}</div>
@@ -231,7 +232,10 @@ function One({ a }: { a: Asset }) {
         </div>}
       </Section>
       <Section id="actions" title="Actions">
-        <div className="igrid">
+        {a.kind === 'mesh' ? <div className="igrid">{/* proto01_UIcast CF9: a 3D model's own verbs */}
+          {!a.trashed_at && <Btn icon={<Package size={14} />} label="Make it a Cast prop ▾" run={(e) => showMenu(e, castPropMenu(a).items)} title="A new Cast prop with this model, or this model for a prop you have (its picture becomes a new prop's hero)" />}
+          <Btn icon={<MoreHorizontal size={14} />} label="More ▾" run={(e) => showMenu(e, actionsMore(a))} />
+        </div> : <div className="igrid">
           {forFrame() && a.kind === 'image' && <CmdBtn id="cat.useFrame" icon={<Clapperboard size={14} />} label={frameUseLabel()} />}
           <Btn icon={<Pencil size={14} />} label="Edit" run={() => runCommand('cat.edit')} title="Open in Edit (E)" />
           <Btn icon={<Film size={14} />} label="Animate ▾" run={(e) => showMenu(e, [{ cmd: 'cat.animate' }, { cmd: 'cat.animateEnd' }])} />
@@ -240,9 +244,9 @@ function One({ a }: { a: Asset }) {
           <Btn icon={<Shuffle size={14} />} label="Variations" run={() => runCommand('cat.variations')} disabled={!a.params?.recipe} title="New seeds (V)" />
           <CmdBtn id="cat.loadInGenerate" icon={<Wand2 size={14} />} label="Load in Image" />
           <Btn icon={<Pin size={14} />} label={c.compare.includes(a.id) ? 'Unpin' : 'Pin for compare'} run={() => runCommand('cat.pin')} title={c.compare.includes(a.id) ? `Unpin (C${c.compare.indexOf(a.id) + 1}, C)` : 'Pin for compare (C)'} />
-          {a.kind === 'image' && !a.trashed_at && <Btn icon={<UserRoundPlus size={14} />} label="Add to character ▾" run={(e) => showMenu(e, addToCharacterMenu().items)} title="Into a Cast profile: as the hero, into the reference set or as a candidate (D93)" />}
+          {a.kind === 'image' && !a.trashed_at && <Btn icon={<UserRoundPlus size={14} />} label="Add to Cast ▾" run={(e) => showMenu(e, addToCharacterMenu().items)} title="Into a Cast character, prop or place: as the hero, into the reference set or as a candidate (D93)" />}
           <Btn icon={<MoreHorizontal size={14} />} label="More ▾" run={(e) => showMenu(e, actionsMore(a))} />
-        </div>
+        </div>}
       </Section>
       {a.kind === 'image' && <Section id="start" title="Start from this image">
         <div className="quick-cards compact">

@@ -116,7 +116,8 @@ export function goToOrigin(j: Job): void {
         const sp = m.useSplit.getState()
         const c = m.paneStore(sp.mode === 'single' ? 0 : sp.active).getState()
         const folder = typeof o.payload?.folder === 'string' ? o.payload.folder : null
-        if (o.ref) m.openPlace(c, { group: o.ref })
+        if (o.ref && (o.surface === 'mesh' || o.ref.startsWith('ast_'))) { m.openPlace(c, 'library'); c.openLineage(o.ref) }   // proto01_UIcast CB1: a picture's job (Make a 3D prop…) — the picture and what came of it
+        else if (o.ref) m.openPlace(c, { group: o.ref })
         else if (folder) void c.setQuery({ folder: folder as typeof c.q.folder, group_id: undefined, collection_id: undefined })
       })
       break

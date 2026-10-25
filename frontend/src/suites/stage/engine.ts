@@ -11,7 +11,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { api } from '../../api/client'
 import type { StageCamera, StageDoc, StageObject } from '../../api/types'
 import { applyPose, clay, JOINTS, mannequin, POSES, prop, set as buildSet, setMaterial, vfovFor, type Body, type Joint, type Mannequin } from './builders'
-import { HAND_MARKER, heldWorld, onHand, transformOf } from './held'
+import { HAND_MARKER, heldWorld, onHand, ownTraverse, transformOf } from './held'
 import { CHAINS, eulerDeg, figureChain, solveTwoBone, type Chain } from './ik'
 import { makeDetailed, type Detailed, type HandPreset } from './detailed'
 import { measure } from './motion/path'
@@ -421,10 +421,10 @@ export class StageEngine {
       let e = this.entries.get(o.id)
       if (!e || e.doc.kind !== o.kind || e.doc.preset !== o.preset || e.doc.asset_id !== o.asset_id || JSON.stringify((e.doc as { body?: unknown }).body ?? null) !== JSON.stringify((o as { body?: unknown }).body ?? null)
         || (e.doc.detail ?? null) !== (o.detail ?? null) || (e.doc.shadow_proxy ?? null) !== (o.shadow_proxy ?? null) || (e.doc.floor_y ?? null) !== (o.floor_y ?? null)) {
-        if (e) { this.scene.remove(e.holder); e.proxy?.dispose() }
+        if (e) { e.holder.removeFromParent(); e.proxy?.dispose() }
         e = this.build(o)
         this.entries.set(o.id, e)
-        this.scene.add(e.holder)
+        this.scene.add(e.holder)                                                     // placeChildren hangs it under its parent below
       }
       const t = o.transform
       e.holder.position.set(t.pos[0], t.pos[1], t.pos[2])
@@ -437,7 +437,8 @@ export class StageEngine {
       }
       e.doc = o
     }
-    for (const [id, e] of [...this.entries]) if (!seen.has(id)) { this.scene.remove(e.holder); e.proxy?.dispose(); this.entries.delete(id); if (this.selectedId === id) this.select(null) }
+    for (const [id, e] of [...this.entries]) if (!seen.has(id)) { e.holder.removeFromParent(); e.proxy?.dispose(); this.entries.delete(id); if (this.selectedId === id) this.select(null) }
+    this.placeChildren()
     this.syncLight(doc)
     this.followAll()
     this.placeHeld()
@@ -682,7 +683,7 @@ export class StageEngine {
       const px = bindProxy(gltf.scene, e.figure.joints, e.figure.limbs, e.holder, e.doc.pose ?? null)
       for (const m of px.meshes) this.scene.add(m)
       e.proxy = px
-      e.holder.traverse((c) => { const m = c as THREE.Mesh; if (m.isMesh) m.castShadow = false })
+      ownTraverse(e.holder, id, (c) => { const m = c as THREE.Mesh; if (m.isMesh) m.castShadow = false })
       this.followAll()
       this.dirty = true
     }).catch((err) => this.hooks.onDetailError?.(id, `shadow proxy: ${err instanceof Error ? err.message : String(err)}`)))
@@ -694,7 +695,8 @@ export class StageEngine {
     this.track(import('./motion/mannequins').then((m) => m.mannequinClone(kind, this.clayMat)).then(({ root, rig }) => {
       if (this.disposed || this.entries.get(id) !== e || !e.figure) return
       e.holder.updateMatrixWorld(true)
-      const d = makeDetailed(root, rig, e.figure.joints.root.parent!, e.figure.joints, e.figure.limbs, { hands: e.doc.body?.hands, feet: e.doc.body?.feet })
+      const b = e.doc.body
+      const d = makeDetailed(root, rig, e.figure.joints.root.parent!, e.figure.joints, e.figure.limbs, { hands: b?.hands, feet: b?.feet, head: b?.head, handRest: b?.hand_rest ?? null })   // CS1 (S1, S2)
       d.object.traverse((c) => { c.userData.stageId = id; const m = c as THREE.Mesh; if (m.isMesh) { m.castShadow = !e.proxy; m.receiveShadow = true } })
       const inside = (o: THREE.Object3D) => { for (let p: THREE.Object3D | null = o; p; p = p.parent) if (p === d.object) return true; return false }
       e.figure.root.traverse((c) => { const mesh = c as THREE.Mesh; if (mesh.isMesh && !mesh.userData.joint && !mesh.userData.ik && !inside(mesh)) mesh.visible = false })
@@ -732,6 +734,18 @@ export class StageEngine {
   }
   /** CA1: every Detailed figure after its joints (a key, a gizmo drag, the IK, a sampled frame). */
   /** D129 (HP1): a held thing follows its figure's hand — its transform is local to the wrist marker, re-placed after every pose. */
+  /** proto01_UIcast CB4: an object with a parent (and no hand) hangs under its parent's holder, so its transform is local to the parent and
+   *  it moves with it; a held thing, an orphan or a loop stays at the scene's root. Run on every sync, so a rebuilt parent takes its
+   *  children back. */
+  private placeChildren(): void {
+    for (const e of this.entries.values()) {
+      const p = !e.doc.parent_joint && e.doc.parent ? this.entries.get(e.doc.parent) : undefined
+      let loop = false
+      for (let a = p?.doc; a && !loop; a = a.parent && !a.parent_joint ? this.entries.get(a.parent)?.doc : undefined) loop = a.id === e.doc.id
+      const target = p && !loop ? p.holder : this.scene
+      if (e.holder.parent !== target) target.add(e.holder)
+    }
+  }
   private placeHeld(): void {
     for (const e of this.entries.values()) {
       const hand = this.handOf(e.doc)
@@ -779,7 +793,7 @@ export class StageEngine {
         if (!e.doc.visible) continue
         const hex = maskColour(i++); legend[hex] = e.doc.id
         const m = new THREE.MeshBasicMaterial({ color: hex })
-        e.holder.traverse((o) => { const mesh = o as THREE.Mesh; if (mesh.isMesh && !mesh.userData.joint && !mesh.userData.ik) { swapped.push([mesh, mesh.material]); mesh.material = m } })   // CA1: the holder, so a Detailed mannequin is in its mask
+        ownTraverse(e.holder, e.doc.id, (o) => { const mesh = o as THREE.Mesh; if (mesh.isMesh && !mesh.userData.joint && !mesh.userData.ik) { swapped.push([mesh, mesh.material]); mesh.material = m } })   // CA1: the holder, so a Detailed mannequin is in its mask (its children keep their own colour)
       }
       blobs.mask = await this.shotWith(r, camera, null, 0x000000)
       for (const [mesh, mat] of swapped) mesh.material = mat

@@ -15,7 +15,7 @@ import { DEV_HOOKS } from '../../devHooks'
 import { useSuiteRail } from '../../frame/suiteRegistry'
 import { useSession } from '../../store/session'
 import type { Asset, Profile, Shot, ShotVersion, StoryBeat, StoryVariable, WorldStyle } from '../../api/types'
-import { coverageGrid } from './coverage'
+import { cellOf, coverageGrid } from './coverage'
 import { ITEM_LABEL, readinessOf, rowSummary, shotNeeds } from './castReady'
 import { spineTodo } from './episodeVerbs'
 import { ROUTE_LABEL, bareNode } from './board'
@@ -266,7 +266,7 @@ export function PrimaryAction() {
     )
     return (
       <div>
-        <button className="primary" disabled={!!reason} onClick={() => runCommand('story.cast.expand')} title="Queue one job per coverage cell (Full coverage; the dialog says the cost) — Ctrl+Enter">Expand ▶</button>
+        <button className="primary" disabled={!!reason} onClick={() => runCommand('story.cast.expand')} title="Image opens with this version as the subject and the coverage grid as its poses; its Expand ▶ lands the images as candidates — Ctrl+Enter">Expand in Image ▶</button>
         <div className="estimate">{reason ? <span style={{ color: 'var(--fg3)' }}>{reason}</span> : <><span className="dot ok" />{caps?.presets.full?.cells ?? '?'} cells · ≈ {Math.max(1, Math.round(secs / 60))} min warm · {caps?.short}</>}</div>
       </div>
     )
@@ -576,6 +576,9 @@ function AnimRef({ p, v }: { p: Profile; v: Profile['versions'][number] }) {
       onContextMenu={(e) => showMenu(e, side === 'back' ? [{ cmd: 'story.cast.makeAnimRefBack' }, { cmd: 'story.cast.clearAnimRefBack' }] : [{ cmd: 'story.cast.makeAnimRef' }, { cmd: 'story.cast.fitBody' }, { cmd: 'story.cast.clearAnimRef' }])}>
       {id ? <img src={api.thumbUrl(id, 512)} alt={label} /> : <span className="hint">{label}: none yet</span>}
       <span className="cell">{label}</span>
+      {side === 'front' && id && v.anim_ref_note === 'arms_close' && <button type="button" className="link ref-note" data-note="arms_close"
+        title="The fit reads a figure whose arms stand clear of the body best (the prompt now asks for that): draw the reference again, then fit the body"
+        onClick={(e) => { e.stopPropagation(); runCommand('story.cast.makeAnimRef') }}>The arms touch the body — draw it again?</button>}   {/* proto01_UIcast S8 */}
     </div>
   )
   markUsed('story.cast.useAsAnimRef'); markUsed('story.cast.useAsAnimRefBack'); markUsed('story.cast.clearAnimRef'); markUsed('story.cast.clearAnimRefBack')
@@ -661,6 +664,16 @@ function CastPage() {
             </button>
           ) })}</div> : <span className="hint">in no shot yet</span>}
       </section>
+      <section className="ref-set">{/* proto01_UIcast CF6: the kept pictures themselves, not only their count */}
+        <h3>Reference set <Help text={"The version's kept references, the hero first, each under its coverage cell. A click opens the set in the Catalogue (its page), where they are sorted, tagged or taken out."} /></h3>
+        {refs.length ? <div className="story-refs" role="list" aria-label="the reference set">
+          {[...refs].sort((a, b) => (a.id === v.hero_asset_id ? -1 : b.id === v.hero_asset_id ? 1 : a.created_at < b.created_at ? -1 : 1)).slice(0, REF_SHOWN).map((a) => { const c = cellOf(a)
+            return <button key={a.id} type="button" role="listitem" className={`ref-card${a.id === v.hero_asset_id ? ' hero' : ''}`} data-id={a.id} onClick={() => runCommand('story.cast.openGroup')}
+              onContextMenu={(e) => showMenu(e, [{ cmd: 'story.cast.openGroup' }])} title="Open the reference set in the Catalogue">
+              <img src={api.thumbUrl(a.id, 256)} alt="" /><span className="cell">{a.id === v.hero_asset_id ? 'hero' : c ? `${c.shot} · ${c.angle}` : 'no cell'}</span></button> })}
+          {refs.length > REF_SHOWN && <button type="button" className="link" onClick={() => runCommand('story.cast.openGroup')}>+{refs.length - REF_SHOWN} more</button>}
+        </div> : <span className="hint">none yet — ✓ on a candidate keeps it here</span>}
+      </section>
       <section>
         <h3>Coverage <Help text={"Kept references per shot size × angle; thin cells are tinted (advisory)."} /></h3>
         <table className="cov-grid" aria-label="coverage">
@@ -674,8 +687,8 @@ function CastPage() {
       {(p.cls === 'character' || p.cls === 'prop') && <AnimRef p={p} v={v} />}
       {p.cls === 'prop' && <PropModel p={p} v={v} />}
       <section>
-        <h3>Candidates <Help text={"Newest first · ✓ adds to the reference set, ✕ rejects · click to select, Ctrl-click for several."} /></h3>
-        {!cands.length && <div className="empty">{open ? <>No candidates yet — <button className="link" onClick={() => void askExpand('full', 1, 'draft')} disabled={!v.hero_asset_id}>Expand ▶</button> makes one image per coverage cell.</> : 'This version is final.'}</div>}
+        <h3>Candidates <Help text={"Newest first · ✓ adds to the reference set · click to select, Ctrl-click for several."} /></h3>
+        {!cands.length && <div className="empty">{open ? <>No candidates yet — <button className="link" onClick={() => void askExpand('full', 1, 'draft')} disabled={!v.hero_asset_id} title="Queues one draft image per coverage cell here, the cost said first">Queue the coverage ▶</button> makes one image per coverage cell.</> : 'This version is final.'}</div>}
         <div className="story-cands" role="list">
           {cands.map((a) => <Candidate key={a.id} a={a} picked={picked.includes(a.id)} />)}
         </div>
@@ -683,6 +696,8 @@ function CastPage() {
     </div>
   )
 }
+
+const REF_SHOWN = 24                                                               // proto01_UIcast CF6: the rest one click away, in the Catalogue
 
 // ------------------------------------------------------------------ Stage: the shot board
 function Take({ kind, id, current, clipsById }: { kind: 'image' | 'clip'; id: string; current: boolean; clipsById: Record<string, { asset_id: string | null; frames: number; w: number; h: number }> }) {
@@ -1077,7 +1092,7 @@ function PlaceField({ n }: { n: FlowNode }) {
         {places.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
       </select>
       {cur && <><span /><span className="place-hero">{hero ? <img className="place-thumb" src={api.thumbUrl(hero, 256)} alt="" /> : null}<span className="hint">{cur.name} · {cur.current}</span></span></>}
-      {!places.length && <><span /><span className="hint">no places in the Cast yet <Help text={"New profile…, with the class place."} /></span></>}
+      {!places.length && <><span /><span className="hint">no places in the Cast yet <Help text={"Story › Cast › New place…"} /></span></>}
       {n.place_id && <><span /><span><CommandButton id="story.flow.placeForward" text size={14} /></span></>}{/* D125 (S7) */}
     </div>
   )

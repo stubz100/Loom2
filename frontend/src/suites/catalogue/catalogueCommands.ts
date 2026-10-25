@@ -15,6 +15,7 @@ import type { JobOrigin } from '../../api/types'
 import { originFor, useMakeFor } from '../../store/origin'
 import { selectedOrPrimary, useGenerateResults, type GroupMode } from './catalogueStore'
 import { addToCastMenu, castTarget, madeFor } from '../story/addToCast'
+import { castPropMenu } from '../story/castProp'
 import { profilesForMentions, useStory } from '../story/storyStore'
 
 export const GROUP_MODES: [GroupMode, string][] = [['batch', 'Batch'], ['lineage', 'Lineage'], ['session', 'Session'], ['model', 'Model'], ['none', 'None']]
@@ -35,6 +36,18 @@ const originHere = (): JobOrigin => {
   if (activeCatalogue.current === useGenerateResults) return originFor('generate', { suite: 'generate', surface: 'results' })   // D125 (I4): Image's For chip
   const q = cat().q
   return { suite: 'catalogue', surface: 'group', ref: q.group_id ?? null, payload: { folder: q.folder } }
+}
+
+/** 17 SY1 (D85): a new Cast profile with the image as its hero — the name asked, then Story › Cast opens on it (the Catalogue's tiles, the
+ *  Bin's: proto01_UIcast CW0). */
+export function startProfile(cls: 'character' | 'place' | 'prop', assetId: string): void {
+  void askText({ title: `Make a ${cls} from this image`, text: 'The image moves onto a new reference page as the hero and cover; @name mentions it in prompts; Expand fills the coverage grid from it.', placeholder: `${cls} name` })
+    .then(async (name) => {
+      if (!name?.trim()) return
+      const [m, reg] = await Promise.all([import('../story/storyStore'), import('../../frame/suiteRegistry')])
+      const p = await m.useStory.getState().createProfile(name.trim(), cls, assetId)
+      if (p) { m.revealClass(cls); reg.setRailTab('story', 'cast'); useSession.getState().setSuite('story') }   // D125: a prop is a class of Cast
+    })
 }
 
 registerCommands([
@@ -110,23 +123,17 @@ registerCommands([
   ...(['character', 'place', 'prop'] as const).map((cls) => ({
     id: `cat.start.${cls}`, scope: 'catalogue' as const, label: `Make a ${cls}…`, icon: cls === 'character' ? UserRound : cls === 'place' ? MapPin : Package, placement: ['inspector', 'context'] as ['inspector', 'context'],
     when: () => !!primary() && primary()!.kind === 'image',
-    run: () => { const a = primary(); if (!a) return
-      void askText({ title: `Make a ${cls} from this image`, text: 'The image moves onto a new reference page as the hero and cover; @name mentions it in prompts; Expand fills the coverage grid from it.', placeholder: `${cls} name` })
-        .then(async (name) => {
-          if (!name?.trim()) return
-          const [m, reg] = await Promise.all([import('../story/storyStore'), import('../../frame/suiteRegistry')])
-          const p = await m.useStory.getState().createProfile(name.trim(), cls, a.id)
-          if (p) { m.revealClass(cls); reg.setRailTab('story', 'cast'); useSession.getState().setSuite('story') }   // D125: a prop is a class of Cast
-        }) },
+    run: () => { const a = primary(); if (a) startProfile(cls, a.id) },
   })),
-  // D93 (A2): "Add to character ▸" — the selection into a Cast profile's current version (the menu entry names the profile: castTarget)
+  // D93 (A2): "Add to Cast ▸" — the selection (or the Bin's tile) into a Cast profile's version (the menu entry names both: castTarget)
   ...([['hero', 'as the hero', ImageUp], ['reference', 'into the reference set', ImagePlus], ['candidate', 'as a candidate', InboxIcon]] as const).map(([role, how, icon]) => ({
-    id: `cat.addTo.${role}`, scope: 'catalogue' as const, label: `Add to character ${how}`, icon, placement: ['context', 'inspector'] as ['context', 'inspector'],
+    id: `cat.addTo.${role}`, scope: 'catalogue' as const, label: `Add to Cast ${how}`, icon, placement: ['context', 'inspector'] as ['context', 'inspector'],
     hint: role === 'hero' ? 'it joins the reference set as its cover' : role === 'candidate' ? 'onto the version\'s candidates page' : 'moved from Unprocessed or its candidates, copied from any other page',
     when: () => { const p = castTarget.pid ? useStory.getState().profiles.find((x) => x.id === castTarget.pid) : undefined
-      const imgs = ids().filter((i) => cat().byId(i)?.kind === 'image')
-      return !!p && p.versions.find((v) => v.id === p.current)?.state === 'open' && imgs.length > 0 && imgs.length === ids().length && (role !== 'hero' || imgs.length === 1) && !inTrash() },
-    run: () => { const pid = castTarget.pid; const list = ids(); if (pid) void useStory.getState().addToProfile(pid, list, role) },
+      const list = castTarget.ids ?? ids()
+      const imgs = castTarget.ids ? list : list.filter((i) => cat().byId(i)?.kind === 'image')                // the Bin names an image tile itself
+      return !!p && p.versions.find((v) => v.id === (castTarget.vid ?? p.current))?.state === 'open' && imgs.length > 0 && imgs.length === list.length && (role !== 'hero' || imgs.length === 1) && (!!castTarget.ids || !inTrash()) },
+    run: () => { const pid = castTarget.pid; const list = castTarget.ids ?? ids(); if (pid) void useStory.getState().addToProfile(pid, list, role, castTarget.vid) },
   })),
   // P18 (D84): a 3D prop from the image — Pixal3D as a background job, its cost said before it is queued; the mesh lands in the Catalogue
   { id: 'cat.start.mesh', scope: 'catalogue', label: 'Make a 3D prop…', icon: Box, placement: ['inspector', 'context'],
@@ -168,13 +175,25 @@ export function moveToMenu(): MenuItem {
   ] }
 }
 
-/** D93 (A2): "Add to character ▸" for the selection — the profiles the primary was made for first (its recipe's profile mentions). */
+/** D93 (A2): "Add to Cast ▸" for the selection — the profiles the primary was made for first (its recipe's profile mentions). */
 export const addToCharacterMenu = () => addToCastMenu(profilesForMentions(), madeFor(primary()))
 
 /** D90 (01 §11.4): a clip's tile — Make a shot sits at the menu's top level and the image starts are left out. */
 const clipTile = () => primary()?.kind === 'video'
+/** proto01_UIcast CF9: a 3D model's tile — its own verbs, not a picture's (no Edit, reference or Animate on a mesh). */
+function meshTileMenu(a: NonNullable<ReturnType<typeof primary>>): MenuItem[] {
+  return [
+    ...(inTrash() ? [] : [castPropMenu(a), sep]),
+    moveToMenu(), { cmd: 'cat.toUnprocessed' }, { cmd: 'cat.duplicate' }, { cmd: 'cat.lineage' }, { cmd: 'cat.tag' }, sep,
+    { cmd: 'cat.reveal' }, sep,
+    ...(inTrash() ? [{ cmd: 'cat.restore' }, { cmd: 'cat.purge' }, { cmd: 'cat.emptyTrash' }] : [{ cmd: 'cat.trash' }]),
+  ]
+}
+
 /** Right-click on a tile (the tile has been made primary / selected by the caller). */
 export function tileMenu(): MenuItem[] {
+  const a = primary()
+  if (a?.kind === 'mesh') return meshTileMenu(a)
   return [
     ...(forFrame() && !clipTile() ? [{ cmd: 'cat.useFrame', label: frameUseLabel() }, sep] : []),
     { cmd: 'cat.loupe' }, { cmd: 'cat.edit' }, sep,

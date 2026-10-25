@@ -15,7 +15,8 @@ from .body import Body
 from .fsio import atomic_write_json, new_id, read_json, utc_now
 from .workspace import Workspace
 
-STAGE_SCHEMA_VERSION = 2                           # 2 (D108): a set is architecture; schema 1's set blocks are read as props
+STAGE_SCHEMA_VERSION = 3                           # 2 (D108): a set is architecture; schema 1's set blocks are read as props;
+                                                   # 3 (proto01_UIcast CS1, S3): a figure's body is of the adult dummy (body.rebase_body)
 # D108: the blocks schema 1's set presets carried, now props of their own — (size w h d, foot x y z) in the set's frame (builders.ts)
 SET_BLOCKS_V1: dict[str, list[tuple[tuple[float, float, float], tuple[float, float, float]]]] = {
     "room": [((1.2, 0.8, 0.8), (1.9, 0.0, -1.8)), ((0.45, 0.48, 0.45), (0.0, 0.0, 0.0))],
@@ -106,7 +107,8 @@ class StageObject(BaseModel):
     profile_id: str | None = None                  # D93 (C8): a figure bound to a Cast character — its references and sheet go into the frame; D110 (PS3): a mesh bound to a Cast prop (its model follows the version)
     version: str | None = None                     # D93 (C8): the character's version (a costume) the figure wears; None = the current one (a prop's version for a mesh)
     body: Body | None = None                       # CA0: the bound version's body, copied when bound and kept in step by the client (None = the preset's dummy)
-    detail: Literal["male", "female"] | None = None   # CA1: the Detailed level — the starter set's skinned mannequin follows the figure (None = Simple)
+    detail: Literal["male", "female"] | None = None   # CA1: the Detailed level — the starter set's skinned mannequin follows the figure; U18 (CS1): every
+                                                      # figure has one (a stored None reads as ♀, the Simple dummy retired); other kinds None
     shadow_proxy: str | None = None                # E23d (D105): a mesh asset shaped like the character, bound to the figure, that casts its shadow
     path: list[list[float]] | None = None          # CA1: the figure's floor path, [x, z] points clicked on the floor (a library clip walks it)
     light: LightSpec | None = None                 # D110 (PS4): a light object's settings (None = E23c's key)
@@ -157,9 +159,28 @@ class Stage(BaseModel):
 
 def migrate(raw: dict[str, Any]) -> dict[str, Any]:
     """Read a stored document at the current schema. 1 → 2 (D108): each room or street set gives its blocks to the stage as `block` props
-    where they stood (the set's position, yaw and scale applied; Stage's transforms are world ones), so an old shot keeps its look."""
-    if int(raw.get("schema_version", 1)) >= 2:
+    where they stood (the set's position, yaw and scale applied; Stage's transforms are world ones), so an old shot keeps its look.
+    2 → 3 (CS1, S3): each figure's body reads as the adult dummy's (body.rebase_body), every point where it was; (U18) a figure without a
+    Detailed mannequin gets the ♀ one."""
+    v = int(raw.get("schema_version", 1))
+    if v >= STAGE_SCHEMA_VERSION:
         return raw
+    if v < 2:
+        raw = _migrate_sets(raw)
+    from .body import rebase_body
+
+    def figure(o: dict[str, Any]) -> dict[str, Any]:
+        if isinstance(o.get("body"), dict):
+            o = {**o, "body": rebase_body(o["body"])}
+        if o.get("kind") == "mannequin" and not o.get("detail"):
+            o = {**o, "detail": "female"}                          # U18: the Simple dummy retired — every figure the Detailed mannequin
+        return o
+    objs = [figure(o) if isinstance(o, dict) else o for o in (raw.get("objects") or [])]
+    return {**raw, "objects": objs, "schema_version": STAGE_SCHEMA_VERSION}
+
+
+def _migrate_sets(raw: dict[str, Any]) -> dict[str, Any]:
+    """1 → 2 (D108): the set blocks as props."""
     objs = list(raw.get("objects") or [])
     used = {int(o.get("colour_id", 0)) for o in objs}
     ids = {o.get("id") for o in objs}
@@ -182,7 +203,7 @@ def migrate(raw: dict[str, Any]) -> dict[str, Any]:
                          "transform": {"pos": [pos[0] + wx, pos[1] + y, pos[2] + wz], "rot": [0.0, float(rot[1]), 0.0],
                                        "scale": [size[0] * scl[0], size[1] * scl[1], size[2] * scl[2]]},
                          "locked": bool(o.get("locked", False)), "visible": bool(o.get("visible", True)), "colour_id": colour})
-    return {**raw, "objects": objs, "schema_version": STAGE_SCHEMA_VERSION}
+    return {**raw, "objects": objs, "schema_version": 2}
 
 
 def check(st: Stage) -> None:

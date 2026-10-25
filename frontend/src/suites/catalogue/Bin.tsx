@@ -2,19 +2,27 @@
 // Animate. The places (Unprocessed, the Library, the album's groups), a type filter and the tiles; a tile drags to wherever it is used (the
 // references, a start slot, a layer — frame/drag.ts), a double-click does the likely verb of the mode you are in, the right-click lists
 // them all. It is the Catalogue's own store machinery on a store of its own (`useBin`), so the Catalogue and Image's results are untouched.
+// proto01_UIcast CW0: a Meshes filter, a 3D model's own verbs (on the stage, as a Cast prop's model, its lineage) and a picture's Cast
+// verbs (Add to Cast ▸, Make a character / place / prop…) — the Bin was the one place a picture had none.
+import { UserRound } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type { Asset } from '../../api/types'
 import { showMenu } from '../../frame/ContextMenu'
 import { mediaOf } from '../../frame/drag'
 import { editPresence } from '../../frame/editPresence'
-import { command } from '../../frame/commands'
+import { command, sep, type MenuItem } from '../../frame/commands'
 import { useSession } from '../../store/session'
+import { addToCastMenu, madeFor } from '../story/addToCast'
+import { castPropMenu } from '../story/castProp'
+import { profilesForMentions } from '../story/storyStore'
 import { useAlbum } from './albumStore'
+import { startProfile } from './catalogueCommands'
 import { useBin, type Query } from './catalogueStore'
+import { openPlace, paneStore, useSplit } from './split'
 import { Tile } from './Tile'
 
 type Kind = Query['kind'] | undefined
-const KINDS: [Kind, string][] = [[undefined, 'All'], ['image', 'Images'], ['video', 'Clips']]
+const KINDS: [Kind, string][] = [[undefined, 'All'], ['image', 'Images'], ['video', 'Clips'], ['mesh', 'Meshes']]
 const TILE = 128
 
 const openInEdit = (id: string) => void import('../edit/editorStore').then((m) => m.useEditor.getState().openFromAsset(id))
@@ -44,8 +52,34 @@ function setFromImage(id: string): void {
   void import('../stage/stageStore').then((s) => s.st().setFromImage(id))
 }
 
+/** proto01_UIcast CW0: a 3D model on the open stage at the viewport's centre (a loose mesh: Clay's Meshes). */
+function addMesh(id: string): void {
+  void Promise.all([import('../stage/stageStore'), import('../stage/stageCommands')]).then(([s, c]) => {
+    if (!s.st().addObject('mesh', null, c.viewport.centre?.() ?? [0, 0, 0], id)) useSession.getState().toast('Open a stage first (the Shot section)', 'info')
+  })
+}
+
+/** The Catalogue's lineage of an asset: what it was made from and what came of it. */
+function showLineage(id: string): void {
+  useSession.getState().setSuite('catalogue')
+  const sp = useSplit.getState()
+  const c = paneStore(sp.mode === 'single' ? 0 : sp.active).getState()
+  openPlace(c, 'library'); c.openLineage(id)
+}
+
+/** The rest of a tile's right-click, after its verbs: a picture's Cast verbs, a 3D model's Cast prop. */
+function castItems(a: Asset): MenuItem[] {
+  if (a.trashed_at) return []
+  if (a.kind === 'mesh') return [sep, castPropMenu(a)]
+  if (a.kind !== 'image') return []
+  return [sep, addToCastMenu(profilesForMentions(), madeFor(a), [a.id]),
+    { label: 'Make a profile from it', icon: UserRound, items: (['character', 'place', 'prop'] as const).map((cls): MenuItem => ({ label: `Make a ${cls}…`, run: () => startProfile(cls, a.id) })) }]
+}
+
 function verbs(a: Asset, suite: string): Verb[] {
   if (a.kind === 'video') return [{ id: 'play', label: 'Play in Animate', run: () => playClip(a) }]
+  if (a.kind === 'mesh') return [...(suite === 'stage' ? [{ id: 'stage.mesh', label: 'Add to the stage (a 3D model)', run: () => addMesh(a.id) }] : []),
+    { id: 'lineage', label: 'Show its lineage (Catalogue)', run: () => showLineage(a.id) }]
   if (a.kind !== 'image') return []
   const edit: Verb[] = suite === 'edit' && editPresence.hasDoc ? [{ id: 'edit.layer', label: 'Add as a layer', run: () => addLayer(a.id) }] : []
   const rest: Verb[] = [{ id: 'reference', label: 'Use as a reference (Image · Make)', run: () => asReference(a.id) }, { id: 'edit.open', label: 'Open in Image · Edit', run: () => openInEdit(a.id) },
@@ -104,13 +138,13 @@ export function Bin() {
           <span className="spacer" />
           {pick
             ? <span className="meta picking">picking for: {pick.label} <button type="button" className="quiet" aria-label="stop picking" title="Stop picking (the tiles' corner buttons go)" onClick={endPick}>✕</button></span>
-            : <span className="meta">drag a tile where it is used · double-click: {suite === 'stage' ? 'an image plane / play' : suite === 'animate' ? 'start frame / play' : suite === 'edit' ? 'a layer' : 'a reference'}</span>}
+            : <span className="meta">drag a tile where it is used · double-click: {suite === 'stage' ? 'an image plane / a 3D model / play' : suite === 'animate' ? 'start frame / play' : suite === 'edit' ? 'a layer' : 'a reference'}</span>}
         </div>
         <div className="bin-grid" onContextMenu={(e) => { if (pick) { e.preventDefault(); endPick() } }}                 // a right-click ends the pick (on a tile the verbs still open)
           onScroll={(e) => { const el = e.currentTarget; if (el.scrollTop + el.clientHeight > el.scrollHeight - 200) void useBin.getState().loadMore() }}>
           {shown.map((a) => (
             <Tile key={a.id} a={a} size={TILE} fill caption="off" selected={selected === a.id} primary={selected === a.id} pinned={0}
-              onClick={(_e, id) => setSelected(id)} onDouble={() => { const pv = picked(a); if (pv) { pv.run(); endPick() } else first(a)?.run() }} onContext={(e) => { e.preventDefault(); setSelected(a.id); if (pick) endPick(); showMenu(e, verbs(a, suite)) }}
+              onClick={(_e, id) => setSelected(id)} onDouble={() => { const pv = picked(a); if (pv) { pv.run(); endPick() } else first(a)?.run() }} onContext={(e) => { e.preventDefault(); setSelected(a.id); if (pick) endPick(); showMenu(e, [...verbs(a, suite), ...castItems(a)]) }}
               corner={(() => { const pv = picked(a); return pv ? { icon: PickIcon ? <PickIcon size={13} /> : undefined, label: pv.label, run: () => { pv.run(); endPick() } } : undefined })()}
               dragItems={() => [{ kind: 'asset', id: a.id, media: mediaOf(a.kind) }]} />
           ))}

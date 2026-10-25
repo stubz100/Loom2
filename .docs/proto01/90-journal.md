@@ -9284,3 +9284,125 @@ patched (the Mid attenuated). A track with plugins is printed onto a hidden comp
   `fillPlate.test.ts` (5: the stacks, the best per pixel, the bad mask, the composite, the heal's pick), `finalShot.test.ts` (the advice),
   a new e2e scenario (a moving camera's final: the confirm says *projected and filled*, the plate filled on the fake engine through its
   keyframes, 9 frames, the chip `filled ▾`, the heal tick). The suites caught one bug under `open`: the keyframe's Fill took the Inpaint recipe's default (Klein 9B, flux-nc) — the route now takes the variant's own (`registry.default_model('inpaint', variant)`: Klein 4B under `open`), a test pins it. Offline 589 passed, agents_check, model_literals_check and settings audit clean, Vitest 475 + 3 skipped, typecheck, lint (0 errors, 79 warnings) and build clean, e2e full 65/65 and open 65/65. Screenshots img/31-pf1-make-confirm.jpg, img/31-pf1-plate-menu.jpg.
+
+## 2026-10-25 08:38 — proto01_UIcast: Cast as a prototyping workshop; Mara's skeleton measured; the author's answers → D136, the order → Q30
+
+- **The study** (`.docs/proto01_UIcast` 00–06, from the code at `6cafacc`, nothing in the app changed): today's routes from a picture to
+  clay (seven journeys counted, CF1–CF25, defects CB1–CB6, 15 screenshots and sheets); the workshop (ideas and variants, *Prototype ▸*,
+  *Make the clay ▶*, the line-up, Cast in Clay); a character's clay and skeleton, a prop's model (03); places and the set builder (04);
+  the plan (05); six wireframes from `mock/cast-mock.html`.
+- **Mara's skeleton, measured on a copy of A1** (the author: her neck missing, her hands and feet too large, the fingers bending
+  outwards; 01 §1.6, sheets img/cur-13 to cur-15). The fit meets its eight measures to within 0.0004; the faults are in the figure:
+  - the Detailed guide draws two bodies — the 18 body points the fitted dummy's, the hands and feet on UAL2's bones, which follow the fit
+    only in the limbs (`detailed.ts:76-86`): in the walk each hand begins 0.033 of the height below its wrist and reaches 0.177 from it
+    (median of 42 hands), the reference's 0.011 and 0.079–0.090 (CB5);
+  - the fingers are the GLB's flat rest hand unless a preset is clicked per figure in Clay — Wan paints them fanned;
+  - the dummy's neck is 6 cm at ×1, so the references' nose-to-shoulders (0.160 and 0.167 of the height, the dummy 0.116) stretch it to
+    ×2.32 and ×2.24, and the Simple dummy draws nothing there (CB6);
+  - the feet are never fitted though SDPose reads six foot points; both references stand arms-down, not in the A-pose the prompt asks;
+  - the turn test renders the Simple figure, with no hands or feet in its guide;
+  - SDPose's `hand_left` is the picture's left hand (the person's right): harmless to the fit's median, to be swapped for per-side use.
+- **The author's answers** (06 §1) → **D136**: a separate ideas store (U1); copy (U2); names from the prompt (U3); no automatic variants
+  but lineage recorded (U4); no TripoSR (U5; D134 superseded, E33's 12 GB in `engine/tools/e33` await the author's OK to delete); the
+  skeleton fitted inside the Pixal3D shell (U6, U7); the pose pass from the shell too (U8; the reading to confirm: landmarks on the shell,
+  the hands from the hand rig); later set kinds — skyboxes, balconies, hillsides, nature (U9); U10, U11, U13, U15–U17 as recommended;
+  Cast's bench with all of Clay's functions, bound, and Clay the free area (U12); the Detailed figure only, and a pose editor in Animate
+  fitting poses to each skeleton (U18, spike E39); skeleton changes as keys on the timeline or a full re-render (U19).
+- **The order** (U14) explained as a workflow in six stages (06 §3) → **Q30**, recommended (a): the skeleton first, then poses, ideas,
+  bound clay, places; ≈ 9½ weeks with the spikes. No GPU job was run for the study.
+
+## 2026-10-25 08:49 — Q30 answered → D137: proto01_UIcast built in six stages, the skeleton first; U8's reading confirmed; E33's leftovers deleted
+
+- The author agreed with every proposal of proto01_UIcast 06 and answered yes to its three open points: Q30 (a) → **D137**, the order of
+  06 §3 (1 CW0 + CS1, 2 E36 + CS2 + CS3, 3 E39 + AP1, 4 CW1 + CW2, 5 CW3–CW5, 6 E38 + CW6 + CW7); U8's reading (the pose pass's
+  points are landmarks on the shell, the hands from the character's hand rig; the skeleton guide stays what Wan Animate gets); and the
+  deletion of E33's leftovers (house rule 1, D136 U5).
+- Deleted: `engine/tools/e33` (12 GB: TripoSR's checkout, its venv on torch 2.13.0+rocm10.0.0, rembg's u2net) and the Hugging Face
+  downloads only E33 used, `F:\HF_HOME\hub\models--stabilityai--TripoSR` (1.6 GB) and `models--facebook--dino-vitb16` (0.66 GB).
+  `engine/spikes/e33_mesh.py` stays as the spike's record (D134, superseded by D136 U5).
+- Stage 1 starts: CW0, then CS1.
+
+## 2026-10-25 09:20 — CW0 built: proto01_UIcast's fixes and bridges (D137 stage 1, first half)
+
+- **CB1** "Go to origin" of *Make a 3D prop…* opens the picture's lineage in the Library (`origin.ts`: a catalogue origin whose ref is an
+  asset), not a group page that does not exist.
+- **CB2** a mesh made anywhere joins Clay's Meshes at once (`session.ts`: `asset.created` of kind mesh reaches `stageStore.onAssetCreated`);
+  a deleted asset leaves the meshes and shots lists (`onAssetDeleted`).
+- **CB3** the Candidates help no longer promises ✕.
+- **CB4** *parent* works: an object hangs under its parent's holder (`engine.placeChildren`, re-run on every sync so a rebuilt parent takes
+  its children back; held things, orphans and loops stay at the root), so it moves with its parent; picking a parent keeps it where it
+  stands (`stageStore.setParent`: its transform re-expressed in the parent's frame through `worldOf`); the picker leaves out what hangs
+  under the object (`held.descendsFrom`); the mask pass and the proxy's shadow flags walk an object's own nodes only (`held.ownTraverse`).
+  The server already refused loops; `removeObject` already took children with their parent.
+- **CF17** the Cast foot says *Expand in Image ▶* (with what it does), the empty candidates' link *Queue the coverage ▶*; the hints name
+  *New place…* / *New prop…*.
+- **CF5** *Add to character* is *Add to Cast* (props and places are in it); a profile with several open versions offers each, one with
+  every version final says so (`addToCast.ts`; `addToProfile(pid, ids, role, vid?)`).
+- **CF6** Cast shows the reference set's pictures (the hero first, each under its coverage cell, 24 then "+N more"; a click opens the set in
+  the Catalogue).
+- **CF8 / CF9** a 3D model has its own verbs: *Make it a Cast prop ▸* (`story/castProp.ts`: *New prop…* — the mesh its model through
+  D110's PUT …/model, the picture it was made from its hero — or an open prop version's model) on a mesh tile's right-click and Inspector
+  (the picture verbs gone from meshes), in the Bin and in a loose mesh's editor in Clay (which then binds it); Clay's Meshes are named by
+  source (`stage/meshes.ts`: a Cast prop's name, a picture set's thing, an imported file, else "3D model · ‹day›"), a picture set's relief
+  left out (it is a set). The Bin gets a Meshes filter, *Add to the stage (a 3D model)*, *Show its lineage*, and on a picture *Add to Cast ▸*
+  and *Make a profile from it ▸*.
+- Tests: `held.test.ts` +3 (no loops, own nodes, stays where it stands), `meshes.test.ts` (4), `addToCast.test.ts` +1 (versions, the Bin's
+  tile); e2e: P18's scenario makes its loose mesh a Cast prop from its editor (model, hero, bound under Props), HP1's parents the cup to Mara
+  (no jump; it moves 2 m with her). Vitest 483 + 3 skipped, typecheck, lint (0 errors, 79 warnings) and build clean, e2e full 65/65 and
+  open 65/65. No Python changed. Screenshots `.docs/proto01_UIcast/img/cw0-*.jpg` (A1 and E28c copies).
+
+## 2026-10-25 10:16 — CS1 built: one figure, one body (D137 stage 1, second half; proto01_UIcast 03 §3.1, 06 §2.8)
+
+- **S1 one body (CB5).** The Detailed mannequin follows the whole fit, not only its limbs (`detailed.ts`): the spine chain's offsets
+  scaled so the neck bone stands the figure's pelvis → neck joint above the pelvis; the upper arms and thighs put where the figure's
+  shoulder and hip joints are (their offsets from the neck joint and the root, pose-invariant); the head's pivot a neck's length above the
+  neck; the forearms and shins at the figure's lengths, so the hand starts at the wrist point and the foot at the ankle; the head at the
+  character's size, not the legs'. The foot markers' offsets scale with the foot. Tested on a synthetic rig in four poses (hands, feet,
+  shoulders, hips, neck and head within 2 mm of the figure's points) and on the real starter mannequin on Stage (the hand's gap to the
+  wrist point 0.0013 of the height, was 0.033 in A1's walk).
+- **S2 the rest hand.** `Body.hand_rest {preset, curl}` (relaxed by default): every Detailed figure's fingers start from it where a key
+  turns none — never the GLB's flat, fanned hand; a key's preset still wins. `relaxed` is curled as people hold a hand at rest (index
+  22/35/15°, was 12/18/10°). Cast's body section: *hands at rest*.
+- **S3 ×1 an adult (CB6).** The dummy's neck 0.12 from the neck joint to the head's pivot at the jaw (was 0.06), the head's points
+  0.06·head lower on it (the nose 0.02 over the pivot, was 0.08): `body.py dummy_ratios`, `builders.ts`, `bodyDims`, the attachments, the
+  silhouette, the proxy's segments. Stored bodies convert exactly on read — neck′ = (neck + head) / 2 keeps every point (`rebase_body`,
+  the profile record's schema 3 and the stage's 3; a body made now is untouched — a validator on Body itself converted `Body(neck=1.4)`
+  too, caught by the tests, so the conversion lives in the records' migrations). Mara's ×2.32 reads ×1.60, Ines' ×2.24 ×1.50. The
+  Simple level's boxes draw a neck now (they show while the mannequin loads).
+- **S4 the turn test** renders the character's Detailed mannequin (hands and feet in its guide) and starts in the reference's own stance
+  (`turnTest.stanceOf`: the arms' angles from the points the body was fitted to), then turns.
+- **S5 / S6 / S7 the fit.** New measures: the elbow's and the knee's places along their limbs (`Body.elbow`, `.knee`), the toes' breadth
+  (big ↔ small toe, `TOES_PER_LEG = 0.058` measured on Stage) for the feet; the hips' width a factor (`Body.hips`), the scale held by a
+  weak pull of every factor toward its adult value (`PULL = 0.02`); locks (CS2's). `PALM_PER_LEG` 0.149 → 0.147 (measured in the A-pose
+  front). On A1's points every ratio within 0.15 %: Mara neck ×1.54, torso ×1.17, hips ×0.96, legs ×0.85, feet ×1.05; Ines neck ×1.63,
+  hips ×1.09, feet ×1.08. The version keeps the points (`ProfileVersion.body_points`).
+- **S8 the A-pose.** The animation reference's prompt asks for the arms about 30° out, the hands open and clear of the clothes; the fit
+  notes a reference whose wrists sit within 0.10 of the height of the hips (`body.stance_note` → `ProfileVersion.anim_ref_note`), and the
+  slot says *The arms touch the body — draw it again?* (A1's two: 0.088 and 0.080).
+- **U18 the Simple dummy retired.** Every figure is the Detailed mannequin: Clay's picker is ♀ / ♂, a new figure ♀ (♂ when the stage's
+  are all ♂), a bound figure the character's (`Body.figure`, Cast's body section), stored figures without one read as ♀ (stage schema 3).
+- **The rig** (`scripts/cs1_acceptance.py` + `cs1_browser.cjs`: a fresh copy of A1, the real engine, one job at a time) — 11/11:
+
+  | | before (A1's layer) | after (the same seed) | the reference |
+  | --- | --- | --- | --- |
+  | Mara · the guide's hand, its gap to the wrist point | 0.033 | **0.002** | — |
+  | Mara · the hand's reach (Wan's figure, SDPose, median of 9 frames) | 0.140 | **0.115** | 0.106 |
+  | Mara · nose → neck | 0.163 | 0.160 | 0.161 |
+  | Ines · the hand's reach | 0.016 (the hands hidden in the jacket: SDPose found few) | **0.117** | 0.100 |
+  | Ines · nose → neck (seated: the unit shrinks) | 0.184 | 0.192 | 0.167 |
+
+  The refits: every ratio within 0.15 %, the points kept, both references noted *the arms touch the body*. The new final made by Stage
+  in the browser (the Final shot card's own path), both character layers performed again with seed 20261021: Mara's walk 204 s, Ines' sit
+  185 s (two chained batches each, then SAM 3). On the sheets (`img/cs1-mara-before-after.jpg`, `cs1-ines-before-after.jpg`) Mara's hands
+  hang relaxed at her sides instead of fanned, Ines' rest on her knees instead of in her jacket. The toes' reach is not comparable with
+  the front-view reference (a walk shows the whole foot: Mara 0.138 → 0.153, Ines 0.074 → 0.102 against 0.062 / 0.080) — reported, not
+  scored. A first run stopped in the browser half: an edit to `proxy.ts` (the proxy's neck and head segments on the adult dummy) made Vite
+  reload the page mid-render; run again untouched.
+- Tests: `test_body_fit_ca1b.py` 9 (+2: the rebase in both records, the stance check; the round trip with the hips held and free, locks),
+  `detailed.test.ts` +5 (one body in four poses, the rest hand), `body.test.ts` +2 (the rebase keeps every head point; the elbow and
+  knee), `turnTest.test.ts` (2, the stance), the schema tests at 3; e2e: the Detailed scenario (a new figure ♀, the picker ♀ / ♂), the
+  fit scenario (the elbow, the points kept, no note on the fake's A-pose, the figure and the hands at rest on the sheet). Offline 591
+  passed, agents_check, model_literals_check and settings audit clean, Vitest 492 + 3 skipped, typecheck, lint (0 errors, 79 warnings)
+  and build clean, e2e full 65/65 and open 65/65. Screenshots `.docs/proto01_UIcast/img/cs1-*.jpg`.
+- **For the author's own characters:** their bodies read on the adult dummy by themselves (nothing moves); *Fit the body* again gives
+  them the new measures (hips, elbows, knees, feet) and the stance note; their shots' guides change only when rendered again.

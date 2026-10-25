@@ -1015,11 +1015,24 @@ test('a 3D prop (P18, D84): "Make a 3D prop…" on a tile says its cost, the fak
   await dialog.locator('input').fill('Props')
   await dialog.locator('button.primary').click()
   await expect(page.locator('canvas.stage-canvas')).toBeVisible()
-  await libAdd(page, 'meshes', 'prop ')                                                                    // the Scene's Meshes +
+  await libAdd(page, 'meshes', '3D model')                                                                // the Scene's Meshes + (proto01_UIcast CF9: named by source)
   await expect(page.locator('.panel .stage-insp h4')).toContainText('Mesh 1')
   await expect.poll(() => page.evaluate(() => (window as unknown as { __loom2Stage: { meshes: () => { loaded: string[]; failed: Record<string, string> } } }).__loom2Stage.meshes().loaded.length), { timeout: 15_000 }).toBe(1)
   await expect.poll(async () => (await api<{ params: { thumb_source?: string } }>('GET', `/assets/${m.id}`)).params.thumb_source, { timeout: 15_000 }).toBe('client')   // the viewport's fitted view became the thumbnail
   await page.screenshot({ path: 'node_modules/.e2e/stage-prop.png' })
+  // proto01_UIcast CF8: the loose mesh becomes a Cast prop from its editor — the model its, the picture it was made from its hero, the object bound
+  await page.locator('.panel button[data-verb="cast-prop"]').click()
+  await page.locator('.ctx-menu button.item', { hasText: 'New prop…' }).click()
+  await dialog.locator('input').fill('Lamp')
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('.toast', { hasText: 'Lamp is a Cast prop' })).toBeVisible()
+  type PropLite = { id: string; name: string; cls: string; versions: { model_asset_id: string | null; hero_asset_id: string | null }[] }
+  const lamp = async () => (await api<{ items: PropLite[] }>('GET', '/story/profiles')).items.find((p) => p.name === 'Lamp')
+  await expect.poll(async () => (await lamp())?.versions[0].model_asset_id, { timeout: 10_000 }).toBe(m.id)
+  expect((await lamp())!.cls).toBe('prop')
+  await expect.poll(async () => (await lamp())?.versions[0].hero_asset_id, { timeout: 10_000 }).toBe(srcId)
+  await expect(page.locator('.outl-group[data-group-rows="props"] .outl-row[data-row="object"]')).toHaveCount(1)   // bound: under Props now
+  await expect(page.locator('.outl-group[data-group-rows="meshes"] .outl-row[data-row="object"]')).toHaveCount(0)
 })
 
 test('a prop (D110 PS1–PS2, D125): Cast\'s props class lists the props (the old Props link opens it, the characters class hides them); "Make the 3D model…" says its cost, the fake engine\'s GLB lands stood upright as the version\'s model, and the page shows it turning', async ({ page }) => {
@@ -2236,11 +2249,11 @@ test('Cast from Generate (D93 · A1, A2): a character without a look gets candid
   const made = (await mine()).flatMap((j) => j.result?.asset_ids ?? [])
   expect((await mine()).every((j) => j.origin?.payload?.group_id === cand)).toBe(true)
   await expect.poll(async () => Object.keys((await api<{ assets: Record<string, unknown> }>('GET', `/groups/${cand}`)).assets).sort().join()).toBe([...made].sort().join())   // all on the candidates page
-  // Add to character ▸ on a result tile: the profile it was made for first, "as the hero"
+  // Add to Cast ▸ on a result tile: the profile it was made for first, "as the hero"
   const tile = page.locator(`.cat-grid .tile[data-id="${made[0]}"]`)
   await expect(tile).toBeVisible({ timeout: 20_000 })
   await tile.click({ button: 'right' })
-  await page.locator('.ctx-menu .item.sub', { hasText: 'Add to character' }).hover()
+  await page.locator('.ctx-menu .item.sub', { hasText: 'Add to Cast' }).hover()
   await expect(page.locator('.ctx-menu .heading', { hasText: 'made for' })).toBeVisible()
   await page.locator('.ctx-menu .ctx-menu > .item.sub', { hasText: `${name} · v1` }).first().hover()    // the profile's own submenu (not its parent's row)
   await page.locator('.ctx-menu .ctx-menu .ctx-menu button.item', { hasText: 'as the hero' }).click()
@@ -2670,7 +2683,8 @@ test('the body fitted to the animation reference (CA1b, D104): Fit the body meas
   const name = `Ines ${Date.now().toString(36)}`
   const src = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0]
   const ref = (await api<{ ids: string[] }>('POST', '/assets/duplicate', { ids: [src.id] })).ids[0]
-  type ProfileLite = { id: string; versions: { id: string; body_fit_from: string | null; body: { height_m: number; neck: number; shoulders: number } | null }[] }
+  type ProfileLite = { id: string; versions: { id: string; body_fit_from: string | null; body_points: { pose: number[][] } | null; anim_ref_note: string | null
+    body: { height_m: number; neck: number; shoulders: number; hips: number; elbow: number; figure: string; hand_rest: { preset: string } } | null }[] }
   const p = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', appearance: `${name}, a mechanic` })
   await api('PUT', `/story/profiles/${p.id}/versions/v1/anim-ref`, { side: 'front', asset_id: ref })           // set by hand: no fit by itself
   await openApp(page, { suite: 'story', tab: 'cast' })
@@ -2679,9 +2693,16 @@ test('the body fitted to the animation reference (CA1b, D104): Fit the body meas
   await expect.poll(async () => (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0].body_fit_from, { timeout: 60_000 }).toBe(ref)
   const body = (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0].body!
   expect(body.height_m).toBe(1.75)                                                                    // the author's: unchanged
-  expect(body.neck).toBeGreaterThan(1.5)                                                              // the fake reference's long neck (0.16 of the height)
+  expect(body.neck).toBeGreaterThan(1.3)                                                              // the fake reference's long neck (0.16 of the height; ×1 an adult's, S3)
+  expect(body.elbow).toBeCloseTo(0.5, 2)                                                              // CS1 (S6): the fake's elbows halfway
+  const v = (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0]
+  expect(v.body_points?.pose.length).toBe(18); expect(v.anim_ref_note).toBeNull()                     // CS1: the points kept; the fake stands in the A-pose (S8)
   await expect(page.locator('.cast-body')).toContainText('Proportions fitted to the animation reference')
   await expect(page.locator('.cast-body')).toContainText(`×${body.neck.toFixed(2)}`)                     // the neck slider shows the fitted factor
+  // CS1 (U18, S2): the character's figure and its hands at rest are on the sheet
+  await expect(page.locator('.cast-body [aria-label="figure"] button[aria-pressed="true"]')).toHaveText('♀')
+  await page.locator('.cast-body select[aria-label="hands at rest"]').selectOption('fist')
+  await expect.poll(async () => (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0].body?.hand_rest.preset, { timeout: 10_000 }).toBe('fist')
 })
 
 test('a test animation in Cast (CA0, 01 step 2): Test it draws a turn on the spot from the body here, the pose-driven model performs it with the reference, the clip lands beside the reference', async ({ page }) => {
@@ -2744,7 +2765,7 @@ test('the motion library (CA1, 01 step 5): the starter folder\'s clips listed in
   await page.screenshot({ path: 'node_modules/.e2e/ca1-motion-library.png' })
 })
 
-test('the Detailed level (CA1, 01 §9a): a figure switched to Detailed follows its joints with the starter set\'s mannequin, a fist is keyed as its own bones, and the passes still render', async ({ page }) => {
+test('the Detailed level (CA1, 01 §9a; U18 every figure): a figure switched to ♂ follows its joints with the starter set\'s mannequin, a fist is keyed as its own bones, and the passes still render', async ({ page }) => {
   await openApp(page, { suite: 'stage' })
   await page.locator('.placeholder button', { hasText: /^New stage/ }).click()
   const dialog = page.locator('.modal.ask')
@@ -2752,10 +2773,12 @@ test('the Detailed level (CA1, 01 §9a): a figure switched to Detailed follows i
   await dialog.locator('button.primary').click()
   await expect(page.locator('#anim-sec-shot .stage-picker select option:checked')).toHaveText('Detail test')
   await libAdd(page, 'figures', 'Adult')
-  await openSection(page, 'Motion')
-  await page.locator('.detail-level .segmented button', { hasText: 'Detailed ♂' }).click()
   type Doc = { name: string; objects: { detail: string | null; pose: { extra: Record<string, number[]> } | null }[] }
   const doc = async () => (await api<{ items: Doc[] }>('GET', '/stages')).items.find((s) => s.name === 'Detail test')!
+  await expect.poll(async () => (await doc())?.objects[0]?.detail ?? null, { timeout: 10_000 }).toBe('female')   // U18 (proto01_UIcast): a new figure is the Detailed ♀
+  await openSection(page, 'Motion')
+  await expect(page.locator('.detail-level .segmented button')).toHaveText(['♀', '♂'])                            // no Simple level any more
+  await page.locator('.detail-level .segmented button', { hasText: '♂' }).click()
   await expect.poll(async () => (await doc())?.objects[0]?.detail ?? null, { timeout: 10_000 }).toBe('male')
   // the mannequin loads from the starter folder (the e2e tree's test rig carries a skinned mesh); then the fist is the finger bones' turns
   await expect.poll(async () => {
@@ -3591,4 +3614,13 @@ test('a prop held in a hand (D129 · HP1): a prop goes into a figure\'s right ha
   await expect.poll(async () => (await api<StageLite>('GET', `/stages/${st0.id}`)).objects.find((x) => x.id === 'prop_c')!.parent_joint, { timeout: 10_000 }).toBeNull()
   const out = (await api<StageLite>('GET', `/stages/${st0.id}`)).objects.find((x) => x.id === 'prop_c')!.transform.pos
   out.forEach((v, i) => expect(Math.abs(v - at[i])).toBeLessThan(0.01))                                 // where it was in the hand
+  // proto01_UIcast CB4: any object as a parent — the Cup picks Mara and stays where it stands, then moves with her
+  await page.locator('.row-editor select').filter({ has: page.locator('option[value="fig_m"]') }).first().selectOption('fig_m')
+  await expect.poll(async () => (await api<StageLite>('GET', `/stages/${st0.id}`)).objects.find((x) => x.id === 'prop_c')!.parent, { timeout: 10_000 }).toBe('fig_m')
+  const kept = (await world())!.pos
+  kept.forEach((v, i) => expect(Math.abs(v - out[i])).toBeLessThan(0.01))                                // no jump
+  const doc = await api<StageLite & Record<string, unknown>>('GET', `/stages/${st0.id}`)
+  await api('PUT', `/stages/${st0.id}`, { ...doc, objects: doc.objects.map((o) => (o.id === 'fig_m' ? { ...o, transform: { ...o.transform, pos: [2, 0, 0] } } : o)) })
+  await page.evaluate(async (id) => { await (window as unknown as { __loom2Stage: StageHook }).__loom2Stage.open(id) }, st0.id)
+  await expect.poll(async () => (await world())!.pos[0] - kept[0], { timeout: 10_000 }).toBeGreaterThan(1.9)   // two metres with Mara
 })

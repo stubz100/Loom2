@@ -3,6 +3,7 @@
 // figure does not have (a finger) takes its own keyed turn.
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
+import { DEFAULT_BODY } from './body'
 import { applyPose, mannequin, POSES } from './builders'
 import { makeDetailed } from './detailed'
 
@@ -78,7 +79,7 @@ describe('the Detailed level follows the figure (CA1)', () => {
     expect(d.handPreset('r', 'open').index_01_r).toEqual([0, 0, 0])
     // the hand as it hangs: measure the curl in the hand's own frame (toward its palm side)
     const tipIn = () => b('hand_r').worldToLocal(b('index_03_r').getWorldPosition(new THREE.Vector3()))
-    d.follow(fig.joints, {})
+    d.follow(fig.joints, d.handPreset('r', 'open'))                            // the open hand asked for: a key's turns win over the rest hand
     const open = tipIn()
     d.follow(fig.joints, fist)
     const closed = tipIn()
@@ -112,5 +113,40 @@ describe('the Detailed level follows the figure (CA1)', () => {
     expect(at(wb.feet[2]).y).toBeLessThan(at(b('foot_l')).y)                         // the heel sits below the ankle
     const noFingers = makeDetailed(synthetic(), 'unreal', new THREE.Group(), mannequin(new THREE.MeshBasicMaterial()).joints, fig.limbs)
     expect(noFingers.wholebody).toBeNull()
+  })
+})
+
+describe('one body (proto01_UIcast CS1 · S1, S2)', () => {
+  const at = (o: THREE.Object3D) => o.getWorldPosition(new THREE.Vector3())
+  it.each(['stand', 'walk', 'point', 'sit'])('the hand starts at the wrist point, the foot at the ankle; shoulders, hips, neck and head where the figure has them (%s)', (name) => {
+    const body = { ...DEFAULT_BODY, torso: 1.2, shoulders: 0.85, hips: 1.1, neck: 1.5, legs: 0.85, arms: 0.95, head: 0.9, elbow: 0.55, knee: 0.48 }
+    const fig = mannequin(new THREE.MeshBasicMaterial(), POSES[name], undefined, body)
+    const holder = new THREE.Group(); holder.add(fig.root); holder.rotation.y = -0.4; holder.updateMatrixWorld(true)
+    const d = makeDetailed(synthetic(), 'unreal', fig.joints.root.parent!, fig.joints, fig.limbs, { head: body.head })
+    const b = (n: string) => d.bones.get(n.replace(/[_\s.:-]/g, '').toLowerCase())!
+    holder.updateMatrixWorld(true)
+    const near = (bone: string, o: THREE.Object3D) => expect(at(b(bone)).distanceTo(at(o)), `${name}: ${bone}`).toBeLessThan(2e-3)
+    near('hand_r', fig.markers[4]); near('hand_l', fig.markers[7])                 // CB5: the hand's points began 0.033 of the height below the wrist
+    near('foot_r', fig.markers[10]); near('foot_l', fig.markers[13])
+    near('upperarm_r', fig.joints.r_shoulder); near('upperarm_l', fig.joints.l_shoulder)
+    near('thigh_r', fig.joints.r_hip); near('thigh_l', fig.joints.l_hip)
+    near('neck_01', fig.joints.neck); near('Head', fig.joints.head)
+  })
+  it("rests the fingers as the character does (relaxed unless its body says), a key's turns winning", () => {
+    const fig = mannequin(new THREE.MeshBasicMaterial(), POSES.stand)
+    const holder = new THREE.Group(); holder.add(fig.root)
+    const tip = (d: ReturnType<typeof makeDetailed>) => { const b = (n: string) => d.bones.get(n.replace(/[_\s.:-]/g, '').toLowerCase())!
+      return b('hand_r').worldToLocal(at(b('index_03_r'))).length() }
+    const relaxed = makeDetailed(synthetic(), 'unreal', holder, fig.joints, fig.limbs)
+    relaxed.follow(fig.joints, {})
+    const atRest = tip(relaxed)
+    relaxed.follow(fig.joints, relaxed.handPreset('r', 'open'))
+    expect(atRest).toBeLessThan(tip(relaxed) - 1e-3)                               // the GLB's flat hand is never the rest
+    const fist = makeDetailed(synthetic(), 'unreal', holder, fig.joints, fig.limbs, { handRest: { preset: 'fist', curl: 1 } })
+    fist.follow(fig.joints, {})
+    expect(tip(fist)).toBeLessThan(atRest - 0.01)                                  // the character's own rest
+    const flat = makeDetailed(synthetic(), 'unreal', holder, fig.joints, fig.limbs, { handRest: { preset: 'relaxed', curl: 0 } })
+    flat.follow(fig.joints, {})
+    expect(tip(flat)).toBeCloseTo(tip(relaxed), 4)                                 // curl 0: the open hand
   })
 })

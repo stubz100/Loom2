@@ -155,7 +155,7 @@ export function HoldsChip({ i, s }: { i: number; s: Subject }) {
   const props = profiles.filter((p) => p.cls === 'prop')
   const slots = held ? slotsOf(preview?.bindings, sentIndex(subs ?? [], i), 'held') : null
   const menu = () => [{ heading: `subject ${i + 1} holds — a prop of the Cast` },
-    ...(props.length ? props.map((p) => ({ label: p.name, checked: p.id === s.holds?.profile_id, run: () => useGenerate.getState().holdProp(i, p) })) : [{ label: 'no props in the Cast yet — Story · Cast › New profile… (prop)', disabled: true, run: () => {} }]),
+    ...(props.length ? props.map((p) => ({ label: p.name, checked: p.id === s.holds?.profile_id, run: () => useGenerate.getState().holdProp(i, p) })) : [{ label: 'no props in the Cast yet — Story › Cast › New prop…', disabled: true, run: () => {} }]),
     sep, { cmd: 'gen.subject.unhold', on: onSubject(i) }]
   markUsed('gen.subject.unhold')
   if (!held) return <button type="button" className="quiet holds-btn" aria-haspopup="menu" title="This subject holds a Cast prop — its sheet and its images go with the subject" onPointerDown={(e) => openPressMenu(e, menu)}><Hand size={12} /> holds ▸</button>

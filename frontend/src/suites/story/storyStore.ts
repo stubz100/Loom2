@@ -217,6 +217,7 @@ export interface StoryState {
   makeModel: () => Promise<void>
   /** D110: a mesh already in the Catalogue as the version's model, or null to clear it. */
   setModel: (assetId: string | null) => Promise<void>
+  setPropModel: (pid: string, vid: string, assetId: string) => Promise<Profile | null>   // proto01_UIcast CF8: any prop's version, from anywhere
   /** D128: a prop version's 3D model imported from a GLB file on this machine. */
   importModel: (path: string) => Promise<void>
   /** CA0: the author's pick (an image in the Catalogue) or null to clear it; a final version takes it too. */
@@ -230,7 +231,7 @@ export interface StoryState {
   ensureCandidates: (pid: string, vid: string) => Promise<string | null>
   /** D93 (A2) "Add to character ▸": images into a profile's current version as the hero, into the reference set or as candidates — moved
    *  from Unprocessed or its candidates, copied from any other page (the toast says so, with "Open <name> in Cast"). */
-  addToProfile: (pid: string, ids: string[], role: ProfileAdded['role']) => Promise<ProfileAdded | null>
+  addToProfile: (pid: string, ids: string[], role: ProfileAdded['role'], vid?: string) => Promise<ProfileAdded | null>   // vid: an open version, else the current one
   expand: (preset: string, seeds: number, tier: 'draft' | 'full') => Promise<{ batch_id: string; job_ids: string[]; cells: number } | null>
   pick: (id: string | null, additive?: boolean) => void
   setCastFilter: (f: ProfileClass | 'all') => void
@@ -604,6 +605,10 @@ export const useStory = create<StoryState>()((set, get) => {
       try { replaceProfile(await unwrap(http.PUT('/story/profiles/{pid}/versions/{vid}/model', { params: { path: { pid: p.id, vid: v.id } }, body: { asset_id: assetId } }))) }
       catch (e) { toast(`3D model: ${detail(e)}`) }
     },
+    setPropModel: async (pid, vid, assetId) => {
+      try { const p = await unwrap(http.PUT('/story/profiles/{pid}/versions/{vid}/model', { params: { path: { pid, vid } }, body: { asset_id: assetId } })); replaceProfile(p); return p }
+      catch (e) { toast(`3D model: ${detail(e)}`); return null }
+    },
     importModel: async (path) => {
       const p = get().profile(); const v = get().version(); if (!p || !v) return
       try {
@@ -632,17 +637,18 @@ export const useStory = create<StoryState>()((set, get) => {
         return next.versions.find((v) => v.id === vid)?.candidates_group_id ?? null
       } catch (e) { toast(`Candidates: ${detail(e)}`); return null }
     },
-    addToProfile: async (pid, ids, role) => {
+    addToProfile: async (pid, ids, role, vid) => {
       const p = get().profiles.find((x) => x.id === pid)
       if (!p || !ids.length) return null
+      const into = vid ?? p.current
       try {
-        const r = await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/add', { params: { path: { pid, vid: p.current } }, body: { asset_ids: ids, role } }))
+        const r = await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/add', { params: { path: { pid, vid: into } }, body: { asset_ids: ids, role } }))
         set({ profiles: get().profiles.map((x) => (x.id === pid ? r.profile : x)) })
         if (get().profileId === pid) void get().loadPages()
         const copies = Object.keys(r.copied).length
         const what = role === 'hero' ? `is ${p.name}'s hero` : role === 'reference' ? `${ids.length === 1 ? 'is' : 'are'} in ${p.name}'s reference set` : `${ids.length === 1 ? 'is a candidate' : 'are candidates'} of ${p.name}`
         useSession.getState().toast(`${ids.length === 1 ? 'The image' : `${ids.length} images`} ${what}${copies ? ` — ${copies === ids.length ? 'as a copy' : `${copies} as copies`}; the original${copies === 1 ? ' stays' : 's stay'} on ${copies === 1 ? 'its page' : 'their pages'}` : ''}`, 'success',
-          { label: `Open ${p.name} in Cast`, run: () => void import('../../store/origin').then((m) => m.goToStory({ tab: 'cast', id: pid, version: p.current })) })
+          { label: `Open ${p.name} in Cast`, run: () => void import('../../store/origin').then((m) => m.goToStory({ tab: 'cast', id: pid, version: into })) })
         return r
       } catch (e) { toast(`Add to ${p.name}: ${detail(e)}`); return null }
     },

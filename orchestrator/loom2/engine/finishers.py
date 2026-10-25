@@ -868,11 +868,14 @@ def _body_fit_result(q: JobQueue, job: JobRecord, recipe: Keypoints, people: lis
     if cur is None:
         raise ValueError(f"the profile {pid} is gone")
     v = cur.version(vid)
-    body, report = fit_body(measured, v.body or Body(), (v.body.locks if v.body else ()))   # CS2: the locked factors stay the author's
     note = stance_note(people[0])
+    if note == "arms_close":                                                   # D140: fitted only on an A-pose — the note kept, the body as it was
+        p = store.set_stance_note(pid, v.id, note)
+        q.hub.broadcast("story.changed", {"kind": "profile", "id": p.id, "revision": p.revision})
+        from ..story import ARMS_DOWN
+        raise ValueError(ARMS_DOWN)
+    body, report = fit_body(measured, v.body or Body(), (v.body.locks if v.body else ()))   # CS2: the locked factors stay the author's
     p = store.set_fitted_body(pid, v.id, body, recipe.asset_id, body_points(people[0], job.result.get("canvas")), note)
-    if note:
-        job.log_tail.append("the reference's arms touch the body — draw it again for a cleaner fit (the prompt asks for an A-pose)")
     job.result["body"] = body.model_dump()
     job.result["fit"] = report
     job.log_tail.append("body fitted: " + ", ".join(f"{k} {body.model_dump()[k]}" for k in ("neck", "torso", "shoulders", "arms", "legs", "hands")))

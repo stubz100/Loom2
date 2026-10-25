@@ -763,12 +763,24 @@ def shell_blocked(v: ProfileVersion) -> str | None:
     (S8's check, from SDPose's own points)."""
     if not v.anim_ref_asset_id:
         return "make the animation reference first: the shell is made from it"
-    if not v.body_points or v.body_fit_from != v.anim_ref_asset_id:
-        return "fit the body to the animation reference first: the fit reads its stance, and the shell needs the A-pose"
     if v.anim_ref_note == "arms_close":
         return ("the animation reference holds its arms against the body, and Pixal3D would make them part of it: draw the reference "
                 "again in the A-pose (arms about 30° out), fit the body, then make the shell")
+    if not v.body_points or v.body_fit_from != v.anim_ref_asset_id:
+        return "fit the body to the animation reference first: the fit reads its stance, and the shell needs the A-pose"
     return None
+
+
+ARMS_DOWN = ("the animation reference holds its arms against the body: the body is fitted only on an A-pose, with the fingers straight "
+             "and spread (D140) — draw the reference again, then fit")
+
+
+def fit_blocked(v: ProfileVersion) -> str | None:
+    """D140: why the body cannot be fitted to the version's animation reference now (None: it can) — only on an A-pose picture; an
+    arms-down one is known once a fit has read it (the note)."""
+    if not v.anim_ref_asset_id:
+        return "make the animation reference first: the body is fitted to it"
+    return ARMS_DOWN if v.anim_ref_note == "arms_close" else None
 
 
 def shell_from_arms_down(v: ProfileVersion) -> bool:
@@ -791,14 +803,16 @@ AnimRefSide = Literal["front", "back"]
 
 def anim_ref_sentence(cls: str, side: str) -> str:
     """CA0 (01 step 2, §10): what an animation reference shows — for a character the whole figure in a neutral A-pose (arms a little away
-    from the body, so they do not merge with the torso), centred and padded in the 16:9 frame on a plain ground, the back view the same
-    from behind; for a prop the object alone in a three-quarter view."""
+    from the body, so they do not merge with the torso; D140: the fingers straight and spread, so the fit reads the whole hand), centred and
+    padded in the 16:9 frame on a plain ground, the back view the same from behind; for a prop the object alone in a three-quarter view."""
     if cls == "prop":
         return ("The object alone, a three-quarter view, the whole object visible and centred with space around it, "
                 "on a plain light grey studio background, soft even light, no other objects, no text.")
     view = "seen from directly behind, the back of the figure" if side == "back" else "facing the camera, front view"
-    return (f"Full-body character reference, {view}, standing in a neutral A-pose with both arms held straight about 30 degrees away from "
-            "the body, the hands open and clear of the clothes, the feet slightly apart, the whole figure from the top of the head to the "
+    hands = ("the wrists straight, the fingers in line with the forearms and spread apart" if side == "back"
+             else "the palms turned toward the camera, the wrists straight, the fingers in line with the forearms and spread apart")   # D140: not bent back at the wrist
+    return (f"Full-body character reference, {view}, standing in a neutral A-pose with both arms held straight about 30 degrees away from "   # D140: the hands' 21 points read
+            f"the body, {hands}, clear of the clothes, the feet slightly apart, the whole figure from the top of the head to the "
             "feet visible and centred with space around it, on a plain light grey studio background, soft even light, no props, no other "
             "people, no text.")
 
@@ -1992,6 +2006,21 @@ class StoryStore(_ShotMixin, _FlowMixin):
         if v is None:
             raise KeyError(f"no version {vid!r}")
         v.body, v.body_fit_from, v.body_points, v.anim_ref_note = body, asset_id, points, note
+        p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
+        self.save_profile(p)
+        return p
+
+    def set_stance_note(self, pid: str, vid: str, note: str | None) -> Profile:
+        """D140: what a fit read of the reference's stance, when it fitted nothing (an arms-down picture): the body, its points and the
+        picture it was fitted to stay as they were."""
+        cur = self.profile(pid)
+        if cur is None:
+            raise KeyError(pid)
+        versions = [v.model_copy() for v in cur.versions]
+        v = next((x for x in versions if x.id == vid), None)
+        if v is None:
+            raise KeyError(f"no version {vid!r}")
+        v.anim_ref_note = note
         p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
         self.save_profile(p)
         return p

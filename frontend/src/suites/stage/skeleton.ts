@@ -77,7 +77,7 @@ export function lengthCm(b: Body, key: RowKey): number {
   const m = {
     head: 0.242 * b.head, neck: 0.12 * (b.neck ?? 1), torso: 0.44 * b.torso, shoulders: 2 * 0.21 * b.shoulders * (0.5 + 0.5 * w), hips: 0.2 * w * (b.hips ?? 1),
     upper_arm: d.limbs.upper_arm, forearm: d.limbs.forearm, thigh: d.limbs.thigh, shin: d.limbs.shin,
-    hands: 0.147 * leg * (b.hands ?? 1) * 1.95, feet: 0.3 * leg * (b.feet ?? 1),       // the palm × its fingers; the Detailed foot per leg
+    hands: 0.147 * leg * (b.hands ?? 1) * (b.figure === 'male' ? 1.848 : 1.908), feet: 0.3 * leg * (b.feet ?? 1),   // the Detailed hand wrist → the middle fingertip (its palm × 1.91 / 1.85, measured on Stage, D140); the Detailed foot per leg
   }[key]
   return Math.round(m * s * 1000) / 10
 }

@@ -15,7 +15,7 @@ import { HAND_MARKER, heldWorld, onHand, ownTraverse, transformOf } from './held
 import { CHAINS, eulerDeg, figureChain, solveTwoBone, type Chain } from './ik'
 import { makeDetailed, type Detailed, type HandPreset } from './detailed'
 import { measure } from './motion/path'
-import { bindProxy, FACE_LANDMARKS, FEET_LANDMARKS, shellStance, type Landmark, type Proxy } from './proxy'
+import { bindProxy, FACE_LANDMARKS, FEET_LANDMARKS, shellPoints, shellStance, type Landmark, type Proxy } from './proxy'
 import { depthMaterial, depthRange, drawPose, maskColour, projectMarkers, toBlob, type Keypoint, type PassName, type WholeBody } from './passes'
 import type { RenderedPasses, Tool, Transform, View } from './stageStore'
 
@@ -684,7 +684,7 @@ export class StageEngine {
     this.track(new GLTFLoader().loadAsync(api.assetUrl(assetId)).then((gltf) => {
       if (this.disposed || this.entries.get(id) !== e || !e.figure) return
       e.holder.updateMatrixWorld(true)
-      const px = bindProxy(gltf.scene, e.figure.joints, e.figure.limbs, e.holder, e.doc.pose ?? null, { stance: shellStance(assetId), visible: true, hands: true })   // CS2: in its reference's stance
+      const px = bindProxy(gltf.scene, e.figure.joints, e.figure.limbs, e.holder, e.doc.pose ?? null, { stance: shellStance(assetId), visible: true, hands: true, points: shellPoints(assetId), markers: e.figure.markers })   // D140: placed by its picture   // CS2: in its reference's stance
       for (const m of px.meshes) { m.material = this.clayMat; m.userData.stageId = id; m.visible = e.doc.visible; this.scene.add(m) }
       e.proxy = px
       ownTraverse(e.holder, id, (c) => { const m = c as THREE.Mesh; if (m.isMesh) m.castShadow = false })

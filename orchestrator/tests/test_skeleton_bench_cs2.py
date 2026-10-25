@@ -146,8 +146,11 @@ def test_the_shell_routes(tmp_path: Path):
             assert r.status_code == 422 and "arms against the body" in r.json()["detail"]                # Pixal3D would fuse them
             moved = {**down, "pose": [list(x) for x in down["pose"]]}
             moved["pose"][4][0] -= 80; moved["pose"][7][0] += 80                                          # the wrists dragged out on the bench
-            v = cl.post(f"/story/profiles/{who['id']}/versions/v1/body/refit", json={"points": moved}).json()["profile"]["versions"][0]
-            assert v["anim_ref_note"] == "arms_close"                                                     # the picture's stance, not the points dragged
+            r = cl.post(f"/story/profiles/{who['id']}/versions/v1/body/refit", json={"points": moved})
+            assert r.status_code == 422 and "only on an A-pose" in r.json()["detail"]                    # D140: the picture's stance, not the points dragged
+            v = cl.get(f"/story/profiles/{who['id']}").json()["versions"][0]
+            assert v["anim_ref_note"] == "arms_close" and v["body_points"]["pose"][4][0] == down["pose"][4][0]   # nothing refitted
+            assert cl.post(f"/story/profiles/{who['id']}/versions/v1/body/fit").status_code == 422     # nor fitted again on that picture
             assert cl.post(f"/story/profiles/{who['id']}/versions/v1/shell").status_code == 422
             store.set_fitted_body(who["id"], "v1", Body(), a["id"], pts, None)                              # drawn again in the A-pose and fitted
             r = cl.post(f"/story/profiles/{who['id']}/versions/v1/shell")

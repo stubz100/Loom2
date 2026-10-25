@@ -126,6 +126,31 @@ async def test_a_reference_fits_the_body(tmp_path: Path, object_info: dict):
         await rig.close()
 
 
+@pytest.mark.asyncio
+async def test_an_arms_down_picture_fits_nothing(tmp_path: Path, object_info: dict):
+    """D140: the body is fitted only on an A-pose — a read that finds the arms against the body fails the job with the way out, keeps the
+    note, and leaves the body, its points and its picture as they were; the route then refuses until the reference is drawn again."""
+    rig = Rig(tmp_path, object_info)
+    try:
+        groups = rig.queue.groups = GroupStore(rig.ws, rig.catalogue)
+        st = StoryStore(rig.ws)
+        ref = rig.catalogue.ingest_file(_png(tmp_path / "ref.png")).id
+        p = st.create_profile("Mara", "character", groups, appearance="Mara")
+        down = fake_person()
+        b = down["pose_keypoints_2d"]
+        b[4 * 3], b[7 * 3] = b[8 * 3], b[11 * 3]                                                  # the wrists at the hips: the arms down
+        rig.fake.people = [down]
+        rig.queue.load()
+        await rig.queue.start()
+        job = rig.queue.submit({"kind": "keypoints", "asset_id": ref}, origin=body_fit_origin(p.id, "v1"))[0]
+        done = await rig.wait(job.id)
+        assert done.status == "failed" and "only on an A-pose" in (done.error or "")
+        v = st.profile(p.id).version("v1")
+        assert v.anim_ref_note == "arms_close" and v.body is None and v.body_points is None and v.body_fit_from is None
+    finally:
+        await rig.close()
+
+
 def test_the_fit_route(tmp_path: Path):
     from fastapi.testclient import TestClient
     from loom2.api import create_app

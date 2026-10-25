@@ -2753,7 +2753,7 @@ test('the skeleton bench (proto01_UIcast CS2): Skeleton… opens the reference w
     await bench.locator('.skel-foot button', { hasText: /^Make the shell/ }).click()
     await expect.poll(async () => ((await prof()) as unknown as { shell_asset_id: string | null }).shell_asset_id, { timeout: 30_000 }).toBeTruthy()
     await expect(bench.locator('.skel-foot')).toContainText('shell')
-    await expect(bench.locator('.skel-pane.fig button', { hasText: 'shell' })).toBeEnabled()
+    await expect(bench.locator('.skel-pane.ref .tools button', { hasText: 'shell' })).toBeEnabled()          // D140: the shell over the picture
   }
   // the guide follows a motion; the bench closes back to the sheet
   await bench.locator('.skel-motions button', { hasText: 'walk' }).click()

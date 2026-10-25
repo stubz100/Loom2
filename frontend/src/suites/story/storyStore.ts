@@ -1240,9 +1240,15 @@ type ShellVersion = Pick<Profile['versions'][number], 'anim_ref_asset_id' | 'bod
  *  A-pose picture, which the fit has read; null: it can. */
 export function shellBlocked(v: ShellVersion | undefined | null): string | null {
   if (!v?.anim_ref_asset_id) return 'make the animation reference first: the shell is made from it'
-  if (!v.body_points || v.body_fit_from !== v.anim_ref_asset_id) return 'fit the body to the animation reference first: the fit reads its stance, and the shell needs the A-pose'
   if (v.anim_ref_note === 'arms_close') return 'the animation reference holds its arms against the body, and Pixal3D would make them part of it: draw the reference again in the A-pose (arms about 30° out), fit the body, then make the shell'
+  if (!v.body_points || v.body_fit_from !== v.anim_ref_asset_id) return 'fit the body to the animation reference first: the fit reads its stance, and the shell needs the A-pose'
   return null
+}
+/** D140 (story.py fit_blocked): why the body cannot be fitted to the version's reference now — only on an A-pose; an arms-down picture is
+ *  known once a fit has read it. Null: it can. */
+export function fitBlocked(v: Pick<ShellVersion, 'anim_ref_asset_id' | 'anim_ref_note'> | undefined | null): string | null {
+  if (!v?.anim_ref_asset_id) return 'make the animation reference first: the body is fitted to it'
+  return v.anim_ref_note === 'arms_close' ? 'the animation reference holds its arms against the body: the body is fitted only on an A-pose, with the fingers straight and spread — draw the reference again, then fit' : null
 }
 /** D139: the version's shell was made from the reference it has now, and that reference holds its arms against the body (fused arms). */
 export const shellFromArmsDown = (v: ShellVersion | undefined | null): boolean =>

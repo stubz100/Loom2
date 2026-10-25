@@ -79,6 +79,8 @@ PALM_PER_LEG = 0.147          # the Detailed figure's palm (wrist → the middle
 TOES_PER_LEG = 0.058          # S5: the Detailed figure's toes (big toe ↔ small toe, front view) per leg length, measured on Stage (CS1, journal 2026-10-25)
 A_POSE_DEG = 22.0             # the reference's stance (frontend stage/turnTest.ts A_POSE): arms 22° away from the body
 FITTED = ("head_w", "head_neck", "torso", "shoulders", "hips", "leg", "arm", "palm", "elbow_at", "knee_at", "toes")
+# D140 measured the whole hand (wrist → the middle fingertip) too and did not keep it: SDPose reads a real straight hand at 1.43–1.76 palms
+# against the Detailed hand's 1.85–1.91, so the fit's hands came out 12–24 % smaller than from the palm on the same pictures (journal).
 PULL = 0.02                   # S7: the weight of each factor's pull toward its adult value, against log-ratio residuals (≈ 2 % of a measure)
 DEFAULTS = {"elbow": ELBOW_AT, "knee": KNEE_AT}
 

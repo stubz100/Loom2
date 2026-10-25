@@ -445,8 +445,9 @@ async def profile_body_fit(svc: Svc, pid: str, vid: str):
         raise HTTPException(404, str(e))
     if p.cls != "character":
         raise HTTPException(422, "only a character has a body to fit")
-    if not v.anim_ref_asset_id:
-        raise HTTPException(422, "make the animation reference first: the body is fitted to it")
+    from ..story import fit_blocked
+    if (why := fit_blocked(v)) is not None:                                  # D140: only on an A-pose
+        raise HTTPException(422, why)
     try:
         jobs = svc.queue.submit({"kind": "keypoints", "asset_id": v.anim_ref_asset_id}, origin=body_fit_origin(p.id, v.id))
     except ValueError as e:
@@ -486,12 +487,18 @@ async def profile_body_refit(svc: Svc, pid: str, vid: str, body: BodyRefit):
         measured = reference_ratios(person)
     except ValueError as e:
         raise HTTPException(422, str(e))
-    cur = v.body or Body()
-    fitted, report = fit_body(measured, cur, cur.locks)
     before = v.body_points or {}
     sdpose = before.get("sdpose") or {k: before.get(k) for k in ("pose", "hand_left", "hand_right", "feet") if k in before}   # SDPose's own read, kept for *Back to SDPose's points*
-    pts = {**{k: x for k, x in body.points.items() if k != "sdpose"}, "canvas": body.points.get("canvas") or before.get("canvas") or [], "sdpose": sdpose}
     note = stance_note(person_of(sdpose)) if sdpose.get("pose") else stance_note(person)   # D139: the picture's stance, not the points dragged
+    if note == "arms_close":                                                   # D140: fitted only on an A-pose
+        from ..story import ARMS_DOWN
+        if v.anim_ref_note != note:
+            p = await asyncio.to_thread(store.set_stance_note, pid, v.id, note)
+            _changed(svc, p)
+        raise HTTPException(422, ARMS_DOWN)
+    cur = v.body or Body()
+    fitted, report = fit_body(measured, cur, cur.locks)
+    pts = {**{k: x for k, x in body.points.items() if k != "sdpose"}, "canvas": body.points.get("canvas") or before.get("canvas") or [], "sdpose": sdpose}
     p = await asyncio.to_thread(store.set_fitted_body, pid, v.id, fitted, v.body_fit_from or v.anim_ref_asset_id or "", pts, note)
     _changed(svc, p)
     return {"profile": p.model_dump(), "fit": report}

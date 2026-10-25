@@ -8,7 +8,7 @@ import { goBack, useMakeFor } from '../../store/origin'
 import { bareNode, cellsOf, hasWork, nextStep, routeOf, type Cell, type Step } from './board'
 import { askConfirm, askConfirmCheck, askText, useSession } from '../../store/session'
 import { useAlbum } from '../catalogue/albumStore'
-import { CLASS_LABEL, latestModelJob, latestTrainJob, modelSource, nodesAfterWithoutPlace, revealClass, sy, ttsJobFor, useStory, type ProfileClass, shellBlocked } from './storyStore'
+import { CLASS_LABEL, latestModelJob, latestTrainJob, modelSource, nodesAfterWithoutPlace, revealClass, sy, ttsJobFor, useStory, type ProfileClass, shellBlocked, fitBlocked } from './storyStore'
 import { forShot, makeClipFor, makeFrameFor, makeTarget, speakersOf } from './makeFor'
 import { runStale, staleOf } from './runStale'
 import type { FlowNode, Profile, SceneOut, Shot, ShotVersion } from '../../api/types'
@@ -313,13 +313,13 @@ const cmds: Command[] = [
     placement: ['panel', 'inspector', 'context'], when: () => animRefable() && !!useSession.getState().capabilities?.story?.model_id, run: () => void sy().makeAnimRef('front') },
   { id: 'story.cast.fitBody', scope: 'story', label: 'Fit the body to the animation reference', icon: Ruler,
     hint: "the reference's proportions measured (neck, shoulders, torso, limbs, hands) so the stage figure moves with the character's build; the height and build stay",
-    placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character' && !!version()?.anim_ref_asset_id && version()?.state === 'open', run: () => void sy().fitBody() },
+    placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character' && !fitBlocked(version()) && version()?.state === 'open', run: () => void sy().fitBody() },   // D140: only on an A-pose
   // CS2 (proto01_UIcast 03 §3.2, D136 U17): the skeleton bench — its view, its foot's verbs (its code loads with the stage's)
   { id: 'cast.skeleton.open', scope: 'story', label: 'Skeleton…', icon: PersonStanding, hint: "the character's skeleton against its reference, its figure and its guide — fit, tune and lock each part",
     placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character' && !!version(), run: () => sy().setSkeleton(true) },
   { id: 'cast.skeleton.close', scope: 'story', label: 'Back to the sheet', icon: ChevronLeft, placement: ['panel'], when: () => sy().skeleton, run: () => sy().setSkeleton(false) },
   { id: 'cast.skeleton.fit', scope: 'story', label: 'Fit again ▶', icon: Ruler, hint: "the body fitted to the points as they are now — SDPose's, with those you moved; the locked parts stay",
-    placement: ['panel', 'context'], when: () => sy().skeleton && openVersion() && !!version()?.body_points,
+    placement: ['panel', 'context'], when: () => sy().skeleton && openVersion() && !!version()?.body_points && !fitBlocked(version()),
     run: () => void import('../stage/benchState').then((m) => { const pts = m.bench.points(); if (pts) void sy().refitBody(pts as never) }) },
   { id: 'cast.skeleton.sdpose', scope: 'story', label: "Back to SDPose's points", icon: RotateCcw, placement: ['panel', 'context'], when: () => sy().skeleton && !!version()?.body_points,
     run: () => { const v = version(); if (v) void import('../stage/benchState').then((m) => m.bench.resetPoints(v)) } },

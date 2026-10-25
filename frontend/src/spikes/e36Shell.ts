@@ -46,7 +46,7 @@ export async function measureShell(input: E36Input): Promise<Record<string, unkn
       const fig = mannequin(mat, POSES.stand, stance, input.body)
       const root = new THREE.Group(); root.add(fig.root); scene.add(root); root.updateMatrixWorld(true)
       fig.root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.visible = false })            // the shell alone is drawn
-      const px = bindProxy(gltf.scene.clone(true), fig.joints, fig.limbs, root, { preset: 'stand', joints: stance }, { weights, stance, visible: true })
+      const px = bindProxy(gltf.scene.clone(true), fig.joints, fig.limbs, root, { preset: 'stand', joints: stance }, { weights, stance, visible: true, points: input.points, markers: fig.markers })
       for (const m of px.meshes) scene.add(m)
       root.updateMatrixWorld(true)
       const H = input.body.height_m

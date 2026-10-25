@@ -581,7 +581,7 @@ function AnimRef({ p, v }: { p: Profile; v: Profile['versions'][number] }) {
       {id ? <img src={api.thumbUrl(id, 512)} alt={label} /> : <span className="hint">{label}: none yet</span>}
       <span className="cell">{label}</span>
       {side === 'front' && id && v.anim_ref_note === 'arms_close' && <button type="button" className="link ref-note" data-note="arms_close"
-        title="The fit reads a figure whose arms stand clear of the body best (the prompt now asks for that), and the shell is made only from the A-pose (D139): draw the reference again, then fit the body"
+        title="The body is fitted and the shell made only on an A-pose — the arms clear of the body, the fingers straight and spread (D139, D140): draw the reference again, then fit the body"
         onClick={(e) => { e.stopPropagation(); runCommand('story.cast.makeAnimRef') }}>The arms touch the body — draw it again?</button>}   {/* proto01_UIcast S8 */}
     </div>
   )

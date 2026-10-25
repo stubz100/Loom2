@@ -1,13 +1,14 @@
 // CS2 (proto01_UIcast 03 §3.2, 06 §2.4; D136 U6/U7/U17): the skeleton bench — Cast's Skeleton view of a character, lazily loaded with the
-// stage's code. Three panes:
-//   the reference   SDPose's points (white) and the figure's markers (blue) over the animation reference, a red tick where they part by
-//                   more than 3 % of the height; a white point dragged corrects what SDPose read (*Fit again* refits), a blue one sets the
-//                   part it ends there and locks it;
-//   the figure      its Detailed mannequin, or its shell in x-ray with the skeleton inside, front or side, orbited; a joint clicked picks
-//                   its row in the parts;
+// stage's code. Two panes (D140: the figure pane folded into the reference's — the shell is made front-on from this picture):
+//   the reference   SDPose's points (white rings) and the figure's markers (blue dots) over the animation reference, a red tick where they
+//                   part by more than 3 % of the height; a white point dragged corrects what SDPose read (*Fit again* refits), a blue one
+//                   sets the part it ends there and locks it. Under them the shell (or the Detailed figure) in x-ray and the skeleton, a
+//                   joint the shell's volume does not hold in red, a joint clicked picks its row; *side* turns the pane to the figure in
+//                   3D, from the side, orbited;
 //   the guide       what Wan Animate gets — the pose pass, hands and feet, on a short motion; the reference under its first frame.
 // The parts are the Inspector's (SkeletonParts): each a length in centimetres with an adult's range and a lock, the head's carriage, the
-// shoulders' drop, the feet turned out, the hands at rest (*From the picture* picks the preset nearest SDPose's hands).
+// shoulders' drop, the feet turned out, the hands at rest (*From a picture ▾* reads one of the reference set's pictures and picks the
+// preset nearest SDPose's hands — D140: the fitting picture's are always open and spread).
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
@@ -24,8 +25,9 @@ import { JOINTS, mannequin, POSES, type Joint } from './builders'
 import { HAND_PRESETS, makeDetailed } from './detailed'
 import { bindProxy, insideShell, setShellPoints, stanceOf } from './proxy'
 import { COCO, cropOf, defaultOf, disagreements, dragFactor, lengthCm, outside, pictureMap, ROWS, seen, setLocked, unlock, type Points, type RowKey, type XY } from './skeleton'
-import { handFromPicture, setUi, ui, useUi } from './benchState'
+import { handFromPicture, readPicture, setUi, ui, useUi } from './benchState'
 import { showMenu } from '../../frame/ContextMenu'
+import { cellOf } from '../story/coverage'
 
 setShellPoints(versionPointsOfShell)                                          // CS3: a shell binds in its reference's stance here too (the stage's store may not be loaded)
 
@@ -38,6 +40,68 @@ const ROW_JOINTS: Partial<Record<RowKey, Joint[]>> = { head: ['head'], neck: ['n
 
 const bodyOf = (v: Profile['versions'][number] | undefined): Body => ({ ...DEFAULT_BODY, ...((v?.body ?? {}) as Partial<Body>), hand_rest: { ...DEFAULT_BODY.hand_rest, ...((v?.body?.hand_rest ?? {}) as object) } }) as Body
 const saveBody = (b: Body) => useStory.getState().setSheet({ body: b as never })
+
+type Look = 'shell' | 'figure' | 'none'
+const BONES: [Joint, Joint | number][] = [['root', 'spine'], ['spine', 'neck'], ['neck', 'head'], ['spine', 'r_shoulder'], ['spine', 'l_shoulder'], ['r_shoulder', 'r_elbow'],
+  ['l_shoulder', 'l_elbow'], ['r_elbow', 4], ['l_elbow', 7], ['root', 'r_hip'], ['root', 'l_hip'], ['r_hip', 'r_knee'], ['l_hip', 'l_knee'], ['r_knee', 10], ['l_knee', 13]]   // a number: the marker that ends it
+
+/** The figure's joints on its front plane (and the wrists' and ankles' markers that end the forearms and shins), in the reference's stance. */
+function figureJoints(body: Body, stance: Record<string, number[]>): { joints: Record<Joint, XY>; markers: XY[] } {
+  const fig = mannequin(new THREE.MeshBasicMaterial(), POSES.stand, stance, body)
+  const g = new THREE.Group(); g.add(fig.root); g.updateMatrixWorld(true)
+  const xy = (o: THREE.Object3D): XY => { const p = o.getWorldPosition(new THREE.Vector3()); return [p.x, p.y] }
+  return { joints: Object.fromEntries(JOINTS.map((j) => [j, xy(fig.joints[j])])) as Record<Joint, XY>, markers: fig.markers.map(xy) }
+}
+
+/** D140: the shell (or the Detailed figure) in x-ray over the picture — rendered offscreen through an orthographic camera fitted to the
+ *  picture by the nose and the ankles (the shell is made front-on from it), as an image under the points — and the joints the shell's
+ *  volume does not hold. Nothing while the look is none or there is no map. */
+function useOverlay(body: Body, stance: Record<string, number[]>, look: Look, shell: string | null, map: ReturnType<typeof pictureMap>, w: number, h: number, points: Points | null): { url: string | null; outside: Joint[] } {
+  const [state, setState] = useState<{ url: string | null; outside: Joint[]; key: string }>({ url: null, outside: [], key: '' })
+  const active = !!map && (look === 'figure' || (look === 'shell' && !!shell))
+  const key = active ? `${look}/${shell}/${w}x${h}` : ''
+  useEffect(() => {
+    if (!active || !map) return
+    let live = true
+    const t = window.setTimeout(() => void (async () => {
+      const scale = Math.min(1, 1024 / w), W = Math.round(w * scale), H = Math.round(h * scale)
+      const r = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true })
+      try {
+        r.setSize(W, H, false); r.setClearColor(0x000000, 0)
+        const scene = new THREE.Scene()
+        scene.add(new THREE.HemisphereLight(0xffffff, 0x666666, 1.8)); const sun = new THREE.DirectionalLight(0xffffff, 1.2); sun.position.set(1, 2, 3); scene.add(sun)
+        const clay = new THREE.MeshLambertMaterial({ color: 0xd8dce4, transparent: true, opacity: 0.5, depthWrite: false })
+        const fig = mannequin(clay, POSES.stand, stance, body)
+        const g = new THREE.Group(); g.add(fig.root); scene.add(g); g.updateMatrixWorld(true)
+        fig.root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.visible = false })
+        let outside: Joint[] = []
+        if (look === 'shell' && shell) {
+          const gltf = await new GLTFLoader().loadAsync(api.assetUrl(shell))
+          const px = bindProxy(gltf.scene, fig.joints, fig.limbs, g, { preset: 'stand', joints: stance }, { stance, visible: true, points, markers: fig.markers })
+          for (const m of px.meshes) { m.material = clay; scene.add(m) }
+          const plain = px.meshes.map((m) => new THREE.Mesh(m.geometry, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide })))
+          plain.forEach((m) => m.updateMatrixWorld(true))
+          outside = JOINTS.filter((j) => !insideShell(plain, fig.joints[j].getWorldPosition(new THREE.Vector3())))
+        } else {
+          const { mannequinClone } = await import('./motion/mannequins')
+          const { root, rig } = await mannequinClone(body.figure ?? 'female', clay)
+          const d = makeDetailed(root, rig, fig.joints.root.parent!, fig.joints, fig.limbs, { hands: body.hands, feet: body.feet, head: body.head, handRest: body.hand_rest, feetOut: body.feet_out })
+          d.follow(fig.joints, null)
+        }
+        const tl = map.toFig([0, 0]), br = map.toFig([w, h])
+        const cam = new THREE.OrthographicCamera(tl[0], br[0], tl[1], br[1], 0.01, 100)
+        cam.position.set(0, 0, 10); cam.updateProjectionMatrix()
+        r.render(scene, cam)
+        const blob: Blob = await new Promise((res) => r.domElement.toBlob((b) => res(b!), 'image/png'))
+        if (!live) return
+        const url = URL.createObjectURL(blob)
+        setState((old) => { if (old.url) URL.revokeObjectURL(old.url); return { url, outside, key } })
+      } catch { /* no shell or no starter set: the points alone */ } finally { r.dispose(); r.forceContextLoss() }
+    })(), 150)
+    return () => { live = false; window.clearTimeout(t) }
+  }, [active, key, body, stance, look, shell, map, w, h, points])
+  return active && state.key === key ? { url: state.url, outside: state.outside } : { url: null, outside: [] }
+}
 
 /** The figure's 18 markers on its front plane, in the reference's stance. */
 function figureMarkers(body: Body, stance: Record<string, number[]>): XY[] {
@@ -72,8 +136,7 @@ export default function SkeletonBench() {
         <CommandButton id="cast.skeleton.close" text size={13} />
       </div>
       <div className="skel-panes">
-        <RefPane v={v} body={body} stance={stance} side={side} />
-        <FigurePane key={`${p.id}/${v.id}`} body={body} stance={stance} shell={v.shell_asset_id ?? null} />
+        <RefPane key={`${p.id}/${v.id}`} v={v} body={body} stance={stance} side={side} />
         <GuidePane body={body} stance={stance} refId={v.anim_ref_asset_id ?? null} points={u.pts ?? vp} shell={v.shell_asset_id ?? null} />
       </div>
       <div className="skel-foot">
@@ -103,12 +166,17 @@ function RefPane({ v, body, stance, side }: { v: Profile['versions'][number]; bo
   const u = useUi()
   const svg = useRef<SVGSVGElement>(null)
   const [drag, setDrag] = useState<{ kind: 'white' | 'blue'; key: string; k: number; at: XY } | null>(null)
+  const shell = v.shell_asset_id ?? null
+  const [look, setLook] = useState<Look>(shell ? 'shell' : 'figure')
+  const [view, setView] = useState<'front' | 'side'>('front')
   const fig = useMemo(() => figureMarkers(body, stance), [body, stance])
+  const skel = useMemo(() => figureJoints(body, stance), [body, stance])
   const pts = u.pts
   const id = side === 'back' ? v.anim_ref_back_asset_id : v.anim_ref_asset_id
-  if (!id) return <div className="skel-pane"><span className="hint">No animation reference yet — Cast's *Make an animation reference*.</span></div>
   const [w, h] = (pts?.canvas?.length === 2 ? pts.canvas : [1280, 720]) as [number, number]
-  const map = pts && side === 'front' ? pictureMap(pts.pose, fig) : null
+  const map = useMemo(() => (pts && side === 'front' ? pictureMap(pts.pose, fig) : null), [pts, side, fig])
+  const over = useOverlay(body, stance, look, shell, view === 'front' ? map : null, w, h, (v.body_points ?? null) as Points | null)
+  if (!id) return <div className="skel-pane"><span className="hint">No animation reference yet — Cast's *Make an animation reference*.</span></div>
   const crop = pts && side === 'front' ? cropOf(pts, w, h) ?? [0, 0, w, h] : null      // the figure fills the pane (the SVG letterboxes it)
   const at = (e: React.PointerEvent): XY => { const m = svg.current!.getScreenCTM()!.inverse(); const q = new DOMPoint(e.clientX, e.clientY).matrixTransform(m); return [q.x, q.y] }
   const r = Math.max(3, (crop?.[3] ?? h) / 110)
@@ -128,13 +196,42 @@ function RefPane({ v, body, stance, side }: { v: Profile['versions'][number]; bo
     setDrag(null)
   }
   const ticks = pts && side === 'front' ? disagreements(pts.pose, fig) : []
+  const toPic = (p: XY): XY => map!.toPic(p)
+  const end = (b: Joint | number): XY => toPic(typeof b === 'number' ? skel.markers[b] : skel.joints[b])
+  const tools = (
+    <div className="tools">
+      <span className="segmented" role="group" aria-label="over the picture">
+        {(['shell', 'figure', 'none'] as const).map((k) => <button key={k} type="button" className={look === k ? 'active' : ''} disabled={k === 'shell' && !shell}
+          title={k === 'shell' ? (shell ? 'the shell in x-ray, the skeleton inside' : 'no shell yet — Make the shell ▶') : k === 'figure' ? 'the Detailed figure in x-ray, the skeleton inside' : 'the points alone'}
+          onClick={() => setLook(k)}>{k === 'none' ? 'points' : k}</button>)}
+      </span>
+      <span className="segmented" role="group" aria-label="the view">
+        {(['front', 'side'] as const).map((k) => <button key={k} type="button" className={view === k ? 'active' : ''} onClick={() => setView(k)}
+          title={k === 'side' ? 'the figure in 3D from the side, orbited with the mouse' : 'the picture, the figure over it'}>{k}</button>)}
+      </span>
+    </div>
+  )
+  if (view === 'side') return (
+    <div className="skel-pane ref" aria-label="the reference">
+      <span className="lab">the figure · side</span>
+      {tools}
+      <FigurePane body={body} stance={stance} shell={shell} look={look} points={(v.body_points ?? null) as Points | null} />
+    </div>
+  )
   return (
     <div className="skel-pane ref" aria-label="the reference" onContextMenu={(e) => { e.preventDefault(); showMenu(e, [{ cmd: 'cast.skeleton.fit' }, { cmd: 'cast.skeleton.sdpose' }, { cmd: 'cast.skeleton.mirror' }, { cmd: 'cast.shell.make' }]) }}>
       <span className="lab">the reference · SDPose's points ○ · the figure's ●</span>
+      {tools}
       <div className="skel-ref">
         {!crop && <img src={api.assetUrl(id)} alt="the animation reference" draggable={false} />}
         {crop && <svg ref={svg} viewBox={crop.join(' ')} onPointerMove={move} onPointerUp={drop} onPointerLeave={drop}>
           <image href={api.assetUrl(id)} x={0} y={0} width={w} height={h}><title>the animation reference</title></image>
+          {over.url && <image href={over.url} x={0} y={0} width={w} height={h} className="xray" />}
+          {map && look !== 'none' && BONES.map(([a, b]) => { const p = end(a), q = end(b)
+            return <line key={`${a}-${b}`} x1={p[0]} y1={p[1]} x2={q[0]} y2={q[1]} className="bone" /> })}
+          {map && look !== 'none' && JOINTS.map((j) => { const p = toPic(skel.joints[j]), out = over.outside.includes(j), sel = (ROW_JOINTS[u.row as RowKey] ?? []).includes(j)
+            return <circle key={j} cx={p[0]} cy={p[1]} r={r * (out ? 0.75 : 0.45)} className={`joint${out ? ' out' : ''}${sel ? ' sel' : ''}`} data-joint={j}
+              onClick={() => { if (JOINT_ROW[j]) setUi({ row: JOINT_ROW[j]! }) }}><title>{`${j}${out ? ' — outside the shell' : ''}: click for its row`}</title></circle> })}
           {ticks.map((t) => <line key={`t${t.k}`} x1={t.at[0]} y1={t.at[1]} x2={t.fig[0]} y2={t.fig[1]} className="tick" />)}
           {(['pose', 'hand_left', 'hand_right', 'feet'] as const).flatMap((key) => rows(key).map((pt, k) => {
             if (!seen(pt)) return null
@@ -149,15 +246,14 @@ function RefPane({ v, body, stance, side }: { v: Profile['versions'][number]; bo
       </div>
       {!pts && <span className="hint">Fit the body first: its points come from the reference (Cast's body section).</span>}
       {ticks.length > 0 && <span className="hint warn">{ticks.length} point{ticks.length === 1 ? '' : 's'} apart from the figure's</span>}
+      {look === 'shell' && over.outside.length > 0 && <span className="hint warn" title={over.outside.join(', ')}>{over.outside.length} joint{over.outside.length === 1 ? '' : 's'} outside the shell</span>}
     </div>
   )
 }
 
-// ------------------------------------------------------------------ the figure
-function FigurePane({ body, stance, shell }: { body: Body; stance: Record<string, number[]>; shell: string | null }) {
+// ------------------------------------------------------------------ the figure from the side (the reference pane's *side*)
+function FigurePane({ body, stance, shell, look, points }: { body: Body; stance: Record<string, number[]>; shell: string | null; look: Look; points: Points | null }) {
   const host = useRef<HTMLDivElement>(null)
-  const [look, setLook] = useState<'detailed' | 'shell'>(shell ? 'shell' : 'detailed')
-  const [view, setView] = useState<'front' | 'side'>('front')
   const [outside, setOutside] = useState<Joint[]>([])                       // the joints the shell's volume does not hold (ringed)
   const u = useUi()
   const world = useRef<{ r: THREE.WebGLRenderer; scene: THREE.Scene; cam: THREE.PerspectiveCamera; orbit: OrbitControls; content: THREE.Group; balls: Map<Joint, THREE.Mesh> } | null>(null)
@@ -211,10 +307,11 @@ function FigurePane({ body, stance, shell }: { body: Body; stance: Record<string
       link('r_elbow', fig.markers[4]); link('l_elbow', fig.markers[7]); link('root', 'r_hip'); link('root', 'l_hip'); link('r_hip', 'r_knee'); link('l_hip', 'l_knee'); link('r_knee', fig.markers[10]); link('l_knee', fig.markers[13])
       const lines = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x2f9be8, depthTest: false })); lines.renderOrder = 2; w.content.add(lines)
       fig.root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.visible = false })                     // the Simple boxes: the Detailed figure or the shell instead
-      if (look === 'shell' && shell) {
+      if (look === 'none') setOutside([])
+      else if (look === 'shell' && shell) {
         void new GLTFLoader().loadAsync(api.assetUrl(shell)).then((gltf) => {
           if (!live) return
-          const px = bindProxy(gltf.scene, fig.joints, fig.limbs, g, { preset: 'stand', joints: stance }, { stance, visible: true })
+          const px = bindProxy(gltf.scene, fig.joints, fig.limbs, g, { preset: 'stand', joints: stance }, { stance, visible: true, points, markers: fig.markers })
           for (const m of px.meshes) { const mat = m.material as THREE.MeshLambertMaterial; mat.transparent = true; mat.opacity = 0.42; mat.depthWrite = false; w.content.add(m) }
           const plain = px.meshes.map((m) => new THREE.Mesh(m.geometry, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide })))
           plain.forEach((m) => m.updateMatrixWorld(true))
@@ -233,26 +330,16 @@ function FigurePane({ body, stance, shell }: { body: Body; stance: Record<string
       }
       const half = THREE.MathUtils.degToRad(w.cam.fov / 2), halfW = Math.atan(Math.tan(half) * w.cam.aspect)
       const d = Math.max((0.6 * H) / Math.tan(half), (0.56 * H) / Math.tan(halfW))   // the figure whole, arms out, in a narrow pane too
-      if (view === 'front') w.cam.position.set(0, H * 0.5, d); else w.cam.position.set(d, H * 0.5, 0)
+      w.cam.position.set(d, H * 0.5, 0)                                     // from the side: the depth the picture cannot show
       w.orbit.target.set(0, H * 0.5, 0); w.orbit.update()
     }, 120)
     return () => { live = false; window.clearTimeout(t) }
-  }, [body, stance, shell, look, view, u.row])
+  }, [body, stance, shell, look, u.row, points])
   return (
-    <div className="skel-pane fig" aria-label="the figure">
-      <span className="lab">the figure</span>
-      <div className="tools">
-        <span className="segmented" role="group" aria-label="the figure's look">
-          <button type="button" className={look === 'detailed' ? 'active' : ''} onClick={() => setLook('detailed')}>Detailed</button>
-          <button type="button" className={look === 'shell' ? 'active' : ''} disabled={!shell} title={shell ? 'the shell in x-ray, the skeleton inside' : 'no shell yet — Make the shell ▶'} onClick={() => setLook('shell')}>shell</button>
-        </span>
-        <span className="segmented" role="group" aria-label="the view">
-          {(['front', 'side'] as const).map((k) => <button key={k} type="button" className={view === k ? 'active' : ''} onClick={() => setView(k)}>{k}</button>)}
-        </span>
-      </div>
+    <>
       <div ref={host} className="skel-3d" />
       {look === 'shell' && outside.length > 0 && <span className="hint warn" title={outside.join(', ')}>{outside.length} joint{outside.length === 1 ? '' : 's'} outside the shell</span>}
-    </div>
+    </>
   )
 }
 
@@ -327,6 +414,7 @@ export function SkeletonParts() {
   const profiles = useStory((s) => s.profiles)
   const u = useUi()
   const [busy, setBusy] = useState(false)
+  const refPage = useStory((s) => s.refPage)
   if (!p || !v) return null
   const b = bodyOf(v)
   const open = v.state === 'open'
@@ -334,7 +422,18 @@ export function SkeletonParts() {
   const first = ROWS.find((r) => outside(b, r))
   const groups = [...new Set(ROWS.map((r) => r.group))]
   const others = profiles.filter((x) => x.cls === 'character' && x.id !== p.id && x.versions.some((y) => y.body))
-  const fromPicture = async () => { setBusy(true); try { const r = await handFromPicture(b, (u.pts ?? v.body_points) as Points | null); if (r) set({ hand_rest: { ...b.hand_rest, preset: r.preset, curl: r.curl } }) } finally { setBusy(false) } }
+  const fromPicture = async (assetId: string) => {                         // D140: a picture of the character's — the fitting picture's hands are always open
+    setBusy(true)
+    try {
+      const r = await handFromPicture(b, await readPicture(assetId))
+      if (r) set({ hand_rest: { ...b.hand_rest, preset: r.preset, curl: r.curl } })
+      else useSession.getState().toast('No hands found in that picture — pick one that shows them', 'info')
+    } finally { setBusy(false) }
+  }
+  const pictures = Object.values(refPage?.assets ?? {}).sort((x, y) => (x.id === v.hero_asset_id ? -1 : y.id === v.hero_asset_id ? 1 : x.created_at < y.created_at ? -1 : 1))
+  const pictureMenu = (e: React.MouseEvent) => showMenu(e, pictures.length
+    ? pictures.slice(0, 20).map((a) => { const c = cellOf(a); return { label: a.id === v.hero_asset_id ? 'the hero' : c ? `${c.shot} · ${c.angle}` : `a reference (${a.created_at.slice(0, 10)})`, run: () => void fromPicture(a.id) } })
+    : [{ label: 'no pictures in the reference set yet', disabled: true, run: () => undefined }])
   return (
     <div className="story-insp skel-parts">
       <h4>{p.name}'s skeleton <Help text={"Each part as a length at the figure's height, the factor of the default adult in its tooltip. The grey band is an adult's range: outside it the row turns amber — a child or a creature is yours to decide. A lock keeps a part through Fit again."} /></h4>
@@ -371,9 +470,9 @@ export function SkeletonParts() {
             <span className="mono">{unit === '×' ? `×${Number(b[k] ?? 1).toFixed(2)}` : `${Math.round(Number(b[k] ?? 0))}°`}</span><span /></div>))}
       </div>
       <div className="skel-group">
-        <div className="grp">Hands at rest <Help text={"How the hands are held where a pose turns no finger — every figure of this character starts from it. From the picture picks the preset (and its curl) nearest the reference's hands."} /></div>
+        <div className="grp">Hands at rest <Help text={"How the hands are held where a pose turns no finger — every figure of this character starts from it. From a picture reads one of the reference set's pictures — pick one that shows the hands (the animation reference's are always open and spread) — and picks the preset and curl nearest them."} /></div>
         <div className="hands">
-          <button type="button" className="quiet" disabled={!open || busy} onClick={() => void fromPicture()}>{busy ? 'reading the hands…' : 'From the picture'}</button>
+          <button type="button" className="quiet" disabled={!open || busy} onClick={pictureMenu} title="read the hands of one of the character's pictures (SDPose, a short job)">{busy ? 'reading the hands…' : 'From a picture ▾'}</button>
           {HAND_PRESETS.map((h) => <button key={h} type="button" disabled={!open} className={b.hand_rest.preset === h ? 'active' : ''} onClick={() => set({ hand_rest: { ...b.hand_rest, preset: h } })}>{h}</button>)}
         </div>
         {([['curl', 0, 1.6, 0.05, '×'], ['spread', -10, 30, 1, '°'], ['thumb', -30, 40, 1, '°']] as const).map(([k, lo, hi, step, unit]) => (

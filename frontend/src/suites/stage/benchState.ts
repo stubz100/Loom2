@@ -2,6 +2,7 @@
 // it with the bench) and *From the picture*. Kept apart from SkeletonBench.tsx, a components-only file.
 import { useEffect, useState } from 'react'
 import * as THREE from 'three'
+import { http, unwrap } from '../../api/client'
 import type { Profile } from '../../api/types'
 import type { Body } from './body'
 import { mannequin, POSES } from './builders'
@@ -16,14 +17,39 @@ export function setUi(patch: Partial<BenchUi>) { Object.assign(ui, patch); for (
 export function useUi(): BenchUi { const [, tick] = useState(0); useEffect(() => { const f = () => tick((n) => n + 1); ui.subs.add(f); return () => { ui.subs.delete(f) } }, []); return ui }
 
 
+/** D140: a picture's people as SDPose reads them — a short `keypoints` job (one GPU job through the queue), its first person as points;
+ *  null when it finds nobody or the job fails. */
+export async function readPicture(assetId: string): Promise<Points | null> {
+  const r = await unwrap(http.POST('/jobs', { body: { recipe: { kind: 'keypoints', asset_id: assetId } as never, stage: false } }))
+  const id = r.jobs[0]?.id
+  for (let i = 0; id && i < 240; i++) {
+    const j = await unwrap(http.GET('/jobs/{job_id}', { params: { path: { job_id: id } } }))
+    if (j.status === 'failed' || j.status === 'cancelled') return null
+    if (j.status === 'done') {
+      const person = ((j.result as { people?: Record<string, number[]>[] } | null)?.people ?? [])[0]
+      if (!person) return null
+      const rows = (flat?: number[]) => { const out: number[][] = []; for (let k = 0; k + 2 < (flat ?? []).length; k += 3) out.push([flat![k], flat![k + 1], flat![k + 2]]); return out }
+      return { pose: rows(person.pose_keypoints_2d), hand_left: rows(person.hand_left_keypoints_2d), hand_right: rows(person.hand_right_keypoints_2d), feet: rows(person.foot_keypoints_2d) }
+    }
+    await new Promise((res) => setTimeout(res, 500))
+  }
+  return null
+}
+
 /** *From the picture*: the hand preset and curl whose 21 points — the Detailed figure in the reference's stance, seen from the front — lie
- *  nearest SDPose's hands (each hand from its wrist, by its palm; SDPose's `hand_left` is the picture's left, the figure's right). */
+ *  nearest SDPose's hands (each hand from its wrist, by its palm, turned so the palm points the same way: D140 reads the hero, whose hands
+ *  hang or rest anyhow; SDPose's `hand_left` is the picture's left, the figure's right). */
 export async function handFromPicture(body: Body, pts: Points | null): Promise<{ preset: HandPreset; curl: number; err: number } | null> {
   if (!pts) return null
   const shape = (rows: number[][] | undefined, flipY: boolean): XY[] | null => {
     if (!rows || rows.length < 21 || !seen(rows[0]) || !seen(rows[9])) return null
-    const s = Math.hypot(rows[9][0] - rows[0][0], rows[9][1] - rows[0][1]) || 1
-    return rows.map((r) => (seen(r) ? [(r[0] - rows[0][0]) / s, ((r[1] - rows[0][1]) / s) * (flipY ? -1 : 1)] as XY : [NaN, NaN] as XY))
+    const dx = rows[9][0] - rows[0][0], dy = (rows[9][1] - rows[0][1]) * (flipY ? -1 : 1)
+    const s = Math.hypot(dx, dy) || 1, c = dx / s, n = dy / s                // the palm turned onto +x, scaled to one
+    return rows.map((r) => {
+      if (!seen(r)) return [NaN, NaN] as XY
+      const x = (r[0] - rows[0][0]) / s, y = ((r[1] - rows[0][1]) * (flipY ? -1 : 1)) / s
+      return [x * c + y * n, -x * n + y * c] as XY
+    })
   }
   const want = { r: shape(pts.hand_left, true), l: shape(pts.hand_right, true) }
   if (!want.r && !want.l) return null
@@ -41,9 +67,8 @@ export async function handFromPicture(body: Body, pts: Points | null): Promise<{
     let sum = 0, n = 0
     for (const [side, markers] of [['r', d.wholebody.right], ['l', d.wholebody.left]] as const) {
       const w = want[side]; if (!w) continue
-      const xy = markers.map((m) => { const p = m.getWorldPosition(new THREE.Vector3()); return [p.x, p.y] as XY })
-      const s = Math.hypot(xy[9][0] - xy[0][0], xy[9][1] - xy[0][1]) || 1
-      for (let k = 1; k < 21; k++) { if (Number.isNaN(w[k][0])) continue; sum += Math.hypot((xy[k][0] - xy[0][0]) / s - w[k][0], (xy[k][1] - xy[0][1]) / s - w[k][1]); n++ }
+      const xy = shape(markers.map((m) => { const p = m.getWorldPosition(new THREE.Vector3()); return [p.x, p.y, 1] }), false)!
+      for (let k = 1; k < 21; k++) { if (Number.isNaN(w[k][0])) continue; sum += Math.hypot(xy[k][0] - w[k][0], xy[k][1] - w[k][1]); n++ }
     }
     const err = n ? sum / n : Infinity
     if (!best || err < best.err) best = { preset, curl, err }

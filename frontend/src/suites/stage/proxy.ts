@@ -44,6 +44,7 @@ export function stanceOf(points: StancePoints): Record<string, number[]> {
 let pointsOfShell: (assetId: string) => StancePoints = () => null
 export const setShellPoints = (fn: (assetId: string) => StancePoints) => { pointsOfShell = fn }
 export const shellStance = (assetId: string) => stanceOf(pointsOfShell(assetId))
+export const shellPoints = (assetId: string) => pointsOfShell(assetId) as BindOptions['points']
 
 /** Each joint's segment, from the joint to where its part ends, in the joint's own frame (−Y down the limb). */
 function segmentEnd(j: Joint, limbs: Limbs): THREE.Vector3 {
@@ -181,6 +182,32 @@ export interface BindOptions {
   weights?: Weighting; stance?: Record<string, number[]> | null; visible?: boolean
   /** CS3 (06 §2.5): the character's hand rig draws the hands — the shell's own (Pixal3D's mittens) collapse into the wrists. */
   hands?: boolean
+  /** D140: the points the figure was fitted to (its reference's) and the figure's 18 markers — with the GLB's figure box (the cut-out
+   *  Pixal3D was given, `extras.loom2.figure_box`) the shell is placed by its picture. */
+  points?: { pose?: number[][]; canvas?: number[] } | null; markers?: THREE.Object3D[]
+}
+
+/** D140: the shell's placement from its picture, in the figure's own frame (it faces +Z, its left at +X, its floor at y 0): the figure
+ *  box's bottom — the soles — on the floor and SDPose's nose on the figure's nose, so a bun or a hat stands above the head as the picture
+ *  has it and the arms where it has them (E36 scaled the shell from the floor to the head's top + 0.16 instead: the bench's overlay showed
+ *  the dancer's arms 8 cm low under her bun). Not by the ankles: SDPose's sit ≈ 10 cm over the soles (the ankle bone, the shoe), the
+ *  dummy's 4 cm. Null without a box, a nose or the markers. */
+function placeByPicture(model: THREE.Object3D, box: THREE.Box3, figureRoot: THREE.Object3D, root: THREE.Object3D, opts: BindOptions): THREE.Matrix4 | null {
+  const fb = (model.userData?.loom2 as { figure_box?: number[] } | undefined)?.figure_box
+  const nose = opts.points?.pose?.[0]
+  if (!fb || fb.length < 6 || !nose || (nose[2] ?? 0) < 0.3 || !opts.markers?.length) return null
+  const inv = figureRoot.matrixWorld.clone().invert()
+  const at = (o: THREE.Object3D) => o.getWorldPosition(new THREE.Vector3()).applyMatrix4(inv)
+  const cv = opts.points?.canvas, kx = cv?.length === 2 ? cv[0] / fb[4] : 1, ky = cv?.length === 2 ? cv[1] / fb[5] : 1   // the fit's picture size against the matte's
+  const [x0, y0, x1, y1] = [fb[0] * kx, fb[1] * ky, fb[2] * kx, fb[3] * ky]
+  const n = at(opts.markers[0])
+  const size = box.getSize(new THREE.Vector3())
+  if (!(y1 > nose[1]) || n.y <= 0 || size.y < 1e-6) return null
+  const k = n.y / (y1 - nose[1])                                             // metres per pixel: the nose's height over the soles
+  const s = ((y1 - y0) * k) / size.y
+  const x = n.x + ((x0 + x1) / 2 - nose[0]) * k                              // the picture's x runs as the figure's (facing the camera)
+  return figureRoot.matrixWorld.clone().multiply(new THREE.Matrix4().compose(new THREE.Vector3(x, 0, at(root).z), new THREE.Quaternion(), new THREE.Vector3(s, s, s))
+    .multiply(new THREE.Matrix4().makeTranslation(-(box.min.x + box.max.x) / 2, -box.min.y, -(box.min.z + box.max.z) / 2)))
 }
 
 /** The shell's hands into its wrists: a vertex whose nearest part is a forearm, beyond the wrist, within 25 cm of it and along the
@@ -216,17 +243,16 @@ export function bindProxy(model: THREE.Object3D, J: Record<Joint, THREE.Object3D
   const topY = J.head.getWorldPosition(new THREE.Vector3()).y + 0.16
   const centre = J.root.getWorldPosition(new THREE.Vector3())
   const right = J.r_shoulder.getWorldPosition(new THREE.Vector3()).sub(J.l_shoulder.getWorldPosition(new THREE.Vector3())).setY(0).normalize()
-  // the model: its own transforms baked, scaled from the floor to the head's top + 0.16, turned onto the figure's facing. It is made from
-  // the front animation reference, so it faces +Z with the character's left at +X: its +X goes onto the figure's left (−right). (E23d took
-  // the wider horizontal axis for the left-right one; E36's Skink — a snout and a tail — is deeper than wide and was bound turned 90°.)
-  // E36 also placed the shells by their picture (the GLB's figure box, the soles on the floor, the nose on the nose): 76 of 96 joints
-  // inside their shells against this scaling's 86 — SDPose's shoulders sit on the shoulder's top, not at the joint — so this stays.
+  // the model: its own transforms baked, placed by its picture where it carries its figure box (D140, placeByPicture), else scaled from
+  // the floor to the head's top + 0.16; turned onto the figure's facing. It is made from the front animation reference, so it faces +Z
+  // with the character's left at +X: its +X goes onto the figure's left (−right). (E23d took the wider horizontal axis for the left-right
+  // one; E36's Skink — a snout and a tail — is deeper than wide and was bound turned 90°.)
   model.updateMatrixWorld(true)
   const box = new THREE.Box3().setFromObject(model, true)                  // SC3d: its vertices (a turned box would overstate the height)
   const size = box.getSize(new THREE.Vector3()), mid = box.getCenter(new THREE.Vector3())
   const s = (topY - floorY) / Math.max(1e-6, size.y)
   const turn = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), right.clone().negate())
-  const place = new THREE.Matrix4().compose(new THREE.Vector3(centre.x, floorY, centre.z), turn, new THREE.Vector3(s, s, s))
+  const place = placeByPicture(model, box, figureRoot, J.root, opts) ?? new THREE.Matrix4().compose(new THREE.Vector3(centre.x, floorY, centre.z), turn, new THREE.Vector3(s, s, s))
     .multiply(new THREE.Matrix4().makeTranslation(-mid.x, -box.min.y, -mid.z))
   const bones = JOINTS.map((j) => J[j])
   const skeleton = new THREE.Skeleton(bones as unknown as THREE.Bone[])

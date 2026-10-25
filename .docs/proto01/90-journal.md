@@ -9571,3 +9571,57 @@ patched (the Mid attenuated). A track with plugins is printed onto a hidden comp
 
 **Asked of the author** (not built): D140 — the fit, too, only on an A-pose with straight, spread fingers, the rest hand read from the
 hero instead; and the bench's figure pane folded into the reference pane.
+
+## 2026-10-25 13:50 — D140 built: the fit only on an A-pose with open hands; the skeleton bench in two panes; a shell placed by its picture
+
+The author, after stage 2's commit (`a6ed9ae`): "the fitting image should already be an A-pose, and SDPose should be fitted on an
+A-pose, which stretches the fingers out so it makes it easier to fit hands"; on the bench, "why do we need a separate window for the
+mannequin… I thought it is already rigged". My two proposals were answered with "let's commit, push and continue" → **D140** (recorded
+before the work).
+
+- **The fit only on an A-pose.**
+  - *Fit the body* and the bench's *Fit again* are greyed on a reference a fit found arms-down. The way out is shown: draw the
+    reference again (`story.fit_blocked`).
+  - A fit job that finds the arms against the body keeps the body, its points and its picture as they were. It records the note and
+    fails with the way out.
+  - The refit reads the stance from SDPose's own points, so a wrist dragged out does not lift the note.
+  - *Make the shell*'s reasons are now in order: the arms before the fit.
+- **The prompt.** The animation reference asks for the palms toward the camera, the wrists straight, and the fingers in line with the
+  forearms and spread. The back view asks for the same without the palms.
+- **Tried and not kept: the hand fitted wrist to fingertip.**
+  - Measured on Stage: the Detailed hand open and straight is 1.908 palms (♀) and 1.848 (♂).
+  - SDPose reads real straight hands at 1.43–1.76 palms (Ines' palm-forward hand 1.43–1.49, Mara's edge-on 1.66–1.76).
+  - On the same pictures the whole hand gave hands 12–24 % smaller than the palm (Ines ×0.71 against ×0.92, Mara ×0.68 against ×0.77),
+    and Mara's whole-hand fit moved from ×0.82 to ×0.68 between two drawings.
+  - The palm stays the hand's measure; open hands make it read surely (confidence 0.9 and over on all 21 points).
+- ***From a picture ▾*.** The rest hand is read from a picture of the reference set the author picks, the hero first (an SDPose read,
+  `benchState.readPicture`). The hands are compared turned alike, palm onto palm. The hero alone would not do: Mara's is a
+  head-and-shoulders portrait (no hands, nothing picked — the rig).
+- **The bench in two panes.** The figure pane is folded into the reference pane:
+  - the shell (or the Detailed figure) in x-ray over the picture, rendered offscreen through an orthographic camera fitted to the
+    picture by the nose and the ankles;
+  - the skeleton drawn on it as bones and joints, a joint the shell's volume does not hold in red, a joint clicked picks its row;
+  - *shell · figure · points*, and *front · side* (the figure in 3D from the side, orbited).
+- **A shell placed by its picture again.** Over the picture, the head-top scaling of D138 showed: the dancer's shell sat low and small
+  under her bun, its arms 8 cm below hers. A shell is placed by the figure box its GLB carries: the soles on the floor, SDPose's nose on
+  the figure's (`proxy.placeByPicture`, in the viewport, the passes and the bench).
+  - It now lies on its picture (`img/d140-1-bench-dancer.jpg`).
+  - E36 measured again: 82 of 96 joints inside (86 with D138's scaling). The misses are knees (Mara, Ines, Pip, the lizard) and the
+    dancer's shoulders and elbows; the skeleton's to fix on the bench.
+- **The rig** (`scripts/cs3_acceptance.py --fingers`, on CS3's project):
+  - Ines' fit was refused on her arms-down reference;
+  - Ines and Mara were drawn again with the new prompt and fitted (43 s and 28 s), no notes;
+  - Mara's hero read no hands.
+  - The first run's "whole hand" checks are what showed the bias above. Ines' two drawings held their arms nearly level, the hands bent
+    back at the wrists; the prompt now asks for the wrists straight.
+- Screenshots: `img/d140-1-bench-dancer.jpg` (the shell on its picture, 5 joints out), `d140-2-bench-side.jpg`,
+  `d140-3-bench-mara-fused.jpg` (an arms-down character: its fused shell flagged, the fit and the shell greyed),
+  `d140-4-bench-fisherman.jpg`.
+- Tests:
+  - offline: `test_body_fit_ca1b.py` +1 (an arms-down read fits nothing); `test_skeleton_bench_cs2.py` (the refit and the fit refused
+    arms-down);
+  - Vitest: `shell.test.ts` 3 (D140's `fitBlocked`, the order); the bench's e2e scenario (the shell toggle in the reference pane).
+- Totals: offline 601 passed; agents_check, model_literals_check and settings audit clean; Vitest 513 + 3 skipped; typecheck, lint
+  (0 errors, 79 warnings) and build clean; e2e full 67/67 and open 67/67.
+- **Owed by the author:** their characters' references drawn again in the A-pose (the fit and the shell wait for it), then *From a
+  picture ▾* on a reference-set picture that shows the hands.

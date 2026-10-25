@@ -13,6 +13,8 @@ the real engine on a fresh copy of E36's project (A1 after CS1's rig, Mara's and
     … scripts/cs3_acceptance.py --silhouettes                               (the silhouette check again on the last run's project)
     … scripts/cs3_acceptance.py --apose                                     (D139 on the last run's project: Mara drawn again in the A-pose,
                                                                              her shell made again — the arms apart from the body)
+    … scripts/cs3_acceptance.py --fingers                                   (D140 on the last run's project: the fit refused arms-down, two
+                                                                             references drawn with spread fingers and fitted)
 
 Results: engine/spikes/out/cs3/results.json; the sheets: .docs/proto01_UIcast/img/cs3-*.jpg.
 """
@@ -320,5 +322,83 @@ def apose() -> int:
     return 0 if ok == len(checks) else 1
 
 
+def fingers() -> int:
+    """D140 on the rig: the fit refused on an arms-down reference (Ines'); Ines and Mara drawn again with the new prompt (the palms toward
+    the camera, the wrists straight, the fingers spread) and fitted on the palm (the whole hand was measured and not kept: journal);
+    *From the picture* reads the rest hand from Mara's hero (the dev page, Vite on 1420)."""
+    import urllib.error
+    checks: list[tuple[str, bool, str]] = []
+
+    def check(name: str, ok: bool, detail: str = "") -> None:
+        checks.append((name, bool(ok), detail))
+        print(f"{'PASS' if ok else 'FAIL'} {name} {detail}", flush=True)
+    P.OUT = OUT
+    app = P.App(OUT / "proj")
+    res: dict = {}
+    try:
+        old = next(f for f in P.api("GET", "/finals")["items"] if f["name"] == "CS1 after")
+        who = {x["name"]: x["profile_id"] for x in old["layers"] if x["kind"] == "figure"}
+        ines, mara = who["Ines"], who["Mara"]
+        try:
+            if P.api("GET", f"/story/profiles/{ines}")["versions"][0]["anim_ref_note"] != "arms_close":
+                raise LookupError
+            P.api("POST", f"/story/profiles/{ines}/versions/v1/body/fit")
+            refused = ""
+        except LookupError:
+            refused = ""
+        except urllib.error.HTTPError as e:
+            refused = f"{e.code} {e.read().decode('utf-8', 'replace')}"
+        if P.api("GET", f"/story/profiles/{ines}")["versions"][0]["anim_ref_note"] == "arms_close" or refused:
+            check("Ines' fit refused on her arms-down reference (D140)", "only on an A-pose" in refused, refused[-120:])
+        else:
+            print("(Ines' reference was drawn again in an earlier run: no arms-down picture to refuse)")
+        for name, pid in (("Ines", ines), ("Mara", mara)):
+            t0 = time.time()
+            made = []
+            for jid in P.api("POST", f"/story/profiles/{pid}/versions/v1/anim-ref", {"side": "front", "count": 1})["job_ids"]:
+                made += (P.wait_job(jid).get("result") or {}).get("asset_ids") or []
+            P.api("PUT", f"/story/profiles/{pid}/versions/v1/anim-ref", {"side": "front", "asset_id": made[0]})
+            j = P.wait_job(P.api("POST", f"/story/profiles/{pid}/versions/v1/body/fit")["job_id"])
+            v = P.api("GET", f"/story/profiles/{pid}")["versions"][0]
+            fit = (j.get("result") or {}).get("fit") or {}
+            person = ((j.get("result") or {}).get("people") or [{}])[0]
+            palm = fit.get("palm", {}).get("reference")
+            res[name] = {"seconds": round(time.time() - t0, 1), "note": v["anim_ref_note"], "hands": (v["body"] or {}).get("hands"), "measures": sorted(fit),
+                         "hand": fit.get("hand"), "palm_read": palm, "people": len((j.get("result") or {}).get("people") or [])}
+            check(f"{name} drawn again in the A-pose and fitted", j["status"] == "done" and v["anim_ref_note"] is None and "palm" in fit,
+                  f"note {v['anim_ref_note']}; measures {sorted(fit)}; hands ×{(v['body'] or {}).get('hands')} · {res[name]['seconds']} s")
+            res[name]["reference"] = made[0]
+        hero = P.api("GET", f"/story/profiles/{mara}")
+        hero_id = next((x.get("hero_asset_id") for x in hero["versions"] if x.get("hero_asset_id")), None)
+        inputs = {"body": hero["versions"][0]["body"], "hero": hero_id}
+        r = subprocess.run(["node", "-e", """
+const { chromium } = require('playwright')
+;(async () => {
+  const [inp] = [JSON.parse(process.argv[1])]
+  const browser = await chromium.launch({ channel: 'msedge', headless: false })
+  const page = await browser.newPage()
+  await page.goto('http://127.0.0.1:1420/?token=e28&port=8792')
+  await page.waitForTimeout(2000)
+  const out = await page.evaluate(async (x) => {
+    const m = await import('/src/suites/stage/benchState.ts'), b = await import('/src/suites/stage/body.ts')
+    const body = { ...b.DEFAULT_BODY, ...x.body, hand_rest: { ...b.DEFAULT_BODY.hand_rest, ...(x.body.hand_rest ?? {}) } }
+    const pts = await m.readPicture(x.hero)
+    return { hands: !!pts && (pts.hand_left?.length ?? 0) + (pts.hand_right?.length ?? 0), pick: await m.handFromPicture(body, pts) }
+  }, inp)
+  console.log(JSON.stringify(out)); await browser.close()
+})().catch((e) => { console.error(e); process.exit(1) })""", json.dumps(inputs)], cwd=str(ROOT / "frontend"), capture_output=True, text=True, encoding="utf-8", timeout=600,
+                           env={**os.environ, "NODE_PATH": str(ROOT / "frontend" / "node_modules")})
+        pick = json.loads(r.stdout.strip().splitlines()[-1]) if r.returncode == 0 and r.stdout.strip() else {"error": r.stderr[-400:]}
+        res["from_the_hero"] = pick
+        check("From the picture reads Mara's hero (reported)", r.returncode == 0, json.dumps(pick)[:200])
+    finally:
+        app.close()
+    res["checks"] = [{"name": a, "ok": b, "detail": c} for a, b, c in checks]
+    (OUT / "fingers.json").write_text(json.dumps(res, indent=1), encoding="utf-8")
+    ok = sum(1 for _, b, _ in checks if b)
+    print(f"cs3_acceptance --fingers: {ok}/{len(checks)}")
+    return 0 if ok == len(checks) else 1
+
+
 if __name__ == "__main__":
-    raise SystemExit(silhouettes_again() if "--silhouettes" in sys.argv else apose() if "--apose" in sys.argv else main())
+    raise SystemExit(silhouettes_again() if "--silhouettes" in sys.argv else apose() if "--apose" in sys.argv else fingers() if "--fingers" in sys.argv else main())

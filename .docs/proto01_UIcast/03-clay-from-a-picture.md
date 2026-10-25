@@ -186,8 +186,11 @@ design above:
     handle in the figure pane;
   - the back view's points, the variant routes (no ideas store yet: CW1).
 - **The reference pane** is cropped to the figure. SDPose's points are white rings, and the figure's markers blue dots inside them.
-- **The figure pane** shows the shell in x-ray once it exists, and rings a joint the shell's volume does not hold (E36: thin limbs a
-  centimetre off).
+- **The figure pane** is folded into the reference pane (D140): the shell (or the Detailed figure) in x-ray over the picture with the
+  skeleton, a joint the shell's volume does not hold in red, *side* for the figure in 3D. The shell is placed by its picture, so it lies
+  on it.
+- **The fit and the shell** need an A-pose picture (D139, D140), its fingers straight and spread; the hand is still fitted by its palm (the whole hand was measured and not kept, D140).
+  *From a picture ▾* reads the rest hand from a reference-set picture the author picks.
 - **The refit** is its own route, `POST …/body/refit {points}` (not an option of `/body/fit`). SDPose's first read is kept in
   `body_points.sdpose` for *Back to SDPose's points*. The fit does not depend on where it starts, and a lock rescales the other parts
   (the factors only fix proportions).

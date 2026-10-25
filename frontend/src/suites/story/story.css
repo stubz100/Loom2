@@ -358,7 +358,7 @@
 .skel-strip { border-bottom: 1px solid var(--line2); }
 .skel-foot { border-top: 1px solid var(--line2); flex-wrap: wrap; }
 .skel-strip .spacer, .skel-foot .spacer { flex: 1; }
-.skel-panes { flex: 1; display: grid; grid-template-columns: 1.15fr 1fr 0.8fr; gap: 8px; padding: 8px; min-height: 0; }
+.skel-panes { flex: 1; display: grid; grid-template-columns: 1.5fr 1fr; gap: 8px; padding: 8px; min-height: 0; }   /* D140: the reference (the figure over it) and the guide */
 .skel-pane { position: relative; border: 1px solid var(--line2); border-radius: var(--radius); background: var(--bg1); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .skel-pane .lab { position: absolute; left: 8px; top: 6px; font-size: 11px; color: var(--fg3); z-index: 2; pointer-events: none; }
 .skel-pane .tools { position: absolute; right: 6px; top: 4px; display: flex; gap: 6px; z-index: 2; }
@@ -372,6 +372,11 @@
 .skel-ref circle.white.moved { stroke: var(--accent); }
 .skel-ref circle.blue { fill: #2f9be8; stroke: #0b2a44; stroke-width: 1.5px; opacity: 0.9; }
 .skel-ref line.tick { stroke: #e5534b; stroke-width: 2px; vector-effect: non-scaling-stroke; }
+.skel-ref image.xray { pointer-events: none; }
+.skel-ref line.bone { stroke: #2f9be8; stroke-width: 2px; opacity: 0.85; vector-effect: non-scaling-stroke; pointer-events: none; }
+.skel-ref circle.joint { fill: #2f9be8; stroke: #0b2a44; stroke-width: 1px; cursor: pointer; }
+.skel-ref circle.joint.sel { fill: #f0a030; }
+.skel-ref circle.joint.out { fill: #e5484d; stroke: #fff; stroke-width: 1.5px; }
 .skel-3d { flex: 1; min-height: 0; }
 .skel-3d canvas { display: block; width: 100%; height: 100%; }
 .skel-guide { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; padding-top: 26px; }

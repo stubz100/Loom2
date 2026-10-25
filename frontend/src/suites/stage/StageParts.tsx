@@ -7,7 +7,7 @@
 // the viewport with the pose pill; the stage's frame form (`ShotTab`) is Image › From a stage's, the stage clip (`StageClipCard`) Performance's.
 import { AnimateLevels, GraphPill } from '../../frame/AnimateLevels'
 import { Help } from '../../frame/Help'
-import { Aperture, Bookmark, Box, Camera, Eye, EyeOff, Frame, LayoutTemplate, Lock, LockOpen, PersonStanding, User, Video } from 'lucide-react'
+import { Aperture, Bookmark, Box, Camera, Eye, EyeOff, Frame, LayoutTemplate, Lock, LockOpen, PersonStanding, User, UserRound, Video } from 'lucide-react'
 import { PresetPanel } from '../../frame/PresetPanel'
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { CommandButton, CommandRow, MenuButton } from '../../frame/CommandButton'
@@ -39,7 +39,8 @@ import { StageEngine } from './engine'
 import { viewport, viewportMenu, cameraMenu } from './stageCommands'
 import { descendsFrom, HAND_LABEL } from './held'
 import { meshLabel, propMeshes } from './meshes'
-import { effectiveJoints, st, TEMPLATE_KINDS, useStage, type ShotState, imageSetBudget } from './stageStore'
+import { castPoses, effectiveJoints, st, TEMPLATE_KINDS, useStage, type ShotState, imageSetBudget } from './stageStore'
+import { ENDS, type End } from './motion/contact'
 import './stage.css'
 
 const FOCALS = [24, 35, 50, 85]
@@ -390,8 +391,11 @@ export function PosesTab() {
   const joint = useStage((s) => s.selectedJoint)
   const posing = useStage((s) => s.posing)
   const userPoses = useStage((s) => s.userPoses)
+  const frame = useStage((s) => s.frame)
+  const profiles = useStory((s) => s.profiles)
+  const shown = useMemo(() => (o && current ? sampleDoc(current, frame).objects.find((x) => x.id === o.id) ?? o : null), [current, frame, o])   // AP1b: the pins at the playhead
   if (!current) return <span className="hint">Open or make a stage in the Shot section.</span>
-  markUsed('stage.pose.mirror'); markUsed('stage.pose.reset'); markUsed('stage.pose.save')
+  markUsed('stage.pose.mirror'); markUsed('stage.pose.reset'); markUsed('stage.pose.save'); markUsed('stage.pose.unpin'); markUsed('stage.pose.saveForCharacter')
   if (!o || o.kind !== 'mannequin') return <><MotionLibrary /><div className="stage-panel"><div className="head"><b>Poses</b></div><span className="hint">No figure selected. <Help text="Select a figure, then Pose (over the viewport, or its right-click): click a joint for the rotate gizmo, or drag a hand / foot handle." /></span></div></>
   const joints = effectiveJoints(o)
   const v = joint ? (joints[joint] ?? [0, 0, 0]) : null
@@ -404,17 +408,25 @@ export function PosesTab() {
       <DetailLevel o={o} />
       {(() => {                                                          // D119 (SC2): the poses behind a + — the built-in ones and the project's saved ones
         const edited = Object.keys(o.pose?.joints ?? {}).length > 0
-        const built = POSE_NAMES.map((p) => ({ id: `preset:${p}`, label: p, icon: <PersonStanding size={18} />, hint: 'built in' }))
+        // AP1b (D141): a bound figure's character's own poses too; a starter pose it has its own version of takes that
+        const own = castPoses(o), who = profiles.find((p) => p.id === o.profile_id)?.name ?? 'the character'
+        const built = POSE_NAMES.map((p) => ({ id: `preset:${p}`, label: p, icon: <PersonStanding size={18} />, hint: own[p] ? `built in · ${who}'s own version` : 'built in' }))
+        const mine = Object.keys(own).filter((n) => !POSE_NAMES.includes(n)).map((n) => ({ id: `own:${n}`, label: n, icon: <UserRound size={18} />, hint: `${who}'s own · fitted to the body` }))
         const saved = Object.entries(userPoses).map(([name, def]) => ({ id: `saved:${name}`, label: name, icon: <Bookmark size={18} />, hint: `saved in this project · from ${def.preset ?? 'stand'}` }))
-        const items = [...built, ...saved]
+        const items = [...built, ...mine, ...saved]
         const cur = o.pose?.preset && !edited ? `preset:${o.pose.preset}` : null
         return (
           <div className="lib-row" data-group="poses"><span className="lib-label">Poses</span>
             <PresetPanel label="pose presets" items={items} showText selected={cur} chosen={items.filter((i) => i.id === cur)}
               title="The poses: the built-in ones and the ones saved in this project; a click poses the figure" saveLabel="Save this pose…"
               onSave={(name) => void st().savePose(name || `Pose ${saved.length + 1}`, o.id)}
-              onPick={(id) => { const k = id.slice(0, id.indexOf(':')), n = id.slice(id.indexOf(':') + 1); if (k === 'preset') st().applyPose(o.id, n); else { const d = userPoses[n]; if (d) st().applyPose(o.id, d.preset ?? 'stand', d.joints) } }}
+              onPick={(id) => { const k = id.slice(0, id.indexOf(':')), n = id.slice(id.indexOf(':') + 1); if (k === 'preset') st().applyPose(o.id, n); else if (k === 'own') st().applyCharacterPose(o.id, n); else { const d = userPoses[n]; if (d) st().applyPose(o.id, d.preset ?? 'stand', d.joints) } }}
               verbs={(f) => {
+                const n0 = f?.slice(f.indexOf(':') + 1) ?? ''
+                if ((f?.startsWith('own:') || (f?.startsWith('preset:') && own[n0])) && o.profile_id) {
+                  const p = profiles.find((x) => x.id === o.profile_id)
+                  return <button type="button" className="quiet danger" onClick={() => void askConfirm({ title: `Delete ${who}'s "${n0}"?`, okLabel: 'Delete', danger: true }).then((ok) => { if (ok && p) void useStory.getState().deleteCharacterPose(p.id, o.version ?? p.current, n0) })}>Delete {who}'s “{n0}”</button>
+                }
                 if (!f?.startsWith('saved:')) return <span className="hint">Click a pose: the figure takes it; one saved here can be deleted.</span>
                 const n = f.slice(6)
                 return <button type="button" className="quiet danger" onClick={() => void askConfirm({ title: `Delete the pose "${n}"?`, okLabel: 'Delete', danger: true }).then((ok) => { if (ok) void st().deletePose(n) })}>Delete “{n}”</button>
@@ -422,13 +434,32 @@ export function PosesTab() {
             {edited && <span className="hint">edited</span>}
           </div>)
       })()}
-      <div className="verbs"><CommandButton id="stage.pose.mirror" text /><CommandButton id="stage.pose.reset" text label="Reset" /><CommandButton id="stage.pose.save" text /></div>
+      <div className="verbs"><CommandButton id="stage.pose.mirror" text /><CommandButton id="stage.pose.reset" text label="Reset" /><CommandButton id="stage.pose.save" text />
+        {o.profile_id && <CommandButton id="stage.pose.saveForCharacter" text label={`Save for ${profiles.find((p) => p.id === o.profile_id)?.name ?? 'the character'}…`} />}</div>
+      <Pins id={o.id} pins={(shown?.pose?.pins ?? {}) as Partial<Record<End, number[]>>} />
       <h4>Joint <CommandButton id="stage.pose.mode" text label={posing ? 'Done posing' : 'Pose'} active={posing} /></h4>
       <div className="kv"><span>joint</span><select value={joint ?? ''} onChange={(e) => st().selectJoint(e.target.value || null)}><option value="">— click one in the viewport —</option>{JOINTS.map((j) => <option key={j} value={j}>{j}</option>)}</select></div>
       {v && <Vec label="x · y · z °" v={v} onChange={setJoint} step={5} />}
       <p className="hint">Gizmos <Help text="Pose shows them on the figure: orange spheres are joints (rotate), blue cubes are hands and feet (drag; elbow and shoulder follow). The figure's own transform stays on the Move / Rotate tools." /></p>
     </div>
     </>
+  )
+}
+
+const END_LABEL: Record<End, string> = { r_hand: 'right hand', l_hand: 'left hand', r_foot: 'right foot', l_foot: 'left foot' }
+/** AP1b (D141): the figure's pins — a toggle per hand and foot (pinned where it is now), the commands for both feet / both hands / none. */
+function Pins({ id, pins }: { id: string; pins: Partial<Record<End, number[]>> }) {
+  const n = ENDS.filter((e) => pins[e]).length
+  return (
+    <div className="lib-row" data-group="pins"><span className="lib-label">Pins</span>
+      <span className="segmented" role="group" aria-label="pins">{ENDS.map((e) => (
+        <button key={e} type="button" className={pins[e] ? 'active' : ''} aria-pressed={!!pins[e]} data-end={e}
+          title={pins[e] ? `Unpin the ${END_LABEL[e]}` : `Pin the ${END_LABEL[e]} where it is`}
+          onClick={() => (pins[e] ? st().unpinEnds(id, [e]) : st().pinEnds(id, [e]))}>{END_LABEL[e].replace('right ', 'R ').replace('left ', 'L ')}</button>))}</span>
+      <CommandButton id="stage.pose.unpin" />
+      <span className="hint">{n ? `${n} pinned` : 'none'}</span>
+      <Help text="A pinned hand or foot stays where it is while the hips, the spine or the other limbs turn: its arm or leg bends to keep it there (red rings in Pose). Turn or drag that limb itself and the pin goes with it." />
+    </div>
   )
 }
 
@@ -827,7 +858,7 @@ function Viewport() {
       onPickCamera: (id) => st().selectCamera(id),
       onCameraMoved: (id, pos) => st().moveCamera(id, pos),                                                // D119 (SC1): the camera's body dragged
       onCameraTurned: (id, target, roll) => st().updateCamera(id, { target, roll }),                      // the body turned with the rotate tool
-      onPosed: (id, joints) => st().setJoints(id, joints),
+      onPosed: (id, joints, moved) => st().setJoints(id, joints, moved),
       onDetailError: (_id, message) => useSession.getState().toast(`The Detailed mannequin did not load — the figure stays Simple: ${message}`, 'error'),   // CA1
       onMeshThumb: (assetId, view) => void st().uploadMeshThumbnail(assetId, view),
     })

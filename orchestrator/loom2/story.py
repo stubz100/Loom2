@@ -31,6 +31,7 @@ from .fsio import atomic_move, atomic_write_json, new_id, read_json, read_json_o
 from .models import registry
 from .body import Body
 from .origin import JobOrigin
+from .stages import Pose
 from .shot_recipe import RecipeRun, ShotRecipe, add_run, default_template, stamps_for, step_of
 
 if TYPE_CHECKING:
@@ -183,6 +184,8 @@ class ProfileVersion(BaseModel):
     anim_test_clip_id: str | None = None          # CA0: the last test animation of the reference (a turn on the spot, Wan Animate) — a clip id
     shell_asset_id: str | None = None             # CS2 (D136 U6): a character version's shell — the image → 3D model of its animation reference, the clay
     shell_from: str | None = None                 #   its figures are drawn in (bound to the skeleton); the reference it was made from (a newer one marks it stale)
+    poses: dict[str, Pose] = Field(default_factory=dict)   # AP1b (D141): the character's own poses, fitted to this body in the pose editor —
+                                                  # by name; one named as a starter pose ("crouch") stands in for it on this character's figures
     model_asset_id: str | None = None             # D110 (PS2): a prop version's 3D model (a Catalogue mesh, image → mesh, stood upright)
     model_from: str | None = None                 # D110: the image it was made from (an asset id); another reference now marks it stale
     derived_from: str | None = None
@@ -2025,6 +2028,26 @@ class StoryStore(_ShotMixin, _FlowMixin):
         self.save_profile(p)
         return p
 
+    def set_pose(self, pid: str, vid: str, name: str, pose: Pose | None) -> Profile:
+        """AP1b (D141): one of a character version's own poses saved under `name` (None deletes it). The version's product like its shell:
+        no revision guard, a final version takes it too (a pose fitted later does not change the look)."""
+        cur = self.profile(pid)
+        if cur is None:
+            raise KeyError(pid)
+        if cur.cls != "character":
+            raise ValueError("only a character has poses")
+        name = name.strip()
+        if not name or len(name) > 60:
+            raise ValueError("a pose's name is 1–60 characters")
+        versions = [v.model_copy() for v in cur.versions]
+        v = next((x for x in versions if x.id == vid), None)
+        if v is None:
+            raise KeyError(f"no version {vid!r}")
+        v.poses = {k: x for k, x in v.poses.items() if k != name} | ({name: pose} if pose is not None else {})
+        p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
+        self.save_profile(p)
+        return p
+
     def set_shell(self, pid: str, vid: str, asset_id: str | None, source: str | None) -> Profile:
         """CS2: a character version's shell and the reference it was made from (None clears both). A product of the version like its
         animation reference: no revision guard, a final version takes it too."""
@@ -2100,7 +2123,7 @@ class StoryStore(_ShotMixin, _FlowMixin):
         g = groups.duplicate_group(src.group_id)
         groups.update(g.id, name=f"{cur.name} · v{n}")
         g = groups.groups[g.id]
-        v = ProfileVersion.model_validate({**src.model_dump(include=set(SHEET_FIELDS)), "id": f"v{n}", "group_id": g.id,   # D93 (B4): the sheet copied, a label of its own
+        v = ProfileVersion.model_validate({**src.model_dump(include={*SHEET_FIELDS, "poses"}), "id": f"v{n}", "group_id": g.id,   # D93 (B4): the sheet copied, a label of its own; AP1b: the poses fitted to its body
                                            "hero_asset_id": g.cover_id if src.hero_asset_id else None, "derived_from": src.id})
         p = cur.model_copy(update={"versions": [*cur.versions, v], "current": v.id, "revision": cur.revision + 1, "updated_at": utc_now()})
         check_profile(p)

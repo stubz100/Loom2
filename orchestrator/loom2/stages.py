@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -55,12 +55,18 @@ class Transform(BaseModel):
     scale: list[float] = Field(default_factory=lambda: [1.0, 1.0, 1.0])
 
 
+PinEnd = Literal["r_hand", "l_hand", "r_foot", "l_foot"]
+
+
 class Pose(BaseModel):
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
     preset: str | None = None
     joints: dict[str, list[float]] = Field(default_factory=dict)         # joint name → [x, y, z] degrees (ST2 edits them; ST1 keeps presets)
     extra: dict[str, list[float]] = Field(default_factory=dict)          # CA1: the Detailed level's own bones (fingers, wrists, feet …) → [x, y, z] degrees on their rest
     ground: float = 0.0                            # AP1 (D141): the root dropped this much (metres; < 0 raises it) so the pose stands on its feet
+    # AP1b: the pose editor's pins — a hand or a foot held at [x, y, z] metres in the figure's own space while the rest of the pose changes
+    # (frontend motion/contact.ts)
+    pins: dict[PinEnd, Annotated[list[float], Field(min_length=3, max_length=3)]] = Field(default_factory=dict)
 
 
 class LightSpec(BaseModel):

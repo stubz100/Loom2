@@ -835,6 +835,68 @@ test('posing (P13 / ST2, D81): the Poses tab applies a preset, mirrors it, edits
   await page.screenshot({ path: 'node_modules/.e2e/stage-poses.png' })
 })
 
+test("the pose editor (AP1b, D141): a crouch stands on the character's feet, the feet pinned stay as the hips turn, Save for ‹character› keeps it in Cast, the crouch preset then takes it, the bench lists it", async ({ page }) => {
+  test.setTimeout(90_000)
+  const name = `Mara ${Date.now().toString(36)}`
+  type Pose = { preset: string; joints: Record<string, number[]>; ground: number; pins: Record<string, number[]> }
+  type ProfileLite = { id: string; versions: { id: string; poses: Record<string, Pose> }[] }
+  const p = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', appearance: `${name}, a fisher` })
+  const st = await api<{ id: string } & Record<string, unknown>>('POST', '/stages', { name: `Quay ${name}` })
+  await api('PUT', `/stages/${st.id}`, { ...st, objects: [{ id: 'obj_mara', kind: 'mannequin', name, preset: 'adult', profile_id: p.id, version: null, body: null }] })
+  const figure = async () => (await api<{ objects: { pose: Pose | null }[] }>('GET', `/stages/${st.id}`)).objects[0].pose
+  await openApp(page, { suite: 'stage' })
+  await openAnimate(page, 'Clay')
+  await page.locator('#anim-sec-shot .stage-picker select').selectOption({ label: `Quay ${name}` })
+  await page.locator('.outl-row[data-row="object"]').filter({ has: page.locator('.name', { hasText: name }) }).click()
+  await openSection(page, 'Motion')
+  await libAdd(page, 'poses', 'crouch')
+  await expect.poll(async () => (await figure())?.ground ?? 0, { timeout: 10_000 }).toBeGreaterThan(0.05)    // AP1a: the crouch's drop onto its feet
+  // the pins: both feet from the Pins row's chips
+  const pins = page.locator('.lib-row[data-group="pins"]')
+  await pins.locator('button[data-end="r_foot"]').click()
+  await pins.locator('button[data-end="l_foot"]').click()
+  await expect(pins.locator('button[aria-pressed="true"]')).toHaveCount(2)
+  await expect.poll(async () => Object.keys((await figure())?.pins ?? {}).sort().join(), { timeout: 10_000 }).toBe('l_foot,r_foot')
+  await page.locator('.pose-pill button').click()                                                           // Pose: the rings at the pins with the pickers
+  const at = async (what: string) => (await page.evaluate((w) => (window as unknown as { __loom2Stage: { screenOf: (at: string) => { x: number; y: number } | null } }).__loom2Stage.screenOf(w), what))!
+  const foot = await at('r_leg'), hip0 = (await figure())!.joints.r_hip
+  // the hips turned by number: the pinned legs bend to keep the feet where they were
+  await page.locator('.stage-panel select').last().selectOption('root')
+  const y = page.locator('#anim-sec-motion .stage-panel .vec input').nth(1)
+  await y.fill('30'); await y.dispatchEvent('change')
+  await expect.poll(async () => (await figure())?.joints.root?.[1], { timeout: 10_000 }).toBe(30)
+  expect((await figure())!.joints.r_hip).not.toEqual(hip0)
+  await expect.poll(async () => { const now = await at('r_leg'); return Math.hypot(now.x - foot.x, now.y - foot.y) }, { timeout: 5_000 }).toBeLessThan(3)
+  // a look: the figure framed from its right-click, the joint let go (the gizmo away), the rings at the pinned feet
+  await page.locator('.stage-panel select').last().selectOption('')
+  await page.locator('.outl-row[data-row="object"]').filter({ has: page.locator('.name', { hasText: name }) }).click({ button: 'right' })
+  await page.locator('.ctx-menu button.item', { hasText: 'Frame the selection' }).click()
+  await page.waitForTimeout(600)
+  await page.screenshot({ path: 'node_modules/.e2e/ap1b-pins.png' })
+  await page.locator('.lib-row[data-group="pins"]').scrollIntoViewIfNeeded()
+  await page.screenshot({ path: 'node_modules/.e2e/ap1b-pins-row.png' })
+  // Save for ‹character›: the character's own crouch
+  await page.locator('.stage-panel button', { hasText: `Save for ${name}…` }).click()
+  const dialog = page.locator('.modal.ask')
+  await expect(dialog.locator('input')).toHaveValue('crouch')
+  await dialog.locator('button.primary').click()
+  await expect.poll(async () => (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0].poses.crouch?.joints.root?.[1] ?? null, { timeout: 10_000 }).toBe(30)
+  // a stand, then the crouch preset again: on this character it is its own
+  await page.locator('.stage-panel button', { hasText: /^Reset$/ }).click()
+  await expect.poll(async () => Object.keys((await figure())?.pins ?? {}).length, { timeout: 10_000 }).toBe(0)
+  await libAdd(page, 'poses', 'crouch')
+  await expect.poll(async () => (await figure())?.joints.root?.[1], { timeout: 10_000 }).toBe(30)
+  expect(Object.keys((await figure())!.pins).sort()).toEqual(['l_foot', 'r_foot'])
+  // Cast's bench lists the character's poses
+  await openApp(page, { suite: 'story', tab: 'cast' })
+  await page.locator(`.profile-row[data-id="${p.id}"]`).click()
+  await page.locator('.cast-body button', { hasText: 'body' }).click()                                    // a body of its own (the default adult's)
+  await page.locator('.cast-body button', { hasText: /^Skeleton…/ }).click()
+  await expect(page.locator('.skel-parts [data-group="poses"] [data-pose="crouch"]')).toContainText('its starter pose · 2 pinned')
+  await page.locator('.skel-parts [data-group="poses"]').scrollIntoViewIfNeeded()
+  await page.screenshot({ path: 'node_modules/.e2e/ap1b-bench-poses.png' })
+})
+
 test('a shot (P13 / ST3, D81): the Shot tab renders the five passes as stage-pass assets on the stage\'s album page, then the fake engine makes a shot with lineage to the clay pass', async ({ page }) => {
   await openApp(page, { suite: 'stage' })
   await page.locator('.placeholder button', { hasText: /^New stage/ }).click()

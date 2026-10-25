@@ -19,7 +19,7 @@ from ..clips import ClipStore
 from ..loras import LoraRegistry, publish, unpublish
 from ..library import Library, LibraryStore, StaleLibrary
 from ..schemas import Deleted, ProfileAdded, LibraryChange, LibraryRemoved, Expanded, FlowOut, FlowProblems, LipsyncQueued, LoraCheckQueued, LoraRecordList, LoraRecordOut, NodeShot, ProfileList, SceneList, SceneOut, ShotCards, ShotList, ShotTemplateList, TrainQueued, TtsQueued, VoiceList, VoiceRecordOut
-from ..stages import StageStore, encode_guide
+from ..stages import Pose, StageStore, encode_guide
 from ..shot_recipe import TEMPLATES, StampReader, Template, recipe_state, rerun_recipe, stale_plan, used_run
 from ..shot_graph import ShotGraph, clay_rows, final_for, shot_graph
 from ..story import FOR_SHOT, NODE_TYPES, VISUAL_TYPES, StaleScenes, CastUse, cast_uses, body_fit_origin, model_source, prop_model_origin, shell_origin, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
@@ -540,6 +540,30 @@ async def profile_shell_make(svc: Svc, pid: str, vid: str):
         raise HTTPException(422, str(e))
     await svc.queue.flush()
     return {"job_id": jobs[0].id, "source_asset_id": v.anim_ref_asset_id, "model_id": spec.id}
+
+
+@router.put("/story/profiles/{pid}/versions/{vid}/poses/{name}", response_model=Profile)
+async def profile_pose_put(svc: Svc, pid: str, vid: str, name: str, body: Pose):
+    """AP1b (D141): *Save for ‹character›* — a pose fitted in the pose editor kept in the character version's own library (a starter
+    pose's name makes it stand in for that preset on the character's figures)."""
+    return await _pose_set(svc, pid, vid, name, body)
+
+
+@router.delete("/story/profiles/{pid}/versions/{vid}/poses/{name}", response_model=Profile)
+async def profile_pose_delete(svc: Svc, pid: str, vid: str, name: str):
+    return await _pose_set(svc, pid, vid, name, None)
+
+
+async def _pose_set(svc, pid: str, vid: str, name: str, pose: Pose | None):
+    ws, _, _ = svc.require_project()
+    try:
+        p = await asyncio.to_thread(StoryStore(ws).set_pose, pid, vid, name, pose)
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0]))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    _changed(svc, p)
+    return p.model_dump()
 
 
 class ShellPick(BaseModel):

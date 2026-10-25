@@ -9696,3 +9696,53 @@ on any skeleton (the preset itself): it goes to AP1's list of presets to correct
   foot more than 0.3 cm under the floor. The jogs' 1–5 cm are flight frames the stance classifier calls planted.
 - Tests: `contact.test.ts` 2 (a crouch dropped 10 cm onto its feet, a sit raised, a stand untouched; a held crouch's clip lowered onto
   both feet). Totals: offline 601 passed, agents_check, model_literals_check and settings audit clean, Vitest 515 + 3 skipped, typecheck, lint (0 errors, 79 warnings) and build clean, e2e full 67/67 and open 67/67.
+
+## 2026-10-25 15:09 — AP1b built: the pose editor's pins and a character's own poses (D141; D137 stage 3 done)
+
+- **Pins** (`stage/motion/contact.ts`, stage `Pose.pins`: `r_hand`, `l_hand`, `r_foot`, `l_foot` → [x, y, z] metres):
+  - A pinned hand or foot is held at a point in the figure's own space. That is the root joint's parent's space (Stage's holder, with the
+    object's transform), so a pin moves with the figure but not with its hips.
+  - After every pose edit (`pinPose`), the pinned limbs bend back onto their pins.
+  - The limb the author turned or dragged takes its pin along. The engine says which limb: the turned joint's, or the dragged IK handle's
+    chain. For the Inspector's numbers it is read from the joints that changed.
+  - While a joint's gizmo turns, `holdPins` keeps the pins on the live figure.
+- **The IK keeps the limb's twist.** `reach` opens or closes the knee or elbow in the limb's own plane (law of cosines). It then swings
+  the hip or shoulder by the least turn that puts the end on the target. A straight limb bends about its hinge: knees forward, elbows
+  back.
+  - Why not `ik.solveTwoBone`: it rebuilds the upper bone's frame from a pole. A knee bowing forward came out as the thigh turned half
+    round, so the Detailed foot pointed back; with its own leg pole, a dropped figure's knees bowed backward.
+  - AP1a's leg IK now runs through `reach` too. E39 measured again with the module (Vite on 1420, E36's project): every stance within
+    0.4 cm and no foot under the floor, the same as AP1a's run (the jogs' flight frames aside).
+- **In Animate › Clay:**
+  - The Poses panel's *Pins* row: a toggle per hand and foot, *Unpin*, the count, a ?.
+  - The figure's right-click ▸ *Pins*: *Pin the feet*, *Pin the hands*, *Unpin*.
+  - Red rings at the pins in Pose. They are drawn with the pickers: on the selected figure only, never in a pass.
+  - Mirror mirrors the pins; a preset clears them; keys carry them.
+  - Fixed on the way: a transform edit keyed on a keyed figure kept neither AP1a's drop nor the pins.
+- ***Save for ‹character›…*** (the Poses panel and the right-click, on a bound figure):
+  - `PUT` / `DELETE /story/profiles/{pid}/versions/{vid}/poses/{name}` into `ProfileVersion.poses`: the joints, the Detailed bones, the
+    drop and the pins.
+  - A final version takes it too, and a new version copies them.
+  - A starter pose's name makes that preset give the character's own on its figures; the panel says so.
+  - Other names are tiles beside the presets, with *Delete*.
+- **Cast's bench** lists the version's poses: *its starter pose* or *from ‹preset›*, the pins' count, and a delete. Editing in the bench
+  waits for CW3.
+- **Not built** (06 §2.9 as built):
+  - contacts to props, other figures and the gaze;
+  - clips falling back on the character's poses;
+  - an automatic arm clearance (E39's sitting hands inside a broad shell are set with hand pins).
+- **Tests:**
+  - `pins.test.ts` 6:
+    - the ends in the figure's space;
+    - feet and hands held within 2 mm through a 12 cm drop, a 25° turn of the hips and a 30° lean, with knees forward, elbows back and
+      no thigh turned;
+    - the worked limb's pin goes along;
+    - mirror;
+    - the store's pin, hold, mirror, unpin and a preset clearing;
+    - the character's own crouch for the preset, and *Save for ‹character›*.
+  - `test_character_poses_ap1.py` 2; the routes snapshot +2.
+  - e2e *the pose editor*: a crouch on its feet; both feet pinned stay within 3 px while the hips turn 30°; *Save for ‹character›*; the
+    crouch preset then gives Mara's own; the bench lists it.
+- **Totals:** offline 603 passed; agents_check, model_literals_check and the settings audit clean; Vitest 521 + 3 skipped; typecheck,
+  lint (0 errors, 79 warnings) and build clean; e2e full 68/68 and open 68/68.
+- Screenshots: `.docs/proto01_UIcast/img/ap1b-pins.jpg`, `ap1b-pins-row.jpg`, `ap1b-bench-poses.jpg`.

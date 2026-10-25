@@ -3257,6 +3257,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/profiles/{pid}/versions/{vid}/poses/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Profile Pose Put
+         * @description AP1b (D141): *Save for ‹character›* — a pose fitted in the pose editor kept in the character version's own library (a starter
+         *     pose's name makes it stand in for that preset on the character's figures).
+         */
+        put: operations["profile_pose_put_story_profiles__pid__versions__vid__poses__name__put"];
+        post?: never;
+        /** Profile Pose Delete */
+        delete: operations["profile_pose_delete_story_profiles__pid__versions__vid__poses__name__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/profiles/{pid}/versions/{vid}/shell": {
         parameters: {
             query?: never;
@@ -9539,7 +9561,29 @@ export interface components {
             scene_plate?: string | null;
         };
         /** Pose */
-        Pose: {
+        "Pose-Input": {
+            /** Extra */
+            extra?: {
+                [key: string]: number[];
+            };
+            /**
+             * Ground
+             * @default 0
+             */
+            ground?: number;
+            /** Joints */
+            joints?: {
+                [key: string]: number[];
+            };
+            /** Pins */
+            pins?: {
+                [key: string]: number[];
+            };
+            /** Preset */
+            preset?: string | null;
+        };
+        /** Pose */
+        "Pose-Output": {
             /** Extra */
             extra: {
                 [key: string]: number[];
@@ -9551,6 +9595,10 @@ export interface components {
             ground: number;
             /** Joints */
             joints: {
+                [key: string]: number[];
+            };
+            /** Pins */
+            pins: {
                 [key: string]: number[];
             };
             /** Preset */
@@ -9857,6 +9905,10 @@ export interface components {
              * @default
              */
             outfit: string;
+            /** Poses */
+            poses: {
+                [key: string]: components["schemas"]["Pose-Output"];
+            };
             /** Shell Asset Id */
             shell_asset_id: string | null;
             /** Shell From */
@@ -11460,7 +11512,7 @@ export interface components {
             plate_asset_id: string | null;
             /** Plate Camera Id */
             plate_camera_id: string | null;
-            pose: components["schemas"]["Pose"] | null;
+            pose: components["schemas"]["Pose-Output"] | null;
             /** Preset */
             preset: string | null;
             /** Profile Id */
@@ -19278,6 +19330,76 @@ export interface operations {
                 "application/json": components["schemas"]["PropModelImport"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Profile"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_pose_put_story_profiles__pid__versions__vid__poses__name__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Pose-Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Profile"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_pose_delete_story_profiles__pid__versions__vid__poses__name__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

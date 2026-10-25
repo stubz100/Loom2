@@ -81,6 +81,8 @@
 .shot-tab .ref-slots.over { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius); }
 .shot-tab .shot-prompt { width: 100%; resize: vertical; min-height: 54px; font: inherit; }
 .shot-tab .segmented button.active { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--fg); }
+.lib-row[data-group="pins"] .segmented button { white-space: nowrap; }
+.lib-row[data-group="pins"] .segmented button.active { background: color-mix(in srgb, #ff5a6e 24%, transparent); color: var(--fg); }   /* AP1b: the pins' rings are this red */
 .shot-tab .angle-count { display: inline-flex; align-items: center; gap: 8px; }
 .shot-tab .prompt-preview { font-size: 11px; line-height: 1.35; max-height: 80px; overflow: auto; }
 .shot-tab .shot-results { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }

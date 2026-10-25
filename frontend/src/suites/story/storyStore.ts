@@ -120,6 +120,9 @@ export interface StoryState {
   /** CS2: the character's shell — made from its animation reference (a background job), or picked / cleared. */
   makeShell: () => Promise<void>
   setShell: (assetId: string | null) => Promise<void>
+  /** AP1b (D141): a character version's own pose saved (Animate's *Save for ‹character›*) or deleted; true when it landed. */
+  saveCharacterPose: (pid: string, vid: string, name: string, pose: NonNullable<ProfileVersion['poses']>[string]) => Promise<boolean>
+  deleteCharacterPose: (pid: string, vid: string, name: string) => Promise<boolean>
   /** LT2 (18 §3a / §3c): the project's trained LoRAs and the options the next training job runs with. */
   loras: LoraRecord[]
   trainOpts: TrainOpts
@@ -628,6 +631,14 @@ export const useStory = create<StoryState>()((set, get) => {
       const p = get().profile(); const v = get().version(); if (!p || !v) return
       try { replaceProfile(await unwrap(http.PUT('/story/profiles/{pid}/versions/{vid}/shell', { params: { path: { pid: p.id, vid: v.id } }, body: { asset_id: assetId } }))) }
       catch (e) { toast(`Shell: ${detail(e)}`) }
+    },
+    saveCharacterPose: async (pid, vid, name, pose) => {
+      try { replaceProfile(await unwrap(http.PUT('/story/profiles/{pid}/versions/{vid}/poses/{name}', { params: { path: { pid, vid, name } }, body: pose }))); return true }
+      catch (e) { toast(`Save the pose: ${detail(e)}`); return false }
+    },
+    deleteCharacterPose: async (pid, vid, name) => {
+      try { replaceProfile(await unwrap(http.DELETE('/story/profiles/{pid}/versions/{vid}/poses/{name}', { params: { path: { pid, vid, name } } }))); return true }
+      catch (e) { toast(`Delete the pose: ${detail(e)}`); return false }
     },
     setModel: async (assetId) => {
       const p = get().profile(); const v = get().version(); if (!p || !v) return

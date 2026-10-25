@@ -13222,7 +13222,7 @@
         "title": "PlateQueued",
         "type": "object"
       },
-      "Pose": {
+      "Pose-Input": {
         "properties": {
           "extra": {
             "additionalProperties": {
@@ -13249,6 +13249,88 @@
             "title": "Joints",
             "type": "object"
           },
+          "pins": {
+            "additionalProperties": {
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": "array"
+            },
+            "propertyNames": {
+              "enum": [
+                "r_hand",
+                "l_hand",
+                "r_foot",
+                "l_foot"
+              ]
+            },
+            "title": "Pins",
+            "type": "object"
+          },
+          "preset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preset"
+          }
+        },
+        "title": "Pose",
+        "type": "object"
+      },
+      "Pose-Output": {
+        "properties": {
+          "extra": {
+            "additionalProperties": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "title": "Extra",
+            "type": "object"
+          },
+          "ground": {
+            "default": 0.0,
+            "title": "Ground",
+            "type": "number"
+          },
+          "joints": {
+            "additionalProperties": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "title": "Joints",
+            "type": "object"
+          },
+          "pins": {
+            "additionalProperties": {
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": "array"
+            },
+            "propertyNames": {
+              "enum": [
+                "r_hand",
+                "l_hand",
+                "r_foot",
+                "l_foot"
+              ]
+            },
+            "title": "Pins",
+            "type": "object"
+          },
           "preset": {
             "anyOf": [
               {
@@ -13265,7 +13347,8 @@
           "preset",
           "joints",
           "extra",
-          "ground"
+          "ground",
+          "pins"
         ],
         "title": "Pose",
         "type": "object"
@@ -14043,6 +14126,13 @@
             "title": "Outfit",
             "type": "string"
           },
+          "poses": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Pose-Output"
+            },
+            "title": "Poses",
+            "type": "object"
+          },
           "shell_asset_id": {
             "anyOf": [
               {
@@ -14108,6 +14198,7 @@
           "anim_test_clip_id",
           "shell_asset_id",
           "shell_from",
+          "poses",
           "model_asset_id",
           "model_from",
           "derived_from",
@@ -18091,7 +18182,7 @@
           "pose": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Pose"
+                "$ref": "#/components/schemas/Pose-Output"
               },
               {
                 "type": "null"
@@ -31365,6 +31456,135 @@
           }
         },
         "summary": "Profile Model Import",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/profiles/{pid}/versions/{vid}/poses/{name}": {
+      "delete": {
+        "operationId": "profile_pose_delete_story_profiles__pid__versions__vid__poses__name__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Pose Delete",
+        "tags": [
+          "story"
+        ]
+      },
+      "put": {
+        "description": "AP1b (D141): *Save for ‹character›* — a pose fitted in the pose editor kept in the character version's own library (a starter\npose's name makes it stand in for that preset on the character's figures).",
+        "operationId": "profile_pose_put_story_profiles__pid__versions__vid__poses__name__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Pose-Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Pose Put",
         "tags": [
           "story"
         ]

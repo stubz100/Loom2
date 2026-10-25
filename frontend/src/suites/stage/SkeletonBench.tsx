@@ -13,15 +13,15 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Lock, LockOpen } from 'lucide-react'
+import { Lock, LockOpen, Trash2 } from 'lucide-react'
 import { api } from '../../api/client'
 import type { Profile, StageCamera, StageDoc, StageObject } from '../../api/types'
 import { CommandButton } from '../../frame/CommandButton'
 import { Help } from '../../frame/Help'
-import { useSession } from '../../store/session'
+import { askConfirm, useSession } from '../../store/session'
 import { shellBlocked, shellFromArmsDown, useStory, versionPointsOfShell } from '../story/storyStore'
 import { DEFAULT_BODY, type Body } from './body'
-import { JOINTS, mannequin, POSES, type Joint } from './builders'
+import { JOINTS, mannequin, POSE_NAMES, POSES, type Joint } from './builders'
 import { HAND_PRESETS, makeDetailed } from './detailed'
 import { bindProxy, insideShell, setShellPoints, stanceOf } from './proxy'
 import { COCO, cropOf, defaultOf, disagreements, dragFactor, lengthCm, outside, pictureMap, ROWS, seen, setLocked, unlock, type Points, type RowKey, type XY } from './skeleton'
@@ -479,6 +479,18 @@ export function SkeletonParts() {
           <div key={k} className="skel-row"><span>{k}</span>
             <input type="range" min={lo} max={hi} step={step} value={b.hand_rest[k]} disabled={!open} aria-label={`the hand's ${k}`} onChange={(e) => set({ hand_rest: { ...b.hand_rest, [k]: Number(e.target.value) } })} />
             <span className="mono">{unit === '×' ? `×${b.hand_rest[k].toFixed(2)}` : `${Math.round(b.hand_rest[k])}°`}</span><span /></div>))}
+      </div>
+      <div className="skel-group" data-group="poses">
+        <div className="grp">Poses <Help text={`${p.name}'s own poses, fitted to this body in Animate › Clay: Pose the figure, pin what must stay, then Save for ${p.name}… One named as a starter pose (crouch, sit …) stands in for it on ${p.name}'s figures.`} /></div>
+        {Object.keys(v.poses ?? {}).length ? Object.entries(v.poses).map(([n, x]) => {
+          const pinned = Object.keys(x.pins ?? {}).length
+          return (
+            <div key={n} className="skel-row" data-pose={n}><span>{n}</span>
+              <span className="hint">{POSE_NAMES.includes(n) ? 'its starter pose' : `from ${x.preset ?? 'stand'}`}{pinned ? ` · ${pinned} pinned` : ''}</span><span />
+              <button type="button" className="quiet danger" title={`Delete ${p.name}'s "${n}"`}
+                onClick={() => void askConfirm({ title: `Delete ${p.name}'s "${n}"?`, okLabel: 'Delete', danger: true }).then((ok) => { if (ok) void useStory.getState().deleteCharacterPose(p.id, v.id, n) })}><Trash2 size={12} /></button>
+            </div>)
+        }) : <div className="hint">none yet</div>}
       </div>
       {first ? <div className="skel-status warn">{first.label} {Number(b[first.factor]) > first.band[1] ? 'long' : 'short'} for an adult — check its points</div> : <div className="skel-status">every part in an adult's range</div>}
       {others.length > 0 && open && <div className="kv"><span>copy from</span>

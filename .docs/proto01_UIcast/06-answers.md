@@ -184,6 +184,30 @@ the hands off the hips and the head somewhere else.
   sliding, contact error and limbs passing through the body. It decides whether contacts and IK are enough, or whether clips need a
   retargeting model (licence read against D17 first).
 
+**As built (AP1, 2026-10-25; E39 → D141).**
+
+- **Feet on the floor (AP1a).** Every pose preset and every clip put on a figure stands on that figure's feet. A preset gets the drop that
+  sets its lower foot on the floor (a pose's `ground`). A clip gets the vertical contact through each stance. Either way, a foot still
+  under the floor is bent up by leg IK.
+- **The pose editor is Animate's Pose.** The pill over the viewport, or the figure's right-click, opens it on the figure's shell; the
+  joints keep their gizmos.
+- **The contacts are pins.** A pinned hand or foot is held at a point in the figure's own space; a red ring marks it in Pose.
+  - When the hips, the spine or another limb turns, the pinned limbs bend back onto their pins.
+  - The limb the author turns or drags takes its pin along.
+  - The IK keeps the limb's twist: knees bend forward, elbows back.
+- **Where to pin.** The Poses panel has a *Pins* row: a toggle per hand and foot, and *Unpin*. *Pin the feet* and *Pin the hands* are on
+  the right-click. Mirror swaps the pins; a preset clears them.
+- ***Save for ‹character›…*** keeps the pose on the character's Cast version, in `ProfileVersion.poses`, with its drop and its pins.
+  - A new version takes the poses with it.
+  - A pose saved under a starter pose's name (*crouch*) is what that preset gives on the character's figures.
+  - The character's other poses appear beside the presets.
+- **Cast's bench lists the library.** Each pose can be deleted there. Editing a pose in the bench waits for CW3, which puts the bench
+  on Stage's engine.
+- **Not built.**
+  - Contacts to a prop or another figure, and the gaze: a pin holds a point in the figure's space.
+  - Clips falling back on the character's poses: the contact fits clips frame by frame.
+  - An automatic arm clearance: the sitting hands E39 found inside a broad shell are set with hand pins.
+
 ### 2.10 Skeleton changes in a shot are deliberate (U19)
 
 **The skeleton can be keyed.** A **skeleton key** on a figure's timeline track says: from this frame, the figure's body is this one,
@@ -250,6 +274,7 @@ About 9½ weeks in all, the spikes included.
 | **D140 · The fit on an A-pose, the bench in two panes** | 2026-10-25: the fit (and *Fit again*) only on an A-pose — an arms-down read fits nothing; the prompt asks for open hands, the wrists straight; the whole hand measured and not kept (SDPose reads it 12–24 % short of the palm's estimate); *From a picture ▾* reads the rest hand from a reference-set picture; the figure pane folded into the reference pane (the shell in x-ray and the skeleton over the picture, *side* in 3D); a shell placed by its picture again (it lies on it; 82/96 joints inside). Rig `cs3_acceptance.py --fingers` | journal 2026-10-25 13:50; `img/d140-*.jpg` |
 | **E39 · Poses and clips on characters' skeletons** | 2026-10-25 → D141: ten presets and ten starter clips on seven skeletons; slides 0 cm; the deep knee bends miss the floor by 3–7 cm already on the default adult, proportions move it; a vertical contact plus leg IK puts every foot within 0.3 cm; hands through the body only sitting on broad or dressed shells — contacts and IK, no retargeting model | journal 2026-10-25 14:05; `img/e39-*.jpg` |
 | **CS3 · The shell in the shots, the skeleton over time** | the passes from the shell, the pose pass's landmarks (§2.5); skeleton keys on the timeline, *the skeleton changed* with its two choices, the guide's hash per segment (§2.10) | yes (rig) | 4 |
+| **AP1 · Feet on the floor, the pose editor** | 2026-10-25 (§2.9 as built): AP1a — presets and clips on the character's feet (the pose's drop, the stances' vertical contact, leg IK); AP1b — pins on hands and feet held by twist-keeping two-bone IK in the figure's own space, red rings in Pose, the Pins row; *Save for ‹character›* into the Cast version's own poses, a starter pose's name standing in for the preset; the bench lists them | no | 1 |
 | **E39 → AP1 · The pose editor** | §2.9: E39 first; then contacts and IK on every pose and clip, the pose editor in Animate › Clay and Cast's bench, the character's pose library | yes (rig) | 1.5 + 4 |
 | **CW1 · The ideas store** | §2.1: the store, the Ideas board, *Prototype ▸* (copy, U2) with a name from the prompt (U3), variants, *Make the clay ▶* on a variant, *Keep ▶* | no | 3 |
 | **CW2 · Lineage from Image** | §2.2: `for_idea` on results, *Made for this idea*, *Add as a variant* | no | 1 |

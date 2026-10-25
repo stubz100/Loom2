@@ -5,11 +5,13 @@
 //   · a clip: through each stance the figure raised or lowered so the planted foot's lowest point meets the floor (its standing height),
 //     eased between stances; then a foot still under the floor (a crouch's second foot) bent up onto it by two-bone IK (ik.ts, as Stage's
 //     IK handle bends a leg, the knee keeping its way);
-//   · a pose: the drop that sets its lower foot on the floor, the other bent up the same way.
+//   · a pose: the drop that sets its lower foot on the floor, the other bent up the same way;
+//   · AP1b, the pose editor's pins: a hand or a foot pinned where it is (the figure's own space) stays there while the rest of the pose
+//     changes — its limb bent onto the pin by the same IK — and goes with the limb the author turns or drags.
 import * as THREE from 'three'
 import type { Body } from '../body'
-import { applyPose, mannequin, POSES, type Mannequin } from '../builders'
-import { solveTwoBone } from '../ik'
+import { applyPose, mannequin, POSES, type Joint, type Mannequin } from '../builders'
+import { CHAINS, eulerDeg, figureChain, type Chain } from '../ik'
 import { stance } from './footlock'
 import type { MotionFrame } from './retarget'
 
@@ -17,7 +19,6 @@ const EASE = 2                                                              // f
 const UNDER_M = 0.003                                                       // a foot this far under the floor is bent up onto it
 
 const ankleY = (fig: Mannequin, side: 'r' | 'l') => new THREE.Vector3(0, -fig.limbs.shin, 0).applyMatrix4(fig.joints[side === 'r' ? 'r_knee' : 'l_knee'].matrixWorld).y
-const rad = THREE.MathUtils.degToRad
 
 function posed(fig: Mannequin, joints: Record<string, number[]> | undefined, offset: [number, number, number], preset = 'stand'): void {
   applyPose(fig.joints, POSES[preset] ?? POSES.stand, joints)
@@ -31,16 +32,46 @@ function standing(fig: Mannequin): { r: number; l: number } {
   return { r: ankleY(fig, 'r'), l: ankleY(fig, 'l') }
 }
 
+// The figure's own space: its root joint's parent's (Stage's holder — the object's transform; the world for a figure off-screen), the floor
+// at y = 0. A pin lives there, so it stays put while the hips turn or drop.
+const toWorld = (fig: Mannequin, v: THREE.Vector3) => (fig.root.parent ? fig.root.parent.localToWorld(v) : v)
+const toOwn = (fig: Mannequin, v: THREE.Vector3) => (fig.root.parent ? fig.root.parent.worldToLocal(v) : v)
+
+// a straight limb bends about its hinge (the lower joint's X) this way: a knee's shin back (+X, the crouch's), an elbow's forearm forward (−X)
+const HINGE: Record<Chain, number> = { r_arm: -1, l_arm: -1, r_leg: 1, l_leg: 1 }
+
+/** A limb bent so its end (the wrist, the ankle) reaches `target` (the figure's own space; out of reach: straight toward it). The middle joint
+ *  opens or closes in the limb's own plane (law of cosines), then the upper joint swings by the least turn onto the target — the limb keeps
+ *  its twist and its knee or elbow its way. The turns written on the figure. */
+function reach(fig: Mannequin, chain: Chain, target: THREE.Vector3): void {
+  const c = CHAINS[chain], upper = fig.joints[c.upper], lower = fig.joints[c.lower], b = figureChain(fig.limbs, chain).b
+  fig.root.updateWorldMatrix(true, true)
+  const end = () => new THREE.Vector3(0, -b, 0).applyMatrix4(lower.matrixWorld)
+  const turnWorld = (o: THREE.Object3D, q: THREE.Quaternion) => {             // a world turn about the joint's own position
+    const parentQ = o.parent!.getWorldQuaternion(new THREE.Quaternion())
+    o.quaternion.copy(parentQ.clone().invert().multiply(q).multiply(parentQ).multiply(o.quaternion))
+    o.updateMatrixWorld(true)
+  }
+  const T = toWorld(fig, target.clone())
+  const A = upper.getWorldPosition(new THREE.Vector3()), B = lower.getWorldPosition(new THREE.Vector3()), C = end()
+  const la = A.distanceTo(B), lb = B.distanceTo(C)
+  const d = THREE.MathUtils.clamp(A.distanceTo(T), Math.abs(la - lb) + 1e-4, la + lb - 1e-4)
+  const u = A.clone().sub(B).normalize(), w = C.clone().sub(B).normalize()
+  const now = u.angleTo(w), want = Math.acos(THREE.MathUtils.clamp((la * la + lb * lb - d * d) / (2 * la * lb), -1, 1))
+  let axis = new THREE.Vector3().crossVectors(u, w)                            // turning the lower bone about u × w opens the joint
+  if (axis.length() < 1e-4) axis = new THREE.Vector3(-HINGE[chain], 0, 0).transformDirection(lower.matrixWorld)   // straight: about its hinge
+  turnWorld(lower, new THREE.Quaternion().setFromAxisAngle(axis.normalize(), want - now))
+  const from = end().sub(A).normalize(), to = T.clone().sub(A).normalize()
+  turnWorld(upper, new THREE.Quaternion().setFromUnitVectors(from, to))
+  fig.root.updateMatrixWorld(true)
+}
+const turns = (fig: Mannequin, j: Joint) => eulerDeg(fig.joints[j].quaternion)
+
 /** A leg bent so its ankle is at height `y`, its knee bending the way it already does; the hip's and knee's turns (degrees YXZ). */
 function legTo(fig: Mannequin, side: 'r' | 'l', y: number): { hip: number[]; knee: number[] } {
-  const upper = fig.joints[side === 'r' ? 'r_hip' : 'l_hip'], lower = fig.joints[side === 'r' ? 'r_knee' : 'l_knee'], parent = upper.parent!
-  const ankle = new THREE.Vector3(0, -fig.limbs.shin, 0).applyMatrix4(lower.matrixWorld).setY(y)
-  const target = parent.worldToLocal(ankle.clone()), knee = parent.worldToLocal(lower.getWorldPosition(new THREE.Vector3()))
-  const bend = knee.clone().sub(upper.position.clone().add(target).multiplyScalar(0.5))
-  const s = solveTwoBone(upper.position, target, fig.limbs.thigh, fig.limbs.shin, bend.lengthSq() > 1e-8 ? bend : new THREE.Vector3(0, 0, 1))
-  upper.rotation.set(rad(s.upper[0]), rad(s.upper[1]), rad(s.upper[2]), 'YXZ'); lower.rotation.set(rad(s.lower[0]), rad(s.lower[1]), rad(s.lower[2]), 'YXZ')
-  fig.root.updateMatrixWorld(true)
-  return { hip: s.upper.map((v) => Math.round(v * 100) / 100), knee: s.lower.map((v) => Math.round(v * 100) / 100) }
+  const ankle = new THREE.Vector3(0, -fig.limbs.shin, 0).applyMatrix4(fig.joints[side === 'r' ? 'r_knee' : 'l_knee'].matrixWorld).setY(y)
+  reach(fig, side === 'r' ? 'r_leg' : 'l_leg', toOwn(fig, ankle))
+  return { hip: turns(fig, side === 'r' ? 'r_hip' : 'l_hip'), knee: turns(fig, side === 'r' ? 'r_knee' : 'l_knee') }
 }
 
 /** A clip's frames with their feet on the floor: the height through each stance, a foot under the floor bent up (the foot lock first). */
@@ -93,4 +124,64 @@ export function poseContact(preset: string, joints: Record<string, number[]> | u
     }
   }
   return { ground: Math.round(low * 1e4) / 1e4, joints: out }
+}
+
+// ---- AP1b: the pose editor's pins ------------------------------------------------------------------------------------------------------
+export type End = 'r_hand' | 'l_hand' | 'r_foot' | 'l_foot'
+export const ENDS: readonly End[] = ['r_hand', 'l_hand', 'r_foot', 'l_foot']
+export const END_CHAIN: Record<End, Chain> = { r_hand: 'r_arm', l_hand: 'l_arm', r_foot: 'r_leg', l_foot: 'l_leg' }
+/** The pinned ends: where each is held, [x, y, z] metres in the figure's own space (its transform aside: a pin moves with the figure). */
+export type Pins = Partial<Record<End, number[]>>
+/** The limb a joint belongs to (null for the root, spine, neck and head). */
+export function chainOf(joint: string | null | undefined): Chain | null {
+  return (Object.keys(CHAINS) as Chain[]).find((c) => CHAINS[c].upper === joint || CHAINS[c].lower === joint) ?? null
+}
+
+/** An end's position in the figure's own space (the wrist, the ankle). */
+function endAt(fig: Mannequin, end: End): THREE.Vector3 {
+  const c = figureChain(fig.limbs, END_CHAIN[end])
+  return toOwn(fig, new THREE.Vector3(0, -c.b, 0).applyMatrix4(fig.joints[c.lower].matrixWorld))
+}
+const r4 = (v: THREE.Vector3) => [v.x, v.y, v.z].map((x) => Math.round(x * 1e4) / 1e4)
+
+/** On a live figure (Stage's, while a joint turns): every pinned limb but `except` bent back onto its pin. */
+export function holdPins(fig: Mannequin, pins: Pins | null | undefined, except?: Chain | null): void {
+  fig.root.updateWorldMatrix(true, true)
+  for (const end of ENDS) { const p = pins?.[end]; if (p && END_CHAIN[end] !== except) reach(fig, END_CHAIN[end], new THREE.Vector3(p[0], p[1], p[2])) }
+}
+
+function posedFigure(preset: string, joints: Record<string, number[]> | undefined, ground: number, body?: Body | null): Mannequin {
+  const fig = mannequin(new THREE.MeshBasicMaterial(), POSES.stand, undefined, body)
+  applyPose(fig.joints, POSES[preset] ?? POSES.stand, joints, ground)
+  fig.root.updateMatrixWorld(true)
+  return fig
+}
+
+/** Where a pose's hands and feet are (the figure's own space) — what *Pin the feet* and *Pin the hands* hold. */
+export function endsOf(preset: string, joints: Record<string, number[]> | undefined, ground: number, body?: Body | null): Record<End, number[]> {
+  const fig = posedFigure(preset, joints, ground, body)
+  return Object.fromEntries(ENDS.map((e) => [e, r4(endAt(fig, e))])) as Record<End, number[]>
+}
+
+/** A pose edit with its pins kept: the limb the author turned or dragged (`moved`) takes its pin along to where its end now is; every
+ *  other pinned limb is bent back onto its pin. The joints come back with the pinned limbs' turns, the pins as they now are. */
+export function pinPose(preset: string, joints: Record<string, number[]>, ground: number, pins: Pins, body: Body | null | undefined, moved: Chain | null): { joints: Record<string, number[]>; pins: Pins } {
+  const fig = posedFigure(preset, joints, ground, body)
+  const out = { ...joints }, held: Pins = {}
+  for (const end of ENDS) {
+    const p = pins[end]
+    if (!p) continue
+    const chain = END_CHAIN[end], c = CHAINS[chain]
+    if (chain === moved) { held[end] = r4(endAt(fig, end)); continue }
+    reach(fig, chain, new THREE.Vector3(p[0], p[1], p[2]))
+    out[c.upper] = turns(fig, c.upper); out[c.lower] = turns(fig, c.lower); held[end] = [...p]
+  }
+  return { joints: out, pins: held }
+}
+
+/** The pose seen in a mirror: the pins swap sides, x changes sign (ik.mirrorJoints does the joints). */
+export function mirrorPins(pins: Pins | null | undefined): Pins {
+  const out: Pins = {}
+  for (const end of ENDS) { const p = pins?.[end]; if (p) out[(end[0] === 'r' ? 'l' : 'r') + end.slice(1) as End] = [-p[0] || 0, p[1], p[2]] }
+  return out
 }

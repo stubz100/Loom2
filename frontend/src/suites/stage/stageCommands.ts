@@ -1,6 +1,6 @@
 // P13 / ST1 (D81): the Stage suite's verbs — every one has a mouse home (the gizmo bar, the panel, the Inspector, the viewport's
 // right-click menu) per D32; G / R / S / W, F, Delete, Ctrl+Z / Ctrl+Shift+Z are accelerators.
-import { Aperture, Box, Hand, PersonStanding, PictureInPicture2, Sun, UserRound, UserX, Camera, Clapperboard, Copy, Crosshair, Diamond, Eye, EyeOff, Focus, Frame, Grid3x3, ImagePlus, Layers, Pencil, Lock, LockOpen, Magnet, Move3d, MousePointer2, Play, Plus, Redo2, Rotate3d, Route, Scaling, Trash2, Undo2, User, Video, X } from 'lucide-react'
+import { Aperture, BookmarkPlus, Box, Hand, PersonStanding, Pin, PinOff, PictureInPicture2, Sun, UserRound, UserX, Camera, Clapperboard, Copy, Crosshair, Diamond, Eye, EyeOff, Focus, Frame, Grid3x3, ImagePlus, Layers, Pencil, Lock, LockOpen, Magnet, Move3d, MousePointer2, Play, Plus, Redo2, Rotate3d, Route, Scaling, Trash2, Undo2, User, Video, X } from 'lucide-react'
 import { registerCommands, sep, type Command, type MenuItem } from '../../frame/commands'
 import { askConfirm, askText, useSession } from '../../store/session'
 import { MANNEQUIN_PRESETS, PROP_PRESETS, SET_PRESETS } from './builders'
@@ -96,6 +96,21 @@ registerCommands([
   { id: 'stage.pose.reset', scope: 'stage', label: 'Reset the pose (stand)', icon: LockOpen, placement: ['panel', 'inspector', 'context'], when: () => sel()?.kind === 'mannequin', run: () => st().resetPose(st().selected!) },
   { id: 'stage.pose.save', scope: 'stage', label: 'Save pose…', icon: Plus, placement: ['panel', 'context'], when: () => sel()?.kind === 'mannequin',
     run: () => void askText({ title: 'Save pose', text: "The figure's joints, as a preset of this project.", placeholder: 'pose name' }).then((n) => { if (n?.trim()) void st().savePose(n.trim(), st().selected!) }) },
+  // AP1b (D141): the pose editor's pins — a hand or a foot held where it is while the hips, the spine or the other limbs turn; dragging its
+  // cube moves the pin. Save for ‹character›: the pose in the character's own library (a starter pose's name makes that preset take it)
+  { id: 'stage.pose.pinFeet', scope: 'stage', label: 'Pin the feet', icon: Pin, hint: 'the feet stay where they are while the rest of the pose changes', placement: ['context'],
+    when: () => sel()?.kind === 'mannequin', run: () => st().pinEnds(st().selected!, ['r_foot', 'l_foot']) },
+  { id: 'stage.pose.pinHands', scope: 'stage', label: 'Pin the hands', icon: Pin, hint: 'the hands stay where they are while the rest of the pose changes', placement: ['context'],
+    when: () => sel()?.kind === 'mannequin', run: () => st().pinEnds(st().selected!, ['r_hand', 'l_hand']) },
+  { id: 'stage.pose.unpin', scope: 'stage', label: 'Unpin the hands and feet', icon: PinOff, placement: ['panel', 'inspector', 'context'],
+    when: () => sel()?.kind === 'mannequin' && Object.keys(st().sampledDoc()?.objects.find((o) => o.id === st().selected)?.pose?.pins ?? {}).length > 0, run: () => st().unpinEnds(st().selected!) },
+  { id: 'stage.pose.saveForCharacter', scope: 'stage', label: 'Save the pose for the character…', icon: BookmarkPlus, placement: ['panel', 'inspector', 'context'],
+    when: () => sel()?.kind === 'mannequin' && !!sel()?.profile_id,
+    run: () => {
+      const o = sel(); const who = useStory.getState().profiles.find((p) => p.id === o?.profile_id)?.name ?? 'the character'
+      if (o) void askText({ title: `Save the pose for ${who}`, text: `Kept with ${who} in Cast, fitted to this body. A starter pose's name (crouch, sit …) makes that preset take it on ${who}'s figures.`, initial: o.pose?.preset ?? '', placeholder: 'pose name' })
+        .then((n) => { if (n?.trim()) void st().saveForCharacter(o.id, n.trim()) })
+    } },
   // D93 (C8): a figure bound to a Cast character (the Inspector's tiles, "Bind to a character ▸" pick it; these end it or open the character)
   { id: 'stage.figure.unbind', scope: 'stage', label: 'Unbind the character', icon: UserX, placement: ['inspector', 'context'], when: () => !!sel()?.profile_id, run: () => st().bindFigure(st().selected!, null) },
   // CS3 (proto01_UIcast 06 §2.10, D136 U19): skeleton keys — a change of body in a shot is deliberate: held from a frame, or Cast's from it
@@ -172,7 +187,7 @@ export function viewportMenu(onObject: boolean): MenuItem[] {
   return onObject
     ? [{ cmd: 'stage.frameSel' }, { cmd: 'stage.object.rename' }, { cmd: 'stage.object.duplicate' }, { cmd: 'stage.object.lock' }, { cmd: 'stage.object.hide' }, { cmd: 'stage.object.reset' }, sep,
       ...holdItems(),
-      ...(sel()?.kind === 'mannequin' ? [...bindItems(), { cmd: 'stage.pose.mode' }, { cmd: 'stage.pose.mirror' }, { cmd: 'stage.pose.reset' }, { cmd: 'stage.pose.save' }, { cmd: 'stage.motion.apply' }, { cmd: 'stage.path.clear' }, sep] : []),
+      ...(sel()?.kind === 'mannequin' ? [...bindItems(), { cmd: 'stage.pose.mode' }, { label: 'Pins', icon: Pin, items: [{ cmd: 'stage.pose.pinFeet' }, { cmd: 'stage.pose.pinHands' }, sep, { cmd: 'stage.pose.unpin' }] }, { cmd: 'stage.pose.mirror' }, { cmd: 'stage.pose.reset' }, { cmd: 'stage.pose.save' }, { cmd: 'stage.pose.saveForCharacter' }, { cmd: 'stage.motion.apply' }, { cmd: 'stage.path.clear' }, sep] : []),
       { cmd: 'stage.anim.keyObject' }, sep, { cmd: 'stage.object.delete' }, sep, { cmd: 'stage.undo' }, { cmd: 'stage.redo' }]
     : [addMenu(), { cmd: 'stage.add.plane' }, { cmd: 'stage.camera.add' }, { cmd: 'stage.camera.setFromView' }, cameraShotItem(), sep, { cmd: 'stage.tool.select' }, { cmd: 'stage.tool.move' }, { cmd: 'stage.tool.rotate' }, { cmd: 'stage.tool.scale' }, { cmd: 'stage.tool.path' }, { cmd: 'stage.snap' }, sep, { cmd: 'stage.frameAll' }, sep,
       { cmd: 'stage.shot.passes' }, { cmd: 'stage.shot.generate' }, sep, { cmd: 'stage.anim.keyCamera' }, { cmd: 'stage.anim.removeKey' }, { cmd: 'stage.clip.guide' }, { cmd: 'stage.clip.animate' }, sep,

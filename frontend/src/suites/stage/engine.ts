@@ -13,6 +13,7 @@ import type { StageCamera, StageDoc, StageObject } from '../../api/types'
 import { applyPose, clay, JOINTS, mannequin, POSES, prop, set as buildSet, setMaterial, vfovFor, type Body, type Joint, type Mannequin } from './builders'
 import { HAND_MARKER, heldWorld, onHand, ownTraverse, transformOf } from './held'
 import { CHAINS, eulerDeg, figureChain, solveTwoBone, type Chain } from './ik'
+import { chainOf, holdPins, type Pins } from './motion/contact'
 import { makeDetailed, type Detailed, type HandPreset } from './detailed'
 import { measure } from './motion/path'
 import { bindProxy, FACE_LANDMARKS, FEET_LANDMARKS, shellPoints, shellStance, type Landmark, type Proxy } from './proxy'
@@ -23,7 +24,7 @@ export interface EngineHooks {
   onPick: (id: string | null) => void
   onTransformed: (id: string, t: Transform) => void
   /** ST2: a joint was rotated or a hand / foot dragged — the figure's full joint map in degrees (YXZ). */
-  onPosed: (id: string, joints: Record<string, number[]>) => void
+  onPosed: (id: string, joints: Record<string, number[]>, moved?: Chain | null) => void   // AP1b: the limb the author turned or dragged (null: the root, spine, neck or head)
   onDetailError?: (id: string, message: string) => void          // CA1: the Detailed mannequin could not load (the figure stays Simple)
   onFreeCameraMoved?: () => void
   /** P18: a mesh asset's GLB arrived and a fitted view of it is ready — the store may make it the asset's thumbnail. */
@@ -35,7 +36,7 @@ export interface EngineHooks {
 }
 export interface Pick { id: string | null; joint?: Joint; ik?: Chain; camera?: string }
 
-interface Entry { holder: THREE.Group; body: THREE.Object3D; doc: StageObject; figure?: Mannequin; pickers?: THREE.Object3D[]; detailed?: Detailed; proxy?: Proxy; unmark?: () => void }
+interface Entry { holder: THREE.Group; body: THREE.Object3D; doc: StageObject; figure?: Mannequin; pickers?: THREE.Object3D[]; detailed?: Detailed; proxy?: Proxy; unmark?: () => void; pinKey?: string }
 
 const deg = THREE.MathUtils.radToDeg, rad = THREE.MathUtils.degToRad
 const BEAUTY_ENV = 0.8                            // D109: the beauty pass's room-environment intensity (E28c: the models read near the plate's brightness)
@@ -73,6 +74,7 @@ export class StageEngine {
   private ik: { id: string; chain: Chain; proxy: THREE.Object3D } | null = null
   private pickerMat = new THREE.MeshBasicMaterial({ color: 0xf0b040, depthTest: false, transparent: true, opacity: 0.9 })
   private ikMat = new THREE.MeshBasicMaterial({ color: 0x5ad0ff, depthTest: false, transparent: true, opacity: 0.95 })
+  private pinMat = new THREE.MeshBasicMaterial({ color: 0xff5a6e, depthTest: false, transparent: true, opacity: 0.95, side: THREE.DoubleSide })   // AP1b: a pin's ring
   // P18: which mesh objects have their GLB in the scene (the smoke test and the rig ask)
   readonly meshesLoaded = new Set<string>()
   readonly meshesFailed = new Map<string, string>()
@@ -122,7 +124,7 @@ export class StageEngine {
     this.orbit.addEventListener('change', () => { this.dirty = true; this.hooks.onFreeCameraMoved?.() })
     this.gizmo = new TransformControls(this.free, canvas)
     this.gizmo.addEventListener('dragging-changed', (e) => { this.orbit.enabled = !(e as unknown as { value: boolean }).value; this.dirty = true })
-    this.gizmo.addEventListener('objectChange', () => { if (this.ik) this.solveIk(); this.followAll(); this.dirty = true })
+    this.gizmo.addEventListener('objectChange', () => { if (this.ik) this.solveIk(); else if (this.posing) this.holdPinned(); this.followAll(); this.dirty = true })
     this.gizmo.addEventListener('mouseUp', () => this.commitGizmo())
     this.scene.add(this.gizmo.getHelper())
     this.gizmo.enabled = false
@@ -348,11 +350,35 @@ export class StageEngine {
     for (const j of JOINTS) out[j] = eulerDeg(e.figure.joints[j].quaternion)
     return out
   }
+  /** AP1b (D141): while a joint turns, the figure's pinned hands and feet stay on their pins (the turned joint's own limb aside). */
+  private holdPinned(): void {
+    const e = this.posing ? this.entries.get(this.posing.id) : undefined
+    const pins = e?.doc.pose?.pins
+    if (!e?.figure || !this.posing || !pins || !Object.keys(pins).length) return
+    holdPins(e.figure, pins as Pins, chainOf(this.posing.joint))
+    this.selection.setFromObject(e.holder)
+  }
+  /** AP1b: a ring at each pin of a figure (pose mode's, with its pickers: shown on the selected figure, never in a pass). */
+  private syncPins(e: Entry): void {
+    const pins = (e.doc.pose?.pins ?? {}) as Pins, key = JSON.stringify(pins)
+    if (!e.figure || !e.pickers || e.pinKey === key) return
+    e.pinKey = key
+    for (const m of e.pickers.filter((p) => p.userData.pin)) { m.removeFromParent(); (m as THREE.Mesh).geometry.dispose() }
+    e.pickers = e.pickers.filter((p) => !p.userData.pin)
+    for (const [end, at] of Object.entries(pins)) {
+      if (!at) continue
+      const m = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.01, 6, 24), this.pinMat)
+      m.rotation.x = Math.PI / 2; m.position.set(at[0], at[1], at[2]); m.userData.pin = end; m.renderOrder = 12
+      m.raycast = () => {}                                                            // a marker: the hand's / foot's cube is the handle
+      e.holder.add(m); e.pickers.push(m)                                             // the figure's own space (the pelvis is its child)
+    }
+    this.showPickers()
+  }
   private commitPose(): void {
     const id = this.posing?.id ?? this.ik?.id
     if (!id) return
     const joints = this.jointsOf(id)
-    if (joints) this.hooks.onPosed(id, joints)
+    if (joints) this.hooks.onPosed(id, joints, this.ik ? this.ik.chain : chainOf(this.posing?.joint))
     if (this.ik) this.endIk()
   }
   private endIk(): void { if (this.ik) { this.scene.remove(this.ik.proxy); this.ik = null; this.gizmo.detach(); this.gizmo.enabled = false } }
@@ -437,6 +463,7 @@ export class StageEngine {
         applyPose(e.figure.joints, POSES[o.pose.preset ?? 'stand'] ?? POSES.stand, o.pose.joints, o.pose.ground ?? 0)
       }
       e.doc = o
+      this.syncPins(e)
     }
     for (const [id, e] of [...this.entries]) if (!seen.has(id)) { e.holder.removeFromParent(); e.proxy?.dispose(); this.entries.delete(id); if (this.selectedId === id) this.select(null) }
     this.placeChildren()
@@ -716,7 +743,7 @@ export class StageEngine {
       const d = makeDetailed(root, rig, e.figure.joints.root.parent!, e.figure.joints, e.figure.limbs, { hands: b?.hands, feet: b?.feet, head: b?.head, handRest: b?.hand_rest ?? null, feetOut: b?.feet_out ?? 0 })   // CS1 (S1, S2); CS2
       d.object.traverse((c) => { c.userData.stageId = id; const m = c as THREE.Mesh; if (m.isMesh) { m.castShadow = !e.proxy; m.receiveShadow = true } })
       const inside = (o: THREE.Object3D) => { for (let p: THREE.Object3D | null = o; p; p = p.parent) if (p === d.object) return true; return false }
-      e.figure.root.traverse((c) => { const mesh = c as THREE.Mesh; if (mesh.isMesh && !mesh.userData.joint && !mesh.userData.ik && !inside(mesh)) mesh.visible = false })
+      e.figure.root.traverse((c) => { const mesh = c as THREE.Mesh; if (mesh.isMesh && !mesh.userData.joint && !mesh.userData.ik && !mesh.userData.pin && !inside(mesh)) mesh.visible = false })
       e.detailed = d
       d.follow(e.figure.joints, e.doc.pose?.extra)
       if (e.proxy) this.dressShell(e)                                                 // CS3: the shell arrived first
@@ -811,7 +838,7 @@ export class StageEngine {
         if (!e.doc.visible) continue
         const hex = maskColour(i++); legend[hex] = e.doc.id
         const m = new THREE.MeshBasicMaterial({ color: hex })
-        ownTraverse(e.holder, e.doc.id, (o) => { const mesh = o as THREE.Mesh; if (mesh.isMesh && !mesh.userData.joint && !mesh.userData.ik) { swapped.push([mesh, mesh.material]); mesh.material = m } })   // CA1: the holder, so a Detailed mannequin is in its mask (its children keep their own colour)
+        ownTraverse(e.holder, e.doc.id, (o) => { const mesh = o as THREE.Mesh; if (mesh.isMesh && !mesh.userData.joint && !mesh.userData.ik && !mesh.userData.pin) { swapped.push([mesh, mesh.material]); mesh.material = m } })   // CA1: the holder, so a Detailed mannequin is in its mask (its children keep their own colour)
         for (const mesh of e.proxy?.meshes ?? []) { swapped.push([mesh, mesh.material]); mesh.material = m }                      // CS3: the shell is the figure
       }
       blobs.mask = await this.shotWith(r, camera, null, 0x000000)

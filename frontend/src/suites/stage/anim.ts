@@ -8,7 +8,7 @@ import type { StageCamera, StageDoc, StageObject } from '../../api/types'
 
 export type Ease = 'linear' | 'ease'
 export interface CameraKey { frame: number; ease: Ease; pos: number[]; target: number[]; focal_mm: number }
-export interface ObjectKey { frame: number; ease: Ease; transform: { pos: number[]; rot: number[]; scale: number[] }; pose?: { preset?: string | null; joints: Record<string, number[]>; extra?: Record<string, number[]>; ground?: number } | null }
+export interface ObjectKey { frame: number; ease: Ease; transform: { pos: number[]; rot: number[]; scale: number[] }; pose?: { preset?: string | null; joints: Record<string, number[]>; extra?: Record<string, number[]>; ground?: number; pins?: Record<string, number[]> } | null }
 /** CS3: from `frame` the figure's body is `body` (null: the figure's own — its Cast version's, whatever it is now), reached over
  *  `transition` frames from the body before it (0: a cut). */
 export interface SkeletonKey { frame: number; transition: number; body: StageObject['body'] | null }
@@ -67,7 +67,7 @@ export function sampleObject(o: StageObject, keys: ObjectKey[] | undefined, fram
     // CA1: the Detailed level's own bones interpolate the same way (a bone only one key has holds that key's turn)
     const xa = pa?.extra ?? {}, xb = pb?.extra ?? {}
     const extra = Object.fromEntries([...new Set([...Object.keys(xa), ...Object.keys(xb)])].map((n) => [n, xa[n] && xb[n] ? lerpDeg(xa[n], xb[n], w) : (w < 0.5 ? xa[n] ?? xb[n] : xb[n] ?? xa[n])]))
-    pose = { preset: near?.preset ?? 'stand', joints, extra, ground: lerp(pa?.ground ?? 0, pb?.ground ?? 0, w) }   // AP1: the drop eases between keys
+    pose = { preset: near?.preset ?? 'stand', joints, extra, ground: lerp(pa?.ground ?? 0, pb?.ground ?? 0, w), pins: { ...(near?.pins ?? {}) } }   // AP1: the drop eases between keys; AP1b: the nearer key's pins
   }
   return { ...o, transform, pose }
 }

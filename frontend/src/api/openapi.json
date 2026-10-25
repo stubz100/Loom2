@@ -6816,6 +6816,7 @@
               "generated",
               "filled",
               "picture",
+              "set",
               "move",
               "rendered",
               "drawn",
@@ -13719,12 +13720,23 @@
         "title": "PixelsPut",
         "type": "object"
       },
-      "PlaceSet": {
+      "PlaceSet-Input": {
         "description": "CW6 (04 §2): a place's set — a room, a street, a corridor or open ground, its sizes and parts (frontend placeSet.ts lays its faces\nout), its baked faces and the pictures they came from.",
         "properties": {
+          "baked_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baked Key"
+          },
           "faces": {
             "items": {
-              "$ref": "#/components/schemas/SetFace"
+              "$ref": "#/components/schemas/SetFace-Input"
             },
             "title": "Faces",
             "type": "array"
@@ -13756,7 +13768,64 @@
           },
           "sources": {
             "items": {
-              "$ref": "#/components/schemas/SetSource"
+              "$ref": "#/components/schemas/SetSource-Input"
+            },
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "title": "PlaceSet",
+        "type": "object"
+      },
+      "PlaceSet-Output": {
+        "description": "CW6 (04 §2): a place's set — a room, a street, a corridor or open ground, its sizes and parts (frontend placeSet.ts lays its faces\nout), its baked faces and the pictures they came from.",
+        "properties": {
+          "baked_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baked Key"
+          },
+          "faces": {
+            "items": {
+              "$ref": "#/components/schemas/SetFace-Output"
+            },
+            "title": "Faces",
+            "type": "array"
+          },
+          "kind": {
+            "default": "room",
+            "enum": [
+              "room",
+              "street",
+              "corridor",
+              "ground"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "parts": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Parts",
+            "type": "object"
+          },
+          "sizes": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Sizes",
+            "type": "object"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SetSource-Output"
             },
             "title": "Sources",
             "type": "array"
@@ -13767,7 +13836,8 @@
           "sizes",
           "parts",
           "faces",
-          "sources"
+          "sources",
+          "baked_key"
         ],
         "title": "PlaceSet",
         "type": "object"
@@ -14955,6 +15025,16 @@
             "title": "Outfit",
             "type": "string"
           },
+          "place_set": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlaceSet-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "poses": {
             "additionalProperties": {
               "$ref": "#/components/schemas/Pose-Output"
@@ -15031,6 +15111,7 @@
           "model_asset_id",
           "model_from",
           "height_m",
+          "place_set",
           "derived_from",
           "from_idea",
           "created_at",
@@ -17325,14 +17406,90 @@
         "title": "SessionInfo",
         "type": "object"
       },
-      "SetFace": {
-        "description": "CW6 (04 §2): a built set's face, baked — its texture (a Catalogue image, the face straight on) and its texel size.",
+      "SetBake": {
         "properties": {
+          "faces": {
+            "items": {
+              "$ref": "#/components/schemas/SetBakeFace"
+            },
+            "maxItems": 64,
+            "title": "Faces",
+            "type": "array"
+          },
+          "key": {
+            "maxLength": 4000,
+            "title": "Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "faces"
+        ],
+        "title": "SetBake",
+        "type": "object"
+      },
+      "SetBakeFace": {
+        "properties": {
+          "bad": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Bad",
+            "type": "number"
+          },
+          "coverage": {
+            "title": "Coverage",
+            "type": "string"
+          },
           "id": {
             "title": "Id",
             "type": "string"
           },
-          "mask_asset_id": {
+          "image": {
+            "title": "Image",
+            "type": "string"
+          },
+          "seen": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Seen",
+            "type": "number"
+          },
+          "texel_m": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Texel M",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "image",
+          "coverage",
+          "texel_m",
+          "seen",
+          "bad"
+        ],
+        "title": "SetBakeFace",
+        "type": "object"
+      },
+      "SetFace-Input": {
+        "description": "CW6 (04 §2, §4): a built set's face — what it shows (a Catalogue image of the face straight on: its Fill once filled, else its bake),\nthe bake and its coverage, its texel size, how much the picture saw, and the material its Fill names (D143).",
+        "properties": {
+          "bad": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bad"
+          },
+          "baked_asset_id": {
             "anyOf": [
               {
                 "type": "string"
@@ -17341,7 +17498,159 @@
                 "type": "null"
               }
             ],
-            "title": "Mask Asset Id"
+            "title": "Baked Asset Id"
+          },
+          "coverage_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage Asset Id"
+          },
+          "fill_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fill Job Id"
+          },
+          "filled": {
+            "default": false,
+            "title": "Filled",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "material": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Material",
+            "type": "string"
+          },
+          "seen": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seen"
+          },
+          "texel_m": {
+            "default": 0.01,
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Texel M",
+            "type": "number"
+          },
+          "texture_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Texture Asset Id"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "SetFace",
+        "type": "object"
+      },
+      "SetFace-Output": {
+        "description": "CW6 (04 §2, §4): a built set's face — what it shows (a Catalogue image of the face straight on: its Fill once filled, else its bake),\nthe bake and its coverage, its texel size, how much the picture saw, and the material its Fill names (D143).",
+        "properties": {
+          "bad": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bad"
+          },
+          "baked_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baked Asset Id"
+          },
+          "coverage_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage Asset Id"
+          },
+          "fill_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fill Job Id"
+          },
+          "filled": {
+            "default": false,
+            "title": "Filled",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "material": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Material",
+            "type": "string"
+          },
+          "seen": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seen"
           },
           "texel_m": {
             "default": 0.01,
@@ -17365,30 +17674,219 @@
         "required": [
           "id",
           "texture_asset_id",
+          "baked_asset_id",
+          "coverage_asset_id",
           "texel_m",
-          "mask_asset_id"
+          "seen",
+          "bad",
+          "filled",
+          "material",
+          "fill_job_id"
         ],
         "title": "SetFace",
         "type": "object"
       },
-      "SetSource": {
+      "SetFillBody": {
+        "properties": {
+          "faces": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Faces"
+          }
+        },
+        "title": "SetFillBody",
+        "type": "object"
+      },
+      "SetFillQueued": {
+        "properties": {
+          "faces": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Faces",
+            "type": "array"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "faces"
+        ],
+        "title": "SetFillQueued",
+        "type": "object"
+      },
+      "SetFitBody": {
+        "properties": {
+          "asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Id"
+          },
+          "camera_height_m": {
+            "default": 1.6,
+            "maximum": 50.0,
+            "minimum": 0.2,
+            "title": "Camera Height M",
+            "type": "number"
+          }
+        },
+        "title": "SetFitBody",
+        "type": "object"
+      },
+      "SetFitQueued": {
+        "properties": {
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "source_asset_id": {
+            "title": "Source Asset Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "source_asset_id"
+        ],
+        "title": "SetFitQueued",
+        "type": "object"
+      },
+      "SetPut": {
+        "properties": {
+          "place_set": {
+            "$ref": "#/components/schemas/PlaceSet-Input"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revision",
+          "place_set"
+        ],
+        "title": "SetPut",
+        "type": "object"
+      },
+      "SetSource-Input": {
         "description": "CW6: a picture a built set was skinned from, and the camera it was matched to (in the set's frame).",
         "properties": {
           "asset_id": {
             "title": "Asset Id",
             "type": "string"
           },
+          "assumed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Assumed",
+            "type": "array"
+          },
           "camera": {
-            "$ref": "#/components/schemas/SourceCamera"
+            "$ref": "#/components/schemas/SourceCamera-Input"
+          },
+          "lens_deg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lens Deg"
           },
           "made_at": {
             "title": "Made At",
             "type": "string"
+          },
+          "relief_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relief Asset Id"
+          }
+        },
+        "required": [
+          "asset_id",
+          "camera"
+        ],
+        "title": "SetSource",
+        "type": "object"
+      },
+      "SetSource-Output": {
+        "description": "CW6: a picture a built set was skinned from, and the camera it was matched to (in the set's frame).",
+        "properties": {
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "assumed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Assumed",
+            "type": "array"
+          },
+          "camera": {
+            "$ref": "#/components/schemas/SourceCamera-Output"
+          },
+          "lens_deg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lens Deg"
+          },
+          "made_at": {
+            "title": "Made At",
+            "type": "string"
+          },
+          "relief_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relief Asset Id"
           }
         },
         "required": [
           "asset_id",
           "camera",
+          "relief_asset_id",
+          "assumed",
+          "lens_deg",
           "made_at"
         ],
         "title": "SetSource",
@@ -18349,7 +18847,46 @@
         "title": "ShuttingDown",
         "type": "object"
       },
-      "SourceCamera": {
+      "SourceCamera-Input": {
+        "properties": {
+          "focal_mm": {
+            "default": 35.0,
+            "title": "Focal Mm",
+            "type": "number"
+          },
+          "pos": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Pos",
+            "type": "array"
+          },
+          "roll": {
+            "default": 0.0,
+            "title": "Roll",
+            "type": "number"
+          },
+          "sensor_mm": {
+            "default": 36.0,
+            "title": "Sensor Mm",
+            "type": "number"
+          },
+          "target": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Target",
+            "type": "array"
+          }
+        },
+        "required": [
+          "pos",
+          "target"
+        ],
+        "title": "SourceCamera",
+        "type": "object"
+      },
+      "SourceCamera-Output": {
         "properties": {
           "focal_mm": {
             "default": 35.0,
@@ -19156,7 +19693,7 @@
           "place_set": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/PlaceSet"
+                "$ref": "#/components/schemas/PlaceSet-Output"
               },
               {
                 "type": "null"
@@ -33397,6 +33934,304 @@
           }
         },
         "summary": "Profile Pose Put",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/profiles/{pid}/versions/{vid}/set": {
+      "delete": {
+        "description": "CW6: the set cleared (its baked and filled faces stay in the Catalogue).",
+        "operationId": "profile_set_delete_story_profiles__pid__versions__vid__set_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Set Delete",
+        "tags": [
+          "story"
+        ]
+      },
+      "put": {
+        "description": "CW6: the author's edit of the set — its kind, sizes and parts, the overlay's drags (the source camera moved with the set), a face's\nmaterial; the faces stay as they were baked until the next bake.",
+        "operationId": "profile_set_put_story_profiles__pid__versions__vid__set_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetPut"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Set Put",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/profiles/{pid}/versions/{vid}/set/bake": {
+      "put": {
+        "description": "CW6 (04 §4): the client's bake (stage/setBake.ts) — each face's texture and coverage become Catalogue images (lineage `set-bake` ←\nthe set picture); the faces are the version's, unfilled, each keeping the material the author named.",
+        "operationId": "profile_set_bake_story_profiles__pid__versions__vid__set_bake_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetBake"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Set Bake",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/profiles/{pid}/versions/{vid}/set/fill": {
+      "post": {
+        "description": "CW6 (D143): *Fill ▶* — what the picture never saw well, painted by Klein's Fill face after face, the most seen first, each with its\nmaterial named (PF1's route, the face as the frame); the first face is queued now, each landing queues the next.",
+        "operationId": "profile_set_fill_story_profiles__pid__versions__vid__set_fill_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetFillBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetFillQueued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Set Fill",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/profiles/{pid}/versions/{vid}/set/fit": {
+      "post": {
+        "description": "CW6: *Build the set ▶* — MoGe-2 on the place's set picture (an `image_to_set` job, about a minute); its finisher fits a room, a\ncorridor, a street or open ground to the relief, scaled by the camera's height, and puts it on the version (the faces are the client's\nbake).",
+        "operationId": "profile_set_fit_story_profiles__pid__versions__vid__set_fit_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetFitBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetFitQueued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Set Fit",
         "tags": [
           "story"
         ]

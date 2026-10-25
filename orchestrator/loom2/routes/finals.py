@@ -79,7 +79,7 @@ def _reconcile(svc, store: FinalStore, f: Final) -> Final:
 async def final_create(svc: Svc, body: FinalCreate):
     """PS5a: a final from the scene's layers — the record and each layer's passes (Stage's renders at the shot's rate) on disk. SC3e: on a
     stage with a picture set the plate is that picture (method `picture`: Stage renders it through the relief), not a Klein still."""
-    from ..finals import DEFAULT_METHOD, picture_plate
+    from ..finals import DEFAULT_METHOD, built_plate, picture_plate
     ws, _, _ = svc.require_project()
     st = await asyncio.to_thread(StageStore(ws).get, body.stage_id)
     if st is None:
@@ -102,8 +102,8 @@ async def final_create(svc: Svc, body: FinalCreate):
         body = body.model_copy(update={"shot_version": v.id})
     passes = {x.id: {name: [_blob(ws, sha) for sha in shas] for name, shas in x.passes.items()} for x in body.layers}
     keypoints = {x.id: x.keypoints for x in body.layers if x.keypoints is not None}
-    method = DEFAULT_METHOD | ({"plate": "picture"} if picture_plate(st) else {})
-    pick = {x.id: method[x.kind] if x.kind == "plate" and method["plate"] == "picture" else x.method or method[x.kind] for x in body.layers}   # CA3: the client's plate method, a picture set's first
+    method = DEFAULT_METHOD | ({"plate": "picture"} if picture_plate(st) else {"plate": "set"} if built_plate(st) else {})   # CW7: a built set's plate is the set
+    pick = {x.id: method[x.kind] if x.kind == "plate" and method["plate"] in ("picture", "set") else x.method or method[x.kind] for x in body.layers}   # CA3: the client's plate method, a picture or built set's first
     data = body.model_dump(exclude={"layers"}) | {"layers": [FinalLayer(id=x.id, kind=x.kind, name=x.name, object_id=x.object_id, method=pick[x.id],  # type: ignore[arg-type]
                                                                         profile_id=x.profile_id, version=x.version, body=x.body, body_hashes=x.body_hashes).model_dump() for x in body.layers]}
     from ..shot_graph import stage_stamps
@@ -208,8 +208,8 @@ async def final_plate(svc: Svc, fid: str, body: PlateBody):
     if f is None:
         raise HTTPException(404, "final not found")
     plate = next(x for x in f.layers if x.id == "plate")
-    if plate.method == "picture":                                                            # SC3e
-        raise HTTPException(422, "the plate is the set's picture: Stage renders it through the relief (no Klein still)")
+    if plate.method in ("picture", "set"):                                                   # SC3e, CW7
+        raise HTTPException(422, "the plate is the set's picture or the built set: Stage renders it (no Klein still)")
     if plate.method == "generated":                                                          # CA3: refused now, not after the still
         try:
             plate_method_check("generated", f.frames)
@@ -262,8 +262,8 @@ async def final_plate_method(svc: Svc, fid: str, body: PlateMethodBody):
         raise HTTPException(404, "final not found")
     f = await asyncio.to_thread(_reconcile, svc, store, f)
     plate = next(x for x in f.layers if x.id == "plate")
-    if plate.method == "picture":
-        raise HTTPException(422, "the plate is the set's picture (SC3e): it is neither projected nor generated")
+    if plate.method in ("picture", "set"):
+        raise HTTPException(422, "the plate is the set's picture (SC3e) or the built set (CW7): it is neither projected nor generated")
     if plate.status in ("queued", "running") and not (plate.status == "running" and plate.method in ("projected", "filled") and plate.still_asset_id
                                                        and not any(k.get("asset_id") is None for k in plate.keys)):
         raise HTTPException(409, "the plate is being made — wait for it, or cancel its job")
@@ -388,18 +388,19 @@ class FramesBody(BaseModel):
 async def final_layer_frames(svc: Svc, fid: str, lid: str, body: FramesBody):
     """A layer's own sequence made by the client (PS5b: the projected plate; SC3e: the picture plate, its still stamped as the stage's
     picture — the lineage the assembled shot carries) — stored as its `frames/`; the layer is done."""
-    from ..finals import picture_plate
+    from ..finals import built_plate, picture_plate
     ws, _, _ = svc.require_project()
     files = [_blob(ws, sha) for sha in body.frames]
     store = FinalStore(ws)
     f = await asyncio.to_thread(store.get, fid)
     layer = next((x for x in f.layers if x.id == lid), None) if f is not None else None
     still = None
-    if layer is not None and layer.method == "picture":
+    if layer is not None and layer.method in ("picture", "set"):
         st = await asyncio.to_thread(StageStore(ws).get, f.stage_id)
-        still = picture_plate(st) if st is not None else None
+        still = (picture_plate(st) if layer.method == "picture" else built_plate(st)) if st is not None else None   # CW7: the built set's picture stamped as the still
         if still is None:
-            raise HTTPException(422, "the stage has no picture set any more: the plate cannot be its picture")
+            raise HTTPException(422, "the stage has no picture set any more: the plate cannot be its picture" if layer.method == "picture"
+                                else "the stage has no built set with baked faces any more: the plate cannot be the set")
     try:
         f = await asyncio.to_thread(store.set_frames, fid, lid, files, "done", still)
     except KeyError as e:

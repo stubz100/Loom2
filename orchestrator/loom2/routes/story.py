@@ -19,7 +19,7 @@ from ..clips import ClipStore
 from ..loras import LoraRegistry, publish, unpublish
 from ..library import Library, LibraryStore, StaleLibrary
 from ..schemas import Deleted, ProfileAdded, LibraryChange, LibraryRemoved, Expanded, FlowOut, FlowProblems, LipsyncQueued, LoraCheckQueued, LoraRecordList, LoraRecordOut, NodeShot, ProfileList, SceneList, SceneOut, ShotCards, ShotList, ShotTemplateList, TrainQueued, TtsQueued, VoiceList, VoiceRecordOut
-from ..stages import Pose, StageStore, encode_guide
+from ..stages import PlaceSet, Pose, SetFace, StageStore, encode_guide
 from ..shot_recipe import TEMPLATES, StampReader, Template, recipe_state, rerun_recipe, stale_plan, used_run
 from ..shot_graph import ShotGraph, clay_rows, final_for, shot_graph
 from ..story import FOR_SHOT, NODE_TYPES, VISUAL_TYPES, StaleScenes, CastUse, cast_uses, body_fit_origin, model_source, prop_model_origin, shell_origin, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
@@ -702,6 +702,167 @@ async def profile_model_import(svc: Svc, pid: str, vid: str, body: PropModelImpo
         raise HTTPException(404, str(e.args[0]))
     _changed(svc, p)
     return p.model_dump()
+
+
+# ---- a place's set (CW6, proto01_UIcast 04 §3–4; D143) ------------------------------------------------------------------------------------
+class SetFitBody(BaseModel):
+    camera_height_m: float = Field(1.6, ge=0.2, le=50.0)   # D143: MoGe's scale runs short — the camera's height sets it (eye level)
+    asset_id: str | None = None                   # the picture; the version's set picture (else its hero) when absent
+
+
+class SetFitQueued(BaseModel):
+    job_id: str
+    source_asset_id: str
+
+
+async def _place(svc, pid: str, vid: str) -> tuple[Any, Any]:
+    ws, _, _ = svc.require_project()
+    p = await asyncio.to_thread(StoryStore(ws).profile, pid)
+    if p is None:
+        raise HTTPException(404, "profile not found")
+    try:
+        v = p.version(vid)
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    if p.cls != "place":
+        raise HTTPException(422, "only a place has a set (a character has its body, a prop its 3D model)")
+    return p, v
+
+
+@router.post("/story/profiles/{pid}/versions/{vid}/set/fit", response_model=SetFitQueued)
+async def profile_set_fit(svc: Svc, pid: str, vid: str, body: SetFitBody):
+    """CW6: *Build the set ▶* — MoGe-2 on the place's set picture (an `image_to_set` job, about a minute); its finisher fits a room, a
+    corridor, a street or open ground to the relief, scaled by the camera's height, and puts it on the version (the faces are the client's
+    bake)."""
+    from ..place_sets import fit_origin, set_picture
+    ws, cat, _ = svc.require_project()
+    if svc.queue is None:
+        raise HTTPException(409, "no queue")
+    p, v = await _place(svc, pid, vid)
+    source = body.asset_id or set_picture(v)
+    if not source:
+        raise HTTPException(422, "give the place its set picture first (Make the set picture ▶: the place empty, from eye level), or a hero")
+    rec = await asyncio.to_thread(cat.get, source)
+    if rec is None or rec.trashed_at is not None or rec.kind != "image":
+        raise HTTPException(422, "the set picture must be an image in the Catalogue")
+    try:
+        jobs = svc.queue.submit({"kind": "image_to_set", "asset_id": source}, origin=fit_origin(p.id, v.id, source, body.camera_height_m))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await svc.queue.flush()
+    return {"job_id": jobs[0].id, "source_asset_id": source}
+
+
+class SetPut(BaseModel):
+    revision: int                                  # the profile's: the set changed meanwhile (a Fill landed) → 409
+    place_set: PlaceSet
+
+
+@router.put("/story/profiles/{pid}/versions/{vid}/set", response_model=Profile)
+async def profile_set_put(svc: Svc, pid: str, vid: str, body: SetPut):
+    """CW6: the author's edit of the set — its kind, sizes and parts, the overlay's drags (the source camera moved with the set), a face's
+    material; the faces stay as they were baked until the next bake."""
+    ws, _, _ = svc.require_project()
+    await _place(svc, pid, vid)
+    try:
+        p = await asyncio.to_thread(StoryStore(ws).set_place_set, pid, vid, body.place_set, body.revision)
+    except StaleProfile as e:
+        raise HTTPException(409, str(e))
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0]))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    _changed(svc, p)
+    return p.model_dump()
+
+
+@router.delete("/story/profiles/{pid}/versions/{vid}/set", response_model=Profile)
+async def profile_set_delete(svc: Svc, pid: str, vid: str):
+    """CW6: the set cleared (its baked and filled faces stay in the Catalogue)."""
+    ws, _, _ = svc.require_project()
+    await _place(svc, pid, vid)
+    p = await asyncio.to_thread(StoryStore(ws).set_place_set, pid, vid, None)
+    _changed(svc, p)
+    return p.model_dump()
+
+
+class SetBakeFace(BaseModel):
+    id: str
+    image: str                                     # the face straight on with the picture projected (a blob's sha256, PNG with alpha where unseen)
+    coverage: str                                  # its coverage (a blob's sha256, PNG: red the cosine, green the picture's pixel in texels ÷ 8)
+    texel_m: float = Field(gt=0.0, le=1.0)
+    seen: float = Field(ge=0.0, le=1.0)
+    bad: float = Field(ge=0.0, le=1.0)
+
+
+class SetBake(BaseModel):
+    key: str = Field(max_length=4000)              # what the faces were baked for (setOverlay.bakeKey)
+    faces: list[SetBakeFace] = Field(max_length=64)
+
+
+@router.put("/story/profiles/{pid}/versions/{vid}/set/bake", response_model=Profile)
+async def profile_set_bake(svc: Svc, pid: str, vid: str, body: SetBake):
+    """CW6 (04 §4): the client's bake (stage/setBake.ts) — each face's texture and coverage become Catalogue images (lineage `set-bake` ←
+    the set picture); the faces are the version's, unfilled, each keeping the material the author named."""
+    from .finals import _blob
+    ws, cat, _ = svc.require_project()
+    p, v = await _place(svc, pid, vid)
+    ps = v.place_set
+    if ps is None or not ps.sources:
+        raise HTTPException(422, "the place has no set to bake — Build the set ▶ first")
+    files = [(f, _blob(ws, f.image), _blob(ws, f.coverage)) for f in body.faces]
+    source = ps.sources[0].asset_id
+
+    def ingest() -> list[SetFace]:
+        out = []
+        old = {f.id: f for f in ps.faces}
+        for f, img, cov in files:
+            params = {"profile_id": pid, "version": vid, "face": f.id, "texel_m": f.texel_m}
+            t = cat.make_thumbs(cat.ingest_file(img, kind="image", move=False, suite="story", lineage_kind="set-bake", parents=[source], params=params))
+            c = cat.ingest_file(cov, kind="image", move=False, suite="story", lineage_kind="set-coverage", parents=[t.id], params=params)
+            out.append(SetFace(id=f.id, texture_asset_id=t.id, baked_asset_id=t.id, coverage_asset_id=c.id, texel_m=f.texel_m, seen=f.seen, bad=f.bad,
+                               material=old[f.id].material if f.id in old else ""))
+        return out
+    faces = await asyncio.to_thread(ingest)
+    p = await asyncio.to_thread(StoryStore(ws).set_place_set, pid, vid, ps.model_copy(update={"faces": faces, "baked_key": body.key}))
+    _changed(svc, p)
+    return p.model_dump()
+
+
+class SetFillBody(BaseModel):
+    faces: list[str] | None = None                 # some faces (a filled one is filled again, another seed); every face still to fill when absent
+
+
+class SetFillQueued(BaseModel):
+    job_id: str
+    faces: list[str]
+
+
+@router.post("/story/profiles/{pid}/versions/{vid}/set/fill", response_model=SetFillQueued)
+async def profile_set_fill(svc: Svc, pid: str, vid: str, body: SetFillBody):
+    """CW6 (D143): *Fill ▶* — what the picture never saw well, painted by Klein's Fill face after face, the most seen first, each with its
+    material named (PF1's route, the face as the frame); the first face is queued now, each landing queues the next."""
+    from ..place_sets import fill_order, queue_fill
+    if svc.queue is None:
+        raise HTTPException(409, "no queue")
+    svc.require_documents()
+    p, v = await _place(svc, pid, vid)
+    ps = v.place_set
+    if ps is None or not any(f.baked_asset_id for f in ps.faces):
+        raise HTTPException(422, "the set is not baked yet — Build the set ▶ bakes it")
+    if any(f.fill_job_id for f in ps.faces):
+        raise HTTPException(409, "the set's Fill is running — one at a time")
+    order = fill_order(ps, body.faces)
+    if not order:
+        raise HTTPException(422, "nothing to fill: every face the picture did not see well is filled")
+    try:
+        job = await asyncio.to_thread(queue_fill, svc.queue, pid, vid, order, None, body.faces is not None)   # faces named: filled again when they were
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    if job is None:
+        raise HTTPException(422, "nothing to fill: the faces' bakes are gone from the Catalogue — bake the set again")
+    await svc.queue.flush()
+    return {"job_id": job.id, "faces": order}
 
 
 class AnimTestUpload(BaseModel):

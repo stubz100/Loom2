@@ -58,6 +58,23 @@ function withModel(o: StageObject): StageObject {
   const next = m && m !== o.asset_id ? { ...o, asset_id: m } : o
   return h !== undefined && h !== next.height_m ? { ...next, height_m: h } : next
 }
+/** A new object of a kind with every field at its default (a figure standing, its Detailed mannequin; a light aimed ahead). */
+function newObject(cur: StageDoc, kind: Kind, preset: string | null = null, pos?: number[], assetId: string | null = null): StageObject {
+  const scale = kind === 'mannequin' ? (MANNEQUIN_PRESETS[preset ?? 'adult']?.scale ?? 1) : 1
+  return { id: newId(kind === 'mannequin' ? 'fig' : kind), kind, name: `${NAMES[kind] ?? kind} ${cur.objects.filter((o) => o.kind === kind).length + 1}`, preset, asset_id: assetId,
+    transform: { pos: pos ?? [0, 0, 0], rot: [0, 0, 0], scale: [scale, scale, scale] }, parent: null, parent_joint: null,
+    locked: false, visible: true, colour_id: (cur.objects.length % 12) + 1, pose: kind === 'mannequin' ? { preset: 'stand', joints: {}, extra: {}, ground: 0, pins: {} } : null, billboard: kind === 'plane', profile_id: null, version: null, body: null, detail: kind === 'mannequin' ? newDetail(cur.objects) : null, path: null, shadow_proxy: null,
+    light: kind === 'light' ? { ...NEW_LIGHT, target: [...NEW_LIGHT.target] } : null,
+    lens_deg: null, plate_asset_id: null, floor_y: null, plate_camera_id: null, level: null, things: [], things_document_id: null, height_m: null, place_set: null }
+}
+/** CW6: a built set bound to a Cast place shows its version's set (pinned, else the current) — refitted, baked or filled, it follows;
+ *  kept as it is while the place is not loaded or its version has no set. */
+function withPlaceSet(o: StageObject): StageObject {
+  if (o.kind !== 'set' || o.preset !== 'built' || !o.profile_id) return o
+  const p = useStory.getState().profiles.find((x) => x.id === o.profile_id)
+  const ps = p?.versions.find((x) => x.id === (o.version ?? p.current))?.place_set
+  return ps && JSON.stringify(ps) !== JSON.stringify(o.place_set) ? { ...o, place_set: ps } : o
+}
 /** CS2 (D136 U6): the shell of a bound figure's Cast version (pinned, else the current) — its shadow proxy; undefined while the character
  *  is not loaded or the version has none (the figure keeps what it has). */
 function castShell(profileId: string | null | undefined, version: string | null | undefined): string | undefined {
@@ -258,6 +275,10 @@ interface StageState {
   setGuides: (on: boolean) => void
   setPip: (on: boolean) => void
   addObject: (kind: Kind, preset?: string | null, pos?: number[], assetId?: string | null) => string | null
+  /** CW7 (02 §9): a Cast place's set on the stage, bound (it follows Cast); selected when it is already there. */
+  placePlace: (profileId: string) => string | null
+  /** CW7: *Make it a Cast place…* — a picture set's picture becomes a new Cast place's set picture, and its set is built from it. */
+  setToPlace: (id: string) => Promise<void>
   setFromImage: (assetId: string) => Promise<void>            // SC3 (D120): a Catalogue image → MoGe's relief as a locked set with the picture's camera (a job; the stage reloads when it lands)
   pendingSet: string | null                                   // SC3: the image → set job in flight for the open stage
   /** SC3b (D120): the picture set rebuilt in place with a corrected lens (MoGe's reading wobbles); the stage reloads when it lands. */
@@ -765,17 +786,23 @@ export const useStage = create<StageState>()((set, get) => ({
   addObject: (kind, preset = null, pos, assetId = null) => {
     const cur = get().current
     if (!cur) return null
-    const id = newId(kind === 'mannequin' ? 'fig' : kind)
-    const n = cur.objects.filter((o) => o.kind === kind).length + 1
-    const name = `${NAMES[kind] ?? kind} ${n}`
-    const scale = kind === 'mannequin' ? (MANNEQUIN_PRESETS[preset ?? 'adult']?.scale ?? 1) : 1
-    const o: StageObject = { id, kind, name, preset, asset_id: assetId, transform: { pos: pos ?? [0, 0, 0], rot: [0, 0, 0], scale: [scale, scale, scale] }, parent: null, parent_joint: null,
-      locked: false, visible: true, colour_id: (cur.objects.length % 12) + 1, pose: kind === 'mannequin' ? { preset: 'stand', joints: {}, extra: {}, ground: 0, pins: {} } : null, billboard: kind === 'plane', profile_id: null, version: null, body: null, detail: kind === 'mannequin' ? newDetail(cur.objects) : null, path: null, shadow_proxy: null,
-      light: kind === 'light' ? { ...NEW_LIGHT, target: [...NEW_LIGHT.target] } : null,
-      lens_deg: null, plate_asset_id: null, floor_y: null, plate_camera_id: null, level: null, things: [], things_document_id: null, height_m: null, place_set: null }
+    const o = newObject(cur, kind, preset, pos, assetId)
     get().apply((d) => ({ ...d, objects: [...d.objects, o] }), 'add')
-    set({ selected: id })
-    return id
+    set({ selected: o.id })
+    return o.id
+  },
+  placePlace: (profileId) => {
+    const cur = get().current
+    if (!cur) return null
+    const here = cur.objects.find((o) => o.kind === 'set' && o.profile_id === profileId)
+    if (here) { get().select(here.id); return here.id }
+    const p = useStory.getState().profiles.find((x) => x.id === profileId)
+    const ps = p?.versions.find((x) => x.id === p.current)?.place_set
+    if (!p || !ps) { useSession.getState().toast(`${p?.name ?? 'The place'} has no set yet — Build the set ▶ on its Cast page`, 'info'); return null }
+    const o = { ...newObject(cur, 'set', 'built'), name: p.name, locked: true, profile_id: profileId, version: null, place_set: ps }
+    get().apply((d) => ({ ...d, objects: [...d.objects, o] }), 'place a Cast set')
+    set({ selected: o.id })
+    return o.id
   },
   setFromImage: async (assetId) => {
     const cur = get().current
@@ -946,10 +973,12 @@ export const useStage = create<StageState>()((set, get) => ({
   },
   freeCopy: (id) => {
     const o = get().sampledDoc()?.objects.find((x) => x.id === id) ?? get().object(id)
-    if (!o || !o.profile_id || (o.kind !== 'mannequin' && o.kind !== 'mesh')) return
-    const nid = newId(o.kind === 'mannequin' ? 'fig' : 'mesh')
+    const set = o?.kind === 'set' && o.preset === 'built' && !!o.place_set
+    if (!o || !o.profile_id || (o.kind !== 'mannequin' && o.kind !== 'mesh' && !set)) return
+    const nid = newId(o.kind === 'mannequin' ? 'fig' : o.kind)
+    const dx = set ? (o.place_set!.sizes.width ?? 5) + 1 : 0.8                             // CW7: a set's copy beside it, not inside it
     const copy: StageObject = { ...JSON.parse(JSON.stringify(o)) as StageObject, id: nid, name: `${o.name} (free)`, profile_id: null, version: null, parent: null, parent_joint: null,
-      transform: { ...o.transform, pos: [o.transform.pos[0] + 0.8, o.transform.pos[1], o.transform.pos[2]] }, colour_id: ((get().current?.objects.length ?? 0) % 12) + 1 }
+      transform: { ...o.transform, pos: [o.transform.pos[0] + dx, o.transform.pos[1], o.transform.pos[2]] }, colour_id: ((get().current?.objects.length ?? 0) % 12) + 1 }
     get().apply((d) => ({ ...d, objects: [...d.objects, copy] }), 'free copy')
     get().select(nid)
   },
@@ -972,6 +1001,21 @@ export const useStage = create<StageState>()((set, get) => ({
     } catch (e) { s.toast(`Prototype: ${(e as ApiError).detail ?? e}`, 'error') }
   },
   setHeight: (id, h) => get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id && o.kind === 'mesh' && !o.profile_id ? { ...o, height_m: h } : o)) }), 'height'),
+  setToPlace: async (id) => {
+    const o = get().object(id)
+    const s = useSession.getState()
+    if (!o || o.kind !== 'set' || o.preset !== 'image' || !o.plate_asset_id) return
+    const name = await s.askText({ title: 'Make it a Cast place', text: "A Cast place with this set's picture as its set picture; Build the set ▶ fits a room, a corridor or a street to it (the camera at eye level). The picture set stays here.",
+      initial: o.name, placeholder: 'the place\'s name', okLabel: 'Make the place' })
+    if (!name?.trim()) return
+    try {
+      const p = await unwrap(http.POST('/story/profiles', { body: { name: name.trim(), cls: 'place', hero_asset_id: null, appearance: '' } }))
+      await unwrap(http.PUT('/story/profiles/{pid}/versions/{vid}/anim-ref', { params: { path: { pid: p.id, vid: p.current } }, body: { side: 'front', asset_id: o.plate_asset_id } }))
+      await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/set/fit', { params: { path: { pid: p.id, vid: p.current } }, body: { camera_height_m: 1.6 } }))
+      void useStory.getState().loadProfiles()
+      s.toast(`${p.name} is a Cast place — its set is being built from the picture`, 'success', { label: 'Open', run: () => void import('../../store/origin').then((m) => m.goToStory({ tab: 'cast', id: p.id })) })
+    } catch (e) { s.toast(`Make it a Cast place: ${(e as ApiError).detail ?? e}`, 'error') }
+  },
   bindFigure: (id, profileId, version = null) => {
     const o = get().object(id)
     if (!o || o.kind !== 'mannequin') return
@@ -1006,8 +1050,8 @@ export const useStage = create<StageState>()((set, get) => ({
   },
   syncBodies: () => {
     const d = get().current
-    if (!d || !d.objects.some((o) => (o.kind === 'mannequin' || o.kind === 'mesh') && o.profile_id)) return
-    const next = d.objects.map((o) => (o.kind === 'mannequin' && o.profile_id ? withBody(o, castBody(o.profile_id, o.version)) : withModel(o)))
+    if (!d || !d.objects.some((o) => (o.kind === 'mannequin' || o.kind === 'mesh' || o.kind === 'set') && o.profile_id)) return
+    const next = d.objects.map((o) => (o.kind === 'mannequin' && o.profile_id ? withBody(o, castBody(o.profile_id, o.version)) : o.kind === 'set' ? withPlaceSet(o) : withModel(o)))
     if (next.every((o, i) => o === d.objects[i])) return
     get().apply((doc) => ({ ...doc, objects: doc.objects.map((o) => next.find((x) => x.id === o.id) ?? o) }), 'from Cast')
   },

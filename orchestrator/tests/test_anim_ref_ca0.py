@@ -42,9 +42,10 @@ def test_the_plan(tmp_path: Path):
     assert "three-quarter view" in plan_anim_ref(prop, prop.version(), "front", "full", width=1280, height=720, count=1, group_id="g")[0][0]["prompt_text"]
     with pytest.raises(ValueError, match="only a character has a back view"):
         plan_anim_ref(prop, prop.version(), "back", "full", width=1280, height=720, count=1, group_id="g")
-    place = st.create_profile("Quay", "place", groups)
-    with pytest.raises(ValueError, match="a place has no animation reference"):
-        plan_anim_ref(place, place.version(), "front", "full", width=1280, height=720, count=1, group_id="g")
+    place = st.create_profile("Quay", "place", groups)                                             # CW6 (D143): a place's is its set picture, the place empty
+    assert "The place itself, empty" in plan_anim_ref(place, place.version(), "front", "full", width=1280, height=720, count=1, group_id="g")[0][0]["prompt_text"]
+    with pytest.raises(ValueError, match="only a character has a back view"):
+        plan_anim_ref(place, place.version(), "back", "full", width=1280, height=720, count=1, group_id="g")
 
 
 @pytest.mark.asyncio
@@ -101,7 +102,8 @@ def test_the_routes(tmp_path: Path):
         assert cl.put(f"/story/profiles/{p['id']}/versions/v1/anim-ref", json={"side": "front", "asset_id": "ast_nope"}).status_code == 422
         assert cl.put(f"/story/profiles/{p['id']}/versions/v9/anim-ref", json={"side": "front", "asset_id": None}).status_code == 404
         place = cl.post("/story/profiles", json={"name": "Quay", "cls": "place"}).json()
-        assert cl.post(f"/story/profiles/{place['id']}/versions/v1/anim-ref", json={}).status_code == 422
+        assert cl.post(f"/story/profiles/{place['id']}/versions/v1/anim-ref", json={"side": "back"}).status_code == 422   # a place's set picture has no back
+        assert cl.post(f"/story/profiles/{place['id']}/versions/v1/anim-ref", json={}).status_code == 200                  # CW6: its set picture
 
 
 # ---- step 3: the test animation (a turn on the spot) -------------------------------------------------------------------------------------

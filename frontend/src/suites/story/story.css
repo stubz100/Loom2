@@ -310,6 +310,32 @@
 .model-view-canvas { width: 100%; height: 100%; display: block; touch-action: none; }
 .prop-model-side { display: flex; flex-direction: column; gap: 8px; max-width: 360px; }
 .prop-model-side .hint.warn { color: var(--accent); }
+/* CW6 (D143): a place's set builder — the set picture with the set drawn over it, the kind, sizes and parts beside, the faces under */
+.place-set-row { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+.set-view { position: relative; flex: 1 1 420px; max-width: 720px; border: 1px solid var(--line2); border-radius: var(--radius); background: var(--bg2); overflow: hidden; }
+.set-view.empty { aspect-ratio: 16 / 9; border-style: dashed; display: flex; align-items: center; justify-content: center; }
+.set-view img { display: block; width: 100%; height: 100%; object-fit: fill; user-select: none; }
+.set-overlay { position: absolute; inset: 0; width: 100%; height: 100%; }
+.set-overlay .face { fill: none; stroke: color-mix(in srgb, var(--accent) 70%, white); stroke-width: 1.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; opacity: .8; }
+.set-overlay .handle { cursor: grab; }
+.set-overlay .handle.on { cursor: grabbing; }
+.set-overlay .handle .hit { stroke: transparent; stroke-width: 18; vector-effect: non-scaling-stroke; }
+.set-overlay .handle .edge { stroke: var(--accent); stroke-width: 3; vector-effect: non-scaling-stroke; stroke-linecap: round; }
+.set-overlay .handle.assumed .edge { stroke-dasharray: 8 6; }
+.set-overlay .handle:hover .edge, .set-overlay .handle.on .edge { stroke-width: 5; }
+.place-set-side { display: flex; flex-direction: column; gap: 8px; flex: 0 1 300px; min-width: 240px; }
+.place-set-side .hint.warn { color: var(--accent); }
+.place-set-side .set-kind { display: flex; flex-wrap: wrap; }
+.place-set-side .set-sizes input[type=number] { width: 70px; }
+.place-set-side .set-parts { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; color: var(--fg2); }
+.place-set-side .verbs { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.set-faces { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; margin-top: 8px; }
+.set-face { display: grid; grid-template-columns: 48px 1fr auto; grid-template-rows: auto auto; gap: 2px 6px; align-items: center; padding: 4px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg1); }
+.set-face img, .set-face .thumb { grid-row: span 2; width: 48px; height: 36px; object-fit: cover; border-radius: 3px; background: var(--bg3); }
+.set-face .name { font-size: 12px; color: var(--fg); }
+.set-face .muted { font-size: 11px; }
+.set-face input { grid-column: 2 / span 2; min-width: 0; font-size: 12px; }
+.set-face.filled { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
 /* D125 (SP3): the Shots board — every shot × its steps; the selected shot's page under it */
 .shots-stage { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 .shots-stage > .shots-board { flex: 0 0 auto; max-height: 46%; overflow: auto; border-bottom: 1px solid var(--line); background: var(--bg0); }

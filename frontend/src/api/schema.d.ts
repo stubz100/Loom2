@@ -3464,6 +3464,95 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/profiles/{pid}/versions/{vid}/set": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Profile Set Put
+         * @description CW6: the author's edit of the set — its kind, sizes and parts, the overlay's drags (the source camera moved with the set), a face's
+         *     material; the faces stay as they were baked until the next bake.
+         */
+        put: operations["profile_set_put_story_profiles__pid__versions__vid__set_put"];
+        post?: never;
+        /**
+         * Profile Set Delete
+         * @description CW6: the set cleared (its baked and filled faces stay in the Catalogue).
+         */
+        delete: operations["profile_set_delete_story_profiles__pid__versions__vid__set_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/profiles/{pid}/versions/{vid}/set/bake": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Profile Set Bake
+         * @description CW6 (04 §4): the client's bake (stage/setBake.ts) — each face's texture and coverage become Catalogue images (lineage `set-bake` ←
+         *     the set picture); the faces are the version's, unfilled, each keeping the material the author named.
+         */
+        put: operations["profile_set_bake_story_profiles__pid__versions__vid__set_bake_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/profiles/{pid}/versions/{vid}/set/fill": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Profile Set Fill
+         * @description CW6 (D143): *Fill ▶* — what the picture never saw well, painted by Klein's Fill face after face, the most seen first, each with its
+         *     material named (PF1's route, the face as the frame); the first face is queued now, each landing queues the next.
+         */
+        post: operations["profile_set_fill_story_profiles__pid__versions__vid__set_fill_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/profiles/{pid}/versions/{vid}/set/fit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Profile Set Fit
+         * @description CW6: *Build the set ▶* — MoGe-2 on the place's set picture (an `image_to_set` job, about a minute); its finisher fits a room, a
+         *     corridor, a street or open ground to the relief, scaled by the camera's height, and puts it on the version (the faces are the client's
+         *     bake).
+         */
+        post: operations["profile_set_fit_story_profiles__pid__versions__vid__set_fit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/profiles/{pid}/versions/{vid}/shell": {
         parameters: {
             query?: never;
@@ -7161,7 +7250,7 @@ export interface components {
              * Method
              * @enum {string}
              */
-            method: "projected" | "generated" | "filled" | "picture" | "move" | "rendered" | "drawn" | "stage";
+            method: "projected" | "generated" | "filled" | "picture" | "set" | "move" | "rendered" | "drawn" | "stage";
             /** Name */
             name: string;
             /** Object Id */
@@ -9979,9 +10068,38 @@ export interface components {
          * @description CW6 (04 §2): a place's set — a room, a street, a corridor or open ground, its sizes and parts (frontend placeSet.ts lays its faces
          *     out), its baked faces and the pictures they came from.
          */
-        PlaceSet: {
+        "PlaceSet-Input": {
+            /** Baked Key */
+            baked_key?: string | null;
             /** Faces */
-            faces: components["schemas"]["SetFace"][];
+            faces?: components["schemas"]["SetFace-Input"][];
+            /**
+             * Kind
+             * @default room
+             * @enum {string}
+             */
+            kind?: "room" | "street" | "corridor" | "ground";
+            /** Parts */
+            parts?: {
+                [key: string]: boolean;
+            };
+            /** Sizes */
+            sizes?: {
+                [key: string]: number;
+            };
+            /** Sources */
+            sources?: components["schemas"]["SetSource-Input"][];
+        };
+        /**
+         * PlaceSet
+         * @description CW6 (04 §2): a place's set — a room, a street, a corridor or open ground, its sizes and parts (frontend placeSet.ts lays its faces
+         *     out), its baked faces and the pictures they came from.
+         */
+        "PlaceSet-Output": {
+            /** Baked Key */
+            baked_key: string | null;
+            /** Faces */
+            faces: components["schemas"]["SetFace-Output"][];
             /**
              * Kind
              * @default room
@@ -9997,7 +10115,7 @@ export interface components {
                 [key: string]: number;
             };
             /** Sources */
-            sources: components["schemas"]["SetSource"][];
+            sources: components["schemas"]["SetSource-Output"][];
         };
         /** PlanBatch */
         PlanBatch: {
@@ -10439,6 +10557,7 @@ export interface components {
              * @default
              */
             outfit: string;
+            place_set: components["schemas"]["PlaceSet-Output"] | null;
             /** Poses */
             poses: {
                 [key: string]: components["schemas"]["Pose-Output"];
@@ -11439,15 +11558,92 @@ export interface components {
             /** Session Id */
             session_id: string;
         };
-        /**
-         * SetFace
-         * @description CW6 (04 §2): a built set's face, baked — its texture (a Catalogue image, the face straight on) and its texel size.
-         */
-        SetFace: {
+        /** SetBake */
+        SetBake: {
+            /** Faces */
+            faces: components["schemas"]["SetBakeFace"][];
+            /** Key */
+            key: string;
+        };
+        /** SetBakeFace */
+        SetBakeFace: {
+            /** Bad */
+            bad: number;
+            /** Coverage */
+            coverage: string;
             /** Id */
             id: string;
-            /** Mask Asset Id */
-            mask_asset_id: string | null;
+            /** Image */
+            image: string;
+            /** Seen */
+            seen: number;
+            /** Texel M */
+            texel_m: number;
+        };
+        /**
+         * SetFace
+         * @description CW6 (04 §2, §4): a built set's face — what it shows (a Catalogue image of the face straight on: its Fill once filled, else its bake),
+         *     the bake and its coverage, its texel size, how much the picture saw, and the material its Fill names (D143).
+         */
+        "SetFace-Input": {
+            /** Bad */
+            bad?: number | null;
+            /** Baked Asset Id */
+            baked_asset_id?: string | null;
+            /** Coverage Asset Id */
+            coverage_asset_id?: string | null;
+            /** Fill Job Id */
+            fill_job_id?: string | null;
+            /**
+             * Filled
+             * @default false
+             */
+            filled?: boolean;
+            /** Id */
+            id: string;
+            /**
+             * Material
+             * @default
+             */
+            material?: string;
+            /** Seen */
+            seen?: number | null;
+            /**
+             * Texel M
+             * @default 0.01
+             */
+            texel_m?: number;
+            /** Texture Asset Id */
+            texture_asset_id?: string | null;
+        };
+        /**
+         * SetFace
+         * @description CW6 (04 §2, §4): a built set's face — what it shows (a Catalogue image of the face straight on: its Fill once filled, else its bake),
+         *     the bake and its coverage, its texel size, how much the picture saw, and the material its Fill names (D143).
+         */
+        "SetFace-Output": {
+            /** Bad */
+            bad: number | null;
+            /** Baked Asset Id */
+            baked_asset_id: string | null;
+            /** Coverage Asset Id */
+            coverage_asset_id: string | null;
+            /** Fill Job Id */
+            fill_job_id: string | null;
+            /**
+             * Filled
+             * @default false
+             */
+            filled: boolean;
+            /** Id */
+            id: string;
+            /**
+             * Material
+             * @default
+             */
+            material: string;
+            /** Seen */
+            seen: number | null;
             /**
              * Texel M
              * @default 0.01
@@ -11456,16 +11652,74 @@ export interface components {
             /** Texture Asset Id */
             texture_asset_id: string | null;
         };
+        /** SetFillBody */
+        SetFillBody: {
+            /** Faces */
+            faces?: string[] | null;
+        };
+        /** SetFillQueued */
+        SetFillQueued: {
+            /** Faces */
+            faces: string[];
+            /** Job Id */
+            job_id: string;
+        };
+        /** SetFitBody */
+        SetFitBody: {
+            /** Asset Id */
+            asset_id?: string | null;
+            /**
+             * Camera Height M
+             * @default 1.6
+             */
+            camera_height_m?: number;
+        };
+        /** SetFitQueued */
+        SetFitQueued: {
+            /** Job Id */
+            job_id: string;
+            /** Source Asset Id */
+            source_asset_id: string;
+        };
+        /** SetPut */
+        SetPut: {
+            place_set: components["schemas"]["PlaceSet-Input"];
+            /** Revision */
+            revision: number;
+        };
         /**
          * SetSource
          * @description CW6: a picture a built set was skinned from, and the camera it was matched to (in the set's frame).
          */
-        SetSource: {
+        "SetSource-Input": {
             /** Asset Id */
             asset_id: string;
-            camera: components["schemas"]["SourceCamera"];
+            /** Assumed */
+            assumed?: string[];
+            camera: components["schemas"]["SourceCamera-Input"];
+            /** Lens Deg */
+            lens_deg?: number | null;
+            /** Made At */
+            made_at?: string;
+            /** Relief Asset Id */
+            relief_asset_id?: string | null;
+        };
+        /**
+         * SetSource
+         * @description CW6: a picture a built set was skinned from, and the camera it was matched to (in the set's frame).
+         */
+        "SetSource-Output": {
+            /** Asset Id */
+            asset_id: string;
+            /** Assumed */
+            assumed: string[];
+            camera: components["schemas"]["SourceCamera-Output"];
+            /** Lens Deg */
+            lens_deg: number | null;
             /** Made At */
             made_at: string;
+            /** Relief Asset Id */
+            relief_asset_id: string | null;
         };
         /**
          * SetThing
@@ -11820,7 +12074,29 @@ export interface components {
             shutting_down: boolean;
         };
         /** SourceCamera */
-        SourceCamera: {
+        "SourceCamera-Input": {
+            /**
+             * Focal Mm
+             * @default 35
+             */
+            focal_mm?: number;
+            /** Pos */
+            pos: number[];
+            /**
+             * Roll
+             * @default 0
+             */
+            roll?: number;
+            /**
+             * Sensor Mm
+             * @default 36
+             */
+            sensor_mm?: number;
+            /** Target */
+            target: number[];
+        };
+        /** SourceCamera */
+        "SourceCamera-Output": {
             /**
              * Focal Mm
              * @default 35
@@ -12111,7 +12387,7 @@ export interface components {
             parent_joint: ("r_hand" | "l_hand") | null;
             /** Path */
             path: number[][] | null;
-            place_set: components["schemas"]["PlaceSet"] | null;
+            place_set: components["schemas"]["PlaceSet-Output"] | null;
             /** Plate Asset Id */
             plate_asset_id: string | null;
             /** Plate Camera Id */
@@ -20483,6 +20759,182 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Profile"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_set_put_story_profiles__pid__versions__vid__set_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetPut"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Profile"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_set_delete_story_profiles__pid__versions__vid__set_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Profile"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_set_bake_story_profiles__pid__versions__vid__set_bake_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetBake"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Profile"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_set_fill_story_profiles__pid__versions__vid__set_fill_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetFillBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetFillQueued"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_set_fit_story_profiles__pid__versions__vid__set_fit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetFitBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetFitQueued"];
                 };
             };
             /** @description Validation Error */

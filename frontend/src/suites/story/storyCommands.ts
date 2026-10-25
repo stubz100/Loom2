@@ -1,6 +1,6 @@
 // 17 (D85): the Story suite's verbs — every one has a mouse home (the panel's buttons, the editor rows' tools, the Inspector, right-click
 // menus) per D32; Delete and the arrows are accelerators. SY1 adds the Cast tab's verbs (new profile, expand, add to the reference set, lock, copy, open).
-import { CopyPlus, Hammer, Lightbulb, Group, Ungroup, Workflow, ArrowDown, ArrowLeft, Box, Ruler, ArrowUp, BookOpen, BookPlus, ChevronLeft, ChevronRight, Pencil, UserRoundPlus, Users, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImageOff, ImagePlus, ImageUp, Link, ListChecks, ListPlus, Lock, MapPinPlus, Maximize, MessageSquare, Mic, PackagePlus, Palette, PersonStanding, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
+import { Paintbrush, RefreshCw, CopyPlus, Hammer, Lightbulb, Group, Ungroup, Workflow, ArrowDown, ArrowLeft, Box, Ruler, ArrowUp, BookOpen, BookPlus, ChevronLeft, ChevronRight, Pencil, UserRoundPlus, Users, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImageOff, ImagePlus, ImageUp, Link, ListChecks, ListPlus, Lock, MapPinPlus, Maximize, MessageSquare, Mic, PackagePlus, Palette, PersonStanding, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
 import { command, isEnabled, registerCommands, runCommand, sep, type Command, type MenuItem } from '../../frame/commands'
 import { nextOwed, readinessOf, type ReadyCell, type ReadyItem } from './castReady'
 import { linesToVoice, spineTodo } from './episodeVerbs'
@@ -35,7 +35,14 @@ const sampleModel = () => { const ss = useSession.getState(); return pickSampleM
 const profile = () => sy().profile()
 const version = () => sy().version()
 const openVersion = () => version()?.state === 'open'
-const animRefable = () => { const c = profile()?.cls; return c === 'character' || c === 'prop' }   // CA0: a place has none
+const animRefable = () => { const c = profile()?.cls; return c === 'character' || c === 'prop' }   // CA0: a place has its set picture instead (CW6)
+const isPlace = () => profile()?.cls === 'place'
+/** CW6: the place version's set jobs still running (its fit, a face's Fill). */
+const setJobs = (surface: string) => { const p = profile(); const v = version(); return p && v ? Object.values(useSession.getState().jobs).filter((j) => j.origin?.surface === surface && j.origin?.ref === p.id
+  && (j.origin?.payload as { version?: string } | null)?.version === v.id && !['done', 'failed', 'cancelled'].includes(j.status)) : [] }
+const setBusy = () => setJobs('set_fit').length > 0 || setJobs('set_fill').length > 0 || !!version()?.place_set?.faces.some((f) => f.fill_job_id)
+const fillable = () => (version()?.place_set?.faces ?? []).filter((f) => f.baked_asset_id && (f.bad ?? 0) >= 0.002).map((f) => f.id)
+const toFill = () => (version()?.place_set?.faces ?? []).filter((f) => f.baked_asset_id && !f.filled && (f.bad ?? 0) >= 0.002).map((f) => f.id)
 const picked = () => sy().picked
 const modelJob = () => { const p = profile(); const v = version(); return p && v ? latestModelJob(useSession.getState().jobs, p.id, v.id) : undefined }
 const modelBusy = () => { const j = modelJob(); return !!j && !['done', 'failed', 'cancelled'].includes(j.status) }
@@ -157,7 +164,7 @@ const NODE_LABEL = { start: 'Start', hub: 'Hub', dialogue: 'Dialogue', choice: '
 /** The viewport registers its fit, its centre and the screen → flow mapping (D90 B11) in flow coordinates (the canvas is not a store). */
 /** D90 (01 §11.2): the item a per-item command acts on — the take or the line whose button or menu ran it (commands take no
  *  arguments; the button sets this first). A run clears it, so the palette never acts on a stale one. */
-export const storyItem: { take?: { kind: 'image' | 'clip'; id: string }; line?: { node: string; index: number }; field?: string } = {}   // D92: a library field's Add
+export const storyItem: { take?: { kind: 'image' | 'clip'; id: string }; line?: { node: string; index: number }; field?: string; face?: string } = {}   // D92: a library field's Add; CW6: a set's face
 /** Run `id` on an item (a take card's ✓ use, a line's 🎙). */
 export function runOnItem(item: Partial<typeof storyItem>, id: string): boolean {
   Object.assign(storyItem, item)
@@ -321,8 +328,8 @@ const cmds: Command[] = [
   // proto01_UIcast CW1–CW2 (06 §2.1–2.2): the Ideas board's verbs, on the idea open on the bench (its variant in focus)
   // D142: Clay opened for the version (its bench); CW5: the line-up of what the board shows (or the ideas picked)
   { id: 'story.cast.bench', scope: 'story', label: 'Bench ▶', icon: Hammer, placement: ['panel', 'inspector', 'context'],
-    hint: "Clay opened for this version: its figure (a prop: its model at its height beside a 1.75 m figure) on a scene of its own, with all of Clay's tools",
-    when: () => { const p = sy().profile(); const v = sy().version(); return !!p && !!v && (p.cls === 'character' || (p.cls === 'prop' && !!v.model_asset_id)) },
+    hint: "Clay opened for this version: its figure (a prop: its model at its height beside a 1.75 m figure; a place: its set from the picture's camera) on a scene of its own, with all of Clay's tools",
+    when: () => { const p = sy().profile(); const v = sy().version(); return !!p && !!v && (p.cls === 'character' || (p.cls === 'prop' && !!v.model_asset_id) || (p.cls === 'place' && !!v.place_set)) },
     run: () => { const p = sy().profile(); const v = sy().version(); if (p && v) void import('../stage/stageStore').then((m) => m.st().openBench(p.id, v.id)) } },
   { id: 'story.cast.lineup', scope: 'story', label: 'Line-up ▶', icon: Users, placement: ['panel', 'context'], hint: 'the characters and props shown, side by side at their sizes in Clay (twelve at most)',
     when: () => castLineup().length > 0, run: () => { const items = castLineup().map((p) => ({ profile_id: p.id })); void import('../stage/stageStore').then((m) => m.st().openLineup(items, backToBoard('cast'))) } },
@@ -413,6 +420,24 @@ const cmds: Command[] = [
       .then((v) => { if (v?.trim()) void sy().importModel(v.trim()) }) },
   { id: 'story.cast.clearModel', scope: 'story', label: 'Clear the 3D model', icon: X, placement: ['inspector', 'context'], when: () => !!version()?.model_asset_id,
     run: () => void sy().setModel(null) },
+  // CW6 (proto01_UIcast 04 §3–6; D143): a place's set — its picture (the place empty), the fit, the bake, the Fill
+  { id: 'cast.place.picture', scope: 'story', label: 'Make the set picture ▶', icon: ImagePlus, hint: 'the place empty, from eye level, its floor and walls in view — two candidates from the sheet and references',
+    placement: ['panel', 'inspector', 'context'], when: () => isPlace() && !!useSession.getState().capabilities?.story?.model_id, run: () => void sy().makeAnimRef('front') },
+  { id: 'cast.place.usePicture', scope: 'story', label: 'Use as the set picture', icon: ImagePlus, placement: ['context', 'inspector'], when: () => isPlace() && picked().length === 1,
+    run: () => void sy().setAnimRef('front', picked()[0]) },
+  { id: 'cast.place.build', scope: 'story', label: 'Build the set ▶', icon: Box, hint: "MoGe reads the set picture's depth: a room, a corridor, a street or open ground fitted to it, scaled by the camera's height, then the picture baked onto its faces",
+    placement: ['panel', 'inspector', 'context'], when: () => isPlace() && !!version() && !!(version()!.anim_ref_asset_id ?? version()!.hero_asset_id) && !setBusy(),
+    run: () => { const v = version(); const h = v?.place_set?.sources[0]?.camera.pos[1]; void import('./setBuilder').then((m) => m.buildSet(h ?? m.EYE_HEIGHT_M)) } },
+  { id: 'cast.place.bake', scope: 'story', label: 'Bake again ▶', icon: RefreshCw, hint: 'the picture projected onto the faces again — after the set or its camera changed (the Fills are made again after it)',
+    placement: ['panel', 'context'], when: () => isPlace() && !!version()?.place_set?.sources.length && !setBusy(), run: () => void import('./setBuilder').then((m) => m.bakeSet()) },
+  { id: 'cast.place.fill', scope: 'story', label: 'Fill what the picture never saw ▶', icon: Paintbrush, hint: 'Klein paints each face the picture did not see well, the most seen first, with its material — about 45 s a face',
+    placement: ['panel', 'context'], when: () => isPlace() && toFill().length > 0 && !setBusy(), run: () => void import('./setBuilder').then((m) => m.fillSet()) },
+  { id: 'cast.place.fillFace', scope: 'story', label: 'Fill this face ▶', icon: Paintbrush, hint: 'a filled face is filled again from its bake, with another seed — name its material first for a cleaner surface',
+    placement: ['context'], when: () => isPlace() && !!storyItem.face && fillable().includes(storyItem.face) && !setBusy(),
+    run: () => { const f = storyItem.face; if (f) void import('./setBuilder').then((m) => m.fillSet([f])) } },
+  { id: 'cast.place.clear', scope: 'story', label: 'Clear the set…', icon: X, danger: true, placement: ['inspector', 'context'], when: () => isPlace() && !!version()?.place_set && !setBusy(),
+    run: () => void askConfirm({ title: 'Clear the set?', okLabel: 'Clear', text: 'Its kind, sizes and faces go; the baked and filled faces stay in the Catalogue. Build the set ▶ fits it again.' })
+      .then((ok) => { if (ok) void import('./setBuilder').then((m) => m.saveSet(null)) }) },
   { id: 'story.cast.testAnimRef', scope: 'story', label: 'Test it: a turn on the spot…', icon: Play, hint: 'the reference performs a turn through the pose-driven model (the cost is asked first)',
     placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character' && !!version()?.anim_ref_asset_id && !!useSession.getState().capabilities?.stage?.animate,
     run: () => void import('./animTest').then((m) => m.testAnimRef()) },

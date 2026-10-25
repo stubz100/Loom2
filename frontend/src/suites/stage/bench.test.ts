@@ -7,7 +7,7 @@ import { useStory } from '../story/storyStore'
 import { st, useStage } from './stageStore'
 
 const ver = (v: Partial<ProfileVersion>): ProfileVersion => ({ id: 'v1', label: 'v1', state: 'open', group_id: 'grp_1', candidates_group_id: null, hero_asset_id: null, body: null, anim_ref_asset_id: null,
-  anim_ref_back_asset_id: null, anim_test_clip_id: null, shell_asset_id: null, shell_from: null, poses: {}, from_idea: null, height_m: null, model_asset_id: null, model_from: null, body_fit_from: null,
+  anim_ref_back_asset_id: null, anim_test_clip_id: null, shell_asset_id: null, shell_from: null, poses: {}, from_idea: null, height_m: null, place_set: null, model_asset_id: null, model_from: null, body_fit_from: null,
   body_points: null, anim_ref_note: null, appearance: '', outfit: '', colours: [], marks: '', trigger: null, lora: null, derived_from: null, created_at: '', locked_at: null, ...v })
 const prof = (id: string, name: string, cls: Profile['cls'], v: Partial<ProfileVersion>) => ({ id, name, cls, current: 'v1', schema_version: 3, revision: 0, voice_id: null, created_at: '', updated_at: '', versions: [ver(v)] }) as unknown as Profile
 const INES = prof('prf_i', 'Ines', 'character', { body: { height_m: 1.58 } as never })
@@ -55,6 +55,30 @@ describe("Cast's things in Clay (CW3–CW5)", () => {
     st().setHeight('mesh_2', 0.75); st().setHeight('mesh_1', 3)
     expect(objects()[1].height_m).toBe(0.75)
     expect(objects()[0].height_m).toBe(0.1)                                                            // a bound one's is Cast's
+  })
+  it("adds a place's set bound (CW7) — once; it follows Cast's set; its free copy stands beside it; it is the final's plate", async () => {
+    const ps = { kind: 'room', sizes: { width: 5, depth: 6, height: 2.8 }, parts: {}, baked_key: 'k', faces: [{ id: 'wall_back', texture_asset_id: 'ast_t', baked_asset_id: 'ast_t', coverage_asset_id: null,
+      texel_m: 0.01, seen: 1, bad: 0, filled: false, material: '', fill_job_id: null }], sources: [] } as unknown as NonNullable<ProfileVersion['place_set']>
+    const KITCHEN = prof('prf_k', 'Kitchen', 'place', { place_set: ps })
+    useStory.setState({ profiles: [INES, CUP, KITCHEN, prof('prf_e', 'Empty lot', 'place', {})] })
+    useStage.setState({ current: DOC([]), selected: null, undo: [], redo: [] })
+    expect(st().placePlace('prf_e')).toBeNull()                                                          // no set yet: nothing added
+    const id = st().placePlace('prf_k')!
+    expect(objects()).toHaveLength(1)
+    expect(objects()[0]).toMatchObject({ id, kind: 'set', preset: 'built', name: 'Kitchen', profile_id: 'prf_k', locked: true })
+    expect(objects()[0].place_set?.sizes.width).toBe(5)
+    st().select(null)
+    expect(st().placePlace('prf_k')).toBe(id)
+    expect(objects()).toHaveLength(1)
+    const refit = { ...ps, sizes: { ...ps.sizes, width: 6 } }                                              // refitted in Cast: the bound set follows
+    useStory.setState({ profiles: [INES, CUP, prof('prf_k', 'Kitchen', 'place', { place_set: refit })] })
+    expect(objects()[0].place_set?.sizes.width).toBe(6)
+    st().freeCopy(id)
+    expect(objects()[1]).toMatchObject({ kind: 'set', preset: 'built', name: 'Kitchen (free)', profile_id: null })
+    expect(objects()[1].transform.pos[0]).toBeCloseTo(7, 5)                                                 // its width and a metre beside
+    const { hasBuiltSet, hasPictureSet } = await import('./finalShot')
+    expect(hasBuiltSet(useStage.getState().current!)).toBe(true)
+    expect(hasPictureSet(useStage.getState().current!)).toBe(false)
   })
   it('poses every figure at once (the line-up)', () => {
     useStage.setState({ current: DOC([obj('fig_1', 'mannequin'), obj('fig_2', 'mannequin'), obj('set_1', 'set', { preset: 'lineup' })]), undo: [], redo: [] })

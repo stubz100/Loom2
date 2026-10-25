@@ -30,7 +30,7 @@ FILL_LEAD = ("Continue the surrounding surfaces seamlessly with the same materia
              "there. The place:")                  # PF1 (D135, E35d): a keyframe's Fill continues the place's surfaces, it does not re-describe it
 KEY_FILL_MIN = 0.002                               # PF1: a keyframe whose bad share is below this is the keyframe as projected (no Fill)
 LayerKind = Literal["plate", "figure", "prop", "shadows"]
-LayerMethod = Literal["projected", "generated", "filled", "picture", "move", "rendered", "drawn", "stage"]
+LayerMethod = Literal["projected", "generated", "filled", "picture", "set", "move", "rendered", "drawn", "stage"]
 LayerStatus = Literal["passes", "queued", "running", "done", "failed"]
 MAX_FRAMES = 721                                   # 30 s at 24 fps (D96: ≈ 30 s a Shot, a warning beyond)
 # the passes each kind of layer brings from Stage (PS5a); a pass with one frame is a still (the plate's frame-0 render)
@@ -48,6 +48,16 @@ def picture_plate(st: Any) -> str | None:
     PS5b's Klein still of the bare set). A set from an image already is the place: the plate is that picture through its relief."""
     o = next((o for o in st.objects if o.kind == "set" and o.preset == "image" and o.visible and o.plate_asset_id), None)
     return o.plate_asset_id if o is not None else None
+
+
+def built_plate(st: Any) -> str | None:
+    """CW7 (proto01_UIcast 04 §5): the picture a stage's built set was skinned from — its first visible built set with a baked face — or
+    None. The plate is then the set rendered through each frame's camera (method `set`): no Klein still, no projection to smear, no drift."""
+    o = next((o for o in st.objects if o.kind == "set" and o.preset == "built" and o.visible and o.place_set is not None
+              and any(f.texture_asset_id for f in o.place_set.faces)), None)
+    if o is None:
+        return None
+    return o.place_set.sources[0].asset_id if o.place_set.sources else next(f.texture_asset_id for f in o.place_set.faces if f.texture_asset_id)
 
 
 class FinalLayer(BaseModel):
@@ -133,10 +143,10 @@ def frames_at(start: int, end: int, rate: int) -> list[float]:
 
 
 def plate_method_check(method: str, frames: int) -> None:
-    """The plate is projected (PS5b), projected and filled (PF1, D135), generated along the path (CA3, D130: at most LTX's longest clip) or
-    a picture set's picture (SC3e)."""
-    if method not in ("projected", "filled", "generated", "picture"):
-        raise ValueError(f"the plate is projected, projected and filled, generated along the path or a picture set's picture (not {method!r})")
+    """The plate is projected (PS5b), projected and filled (PF1, D135), generated along the path (CA3, D130: at most LTX's longest clip),
+    a picture set's picture (SC3e) or a built set rendered (CW7)."""
+    if method not in ("projected", "filled", "generated", "picture", "set"):
+        raise ValueError(f"the plate is projected, projected and filled, generated along the path, a picture set's picture or a built set (not {method!r})")
     if method == "generated" and frames > PLATE_PATH_MAX:
         raise ValueError(f"a plate generated along the path is at most {PLATE_PATH_MAX} frames (LTX-2.3's longest clip); this final has {frames} — project it")
 

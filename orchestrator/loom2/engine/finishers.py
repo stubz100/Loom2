@@ -36,7 +36,7 @@ from ..fsio import utc_now
 from ..body import Body
 from ..finals import FINAL_LAYER_SURFACE, FINAL_PLATE_KEY_SURFACE, FINAL_PLATE_PATH_SURFACE, FINAL_PLATE_SURFACE
 from ..story import BODY_FIT_SURFACE, FOR_SHOT, PROP_MODEL_SURFACE, SHELL_SURFACE, body_fit_origin
-from .. import ideas
+from .. import ideas, place_sets
 from ..ideas import FOR_IDEA, IDEA_CLAY_SURFACE
 from ..timelines import TimelineStore, at, duration, starts
 from ..tools import facesim
@@ -223,6 +223,8 @@ class DocumentFinisher:
         await add_result_layer(q, job, od, recipe, rgba, plan.x, plan.y, label, as_mask=isinstance(recipe, Inpaint) or recipe.source == "selection")
         if isinstance(recipe, Inpaint) and getattr(job, "origin", None) and job.origin.surface == FINAL_PLATE_KEY_SURFACE:   # PF1 (D135): a filled plate's keyframe
             await asyncio.to_thread(_final_plate_key, q, job, od)
+        if isinstance(recipe, Inpaint) and getattr(job, "origin", None) and job.origin.surface == place_sets.SET_FILL_SURFACE:   # CW6 (D143): a set's face
+            await asyncio.to_thread(place_sets.fill_landed, q, job, od)
         if isinstance(recipe, Inpaint) and getattr(job, "origin", None) and job.origin.surface == set_things.CLEAN_SURFACE:   # D123 (SC3c-3): a picture set's plate
             done = await asyncio.to_thread(set_things.clean_plate, q, job, od)
             q.hub.broadcast("asset.created", done["asset"].model_dump())
@@ -790,6 +792,8 @@ class SetFinisher:
         job.result["asset_ids"] = [rec.id]
         job.result["relief"] = lens
         job.log_tail.append(f"relief {rec.id}: {glb.name} ({(rec.bytes or 0) / 2**20:.1f} MiB)")
+        if job.origin and job.origin.surface == place_sets.SET_FIT_SURFACE:                     # CW6 (D143): a place's set fitted to the relief
+            await asyncio.to_thread(place_sets.fit_landed, q, job, rec.id, q.catalogue.abs_path(rec))
         if recipe.stage_id:
             lens_deg, floor_y = (lens or {}).get("fov_x") or recipe.lens_deg, (lens or {}).get("y_floor")
             glb = q.catalogue.abs_path(rec)                                                      # SC3d: the store lays the set level by its floor

@@ -31,7 +31,7 @@ from .fsio import atomic_move, atomic_write_json, new_id, read_json, read_json_o
 from .models import registry
 from .body import Body
 from .origin import JobOrigin
-from .stages import Pose
+from .stages import PlaceSet, Pose
 from .shot_recipe import RecipeRun, ShotRecipe, add_run, default_template, stamps_for, step_of
 
 if TYPE_CHECKING:
@@ -195,6 +195,7 @@ class ProfileVersion(BaseModel):
     model_asset_id: str | None = None             # D110 (PS2): a prop version's 3D model (a Catalogue mesh, image → mesh, stood upright)
     model_from: str | None = None                 # D110: the image it was made from (an asset id); another reference now marks it stale
     height_m: float | None = Field(None, gt=0.0, le=100.0)   # CW4 (03 §4): a prop's height in metres — its model is scaled to it in Stage (prefilled from its words)
+    place_set: PlaceSet | None = None             # CW6 (04 §2; D143): a place version's set — fitted to its set picture, baked, filled (place_sets.py)
     derived_from: str | None = None
     from_idea: IdeaRef | None = None              # CW1 (D136 U1): the idea and variant *Keep ▶* made this version from (the idea records it too)
     created_at: str = Field(default_factory=utc_now)
@@ -288,6 +289,8 @@ def check_profile(p: Profile) -> None:
         raise ValueError("only a character has a body (CA0) — a place or a prop has none")
     if p.cls != "prop" and any(v.model_asset_id is not None for v in p.versions):
         raise ValueError("only a prop has a 3D model (D110) — a character has its body, a place its set")
+    if p.cls != "place" and any(v.place_set is not None for v in p.versions):
+        raise ValueError("only a place has a set (CW6)")
 
 
 # ---- shots (SY2, 17 §3c) ------------------------------------------------------------------------------------------------------------
@@ -815,7 +818,12 @@ AnimRefSide = Literal["front", "back"]
 def anim_ref_sentence(cls: str, side: str) -> str:
     """CA0 (01 step 2, §10): what an animation reference shows — for a character the whole figure in a neutral A-pose (arms a little away
     from the body, so they do not merge with the torso; D140: the fingers straight and spread, so the fit reads the whole hand), centred and
-    padded in the 16:9 frame on a plain ground, the back view the same from behind; for a prop the object alone in a three-quarter view."""
+    padded in the 16:9 frame on a plain ground, the back view the same from behind; for a prop the object alone in a three-quarter view;
+    CW6 (D143): for a place its set picture — the place empty, from eye level, its floor and walls in view (people would bake onto the walls)."""
+    if cls == "place":
+        return ("The place itself, empty: a wide view from eye level, the camera level and about 1.6 m above the ground, the floor and the walls "
+                "(or the ground and the buildings' fronts) in view from side to side, nobody in it, no animals, nothing moving, nothing standing in "
+                "the middle of the floor, even light, no text.")
     if cls == "prop":
         return ("The object alone, a three-quarter view, the whole object visible and centred with space around it, "
                 "on a plain light grey studio background, soft even light, no other objects, no text.")
@@ -833,9 +841,7 @@ def plan_anim_ref(profile: Profile, version: ProfileVersion, side: str, variant:
     """CA0: the T2I jobs that make a version's animation reference — the clay-reference model (as Expand: Klein 9B under `full`, 4B under
     `open`), the version's sheet composed (its colours bound) and its reference set as an @mention (pinned to the version, so its LoRA rides
     along and RC0 stamps it), the reference sentence, one seed each. The results land on the version's candidates page; the first becomes
-    the reference while the version has none (the finisher)."""
-    if profile.cls == "place":
-        raise ValueError("a place has no animation reference — characters and props have one")
+    the reference while the version has none (the finisher). CW6 (D143): a place's is its set picture, the empty place its set is fitted to."""
     if side == "back" and profile.cls != "character":
         raise ValueError("only a character has a back view")
     spec = expand_spec(variant)
@@ -2009,6 +2015,38 @@ class StoryStore(_ShotMixin, _FlowMixin):
         self.save_profile(p)
         return p
 
+    def set_place_set(self, pid: str, vid: str, ps: PlaceSet | None, revision: int | None = None) -> Profile:
+        """CW6: a place version's set (None clears it) — a fit landing, a bake, or the author's edit, which names the profile's revision it
+        was based on (409 when stale: a Fill landed meanwhile). A product of the version like its model: a final version takes it too."""
+        with _LOCK:
+            cur = self.profile(pid)
+            if cur is None:
+                raise KeyError(pid)
+            if cur.cls != "place":
+                raise ValueError("only a place has a set (a character has its body, a prop its 3D model)")
+            if revision is not None and revision != cur.revision:
+                raise StaleProfile(f"the profile is at revision {cur.revision}, the change is based on {revision} — reload it first")
+            versions = [v.model_copy() for v in cur.versions]
+            v = next((x for x in versions if x.id == vid), None)
+            if v is None:
+                raise KeyError(f"no version {vid!r}")
+            v.place_set = ps
+            p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
+            self.save_profile(p)
+            return p
+
+    def update_face(self, pid: str, vid: str, fid: str, **upd: Any) -> Profile:
+        """CW6: one face of a place version's set changed in place (a Fill queued, landed or stopped) — read again, so the author's edits stay."""
+        with _LOCK:
+            cur = self.profile(pid)
+            if cur is None:
+                raise KeyError(pid)
+            ps = cur.version(vid).place_set
+            if ps is None or not any(f.id == fid for f in ps.faces):
+                raise KeyError(f"the set has no face {fid!r}")
+            faces = [f.model_copy(update=upd) if f.id == fid else f for f in ps.faces]
+            return self.set_place_set(pid, vid, ps.model_copy(update={"faces": faces}))
+
     def set_fitted_body(self, pid: str, vid: str, body: Body, asset_id: str, points: dict[str, Any] | None = None, note: str | None = None) -> Profile:
         """CA1b (D104): the version's body fitted to its animation reference (SDPose's proportions), with the points it was fitted to and what
         the stance check saw (CS1: S4, S8). Like the reference itself, a product of the version (no revision guard, a final version too)."""
@@ -2156,7 +2194,7 @@ class StoryStore(_ShotMixin, _FlowMixin):
         g = groups.duplicate_group(src.group_id)
         groups.update(g.id, name=f"{cur.name} · v{n}")
         g = groups.groups[g.id]
-        v = ProfileVersion.model_validate({**src.model_dump(include={*SHEET_FIELDS, "poses"}), "id": f"v{n}", "group_id": g.id,   # D93 (B4): the sheet copied, a label of its own; AP1b: the poses fitted to its body
+        v = ProfileVersion.model_validate({**src.model_dump(include={*SHEET_FIELDS, "poses", "place_set"}), "id": f"v{n}", "group_id": g.id,   # D93 (B4): the sheet copied, a label of its own; AP1b: the poses fitted to its body; CW6: a place's set
                                            "hero_asset_id": g.cover_id if src.hero_asset_id else None, "derived_from": src.id})
         p = cur.model_copy(update={"versions": [*cur.versions, v], "current": v.id, "revision": cur.revision + 1, "updated_at": utc_now()})
         check_profile(p)

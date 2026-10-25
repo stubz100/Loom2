@@ -2803,6 +2803,152 @@ test("the bench and a prop's height (D142, CW4): Bench ▶ opens Clay for the ch
   await page.screenshot({ path: 'node_modules/.e2e/cw4-prop-bench.png' })
 })
 
+test("a place's set (CW6, D143): Build the set ▶ queues MoGe on the set picture and says when the relief fits nothing; a fitted set is drawn over its picture and baked on its own; a wall's foot dragged deepens the room; the kind is one click; a face's material is named; Fill ▶ paints the faces one after another; Bench ▶ opens Clay on the set from the picture's camera", async ({ page }) => {
+  test.setTimeout(180_000)
+  const tag = Date.now().toString(36)
+  type Face = { id: string; texture_asset_id: string | null; baked_asset_id: string | null; seen: number | null; bad: number | null; filled: boolean; material: string; fill_job_id: string | null }
+  type PS = { kind: string; sizes: Record<string, number>; parts: Record<string, boolean>; faces: Face[]; sources: { asset_id: string; camera: { pos: number[]; target: number[] } }[]; baked_key: string | null }
+  type ProfileLite = { id: string; revision: number; versions: { id: string; place_set: PS | null; anim_ref_asset_id: string | null }[] }
+  const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
+  const place = await api<ProfileLite>('POST', '/story/profiles', { name: `Farm kitchen ${tag}`, cls: 'place', appearance: 'a farmhouse kitchen, whitewashed walls' })
+  await api('PUT', `/story/profiles/${place.id}/versions/v1/anim-ref`, { side: 'front', asset_id: img })                 // the set picture
+  const prof = async () => api<ProfileLite>('GET', `/story/profiles/${place.id}`)
+  const ps = async () => (await prof()).versions[0].place_set
+  await openApp(page, { suite: 'story', tab: 'cast' })
+  await page.locator('.cast-panel .segmented button', { hasText: /^places$/ }).click()
+  await page.locator(`.profile-row[data-id="${place.id}"]`).click()
+  const sec = page.locator('section.place-set')
+  await expect(sec.locator('[data-status]')).toHaveText('no set yet')
+  // Build the set ▶: MoGe on the set picture; the fake engine's relief is a bare triangle — the fit says so, and nothing is set
+  await sec.locator('button', { hasText: /^Build the set/ }).click()
+  await expect(sec.locator('[data-status]')).toContainText('not fitted', { timeout: 30_000 })
+  const jobs = (await api<{ items: { origin: { surface: string; ref: string; payload: Record<string, unknown> } | null; recipe: { kind: string; asset_id: string } }[] }>('GET', '/jobs')).items
+  const fit = jobs.find((j) => j.origin?.surface === 'set_fit' && j.origin.ref === place.id)!
+  expect(fit.recipe).toMatchObject({ kind: 'image_to_set', asset_id: img })
+  expect(fit.origin!.payload).toMatchObject({ version: 'v1', camera_height_m: 1.6 })
+  expect(await ps()).toBeNull()
+  // a set as a fit leaves it (a room seen from near its front, the camera at eye level): drawn over the picture, then baked here
+  const p0 = await prof()
+  await api('PUT', `/story/profiles/${place.id}/versions/v1/set`, { revision: p0.revision, place_set: { kind: 'room', sizes: { width: 5, depth: 6, height: 2.8 }, parts: {}, faces: [], baked_key: null,
+    sources: [{ asset_id: img, camera: { pos: [0.3, 1.6, 2], target: [0.1, 1.3, -3], roll: 0, focal_mm: 24, sensor_mm: 36 }, relief_asset_id: null, assumed: ['front', 'height'], lens_deg: 73.7 }] } })
+  await expect(sec.locator('.set-overlay polygon.face')).not.toHaveCount(0, { timeout: 10_000 })
+  await expect(sec.locator('[data-handle="back"]')).toHaveCount(1)
+  await expect(sec.locator('[data-handle="top_back"].assumed')).toHaveCount(1)                                         // the height was guessed: dashed
+  await expect.poll(async () => (await ps())?.faces.filter((f) => f.baked_asset_id).length ?? 0, { timeout: 30_000 }).toBe(5)   // the front wall is off
+  const baked = (await ps())!
+  expect(baked.baked_key).toBeTruthy()
+  expect(baked.faces.find((f) => f.id === 'wall_back')!.seen ?? 0).toBeGreaterThan(0.95)                               // the back wall seen whole (the fake's small pictures: coarse, so still to fill)
+  await expect(sec.locator('.set-face')).toHaveCount(5)
+  // a wall's foot dragged up the picture: the back wall further away, the room deeper
+  const foot = sec.locator('[data-handle="back"] .hit')
+  await sec.locator('.set-view').scrollIntoViewIfNeeded()
+  const box = (await foot.boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 - 30, { steps: 6 })
+  await page.mouse.up()
+  await expect.poll(async () => (await ps())?.sizes.depth ?? 0, { timeout: 10_000 }).toBeGreaterThan(6.5)
+  await expect(sec.locator('[data-status]')).toHaveText('changed since the bake')
+  await page.screenshot({ path: 'node_modules/.e2e/cw6-set-builder.png' })
+  // the kind is one click, and back; Bake again ▶ bakes the set as it is now
+  await sec.locator('.set-kind button', { hasText: /^Corridor$/ }).click()
+  await expect.poll(async () => (await ps())?.kind, { timeout: 10_000 }).toBe('corridor')
+  await sec.locator('.set-kind button', { hasText: /^Room$/ }).click()
+  await expect.poll(async () => (await ps())?.kind, { timeout: 10_000 }).toBe('room')
+  await sec.locator('button', { hasText: /^Bake again/ }).click()
+  await expect.poll(async () => (await ps())?.faces.filter((f) => f.baked_asset_id).length ?? 0, { timeout: 30_000 }).toBe(5)
+  await expect(sec.locator('[data-status]')).toContainText('to fill')
+  // a face's material, named for its Fill
+  const wall = sec.locator('.set-face[data-face="wall_left"] input')
+  await wall.fill('pale ochre plaster'); await wall.press('Enter')
+  await expect.poll(async () => (await ps())?.faces.find((f) => f.id === 'wall_left')?.material, { timeout: 10_000 }).toBe('pale ochre plaster')
+  // Fill ▶: face after face (the fake engine paints them), each its own texture
+  const toFill = (await ps())!.faces.filter((f) => (f.bad ?? 0) >= 0.002).length
+  expect(toFill).toBeGreaterThan(0)
+  await sec.locator('button', { hasText: /^Fill what the picture never saw/ }).click()
+  await expect.poll(async () => (await ps())?.faces.filter((f) => f.filled).length ?? 0, { timeout: 90_000 }).toBe(toFill)
+  const filled = (await ps())!.faces.filter((f) => f.filled)
+  expect(filled.every((f) => f.texture_asset_id !== f.baked_asset_id && !f.fill_job_id)).toBe(true)
+  await expect(sec.locator('[data-status]')).toHaveText('baked and filled')
+  // Bench ▶: Clay on the set, bound to the place, from the picture's camera
+  await sec.locator('button', { hasText: /^Bench/ }).click()
+  await expect(page.locator('[data-testid="bench-chip"]')).toContainText(`Bench: Farm kitchen ${tag} v1`)
+  type StageLite = { bound: { profile_id: string } | null; objects: { kind: string; preset: string | null; profile_id: string | null; place_set: PS | null }[]; cameras: { pos: number[] }[] }
+  const bench = (await api<{ items: StageLite[] }>('GET', '/stages?purpose=bench')).items.find((b) => b.bound?.profile_id === place.id)!
+  expect(bench.objects[0]).toMatchObject({ kind: 'set', preset: 'built', profile_id: place.id })
+  expect(bench.objects[0].place_set!.faces.filter((f) => f.filled)).toHaveLength(toFill)
+  expect(bench.cameras[0].pos).toEqual((await ps())!.sources[0].camera.pos)
+  await page.waitForTimeout(1500)                                                                // the faces' textures arrive
+  await page.screenshot({ path: 'node_modules/.e2e/cw6-bench.png' })
+})
+
+test("places in Clay (CW7): Sets' + lists the Cast places that have a set — a click adds it bound, tagged with its place; a free copy stands beside it; the final shot's plate is the built set, rendered with no Klein still; a picture set becomes a Cast place with its set being built", async ({ page }) => {
+  test.setTimeout(180_000)
+  const tag = Date.now().toString(36)
+  type Obj = { id: string; kind: string; preset: string | null; name: string; profile_id: string | null; plate_asset_id: string | null }
+  type StageLite = { id: string; name: string; revision: number; objects: Obj[]; cameras: { id: string }[] }
+  const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
+  const place = await api<{ id: string; revision: number }>('POST', '/story/profiles', { name: `Dock house ${tag}`, cls: 'place' })
+  const cam = { pos: [0.3, 1.6, 2], target: [0.1, 1.3, -3], roll: 0, focal_mm: 24, sensor_mm: 36 }
+  const face = (id: string) => ({ id, texture_asset_id: img, baked_asset_id: img, coverage_asset_id: null, texel_m: 0.01, seen: 1, bad: 0, filled: false, material: '', fill_job_id: null })
+  await api('PUT', `/story/profiles/${place.id}/versions/v1/set`, { revision: place.revision, place_set: { kind: 'room', sizes: { width: 5, depth: 6, height: 2.8 }, parts: {}, baked_key: 'k',
+    faces: ['floor', 'wall_back', 'wall_left', 'wall_right', 'ceiling'].map(face), sources: [{ asset_id: img, camera: cam, relief_asset_id: null, assumed: [], lens_deg: 73.7 }] } })
+  await openApp(page, { suite: 'stage' })
+  await page.locator('.placeholder button', { hasText: /^New stage/ }).click()
+  const dialog = page.locator('.modal.ask')
+  await dialog.locator('input').fill(`Dock ${tag}`)
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('#anim-sec-shot .stage-picker select option:checked')).toHaveText(`Dock ${tag}`)
+  await openSection(page, 'Scene')
+  const doc = async () => (await api<{ items: StageLite[] }>('GET', '/stages')).items.find((s) => s.name === `Dock ${tag}`)!
+  // the place's card in Sets' +: its set, bound
+  await libAdd(page, 'sets', `Dock house ${tag}`)
+  await page.keyboard.press('Escape')                                                              // the + panel stays open for more; it would cover the rows
+  await expect.poll(async () => (await doc()).objects.filter((o) => o.kind === 'set').map((o) => `${o.preset} ${o.profile_id}`), { timeout: 10_000 }).toEqual([`built ${place.id}`])
+  const bound = (await doc()).objects.find((o) => o.kind === 'set')!
+  const row = page.locator(`.outl-row[data-id="${bound.id}"]`)
+  await expect(row.locator('.bound-tag')).toContainText(`Dock house ${tag}`)
+  await page.waitForTimeout(800)                                                                   // the faces' textures arrive
+  await page.screenshot({ path: 'node_modules/.e2e/cw7-clay-set.png' })
+  // a free copy beside it
+  await row.locator('.name').click({ button: 'right' })
+  await page.locator('.ctx-menu button.item', { hasText: /^Make a free copy/ }).click()
+  await expect.poll(async () => (await doc()).objects.filter((o) => o.kind === 'set').map((o) => o.profile_id), { timeout: 10_000 }).toEqual([place.id, null])
+  // the final shot: the plate is the built set, Stage renders it (no Klein still)
+  await page.evaluate(() => (window as unknown as { __loom2Stage: { setRange: (a: number, b: number) => void } }).__loom2Stage.setRange(0, 3))
+  const shotJobs = async () => (await api<{ items: { kind: string }[] }>('GET', '/jobs')).items.filter((j) => j.kind === 'stage_shot').length
+  const before = await shotJobs()
+  await perfCard(page, 'Final shot')
+  await page.locator('.final-section button', { hasText: /^Make the final shot/ }).click()
+  await expect(dialog).toContainText(/the plate from the built set/)
+  await dialog.locator('button.primary').click()
+  type FinP = { id: string; frames: number; layers: { id: string; method: string; status: string; frames_done: number; still_asset_id: string | null }[] }
+  const st0 = await doc()
+  const finOf = async () => (await api<{ items: FinP[] }>('GET', `/finals?stage_id=${st0.id}`)).items[0]
+  await expect.poll(async () => { const f = await finOf(); const p = f?.layers.find((x) => x.id === 'plate'); return p ? `${p.method} ${p.status} ${p.frames_done}/${f.frames}` : '' }, { timeout: 60_000 })
+    .toBe('set done 3/3')
+  expect((await finOf()).layers.find((x) => x.id === 'plate')!.still_asset_id).toBe(img)
+  expect(await shotJobs()).toBe(before)
+  // a picture set becomes a Cast place: its picture the set picture, its set being built
+  const made = await api<{ job_id: string }>('POST', `/stages/${st0.id}/image-set`, { asset_id: img, lens_deg: 70 })
+  await expect.poll(async () => (await api<{ items: { id: string; status: string }[] }>('GET', '/jobs')).items.find((j) => j.id === made.job_id)?.status, { timeout: 60_000 }).toBe('done')
+  await page.evaluate(async (id) => { await (window as unknown as { __loom2Stage: { open: (id: string) => Promise<void> } }).__loom2Stage.open(id) }, st0.id)
+  await openAnimate(page, 'Clay')
+  await openSection(page, 'Scene')
+  const pic = (await doc()).objects.find((o) => o.kind === 'set' && o.preset === 'image')!
+  await page.locator(`.outl-row[data-id="${pic.id}"] .name`).click({ button: 'right' })
+  await page.locator('.ctx-menu button.item', { hasText: /^Make it a Cast place/ }).click()
+  await dialog.locator('input').fill(`Quay ${tag}`)
+  await dialog.locator('button.primary').click()
+  type ProfileLite = { id: string; name: string; cls: string; versions: { anim_ref_asset_id: string | null }[] }
+  await expect.poll(async () => (await api<{ items: ProfileLite[] }>('GET', '/story/profiles')).items.find((p) => p.name === `Quay ${tag}`)?.versions[0].anim_ref_asset_id ?? null, { timeout: 10_000 })
+    .toBe(pic.plate_asset_id)
+  const quay = (await api<{ items: ProfileLite[] }>('GET', '/story/profiles')).items.find((p) => p.name === `Quay ${tag}`)!
+  expect(quay.cls).toBe('place')
+  const fits = (await api<{ items: { origin: { surface: string; ref: string } | null }[] }>('GET', '/jobs')).items.filter((j) => j.origin?.surface === 'set_fit' && j.origin.ref === quay.id)
+  expect(fits).toHaveLength(1)
+})
+
 test("Cast in Clay and the line-up (CW3, CW5): a Cast character's card adds its figure bound; Make a free copy frees one with its body; Prototype ▸ makes that copy an idea; Line-up ▶ stands the characters side by side and Send to a stage ▸ copies them into a new stage", async ({ page }) => {
   test.setTimeout(120_000)
   const tag = Date.now().toString(36)

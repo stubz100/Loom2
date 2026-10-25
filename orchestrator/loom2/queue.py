@@ -578,10 +578,14 @@ class JobQueue:
         self._origin_stopped(job, msg)
 
     def _origin_stopped(self, job: JobRecord, msg: str) -> None:
-        """CW1: a job some record waits on failed or was cancelled — an idea variant's clay step says so (never raises)."""
+        """CW1: a job some record waits on failed or was cancelled — an idea variant's clay step says so; CW6: a set's face waits for the next
+        Fill (never raises)."""
         from .ideas import IDEA_CLAY_SURFACE, clay_failed
+        from .place_sets import SET_FILL_SURFACE, fill_failed
         if job.origin is not None and job.origin.surface == IDEA_CLAY_SURFACE:
             clay_failed(self, job, msg)
+        if job.origin is not None and job.origin.surface == SET_FILL_SURFACE:
+            fill_failed(self, job, msg)
 
     def _finish_cancelled(self, job: JobRecord) -> None:
         self._cancel_requested.discard(job.id)

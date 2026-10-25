@@ -55,7 +55,7 @@ describe('pins (AP1b, D141)', () => {
 })
 
 const ver = (v: Partial<ProfileVersion>): ProfileVersion => ({ id: 'v1', label: 'v1', state: 'open', group_id: 'grp_1', candidates_group_id: null, hero_asset_id: null, body: null, anim_ref_asset_id: null,
-  anim_ref_back_asset_id: null, anim_test_clip_id: null, shell_asset_id: null, shell_from: null, poses: {}, from_idea: null, height_m: null, model_asset_id: null, model_from: null, body_fit_from: null, body_points: null, anim_ref_note: null,
+  anim_ref_back_asset_id: null, anim_test_clip_id: null, shell_asset_id: null, shell_from: null, poses: {}, from_idea: null, height_m: null, place_set: null, model_asset_id: null, model_from: null, body_fit_from: null, body_points: null, anim_ref_note: null,
   appearance: '', outfit: '', colours: [], marks: '', trigger: null, lora: null, derived_from: null, created_at: '', locked_at: null, ...v })
 const MINE = { preset: 'crouch', joints: { r_knee: [100, 0, 0] }, extra: {}, ground: 0.2, pins: { r_foot: [-0.1, 0.04, 0.2] } }
 const MARA = { id: 'prf_m', name: 'Mara', cls: 'character', current: 'v1', schema_version: 2, revision: 0, voice_id: null, created_at: '', updated_at: '', versions: [ver({ poses: { crouch: MINE } })] } as unknown as Profile

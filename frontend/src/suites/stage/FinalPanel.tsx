@@ -14,11 +14,11 @@ import { askConfirm } from '../../store/session'
 import { useStage } from './stageStore'
 
 const KIND_LABEL: Record<string, string> = { plate: 'plate', figure: 'character', prop: 'prop', shadows: 'shadows' }
-const METHOD_LABEL: Record<string, string> = { projected: 'the set, projected', filled: 'the set, projected and filled', generated: 'the set, generated along the path', picture: 'the picture, through its relief', move: 'Wan Animate', rendered: 'its 3D model', drawn: 'drawn on its model', stage: "Stage's" }
+const METHOD_LABEL: Record<string, string> = { projected: 'the set, projected', filled: 'the set, projected and filled', generated: 'the set, generated along the path', picture: 'the picture, through its relief', set: 'the built set, rendered', move: 'Wan Animate', rendered: 'its 3D model', drawn: 'drawn on its model', stage: "Stage's" }
 
 function statusText(l: FinalLayer, projecting: boolean, frames: number, filling: string | null): string {
   if (l.kind === 'plate') {
-    if (projecting) return l.method === 'picture' ? 'rendering the picture…' : 'projecting…'
+    if (projecting) return l.method === 'picture' ? 'rendering the picture…' : l.method === 'set' ? 'rendering the set…' : 'projecting…'
     if (l.method === 'filled' && l.status === 'running' && l.still_asset_id) {                                   // PF1 (D135)
       const keys = l.keys as unknown as { frame: number; asset_id: string | null }[]
       const pending = keys.find((k) => !k.asset_id)
@@ -77,7 +77,7 @@ function LayerRow({ f, l }: { f: Final; l: FinalLayer }) {
       text: `The frames before ${playhead} keep the skeleton they were drawn with (skeleton keys on the figure's timeline); from ${playhead} the figure takes Cast's. The guide is drawn again, and the batches from the one frame ${playhead} falls in are performed again (the ones before kept).`,
       okLabel: 'Apply' }).then((ok) => { if (ok) void useFinals.getState().skeletonFrom(f.id, l.id, playhead) }) },
   ] : []
-  const picture = plate && l.method === 'picture'                                // SC3e: the plate is the set's picture, rendered here
+  const picture = plate && (l.method === 'picture' || l.method === 'set')        // SC3e: the plate is the set's picture, rendered here; CW7: a built set's faces
   const generated = plate && l.method === 'generated'                            // CA3 (D130): generated along the path from the still
   const filled = plate && l.method === 'filled'                                  // PF1 (D135): projected and filled at keyframes
   const clip = useSession((s) => s.capabilities?.stage?.clip)
@@ -111,7 +111,8 @@ function LayerRow({ f, l }: { f: Final; l: FinalLayer }) {
           : filled ? `Projected and filled: the still projected along the path, what it never saw filled by Klein at keyframes Stage places — it stays on the set${l.heal ? '; the frames between healed' : ''}. Click for the plate's other ways`
           : 'Projected: the still cast along the camera path by Stage, no GPU job — exact for a small move, smeared where a large one shows what the still never saw. Click for the plate\'s other ways'}>
         {generated ? 'along the path ▾' : filled ? `filled${l.heal ? ' · heal' : ''} ▾` : 'projected ▾'}</button>}
-      {picture && (l.status === 'passes' || l.status === 'failed') && !projecting && <button className="quiet" onClick={() => void useFinals.getState().plate(f.id)} title="The set's picture through its relief along the camera path, rendered here in seconds (no Klein still: the picture is the place)">Render the plate</button>}
+      {picture && (l.status === 'passes' || l.status === 'failed') && !projecting && <button className="quiet" onClick={() => void useFinals.getState().plate(f.id)}
+        title={l.method === 'set' ? "The built set's baked and filled faces along the camera path, rendered here in seconds (no Klein still, no drift: the set is the place)" : "The set's picture through its relief along the camera path, rendered here in seconds (no Klein still: the picture is the place)"}>Render the plate</button>}
       {plate && !picture && (l.status === 'passes' || l.status === 'failed') && <button className="quiet" onClick={() => void useFinals.getState().plate(f.id)} title="A Klein Stage shot of the bare set at the first frame, with the Shot tab's prompt and references (no people, no objects: they are layers)">Make the plate</button>}
       {l.kind === 'figure' && !working && <button className="quiet" onClick={l.status === 'done' ? retake : () => void useFinals.getState().perform(f.id, l.id)}
         title={l.status === 'done' ? 'Perform it again with a new seed (the other layers stay)' : "The figure's character (its animation reference, placed where the figure starts) performs its pose sequence through Wan Animate, in 77-frame batches"}>

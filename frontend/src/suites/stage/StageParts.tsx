@@ -7,7 +7,7 @@
 // the viewport with the pose pill; the stage's frame form (`ShotTab`) is Image › From a stage's, the stage clip (`StageClipCard`) Performance's.
 import { AnimateLevels, GraphPill } from '../../frame/AnimateLevels'
 import { Help } from '../../frame/Help'
-import { Aperture, Bookmark, Box, Camera, Eye, EyeOff, Frame, LayoutTemplate, Lock, LockOpen, PersonStanding, User, UserRound, Video } from 'lucide-react'
+import { Aperture, Bookmark, Box, Camera, Eye, EyeOff, Frame, LayoutTemplate, Lock, LockOpen, MapPin, PersonStanding, User, UserRound, Video } from 'lucide-react'
 import { PresetPanel } from '../../frame/PresetPanel'
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { CommandButton, CommandRow, MenuButton } from '../../frame/CommandButton'
@@ -85,7 +85,13 @@ export function SceneTab() {
     return { id: `char:${p.id}`, label: p.name, icon: <UserRound size={18} />, img: v?.hero_asset_id ? api.thumbUrl(v.hero_asset_id, 256) : null,
       hint: current.objects.some((o) => o.kind === 'mannequin' && o.profile_id === p.id) ? 'on the stage — a click selects it' : `${p.name}'s figure, bound: its body${v?.shell_asset_id ? ' and shell' : ''} follow Cast` } })
   const figures = [...castFigures, ...Object.entries(MANNEQUIN_PRESETS).map(([p, m]) => ({ id: p, label: m.label, icon: <User size={18} />, hint: 'a mannequin, free' }))]
-  const sets = SET_PRESETS.map((p) => ({ id: p, label: p, icon: <Box size={18} />, hint: 'architecture only (D108)' }))
+  // CW7 (02 §9): Cast's places with a set first — a click adds the place's set, bound (it follows Cast), then the presets
+  const castSets = profiles.filter((p) => p.cls === 'place').flatMap((p) => { const v = p.versions.find((x) => x.id === p.current); const ps = v?.place_set
+    if (!ps) return []
+    const pic = ps.sources[0]?.asset_id ?? v?.hero_asset_id
+    return [{ id: `place:${p.id}`, label: p.name, icon: <MapPin size={18} />, img: pic ? api.thumbUrl(pic, 256) : null,
+      hint: current.objects.some((o) => o.kind === 'set' && o.profile_id === p.id) ? 'on the stage — a click selects it' : `${p.name}'s set (a ${ps.kind}), bound: it follows Cast` }] })
+  const sets = [...castSets, ...SET_PRESETS.map((p) => ({ id: p, label: p, icon: <Box size={18} />, hint: 'architecture only (D108)' }))]
   const standins = PROP_PRESETS.map((p) => ({ id: p, label: p, icon: <Box size={18} />, hint: 'a grey stand-in shape (D109)' }))
   const names = new Map(current.objects.filter((o) => o.kind === 'mesh' && o.asset_id).reverse().map((o) => [o.asset_id!, o.name]))   // a thing keeps its name on its stage (the first object that shows it)
   const meshItems = propMeshes(meshes).slice(0, 48).map((m) => { const l = meshLabel(m, profiles, names); return { id: m.id, label: l.label, icon: <Box size={18} />, img: api.thumbUrl(m.id, 256), hint: l.hint } })   // proto01_UIcast CF9: named by source
@@ -98,7 +104,8 @@ export function SceneTab() {
       add: <PresetPanel label="figure presets" items={figures} showText onPick={(id) => (id.startsWith('char:') ? st().placeCharacter(id.slice(5), centre()) : runCommand(`stage.add.mannequin.${id}`))}
         title="A figure at the viewport's centre: a Cast character's (bound, it follows Cast) or a mannequin to pose" /> },
     { key: 'sets', label: 'Sets', of: (o) => o.kind === 'set',
-      add: <><PresetPanel label="set presets" items={sets} showText onPick={(id) => runCommand(`stage.add.set.${id}`)} title="A set at the viewport's centre: architecture only — room, street, deck, empty (D108)" />
+      add: <><PresetPanel label="set presets" items={sets} showText onPick={(id) => (id.startsWith('place:') ? void st().placePlace(id.slice(6)) : runCommand(`stage.add.set.${id}`))}
+        title="A set: a Cast place's (bound, it follows Cast) or architecture only — room, street, deck, empty (D108)" />
         <CommandButton id="stage.add.set.image" text label="From an image…" /></> },                                       /* SC3 (D120) */
     { key: 'props', label: 'Props', of: (o) => o.kind === 'mesh' && !!o.profile_id, add: <LibraryProps centre={centre} /> },      /* D110 (PS3): Story · Props, each its 3D model bound to the prop */
     { key: 'standins', label: 'Stand-ins', of: (o) => o.kind === 'prop', help: 'Grey shapes for blocking (D109).',
@@ -156,12 +163,12 @@ export const OutlinerTab = SceneTab                                   // the nam
 function ObjectRow({ o, selected }: { o: StageObject; selected: boolean }) {
   const rename = () => void askText({ title: 'Rename', initial: o.name, placeholder: 'name' }).then((n) => { if (n?.trim()) st().updateObject(o.id, { name: n.trim() }) })
   return (
-    <div className={`outl-row${selected ? ' active' : ''}${o.visible ? '' : ' hidden'}`} data-row="object" data-kind={o.kind} onClick={() => st().select(selected ? null : o.id)}
+    <div className={`outl-row${selected ? ' active' : ''}${o.visible ? '' : ' hidden'}`} data-row="object" data-kind={o.kind} data-id={o.id} onClick={() => st().select(selected ? null : o.id)}
       onDoubleClick={() => st().frameView([o.id])} onContextMenu={(e) => { e.preventDefault(); st().select(o.id); showMenu(e, viewportMenu(true)) }}>
       <span className="swatch" style={{ background: `hsl(${(o.colour_id * 137) % 360} 55% 50%)` }} />
       <span className="kind">{o.kind}</span>
       <span className="name" onDoubleClick={(e) => { e.stopPropagation(); rename() }}>{o.name}</span>
-      {(o.kind === 'mannequin' || o.kind === 'mesh') && o.profile_id && <BoundTag o={o} />}
+      {(o.kind === 'mannequin' || o.kind === 'mesh' || o.kind === 'set') && o.profile_id && <BoundTag o={o} />}
       <button className="quiet" title={o.visible ? 'Hide' : 'Show'} onClick={(e) => { e.stopPropagation(); st().updateObject(o.id, { visible: !o.visible }) }}>{o.visible ? <Eye size={13} /> : <EyeOff size={13} />}</button>
       <button className="quiet" title={o.locked ? 'Unlock' : 'Lock'} onClick={(e) => { e.stopPropagation(); st().updateObject(o.id, { locked: !o.locked }) }}>{o.locked ? <Lock size={13} /> : <LockOpen size={13} />}</button>
       {selected && <ObjectEditor o={o} />}

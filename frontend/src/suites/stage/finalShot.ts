@@ -31,8 +31,12 @@ export const batchCount = (n: number): number => (n <= 77 ? 1 : 1 + Math.ceil((n
 const isActor = (o: StageObject) => o.visible && (o.kind === 'mannequin' || o.kind === 'mesh' || o.kind === 'prop' || o.kind === 'plane')
 /** SC3e (D120): a stage with a visible picture set — its plate is that picture through the relief, not a Klein still (finals.py picture_plate). */
 export const hasPictureSet = (doc: StageDoc): boolean => doc.objects.some((o) => o.kind === 'set' && o.preset === 'image' && o.visible && !!o.plate_asset_id)
-/** SC3e: the final's plate is a picture set's picture (the server decided when the final was made). */
-export const picturePlated = (f: Final): boolean => f.layers.some((l) => l.id === 'plate' && l.method === 'picture')
+/** CW7 (04 §5): a stage with a visible built set skinned from its picture — its plate is the set rendered (finals.py built_plate). */
+export const hasBuiltSet = (doc: StageDoc): boolean => doc.objects.some((o) => o.kind === 'set' && o.preset === 'built' && o.visible && !!o.place_set?.faces.some((f) => f.texture_asset_id))
+/** SC3e: the final's plate is a picture set's picture, or (CW7) a built set rendered — Stage renders it, no job (the server decided when
+ *  the final was made). */
+export const picturePlated = (f: Final): boolean => f.layers.some((l) => l.id === 'plate' && (l.method === 'picture' || l.method === 'set'))
+export const builtPlated = (f: Final): boolean => f.layers.some((l) => l.id === 'plate' && l.method === 'set')
 
 // ---- CA3 (D130): the plate's method by the camera's travel ----------------------------------------------------------------------
 type V3 = number[]
@@ -113,7 +117,7 @@ export async function makeFinal(opts: MakeOptions): Promise<Final> {
   if (!doc) throw new Error('no stage open')
   const plan = planFinal(doc, opts.rate)
   const [w, h] = opts.size ?? finalSize()
-  const plate = opts.plate ?? (hasPictureSet(doc) ? null : plateChoice(cameraTravel(doc, cam.id, plan.times)).method)
+  const plate = opts.plate ?? (hasPictureSet(doc) || hasBuiltSet(doc) ? null : plateChoice(cameraTravel(doc, cam.id, plan.times)).method)
   const sampled = plan.times.map((t) => { const d = sampleDoc(doc, t); return { cam: d.cameras.find((c) => c.id === cam.id) ?? cam, doc: d } })
   const actors = plan.layers.filter((l) => l.object_id).map((l) => l.object_id!)
   const todo = plan.layers.flatMap((l) => passesOf(l).map((p) => ({ l, p })))
@@ -245,7 +249,7 @@ export async function projectPlate(f: Final, onProgress?: (done: number, total: 
 export async function picturePlate(f: Final, onProgress?: (done: number, total: number) => void): Promise<Final> {
   const doc = st().current
   if (!doc || doc.id !== f.stage_id) throw new Error('open the final\'s stage to render its plate')
-  if (!hasPictureSet(doc)) throw new Error('the stage has no picture set any more')
+  if (!hasPictureSet(doc) && !hasBuiltSet(doc)) throw new Error('the stage has no picture set or built set any more')
   if (!st().sequenceRenderer) (await import('./headless')).ensureHeadless()
   const render = st().sequenceRenderer
   if (!render) throw new Error('the stage is not ready to render')
@@ -392,7 +396,7 @@ export const useFinals = create<FinalsState>((set, get) => ({
       try {
         const next = await picturePlate(f)
         set({ finals: replace(get().finals, next) })
-        useSession.getState().toast(`${f.name}: the plate is the picture — ${next.frames} frames through its relief`, 'success')
+        useSession.getState().toast(`${f.name}: ${builtPlated(f) ? `the plate is the built set — ${next.frames} frames through its faces` : `the plate is the picture — ${next.frames} frames through its relief`}`, 'success')
       } catch (e) { useSession.getState().toast(`Render the plate: ${(e as ApiError).detail ?? (e as Error).message ?? e}`, 'error') }
       finally { set({ projecting: null }) }
       return
@@ -555,14 +559,14 @@ export const useFinals = create<FinalsState>((set, get) => ({
     const plan = planFinal(doc, rate)
     const figures = plan.layers.filter((l) => l.kind === 'figure').length, props = plan.layers.filter((l) => l.kind === 'prop').length
     const [w, h] = finalSize()
-    const picture = hasPictureSet(doc)
+    const picture = hasPictureSet(doc), built = !picture && hasBuiltSet(doc)               // SC3e; CW7: a built set's plate is the set
     const cam = st().activeCamera()
-    const plate = picture || !cam ? null : plateChoice(cameraTravel(doc, cam.id, plan.times))
+    const plate = picture || built || !cam ? null : plateChoice(cameraTravel(doc, cam.id, plan.times))
     const forShot = useMakeFor.getState().animate           // D125 (A1, WB1): made for the For chip's shot version, its takes land there
     const ok = await askConfirm({ title: 'Make the final shot?', okLabel: 'Split into layers',
       text: `The scene through ${st().activeCamera()?.name ?? 'the camera'}, frames ${doc.range.start}–${doc.range.end} at ${rate} fps: ${plan.times.length} frames at ${w}×${h}. ` +
         `${plan.layers.length} layers — the plate, ${figures} figure${figures === 1 ? '' : 's'}, ${props} prop${props === 1 ? '' : 's'} and the shadows. Stage renders their passes here (a minute or two)` +
-        (picture ? ', and the plate from the picture set\'s picture; the other layers are made next.' : '; the layers are made from them next.') +
+        (picture ? ', and the plate from the picture set\'s picture; the other layers are made next.' : built ? ', and the plate from the built set (its baked and filled faces, no drift on any move); the other layers are made next.' : '; the layers are made from them next.') +
         (plate ? ` The plate is ${plate.method === 'filled' ? 'projected and filled (Klein fills what the still never saw at keyframes: a few minutes on the GPU)' : 'its still projected along the path'}: ${plate.why}.` : '') +
         (forShot ? ` The finished shot becomes a take of ${forLabel(forShot)}.` : ' Its clips become takes of the shots that use this camera.') })
     if (!ok) return null
@@ -577,7 +581,7 @@ export const useFinals = create<FinalsState>((set, get) => ({
         try { f = await picturePlate(f, (done, total) => set({ making: { done, total, what: 'the plate from the picture' } })); set({ finals: replace(get().finals, f) }) }
         catch (e) { s.toast(`${f.name}: the plate from the picture: ${(e as ApiError).detail ?? (e as Error).message ?? e} — Render the plate on its row`, 'error'); return f }
       }
-      s.toast(`${f.name}: ${f.layers.length} layers, ${f.frames} frames each — their passes are on disk${picturePlated(f) ? ', the plate is the picture' : ''}`, 'success')
+      s.toast(`${f.name}: ${f.layers.length} layers, ${f.frames} frames each — their passes are on disk${builtPlated(f) ? ', the plate is the built set' : picturePlated(f) ? ', the plate is the picture' : ''}`, 'success')
       return f
     } catch (e) { s.toast(`Make the final shot: ${(e as ApiError).detail ?? (e as Error).message ?? e}`, 'error'); return null } finally { set({ making: null }) }
   },
@@ -602,7 +606,7 @@ export function nextFinalStep(stageId: string | null): FinalStep {
   }
   const plate = f.layers.find((l) => l.kind === 'plate' && (l.status === 'passes' || l.status === 'failed'))
   if (plate) return fs.projecting === f.id ? { label: 'Rendering the plate…', run: null, why: 'the picture through its relief' }
-    : { label: plate.method === 'picture' ? 'Render the plate ▶' : 'Make the plate ▶', run: () => void fs.plate(f.id) }
+    : { label: plate.method === 'picture' || plate.method === 'set' ? 'Render the plate ▶' : 'Make the plate ▶', run: () => void fs.plate(f.id) }
   const fig = f.layers.find((l) => l.kind === 'figure' && (l.status === 'passes' || l.status === 'failed'))
   if (fig) return { label: `Perform ${fig.name} ▶`, run: () => void fs.perform(f.id, fig.id) }
   const working = f.layers.find((l) => l.status === 'queued' || l.status === 'running')

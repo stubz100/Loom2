@@ -55,6 +55,22 @@ export async function moveCoverage(ps: PlaceSetDoc, coverage: Record<string, str
   } finally { r.dispose(); r.forceContextLoss(); for (const t of tex.values()) t.dispose() }
 }
 
+/** CW6's rig (scripts/cw6_browser.cjs): a set as the engine draws it — its faces' Catalogue textures unlit, each face from inside only —
+ *  from a camera, the untextured faces grey (a PNG, base64). */
+export async function lookAssets(ps: PlaceSetDoc, faces: Record<string, string>, cam: Cam, w = 960, h = 540): Promise<string> {
+  const { api } = await import('../api/client')
+  const tex = new Map<string, THREE.Texture>()
+  for (const [id, aid] of Object.entries(faces)) {
+    const t = new THREE.Texture(await image(api.assetUrl(aid))); t.colorSpace = THREE.SRGBColorSpace; t.needsUpdate = true; tex.set(id, t)
+  }
+  const scene = new THREE.Scene()
+  scene.add(placeSet(ps, new THREE.MeshBasicMaterial({ color: 0x9a9a9a, side: THREE.FrontSide }), (id) => (tex.has(id) ? new THREE.MeshBasicMaterial({ map: tex.get(id)!, side: THREE.FrontSide }) : null)))
+  const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true })
+  r.setPixelRatio(1); r.setSize(w, h, false); r.setClearColor(0x202024, 1)
+  try { r.render(scene, sourceCamera(cam, w / h)); return r.domElement.toDataURL('image/png').split(',')[1] }
+  finally { r.dispose(); r.forceContextLoss(); for (const t of tex.values()) t.dispose() }
+}
+
 /** The set as textured by the bake, from a camera (a look for the sheet). */
 export async function look(ps: PlaceSetDoc, textures: Record<string, string>, cam: Cam, w = 640, h = 360): Promise<string> {
   const scene = new THREE.Scene()

@@ -179,6 +179,28 @@ the shell's picture replaces the skeleton guide. Wan Animate needs the skeleton 
   - **hillside:** sloped ground from a height map (MoGe's relief as the height);
   - **nature:** open ground with terrain, its trees and rocks as props (D108).
 
+**As built (CW6, 2026-10-25; E38 → D143).**
+
+- **The set is the place version's** (`ProfileVersion.place_set`): its kind, sizes, parts, faces and the picture it came from.
+- **The set picture** is the place's reference slot: *Make the set picture ▶* draws the place empty from eye level; *Use as the set
+  picture* takes a candidate.
+- ***Build the set ▶*** runs MoGe-2 and fits a room, a corridor, a street or open ground, scaled by the camera's height (1.6 m). The
+  page then bakes the picture onto the faces by itself.
+- **The picture view:** the set drawn over its picture from the matched camera. Drag a wall's foot or its top to fit it; the guessed
+  edges are dashed. The kind is one click; the sizes, the camera's height and the parts are fields.
+- ***Fill ▶*** paints what the picture never saw well, face after face, the most seen first. Each face's row names its material: a
+  named material is the whole prompt; a room's faces are kept plain, a corridor's or a street's continued as the rest. *Fill this
+  face ▶* fills one again.
+- ***Bench ▶*** opens Clay on the set from the picture's camera, a 1.75 m figure inside; the set is drawn from inside only, a doll's
+  house from outside.
+- **Not built:** openings (doors, windows, arches), a second picture, wall handles in 3D, shadows caught by the faces, a place in the
+  line-up.
+
+**As built (CW7, 2026-10-25).** Clay's Sets + lists the Cast places that have a set; a click adds it bound (it follows Cast), *Make a
+free copy* frees one, *Edit in Cast* goes back. *Make it a Cast place…* on a picture set makes a place from its picture and builds its
+set. A final shot on a stage with a built set takes the set as its plate (method `set`): Stage renders the faces along the camera path,
+no Klein still, nothing to drift (the rig: Mara in the farm kitchen, the camera dollying 0.8 m in).
+
 ### 2.7 Cast's bench is bound clay; Clay stays free (U12)
 
 **The pattern is Image and Cast, repeated in 3D:**
@@ -367,8 +389,8 @@ About 9½ weeks in all, the spikes included.
 | **CW4 · Props** | Pixal3D's model, a height in metres, the prop's bench | yes (rig) | 1.5 |
 | **CW5 · The line-up** | as [05](05-plan.md) §2 | no | 2 |
 | **E38 · The set builder measured** | 2026-10-25 → D143: ten pictures (five truth places and their clay passes, five found); MoGe's scale 1.06–2× short — the camera's height sets it (±10 % on exact geometry); Klein's stills drift 14–127 %, so the overlay is shown every time; texel by kind; each face filled with its material; an empty place only; no second picture by default | journal; `img/e38-*.jpg` |
-| **E38 → CW6 · The set builder** | as [05](05-plan.md) §2, in Cast's place bench | yes | 3 + 7 |
-| **CW7 · Places in Clay, the set as the plate** | as [05](05-plan.md) §2 (U10, U11) | yes (rig) | 2.5 |
+| **CW6 · The set builder** | 2026-10-25 (§2.6 as built): the set on the place version; the set picture; *Build the set ▶* (MoGe, the fit at the camera's height); the overlay with its drags, the kind, sizes and parts; the bake in the page; *Fill ▶* face after face with each face's material; the place's bench. Rig `scripts/cw6_acceptance.py` 14/14 (the clay room within 4 % of the truth; Fills 28–59 s a face) | journal 2026-10-25 (CW6's entry); `img/cw6-*.jpg` |
+| **CW7 · Places in Clay, the set as the plate** | 2026-10-25 (§2.6 as built): Cast places as cards in Sets' +, bound sets following Cast, a free copy, *Make it a Cast place…* on a picture set; the final shot's plate from a built set (method `set`). Rig `scripts/cw7_acceptance.py` 4/4 (Mara in the farm kitchen, a dolly in: the plate in 8 s, Wan Animate 126 s) | journal 2026-10-25 (CW7's entry); `img/cw7-final.jpg` |
 | **Later · More set kinds** | skybox, balcony, hillside, nature (§2.6) | — | — |
 
 ## 5. Settled the same day

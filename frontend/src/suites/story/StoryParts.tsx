@@ -530,7 +530,7 @@ function TemplateRows() {
 function candidateMenu(id: string): MenuItem[] {
   const s = sy()
   if (!s.picked.includes(id)) s.pick(id)
-  return [{ cmd: 'story.cast.addRef' }, { cmd: 'story.cast.setHero' }, sep, { cmd: 'story.cast.useAsAnimRef' }, { cmd: 'story.cast.useAsAnimRefBack' }, sep, { cmd: 'story.cast.openCandidates' }]
+  return [{ cmd: 'story.cast.addRef' }, { cmd: 'story.cast.setHero' }, sep, { cmd: 'story.cast.useAsAnimRef' }, { cmd: 'story.cast.useAsAnimRefBack' }, { cmd: 'cast.place.usePicture' }, sep, { cmd: 'story.cast.openCandidates' }]
 }
 
 function Candidate({ a, picked }: { a: Asset; picked: boolean }) {
@@ -552,6 +552,7 @@ function Candidate({ a, picked }: { a: Asset; picked: boolean }) {
  *  16:9 with the figure centred and padded (a portrait one loses its head and feet to the node's crop), a plain ground. A prop's is the
  *  object alone in a three-quarter view. Made from the sheet and references; any candidate can be picked (its right-click). */
 const ModelView = lazy(() => import('../stage/ModelView'))
+const PlaceSetSection = lazy(() => import('./CastSet').then((m) => ({ default: m.PlaceSetSection })))   // CW6: three.js only when a place is open
 
 /** D110 (PS2): a prop's 3D model — made from its animation reference (else its hero), stood upright, shown turning; Animate places it. */
 function PropModel({ p, v }: { p: Profile; v: Profile['versions'][number] }) {
@@ -692,6 +693,7 @@ function CastPage() {
           {refs.length > REF_SHOWN && <button type="button" className="link" onClick={() => runCommand('story.cast.openGroup')}>+{refs.length - REF_SHOWN} more</button>}
         </div> : <span className="hint">none yet — ✓ on a candidate keeps it here</span>}
       </section>
+      {p.cls === 'place' && <Suspense fallback={<section className="place-set" />}><PlaceSetSection p={p} v={v} /></Suspense>}{/* CW6 (D143): the set builder, a place's own tool */}
       <section>
         <h3>Coverage <Help text={"Kept references per shot size × angle; thin cells are tinted (advisory)."} /></h3>
         <table className="cov-grid" aria-label="coverage">

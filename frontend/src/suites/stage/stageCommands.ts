@@ -1,6 +1,6 @@
 // P13 / ST1 (D81): the Stage suite's verbs — every one has a mouse home (the gizmo bar, the panel, the Inspector, the viewport's
 // right-click menu) per D32; G / R / S / W, F, Delete, Ctrl+Z / Ctrl+Shift+Z are accelerators.
-import { Aperture, BookmarkPlus, Box, FlaskConical, Hand, PersonStanding, Pin, PinOff, PictureInPicture2, Sun, UserRound, UserX, Camera, Clapperboard, Copy, Crosshair, Diamond, Eye, EyeOff, Focus, Frame, Grid3x3, ImagePlus, Layers, Pencil, Lock, LockOpen, Magnet, Move3d, MousePointer2, Play, Plus, Redo2, Rotate3d, Route, Scaling, Trash2, Undo2, User, Video, X } from 'lucide-react'
+import { Aperture, BookmarkPlus, Box, FlaskConical, Hand, MapPin, PersonStanding, Pin, PinOff, PictureInPicture2, Sun, UserRound, UserX, Camera, Clapperboard, Copy, Crosshair, Diamond, Eye, EyeOff, Focus, Frame, Grid3x3, ImagePlus, Layers, Pencil, Lock, LockOpen, Magnet, Move3d, MousePointer2, Play, Plus, Redo2, Rotate3d, Route, Scaling, Trash2, Undo2, User, Video, X } from 'lucide-react'
 import { registerCommands, sep, type Command, type MenuItem } from '../../frame/commands'
 import { askConfirm, askText, useSession } from '../../store/session'
 import { MANNEQUIN_PRESETS, PROP_PRESETS, SET_PRESETS } from './builders'
@@ -133,8 +133,12 @@ registerCommands([
     hint: "a new idea in Cast from this free figure (its body and shell) or mesh (its model and height), with Clay's view of it as its picture",
     when: () => { const o = sel(); return !!o && !o.profile_id && (o.kind === 'mannequin' || (o.kind === 'mesh' && !!o.asset_id)) && !!viewport.snapshot },
     run: () => void st().prototypeObject(st().selected!) },
-  { id: 'stage.object.freeCopy', scope: 'stage', label: 'Make a free copy', icon: Copy, placement: ['inspector', 'context'], hint: "beside it, free of Cast: its body and shell (or its model and height) as they are now, to experiment with",
-    when: () => !!sel()?.profile_id && (sel()?.kind === 'mannequin' || sel()?.kind === 'mesh'), run: () => st().freeCopy(st().selected!) },
+  { id: 'stage.object.freeCopy', scope: 'stage', label: 'Make a free copy', icon: Copy, placement: ['inspector', 'context'], hint: "beside it, free of Cast: its body and shell (or its model and height, or a set's faces) as they are now, to experiment with",
+    when: () => !!sel()?.profile_id && (sel()?.kind === 'mannequin' || sel()?.kind === 'mesh' || (sel()?.kind === 'set' && sel()?.preset === 'built')), run: () => st().freeCopy(st().selected!) },
+  // CW7 (02 §9): a picture set becomes a Cast place — the picture its set picture, its set built from it
+  { id: 'stage.set.toPlace', scope: 'stage', label: 'Make it a Cast place…', icon: MapPin, placement: ['inspector', 'context'],
+    hint: "a Cast place with this set's picture as its set picture, and Build the set ▶ on it: a room, a corridor or a street fitted to the picture",
+    when: () => sel()?.kind === 'set' && sel()?.preset === 'image' && !!sel()?.plate_asset_id, run: () => void st().setToPlace(st().selected!) },
   { id: 'stage.figure.openInCast', scope: 'stage', label: 'Edit in Cast', icon: UserRound, placement: ['inspector', 'context'], when: () => !!sel()?.profile_id,
     run: () => { const o = sel(); if (o?.profile_id) void import('../../store/origin').then((m) => m.goToStory({ tab: 'cast', id: o.profile_id!, ...(o.version ? { version: o.version } : {}) })) } },
   // ST3: the frame (the Render tab; D90 02 §8.1: a shot is a Story shot)
@@ -202,6 +206,8 @@ export function viewportMenu(onObject: boolean): MenuItem[] {
       ...holdItems(),
       ...(sel()?.kind === 'mannequin' ? [...bindItems(), { cmd: 'stage.pose.mode' }, { label: 'Pins', icon: Pin, items: [{ cmd: 'stage.pose.pinFeet' }, { cmd: 'stage.pose.pinHands' }, sep, { cmd: 'stage.pose.unpin' }] }, { cmd: 'stage.pose.mirror' }, { cmd: 'stage.pose.reset' }, { cmd: 'stage.pose.save' }, { cmd: 'stage.pose.saveForCharacter' }, { cmd: 'stage.motion.apply' }, { cmd: 'stage.path.clear' }, sep] : []),
       ...(sel()?.profile_id ? [{ cmd: 'stage.object.freeCopy' }] : sel()?.kind === 'mannequin' || sel()?.kind === 'mesh' ? [{ cmd: 'stage.object.prototype' }] : []),
+      ...(sel()?.kind === 'set' && sel()?.profile_id ? [{ cmd: 'stage.figure.openInCast' }] : []),                      // CW7: a bound set's way to its place
+      ...(sel()?.kind === 'set' && sel()?.preset === 'image' ? [{ cmd: 'stage.set.toPlace' }] : []),
       { cmd: 'stage.anim.keyObject' }, sep, { cmd: 'stage.object.delete' }, sep, { cmd: 'stage.undo' }, { cmd: 'stage.redo' }]
     : [addMenu(), { cmd: 'stage.add.plane' }, { cmd: 'stage.camera.add' }, { cmd: 'stage.camera.setFromView' }, cameraShotItem(), sep, { cmd: 'stage.tool.select' }, { cmd: 'stage.tool.move' }, { cmd: 'stage.tool.rotate' }, { cmd: 'stage.tool.scale' }, { cmd: 'stage.tool.path' }, { cmd: 'stage.snap' }, sep, { cmd: 'stage.frameAll' }, sep,
       { cmd: 'stage.shot.passes' }, { cmd: 'stage.shot.generate' }, sep, { cmd: 'stage.anim.keyCamera' }, { cmd: 'stage.anim.removeKey' }, { cmd: 'stage.clip.guide' }, { cmd: 'stage.clip.animate' }, sep,

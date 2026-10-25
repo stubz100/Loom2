@@ -100,12 +100,19 @@ SetKind = Literal["room", "street", "corridor", "ground"]
 
 
 class SetFace(BaseModel):
-    """CW6 (04 §2): a built set's face, baked — its texture (a Catalogue image, the face straight on) and its texel size."""
+    """CW6 (04 §2, §4): a built set's face — what it shows (a Catalogue image of the face straight on: its Fill once filled, else its bake),
+    the bake and its coverage, its texel size, how much the picture saw, and the material its Fill names (D143)."""
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
     id: str
     texture_asset_id: str | None = None
+    baked_asset_id: str | None = None              # the picture projected onto the face from its camera (stage/setBake.ts)
+    coverage_asset_id: str | None = None           # per texel: red the cosine the picture saw it at, green its pixel in texels ÷ 8
     texel_m: float = Field(0.01, gt=0.0, le=1.0)
-    mask_asset_id: str | None = None               # what the pictures never saw well (the Fill's selection)
+    seen: float | None = Field(None, ge=0.0, le=1.0)   # the share of texels the picture saw
+    bad: float | None = Field(None, ge=0.0, le=1.0)    # the share the Fill takes (unseen, or seen through a pixel over two texels wide)
+    filled: bool = False
+    material: str = Field("", max_length=200)      # D143: named for the face's Fill ("pale ochre plaster"); blank: the face's noun
+    fill_job_id: str | None = None                 # the face's Fill while it runs
 
 
 class SourceCamera(BaseModel):
@@ -122,6 +129,9 @@ class SetSource(BaseModel):
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
     asset_id: str
     camera: SourceCamera
+    relief_asset_id: str | None = None             # MoGe's relief it was fitted from (set_fit.py)
+    assumed: list[str] = Field(default_factory=list)   # what the picture did not show and the fit guessed (back, front, left, right, height, length…)
+    lens_deg: float | None = None
     made_at: str = Field(default_factory=utc_now)
 
 
@@ -134,6 +144,7 @@ class PlaceSet(BaseModel):
     parts: dict[str, bool] = Field(default_factory=dict)
     faces: list[SetFace] = Field(default_factory=list)
     sources: list[SetSource] = Field(default_factory=list)
+    baked_key: str | None = None                   # what the faces were baked for (setOverlay.bakeKey: the set and its camera); another → bake again
 
 
 class StageObject(BaseModel):
@@ -238,7 +249,20 @@ def bench_objects(profile: Any, v: Any) -> tuple[list[StageObject], float]:
         ref = StageObject(id=new_id("fig"), kind="mannequin", name="1.75 m for scale", preset="adult", detail="female", pose=Pose(preset="stand"),
                           transform=Transform(pos=[round(-0.6 - 0.25 * h, 3), 0.0, 0.0]), colour_id=2)
         return [mesh, ref], max(h, REFERENCE_HEIGHT_M)
-    raise ValueError("a place's bench comes with the set builder (CW6) — a character or a prop has one now")
+    if v.place_set is None:
+        raise ValueError("the place has no set yet — Build the set ▶ on its Cast page first")
+    ps = v.place_set
+    built = StageObject(id=new_id("set"), kind="set", name=profile.name, preset="built", locked=True, profile_id=profile.id, version=v.id,
+                        place_set=ps.model_copy(deep=True), colour_id=1)
+    at = [0.0, 0.0, 0.0]
+    if ps.sources:                                                                 # CW6: a figure 2.5 m ahead of the picture's camera, on the floor
+        c = ps.sources[0].camera
+        fx, fz = c.target[0] - c.pos[0], c.target[2] - c.pos[2]
+        n = math.hypot(fx, fz) or 1.0
+        at = [round(c.pos[0] + 2.5 * fx / n, 3), 0.0, round(c.pos[2] + 2.5 * fz / n, 3)]
+    ref = StageObject(id=new_id("fig"), kind="mannequin", name="1.75 m for scale", preset="adult", detail="female", pose=Pose(preset="stand"),
+                      transform=Transform(pos=at), colour_id=2)
+    return [built, ref], REFERENCE_HEIGHT_M
 
 
 def migrate(raw: dict[str, Any]) -> dict[str, Any]:
@@ -316,8 +340,8 @@ def check(st: Stage) -> None:
             raise ValueError(f"object {o.id}: light settings belong to a light, aimed at an [x, y, z] point")   # D110 (PS4)
         if o.parent_joint is not None and (o.parent is None or by[o.parent].kind != "mannequin" or o.kind not in ("mesh", "prop", "plane")):
             raise ValueError(f"object {o.id}: a held thing is a prop (a 3D model, a stand-in or an image plane) in a figure's hand")   # D129 (HP1)
-        if o.profile_id is not None and o.kind not in ("mannequin", "mesh"):
-            raise ValueError(f"object {o.id}: only a figure (to a character) or a 3D model (to a prop) is bound")   # D93 (C8), D110 (PS3)
+        if o.profile_id is not None and not (o.kind in ("mannequin", "mesh") or (o.kind == "set" and o.preset == "built")):
+            raise ValueError(f"object {o.id}: only a figure (to a character), a 3D model (to a prop) or a built set (to a place) is bound")   # D93 (C8), D110 (PS3), CW6
     cids = [c.id for c in st.cameras]
     if len(set(cids)) != len(cids):
         raise ValueError("camera ids must be unique")
@@ -360,6 +384,9 @@ class StageStore:
         objects, h = bench_objects(profile, v)
         d = max(1.2, h * 2.0)
         cam = StageCamera(id=new_id("cam"), name="Bench camera", pos=[round(d * 0.3, 3), round(h * 0.6, 3), round(d, 3)], target=[0.0, round(h * 0.5, 3), 0.0])
+        if profile.cls == "place" and v.place_set is not None and v.place_set.sources:   # CW6: the set seen from where its picture was taken
+            c = v.place_set.sources[0].camera
+            cam = StageCamera(id=new_id("cam"), name="The picture's camera", pos=list(c.pos), target=list(c.target), roll=c.roll, focal_mm=c.focal_mm, sensor_mm=c.sensor_mm)
         st = Stage(id=new_id("stg"), name=f"Bench · {profile.name} {v.id}", purpose="bench", bound=StageBound(profile_id=profile.id, version=v.id),
                    size=size or {"w": 1920, "h": 1080, "fps": 24}, objects=objects, cameras=[cam], active_camera=cam.id)
         check(st)

@@ -9896,3 +9896,74 @@ on any skeleton (the preset itself): it goes to AP1's list of presets to correct
   - Only an empty place is skinned.
   - No second picture by default.
 - Sheets: `.docs/proto01_UIcast/img/e38-truth.jpg`, `e38-found.jpg`, `e38-fill.jpg`.
+
+## 2026-10-25 19:06 — CW6 (D143): a place's set built from its picture, in Cast; rig 14/14 (D137 stage 6, second part)
+
+- **The set lives on the place's Cast version** (`ProfileVersion.place_set`; a new version takes it; only a place has one).
+  - **The set picture** is the place's reference slot. *Make the set picture ▶* draws the place empty from eye level (the sheet plus
+    D143's sentence: nobody in it, the floor and walls in view); *Use as the set picture* on a candidate.
+  - ***Build the set ▶*** queues MoGe-2 on it (`image_to_set` on origin `set_fit`). The finisher (`place_sets.fit_landed`) fits the
+    relief with `set_fit.fit_set`, scaled by the camera's height (1.6 m, or the set's own when built again), and puts the set on the
+    version with its picture, camera and what it assumed. A relief that fits nothing says why on the job (`result.set_error`); the
+    status line shows it.
+  - **The bake is the page's own.** Cast's set section bakes a freshly fitted set by itself (`stage/setBake.ts`, the texel by kind);
+    `PUT …/set/bake` makes each face's texture and coverage Catalogue images (lineage `set-bake` ← the picture) with what the picture
+    saw (`seen`) and what the Fill takes (`bad`: unseen, or through a pixel over two texels wide). *Bake again ▶* after an edit; the
+    faces know the set and camera they were baked for (`baked_key`), and the status says *changed since the bake*.
+  - ***Fill ▶*** paints the faces still to fill, the most seen first, one job after another (`place_sets.queue_fill` → `fill_landed`
+    queues the next; PF1's route with the face as the frame: an Edit document from the bake, unseen texels grey, the bad texels
+    selected, Klein's Fill, flattened into the face's texture, lineage `set-fill`). A failed or cancelled Fill frees its face (the
+    queue's `_origin_stopped` hook). *Fill this face ▶* on a face's row fills it again from its bake with another seed.
+- **Cast's place page** (lazy, three.js only for a place) shows the set over its picture from the matched camera
+  (`stage/setOverlay.ts`): each face outlined; a wall's foot dragged along the floor moves that wall, a wall's top sets the height,
+  the guessed edges dashed (D143: offered first); the kind one click (Room · Corridor · Street · Open ground); the sizes, the camera's
+  height (it scales the fit) and the parts as fields; the faces as rows (their bake, *n % to fill* or *filled*, the material each
+  Fill names). Commands `cast.place.picture`, `.usePicture`, `.build`, `.bake`, `.fill`, `.fillFace`, `.clear`.
+- **The place's bench** (D142): `POST /stages/bench` on a place makes Clay's bench with its set bound (`kind set`, preset `built`,
+  `profile_id`; the binding rule takes a built set), a 1.75 m figure 2.5 m ahead of the camera, and the picture's camera as the
+  stage's. A bound set follows Cast (stageStore `withPlaceSet`). The engine draws a built set's faces from inside only: from outside
+  the set reads as a doll's house.
+- **The rig** (`scripts/cw6_acceptance.py` + `cw6_browser.cjs`, on a copy of E38's project, one GPU job at a time, the bake in a
+  visible Edge with no job running): 14/14.
+  - The kitchen's set picture drawn from its sheet in 37 s: an empty farmhouse kitchen.
+  - Fits in 3–6 s after MoGe: the kitchen a room 4.8 × 4.9 × 3.7 m — its back wall read at the cupboards' fronts and the side walls at
+    the tall cupboard and the hood, plain on the overlay (one drag puts it right); the alley a corridor 3.4 m wide, its end, front and
+    height assumed; E38's clay room within 4 % of the truth (width −0.7 %, height +4.2 %, the back wall's distance +0.7 %).
+  - The bake in the page: 5 faces in 1.1–3.6 s each place.
+  - The Fills: 28–59 s a face; the kitchen's 5 faces in 258 s, the alley's 4 in 167 s, the room's 4 in 152 s.
+  - The benches: the set and the figure, the picture's camera.
+- **The Fill's prompt, from the rig's looks.** The kitchen's floor, its material named ("worn terracotta tiles") but the place's words
+  after it, came back with a window and pots painted on it; the alley's walls, "plain, no window" as a room's, came back beige plaster
+  for brick. Now a named material is the whole subject (E38's clean wall had nothing else), and only a room's faces are plain; a
+  corridor's, a street's and the backdrop are continued as the rest. Filled again (`--refill`): the floor terracotta throughout (the
+  tiles larger near the camera), the alley's walls brick with their windows and pipe (`img/cw6-refill.jpg`).
+- **Not built:** openings (doors, windows, arches on a wall — U9 asked for them with the first kinds); a second picture (D143: not by
+  default); wall handles in the 3D view (the bench is Clay; the sizes are fields); faces catching the figures' shadows; a place's set
+  in the line-up; cleaning a picture with people before *Build the set ▶* (it asks for an empty picture instead). CW7 binds sets on
+  any stage and makes the final shot's plate from a built set.
+- Tests: `test_place_sets_cw6.py` 4 (the fit as the set, the routes, the bake, the Fill on a document, the chain on the fake engine,
+  the bench), `setOverlay.test.ts` 4, `setBuilder.test.ts` 2, the routes snapshot +5, e2e *a place's set*. Sheets
+  `.docs/proto01_UIcast/img/cw6-sets.jpg`, `cw6-refill.jpg`.
+
+## 2026-10-25 19:32 — CW7: places in Clay, a built set as the final shot's plate; rig 4/4 — D137 stage 6 done
+
+- **Sets in Clay follow Cast** (02 §9). Scene › Sets' + lists the Cast places that have a set first (their set picture as the card):
+  a click adds the place's set bound (`stageStore.placePlace`: kind `set`, preset `built`, the place's `place_set`), or selects it when
+  it is there; the row carries the place's tag; a refit, bake or Fill in Cast reaches it (`withPlaceSet`). *Make a free copy* puts a
+  free copy beside it (its width and a metre over); *Edit in Cast* on its right-click. Only a built set binds among the sets.
+- ***Make it a Cast place…*** on a picture set: a new Cast place with the set's picture as its set picture, and *Build the set ▶*
+  queued on it (the picture set stays on the stage).
+- **The plate from a built set** (04 §5): a final made on a stage with a visible built set whose faces are baked takes method `set`
+  (`finals.built_plate`). Stage renders the set's faces through every frame's camera, as SC3e renders a picture set (no Klein still, no
+  projection to smear, no drift); the frames carry the set's picture as the plate's still. The Klein plate route and the projected /
+  generated / filled methods refuse it with the reason; a set not baked yet keeps PS5b's projected plate.
+- **The rig** (`scripts/cw7_acceptance.py` on CW6's rig project, one GPU job at a time): a stage with the farm kitchen's set (CW6's,
+  baked and filled) and Mara bound, the camera at the picture's and keyed to dolly 0.8 m in over two seconds; the final made in the page
+  (F16, 33 frames) — the plate the set, rendered there with the passes in 8 s, its still the set picture, no Klein still queued; Mara
+  performed by Wan Animate in 126 s, matted, the shot assembled in 8 s: 4/4. The kitchen holds through the move
+  (`.docs/proto01_UIcast/img/cw7-final.jpg`).
+- **Not built:** a picture set's things as Cast prop ideas (02 §9's bridge — its things stay meshes); faces catching the figures'
+  shadows (the shadows layer is Stage's, over the set as over any); a place's set in the line-up; Prototype ▸ on a free built set.
+- Tests: `test_place_in_clay_cw7.py` (the plate's method, the refusals, the still; the binding rule), `bench.test.ts` +1 (the card, once,
+  following Cast, the free copy, the plate predicate), e2e *places in Clay*.
+- **D137 stage 6 is done** (E38, CW6, CW7): Cast's six stages are built.

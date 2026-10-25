@@ -807,15 +807,18 @@ export class StageEngine {
     const fig = this.entries.get(o.parent)?.figure
     return fig ? fig.markers[HAND_MARKER[o.parent_joint]] ?? null : null
   }
-  /** CW6 (04 §2): a built set — a plane a face, a baked face its texture unlit (the picture carries its light, as the relief's does). */
+  /** CW6 (04 §2): a built set — a plane a face, a baked face its texture unlit (the picture carries its light, as the relief's does). Each
+   *  face is drawn from inside only (its normal looks in): a camera outside sees into the set over the walls between, as into a doll's house. */
   private buildPlaceSet(ps: NonNullable<StageObject['place_set']>): THREE.Object3D {
     const tex = new Map(ps.faces.filter((f) => f.texture_asset_id).map((f) => [f.id, f.texture_asset_id!]))
-    return placeSet(ps as PlaceSetDoc, this.setMat, (id) => {
+    const grey = this.setMat.clone()
+    grey.side = THREE.FrontSide
+    return placeSet(ps as PlaceSetDoc, grey, (id) => {
       const aid = tex.get(id)
       if (!aid) return null
       const t = new THREE.TextureLoader().load(api.assetUrl(aid), () => { this.dirty = true })
       t.colorSpace = THREE.SRGBColorSpace
-      return new THREE.MeshBasicMaterial({ map: t, side: THREE.DoubleSide })
+      return new THREE.MeshBasicMaterial({ map: t, side: THREE.FrontSide })
     })
   }
   /** CW4 (a dev hook's check): an object's height as drawn, in metres (its box in the world); null before it is built. */

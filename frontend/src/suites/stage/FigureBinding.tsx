@@ -23,9 +23,12 @@ function heroOf(p: Profile | undefined, vid?: string | null): string | null {
 export function BoundTag({ o }: { o: StageObject }) {
   const p = useStory((x) => x.profiles.find((y) => y.id === o.profile_id))
   const prop = o.kind === 'mesh'                                                    // D110 (PS3): a mesh bound to a Cast prop
-  const img = prop ? (p ? propThumb(p, o.version) : null) : heroOf(p, o.version)
-  return <span className="bound-tag" title={p ? `bound to ${p.name}${o.version ? ` ${o.version}` : ''} — ${prop ? 'its 3D model follows the version' : 'its references and sheet go into the frame'}` : `bound to a ${prop ? 'prop' : 'character'} no longer in Story`}>
-    {img ? <img src={img} alt="" /> : <span className="glyph">{fieldGlyph(prop ? 'prop' : 'character')}</span>}{p?.name ?? 'gone'}{o.version ? ` · ${o.version}` : ''}</span>
+  const place = o.kind === 'set'                                                    // CW7: a built set bound to a Cast place
+  const pic = place ? (o.place_set?.sources[0]?.asset_id ?? null) : null
+  const img = place ? (pic ? api.thumbUrl(pic, 256) : heroOf(p, o.version)) : prop ? (p ? propThumb(p, o.version) : null) : heroOf(p, o.version)
+  const what = place ? 'place' : prop ? 'prop' : 'character'
+  return <span className="bound-tag" title={p ? `bound to ${p.name}${o.version ? ` ${o.version}` : ''} — ${place ? 'its set follows the version (refitted, baked or filled in Cast)' : prop ? 'its 3D model follows the version' : 'its references and sheet go into the frame'}` : `bound to a ${what} no longer in Story`}>
+    {img ? <img src={img} alt="" /> : <span className="glyph">{fieldGlyph(what)}</span>}{p?.name ?? 'gone'}{o.version ? ` · ${o.version}` : ''}</span>
 }
 
 /** D93 (C8): the Inspector's character of a figure — the Cast's characters as hero tiles and "none"; a pinned version (a costume) beside. */

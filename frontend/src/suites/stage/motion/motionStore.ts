@@ -8,6 +8,7 @@ import { bodyDims } from '../body'
 import { st } from '../stageStore'
 import { bakeAlongPath, bakeKeys, blendIn, repeatLoop, thinKeys } from './bake'
 import { footLock } from './footlock'
+import { footContact } from './contact'
 import { measure } from './path'
 import { walkAlong } from './walkpath'
 import { keyframesOf, sampleObject } from '../anim'
@@ -21,12 +22,12 @@ interface MotionState {
   open: Record<string, boolean>                                              // the file groups shown open
   filter: MotionFilter; q: string
   picked: MotionClip | null; start: number; end: number | null; speed: number; inPlace: boolean
-  lock: boolean; alongPath: boolean; blend: number                          // foot lock; walk the figure's floor path; frames eased in from what it was doing
+  lock: boolean; ground: boolean; alongPath: boolean; blend: number        // foot lock; the feet on the floor (AP1, D141); walk the figure's floor path; frames eased in from what it was doing
   applying: boolean
   refresh: () => Promise<void>
   toggle: (file: MotionFile) => void
   pick: (clip: MotionClip | null) => void
-  set: (patch: Partial<Pick<MotionState, 'filter' | 'q' | 'start' | 'end' | 'speed' | 'inPlace' | 'lock' | 'alongPath' | 'blend'>>) => void
+  set: (patch: Partial<Pick<MotionState, 'filter' | 'q' | 'start' | 'end' | 'speed' | 'inPlace' | 'lock' | 'ground' | 'alongPath' | 'blend'>>) => void
   apply: () => Promise<void>
 }
 
@@ -35,7 +36,7 @@ export const singleClip = (f: MotionFile): MotionClip => ({ file: f, name: f.nam
 
 export const useMotion = create<MotionState>((set, get) => ({
   files: [], localDir: null, starterDir: null, loaded: false, error: null, clips: {}, open: {}, filter: 'all', q: '',
-  picked: null, start: 0, end: null, speed: 1, inPlace: false, lock: true, alongPath: true, blend: 6, applying: false,
+  picked: null, start: 0, end: null, speed: 1, inPlace: false, lock: true, ground: true, alongPath: true, blend: 6, applying: false,
   refresh: async () => {
     try {
       const r = await listFiles()
@@ -65,7 +66,7 @@ export const useMotion = create<MotionState>((set, get) => ({
     try {
       const r = await retargetClip(clip, { fps: doc.size.fps || 24, start: get().start, end: get().end ?? undefined, speed: get().speed, hip })
       const path = get().alongPath && o.path && o.path.length >= 2 ? (o.path as number[][]).map((p) => [p[0], p[1]] as [number, number]) : null
-      const lock = (fr: typeof r.frames) => (get().lock ? footLock(fr, o.body as never) : fr)
+      const lock = (fr: typeof r.frames) => { const locked = get().lock ? footLock(fr, o.body as never) : fr; return get().ground ? footContact(locked, o.body as never) : locked }   // AP1 (D141): and the feet on the floor
       let frames = lock(r.frames)
       if (path && /_loop$|loop$/i.test(clip.name)) {                                // a loop repeats until its travel covers the path
         const per = Math.hypot(frames[frames.length - 1].offset[0] - frames[0].offset[0], frames[frames.length - 1].offset[2] - frames[0].offset[2]) * (at.transform.scale[1] ?? 1)

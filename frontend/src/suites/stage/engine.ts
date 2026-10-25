@@ -433,8 +433,8 @@ export class StageEngine {
       e.holder.scale.set(t.scale[0], t.scale[1], t.scale[2])
       e.holder.visible = o.visible
       e.proxy?.meshes.forEach((m) => { m.visible = o.visible })                     // E23d: a hidden figure's proxy casts nothing
-      if (e.figure && o.pose && !this.ik && (e.doc.pose?.preset !== o.pose.preset || JSON.stringify(e.doc.pose?.joints) !== JSON.stringify(o.pose.joints))) {
-        applyPose(e.figure.joints, POSES[o.pose.preset ?? 'stand'] ?? POSES.stand, o.pose.joints)
+      if (e.figure && o.pose && !this.ik && (e.doc.pose?.preset !== o.pose.preset || JSON.stringify(e.doc.pose?.joints) !== JSON.stringify(o.pose.joints) || (e.doc.pose?.ground ?? 0) !== (o.pose.ground ?? 0))) {
+        applyPose(e.figure.joints, POSES[o.pose.preset ?? 'stand'] ?? POSES.stand, o.pose.joints, o.pose.ground ?? 0)
       }
       e.doc = o
     }
@@ -516,7 +516,7 @@ export class StageEngine {
     let figure: Mannequin | undefined
     let pickers: THREE.Object3D[] | undefined
     if (o.kind === 'mannequin') {
-      figure = mannequin(this.clayMat, POSES[o.pose?.preset ?? 'stand'] ?? POSES.stand, o.pose?.joints, (o as { body?: Body | null }).body)   // CA0: the bound character's body
+      figure = mannequin(this.clayMat, POSES[o.pose?.preset ?? 'stand'] ?? POSES.stand, o.pose?.joints, (o as { body?: Body | null }).body, o.pose?.ground ?? 0)   // CA0: the bound character's body
       body = figure.root
       // ST2: a picker sphere on every joint (FK) and a handle at each hand and foot (IK), hidden until pose mode
       pickers = []

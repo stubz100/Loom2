@@ -164,7 +164,7 @@ export interface Proxy {
    *  surface along its ray within 25 cm (`front`: the nose, the eyes, the toes; `back`: the heels; `right` / `left`: the ears), where it
    *  stays with its joint; `now` is the figure's pose to return to; `follow` moves what follows the joints (the Detailed mannequin, which
    *  carries the feet's markers). Returns the undo. */
-  landmark: (list: Landmark[], now: { preset?: string | null; joints?: Record<string, number[]> } | null, follow?: () => void) => () => void
+  landmark: (list: Landmark[], now: { preset?: string | null; joints?: Record<string, number[]>; ground?: number } | null, follow?: () => void) => () => void
 }
 export type Landmark = { m: THREE.Object3D; ray: 'front' | 'back' | 'right' | 'left' }
 /** The COCO-18 markers SDPose reads on the surface: the nose and eyes from the front, the ears from the sides. */
@@ -233,7 +233,7 @@ export function collapseHands(pos: THREE.BufferAttribute, segs: Segment[]): numb
 /** Bind `model` (a loaded GLB scene, not in the scene graph) to the figure; returns the skinned meshes, to be added to the scene's root.
  *  `stance`: the reference's (stanceOf; E23d's A-pose without it); `visible`: a clay material the cameras see (the shell, U6). */
 export function bindProxy(model: THREE.Object3D, J: Record<Joint, THREE.Object3D>, limbs: Limbs, figureRoot: THREE.Object3D,
-                          pose: { preset?: string | null; joints?: Record<string, number[]> } | null, opts: BindOptions = {}): Proxy {
+                          pose: { preset?: string | null; joints?: Record<string, number[]>; ground?: number } | null, opts: BindOptions = {}): Proxy {
   const t0 = performance.now()
   // the figure in the reference's stance, its world-space segments and extent
   applyPose(J, POSES.stand, opts.stance ?? A_POSE)
@@ -278,9 +278,9 @@ export function bindProxy(model: THREE.Object3D, J: Record<Joint, THREE.Object3D
   })
   const ms = performance.now() - t0
   // back to the figure's own pose
-  applyPose(J, POSES[pose?.preset ?? 'stand'] ?? POSES.stand, pose?.joints)
+  applyPose(J, POSES[pose?.preset ?? 'stand'] ?? POSES.stand, pose?.joints, pose?.ground ?? 0)
   figureRoot.updateMatrixWorld(true)
-  const landmark = (list: Landmark[], now: { preset?: string | null; joints?: Record<string, number[]> } | null, follow?: () => void) => {
+  const landmark = (list: Landmark[], now: { preset?: string | null; joints?: Record<string, number[]>; ground?: number } | null, follow?: () => void) => {
     applyPose(J, POSES.stand, opts.stance ?? A_POSE)                       // the bind pose: the geometry's own positions
     figureRoot.updateMatrixWorld(true); follow?.(); figureRoot.updateMatrixWorld(true)
     const plain = meshes.map((m) => new THREE.Mesh(m.geometry, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide })))
@@ -298,7 +298,7 @@ export function bindProxy(model: THREE.Object3D, J: Record<Joint, THREE.Object3D
       m.position.copy(m.parent!.worldToLocal(top.point.clone()))
     }
     plain.forEach((m) => (m.material as THREE.Material).dispose())
-    applyPose(J, POSES[now?.preset ?? 'stand'] ?? POSES.stand, now?.joints)
+    applyPose(J, POSES[now?.preset ?? 'stand'] ?? POSES.stand, now?.joints, now?.ground ?? 0)
     figureRoot.updateMatrixWorld(true); follow?.(); figureRoot.updateMatrixWorld(true)
     return () => list.forEach(({ m }, i) => { m.position.copy(before[i]) })
   }

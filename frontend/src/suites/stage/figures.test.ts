@@ -5,7 +5,7 @@ import type { StageObject } from '../../api/types'
 import { figureMentions, figuresByScreen, prebind, screenX } from './figures'
 
 const fig = (id: string, x: number, extra: Partial<StageObject> = {}): StageObject => ({ id, kind: 'mannequin', name: id, preset: 'adult', asset_id: null, body: null, detail: null, path: null, shadow_proxy: null, light: null, transform: { pos: [x, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] },
-  parent: null, parent_joint: null, locked: false, visible: true, colour_id: 1, pose: { preset: 'stand', joints: {}, extra: {} }, billboard: false, profile_id: null, version: null, lens_deg: null, plate_asset_id: null, floor_y: null, plate_camera_id: null, level: null, things: [], things_document_id: null, ...extra })
+  parent: null, parent_joint: null, locked: false, visible: true, colour_id: 1, pose: { preset: 'stand', joints: {}, extra: {}, ground: 0 }, billboard: false, profile_id: null, version: null, lens_deg: null, plate_asset_id: null, floor_y: null, plate_camera_id: null, level: null, things: [], things_document_id: null, ...extra })
 const CAM = { pos: [0, 1.5, 5], target: [0, 1, 0], roll: 0 }
 
 describe('screenX / figuresByScreen', () => {

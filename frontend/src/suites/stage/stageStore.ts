@@ -13,6 +13,7 @@ import { mirrorJoints } from './ik'
 import { lensGuess, parseLens } from './lens'
 import { figureMentions, prebind as prebindOf } from './figures'
 import { matrixOf, transformOf } from './held'
+import { poseContact } from './motion/contact'
 import { setShellPoints } from './proxy'
 import type { Keypoint, WholeBody } from './passes'
 import { profilesForMentions, useStory, versionPointsOfShell } from '../story/storyStore'
@@ -358,12 +359,12 @@ export const useStage = create<StageState>()((set, get) => ({
   keyObject: (id) => {
     const o = get().sampledDoc()?.objects.find((x) => x.id === id)
     if (!o) return
-    get().apply((d) => withObjectKey(d, id, { frame: get().frame, ease: 'ease', transform: { pos: [...o.transform.pos], rot: [...o.transform.rot], scale: [...o.transform.scale] }, pose: o.pose ? { preset: o.pose.preset, joints: { ...o.pose.joints }, extra: { ...(o.pose.extra ?? {}) } } : null }), 'key object')
+    get().apply((d) => withObjectKey(d, id, { frame: get().frame, ease: 'ease', transform: { pos: [...o.transform.pos], rot: [...o.transform.rot], scale: [...o.transform.scale] }, pose: o.pose ? { preset: o.pose.preset, joints: { ...o.pose.joints }, extra: { ...(o.pose.extra ?? {}) }, ground: o.pose.ground ?? 0 } : null }), 'key object')
   },
   addPathPoint: (id, p) => get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id ? { ...o, path: [...(o.path ?? []), [Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000]] } : o)) }), 'path point'),
   clearPath: (id) => get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id ? { ...o, path: null, shadow_proxy: null } : o)) }), 'clear path'),
   setDetail: (id, detail) => get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id && o.kind === 'mannequin' ? { ...o, detail } : o)) }), detail === 'male' ? 'figure ♂' : 'figure ♀'),
-  setExtra: (id, extra, label = 'hand') => editPose(get, id, (p) => ({ preset: p?.preset ?? 'stand', joints: p?.joints ?? {}, extra: { ...(p?.extra ?? {}), ...extra } }), label),
+  setExtra: (id, extra, label = 'hand') => editPose(get, id, (p) => ({ preset: p?.preset ?? 'stand', joints: p?.joints ?? {}, extra: { ...(p?.extra ?? {}), ...extra }, ground: p?.ground ?? 0 }), label),
   applyMotion: (id, keys, label) => {
     if (!keys.length) return
     const first = keys[0].frame, last = keys[keys.length - 1].frame
@@ -571,14 +572,18 @@ export const useStage = create<StageState>()((set, get) => ({
   setJoints: (id, joints) => {
     const o = get().sampledDoc()?.objects.find((x) => x.id === id) ?? get().object(id)
     if (!o || JSON.stringify(effectiveJoints(o)) === JSON.stringify(joints)) return        // a gizmo click without a turn commits nothing (no undo entry)
-    editPose(get, id, (p) => ({ preset: p?.preset ?? 'stand', joints, extra: p?.extra ?? {} }), 'pose')
+    editPose(get, id, (p) => ({ preset: p?.preset ?? 'stand', joints, extra: p?.extra ?? {}, ground: p?.ground ?? 0 }), 'pose')
   },
   applyPose: (id, preset, joints = {}) => {
     // on a keyed figure the preset is keyed as every joint spelled out, so the keys around it interpolate into it (not a snap at halfway)
     const keyed = !!keyframesOf(get().current ?? { keyframes: {} } as never).objects[id]?.length
     const name = preset ?? 'stand'
     const full = keyed ? { ...Object.fromEntries(JOINTS.map((j) => [j, [...(POSES[name]?.j[j] ?? [0, 0, 0])]])), ...joints } : joints
-    editPose(get, id, (p) => ({ preset: name, joints: full, extra: p?.extra ?? {} }), 'pose preset'); set({ selectedJoint: null })
+    // AP1 (D141): a pose on the ground stands on its feet on this figure's body — its lower foot on the floor, the other bent up where it
+    // would go under (a run is in the air: as it is)
+    const o = get().object(id)
+    const on = name !== 'run' && o?.kind === 'mannequin' ? poseContact(name, full, o.body as never) : { ground: 0, joints: full }
+    editPose(get, id, (p) => ({ preset: name, joints: on.joints, extra: p?.extra ?? {}, ground: on.ground }), 'pose preset'); set({ selectedJoint: null })
   },
   mirrorPose: (id) => { const o = get().object(id); if (o) get().setJoints(id, mirrorJoints(effectiveJoints(o))) },
   resetPose: (id) => get().applyPose(id, 'stand', {}),
@@ -690,7 +695,7 @@ export const useStage = create<StageState>()((set, get) => ({
     const name = `${NAMES[kind] ?? kind} ${n}`
     const scale = kind === 'mannequin' ? (MANNEQUIN_PRESETS[preset ?? 'adult']?.scale ?? 1) : 1
     const o: StageObject = { id, kind, name, preset, asset_id: assetId, transform: { pos: pos ?? [0, 0, 0], rot: [0, 0, 0], scale: [scale, scale, scale] }, parent: null, parent_joint: null,
-      locked: false, visible: true, colour_id: (cur.objects.length % 12) + 1, pose: kind === 'mannequin' ? { preset: 'stand', joints: {}, extra: {} } : null, billboard: kind === 'plane', profile_id: null, version: null, body: null, detail: kind === 'mannequin' ? newDetail(cur.objects) : null, path: null, shadow_proxy: null,
+      locked: false, visible: true, colour_id: (cur.objects.length % 12) + 1, pose: kind === 'mannequin' ? { preset: 'stand', joints: {}, extra: {}, ground: 0 } : null, billboard: kind === 'plane', profile_id: null, version: null, body: null, detail: kind === 'mannequin' ? newDetail(cur.objects) : null, path: null, shadow_proxy: null,
       light: kind === 'light' ? { ...NEW_LIGHT, target: [...NEW_LIGHT.target] } : null,
       lens_deg: null, plate_asset_id: null, floor_y: null, plate_camera_id: null, level: null, things: [], things_document_id: null }
     get().apply((d) => ({ ...d, objects: [...d.objects, o] }), 'add')

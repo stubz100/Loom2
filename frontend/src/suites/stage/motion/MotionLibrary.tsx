@@ -47,6 +47,7 @@ export function MotionLibrary() {
             <input type="number" aria-label="trim end (s)" min={0} step={0.1} value={m.end ?? ''} placeholder="end" onChange={(e) => m.set({ end: e.target.value === '' ? null : Math.max(0, Number(e.target.value)) })} /> s</span></div>
           <div className="kv"><span>speed</span><span><input type="range" aria-label="speed" min={0.25} max={2} step={0.05} value={m.speed} onChange={(e) => m.set({ speed: Number(e.target.value) })} /> ×{m.speed.toFixed(2)}</span></div>
           <label className="hint check"><input type="checkbox" checked={m.lock} onChange={(e) => m.set({ lock: e.target.checked })} /> foot lock (the planted foot stays put; an in-place walk travels)</label>
+          <label className="hint check" title="Each step's planted foot set on the floor, a foot still under it bent up — the clip fitted to this figure's legs (D141)"><input type="checkbox" checked={m.ground} onChange={(e) => m.set({ ground: e.target.checked })} /> feet on the floor</label>
           {fig?.path && fig.path.length >= 2
             ? <label className="hint check"><input type="checkbox" checked={m.alongPath} onChange={(e) => m.set({ alongPath: e.target.checked })} /> along {fig.name}'s path ({fig.path.length} points; a loop repeats to its end)</label>
             : <label className="hint check"><input type="checkbox" checked={m.inPlace} onChange={(e) => m.set({ inPlace: e.target.checked })} /> in place (no travel)</label>}

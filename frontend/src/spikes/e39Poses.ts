@@ -12,6 +12,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { bodyDims, DEFAULT_BODY } from '../suites/stage/body'
 import { applyPose, JOINTS, mannequin, POSES, type Body, type Joint, type Mannequin } from '../suites/stage/builders'
 import { footLock, footSlide, stance } from '../suites/stage/motion/footlock'
+import { footContact } from '../suites/stage/motion/contact'
 import { clipsOf, listFiles, retargetClip, type MotionClip } from '../suites/stage/motion/library'
 import type { MotionFrame } from '../suites/stage/motion/retarget'
 import { bindProxy, stanceOf } from '../suites/stage/proxy'
@@ -125,6 +126,26 @@ function contactFix(fig: Mannequin, holder: THREE.Group, frames: MotionFrame[], 
   return { stance_cm: Math.round(worstStance * 1000) / 10, under_cm: Math.round(under * 1000) / 10, under_ik_cm: Math.round(underIk * 1000) / 10 }
 }
 
+/** AP1's module (motion/contact.ts) on the same clip: each stance's contact and the lowest either foot goes under the floor. */
+function grounded(fig: Mannequin, holder: THREE.Group, frames: MotionFrame[], down: ('r' | 'l' | null)[], rest: { r: number; l: number }): { stance_cm: number; under_cm: number } {
+  let worst = 0, under = 0
+  for (let i = 0; i < frames.length; i++) {
+    const f = frames[i]
+    applyPose(fig.joints, POSES.stand, f.joints); fig.root.position.set(f.offset[0], f.offset[1], f.offset[2]); holder.updateMatrixWorld(true)
+    under = Math.min(under, ankleY(fig, 'r') - rest.r, ankleY(fig, 'l') - rest.l)
+    const foot = down[i]
+    if (foot && (i === 0 || down[i - 1] !== foot)) {
+      let low = Infinity
+      for (let k = i; k < frames.length && down[k] === foot; k++) {
+        const g = frames[k]; applyPose(fig.joints, POSES.stand, g.joints); fig.root.position.set(g.offset[0], g.offset[1], g.offset[2]); holder.updateMatrixWorld(true)
+        low = Math.min(low, ankleY(fig, foot) - rest[foot])
+      }
+      worst = Math.max(worst, Math.abs(low))
+    }
+  }
+  return { stance_cm: Math.round(worst * 1000) / 10, under_cm: Math.round(under * 1000) / 10 }
+}
+
 export async function measurePoses(input: E39Input): Promise<Record<string, unknown>> {
   const out: Record<string, unknown> = { name: input.name }
   const body = { ...DEFAULT_BODY, ...input.body, hand_rest: { ...DEFAULT_BODY.hand_rest, ...(input.body.hand_rest ?? {}) } } as Body, H = body.height_m   // a partial body (the baseline's) filled
@@ -188,7 +209,8 @@ export async function measurePoses(input: E39Input): Promise<Record<string, unkn
       if (phase) phases.push(phase.low)
       const cm = (x: number) => Math.round(x * 1000) / 10
       clips[name] = { frames: locked.length, slide_cm: cm(footSlide(locked, body)), stances: phases.length, float_cm: cm(Math.max(0, ...phases)), sink_cm: cm(Math.min(0, ...phases)),
-        hands_in_body: frames ? Math.round((inBody / frames) * 1000) / 1000 : null, after_contact: contactFix(fig, holder, locked, down, rest) }
+        hands_in_body: frames ? Math.round((inBody / frames) * 1000) / 1000 : null, after_contact: contactFix(fig, holder, locked, down, rest),
+        after_module: grounded(fig, holder, footContact(locked, body), down, rest) }
     }
     out.clips = clips
     out.views = views

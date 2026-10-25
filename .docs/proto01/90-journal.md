@@ -9680,3 +9680,19 @@ No retargeting model; no licence to read.
 
 Bruno's sheet shows the clips playing on his heavy shell without tearing (bone heat). The *arms crossed* preset does not cross the arms
 on any skeleton (the preset itself): it goes to AP1's list of presets to correct.
+
+## 2026-10-25 14:23 — AP1a built: the feet on the floor in clips and presets (D141; D137 stage 3, second part)
+
+- **`stage/motion/contact.ts`** (pure, as footlock.ts):
+  - `footContact(frames, body)`: the figure raised or lowered through each stance so the planted foot's lowest point meets the floor,
+    eased over ±2 frames; then a foot still under it bent up by two-bone IK (ik.ts `solveTwoBone`, the knee keeping its way);
+  - `poseContact(preset, joints, body)`: a pose's drop onto its lower foot, the other leg bent up the same way.
+- **Clips.** Animate's *Apply* runs the foot lock, then the contact, behind a new *feet on the floor* checkbox in the motion library
+  (on by default, beside *foot lock*).
+- **Presets.** A pose preset (or a saved pose) applied to a figure stands on its body's feet: the pose's new `ground` (the root's drop in
+  metres, stage `Pose.ground`), the legs bent where a foot would go under. *Run* is in the air and stays as it is. The drop travels
+  through every place a pose is applied: builders, the engine's build and re-pose, the keys (eased between them), the shell's binding.
+- **The module checked on E39's clips** (e39_poses.py with AP1's `footContact`): every stance within 0.4 cm on all seven skeletons, no
+  foot more than 0.3 cm under the floor. The jogs' 1–5 cm are flight frames the stance classifier calls planted.
+- Tests: `contact.test.ts` 2 (a crouch dropped 10 cm onto its feet, a sit raised, a stand untouched; a held crouch's clip lowered onto
+  both feet). Totals: offline 601 passed, agents_check, model_literals_check and settings audit clean, Vitest 515 + 3 skipped, typecheck, lint (0 errors, 79 warnings) and build clean, e2e full 67/67 and open 67/67.

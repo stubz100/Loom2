@@ -76,7 +76,8 @@ def score() -> None:
         for k, v in clips.items():
             fix = v.get("after_contact") or {}
             print(f"   {k}: slide {v['slide_cm']} cm, float {v['float_cm']} / sink {v['sink_cm']} cm, hands in the body {v['hands_in_body']}"
-                  f" · with the vertical contact: stance {fix.get('stance_cm')} cm, a foot under the floor {fix.get('under_cm')} cm, with leg IK {fix.get('under_ik_cm')} cm")
+                  f" · with the vertical contact: stance {fix.get('stance_cm')} cm, a foot under the floor {fix.get('under_cm')} cm, with leg IK {fix.get('under_ik_cm')} cm"
+                  f" · AP1's module: stance {(v.get('after_module') or {}).get('stance_cm')} cm, under {(v.get('after_module') or {}).get('under_cm')} cm")
         views = sorted(p for p in (OUT / "browser").glob(f"{name}_*.png"))
         if views:
             tiles = [Image.open(p).convert("RGB") for p in views]

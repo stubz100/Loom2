@@ -9544,6 +9544,11 @@ export interface components {
             extra: {
                 [key: string]: number[];
             };
+            /**
+             * Ground
+             * @default 0
+             */
+            ground: number;
             /** Joints */
             joints: {
                 [key: string]: number[];

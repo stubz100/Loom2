@@ -34,14 +34,14 @@ function limb(parent: THREE.Object3D, length: number, radius: number, mat: THREE
 }
 
 /** Set a mannequin's joint rotations (degrees; joints a pose leaves out go back to rest). The root's height follows the figure's legs
- *  (CA0: `userData.hip`, the standing hip height; 0.95 for the default dummy). */
-export function applyPose(J: Record<Joint, THREE.Object3D>, pose: Pose, joints?: Record<string, number[]>): void {
+ *  (CA0: `userData.hip`, the standing hip height; 0.95 for the default dummy), less the pose's `ground` (AP1: motion/contact.ts). */
+export function applyPose(J: Record<Joint, THREE.Object3D>, pose: Pose, joints?: Record<string, number[]>, ground = 0): void {
   for (const n of JOINTS) {
     const e = (joints?.[n] as Euler3 | undefined) ?? pose.j[n] ?? [0, 0, 0]
     J[n].rotation.set(rad(e[0]), rad(e[1]), rad(e[2]), 'YXZ')
   }
   const hip = (J.root.userData.hip as number | undefined) ?? 0.95
-  J.root.position.y = (pose.rootY ?? 0.95) * (hip / 0.95)
+  J.root.position.y = (pose.rootY ?? 0.95) * (hip / 0.95) - ground                 // AP1 (D141): the drop that stands it on its feet
 }
 
 export interface Mannequin { root: THREE.Object3D; joints: Record<Joint, THREE.Object3D>; markers: THREE.Object3D[]; limbs: Limbs }
@@ -49,7 +49,7 @@ export interface Mannequin { root: THREE.Object3D; joints: Record<Joint, THREE.O
 /** One posed mannequin and its COCO-18 marker objects (nose, neck, shoulders, elbows, wrists, hips, knees, ankles, eyes, ears). Without a
  *  body it is E10's 1.75 m dummy, unchanged; with one (CA0) its lengths, widths and height follow the Cast sheet, and its attachments
  *  ride on their joints (in the clay, depth and mask passes; never in the pose pass — they carry no marker). */
-export function mannequin(mat: THREE.Material, pose: Pose = POSES.stand, joints?: Record<string, number[]>, b?: Body | null): Mannequin {
+export function mannequin(mat: THREE.Material, pose: Pose = POSES.stand, joints?: Record<string, number[]>, b?: Body | null, ground = 0): Mannequin {
   const J = Object.fromEntries(JOINTS.map((n) => [n, new THREE.Object3D()])) as Record<Joint, THREE.Object3D>
   const x = b ?? DEFAULT_BODY
   const { limbs, hip, scale } = bodyDims(b)
@@ -92,7 +92,7 @@ export function mannequin(mat: THREE.Material, pose: Pose = POSES.stand, joints?
   }
   const [rH, rK, rA] = leg('r_hip', 'r_knee', -1), [lH, lK, lA] = leg('l_hip', 'l_knee', 1)
   if (b) for (const a of b.attachments) attach(J, a, mat, x)
-  applyPose(J, pose, joints)
+  applyPose(J, pose, joints, ground)
   let top: THREE.Object3D = root
   if (scale !== 1) { top = new THREE.Group(); top.add(root); top.scale.setScalar(scale) }     // the height: one uniform scale over the whole figure
   return { root: top, joints: J, markers: [nose, neckMarker, rS, rE, rW, lS, lE, lW, rH, rK, rA, lH, lK, lA, rEye, lEye, rEar, lEar], limbs }

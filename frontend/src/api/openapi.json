@@ -13234,6 +13234,11 @@
             "title": "Extra",
             "type": "object"
           },
+          "ground": {
+            "default": 0.0,
+            "title": "Ground",
+            "type": "number"
+          },
           "joints": {
             "additionalProperties": {
               "items": {
@@ -13259,7 +13264,8 @@
         "required": [
           "preset",
           "joints",
-          "extra"
+          "extra",
+          "ground"
         ],
         "title": "Pose",
         "type": "object"

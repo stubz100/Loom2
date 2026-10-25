@@ -60,6 +60,7 @@ class Pose(BaseModel):
     preset: str | None = None
     joints: dict[str, list[float]] = Field(default_factory=dict)         # joint name → [x, y, z] degrees (ST2 edits them; ST1 keeps presets)
     extra: dict[str, list[float]] = Field(default_factory=dict)          # CA1: the Detailed level's own bones (fingers, wrists, feet …) → [x, y, z] degrees on their rest
+    ground: float = 0.0                            # AP1 (D141): the root dropped this much (metres; < 0 raises it) so the pose stands on its feet
 
 
 class LightSpec(BaseModel):

@@ -15,7 +15,7 @@ const CUP = prof('prf_c', 'Cup', 'prop', { model_asset_id: 'ast_glb', height_m: 
 const obj = (id: string, kind: StageObject['kind'], extra: Partial<StageObject> = {}): StageObject => ({ id, kind, name: id, preset: kind === 'mannequin' ? 'adult' : null, asset_id: null,
   transform: { pos: [0, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] }, parent: null, parent_joint: null, locked: false, visible: true, colour_id: 1, pose: kind === 'mannequin' ? { preset: 'stand', joints: {}, extra: {}, ground: 0, pins: {} } : null,
   billboard: false, profile_id: null, version: null, body: null, detail: null, path: null, shadow_proxy: null, light: null, lens_deg: null, plate_asset_id: null, floor_y: null, plate_camera_id: null, level: null,
-  things: [], things_document_id: null, height_m: null, ...extra }) as StageObject
+  things: [], things_document_id: null, height_m: null, place_set: null, ...extra }) as StageObject
 const DOC = (objects: StageObject[]) => ({ schema_version: 3, id: 'stg_1', name: 'Quay', purpose: 'stage', bound: null, size: { w: 1920, h: 1080, fps: 24 }, objects,
   cameras: [{ id: 'cam_1', name: 'Camera 1', pos: [0, 1.5, 5], target: [0, 1, 0], roll: 0, focal_mm: 35, sensor_mm: 36 }], active_camera: 'cam_1', keyframes: { camera: {}, objects: {} },
   range: { start: 0, end: 120 }, passes: [], group_id: null, revision: 1, created_at: '', updated_at: '' }) as unknown as StageDoc

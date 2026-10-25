@@ -365,7 +365,7 @@ function GuidePane({ body, stance, refId, points, shell }: { body: Body; stance:
           const joints = motion === 'stance' ? stance : (POSES[motion].j as Record<string, number[]>)
           const fig = { id: 'fig', kind: 'mannequin', name: 'figure', preset: 'adult', asset_id: null, transform: { pos: [0, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] }, parent: null, parent_joint: null,
             locked: false, visible: true, colour_id: 1, pose: { preset: motion === 'stance' ? 'stand' : motion, joints, extra: {} }, billboard: false, profile_id: null, version: null, body: body as never,
-            detail: body.figure ?? 'female', path: null, shadow_proxy: shell, light: null, lens_deg: null, plate_asset_id: null, floor_y: null, plate_camera_id: null, level: null, things: [], things_document_id: null, height_m: null } as unknown as StageObject
+            detail: body.figure ?? 'female', path: null, shadow_proxy: shell, light: null, lens_deg: null, plate_asset_id: null, floor_y: null, plate_camera_id: null, level: null, things: [], things_document_id: null, height_m: null, place_set: null } as unknown as StageObject
           const doc = { schema_version: 3, id: 'guide', name: 'guide', size: { w, h, fps: 12 }, objects: [fig], cameras: [cam], active_camera: 'cam', keyframes: { camera: {}, objects: {} },
             range: { start: 0, end: 0 }, passes: [], group_id: null, revision: 0, created_at: '', updated_at: '' } as unknown as StageDoc
           const e = new StageEngine(document.createElement('canvas'), { onPick: () => undefined, onTransformed: () => undefined, onPosed: () => undefined })

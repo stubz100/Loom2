@@ -366,6 +366,7 @@ About 9½ weeks in all, the spikes included.
 | **CW3 · Bound clay, free Clay** | §2.7: Cast's bench on Stage's engine for all three classes; Clay's cards follow Cast (U11), *Edit in Cast*, *Make a free copy*, *Prototype ▸* on Clay's free objects | no | 3 |
 | **CW4 · Props** | Pixal3D's model, a height in metres, the prop's bench | yes (rig) | 1.5 |
 | **CW5 · The line-up** | as [05](05-plan.md) §2 | no | 2 |
+| **E38 · The set builder measured** | 2026-10-25 → D143: ten pictures (five truth places and their clay passes, five found); MoGe's scale 1.06–2× short — the camera's height sets it (±10 % on exact geometry); Klein's stills drift 14–127 %, so the overlay is shown every time; texel by kind; each face filled with its material; an empty place only; no second picture by default | journal; `img/e38-*.jpg` |
 | **E38 → CW6 · The set builder** | as [05](05-plan.md) §2, in Cast's place bench | yes | 3 + 7 |
 | **CW7 · Places in Clay, the set as the plate** | as [05](05-plan.md) §2 (U10, U11) | yes (rig) | 2.5 |
 | **Later · More set kinds** | skybox, balcony, hillside, nature (§2.6) | — | — |

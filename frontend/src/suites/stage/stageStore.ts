@@ -772,7 +772,7 @@ export const useStage = create<StageState>()((set, get) => ({
     const o: StageObject = { id, kind, name, preset, asset_id: assetId, transform: { pos: pos ?? [0, 0, 0], rot: [0, 0, 0], scale: [scale, scale, scale] }, parent: null, parent_joint: null,
       locked: false, visible: true, colour_id: (cur.objects.length % 12) + 1, pose: kind === 'mannequin' ? { preset: 'stand', joints: {}, extra: {}, ground: 0, pins: {} } : null, billboard: kind === 'plane', profile_id: null, version: null, body: null, detail: kind === 'mannequin' ? newDetail(cur.objects) : null, path: null, shadow_proxy: null,
       light: kind === 'light' ? { ...NEW_LIGHT, target: [...NEW_LIGHT.target] } : null,
-      lens_deg: null, plate_asset_id: null, floor_y: null, plate_camera_id: null, level: null, things: [], things_document_id: null, height_m: null }
+      lens_deg: null, plate_asset_id: null, floor_y: null, plate_camera_id: null, level: null, things: [], things_document_id: null, height_m: null, place_set: null }
     get().apply((d) => ({ ...d, objects: [...d.objects, o] }), 'add')
     set({ selected: id })
     return id

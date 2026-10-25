@@ -2736,8 +2736,8 @@ test("ideas (proto01_UIcast CW1–CW2): Prototype ▸ on a tile copies the pictu
   await expect(chip).toHaveCount(0)
   const made = (await get()).made_for[0]
   const card = bench.locator(`.made-card[data-id="${made}"]`)
-  await card.hover()
-  await card.locator('button', { hasText: 'variant' }).click()
+  await card.click({ button: 'right' })                                                      // its right-click: the batch's other results may still land and move the hovered card
+  await page.locator('.ctx-menu button.item', { hasText: /^Add as a variant/ }).click()
   await expect.poll(async () => (await get()).variants.length, { timeout: 10_000 }).toBe(2)
   expect((await get()).variants[1].made_from.asset_id).toBe(made)
   // Keep ▶: a Cast character from the variant in focus — the hero a copy, the sheet drafted, the clay carried, from_idea

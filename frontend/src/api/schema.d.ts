@@ -9974,6 +9974,31 @@ export interface components {
             /** W */
             w: number;
         };
+        /**
+         * PlaceSet
+         * @description CW6 (04 §2): a place's set — a room, a street, a corridor or open ground, its sizes and parts (frontend placeSet.ts lays its faces
+         *     out), its baked faces and the pictures they came from.
+         */
+        PlaceSet: {
+            /** Faces */
+            faces: components["schemas"]["SetFace"][];
+            /**
+             * Kind
+             * @default room
+             * @enum {string}
+             */
+            kind: "room" | "street" | "corridor" | "ground";
+            /** Parts */
+            parts: {
+                [key: string]: boolean;
+            };
+            /** Sizes */
+            sizes: {
+                [key: string]: number;
+            };
+            /** Sources */
+            sources: components["schemas"]["SetSource"][];
+        };
         /** PlanBatch */
         PlanBatch: {
             /** Clip Id */
@@ -11415,6 +11440,34 @@ export interface components {
             session_id: string;
         };
         /**
+         * SetFace
+         * @description CW6 (04 §2): a built set's face, baked — its texture (a Catalogue image, the face straight on) and its texel size.
+         */
+        SetFace: {
+            /** Id */
+            id: string;
+            /** Mask Asset Id */
+            mask_asset_id: string | null;
+            /**
+             * Texel M
+             * @default 0.01
+             */
+            texel_m: number;
+            /** Texture Asset Id */
+            texture_asset_id: string | null;
+        };
+        /**
+         * SetSource
+         * @description CW6: a picture a built set was skinned from, and the camera it was matched to (in the set's frame).
+         */
+        SetSource: {
+            /** Asset Id */
+            asset_id: string;
+            camera: components["schemas"]["SourceCamera"];
+            /** Made At */
+            made_at: string;
+        };
+        /**
          * SetThing
          * @description D123 (SC3c-2): a thing the author picked on a picture set's picture — SAM 3's points and the mask they found (a Catalogue `mask`
          *     asset at the picture's size), the relief and floor it was picked on (the placement reads them), and what was made of it (SC3c-3).
@@ -11766,6 +11819,28 @@ export interface components {
             /** Shutting Down */
             shutting_down: boolean;
         };
+        /** SourceCamera */
+        SourceCamera: {
+            /**
+             * Focal Mm
+             * @default 35
+             */
+            focal_mm: number;
+            /** Pos */
+            pos: number[];
+            /**
+             * Roll
+             * @default 0
+             */
+            roll: number;
+            /**
+             * Sensor Mm
+             * @default 36
+             */
+            sensor_mm: number;
+            /** Target */
+            target: number[];
+        };
         /** SpawnBody */
         SpawnBody: {
             /**
@@ -12036,6 +12111,7 @@ export interface components {
             parent_joint: ("r_hand" | "l_hand") | null;
             /** Path */
             path: number[][] | null;
+            place_set: components["schemas"]["PlaceSet"] | null;
             /** Plate Asset Id */
             plate_asset_id: string | null;
             /** Plate Camera Id */

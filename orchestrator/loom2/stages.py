@@ -96,6 +96,46 @@ class SetThing(BaseModel):
     placed: Transform | None = None                # SC3f: the transform the prop was stood with (a rebuild re-stands it while it still has it)
 
 
+SetKind = Literal["room", "street", "corridor", "ground"]
+
+
+class SetFace(BaseModel):
+    """CW6 (04 §2): a built set's face, baked — its texture (a Catalogue image, the face straight on) and its texel size."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    id: str
+    texture_asset_id: str | None = None
+    texel_m: float = Field(0.01, gt=0.0, le=1.0)
+    mask_asset_id: str | None = None               # what the pictures never saw well (the Fill's selection)
+
+
+class SourceCamera(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    pos: list[float]
+    target: list[float]
+    roll: float = 0.0
+    focal_mm: float = 35.0
+    sensor_mm: float = 36.0
+
+
+class SetSource(BaseModel):
+    """CW6: a picture a built set was skinned from, and the camera it was matched to (in the set's frame)."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    asset_id: str
+    camera: SourceCamera
+    made_at: str = Field(default_factory=utc_now)
+
+
+class PlaceSet(BaseModel):
+    """CW6 (04 §2): a place's set — a room, a street, a corridor or open ground, its sizes and parts (frontend placeSet.ts lays its faces
+    out), its baked faces and the pictures they came from."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    kind: SetKind = "room"
+    sizes: dict[str, float] = Field(default_factory=dict)
+    parts: dict[str, bool] = Field(default_factory=dict)
+    faces: list[SetFace] = Field(default_factory=list)
+    sources: list[SetSource] = Field(default_factory=list)
+
+
 class StageObject(BaseModel):
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
     id: str
@@ -127,6 +167,7 @@ class StageObject(BaseModel):
     things: list[SetThing] = Field(default_factory=list)   # D123 (SC3c): the things the author picked on the picture
     things_document_id: str | None = None          # D123: the set's own document (its picture), where SAM 3 finds them and the plate is cleaned
     height_m: float | None = Field(None, gt=0.0, le=100.0)   # CW4: a mesh's model scaled to this height (metres); None = the GLB's own size
+    place_set: PlaceSet | None = None              # CW6: a built set (kind set, preset `built`): its kind, sizes, parts and baked faces
 
 
 class StageCamera(BaseModel):
@@ -252,6 +293,9 @@ def _migrate_sets(raw: dict[str, Any]) -> dict[str, Any]:
 def check(st: Stage) -> None:
     """The invariants a saved document keeps: unique ids, parents that exist and never cycle, the active camera present, a 36 mm
     sensor is the default but any positive one is allowed, focal lengths in the lens range."""
+    for o in st.objects:
+        if o.kind == "set" and o.preset == "built" and o.place_set is None:
+            raise ValueError(f"object {o.id}: a built set needs its place_set (CW6)")
     ids = [o.id for o in st.objects]
     if len(set(ids)) != len(ids):
         raise ValueError("object ids must be unique")

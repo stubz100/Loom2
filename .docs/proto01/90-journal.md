@@ -9848,3 +9848,51 @@ on any skeleton (the preset itself): it goes to AP1's list of presets to correct
     - Cast in Clay and the line-up: the character's card, a free copy, Prototype ▸, Line-up ▶, Send to a new stage.
 - **Totals:** offline 609 passed, agents_check, model_literals_check and settings audit clean, Vitest 528 + 3 skipped, typecheck, lint (0 errors, 79 warnings) and build clean, e2e full 71/71 and open 71/71 (the first runs failed the new scenarios in sequence: open has no image → 3D job, so the prop's model is now a GLB import; and with the full suite's many characters the Figures + panel and a figure's editor covered the rows the scenario right-clicked — it closes the panel and right-clicks the row's name).
 - Screenshots: `.docs/proto01_UIcast/img/cw3-bench.jpg`, `cw4-prop-bench.jpg`, `cw5-lineup.jpg`.
+
+## 2026-10-25 18:10 — E38 → D143: the set builder measured on ten pictures (D137 stage 6, first part)
+
+- **What E38 built to measure (CW6's foundation, kept):**
+  - `orchestrator/loom2/set_fit.py`: the floor (relief.floor_fit, retried on the lowest points when it reads closer than 0.5 m under the
+    camera — E38's corridor), the points laid level, vertical planes by RANSAC snapped square, the set turned so the camera looks down −Z,
+    the kind (room · corridor · street · ground) and sizes from the planes, the camera, what was `assumed`. A plane beyond 25 m or ending
+    below 1.8 m is not a wall (the field's hills, a kitchen's cabinet fronts). `camera_height_m` scales the point map.
+  - `stage/placeSet.ts`: the four kinds' faces, each in its own frame, looking in. Stage's `PlaceSet` (`StageObject.place_set`, preset
+    `built`) is drawn by the engine, a baked face unlit.
+  - `stage/setBake.ts`: a face straight on with the picture projected from its matched camera, and its coverage (the cosine; the picture's
+    pixel in texels).
+  - Tests: `test_set_fit_cw6.py` 4 (synthetic point maps ray-cast in rooms, a corridor and a street of known size; a picture without a
+    floor) and `placeSet.test.ts` 3.
+- **The spike** (`engine/spikes/e38_sets.py` make · fit · skin · second · fill · fill2 · move · score, `e38_browser.cjs`,
+  `frontend/src/spikes/e38Sets.ts`) ran on a copy of A1's project, one GPU job at a time.
+  - Five truth places: Stage's built sets of known size and their Klein stills from the clay. Klein put people in most, and a block in the
+    hall.
+  - The same five clay passes, Stage's exact render of the true geometry.
+  - Five found pictures: A1's room, a Klein kitchen, alley, hall and field.
+- **The camera match.**
+  - MoGe-2 reads the lens within 2–4°. Its scale ran 1.06–2.04× short, even on the clay passes.
+  - With the camera at eye level (1.6 m) the clay passes fit: width −4…+8 %, height −3…+10 %, the back wall's distance −11…+10 %; every
+    kind right (the street's clay too).
+  - Klein's stills drift more: width −14…+18 %, height +19…+127 %, the street read as a room (its end wall within 25 m).
+- **The skin** (one picture, 1 cm texels):
+  - Seen in rooms: back wall 92–100 %, side walls 13–44 %, floor 12–52 %, ceiling 0–41 %.
+  - The picture's pixel on the faces, by median: rooms 1.1–1.8 cm, a hall 3.3, corridors 4.6, streets and alleys 8–12.
+  - Seams: 0–1 level at the corners where the fit is right, 29–55 where a wall was misplaced, 4–29 on Klein's stills.
+- **A second picture** (New angle left45, matched by orbiting about what the camera looks at, the side where the bakes agree):
+  - the unseen share went 0.58 → 0.52 (kitchen) and 0.50 → 0.48 (alley);
+  - the two bakes disagree by 49–93 levels on what both saw;
+  - for the alley the orbit put the camera outside the walls.
+- **The Fill:**
+  - 32–58 s a face, 3–5 minutes a room.
+  - The neutral prompt on a wall seen 13 % repeated plaster patches; the face's material named gave a plain continuous wall (`fill2`).
+  - The people in room_m's picture are flat on its back wall: a set wants an empty place.
+- **Moves inside the set** (E34's 50° orbit, E35d's crane, each camera kept 0.25 m inside):
+  - the orbit sees 0.5–16 % of its frames unseen;
+  - the crane, looking down at the floor near the camera, 70–87 %.
+- **D143:**
+  - The scale comes from the camera's height (1.6 m, the author's field).
+  - The overlay is always shown, the assumed parts first, the kind one click.
+  - The texel goes by kind: 1 cm for a room, 2 cm for a corridor, 4 cm for a street and open ground; a face at most 2048 px.
+  - Each face is filled with its material from the place's sheet, the most-seen first.
+  - Only an empty place is skinned.
+  - No second picture by default.
+- Sheets: `.docs/proto01_UIcast/img/e38-truth.jpg`, `e38-found.jpg`, `e38-fill.jpg`.

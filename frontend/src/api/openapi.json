@@ -13719,6 +13719,59 @@
         "title": "PixelsPut",
         "type": "object"
       },
+      "PlaceSet": {
+        "description": "CW6 (04 §2): a place's set — a room, a street, a corridor or open ground, its sizes and parts (frontend placeSet.ts lays its faces\nout), its baked faces and the pictures they came from.",
+        "properties": {
+          "faces": {
+            "items": {
+              "$ref": "#/components/schemas/SetFace"
+            },
+            "title": "Faces",
+            "type": "array"
+          },
+          "kind": {
+            "default": "room",
+            "enum": [
+              "room",
+              "street",
+              "corridor",
+              "ground"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "parts": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Parts",
+            "type": "object"
+          },
+          "sizes": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Sizes",
+            "type": "object"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SetSource"
+            },
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "sizes",
+          "parts",
+          "faces",
+          "sources"
+        ],
+        "title": "PlaceSet",
+        "type": "object"
+      },
       "PlanBatch": {
         "properties": {
           "clip_id": {
@@ -17272,6 +17325,75 @@
         "title": "SessionInfo",
         "type": "object"
       },
+      "SetFace": {
+        "description": "CW6 (04 §2): a built set's face, baked — its texture (a Catalogue image, the face straight on) and its texel size.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "mask_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mask Asset Id"
+          },
+          "texel_m": {
+            "default": 0.01,
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Texel M",
+            "type": "number"
+          },
+          "texture_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Texture Asset Id"
+          }
+        },
+        "required": [
+          "id",
+          "texture_asset_id",
+          "texel_m",
+          "mask_asset_id"
+        ],
+        "title": "SetFace",
+        "type": "object"
+      },
+      "SetSource": {
+        "description": "CW6: a picture a built set was skinned from, and the camera it was matched to (in the set's frame).",
+        "properties": {
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "camera": {
+            "$ref": "#/components/schemas/SourceCamera"
+          },
+          "made_at": {
+            "title": "Made At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "asset_id",
+          "camera",
+          "made_at"
+        ],
+        "title": "SetSource",
+        "type": "object"
+      },
       "SetThing": {
         "description": "D123 (SC3c-2): a thing the author picked on a picture set's picture — SAM 3's points and the mask they found (a Catalogue `mask`\nasset at the picture's size), the relief and floor it was picked on (the placement reads them), and what was made of it (SC3c-3).",
         "properties": {
@@ -18227,6 +18349,48 @@
         "title": "ShuttingDown",
         "type": "object"
       },
+      "SourceCamera": {
+        "properties": {
+          "focal_mm": {
+            "default": 35.0,
+            "title": "Focal Mm",
+            "type": "number"
+          },
+          "pos": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Pos",
+            "type": "array"
+          },
+          "roll": {
+            "default": 0.0,
+            "title": "Roll",
+            "type": "number"
+          },
+          "sensor_mm": {
+            "default": 36.0,
+            "title": "Sensor Mm",
+            "type": "number"
+          },
+          "target": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Target",
+            "type": "array"
+          }
+        },
+        "required": [
+          "pos",
+          "target",
+          "roll",
+          "focal_mm",
+          "sensor_mm"
+        ],
+        "title": "SourceCamera",
+        "type": "object"
+      },
       "SpawnBody": {
         "properties": {
           "name": {
@@ -18989,6 +19153,16 @@
             ],
             "title": "Path"
           },
+          "place_set": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlaceSet"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "plate_asset_id": {
             "anyOf": [
               {
@@ -19120,7 +19294,8 @@
           "level",
           "things",
           "things_document_id",
-          "height_m"
+          "height_m",
+          "place_set"
         ],
         "title": "StageObject",
         "type": "object"

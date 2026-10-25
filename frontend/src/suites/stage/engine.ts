@@ -14,6 +14,7 @@ import { applyPose, clay, JOINTS, mannequin, POSES, prop, set as buildSet, setMa
 import { HAND_MARKER, heldWorld, onHand, ownTraverse, transformOf } from './held'
 import { CHAINS, eulerDeg, figureChain, solveTwoBone, type Chain } from './ik'
 import { chainOf, holdPins, type Pins } from './motion/contact'
+import { placeSet, type PlaceSetDoc } from './placeSet'
 import { makeDetailed, type Detailed, type HandPreset } from './detailed'
 import { measure } from './motion/path'
 import { bindProxy, FACE_LANDMARKS, FEET_LANDMARKS, shellPoints, shellStance, type Landmark, type Proxy } from './proxy'
@@ -448,7 +449,7 @@ export class StageEngine {
       let e = this.entries.get(o.id)
       if (!e || e.doc.kind !== o.kind || e.doc.preset !== o.preset || e.doc.asset_id !== o.asset_id || JSON.stringify((e.doc as { body?: unknown }).body ?? null) !== JSON.stringify((o as { body?: unknown }).body ?? null)
         || (e.doc.detail ?? null) !== (o.detail ?? null) || (e.doc.shadow_proxy ?? null) !== (o.shadow_proxy ?? null) || (e.doc.floor_y ?? null) !== (o.floor_y ?? null)
-        || (e.doc.height_m ?? null) !== (o.height_m ?? null)) {
+        || (e.doc.height_m ?? null) !== (o.height_m ?? null) || JSON.stringify(e.doc.place_set ?? null) !== JSON.stringify(o.place_set ?? null)) {
         if (e) { e.holder.removeFromParent(); e.proxy?.dispose() }
         e = this.build(o)
         this.entries.set(o.id, e)
@@ -559,6 +560,7 @@ export class StageEngine {
         figure.joints[c.lower].add(m); pickers.push(m)
       }
     } else if (o.kind === 'set' && o.preset === 'image' && o.asset_id) body = this.buildImageSet(o)
+    else if (o.kind === 'set' && o.preset === 'built' && o.place_set) body = this.buildPlaceSet(o.place_set)   // CW6: a place's set
     else if (o.kind === 'set') body = buildSet(o.preset ?? 'empty', this.setMat)
     else if (o.kind === 'prop') body = prop(o.preset ?? 'block', this.clayMat)
     else if (o.kind === 'mesh' && o.asset_id) {
@@ -804,6 +806,17 @@ export class StageEngine {
     if (!o.parent_joint || !o.parent) return null
     const fig = this.entries.get(o.parent)?.figure
     return fig ? fig.markers[HAND_MARKER[o.parent_joint]] ?? null : null
+  }
+  /** CW6 (04 §2): a built set — a plane a face, a baked face its texture unlit (the picture carries its light, as the relief's does). */
+  private buildPlaceSet(ps: NonNullable<StageObject['place_set']>): THREE.Object3D {
+    const tex = new Map(ps.faces.filter((f) => f.texture_asset_id).map((f) => [f.id, f.texture_asset_id!]))
+    return placeSet(ps as PlaceSetDoc, this.setMat, (id) => {
+      const aid = tex.get(id)
+      if (!aid) return null
+      const t = new THREE.TextureLoader().load(api.assetUrl(aid), () => { this.dirty = true })
+      t.colorSpace = THREE.SRGBColorSpace
+      return new THREE.MeshBasicMaterial({ map: t, side: THREE.DoubleSide })
+    })
   }
   /** CW4 (a dev hook's check): an object's height as drawn, in metres (its box in the world); null before it is built. */
   heightOf(id: string): number | null {

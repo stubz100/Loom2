@@ -10300,7 +10300,7 @@ job id in place for ever (409 on every *Fill ▶* / *Make the clay ▶*). Three 
 - Tests: `engineDispose.test.ts` 2, `saveChain.test.ts` 1 (the first store test with a held `fetch`); Vitest 541 + 3 skipped, typecheck
   and build clean, lint 0 errors, 79 warnings.
 
-## 2026-10-27 13:40 — The Bin's Trash lands with the review's fixes (V58–V64, V1): a place of the Bin, on commands, counts that hold
+## 2026-10-27 13:19 — The Bin's Trash lands with the review's fixes (V58–V64, V1): a place of the Bin, on commands, counts that hold
 
 The Trash the author began on 2026-10-25 (uncommitted, unplanned — the review's working-tree note) is now the Bin's fourth place:
 *Move to trash* ends a tile's right-click, the Trash at the foot of the places with its count, Restore on a trashed tile's double-click,

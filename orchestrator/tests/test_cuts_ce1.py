@@ -197,7 +197,7 @@ def test_the_movie_is_filmcrafts_export(tmp_path: Path, monkeypatch):
     import numpy as np
     from loom2 import final_assembly
 
-    def fake_conform(src: Path, dst: Path, n16: int) -> list[Path]:                       # as rife-ncnn-vulkan writes them: numbered from 1
+    def fake_conform(src: Path, dst: Path, n16: int, cancelled=None) -> list[Path]:                       # as rife-ncnn-vulkan writes them: numbered from 1
         dst.mkdir(parents=True, exist_ok=True)
         out = []
         for i in range(1, round((n16 - 1) * 24 / 16) + 2):

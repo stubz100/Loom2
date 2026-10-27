@@ -1241,7 +1241,9 @@ class ProjectClosed(Out):
 
 class Hello(Out):
     version: str
-    recent: list[dict[str, Any]]
+    run: str                                       # V65: the hub's run; a reconnecting client sends it back with `since`
+    recent: list[dict[str, Any]]                   # the frames the client missed, in order (empty on a first connect, or on a gap)
+    gap: bool = False                              # the missed frames are gone (another run, or more than the hub holds): fetch instead
 
 
 class _Frame(Out):

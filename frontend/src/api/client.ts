@@ -80,17 +80,32 @@ export async function sha256Hex(data: ArrayBuffer): Promise<string> {
 }
 
 export interface BinaryFrame { header: Record<string, unknown>; payload: Blob }
+/** V65: what the hello said — `first` on the first connect, else the missed frames were replayed (`replayed`) or are gone (`gap`). */
+export interface HelloInfo { first: boolean; replayed: number; gap: boolean }
 
-/** `/events` with reconnect; JSON frames → onEvent, binary previews → onBinary. */
+/** `/events` with reconnect; JSON frames → onEvent, binary previews → onBinary. V65: the socket remembers the last frame it applied and
+ *  the hub's run; a reconnect's auth names them, and the hello's `recent` (the frames missed meanwhile) goes through onEvent in order
+ *  before anything live — or `gap` says they are gone, and onHello's caller fetches. */
 export class EventsSocket {
   private ws: WebSocket | null = null
   private closed = false
   private backoff = 500
+  private lastSeq = 0
+  private run: string | null = null
   private onEvent: (f: EventFrame) => void
   private onBinary: (f: BinaryFrame) => void
   private onStatus: (s: 'open' | 'closed') => void
-  constructor(onEvent: (f: EventFrame) => void, onBinary: (f: BinaryFrame) => void, onStatus: (s: 'open' | 'closed') => void) {
-    this.onEvent = onEvent; this.onBinary = onBinary; this.onStatus = onStatus
+  private onHello: ((h: HelloInfo) => void) | undefined
+  constructor(onEvent: (f: EventFrame) => void, onBinary: (f: BinaryFrame) => void, onStatus: (s: 'open' | 'closed') => void, onHello?: (h: HelloInfo) => void) {
+    this.onEvent = onEvent; this.onBinary = onBinary; this.onStatus = onStatus; this.onHello = onHello
+  }
+
+  /** The last seq applied (0 before any frame). */
+  get since(): number { return this.lastSeq }
+
+  private deliver(f: EventFrame): void {
+    if (typeof f.seq === 'number' && f.seq > this.lastSeq) this.lastSeq = f.seq
+    this.onEvent(f)
   }
 
   connect(): void {
@@ -99,12 +114,28 @@ export class EventsSocket {
     const ws = new WebSocket(`ws://${backend.host}:${backend.port}/events`)       // D67: no credential in the URL
     ws.binaryType = 'arraybuffer'
     this.ws = ws
-    ws.onopen = () => { ws.send(JSON.stringify({ type: 'auth', token })); this.backoff = 500; this.onStatus('open') }
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'auth', token, ...(this.lastSeq ? { since: this.lastSeq, run: this.run } : {}) }))   // V65: what this client last saw
+      this.backoff = 500
+      this.onStatus('open')
+    }
     ws.onmessage = (ev) => {
       if (typeof ev.data === 'string') {
         let f: EventFrame | { type: 'pong' }
         try { f = JSON.parse(ev.data) as EventFrame | { type: 'pong' } } catch { return }   // one bad frame must not take the app down
-        if (f.type !== 'pong') this.onEvent(f)
+        if (f.type === 'pong') return
+        if (f.type === 'hello') {                                               // V65: the frames missed while the socket was down, in order
+          const d = f.data as unknown as { run?: string; recent?: EventFrame[]; gap?: boolean }
+          const first = this.run === null
+          const recent = Array.isArray(d.recent) ? d.recent : []
+          this.onEvent(f)
+          for (const r of recent) this.deliver(r)
+          this.run = typeof d.run === 'string' ? d.run : this.run
+          if (typeof f.seq === 'number' && f.seq > this.lastSeq) this.lastSeq = f.seq   // a gap: the fetch covers everything before the hello
+          this.onHello?.({ first, replayed: recent.length, gap: !!d.gap })
+          return
+        }
+        this.deliver(f)
         return
       }
       const buf = ev.data as ArrayBuffer

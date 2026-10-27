@@ -3500,7 +3500,9 @@ export interface paths {
         /**
          * Profile Set Bake
          * @description CW6 (04 §4): the client's bake (stage/setBake.ts) — each face's texture and coverage become Catalogue images (lineage `set-bake` ←
-         *     the set picture); the faces are the version's, unfilled, each keeping the material the author named.
+         *     the set picture); the faces are the version's, unfilled, each keeping the material the author named. V23: written into the set as it
+         *     is when the ingest is done (a wall dragged or a fit landed meanwhile stays; the bake's key tells the page whether it still matches),
+         *     never while a face's Fill runs (its result would land on the new bake).
          */
         put: operations["profile_set_bake_story_profiles__pid__versions__vid__set_bake_put"];
         post?: never;
@@ -8084,10 +8086,17 @@ export interface components {
         };
         /** Hello */
         Hello: {
+            /**
+             * Gap
+             * @default false
+             */
+            gap: boolean;
             /** Recent */
             recent: {
                 [key: string]: unknown;
             }[];
+            /** Run */
+            run: string;
             /** Version */
             version: string;
         };

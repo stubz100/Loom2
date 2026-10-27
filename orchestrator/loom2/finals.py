@@ -6,7 +6,9 @@ Files are truth: the record is written through fsio with its schema version; the
 """
 from __future__ import annotations
 
+import functools
 import shutil
+import threading
 from pathlib import Path
 from typing import Any, Literal
 
@@ -333,7 +335,22 @@ def character_recipe(f: "Final", layer: "FinalLayer", model_id: str, prompt: str
             "chain": {"clip_id": clip_id, "carry": CARRY, "offset": batch["offset"]}}
 
 
+_LOCK = threading.RLock()                        # V34: one writer at a time across route threads and finishers (get → patch → save is atomic)
+
+
+def _locked(fn):
+    @functools.wraps(fn)
+    def inner(self, *a, **k):
+        with _LOCK:
+            return fn(self, *a, **k)
+    return inner
+
+
 class FinalStore:
+    """The finals on disk (`finals/<id>/final.json` and the layers' folders). V34: every read-modify-write of a record runs under one
+    lock, so a finisher landing while a route writes loses nothing; a job is appended with `add_job`, never from a copy read before the
+    submit. The composition beside it has its own revision (the client's); the record needs none for these writes."""
+
     def __init__(self, ws: Workspace) -> None:
         self.ws = ws
         self.dir = ws.path / "finals"
@@ -360,6 +377,7 @@ class FinalStore:
         """D118 (AE4e): a processing layer's folder — `in/` (the stack below, rendered) and `frames/` (the pass's result)."""
         return self.folder(fid) / "processing" / pid
 
+    @_locked
     def set_processing(self, fid: str, rec: ProcessingLayer) -> Final:
         """D118 (AE4e): a processing layer recorded (replaced by id when run again); the record's revision moves."""
         f = self.get(fid)
@@ -371,6 +389,7 @@ class FinalStore:
         self.save(f)
         return f
 
+    @_locked
     def remove_processing(self, fid: str, pid: str) -> Final:
         """D118 (AE4e): a processing layer dropped (its folder too); the composition takes its layer out on the next sync."""
         f = self.get(fid)
@@ -411,6 +430,7 @@ class FinalStore:
                 n += 1
         return n
 
+    @_locked
     def add_take(self, fid: str, lid: str, take: dict[str, Any], use: bool = True) -> Final:
         """D118: a pass's result recorded on the layer, and shown as its source when `use`."""
         f = self.get(fid)
@@ -422,6 +442,7 @@ class FinalStore:
         layer.takes = [t for t in layer.takes if t.get("id") != take["id"]] + [take]
         return self.update_layer(fid, lid, takes=layer.takes, source=take["id"] if use else layer.source)
 
+    @_locked
     def set_source(self, fid: str, lid: str, take_id: str | None) -> Final:
         """D118: the layer shows this take (its frames must be on disk), or its original frames with None."""
         f = self.get(fid)
@@ -437,6 +458,7 @@ class FinalStore:
                 raise ValueError(f"the take {take_id} has no frames on disk")
         return self.update_layer(fid, lid, source=take_id)
 
+    @_locked
     def remove_take(self, fid: str, lid: str, take_id: str) -> Final:
         """D118: a take dropped (its frames too); the source falls back to the original when it was this one."""
         f = self.get(fid)
@@ -482,6 +504,7 @@ class FinalStore:
             raise
         return f
 
+    @_locked
     def set_passes(self, fid: str, lid: str, passes: dict[str, list[Path]], keypoints: list[Any] | None, body: dict[str, Any] | None,
                    body_hashes: list[str]) -> Final:
         """CS3: a character layer's passes drawn again (the skeleton changed) — its pass folders and keypoints replaced, the body they were
@@ -518,6 +541,7 @@ class FinalStore:
         self.save(f)
         return f
 
+    @_locked
     def update_layer(self, fid: str, lid: str, **patch: Any) -> Final:
         """One layer's fields changed (its status, still, jobs, frames done); the record's revision moves."""
         f = self.get(fid)
@@ -532,6 +556,18 @@ class FinalStore:
         f.updated_at = utc_now()
         self.save(f)
         return f
+
+    @_locked
+    def add_job(self, fid: str, lid: str, job_id: str, **patch: Any) -> Final:
+        """V34: a job appended to the layer's `job_ids` as they are *now* (a keyframe's Fill landing between the route's read and its write
+        used to be overwritten), with the rest of the patch."""
+        f = self.get(fid)
+        if f is None:
+            raise KeyError(fid)
+        layer = next((x for x in f.layers if x.id == lid), None)
+        if layer is None:
+            raise KeyError(f"{fid} has no layer {lid}")
+        return self.update_layer(fid, lid, job_ids=[*layer.job_ids, job_id], **patch)
 
     def set_frames(self, fid: str, lid: str, files: list[Path], status: str = "done", still_asset_id: str | None = None) -> Final:
         """A layer's own sequence (`frames/`), one file per frame at the final's count; the layer is done (or runs on: a character's matte).
@@ -548,6 +584,7 @@ class FinalStore:
             shutil.copyfile(src, d / f"{i:04d}.png")
         return self.update_layer(fid, lid, frames_done=len(files), status=status, error=None, **({"still_asset_id": still_asset_id} if still_asset_id else {}))
 
+    @_locked
     def set_result(self, fid: str, clip_id: str, stats: dict[str, Any]) -> Final:
         """PS5e: the assembled shot (a clip) and what the assembly did."""
         f = self.get(fid)
@@ -559,6 +596,7 @@ class FinalStore:
         self.save(f)
         return f
 
+    @_locked
     def set_key(self, fid: str, key: dict[str, Any]) -> Final:
         """PF1: a filled plate's keyframe recorded (replacing the one at its frame), the keyframes kept in frame order."""
         f = self.get(fid)
@@ -571,6 +609,7 @@ class FinalStore:
         self.save(f)
         return f
 
+    @_locked
     def key_landed(self, fid: str, frame: int, job_id: str, asset_id: str) -> Final | None:
         """PF1: a keyframe's Fill landed — its asset on the keyframe the job was made for (None when the plate was made again meanwhile)."""
         f = self.get(fid)
@@ -584,6 +623,7 @@ class FinalStore:
         self.save(f)
         return f
 
+    @_locked
     def set_render(self, fid: str, settings: RenderSettings) -> Final:
         """AE5: the render settings — the record's revision stays (they change what the next render writes, not what the shot is made of)."""
         f = self.get(fid)
@@ -594,6 +634,7 @@ class FinalStore:
         self.save(f)
         return f
 
+    @_locked
     def set_clip(self, fid: str, clip_id: str) -> Final:
         """AE1: the finished shot (the composition rendered) is the final's clip now; the record's revision stays, so its composition
         stays fresh (a render changes nothing it was made from)."""

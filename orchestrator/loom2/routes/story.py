@@ -803,28 +803,35 @@ class SetBake(BaseModel):
 @router.put("/story/profiles/{pid}/versions/{vid}/set/bake", response_model=Profile)
 async def profile_set_bake(svc: Svc, pid: str, vid: str, body: SetBake):
     """CW6 (04 §4): the client's bake (stage/setBake.ts) — each face's texture and coverage become Catalogue images (lineage `set-bake` ←
-    the set picture); the faces are the version's, unfilled, each keeping the material the author named."""
+    the set picture); the faces are the version's, unfilled, each keeping the material the author named. V23: written into the set as it
+    is when the ingest is done (a wall dragged or a fit landed meanwhile stays; the bake's key tells the page whether it still matches),
+    never while a face's Fill runs (its result would land on the new bake)."""
     from .finals import _blob
     ws, cat, _ = svc.require_project()
     p, v = await _place(svc, pid, vid)
     ps = v.place_set
     if ps is None or not ps.sources:
         raise HTTPException(422, "the place has no set to bake — Build the set ▶ first")
+    if svc.queue is not None and any(f.fill_job_id and svc.queue.job_live(f.fill_job_id) for f in ps.faces):
+        raise HTTPException(409, "the set's Fill is running — wait for it, or stop its job, before baking again")
     files = [(f, _blob(ws, f.image), _blob(ws, f.coverage)) for f in body.faces]
     source = ps.sources[0].asset_id
 
     def ingest() -> list[SetFace]:
         out = []
-        old = {f.id: f for f in ps.faces}
         for f, img, cov in files:
             params = {"profile_id": pid, "version": vid, "face": f.id, "texel_m": f.texel_m}
             t = cat.make_thumbs(cat.ingest_file(img, kind="image", move=False, suite="story", lineage_kind="set-bake", parents=[source], params=params))
             c = cat.ingest_file(cov, kind="image", move=False, suite="story", lineage_kind="set-coverage", parents=[t.id], params=params)
-            out.append(SetFace(id=f.id, texture_asset_id=t.id, baked_asset_id=t.id, coverage_asset_id=c.id, texel_m=f.texel_m, seen=f.seen, bad=f.bad,
-                               material=old[f.id].material if f.id in old else ""))
+            out.append(SetFace(id=f.id, texture_asset_id=t.id, baked_asset_id=t.id, coverage_asset_id=c.id, texel_m=f.texel_m, seen=f.seen, bad=f.bad))
         return out
     faces = await asyncio.to_thread(ingest)
-    p = await asyncio.to_thread(StoryStore(ws).set_place_set, pid, vid, ps.model_copy(update={"faces": faces, "baked_key": body.key}))
+    try:
+        p = await asyncio.to_thread(StoryStore(ws).set_baked_faces, pid, vid, faces, body.key)
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0]))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
     _changed(svc, p)
     return p.model_dump()
 

@@ -8932,6 +8932,11 @@
       },
       "Hello": {
         "properties": {
+          "gap": {
+            "default": false,
+            "title": "Gap",
+            "type": "boolean"
+          },
           "recent": {
             "items": {
               "additionalProperties": true,
@@ -8940,6 +8945,10 @@
             "title": "Recent",
             "type": "array"
           },
+          "run": {
+            "title": "Run",
+            "type": "string"
+          },
           "version": {
             "title": "Version",
             "type": "string"
@@ -8947,7 +8956,9 @@
         },
         "required": [
           "version",
-          "recent"
+          "run",
+          "recent",
+          "gap"
         ],
         "title": "Hello",
         "type": "object"
@@ -34053,7 +34064,7 @@
     },
     "/story/profiles/{pid}/versions/{vid}/set/bake": {
       "put": {
-        "description": "CW6 (04 §4): the client's bake (stage/setBake.ts) — each face's texture and coverage become Catalogue images (lineage `set-bake` ←\nthe set picture); the faces are the version's, unfilled, each keeping the material the author named.",
+        "description": "CW6 (04 §4): the client's bake (stage/setBake.ts) — each face's texture and coverage become Catalogue images (lineage `set-bake` ←\nthe set picture); the faces are the version's, unfilled, each keeping the material the author named. V23: written into the set as it\nis when the ingest is done (a wall dragged or a fit landed meanwhile stays; the bake's key tells the page whether it still matches),\nnever while a face's Fill runs (its result would land on the new bake).",
         "operationId": "profile_set_bake_story_profiles__pid__versions__vid__set_bake_put",
         "parameters": [
           {

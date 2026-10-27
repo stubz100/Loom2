@@ -2047,6 +2047,22 @@ class StoryStore(_ShotMixin, _FlowMixin):
             faces = [f.model_copy(update=upd) if f.id == fid else f for f in ps.faces]
             return self.set_place_set(pid, vid, ps.model_copy(update={"faces": faces}))
 
+    def set_baked_faces(self, pid: str, vid: str, faces: list[SetFace], key: str) -> Profile:
+        """V23: a bake landed — its faces written into the set *as it is now* (read again under the lock), not into the one the bake was
+        started from: the kind, sizes, parts and camera are the current ones, the bake's faces are the set's faces (a fit leaves none;
+        the bake makes them), a face the set already had keeps its material and its Fill marker, and `baked_key` says what the bake was
+        for (the page's *changed since the bake* when the set moved on meanwhile — no 409, nothing lost)."""
+        with _LOCK:
+            cur = self.profile(pid)
+            if cur is None:
+                raise KeyError(pid)
+            ps = cur.version(vid).place_set
+            if ps is None:
+                raise ValueError("the set is gone — Build the set ▶ first")
+            had = {f.id: f for f in ps.faces}
+            merged = [f.model_copy(update={"material": had[f.id].material, "fill_job_id": had[f.id].fill_job_id}) if f.id in had else f for f in faces]
+            return self.set_place_set(pid, vid, ps.model_copy(update={"faces": merged, "baked_key": key}))
+
     def set_fitted_body(self, pid: str, vid: str, body: Body, asset_id: str, points: dict[str, Any] | None = None, note: str | None = None) -> Profile:
         """CA1b (D104): the version's body fitted to its animation reference (SDPose's proportions), with the points it was fitted to and what
         the stance check saw (CS1: S4, S8). Like the reference itself, a product of the version (no revision guard, a final version too)."""

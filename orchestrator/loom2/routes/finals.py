@@ -237,7 +237,7 @@ async def final_plate(svc: Svc, fid: str, body: PlateBody):
     except ValueError as e:
         raise HTTPException(422, str(e))
     await svc.queue.flush()
-    f = await asyncio.to_thread(store.update_layer, fid, "plate", status="queued", error=None, clip_id=None, frames_done=0, job_ids=[*plate.job_ids, jobs[0].id],
+    f = await asyncio.to_thread(store.add_job, fid, "plate", jobs[0].id, status="queued", error=None, clip_id=None, frames_done=0,
                                 prompt=body.prompt_text.strip(), keys=[])
     svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
     return {"job_id": jobs[0].id, "pass_asset_id": rec.id, "scene_plate": first}
@@ -374,7 +374,7 @@ async def final_plate_key(svc: Svc, fid: str, body: KeyBody):
             raise HTTPException(422, str(e))
         await q.flush()
         key.update(asset_id=None, job_id=job.id)
-        await asyncio.to_thread(store.update_layer, fid, "plate", seed=seed, job_ids=[*plate.job_ids, job.id], status="running", error=None)
+        await asyncio.to_thread(store.add_job, fid, "plate", job.id, seed=seed, status="running", error=None)
     f = await asyncio.to_thread(store.set_key, fid, key)
     svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
     return f.model_dump()
@@ -490,8 +490,8 @@ async def final_layer_run(svc: Svc, fid: str, lid: str, body: RunBody):
     except ValueError as e:
         raise HTTPException(422, str(e))
     await svc.queue.flush()
-    f = await asyncio.to_thread(store.update_layer, fid, lid, status="queued", error=None, seed=seed, reference_asset_id=ref_id, guide_asset_id=g.id,
-                                batches=[{"k": 0, "job_id": jobs[0].id, "clip_id": None}], job_ids=[*layer.job_ids, jobs[0].id], frames_done=0)
+    f = await asyncio.to_thread(store.add_job, fid, lid, jobs[0].id, status="queued", error=None, seed=seed, reference_asset_id=ref_id, guide_asset_id=g.id,
+                                batches=[{"k": 0, "job_id": jobs[0].id, "clip_id": None}], frames_done=0)
     svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
     return {"job_id": jobs[0].id, "batches": len(plan), "reference_asset_id": ref_id, "placed": placed}
 
@@ -562,8 +562,8 @@ async def _retake_from(svc, store: FinalStore, f: Final, layer: FinalLayer, body
     except ValueError as e:
         raise HTTPException(422, str(e))
     await svc.queue.flush()
-    f2 = await asyncio.to_thread(store.update_layer, f.id, layer.id, status="queued", error=None, seed=seed, frames_done=0,
-                                 batches=[*kept, {"k": k, "job_id": jobs[0].id, "clip_id": None}], job_ids=[*layer.job_ids, jobs[0].id])
+    f2 = await asyncio.to_thread(store.add_job, f.id, layer.id, jobs[0].id, status="queued", error=None, seed=seed, frames_done=0,
+                                 batches=[*kept, {"k": k, "job_id": jobs[0].id, "clip_id": None}])
     svc.hub.broadcast("final.updated", {"id": f.id, "revision": f2.revision})
     return {"job_id": jobs[0].id, "batches": len(plan), "reference_asset_id": layer.reference_asset_id, "placed": layer.reference_asset_id != anim_ref}
 
@@ -718,7 +718,7 @@ async def final_layer_matte(svc: Svc, fid: str, lid: str, body: MatteBody):
     except ValueError as e:
         raise HTTPException(422, str(e))
     await svc.queue.flush()
-    f = await asyncio.to_thread(store.update_layer, fid, lid, status="running", error=None, job_ids=[*layer.job_ids, jobs[0].id])
+    f = await asyncio.to_thread(store.add_job, fid, lid, jobs[0].id, status="running", error=None)
     svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
     return {"job_id": jobs[0].id}
 
@@ -797,7 +797,7 @@ async def final_layer_pass(svc: Svc, fid: str, lid: str, body: PassBody):
     except ValueError as e:
         raise HTTPException(422, str(e))
     await svc.queue.flush()
-    f = await asyncio.to_thread(store.update_layer, fid, lid, job_ids=[*layer.job_ids, jobs[0].id])
+    f = await asyncio.to_thread(store.add_job, fid, lid, jobs[0].id)
     svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
     return {"job_id": jobs[0].id}
 

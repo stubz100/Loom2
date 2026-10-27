@@ -457,43 +457,55 @@ def _shot_takes(q: JobQueue, payload: dict, kind: str, ids: list[str], use: bool
 async def _final_layer_batch(q: JobQueue, job: JobRecord, recipe: I2V, clip_id: str) -> None:
     """D111 (PS5c): a character layer's batch landed — the next batch is queued, carrying this one's last frames (E23a W1); after the last,
     the batches are stitched into the layer's frames (the carried frames dropped, the final's count kept) and the layer is done. A failure
-    here fails the layer, not the job (the clip stays)."""
+    here fails the layer, not the job (the clip stays). V33: the record's reads and writes and the stitch (every frame copied) run on a
+    thread; only the submits are on the loop (AGENTS.md rule 3)."""
     from ..finals import FinalStore, character_recipe, plan_batches, stitch
     from ..origin import JobOrigin
     fid, payload = str(job.origin.ref), job.origin.payload or {}
     lid, k = str(payload.get("layer") or ""), int(payload.get("batch") or 0)
     store = FinalStore(q.ws)
-    try:
+
+    def landed() -> tuple[Any, Any, list[dict], list[dict]] | None:
         f = store.get(fid)
         layer = next((x for x in f.layers if x.id == lid), None) if f else None
         if f is None or layer is None:
             raise ValueError(f"the final {fid} or its layer {lid} is gone")
         batches = [dict(b) for b in layer.batches]
         if k >= len(batches) or batches[k].get("job_id") != job.id:
+            return None
+        batches[k]["clip_id"] = clip_id
+        return f, layer, batches, plan_batches(f.frames)
+
+    def stitched(batches: list[dict], frames: int) -> Any:
+        clips = ClipStore(q.ws)
+        seqs = [[clips.frame_path(b["clip_id"], i) for i in range(clips.get(b["clip_id"]).frames)] for b in batches]
+        store.update_layer(fid, lid, batches=batches)
+        return store.set_frames(fid, lid, stitch(seqs, frames), status="running")
+
+    try:
+        got = await asyncio.to_thread(landed)
+        if got is None:
             job.log_tail.append(f"the layer {lid} was re-taken meanwhile; this batch is not used")
             return
-        batches[k]["clip_id"] = clip_id
-        plan = plan_batches(f.frames)
+        f, layer, batches, plan = got
         if k + 1 < len(plan):
             nxt = q.submit(character_recipe(f, layer, recipe.model_id, recipe.prompt_text, plan[k + 1], clip_id),
                            origin=JobOrigin(suite="stage", surface=job.origin.surface, ref=fid, payload={**payload, "batch": k + 1}))[0]
             batches.append({"k": k + 1, "job_id": nxt.id, "clip_id": None})
-            f = store.update_layer(fid, lid, status="running", batches=batches, job_ids=[*layer.job_ids, nxt.id])
+            f = await asyncio.to_thread(store.add_job, fid, lid, nxt.id, status="running", batches=batches)
             job.log_tail.append(f"layer {lid}: batch {k + 1} of {len(plan)} queued ({nxt.id})")
         else:
-            clips = ClipStore(q.ws)
-            frames = [[clips.frame_path(b["clip_id"], i) for i in range(clips.get(b["clip_id"]).frames)] for b in batches]
-            store.update_layer(fid, lid, batches=batches)
-            f = store.set_frames(fid, lid, stitch(frames, f.frames), status="running")
+            f = await asyncio.to_thread(stitched, batches, f.frames)
             from ..recipes import matte_mode
-            mj = q.submit({"kind": "matte_sequence", "final_id": fid, "layer_id": lid, "mode": matte_mode(q.app.settings.variant)}, origin=JobOrigin(suite="stage", surface=job.origin.surface, ref=fid, payload={"layer": lid, "matte": True}))[0]
-            f = store.update_layer(fid, lid, job_ids=[*next(x for x in f.layers if x.id == lid).job_ids, mj.id])
+            mj = q.submit({"kind": "matte_sequence", "final_id": fid, "layer_id": lid, "mode": matte_mode(q.app.settings.variant)},
+                          origin=JobOrigin(suite="stage", surface=job.origin.surface, ref=fid, payload={"layer": lid, "matte": True}))[0]
+            f = await asyncio.to_thread(store.add_job, fid, lid, mj.id)
             job.log_tail.append(f"layer {lid}: {len(batches)} batch(es) stitched into {f.frames} frames; its matte queued ({mj.id})")
         q.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
     except Exception as e:  # noqa: BLE001
         job.log_tail.append(f"layer {lid}: {e}")
         try:
-            f = store.update_layer(fid, lid, status="failed", error=str(e))
+            f = await asyncio.to_thread(store.update_layer, fid, lid, status="failed", error=str(e))
             q.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
         except Exception:  # noqa: BLE001
             pass
@@ -542,8 +554,8 @@ async def queue_plate_path(q: JobQueue, fid: str, still_id: str, prompt: str) ->
     g = await asyncio.to_thread(q.catalogue.make_thumbs, g, depth[0])
     job = q.submit(plate_path_recipe(f, spec.id, still_id, g.id, prompt, (w, h), layer.seed),
                    origin=JobOrigin(suite="stage", surface=FINAL_PLATE_PATH_SURFACE, ref=fid, payload={"layer": "plate"}))[0]
-    f = await asyncio.to_thread(store.update_layer, fid, "plate", status="queued", error=None, still_asset_id=still_id, guide_asset_id=g.id, clip_id=None,
-                                frames_done=0, job_ids=[*layer.job_ids, job.id])
+    f = await asyncio.to_thread(store.add_job, fid, "plate", job.id, status="queued", error=None, still_asset_id=still_id, guide_asset_id=g.id, clip_id=None,
+                                frames_done=0)
     q.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
     return job
 
@@ -1091,7 +1103,7 @@ async def _finish_face_step(job: JobRecord, recipe: LayerPass, paths: list[Path]
         nj = q.submit({**recipe.model_dump(), "model_id": model, "step": nxt, "seeds": [job.seed]},
                       origin=JobOrigin(**job.origin.model_dump()) if job.origin else None)[0]
         job.result["final_id"], job.result["layer_id"], job.result["take_id"], job.result["next_job_id"] = f.id, recipe.layer_id, step.take_id, nj.id
-        f = await asyncio.to_thread(store.update_layer, f.id, recipe.layer_id, job_ids=[*layer.job_ids, nj.id])
+        f = await asyncio.to_thread(store.add_job, f.id, recipe.layer_id, nj.id)
         job.log_tail.append(f"next: {nxt['stage']} {nxt['k'] + 1} ({nj.id})")
         q.hub.broadcast("final.updated", {"id": f.id, "revision": f.revision})
     except Exception:
@@ -1167,7 +1179,8 @@ async def run_assemble(job: JobRecord, recipe: AssembleFinal, q: JobQueue) -> bo
     q.check_cancel(job)
     paths = sorted((tmp / "f16").glob("*.png"))
     fps = f.rate
-    conformed = await asyncio.to_thread(conform_24, tmp / "f16", tmp / "f24", f.frames) if f.rate == 16 else None
+    conformed = await asyncio.to_thread(conform_24, tmp / "f16", tmp / "f24", f.frames, lambda: job.id in q._cancel_requested) if f.rate == 16 else None
+    q.check_cancel(job)                                                                                 # V35: RIFE killed on a cancel
     if conformed:
         paths, fps = conformed, 24
         stats["conform"] = "RIFE v4.6 to 24 fps (D27)"
@@ -1257,7 +1270,8 @@ async def run_comp_render(job: JobRecord, recipe: CompRender, q: JobQueue) -> bo
     for stray in (x for x in (tmp / "f16").iterdir() if x.suffix.lower() != ".png"):   # a render log or the like: RIFE reads every file in the folder
         stray.unlink()
     conform = conform_24_alpha if rs.alpha else conform_24
-    conformed = await asyncio.to_thread(conform, tmp / "f16", tmp / "f24", f.frames) if f.rate == 16 else None
+    conformed = await asyncio.to_thread(conform, tmp / "f16", tmp / "f24", f.frames, lambda: job.id in q._cancel_requested) if f.rate == 16 else None
+    q.check_cancel(job)                                                                                 # V35: RIFE killed on a cancel
     if conformed:
         paths, fps = conformed, 24
     job.log_tail.append(f"composition rendered: {f.frames} frames in {render_s} s (revision {c.revision}; {rs.quality}, {rs.resolution}, "
@@ -1515,7 +1529,8 @@ async def run_movie(job: JobRecord, recipe: Render, q: JobQueue) -> bool:
             rec = recs[cid]
             if rec.fps == 16:
                 q.progress(job, f"conforming {cid} to 24 fps (RIFE)")
-                got = await asyncio.to_thread(conform_24, clips.frame_path(cid, 0).parent, tmp / "conform" / cid, rec.frames)
+                got = await asyncio.to_thread(conform_24, clips.frame_path(cid, 0).parent, tmp / "conform" / cid, rec.frames, lambda: job.id in q._cancel_requested)
+                q.check_cancel(job)                                                                     # V35: RIFE killed on a cancel
                 if got:
                     conformed[cid] = got
     job.log_tail.append(f"movie: {len(conformed)} clip(s) conformed to 24 fps by RIFE" if conformed else "movie: no RIFE conform (the nearest frame where a clip's rate differs)")
@@ -1652,7 +1667,8 @@ async def run_movie_filmcraft(job: JobRecord, recipe: Render, q: JobQueue, tl: A
             got = sorted(dst.glob("*.png"))
             if len(got) != round((rec.frames - 1) * 24 / 16) + 1:
                 q.progress(job, f"conforming {cid} to 24 fps (RIFE)")
-                got = await asyncio.to_thread(conform_24, clips.frame_path(cid, 0).parent, dst, rec.frames) or []
+                got = await asyncio.to_thread(conform_24, clips.frame_path(cid, 0).parent, dst, rec.frames, lambda: job.id in q._cancel_requested) or []
+                q.check_cancel(job)                                                                     # V35: RIFE killed on a cancel
                 if not got:
                     continue
             q.check_cancel(job)

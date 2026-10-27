@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import secrets
 import logging
 import struct
 import time
@@ -33,6 +34,18 @@ class EventHub:
         self._max_pending = max_pending
         self.seq = 0
         self.dropped = 0
+        self.run = secrets.token_hex(4)                 # V65: this hub's run — seqs of another run (an orchestrator restart) do not line up
+
+    def replay(self, since: int, run: str | None) -> tuple[list[dict], bool]:
+        """V65: the frames a reconnecting client missed (it names the last seq it applied and the run it saw) and whether some are gone —
+        a gap: the client saw another run, or more frames passed than the history holds; it then fetches instead. A first connect
+        (since 0) has nothing to catch up."""
+        if since <= 0:
+            return [], False
+        if run != self.run or since > self.seq:
+            return [], True
+        missed = [f for f in self._recent if f["seq"] > since]
+        return missed, len(missed) != self.seq - since
 
     def attach(self, ws: Any, hello: dict | None = None) -> None:
         c = _Client(ws)

@@ -34,7 +34,7 @@ def test_movie_render_makes_an_mp4_with_the_voice_lane(tmp_path: Path, monkeypat
     import av
     conformed: list[tuple[str, int]] = []
 
-    def fake_conform(src: Path, dst: Path, n16: int) -> list[Path]:          # RIFE's output shape: (n16 − 1) × 1.5 + 1 frames, here painted green
+    def fake_conform(src: Path, dst: Path, n16: int, cancelled=None) -> list[Path]:          # RIFE's output shape: (n16 − 1) × 1.5 + 1 frames, here painted green
         conformed.append((src.parent.name, n16))
         dst.mkdir(parents=True, exist_ok=True)
         out = []

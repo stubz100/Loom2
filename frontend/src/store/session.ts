@@ -113,7 +113,6 @@ export const useSession = create<SessionState>()(
         const start = get().health?.start_suite
         if (!deep && start && ['catalogue', 'generate', 'edit', 'animate', 'stage', 'final', 'story', 'models'].includes(start)) get().setSuite(start as Suite)
         socket?.close()
-        let everOpen = false
         socket = new EventsSocket(
           (f) => applyEvent(f, set, get),
           ({ header, payload }) => {
@@ -122,14 +121,17 @@ export const useSession = create<SessionState>()(
             if (old) URL.revokeObjectURL(old)
             set({ previews: { ...get().previews, [jobId]: URL.createObjectURL(payload) } })
           },
-          (s) => {
-            const reconnected = s === 'open' && everOpen
-            if (s === 'open') everOpen = true
-            set({ wsStatus: s })
-            if (reconnected) {                                          // B21: fetch what the socket missed instead of assuming nothing happened
-              void get().refreshAll().catch(() => undefined)
-              void import('../suites/edit/editorStore').then((m) => m.useEditor.getState().resync())
-            }
+          (s) => set({ wsStatus: s }),
+          ({ first, gap }) => {                                         // V65: a reconnect — the frames missed were just replayed through applyEvent …
+            if (first) return
+            void get().refreshAll().catch(() => undefined)              // B21: the session's own state fetched, not assumed
+            void import('../suites/edit/editorStore').then((m) => m.useEditor.getState().resync())
+            if (!gap) return                                            // … or are gone (an orchestrator restart, more than its history): the lists reload
+            void import('../suites/catalogue/catalogueStore').then((m) => { for (const h of m.allCatalogueStores()) { const st = h.getState(); void st.load({ keepSelection: true }); void st.refreshMeta() } })
+            void import('../suites/catalogue/albumStore').then((m) => void m.useAlbum.getState().load())
+            void import('../suites/story/storyStore').then((m) => void m.useStory.getState().load())
+            void import('../suites/animate/animateStore').then((m) => void m.useAnimate.getState().loadClips())
+            get().toast('Reconnected after a gap — the lists were reloaded', 'info')
           },
         )
         socket.connect()

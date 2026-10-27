@@ -64,11 +64,17 @@ def test_api_flow(tmp_path: Path):
         assert client.put(f"/blobs/{sha}", content=body, headers=H).json()["bytes"] == len(body)
         assert client.put(f"/blobs/{'0' * 64}", content=body, headers=H).status_code == 400
         assert client.get(f"/blobs/{sha}").content == body
-        # events: hello frame carries recent history
+        # events (V65): a first connect's hello names the hub's run and has nothing to catch up; a reconnect names the last seq it
+        # applied and gets the frames after it, in order
         with client.websocket_connect("/events") as ws:
             ws.send_json({"type": "auth", "token": token})                         # D67: the token travels in the first message, not the URL
             hello = ws.receive_json()
-            assert hello["type"] == "hello" and any(e["type"] == "project.opened" for e in hello["data"]["recent"])
+            assert hello["type"] == "hello" and hello["data"]["recent"] == [] and hello["data"]["gap"] is False and hello["seq"] > 5
+        with client.websocket_connect("/events") as ws:
+            ws.send_json({"type": "auth", "token": token, "since": hello["seq"] - 5, "run": hello["data"]["run"]})
+            again = ws.receive_json()
+            assert [e["seq"] for e in again["data"]["recent"]] == list(range(hello["seq"] - 4, hello["seq"] + 1)) and again["data"]["gap"] is False
+            assert all({"type", "data", "t"} <= set(e) for e in again["data"]["recent"])
         assert client.get("/engine").json()["running"] is False
         assert client.post("/project/close", headers=H).json() == {"open": False}
     # a relaunch on the same state reopens the last project (reopen_last_project default)

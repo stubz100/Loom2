@@ -10331,3 +10331,50 @@ The Trash the author began on 2026-10-25 (uncommitted, unplanned — the review'
   `test_review_v.py::test_v1_…` (a trash and a tag during the thumbnails stay); the e2e scenario *the Bin's Trash* from the author's diff
   unchanged. Vitest 545 + 3 skipped, typecheck and build clean, lint 0 errors, 79 warnings; the D32 audit clean with the four commands.
   Not changed: V65–V68 (the session store's reconnect and the global chords in fields) — the frame group.
+
+## 2026-10-27 14:56 — Fix group 5 (review V, journal 08:21): the server mediums V23, V33–V36 and the frame's reconnect V65
+
+The next group after the Trash (13:19): what the review rated medium on the server and the one medium in the frame. Each fixed at the
+cause, with a test named after its id in `test_review_v.py` (and `eventsReplay.test.ts` for the client side of V65).
+
+- **A bake lands on the set as it is now (V23).** `PUT …/set/bake` wrote back the `place_set` it had captured before its multi-second
+  ingest, so a wall dragged, a material named or a fit landed meanwhile was gone without a 409. Now `StoryStore.set_baked_faces` reads
+  the set again under the lock and puts the bake's faces into *that* set: the kind, sizes, parts and camera are the current ones, the
+  bake's faces are the set's faces (a fit leaves none — the bake makes them), a face the set already had keeps its material and its
+  Fill marker, and `baked_key` is the bake's — so the page says *changed since the bake* when the set moved on, and nothing is lost.
+  No revision in the body: the bake is a product of the set, not an edit of it, and a 409 after the ingest would only throw the
+  uploaded faces away. The route refuses (409) while a face's Fill runs, since its result would land on the new bake; a marker naming
+  a job that is over does not hold it (V21's rule).
+- **A character layer's batch landing runs on a thread (V33).** `_final_layer_batch` read and wrote the final's record and stitched
+  every frame on the event loop (its sibling, the plate path, was already in `to_thread`); now the landing, the stitch and the record's
+  writes are thread work, and only the two submits (the next batch, the matte) are on the loop (AGENTS.md rule 3).
+- **The finals' writers take turns (V34).** `FinalStore` had no lock: route threads and finishers interleaved get → patch → save, and a
+  keyframe's Fill landing between the keys route's read and its write was overwritten — the plate stayed `running` for ever (the method
+  route's 409). Now every read-modify-write of a record runs under one re-entrant lock (`_locked` on the twelve mutators; `set_frames`
+  copies its frames outside it), and a job is appended with `add_job`, which reads the layer's `job_ids` again — the ten sites that
+  wrote `job_ids=[*layer.job_ids, …]` from a copy read before the submit use it. No client revision: the record's writes are the
+  server's own; the composition beside it keeps the revision it has.
+- **RIFE under a watchdog (V35).** `conform_24` ran RIFE with `subprocess.run(check=True)`, no timeout, no pid: a Vulkan hang held the
+  worker thread and, one job at a time, the queue, until the orchestrator restarted. Now RIFE is a `Popen` in the orchestrator's Job
+  Object (it dies with the orchestrator), polled every 0.2 s: no new frame for `RIFE_STALL_S` (90 s — E9 measured 121 frames in ≈ 2 s;
+  the first waits for Vulkan) → killed with its tree, `TimeoutError` and the job fails; the job cancelled → killed, `None`, and the
+  caller's `check_cancel` ends the job (the four callers pass `cancelled`; `conform_24_alpha` passes it on). A non-zero exit is a
+  sentence with the frames it wrote.
+- **A download named with any character (V36).** `Content-Disposition: filename="<name>.png"` with an em dash or an ellipsis raised in
+  Starlette (headers are latin-1) — a 500 on Export PNG. `routes/deps.attachment(name)` gives an ASCII fallback beside `filename*=UTF-8''…`
+  (RFC 6266); the export route uses it.
+- **A reconnect replays what it missed (V65).** The hub kept 200 frames and the hello sent the last 20, which the client never read: a
+  WebSocket outage lost every `asset.*`, `group.changed`, `story.changed` and `clip.*` frame, and the reconnect refreshed the session's
+  own state only. Now the client's auth names the last seq it applied and the hub's run it saw (`since`, `run`; `EventsSocket` keeps
+  both), and the hello carries the frames after it (`EventHub.replay`), delivered through `applyEvent` in order before anything live —
+  or `gap: true` when they are gone (another run of the orchestrator, or more than the history holds), and then the session fetches
+  (B21's `refreshAll` and the editor's resync as before) and the lists reload: every catalogue store, the album, the story and the
+  clips, with one toast. The `Hello` schema has `run` and `gap` (D38: the OpenAPI document and `schema.d.ts` regenerated).
+  `orchestrator/AGENTS.md`'s events row says what runs now.
+- Tests: `test_review_v.py` +7 (V23 the merge and the route's 409; V34 a job appended to the layer as it is now, and two threads' keys
+  all landing; V35 the stall, the cancel and a clean run against a fake RIFE; V36 the header; V65 the hub's `replay` and the socket's
+  hello), `eventsReplay.test.ts` 3 (the auth's `since`/`run`, the replay's order, a gap); four tests' fakes of `conform_24` (CE1, AE5,
+  RC3) take the watchdog's argument, `test_api_flow` asserts the hello as it is now (nothing to catch up on a first connect, the rest on
+  a reconnect). Offline 635 passed, Vitest 548 + 3 skipped,
+  typecheck, build and lint (0 errors, 79 warnings) clean, agents_check, settings_audit and model_literals_check clean, e2e full 74/74.
+  Not changed: V13 and V81 (rig first), the lows.

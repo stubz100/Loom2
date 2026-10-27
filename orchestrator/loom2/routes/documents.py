@@ -25,7 +25,7 @@ from ..compose import srgb_delta
 from ..documents import Document
 from ..schemas import Closed, CompareReply, Deleted, DocList, DocumentPutReply, FlattenedToCatalogue, FlattenedToFile, JobsSubmitted, PixelsPut, RefineReply, SelectionReply
 from ..recipes import RefineEdge
-from .deps import Svc
+from .deps import Svc, attachment
 from .jobs import JobSubmit
 
 router = APIRouter(tags=["documents"])
@@ -167,7 +167,7 @@ async def documents_export(svc: Svc, doc_id: str, body: ExportRequest):
         return Response(content=merged.tobytes(), media_type="application/octet-stream",
                         headers={"X-Loom-Width": str(merged.shape[1]), "X-Loom-Height": str(merged.shape[0]), "X-Loom-Channels": "4", **NO_STORE})
     png = await asyncio.to_thread(_png_bytes, merged, 6)
-    return Response(content=png, media_type="image/png", headers={"Content-Disposition": f'attachment; filename="{od.doc.name}.png"'})
+    return Response(content=png, media_type="image/png", headers=attachment(f"{od.doc.name}.png"))        # V36: any name
 
 
 @router.post("/documents/{doc_id}/compare", response_model=CompareReply)

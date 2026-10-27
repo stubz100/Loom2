@@ -66,7 +66,7 @@ def test_the_conform_keeps_the_alpha(tmp_path: Path, monkeypatch):
         im = Image.new("RGBA", (8, 4), (40 * i, 10, 10, 60 * (i + 1)))
         im.save(src / f"f_{i:04d}.png")
 
-    def fake_conform(s: Path, d: Path, n16: int):
+    def fake_conform(s: Path, d: Path, n16: int, cancelled=None):
         shutil.rmtree(d, ignore_errors=True)
         d.mkdir(parents=True)
         frames = sorted(s.glob("*.png"))
@@ -119,7 +119,7 @@ def test_an_opaque_alpha_stays_opaque(tmp_path: Path, monkeypatch):
         Image.new("RGBA", (8, 4), (40 * i, 10, 10, 255)).save(src / f"f_{i:04d}.png")
     runs = []
 
-    def dim(s: Path, d: Path, n16: int):                                                         # a stand-in RIFE that darkens by 5 levels
+    def dim(s: Path, d: Path, n16: int, cancelled=None):                                                         # a stand-in RIFE that darkens by 5 levels
         runs.append(s.name)
         shutil.rmtree(d, ignore_errors=True)
         d.mkdir(parents=True)

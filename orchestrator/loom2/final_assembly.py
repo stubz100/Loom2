@@ -16,7 +16,7 @@ from __future__ import annotations
 import shutil
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 from PIL import Image, ImageFilter
@@ -243,7 +243,7 @@ def rife_binary() -> Path | None:
     return next(iter(sorted(root.glob("rife-ncnn-vulkan-*/rife-ncnn-vulkan.exe"))), None)
 
 
-def conform_24_alpha(src: Path, dst: Path, n16: int) -> list[Path] | None:
+def conform_24_alpha(src: Path, dst: Path, n16: int, cancelled: Callable[[], bool] | None = None) -> list[Path] | None:
     """AE5: F16 to 24 fps keeping the alpha — RIFE reads and writes RGB, so the colour and the alpha (as a grey picture) are conformed in two
     runs and put back together; None without the binary. RIFE shifts a flat grey by a few levels (the AE5 rig: an opaque 255 came back 250),
     so an opaque sequence keeps 255 without a second run, and the alpha's near-ends are snapped back (≤ 8 → 0, ≥ 247 → 255)."""
@@ -257,8 +257,8 @@ def conform_24_alpha(src: Path, dst: Path, n16: int) -> list[Path] | None:
         im = Image.open(p).convert("RGBA")
         im.convert("RGB").save(col / f"{i:06d}.png")
         im.getchannel("A").convert("RGB").save(alp / f"{i:06d}.png")
-    c = conform_24(col, dst.parent / f"{dst.name}-rgb", n16)
-    a = (c if opaque else conform_24(alp, dst.parent / f"{dst.name}-a", n16)) if c is not None else None
+    c = conform_24(col, dst.parent / f"{dst.name}-rgb", n16, cancelled)
+    a = (c if opaque else conform_24(alp, dst.parent / f"{dst.name}-a", n16, cancelled)) if c is not None else None
     if c is None or a is None:
         return None
     shutil.rmtree(dst, ignore_errors=True)
@@ -304,17 +304,42 @@ def write_prores(frames: list[Path], dst: Path, fps: float, alpha: bool) -> dict
     return {"path": dst, "frames": len(frames), "w": w, "h": h, "fps": fps, "alpha": alpha, "bytes": dst.stat().st_size}
 
 
-def conform_24(src: Path, dst: Path, n16: int) -> list[Path] | None:
-    """F16 to 24 fps with RIFE v4.6 (E9: ≈ 2 s for 81 → 121 frames; D102: F16 then RIFE), or None without the binary."""
+RIFE_STALL_S = 90.0                              # V35: RIFE writing no new frame for this long is a hang (E9: 121 frames in ≈ 2 s; the first waits for Vulkan)
+
+
+def conform_24(src: Path, dst: Path, n16: int, cancelled: Callable[[], bool] | None = None) -> list[Path] | None:
+    """F16 to 24 fps with RIFE v4.6 (E9: ≈ 2 s for 81 → 121 frames; D102: F16 then RIFE), or None without the binary. V35: RIFE runs
+    under a watchdog — in the orchestrator's Job Object (it dies with the orchestrator), killed with its tree when it writes nothing new
+    for `RIFE_STALL_S` (a Vulkan hang used to hold the worker thread, and with it the queue, until a restart) → TimeoutError, which fails
+    the job; and killed when `cancelled()` says so → None (the caller's `check_cancel` ends the job)."""
     import shutil
     import subprocess
+
+    from .engine.supervisor import _assign_to_job, _kill_tree
     exe = rife_binary()
     if exe is None or n16 < 2:
         return None
     shutil.rmtree(dst, ignore_errors=True)
     dst.mkdir(parents=True)
     n24 = round((n16 - 1) * 24 / 16) + 1
-    subprocess.run([str(exe), "-i", str(src), "-o", str(dst), "-n", str(n24), "-m", str(exe.parent / "rife-v4.6"), "-f", "%06d.png", "-g", "0"],
-                   check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    argv = [str(exe), "-i", str(src), "-o", str(dst), "-n", str(n24), "-m", str(exe.parent / "rife-v4.6"), "-f", "%06d.png", "-g", "0"]
+    proc = subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    _assign_to_job(proc)
+    seen, last = -1, time.monotonic()
+    while proc.poll() is None:
+        time.sleep(0.2)
+        n = sum(1 for _ in dst.glob("*.png"))
+        if n != seen:
+            seen, last = n, time.monotonic()
+        if cancelled is not None and cancelled():
+            _kill_tree(proc.pid)
+            proc.wait()
+            return None
+        if time.monotonic() - last > RIFE_STALL_S:
+            _kill_tree(proc.pid)
+            proc.wait()
+            raise TimeoutError(f"RIFE wrote nothing new for {int(RIFE_STALL_S)} s ({max(seen, 0)} of {n24} frames; a Vulkan hang?) — killed")
+    if proc.returncode != 0:
+        raise RuntimeError(f"RIFE failed ({proc.returncode}) after {max(seen, 0)} of {n24} frames")
     out = sorted(dst.glob("*.png"))
     return out if len(out) == n24 else None

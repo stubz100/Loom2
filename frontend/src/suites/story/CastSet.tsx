@@ -12,7 +12,7 @@ import { useSession } from '../../store/session'
 import { SET_KIND_PARTS, SET_KIND_SIZES, type PlaceSetDoc, type SetKind } from '../stage/placeSet'
 import { changeKind, dragTo, handles, outlines, rescale, type Handle, type SourceCam } from '../stage/setOverlay'
 import { autoBake, faceNoun, saveSet, setCamera, setPicture, setStatus, useSetBuilder, type PlaceSet } from './setBuilder'
-import { storyItem } from './storyCommands'
+import { onStoryItem } from './storyCommands'
 
 type Version = Profile['versions'][number]
 const KINDS: [SetKind, string][] = [['room', 'Room'], ['corridor', 'Corridor'], ['street', 'Street'], ['ground', 'Open ground']]
@@ -127,7 +127,7 @@ function FaceRows({ ps, onEdit }: { ps: PlaceSet; onEdit: (ps: PlaceSet) => void
     <div className="set-faces" role="list" aria-label="the set's faces">
       {order.map((f) => (
         <div key={f.id} role="listitem" className={`set-face${f.filled ? ' filled' : ''}`} data-face={f.id}
-          onContextMenu={(e) => { storyItem.face = f.id; showMenu(e, [{ cmd: 'cast.place.fillFace' }, { cmd: 'cast.place.fill' }, { cmd: 'cast.place.bake' }]) }}>
+          onContextMenu={(e) => showMenu(e, [{ cmd: 'cast.place.fillFace', on: onStoryItem({ face: f.id }) }, { cmd: 'cast.place.fill' }, { cmd: 'cast.place.bake' }])}>
           {f.texture_asset_id ? <img src={api.thumbUrl(f.texture_asset_id, 256)} alt="" /> : <span className="thumb" />}
           <span className="name">{PART_LABEL[f.id.replace(/_\d+$/, '')] ?? f.id}</span>
           <span className="muted">{f.fill_job_id ? 'filling…' : f.filled ? 'filled' : (f.bad ?? 0) >= 0.002 ? `${Math.round((f.bad ?? 0) * 100)} % to fill` : 'seen'}</span>

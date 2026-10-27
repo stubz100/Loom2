@@ -74,9 +74,14 @@ jobs:
         run: |
           npm ci
           npm run build
+      - name: frontend lint (oxlint) — CLAUDE.md's table names it, CI runs it (V47)
+        working-directory: frontend
+        run: npm run lint
       - name: frontend unit tests (D68) — vitest, incl. the D32 command audit
         working-directory: frontend
         run: npm test
+      - name: production CSP (B24) — the build under tauri.conf.json's policy in headless Edge against the orchestrator (V47)
+        run: orchestrator/.venv/Scripts/python.exe scripts/csp_check.py
       - name: end-to-end smoke (D68) — Playwright on Edge (WebGL2) against the orchestrator and the fake engine, this variant
         working-directory: frontend
         run: |
@@ -95,10 +100,25 @@ jobs:
           orchestrator/.venv/Scripts/python.exe scripts/export_openapi.py --check
           cd frontend && npm run api:types && git diff --exit-code -- src/api/schema.d.ts
 
+  shell:
+    name: shell compiles (cargo check)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: frontend/src-tauri
+      - name: cargo check — V47, a pull request that breaks lib.rs no longer passes green
+        working-directory: frontend/src-tauri
+        run: cargo check --locked
+
   installers:
-    name: installer (${{ matrix.variant }})
+    # V46 (C22): the bundles hold the shell only — they need a checkout prepared by scripts/setup.ps1 beside them (the orchestrator, its
+    # venv, the engine) — so they are built for a tag's draft release, not on every push to main (two Rust builds a push bought nothing)
+    name: shell installer (${{ matrix.variant }})
     needs: test
-    if: github.event_name == 'push'
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: windows-latest
     strategy:
       fail-fast: false
@@ -130,12 +150,12 @@ jobs:
         run: |
           $out = "dist-installers"; New-Item -ItemType Directory -Force $out | Out-Null
           Get-ChildItem frontend/src-tauri/target/release/bundle -Recurse -Include *.exe,*.msi | ForEach-Object {
-            Copy-Item $_.FullName (Join-Path $out ("loom2-${{ matrix.variant }}-" + $_.Name))
+            Copy-Item $_.FullName (Join-Path $out ("loom2-${{ matrix.variant }}-shell-" + $_.Name))
           }
           Get-ChildItem $out
       - uses: actions/upload-artifact@v4
         with:
-          name: loom2-${{ matrix.variant }}-installer
+          name: loom2-${{ matrix.variant }}-shell-installer
           path: dist-installers/*
           if-no-files-found: error
 
@@ -159,5 +179,6 @@ jobs:
         with:
           draft: true
           name: loom2 ${{ github.ref_name }}
+          body: "The installers hold the Tauri shell only (V46, C22): run them beside a checkout prepared by scripts/setup.ps1 (the orchestrator, its venv and the engine), or set LOOM2_REPO to it."
           files: installers/*
           generate_release_notes: true

@@ -1,7 +1,7 @@
 // 17 (D85): the Story suite's verbs — every one has a mouse home (the panel's buttons, the editor rows' tools, the Inspector, right-click
 // menus) per D32; Delete and the arrows are accelerators. SY1 adds the Cast tab's verbs (new profile, expand, add to the reference set, lock, copy, open).
 import { Paintbrush, RefreshCw, CopyPlus, Hammer, Lightbulb, Group, Ungroup, Workflow, ArrowDown, ArrowLeft, Box, Ruler, ArrowUp, BookOpen, BookPlus, ChevronLeft, ChevronRight, Pencil, UserRoundPlus, Users, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImageOff, ImagePlus, ImageUp, Link, ListChecks, ListPlus, Lock, MapPinPlus, Maximize, MessageSquare, Mic, PackagePlus, Palette, PersonStanding, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
-import { command, isEnabled, registerCommands, runCommand, sep, type Command, type MenuItem } from '../../frame/commands'
+import { command, isEnabled, registerCommands, runCommand, sep, type Command, type MenuItem, type OnItem } from '../../frame/commands'
 import { nextOwed, readinessOf, type ReadyCell, type ReadyItem } from './castReady'
 import { linesToVoice, spineTodo } from './episodeVerbs'
 import { goBack, goBackToIdea, useMakeFor } from '../../store/origin'
@@ -169,6 +169,12 @@ export const storyItem: { take?: { kind: 'image' | 'clip'; id: string }; line?: 
 export function runOnItem(item: Partial<typeof storyItem>, id: string): boolean {
   Object.assign(storyItem, item)
   try { return runCommand(id) } finally { for (const k of Object.keys(item) as (keyof typeof storyItem)[]) delete storyItem[k] }
+}
+/** V69: a menu entry's item, set around its `when` and `run` only (`{ cmd, on: onStoryItem({ take }) }`) — a right-click used to leave
+ *  the item set after the menu closed, and the palette then ran *Use this take* / *Fill this face* on the last right-clicked item. */
+export const onStoryItem = (item: Partial<typeof storyItem>): OnItem => (f) => {
+  Object.assign(storyItem, item)
+  try { return f() } finally { for (const k of Object.keys(item) as (keyof typeof storyItem)[]) delete storyItem[k] }
 }
 const takeUsable = () => { const t = storyItem.take; const v = shotVersion(); return !!t && !!v && v.state === 'open' && (t.kind === 'clip' ? v.clip_id !== t.id : v.frame_asset_id !== t.id) }
 const lineVoicable = () => { const l = storyItem.line; const n = l ? sy().flowNodes[l.node] : undefined; const j = l ? ttsJobFor(useSession.getState().jobs, l.node, l.index) : undefined

@@ -172,10 +172,10 @@ export function IdeaInspector() {
     <div className="story-insp idea-insp">
       <h4>{i.name}</h4>
       <div className="kv">
-        <span>name</span><input aria-label="idea name" defaultValue={i.name} key={`n${i.revision}`} maxLength={80} onBlur={(e) => { const n = e.target.value.trim(); if (n && n !== i.name) void ideas().patch(i.id, { name: n }) }} />
+        <span>name</span><input aria-label="idea name" defaultValue={i.name} key={`n${i.id}:${i.name}`} maxLength={80} onBlur={(e) => { const n = e.target.value.trim(); if (n && n !== i.name) void ideas().patch(i.id, { name: n }) }} />
         <span>class</span><select aria-label="idea class" value={i.cls} onChange={(e) => void ideas().patch(i.id, { cls: e.target.value as ProfileClass })}>{(['character', 'prop', 'place'] as const).map((c) => <option key={c} value={c}>{c}</option>)}</select>
-        <span>note</span><textarea aria-label="idea note" defaultValue={i.note} key={`t${i.revision}`} maxLength={1000} rows={3} onBlur={(e) => { if (e.target.value !== i.note) void ideas().patch(i.id, { note: e.target.value }) }} />
-        {v && <><span>variant</span><input aria-label="variant note" placeholder="a note on this variant" defaultValue={v.note} key={`v${v.id}${i.revision}`} maxLength={400} onBlur={(e) => { if (e.target.value !== v.note) void ideas().patch(i.id, { variants: [{ id: v.id, note: e.target.value }] }) }} /></>}
+        <span>note</span><textarea aria-label="idea note" defaultValue={i.note} key={`t${i.id}:${i.note}`} maxLength={1000} rows={3} onBlur={(e) => { if (e.target.value !== i.note) void ideas().patch(i.id, { note: e.target.value }) }} />
+        {v && <><span>variant</span><input aria-label="variant note" placeholder="a note on this variant" defaultValue={v.note} key={`v${v.id}:${v.note}`} maxLength={400} onBlur={(e) => { if (e.target.value !== v.note) void ideas().patch(i.id, { variants: [{ id: v.id, note: e.target.value }] }) }} /></>}
         <span>kept</span><span>{i.kept.length ? `${i.kept.length}×` : 'not yet'}</span>
       </div>
       <div className="verbs"><CommandButton id="story.idea.rename" text /><CommandButton id="story.idea.delete" text /></div>

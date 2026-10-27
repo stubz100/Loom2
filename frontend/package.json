@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "api:types": "npx -y openapi-typescript@7 src/api/openapi.json -o src/api/schema.d.ts --default-non-nullable false",
+    "api:types": "npx -y openapi-typescript@7.13.0 src/api/openapi.json -o src/api/schema.d.ts --default-non-nullable false",
     "typecheck": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",

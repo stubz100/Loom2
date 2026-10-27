@@ -18,7 +18,7 @@ import { laneChanges, type LaneChange } from './assemble'
 import { runCommand } from '../../../frame/commands'
 import { captionStep, CUT_TOOLS, db, dragStep, gradeLabel, gripAt, itemLabel, razorStep, ROLE_NAMES, stripLabel, trackDrop, trackRef, type Grip } from './cut'
 import { tc } from './lane'
-import { captionMenu, captionTrackMenu, cutClipMenu, cutLength, cutSpaceMenu, cutTrackMenu, markerItem, markerMenu } from './sequenceCommands'
+import { captionMenu, captionTrackMenu, cutClipMenu, cutLength, cutSpaceMenu, cutTrackMenu, markerMenu } from './sequenceCommands'
 import { useSequence } from './sequenceStore'
 import '../../animate/animate.css'
 import './cut.css'
@@ -269,7 +269,7 @@ function CutTracksView({ cut }: { cut: CutTracks }) {
         {cut.markers.map((m) => (                                            // CE5: loom2's chapters (a shot's name) and the author's markers
           <i key={m.id} className={`cut-marker${m.kind === 'Chapter' ? ' chapter' : ''}`} data-marker={m.id} style={{ left: HEAD + m.frame * ppf }}
             title={`${m.name}${m.comment ? ` — ${m.comment}` : ''} · ${tc(Math.round(m.frame), cut.fps)}${m.kind === 'Chapter' ? ' · the shot\'s chapter (loom2 keeps it)' : ' — right-click: rename, delete'}`}
-            onContextMenu={m.kind === 'Chapter' ? undefined : (e) => { e.preventDefault(); e.stopPropagation(); markerItem.id = m.id; showMenu(e, markerMenu()) }} />
+            onContextMenu={m.kind === 'Chapter' ? undefined : (e) => { e.preventDefault(); e.stopPropagation(); showMenu(e, markerMenu(m.id)) }} />
         ))}
       </div>
       {cut.captions.map((ct) => <CaptionRow key={ct.id} cut={cut} ct={ct} ppf={ppf} len={len} frameAt={frameAt} />)}

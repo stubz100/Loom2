@@ -324,7 +324,16 @@ const detail = (e: unknown) => (e as ApiError).detail ?? String(e)
 let saveTimer: number | null = null
 let saveSeq = 0
 
-async function save(get: () => StoryState, set: (p: Partial<StoryState>) => void): Promise<void> {
+/** V71: the world's saves one after another — a second save during a slow PUT used to carry the old revision (a 409 and "changed
+ *  elsewhere" for the author's own keystrokes); each waits for the last reply, whose revision it then carries. */
+let saveChain: Promise<void> = Promise.resolve()
+function save(get: () => StoryState, set: (p: Partial<StoryState>) => void): Promise<void> {
+  const run = saveChain.then(() => saveNow(get, set))
+  saveChain = run.catch(() => undefined)
+  return run
+}
+
+async function saveNow(get: () => StoryState, set: (p: Partial<StoryState>) => void): Promise<void> {
   const cur = get().world
   if (!cur) return
   const seq = ++saveSeq
@@ -930,7 +939,8 @@ export const useStory = create<StoryState>()((set, get) => {
         const next = { ...get().clipsById }
         got.forEach((c, i) => { if (c) next[missing[i]] = c })
         const stages = await unwrap(http.GET('/stages')).catch(() => null)
-        set({ clipsById: next, ...(stages ? { stagesLite: stages.items.map((x) => ({ id: x.id, name: x.name, revision: x.revision })) } : {}) })
+        set({ ...(missing.length ? { clipsById: next } : {}),                  // V77: the same map when nothing was missing — a new one made Flow re-measure its nodes mid-drag
+          ...(stages ? { stagesLite: stages.items.map((x) => ({ id: x.id, name: x.name, revision: x.revision })) } : {}) })
       } catch { /* the board shows what it has */ }
     },
     shot: () => get().shots.find((s) => s.id === get().shotId),

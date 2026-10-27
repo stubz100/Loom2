@@ -10,11 +10,13 @@ loop, no orphan on a refused import, why nothing is filled, temp folders gone wi
 export timeout, a bad stack, the plate's id, a final deleted with its jobs). V2–V12, V14–V18, V20 — the queue, engine and catalogue lows
 (trained LoRAs after a rescan, a batch checked as a submit, a held file at purge, a torn app.json or group file, CORS on a 401, a typed
 layout, the thumbnail temp file, counts without the trashed, a requeue on disk, a retried thumbnail replace, a preview without a graph,
-a wedged engine restarted, tiers per model, the headroom of the models that run, the history read again, the disk guard cached)."""
+a wedged engine restarted, tiers per model, the headroom of the models that run, the history read again, the disk guard cached).
+V53, V54, V56 — READY after the bind, a gone parent ends the process, a gain that is not a number refused."""
 from __future__ import annotations
 
 import contextlib
 import json
+import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -1006,3 +1008,69 @@ async def test_v20_the_disk_guard_sums_once_per_few_seconds(tmp_path: Path, obje
         assert calls["n"] == 2
     finally:
         await rig.close()
+
+
+# ---- the eighth group (journal 2026-10-27): the shell, CI and the e2e (V48, V53–V56) and Story / Generate (V69–V77, Vitest) ----------
+
+
+def test_v53_v54_the_ready_line_follows_the_bind_and_a_gone_parent_ends_the_orchestrator(tmp_path: Path):
+    """`python -m loom2.main --parent-pid <gone>`: READY is printed once the socket answers (the first request after the line is a 200,
+    never ECONNREFUSED), and the orchestrator ends by itself when the named parent is no longer running."""
+    import socket
+    import subprocess
+    import time
+    import urllib.request
+    py = sys.executable
+    gone = subprocess.run([py, "-c", "pass"], capture_output=True)                     # a pid that was, and is no more
+    assert gone.returncode == 0
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    state = tmp_path / "state"
+    from loom2.config import AppState
+    AppState(state).update_settings({"engine": {"python": str(tmp_path / "missing.exe"), "health_timeout_s": 1}, "models_root": str(tmp_path / "models"), "mounted_model_trees": []})
+    proc = subprocess.Popen([py, "-m", "loom2.main", "--port", str(port), "--state", str(state), "--parent-pid", str(_dead_pid(py))],
+                            cwd=str(Path(__file__).resolve().parents[1]), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8",
+                            env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1"})
+    try:
+        line, t0 = "", time.time()
+        while time.time() - t0 < 60:
+            line = proc.stdout.readline()                                               # type: ignore[union-attr]
+            if line.startswith("LOOM2_READY ") or not line:
+                break
+        assert line.startswith("LOOM2_READY "), line
+        ready = json.loads(line[len("LOOM2_READY "):])
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/health", headers={"X-Loom-Token": ready["token"]})
+        with urllib.request.urlopen(req, timeout=5) as r:                              # V53: right after the line — the socket is bound
+            assert r.status == 200
+        assert proc.wait(timeout=20) == 0                                               # V54: the parent is gone — the orchestrator ends on its own
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+
+
+def _dead_pid(py: str) -> int:
+    import subprocess
+    p = subprocess.Popen([py, "-c", "pass"])
+    p.wait()
+    return p.pid
+
+
+def test_v54_process_alive_and_watch_parent(tmp_path: Path):
+    from loom2.parent import process_alive, watch_parent
+    assert process_alive(os.getpid())
+    assert not process_alive(_dead_pid(sys.executable))
+    gone = []
+    t = watch_parent(_dead_pid(sys.executable), lambda: gone.append(1), interval_s=0.05)
+    t.join(5)
+    assert gone == [1] and not t.is_alive()
+
+
+def test_v56_a_gain_that_is_not_a_number_is_refused(tmp_path: Path):
+    """The host splices the gain raw into its JSON reply: nan / inf are refused before anything runs."""
+    from loom2 import vsthost
+    host = next(v for v in vars(vsthost).values() if isinstance(v, type) and hasattr(v, "render"))
+    for bad in (float("nan"), float("inf"), float("-inf")):
+        with pytest.raises(ValueError, match="not a number"):
+            host.render(SimpleNamespace(), [], tmp_path / "in.wav", tmp_path / "out" / "out.wav", bad)
+    assert not (tmp_path / "out").exists()

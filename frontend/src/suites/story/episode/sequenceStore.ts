@@ -110,7 +110,16 @@ export const isCut = (): boolean => !!useSequence.getState().current?.file
 let saveTimer: number | null = null
 let saveSeq = 0
 
-async function save(get: () => SequenceState, set: (p: Partial<SequenceState>) => void): Promise<void> {
+/** V71: the lane's saves one after another — a second save during a slow PUT used to carry the old revision (a 409 and "changed elsewhere"
+ *  for the author's own keystrokes); each waits for the last reply, whose revision it then carries. */
+let saveChain: Promise<void> = Promise.resolve()
+function save(get: () => SequenceState, set: (p: Partial<SequenceState>) => void): Promise<void> {
+  const run = saveChain.then(() => saveNow(get, set))
+  saveChain = run.catch(() => undefined)
+  return run
+}
+
+async function saveNow(get: () => SequenceState, set: (p: Partial<SequenceState>) => void): Promise<void> {
   const { current, lane } = get()
   if (!current || !lane) return
   const seq = ++saveSeq
@@ -146,6 +155,10 @@ function applyCut(r: CutEdited, set: (p: Partial<SequenceState>) => void, get: (
 async function cutCall(get: () => SequenceState, set: (p: Partial<SequenceState>) => void, call: (id: string, revision: number) => Promise<CutEdited>): Promise<boolean> {
   const cur = get().current
   if (!cur?.file) return false
+  if (get().cutBusy) {                                                        // V72: a second FilmCraft edit during the first (a gesture, a rename) carried the old
+    useSession.getState().toast('The cut is still applying the last change — a moment', 'info')   // revision → a 409 blamed on "elsewhere"
+    return false
+  }
   set({ cutBusy: true })
   try {
     applyCut(await call(cur.id, cur.revision), set, get)

@@ -10465,3 +10465,48 @@ Each at its cause, a test named after its id (`test_review_v.py` +17; `modelTier
   Vitest 555 + 3 skipped, typecheck, build and lint (0 errors, 79 warnings) clean, agents_check, settings_audit and
   model_literals_check clean, e2e full 74/74. Not changed: V13 and V81 (rig first), CI and the shell (V46–V48, V52–V57),
   Story/Generate (V69–V77), stage (V84–V86, V88), Edit (V89–V96), V97.
+
+## 2026-10-27 19:44 — Fix group 8 (review V, journal 08:21): the shell, CI and the e2e (V46–V48, V52–V56) and Story / Generate (V69–V77)
+
+The build-and-shell section and the Story / Generate section of the register (V49–V51 went with group 1; V57's CRLF working copies
+were put right in group 5 — the index was never affected). Each at its cause; tests where a test can hold it (`test_review_v.py` +3,
+`storyFixes.test.ts` 2, `generateSettle.test.ts` 2; the shell compiles under `cargo check`, CI now checks it too).
+
+- **The installers are the shell's (V46).** The bundles hold the Tauri shell only — they find the orchestrator by `LOOM2_REPO` or a
+  checkout beside them (C22) — so CI builds them for a tag's draft release, not on every push to main (two Rust builds a push bought
+  nothing); the artifacts and the release note say so (`loom2-<variant>-shell-installer`). Bundling the orchestrator, its venv and the
+  engine is a decision for the log, not a review fix.
+- **CI checks what CLAUDE.md's table names (V47).** `npm run lint`, `scripts/csp_check.py` (the production build under the Tauri CSP in
+  headless Edge, which the Windows runner has) and a `shell` job (`cargo check --locked`) run on every push and pull request.
+- **Closing before READY (V48).** `shutdown_backend` waits two seconds, not twenty, when the orchestrator never said READY — there is no
+  server to ask and nothing of the author's to lose; the job object takes the child anyway.
+- **The contract's generator pinned (V52).** `api:types` runs `openapi-typescript@7.13.0`, not the day's 7.x.
+- **READY after the bind (V53).** `main.py`'s `ReadyServer` prints the line once uvicorn's `startup` has run the lifespan *and* bound the
+  socket; the shell's first request no longer meets ECONNREFUSED.
+- **A killed e2e run leaves nothing behind (V54).** `--parent-pid` on the orchestrator (`loom2/parent.py`: `process_alive`, `watch_parent`)
+  and the fake engine: each ends when the Playwright process is gone; `global-setup.ts` passes its pid.
+- **The shell's environment is not the token's (V55).** `spawn_backend` removes `LOOM2_TOKEN` from the orchestrator's environment: the
+  per-launch token is the orchestrator's own, reported in READY (the dev shell's `LOOM2_TOKEN=devtoken` stays a dev matter).
+- **A gain that is not a number is refused (V56).** `VstHost.render` refuses nan / inf before writing the chain script — the host splices
+  the value raw into its JSON reply; the host's own guard is a one-liner owed at its next rebuild (the pin ties the binary to its source).
+- **A menu entry's item is its own (V69).** `onStoryItem({ take })` / `{ face }` and `markerMenu(id)` set the item around the entry's
+  `when` and `run` only; a right-click used to leave `storyItem` / `markerItem` set, and the palette then ran *Use this take*, *Fill this
+  face* or *Delete the marker* on the last right-clicked item.
+- **A retired model settles (V70, T8).** A panel naming a model this build does not offer takes the resolved one (`settleModel`: on
+  `set` and when the capabilities arrive after a remembered panel), with a toast — it was sent resolved and read unresolved: the job ran on
+  the default, the grid showed no card, the refs and size read the wrong family.
+- **The world's and the lane's saves one after another (V71).** Chained like the stage's: a second save during a slow PUT no longer
+  carries the old revision (a 409 and "changed elsewhere" for the author's own keystrokes).
+- **One FilmCraft edit at a time (V72).** `cutCall` refuses while `cutBusy` with a toast, which covers the gestures too; the track's rename,
+  lock and mute say so in their `when`.
+- **A note typed during *Make the clay ▶* stays (V73).** The Inspector's inputs are keyed on the idea and the value they show, not on
+  every revision.
+- **No dead click on a final version (V74).** The Shots board's frame, clip, final and lip-sync cells are disabled on a final version
+  (their commands' `when` was false), the title says why.
+- **Expand runs the panel as it is (V75).** The panel is read again after its confirm; edits made with the dialog up run.
+- **A look under the idea chip is the idea's (V76).** `castLook` submits `withIdea(...)`, as *Expand* does.
+- **Flow keeps its measured nodes (V77).** `loadShotDetails` keeps the same `clipsById` when nothing was missing; a new map on every node
+  click made xyflow drop its sizes mid-drag (a frame of snap-back, scene frames flickering).
+- Offline 668 passed, Vitest 559 + 3 skipped, typecheck, build and lint (0 errors, 79 warnings) clean, `cargo check` clean, the workflow
+  parses, agents_check, settings_audit and model_literals_check clean (the new Generate test uses made-up ids), e2e full 74/74 (the fake engine and the orchestrator started with --parent-pid).
+  Not changed: V13 and V81 (rig first), stage (V84–V86, V88), Edit (V89–V96), V97.

@@ -99,6 +99,9 @@ fn spawn_backend(backend: Shared) {
     cmd.args(&args).current_dir(&cwd).env("PYTHONIOENCODING", "utf-8").env("PYTHONUNBUFFERED", "1").env("LOOM2_VARIANT", variant).stdout(Stdio::piped()).stderr(Stdio::piped());
     // D36: what this shell was built from (build.rs), reported by the orchestrator's /version and Settings · About
     cmd.env("LOOM2_SHELL_VERSION", env!("CARGO_PKG_VERSION")).env("LOOM2_SHELL_GIT_SHA", env!("LOOM2_GIT_SHA")).env("LOOM2_SHELL_BUILD_EPOCH", env!("LOOM2_BUILD_EPOCH"));
+    // V55: the orchestrator makes its per-launch token and reports it in READY; a LOOM2_TOKEN in the shell's environment (a dev shell,
+    // a stale export) must not become the app's token
+    cmd.env_remove("LOOM2_TOKEN");
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -206,6 +209,9 @@ fn shutdown_backend(backend: &Backend, grace: Duration) -> String {
         let _ = ureq::post(&url).header("X-Loom-Token", &token).config().http_status_as_error(false)
             .timeout_global(Some(Duration::from_secs(5))).build().send_empty();
     }
+    // V48: before READY there is no server to ask, and nothing of the author's to lose — a short wait, then the kill (the job object
+    // takes it anyway); the full grace is for a running orchestrator finishing a job's local work
+    let grace = if ready { grace } else { Duration::from_secs(2) };
     let t0 = Instant::now();
     let mut guard = backend.child.lock().unwrap();
     if let Some(child) = guard.as_mut() {

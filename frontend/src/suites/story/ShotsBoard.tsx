@@ -85,8 +85,9 @@ export function ShotsBoard() {
                     const verb = STEP_VERB[s.id](r.v, c)
                     return (
                       <td key={s.id}>
-                        <button type="button" className={`cell ${c.state}`} data-step={s.id} disabled={c.state === 'na' && !verb.always}
-                          title={`${s.label}: ${verb.label}`} aria-label={`${r.shot.name} · ${s.label}: ${verb.label}`}
+                        <button type="button" className={`cell ${c.state}`} data-step={s.id}
+                          disabled={(c.state === 'na' && !verb.always) || (r.v.state !== 'open' && ['frame', 'clip', 'final', 'lipsync'].includes(s.id))}   // V74: a final version makes nothing more
+                          title={`${s.label}: ${r.v.state !== 'open' && ['frame', 'clip', 'final', 'lipsync'].includes(s.id) ? 'the version is final — make a new version' : verb.label}`} aria-label={`${r.shot.name} · ${s.label}: ${verb.label}`}
                           onClick={(e) => { e.stopPropagation(); sy().selectShot(r.shot.id); void sy().loadShotDetails().then(() => runStep(s.id)) }}>
                           <span className="g">{GLYPH[c.state]}</span>{c.text && <span className="t">{c.text}</span>}
                         </button>

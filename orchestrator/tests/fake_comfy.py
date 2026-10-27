@@ -310,7 +310,30 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--object-info", default=str(Path(__file__).resolve().parent / "fixtures" / "object_info.json"))
     ap.add_argument("--output-dir", required=True, help="the orchestrator's <state>/engine_out")
     ap.add_argument("--models-root", default=None, help="LT1: list this tree's loras/ in LoraLoaderModelOnly's enum, as ComfyUI does (subfolders with the OS separator)")
+    ap.add_argument("--parent-pid", type=int, default=None, help="V54: exit when this process is gone (the e2e runner has no job object)")
     a = ap.parse_args(argv)
+    if a.parent_pid:
+        def watch(pid: int) -> None:
+            import os
+            import ctypes
+            while True:
+                time.sleep(1.0)
+                if os.name == "nt":
+                    k32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+                    h = k32.OpenProcess(0x1000, False, pid)                                    # PROCESS_QUERY_LIMITED_INFORMATION
+                    code = ctypes.c_ulong()
+                    alive = bool(h) and bool(k32.GetExitCodeProcess(h, ctypes.byref(code))) and code.value == 259   # STILL_ACTIVE
+                    if h:
+                        k32.CloseHandle(h)
+                else:
+                    try:
+                        os.kill(pid, 0)
+                        alive = True
+                    except OSError:
+                        alive = False
+                if not alive:
+                    os._exit(0)
+        threading.Thread(target=watch, args=(a.parent_pid,), name="fake-comfy-parent-watch", daemon=True).start()
     data = json.loads(Path(a.object_info).read_text(encoding="utf-8"))
     fake = FakeComfy(data.get("object_info", data), Path(a.output_dir), behaviour=a.mode)
     if a.models_root:

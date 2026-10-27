@@ -87,14 +87,14 @@ export default async function globalSetup(config: FullConfig): Promise<() => Pro
     }
   }
   try {
-    fake = spawn(PYTHON, [join(REPO, 'orchestrator', 'tests', 'fake_comfy.py'), '--port', String(enginePort), '--mode', 'success', '--output-dir', join(state, 'engine_out'),
+    fake = spawn(PYTHON, [join(REPO, 'orchestrator', 'tests', 'fake_comfy.py'), '--port', String(enginePort), '--mode', 'success', '--parent-pid', String(process.pid), '--output-dir', join(state, 'engine_out'),
       '--models-root', join(state, 'models')],                                                           // LT1: the loras folder in the loader's enum
       { env, stdio: ['ignore', 'pipe', 'pipe'] })
     const fakeLog = createWriteStream(join(state, 'logs', 'fake_comfy.log'))
     fake.stdout!.pipe(fakeLog); fake.stderr!.pipe(fakeLog)
     await waitHttp(`http://127.0.0.1:${enginePort}/system_stats`, 30_000, fake, 'fake engine')
 
-    orch = spawn(PYTHON, ['-m', 'loom2.main', '--port', String(port), '--state', state, '--project', project],
+    orch = spawn(PYTHON, ['-m', 'loom2.main', '--port', String(port), '--state', state, '--project', project, '--parent-pid', String(process.pid)],   // V54: gone with a killed run
       { cwd: join(REPO, 'orchestrator'), env: { ...env, LOOM2_TOKEN: TOKEN, LOOM2_VARIANT: variant }, stdio: ['ignore', 'pipe', 'pipe'] })
     const orchLog = createWriteStream(join(state, 'logs', 'orchestrator.e2e.log'))
     orch.stdout!.pipe(orchLog); orch.stderr!.pipe(orchLog)

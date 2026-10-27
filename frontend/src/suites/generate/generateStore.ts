@@ -139,6 +139,19 @@ export const maxRefsOf = (p: Panel): number => useSession.getState().capabilitie
 
 /** D90 (B12): what picking a model changes besides the id — Turbo only where the model has it, the tier's size for the new model's family
  *  (a custom size stays), and no base / max shift where the graph has no ModelSamplingFlux (the compiler refuses one). */
+/** V70 (T8): a panel naming a model this build does not offer (a retired model's preset or asset) used to be *sent* resolved to the
+ *  default while the column *read* it unresolved — the job ran on the default, the grid showed no card, the refs and size read the
+ *  wrong family. The panel takes the resolved model (with its tier size), and a toast says so. */
+function settleModel(get: () => GenerateState, set: (p: Partial<GenerateState>) => void): void {
+  const caps = useSession.getState().capabilities
+  const p = get().panel
+  if (!caps || !p.model_id || caps.models[p.model_id]) return
+  const id = panelModel(p)
+  if (!id || id === p.model_id) return
+  set({ panel: { ...p, ...modelPatch(p, id) } })
+  useSession.getState().toast(`${p.model_id} is not in this build — ${id} runs`, 'info')
+}
+
 export function modelPatch(p: Panel, id: string): Partial<Panel> {
   const caps = useSession.getState().capabilities
   const cap = caps?.models[id]
@@ -462,7 +475,7 @@ export const useGenerate = create<GenerateState>()(
         } catch (e) { s.toast(`New angle failed: ${(e as ApiError).detail ?? e}`, 'error'); return null }
       },
 
-      set: (patch) => { set({ panel: { ...get().panel, ...patch } }); schedulePreview(get) },
+      set: (patch) => { set({ panel: { ...get().panel, ...patch } }); if (patch.model_id !== undefined) settleModel(get, set); schedulePreview(get) },
       setTree: (patch) => { get().set({ tree: { ...get().panel.tree, ...patch } }) },
       setSubject: (i, patch) => { const subs = [...(get().panel.tree.subjects ?? [])]; subs[i] = { ...subs[i], ...patch }; get().setTree({ subjects: subs }) },
       addSubject: () => get().setTree({ subjects: [...(get().panel.tree.subjects ?? []), { ...NEW_SUBJECT }] }),
@@ -574,7 +587,7 @@ export const useGenerate = create<GenerateState>()(
         const { useStory } = await import('../story/storyStore')
         const gid = await useStory.getState().ensureCandidates(prof.id, v.id)
         if (!gid) return null
-        return get().generate(false, castOrigin(prof.id, v.id, gid), {
+        return get().generate(false, withIdea(castOrigin(prof.id, v.id, gid)), {                 // V76: a look made under the idea chip is the idea's too
           text: ` — they land as ${prof.name}'s candidates (add ✓ the good ones to the reference set, make one the hero)`,
           action: { label: `Open ${prof.name} in Cast`, run: () => void import('../../store/origin').then((m) => m.goToStory({ tab: 'cast', id: prof.id, version: v.id })) } })
       },
@@ -596,7 +609,8 @@ export const useGenerate = create<GenerateState>()(
         set({ poses: { cells, expressions: on ? ps.expressions.filter((e) => e !== x) : [...ps.expressions, x] } })
       },
       expand: async (stage = false) => {
-        const ss = useSession.getState(), st = ss.capabilities?.story, p = get().panel
+        const ss = useSession.getState(), st = ss.capabilities?.story
+        let p = get().panel
         const cells = expandCells(get().poses, st?.coverage?.shots ?? [], st?.coverage?.angles ?? [], st?.coverage?.expressions ?? [])
         if (!cells.length) { ss.toast('Pick at least one pose in the Poses section', 'error'); return null }
         const phrases = (st?.coverage?.phrases ?? { shots: {}, angles: {} }) as { shots: Record<string, string>; angles: Record<string, string> }
@@ -618,6 +632,7 @@ export const useGenerate = create<GenerateState>()(
             text: `${cells.length} pose${cells.length === 1 ? '' : 's'} × ${p.count}: ${n} images${prof && v ? ` as ${prof.name} ${v.id}'s candidates` : ''} — ${secs ? `about ${Math.max(1, Math.round(secs / 60))} min with the model loaded` : 'time unknown'}.` })
           if (!ok) return null
         }
+        p = get().panel                                                                        // V75: what the panel holds now — edits made with the dialog up run
         const items = cells.map((cell) => ({ recipe: recipeForCell(p, cell, phrases) as unknown as Record<string, unknown>, origin: { ...origin, payload: { ...(origin.payload ?? {}), cell } } }))
         try {
           const jobs = await unwrap(http.POST('/jobs/batch', { body: { items, stage } }))
@@ -764,3 +779,6 @@ function schedulePreview(get: () => GenerateState) {
   if (previewTimer) window.clearTimeout(previewTimer)
   previewTimer = window.setTimeout(() => { previewTimer = null; void get().refreshPreview() }, 250)
 }
+
+// V70: the capabilities arrive after the remembered panel — a model this build does not offer is settled then
+useSession.subscribe((s, prev) => { if (s.capabilities && s.capabilities !== prev.capabilities) settleModel(useGenerate.getState, useGenerate.setState) })

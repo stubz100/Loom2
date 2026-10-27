@@ -31,7 +31,7 @@ import { useLibrary } from './libraryStore'
 import { useGenerate } from '../generate/generateStore'
 import { versionName } from '../generate/sheet'
 import { CastSheet } from './CastSheet'
-import { askExpand, castCells, castNext, ITEM_NEXT, itemCommand, makeClipItems, makeFrameItems, NEXT_LABEL, profileMenu, rowMenu, runOnItem, selectedNext, stageUsers, storyItem } from './storyCommands'
+import { askExpand, castCells, castNext, ITEM_NEXT, itemCommand, makeClipItems, makeFrameItems, NEXT_LABEL, onStoryItem, profileMenu, rowMenu, runOnItem, selectedNext, stageUsers } from './storyCommands'
 import { BoardPanel, LinkStageSheet, ShotsBoard, VoiceAllButton } from './ShotsBoard'
 import { FlowRecipe, ShotRecipe } from './recipe/StoryRecipe'
 import { flatGroups, useAlbum } from '../catalogue/albumStore'
@@ -726,7 +726,7 @@ function Take({ kind, id, current, clipsById }: { kind: 'image' | 'clip'; id: st
   markUsed('story.shot.useTake')
   return (
     <div className={`take-card${current ? ' current' : ''}`} data-kind={kind} data-id={id} title={kind === 'clip' ? (c ? `${c.frames} f · ${c.w}×${c.h}` : id) : id}
-      onContextMenu={(e) => { storyItem.take = { kind, id }; showMenu(e, [{ cmd: 'story.shot.useTake' }]) }}>
+      onContextMenu={(e) => showMenu(e, [{ cmd: 'story.shot.useTake', on: onStoryItem({ take: { kind, id } }) }])}>
       {thumb ? <img src={api.thumbUrl(thumb, 256)} alt="" /> : <span className="empty">{kind}</span>}
       <span className="cell">{kind === 'clip' ? <><Film size={10} /> {c ? `${c.frames} f · ${c.w}×${c.h}` : 'clip'}</> : 'frame'}{current ? ' · in use' : ''}</span>
       {!current && <span className="tools"><button className="quiet" title={kind === 'clip' ? 'Use as the clip' : 'Use as the frame'} aria-label={`use ${kind}`} onClick={() => runOnItem({ take: { kind, id } }, 'story.shot.useTake')}>✓ use</button></span>}

@@ -15,6 +15,7 @@ vsthost › cli runs under this interpreter (tests/fake_vsthost.py).
 from __future__ import annotations
 
 import json
+import math
 import os
 import subprocess
 import threading
@@ -127,7 +128,11 @@ class VstHost:
 
     def render(self, chain: list[dict], wav_in: Path, wav_out: Path, gain_db: float = 0.0) -> dict:
         """`wav_in` through the chain ([{bundle, uid, state: Path | None, bypass}], in order) into `wav_out` (stereo float at the same rate);
-        `gain_db` first, in float (AU4: a print's gain — FilmCraft's WAV is 16-bit, so the gain is not baked into it)."""
+        `gain_db` first, in float (AU4: a print's gain — FilmCraft's WAV is 16-bit, so the gain is not baked into it). V56: a gain that
+        is not a finite number is refused here — the host splices it raw into its JSON reply (`nan` / `inf` made it unparseable; the
+        host's own guard is a one-liner owed at its next rebuild, the pin tying the binary to its source)."""
+        if not math.isfinite(gain_db):
+            raise ValueError(f"the print's gain is not a number ({gain_db})")
         wav_out.parent.mkdir(parents=True, exist_ok=True)
         tsv = wav_out.with_suffix(".chain.tsv")
         lines = [f"@gain\t{gain_db:g}\n"] if gain_db else []

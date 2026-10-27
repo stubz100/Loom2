@@ -1,7 +1,7 @@
 // P17 (D83): the Sequence tab's verbs — every one has a mouse home (the lane's context menu, the Inspector, the transport) per D32;
 // undo / redo take Ctrl+Z / Ctrl+Shift+Z in the Animate scope (the clip player has no undo of its own).
 import { AppWindow, ArrowDown, ArrowLeft, ArrowLeftRight, ArrowRight, ArrowRightLeft, ArrowUp, Bookmark, Captions, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, Columns2, Eye, FileDown, Film, FolderOpen, Gauge, Lock, Mic, MousePointer2, MoveHorizontal, Music, Palette, Pause, Pencil, Play, Plug, Plus, Redo2, RefreshCw, RotateCcw, Scissors, SkipBack, SkipForward, SlidersHorizontal, Snowflake, Sparkles, SplitSquareHorizontal, SquareDashed, Tag, ToggleLeft, Trash2, Undo2, UnfoldHorizontal, Volume2, VolumeX, Workflow, ZoomIn, ZoomOut } from 'lucide-react'
-import { registerCommands, sep, type MenuItem } from '../../../frame/commands'
+import { registerCommands, sep, type MenuItem, type OnItem } from '../../../frame/commands'
 import { askConfirm, askText, useSession } from '../../../store/session'
 import { useAnimate } from '../../animate/animateStore'
 import { useStory } from '../storyStore'
@@ -224,11 +224,11 @@ registerCommands([
     run: () => { const s = selCut(); if (s) edit1('edit.rippleDelete', { clips: [s.item.id] }) } },
   { id: 'story.cut.rename', scope: 'story', label: 'Rename the clip…', icon: Pencil, placement: ['context'], when: cutSel,
     run: () => { const s = selCut(); if (s) void askText({ title: 'Rename the clip', initial: s.item.name }).then((n) => { if (n?.trim()) edit1('clip.rename', { clip: s.item.id, name: n.trim() }) }) } },
-  { id: 'story.cut.track.rename', scope: 'story', label: 'Rename the track…', icon: Pencil, placement: ['context', 'inspector'], when: () => isCut() && !!selTrack(),
+  { id: 'story.cut.track.rename', scope: 'story', label: 'Rename the track…', icon: Pencil, placement: ['context', 'inspector'], when: () => isCut() && !!selTrack() && !sq().cutBusy,
     run: () => { const tr = selTrack(); if (tr) void askText({ title: 'Rename the track', initial: tr.name }).then((n) => { if (n?.trim()) edit1('timeline.setTrack', { track: tr.id, name: n.trim() }) }) } },
-  { id: 'story.cut.track.lock', scope: 'story', label: 'Lock / unlock the track', icon: Lock, placement: ['context', 'inspector'], when: () => isCut() && !!selTrack(),
+  { id: 'story.cut.track.lock', scope: 'story', label: 'Lock / unlock the track', icon: Lock, placement: ['context', 'inspector'], when: () => isCut() && !!selTrack() && !sq().cutBusy,
     run: () => { const tr = selTrack(); if (tr) edit1('timeline.setTrack', { track: tr.id, locked: !tr.locked }) } },
-  { id: 'story.cut.track.mute', scope: 'story', label: 'Mute / unmute the track', icon: VolumeX, placement: ['context', 'inspector'], when: () => isCut() && !!selTrack(),
+  { id: 'story.cut.track.mute', scope: 'story', label: 'Mute / unmute the track', icon: VolumeX, placement: ['context', 'inspector'], when: () => isCut() && !!selTrack() && !sq().cutBusy,
     run: () => { const tr = selTrack(); if (tr) edit1('timeline.setTrack', { track: tr.id, muted: !tr.muted }) } },
   // CE3 (proto01_animate 30 §14): sound — each a FilmCraft command on the clip or the track
   { id: 'story.cut.gain', scope: 'story', label: 'Gain…', icon: Volume2, placement: ['inspector', 'context'], when: () => cutSel() && !isVideo(sq().tracks!, selCut()!.track),
@@ -355,8 +355,10 @@ export function captionTrackMenu(): MenuItem[] {
   return [{ cmd: 'story.cut.caption.add' }, { cmd: 'story.cut.captions.make' }, { cmd: 'story.cut.captions.toggle' },
     { label: 'Style', icon: Captions, items: Object.keys(CAPTION_STYLES).map((k) => ({ cmd: `story.cut.captions.style.${k}` })) }]
 }
-export function markerMenu(): MenuItem[] {
-  return [{ cmd: 'story.cut.marker.rename' }, { cmd: 'story.cut.marker.delete' }, sep, { cmd: 'story.cut.marker.add' }]
+/** V69: the marker is the entry's item, set around its `when` and `run` only — never left set after the menu closes. */
+export function markerMenu(id: number): MenuItem[] {
+  const on: OnItem = (f) => { markerItem.id = id; try { return f() } finally { delete markerItem.id } }
+  return [{ cmd: 'story.cut.marker.rename', on }, { cmd: 'story.cut.marker.delete', on }, sep, { cmd: 'story.cut.marker.add' }]
 }
 
 /** CE2: the tracks' empty space. */

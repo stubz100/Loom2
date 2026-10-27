@@ -3,6 +3,8 @@ stores of the open project. Routes reach it through `routes/deps.py` (D37).
 """
 from __future__ import annotations
 
+import logging
+
 import asyncio
 from pathlib import Path
 
@@ -21,6 +23,9 @@ from .effectcraft import EffectCraft
 from .filmcraft import FilmCraft
 from .vsthost import VstHost
 from .workspace import Workspace
+
+
+log = logging.getLogger(__name__)
 
 
 class Services:
@@ -67,6 +72,18 @@ class Services:
         info = ws.info()
         self.hub.broadcast("project.opened", info)
         return info
+
+    def publish_trained(self) -> None:
+        """V2: the open project's trained LoRAs mounted for the engine and known to the roster's `trained` map (LT2) — after every roster
+        scan, not only at the queue's start (a settings change used to leave them unknown, 422 on submit and gone from /capabilities,
+        until the project was reopened). Thread work; never raises."""
+        if self.ws is None:
+            return
+        from .loras import LoraRegistry, publish
+        try:
+            publish(self.roster, LoraRegistry(self.ws), Path(self.app.settings.models_root), (self.ws.info() or {}).get("id") or self.ws.path.name)
+        except Exception as e:  # noqa: BLE001 — a torn registry never blocks a settings change
+            log.warning("trained LoRAs not published: %s", e)
 
     async def close_project(self) -> None:
         if self.queue:

@@ -7,9 +7,13 @@ fails lets go of its face. V23 — a bake lands on the set as it is now. V34 —
 layer as it is. V35 — RIFE under a watchdog. V36 — a download named with any character. V65 — the hub replays what a reconnecting
 client missed. V26–V29, V31, V32, V37–V43 — the server lows (an idea's page used, a place use, the poses' revision, a refit off the
 loop, no orphan on a refused import, why nothing is filled, temp folders gone with a job, a surround WAV, the mix by loudness, an
-export timeout, a bad stack, the plate's id, a final deleted with its jobs)."""
+export timeout, a bad stack, the plate's id, a final deleted with its jobs). V2–V12, V14–V18, V20 — the queue, engine and catalogue lows
+(trained LoRAs after a rescan, a batch checked as a submit, a held file at purge, a torn app.json or group file, CORS on a 401, a typed
+layout, the thumbnail temp file, counts without the trashed, a requeue on disk, a retried thumbnail replace, a preview without a graph,
+a wedged engine restarted, tiers per model, the headroom of the models that run, the history read again, the disk guard cached)."""
 from __future__ import annotations
 
+import contextlib
 import json
 import sys
 from pathlib import Path
@@ -690,3 +694,315 @@ def test_v43_deleting_a_final_cancels_its_jobs_and_releases_the_session(tmp_path
         assert stopped == [ecproj] and ec.project is None
         assert not store.path(f.id).exists()
         assert cl.delete(f"/finals/{f.id}").status_code == 404
+
+
+# ---- the seventh group (journal 2026-10-27): the queue, engine and catalogue lows V2–V12, V14–V18, V20 ------------------------------
+
+
+@contextlib.contextmanager
+def _project(tmp_path: Path):
+    """An app with a project open (the CS2 client), its services — entered once (a second enter restarts the lifespan)."""
+    from test_skeleton_bench_cs2 import _client
+    app, cl = _client(tmp_path)
+    with cl:
+        assert cl.post("/project", json={"path": str(tmp_path / "p"), "name": "p", "size_cap_gb": 10}).status_code == 200
+        yield app, cl, app.state.services
+
+
+def _png_bytes(w: int = 8, h: int = 8, v: int = 120) -> bytes:
+    import io
+    buf = io.BytesIO()
+    Image.fromarray(np.full((h, w, 3), v, np.uint8)).save(buf, "PNG")
+    return buf.getvalue()
+
+
+def test_v2_a_settings_change_keeps_the_trained_loras(tmp_path: Path, monkeypatch):
+    """PUT /settings and POST /models/scan rescan the roster; the project's trained LoRAs are published onto it again (they were known
+    from the queue's start only, so a settings change lost them until the project was reopened)."""
+    from loom2 import loras
+    calls: list[tuple] = []
+    monkeypatch.setattr(loras, "publish", lambda roster, reg, root, pid: calls.append((id(roster), pid)) or {})
+    with _project(tmp_path) as (app, cl, svc):
+        n = len(calls)
+        assert cl.put("/settings", json={"vram_budget_gb": 15.5}).status_code == 200
+        assert len(calls) == n + 1 and calls[-1] == (id(svc.roster), (svc.ws.info() or {}).get("id") or svc.ws.path.name)
+        assert cl.post("/models/scan").status_code == 200
+        assert len(calls) == n + 2 and calls[-1][0] == id(svc.roster)
+
+
+def test_v3_a_batch_refused_leaves_no_job(tmp_path: Path, monkeypatch):
+    """`/jobs/batch` checks every item as a submit would — the disk guard and the mentions included — so a refused item leaves no job."""
+    with _project(tmp_path) as (app, cl, svc):
+        items = [{"recipe": {"kind": "t2i", "prompt_text": "a cat", "seeds": [3]}}, {"recipe": {"kind": "t2i", "prompt_text": "a dog", "seeds": [4]}}]
+        monkeypatch.setattr(svc.catalogue, "usage_bytes", lambda: 11 * 2**30)             # over the project's 10 GB cap
+        r = cl.post("/jobs/batch", json={"items": items})
+        assert r.status_code == 422 and "disk guard" in r.json()["detail"]
+        assert cl.get("/jobs").json()["items"] == []
+        with pytest.raises(ValueError, match="disk guard"):
+            svc.queue.check(items[0]["recipe"])
+
+
+def test_v4_a_held_file_keeps_one_asset_trashed_and_the_rest_go(tmp_path: Path, monkeypatch):
+    """Empty Trash with one file held open (Edge streaming its thumbnail, an antivirus): that asset stays trashed with its row and is
+    counted as failed, the others go — no 500 half-way."""
+    from loom2 import catalogue as cat_mod
+    with _project(tmp_path) as (app, cl, svc):
+        cat = svc.catalogue
+        ids = []
+        for k in range(3):
+            (tmp_path / f"a{k}.png").write_bytes(_png_bytes(v=40 * k + 10))
+            ids.append(cat.ingest_file(tmp_path / f"a{k}.png", kind="image", move=False, suite="story").id)
+        assert cl.post("/assets/trash", json={"ids": ids}).status_code == 200
+        held = Path(cat.get(ids[1]).path).name
+        real = cat_mod.unlink
+
+        def unlink(p, missing_ok=False):
+            if Path(p).name == held:
+                raise PermissionError(13, "held open", str(p))
+            real(p, missing_ok)
+        monkeypatch.setattr(cat_mod, "unlink", unlink)
+        r = cl.post("/assets/purge", json={"ids": ids})
+        assert r.status_code == 200, r.text
+        assert r.json()["purged"] == 2 and r.json()["failed"] == 1 and set(r.json()["ids"]) == {ids[0], ids[2]}
+        assert cat.get(ids[0]) is None and cat.get(ids[2]) is None
+        kept = cat.get(ids[1])
+        assert kept is not None and kept.trashed_at and cat.abs_path(kept).is_file()
+
+
+def test_v5_a_torn_app_json_is_moved_aside(tmp_path: Path):
+    """A corrupt or stale app.json never stops the launch: moved aside, the defaults, a recovery note."""
+    from loom2.config import AppState
+    state = tmp_path / "state"
+    state.mkdir()
+    (state / "app.json").write_text("{not json", encoding="utf-8")
+    a = AppState(state)
+    assert a.settings.vram_budget_gb > 0 and a.recovery and "moved aside" in a.recovery[0]
+    assert not (state / "app.json").exists() and list(state.glob("app.json.corrupt-*"))
+    (state / "app.json").write_text(json.dumps({"settings": {"vram_budget_gb": "lots"}}), encoding="utf-8")   # a value an older build never wrote
+    b = AppState(state)
+    assert b.recovery and not (state / "app.json").exists()
+    assert AppState(state).recovery == []                                                   # nothing to recover: no note
+
+
+def test_v6_a_torn_group_file_is_moved_aside_and_a_transient_failure_is_not_a_repair(tmp_path: Path, monkeypatch):
+    """A group file that is not JSON is moved aside (its items go back to the album, as for a hand edit); a read that fails for a
+    moment is read again; one that keeps failing stops the load — the album is not restructured over it."""
+    from loom2 import groups as groups_mod
+    from loom2.catalogue import Catalogue
+    from loom2.fsio import StateError
+    from loom2.workspace import Workspace
+    ws = Workspace.create(tmp_path / "p", name="P")
+    cat = Catalogue(ws)
+    store = GroupStore(ws, cat)
+    g = store.create("Kitchen")
+    inner = store.create("Pots", g.id)
+    p = store._path(inner.id)
+    good = p.read_text(encoding="utf-8")
+    p.write_text("{torn", encoding="utf-8")
+    again = GroupStore(ws, cat)
+    assert inner.id not in again.groups and list(p.parent.glob(f"{p.name}.corrupt-*"))
+    p.write_text(good, encoding="utf-8")
+    real = groups_mod.read_json
+    calls = {"n": 0}
+
+    def flaky(path):
+        if Path(path) == p and calls["n"] < 2:
+            calls["n"] += 1
+            raise PermissionError(13, "locked", str(path))
+        return real(path)
+    monkeypatch.setattr(groups_mod, "read_json", flaky)
+    monkeypatch.setattr(groups_mod.time, "sleep", lambda s: None)
+    third = GroupStore(ws, cat)
+    assert inner.id in third.groups and calls["n"] == 2
+
+    def dead(path):
+        if Path(path) == p:
+            raise PermissionError(13, "locked", str(path))
+        return real(path)
+    monkeypatch.setattr(groups_mod, "read_json", dead)
+    files = {q.name: q.read_text(encoding="utf-8") for q in p.parent.glob("*.json")}
+    with pytest.raises(StateError, match="could not be read"):
+        GroupStore(ws, cat)
+    assert {q.name: q.read_text(encoding="utf-8") for q in p.parent.glob("*.json")} == files   # nothing rewritten
+
+
+def test_v7_a_401_carries_the_cors_headers(tmp_path: Path):
+    """The token gate sits inside CORS: a 401 reaches browser dev with its headers (it surfaced as 'Failed to fetch')."""
+    from fastapi.testclient import TestClient
+    from test_auth_d67 import _app
+    with TestClient(_app(tmp_path), headers={}, raise_server_exceptions=False) as c:          # no token (the conftest gives every client one)
+        r = c.get("/project", headers={"Origin": "http://127.0.0.1:1420"})
+        assert r.status_code == 401 and r.headers.get("access-control-allow-origin") == "http://127.0.0.1:1420"
+        assert c.options("/project", headers={"Origin": "http://127.0.0.1:1420", "Access-Control-Request-Method": "GET"}).status_code == 200
+
+
+def test_v8_a_bad_layout_value_is_a_422(tmp_path: Path):
+    """A layout item the model refuses (a kind it does not know, a size under one pixel) is a 422, not a 500 from the casts."""
+    with _project(tmp_path) as (app, cl, svc):
+        g = svc.require_groups().create("Kitchen")
+        path = str(app.url_path_for("groups_layout", gid=g.id))
+        method = next(next(iter(x.methods)) for r in app.routes for x in getattr(getattr(r, "original_router", r), "routes", []) if getattr(x, "name", "") == "groups_layout")
+        put = lambda body: cl.request(method, path, json=body)   # noqa: E731
+        assert put({"items": [{"kind": "banana", "id": "x"}]}).status_code == 422
+        assert put({"items": [{"kind": "asset", "id": "x", "x": "far"}]}).status_code == 422
+        assert put({"items": [{"kind": "asset", "id": "x", "w": 0}]}).status_code == 422
+        assert put({"items": [{"kind": "asset", "id": "nowhere", "x": 1}]}).status_code == 400   # not on the page: the store's sentence, as before
+
+
+def test_v9_an_uploaded_thumbnail_leaves_no_temp_file(tmp_path: Path):
+    with _project(tmp_path) as (app, cl, svc):
+        (tmp_path / "a.png").write_bytes(_png_bytes())
+        rec = svc.catalogue.ingest_file(tmp_path / "a.png", kind="image", move=False, suite="story")
+        r = cl.put(f"/assets/{rec.id}/thumbnail", content=_png_bytes(64, 64, 200), headers={"Content-Type": "image/png"})
+        assert r.status_code == 200 and r.json()["params"]["thumb_source"] == "client"
+        assert not (svc.ws.temp_dir / "thumbs" / f"{rec.id}.png").exists()
+        assert svc.ws.thumb_path(rec.id, 256).is_file()
+
+
+def test_v10_a_groups_counts_leave_trashed_assets_out(tmp_path: Path):
+    """The page hides trashed assets; the card's and the tree's counts leave them out too."""
+    from loom2.catalogue import Catalogue
+    from loom2.workspace import Workspace
+    ws = Workspace.create(tmp_path / "p", name="P")
+    cat = Catalogue(ws)
+    groups = GroupStore(ws, cat)
+    ids = []
+    for k in range(3):
+        (tmp_path / f"a{k}.png").write_bytes(_png_bytes(v=30 * k + 5))
+        ids.append(cat.ingest_file(tmp_path / f"a{k}.png", kind="image", move=False, suite="story").id)
+    g = groups.create("Kitchen")
+    groups.move([("asset", i) for i in ids], g.id)
+    cat.trash([ids[0]])
+    node = next(c for c in groups.tree()["children"] if c["id"] == g.id)
+    assert node["assets"] == 2 and node["total"] == 2 and node["groups"] == 0
+    assert len(groups.page(g.id)["group"]["items"]) == 2
+
+
+def test_v11_a_requeue_is_on_disk_before_the_reply(tmp_path: Path):
+    with _project(tmp_path) as (app, cl, svc):
+        job = JobRecord(id="job_tr", kind="train_lora", recipe={"kind": "train_lora"}, status="failed", resumable=True, error="killed")
+        svc.queue.jobs[job.id] = job
+        svc.queue.paused = True
+        r = cl.post(f"/jobs/{job.id}/requeue")
+        assert r.status_code == 200 and r.json()["status"] == "queued"
+        on_disk = json.loads(svc.ws.queue_path.read_text(encoding="utf-8"))
+        assert next(j for j in on_disk["jobs"] if j["id"] == job.id)["status"] == "queued"
+
+
+def test_v12_a_transient_permission_error_does_not_fail_the_thumbnail(tmp_path: Path, monkeypatch):
+    """The thumbnail's replace retries (D42): one PermissionError no longer stamps `thumb_status: failed` for good."""
+    from loom2 import fsio
+    from loom2.catalogue import Catalogue
+    from loom2.workspace import Workspace
+    ws = Workspace.create(tmp_path / "p", name="P")
+    cat = Catalogue(ws)
+    (tmp_path / "a.png").write_bytes(_png_bytes())
+    rec = cat.ingest_file(tmp_path / "a.png", kind="image", move=False, suite="story")
+    monkeypatch.setattr(fsio, "REPLACE_FIRST_DELAY_S", 0.001)
+    import os
+    real = os.replace
+    calls = {"n": 0}
+
+    def flaky(src, dst):
+        if str(dst).endswith(".webp") and calls["n"] < 1:
+            calls["n"] += 1
+            raise PermissionError(13, "held", str(dst))
+        return real(src, dst)
+    monkeypatch.setattr(os, "replace", flaky)
+    assert cat.make_thumbs(rec).thumb_status == "done" and calls["n"] == 1
+
+
+def test_v14_a_recipe_without_an_engine_graph_previews_no_problems(tmp_path: Path, object_info: dict):
+    """`preview_problems` for a kind with no compiler (train_lora, tts): nothing to check, not a NotImplementedError (a 500)."""
+    from loom2.engine.pipeline import preview_problems
+    from test_graph_parity_d64 import _pin_review
+    roster = _pin_review().full_roster(tmp_path)
+    assert preview_problems(SimpleNamespace(kind="tts", refs=[], loras=None), roster, object_info) == []
+
+
+async def test_v15_a_wedged_engine_is_restarted(tmp_path: Path, monkeypatch):
+    """An engine process that lives but does not answer is restarted before the job, not failed job by job (one timeout each)."""
+    from loom2.config import AppState
+    from loom2.engine.supervisor import EngineSupervisor
+    state = tmp_path / "state"
+    AppState(state).update_settings({"models_root": str(tmp_path / "models"), "mounted_model_trees": []})
+    sup = EngineSupervisor(AppState(state))
+    sup.proc = SimpleNamespace(poll=lambda: None, pid=4242)                 # alive …
+    calls: list[tuple] = []
+
+    async def is_up():
+        return False                                                       # … and silent
+
+    async def restart(want=None):
+        calls.append(("restart", want))
+        sup.proc = None
+    monkeypatch.setattr(sup.client, "is_up", is_up)
+    monkeypatch.setattr(sup, "restart", restart)
+    assert await sup.ensure_running(None) is False
+    assert calls == [("restart", sup.headroom_for(None))] and sup.restarts == 1
+
+
+def test_v16_generates_tiers_are_per_model():
+    """Generate's tier sizes are the chosen model's, with the family's first spec as the fallback (krea2-raw's Full is not the turbo's)."""
+    from loom2.capabilities import image_tiers
+    from loom2.models import registry
+    tiers = image_tiers()
+    specs = registry.image_specs()
+    for s in specs:
+        for tier, wh in s.geometry.tiers.items():
+            assert tiers[tier][s.id] == list(wh) and tiers[tier][s.family]
+    assert any(tiers[t][s.id] != tiers[t][s.family] for s in specs for t in s.geometry.tiers)
+
+
+def test_v17_the_headroom_follows_the_models_that_run(monkeypatch):
+    from loom2 import queue as queue_mod
+    monkeypatch.setattr(queue_mod, "plan", lambda recipe, variant: SimpleNamespace(weights=["m-panel", "m-runs", "lora-x"]))
+    specs = {"m-panel": SimpleNamespace(engine=SimpleNamespace(vram_headroom_gb=None)), "m-runs": SimpleNamespace(engine=SimpleNamespace(vram_headroom_gb=3.0))}
+    monkeypatch.setattr(queue_mod.registry, "get", lambda mid: specs.get(mid))
+    assert queue_mod.model_headroom(SimpleNamespace(model_id="m-panel"), "full") == 3.0
+
+    def refused(recipe, variant):
+        raise ValueError("no plan")
+    monkeypatch.setattr(queue_mod, "plan", refused)
+    assert queue_mod.model_headroom(SimpleNamespace(), "full") is None
+
+
+async def test_v18_the_history_is_read_again(tmp_path: Path, object_info: dict, monkeypatch):
+    """ComfyUI writes a prompt's history after its success event: an empty first read is read again, briefly, before the job fails."""
+    import asyncio as aio
+    rig = _rig(tmp_path, object_info, monkeypatch)
+    try:
+        q = rig.queue
+        hist = {"outputs": {"9": {"images": [{"filename": "job_x_00001_.png", "subfolder": "", "type": "output"}]}}}
+        answers: list = [None, {}, hist]
+
+        async def history(pid):
+            return answers.pop(0)
+        naps: list[float] = []
+
+        async def nap(s):
+            naps.append(s)
+        monkeypatch.setattr(q.engine.client, "history", history)
+        monkeypatch.setattr(aio, "sleep", nap)
+        job = JobRecord(id="job_x", kind="t2i", recipe={"kind": "t2i"}, status="running", prompt_id="p1")
+        assert await q._outputs_after_success(job) == [{"filename": "job_x_00001_.png", "subfolder": ""}]
+        assert answers == [] and len(naps) == 2
+    finally:
+        await rig.close()
+
+
+async def test_v20_the_disk_guard_sums_once_per_few_seconds(tmp_path: Path, object_info: dict, monkeypatch):
+    rig = _rig(tmp_path, object_info, monkeypatch)
+    try:
+        q = rig.queue
+        calls = {"n": 0}
+        monkeypatch.setattr(q.catalogue, "usage_bytes", lambda: calls.__setitem__("n", calls["n"] + 1) or 0)
+        monkeypatch.setattr(q.ws, "info", lambda: {"size_cap_gb": 10})
+        q._disk_guard()
+        q._disk_guard()
+        assert calls["n"] == 1
+        q._usage_cache = (q._usage_cache[0] - 6.0, 0)
+        q._disk_guard()
+        assert calls["n"] == 2
+    finally:
+        await rig.close()

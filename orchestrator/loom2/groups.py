@@ -9,6 +9,7 @@ whenever a project opens.
 from __future__ import annotations
 
 import logging
+import time
 import threading
 from pathlib import Path
 from typing import Literal
@@ -91,9 +92,13 @@ class GroupStore:
             first_open = not self._path(ROOT_ID).is_file()
             for p in sorted(self.dir.glob("*.json")):
                 try:
-                    g = GroupRecord.model_validate(read_json(p))
-                except Exception as e:  # noqa: BLE001 — one unreadable file must not take the album down
-                    log.error("group file %s unreadable (%s); skipped", p.name, e)
+                    g = GroupRecord.model_validate(self._read_retrying(p))
+                except OSError as e:                                   # V6: a transient failure (a lock, an antivirus) must not restructure the album for good
+                    raise StateError(f"the album could not be read ({p.name}: {e}) — open the project again") from e
+                except Exception as e:  # noqa: BLE001 — a torn file is moved aside; its items go back to the album (_repair), as a hand edit would
+                    aside = p.with_name(f"{p.name}.corrupt-{time.strftime('%Y%m%d-%H%M%S')}")
+                    p.replace(aside)
+                    log.error("group file %s unreadable (%s); moved aside as %s", p.name, e, aside.name)
                     continue
                 self.groups[g.id] = g
             if ROOT_ID not in self.groups:
@@ -103,6 +108,19 @@ class GroupStore:
             if first_open:
                 self._migrate_collections()
             self._reindex()
+
+    @staticmethod
+    def _read_retrying(p: Path):
+        """`read_json` with three tries on an OSError (V6): a file another process holds for a moment is read a moment later."""
+        delay = 0.1
+        for attempt in range(3):
+            try:
+                return read_json(p)
+            except OSError:
+                if attempt == 2:
+                    raise
+                time.sleep(delay)
+                delay *= 3
 
     def _repair(self) -> None:
         """One placement per item, no dangling group items, every group reachable from the album (hand-edited or torn files)."""
@@ -290,8 +308,9 @@ class GroupStore:
         return out[:n]
 
     def _summary(self, g: GroupRecord) -> dict:
-        assets = sum(1 for it in g.items if it.kind == "asset")
-        return {"id": g.id, "name": g.name, "assets": assets, "groups": len(g.items) - assets, "total": len(self._asset_ids(g.id)),
+        own = [it.id for it in g.items if it.kind == "asset"]
+        live = {r.id for r in self.cat.get_many(self._asset_ids(g.id)) if r.trashed_at is None}   # V10: the page hides trashed assets — the counts too
+        return {"id": g.id, "name": g.name, "assets": sum(1 for i in own if i in live), "groups": len(g.items) - len(own), "total": len(live),
                 "cover_ids": self._cover(g), "revision": g.revision}
 
     # ---- reads ------------------------------------------------------------------------------------

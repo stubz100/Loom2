@@ -22,7 +22,7 @@ from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field
 
 from .origin import JobOrigin
-from .fsio import StateError, _tmp_for, atomic_copy, atomic_move, atomic_write_json, new_id, read_json, utc_now
+from .fsio import StateError, _tmp_for, atomic_copy, atomic_move, atomic_write_json, new_id, read_json, replace, unlink, utc_now
 from .workspace import Workspace
 
 ASSET_SCHEMA_VERSION = 2                     # D66: `origin` (a version-1 manifest loads with none)
@@ -374,7 +374,7 @@ class Catalogue:
                     out.parent.mkdir(parents=True, exist_ok=True)
                     tmp = _tmp_for(out)                       # C5: unique per writer — the queue and GET /thumbs race on a fresh asset
                     t.save(tmp, "WEBP", quality=82, method=4)
-                    tmp.replace(out)
+                    replace(tmp, out)                             # V12: D42's retries — a transient PermissionError no longer stamps `failed` for good
             status = "done"
         except Exception:
             status = "failed"
@@ -633,8 +633,10 @@ class Catalogue:
             out.append(rec)
         return out
 
-    def purge(self, ids: list[str] | None = None, older_than_days: int | None = None) -> list[str]:
-        """Permanently delete trashed assets (files, manifests, thumbs, index rows, lineage edges)."""
+    def purge(self, ids: list[str] | None = None, older_than_days: int | None = None, failed: list[str] | None = None) -> list[str]:
+        """Permanently delete trashed assets (files, manifests, thumbs, index rows, lineage edges). V4: an asset whose file is held open
+        (a thumbnail Edge streams, an antivirus) stays trashed with its row and is named in `failed`; the others go — Empty Trash never
+        stops half-way with a 500."""
         if ids is None:
             cutoff = (datetime.now(timezone.utc) - timedelta(days=older_than_days or 0)).isoformat(timespec="seconds")
             with self._lock:
@@ -643,7 +645,13 @@ class Catalogue:
         for rec in self.get_many(ids):
             if rec.trashed_at is None:
                 continue
-            self._delete_files(rec)
+            try:
+                self._delete_files(rec)
+            except OSError as e:
+                log.warning("purge: %s kept, a file is held (%s)", rec.id, e)
+                if failed is not None:
+                    failed.append(rec.id)
+                continue
             gone.append(rec.id)
         return gone
 
@@ -659,11 +667,11 @@ class Catalogue:
         if cid and Path(rec.path).parts[:2] == ("clips", cid):             # C6: the proxy lives in the clip → the whole clip goes
             shutil.rmtree(self.ws.clips_dir / cid, ignore_errors=True)
         for p in (self.abs_path(rec), self.manifest_path(rec)):
-            p.unlink(missing_ok=True)
+            unlink(p, missing_ok=True)                                        # V4: D42's retries — a file read at that moment is deleted a moment later
         tdir = self.ws.thumb_path(rec.id, 1).parent
         if tdir.is_dir():
             for t in tdir.iterdir():
-                t.unlink(missing_ok=True)
+                unlink(t, missing_ok=True)
             tdir.rmdir()
         with self._lock:
             self._db.execute("DELETE FROM assets WHERE id=?", (rec.id,))

@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from ..catalogue import AssetPage, AssetQuery, AssetRecord, Catalogue, GroupHeader
 from ..schemas import AssetList, Deleted, IdsReply, Lineage, LineageTree, Purged, RebuildReply, Restored, TagList, Trashed
 from ..tools.pngmeta import parse_image_metadata
+from ..fsio import unlink
 from .deps import Svc
 
 router = APIRouter(tags=["assets"])
@@ -100,7 +101,8 @@ async def assets_restore(svc: Svc, body: IdList):
 @router.post("/assets/purge", response_model=Purged)
 async def assets_purge(svc: Svc, body: PurgeRequest):
     _, cat, _ = svc.require_project()
-    gone = await asyncio.to_thread(cat.purge, body.ids, body.older_than_days)
+    failed: list[str] = []
+    gone = await asyncio.to_thread(cat.purge, body.ids, body.older_than_days, failed)   # V4: a held file keeps its asset, the rest go
     if gone and (changed := await asyncio.to_thread(svc.require_groups().forget_assets, gone)):
         svc.group_changed(changed)
     if len(gone) > 50:                                # emptying a 10k trash: one event, the clients reload (not 10k frames)
@@ -108,7 +110,7 @@ async def assets_purge(svc: Svc, body: PurgeRequest):
     else:
         for i in gone:
             svc.hub.broadcast("asset.deleted", {"id": i})
-    return {"purged": len(gone), "ids": gone if len(gone) <= 50 else []}
+    return {"purged": len(gone), "ids": gone if len(gone) <= 50 else [], "failed": len(failed)}
 
 
 @router.post("/assets/import", response_model=AssetList)
@@ -192,6 +194,7 @@ async def asset_thumbnail(svc: Svc, asset_id: str, request: Request):
     await asyncio.to_thread(tmp.write_bytes, data)
     rec.params = {**rec.params, "thumb_source": "client"}              # make_thumbs writes the manifest and the index with it
     rec = await asyncio.to_thread(cat.make_thumbs, rec, tmp)
+    await asyncio.to_thread(unlink, tmp, True)                            # V9: nothing sweeps _temp/thumbs
     svc.hub.broadcast("asset.updated", rec.model_dump())
     return rec
 

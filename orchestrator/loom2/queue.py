@@ -83,14 +83,23 @@ class JobRecord(BaseModel):
 
 
 def model_headroom(recipe: Any, variant: str) -> float | None:
-    """D100: the VRAM headroom the job's model asks the engine for (its spec's `engine.vram_headroom_gb`); None = the engine-wide setting."""
+    """D100: the VRAM headroom the job asks the engine for — V17: the largest `engine.vram_headroom_gb` among the models the job loads
+    (`plan().weights`: fill_hero runs dev, upscale + refine two models, Reangle and a LayerPass theirs), not the panel's `model_id`;
+    None = the engine-wide setting."""
     from .recipes import StageShot, stage_model_id
+    ids: set[str] = set()
     try:
         mid = stage_model_id(recipe, variant) if isinstance(recipe, StageShot) else getattr(recipe, "model_id", None)
+        if isinstance(mid, str) and mid:
+            ids.add(mid)
     except ValueError:
-        return None
-    spec = registry.get(mid) if isinstance(mid, str) and mid else None
-    return spec.engine.vram_headroom_gb if spec is not None else None
+        pass
+    try:
+        ids |= set(plan(recipe, variant).weights)
+    except Exception:  # noqa: BLE001 — a recipe the plan refuses is refused at submit; the panel's model still answers
+        pass
+    wants = [spec.engine.vram_headroom_gb for mid in ids if (spec := registry.get(mid)) is not None and spec.engine.vram_headroom_gb]
+    return max(wants) if wants else None
 
 class JobQueue:
     def __init__(self, ws: Workspace, app: AppState, engine: EngineSupervisor, roster: Roster, catalogue: Catalogue, hub: EventHub) -> None:
@@ -107,6 +116,7 @@ class JobQueue:
         self._object_info_at: float | None = None
         self.follower = EngineFollower(engine, hub, lambda: self.app.settings, self.pause)    # D64: engine/follow.py
         self._cancel_requested: set[str] = set()
+        self._usage_cache: tuple[float, int] | None = None   # V20: the project's asset bytes, as of (monotonic, bytes)
         self._t0 = time.time()
         self._pending: dict | None = None        # D64: the newest queue snapshot waiting for the writer
         try:                                      # LT2 (18 §3a): the project's trained LoRAs, mounted for the engine and known to the slots
@@ -299,7 +309,9 @@ class JobQueue:
         item first, so a refused item leaves no job behind."""
         recipe = parse_recipe(recipe_data)
         self._validate_models(recipe)
+        recipe = self.resolve_mentions(recipe)                # V3: a bad mention and the disk guard refuse here too — the batch's promise
         plan(recipe, self.app.settings.variant)
+        self._disk_guard()
 
     def submit(self, recipe_data: dict, stage: bool = False, origin: JobOrigin | None = None, batch_id: str | None = None) -> list[JobRecord]:
         """`batch_id`: join an existing batch (17 §3b Expand: one job per coverage cell, one batch) instead of making one per multi-seed submit."""
@@ -538,7 +550,10 @@ class JobQueue:
             raise ValueError(f"disk guard: only {free:.1f} GB free on the project drive (minimum {MIN_FREE_GB:g} GB) — free space or move the project")
         cap = float((self.ws.info() or {}).get("size_cap_gb") or 0)
         if cap:
-            used = self.catalogue.usage_bytes() / 2**30
+            now = time.monotonic()
+            if self._usage_cache is None or now - self._usage_cache[0] > 5.0:    # V20: one SQLite sum per few seconds, not per submit on the loop
+                self._usage_cache = (now, self.catalogue.usage_bytes())
+            used = self._usage_cache[1] / 2**30
             if used > cap:
                 raise ValueError(f"disk guard: the project holds {used:.1f} GB of assets, over its {cap:g} GB cap — empty the trash or raise the cap in project.json")
 
@@ -707,6 +722,22 @@ class JobQueue:
             log.info("job %s: engine free VRAM %.2f GB < %.2f GB — asking the UI to release hidden GPU stages", job.id, free, threshold)
             self.hub.broadcast("engine.vram_pressure", {"job_id": job.id, "free_gb": round(free, 2), "threshold_gb": round(threshold, 2)})
 
+    async def _outputs_after_success(self, job: JobRecord, text: bool = False) -> list[dict]:
+        """V18: the prompt's outputs from `/history` — ComfyUI writes the history after its `execution_success` event, so one read could
+        miss it (the job failed non-resumable, its outputs deleted); read again a few times, briefly."""
+        files: list[dict] = []
+        for attempt in range(6):
+            try:
+                hist = await self.engine.client.history(job.prompt_id)
+            except Exception as e:  # noqa: BLE001
+                log.warning("job %s: /history read failed (%s), trying again", job.id, e)
+                hist = None
+            files = self.follower.outputs(hist, text=text)
+            if files:
+                return files
+            await asyncio.sleep(0.25 * (attempt + 1))
+        return files
+
     async def _scan_roster(self) -> None:
         """D64: the model trees are walked at the first job and whenever a root's mtime changed (a fetch, a delete), not per job."""
         def stamp_now() -> tuple:
@@ -780,7 +811,7 @@ class JobQueue:
                 self._fail(job, job.error or "engine reported an error")
                 return
             await self.irreversible(job)                     # C8: the engine's work is done; what follows must never run twice
-            files = self.follower.outputs(await self.engine.client.history(job.prompt_id), text=getattr(recipe, "kind", None) == "keypoints")
+            files = await self._outputs_after_success(job, text=getattr(recipe, "kind", None) == "keypoints")
             if not files:
                 adopted = self.engine.proc is None                 # V44: an engine started outside loom2 writes where it was told, not where the finishers read
                 self._fail(job, "the engine finished but produced no output files" + (" — the engine was started outside loom2 (adopted): start it with "

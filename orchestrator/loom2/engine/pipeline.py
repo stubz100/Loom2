@@ -255,6 +255,8 @@ def preview_problems(recipe: AnyRecipe, roster: Roster, object_info: dict | None
     try:
         c = compile_recipe(recipe, roster, object_info, 1, "loom2/preview", ref_files=refs or None, inputs=placeholder_inputs(recipe, object_info) or None,
                            variant=variant)
+    except NotImplementedError:                                  # V14: train_lora, tts — no engine graph, nothing to check (was a 500)
+        return []
     except (CompileError, KeyError, ValueError) as e:
         return [str(e)]
     return c.problems
@@ -786,9 +788,14 @@ async def prepare_face_pass(job: JobRecord, recipe: LayerPass, q: JobQueue) -> d
             raise ValueError(f"batch {step.k - 1} left {len(prev)} frames to carry, not {CARRY}")
         cd = work / "carry"
         cd.mkdir(exist_ok=True)
-        for i, p_ in enumerate(prev):                                     # RGB copies: LoadImage would read the matte as the mask
-            q_ = cd / f"{step.k:02d}_{i}.png"
-            Image.open(p_).convert("RGB").save(q_)
+        def rgb_copies() -> list[Path]:                                  # RGB copies: LoadImage would read the matte as the mask (V20: off the loop)
+            out = []
+            for i, p_ in enumerate(prev):
+                q_ = cd / f"{step.k:02d}_{i}.png"
+                Image.open(p_).convert("RGB").save(q_)
+                out.append(q_)
+            return out
+        for q_ in await asyncio.to_thread(rgb_copies):
             inputs["carry"].append(await up(q_))
     job.log_tail.append(f"head batch {step.k + 1} of {len(batches)}: {batch['frames']} frames of the head crop of {layer.name} from frame {batch['offset']}"
                         + (" with the talking head as the face" if inputs["face"] else ""))

@@ -7821,11 +7821,30 @@ export interface components {
         /** GroupLayout */
         GroupLayout: {
             /** Items */
-            items: {
-                [key: string]: unknown;
-            }[];
+            items: components["schemas"]["GroupLayoutItem"][];
             /** Revision */
             revision?: number | null;
+        };
+        /**
+         * GroupLayoutItem
+         * @description V8: one item's place on the page — typed, so a bad value is a 422, not a 500 from `layout()`'s casts.
+         */
+        GroupLayoutItem: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "asset" | "group";
+            /** W */
+            w?: number | null;
+            /** X */
+            x?: number | null;
+            /** Y */
+            y?: number | null;
+            /** Z */
+            z?: number | null;
         };
         /** GroupMake */
         GroupMake: {
@@ -10750,6 +10769,11 @@ export interface components {
         };
         /** Purged */
         Purged: {
+            /**
+             * Failed
+             * @default 0
+             */
+            failed: number;
             /** Ids */
             ids: string[];
             /** Purged */

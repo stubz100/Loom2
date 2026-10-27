@@ -222,6 +222,7 @@ export function createCatalogueStore(name: string, defaults: Partial<Query> = {}
         try {
           const r = await unwrap(http.POST('/assets/purge', { body: { ids: null } }))   // every trashed asset, files and index rows
           await get().load(); void get().refreshMeta()
+          if (r.failed) useSession.getState().toast(`${r.failed} could not be deleted yet — a file is still in use; empty the trash again in a moment`, 'info')   // V4
           return r.purged
         } finally { set({ purging: false }) }
       },

@@ -8337,8 +8337,7 @@
         "properties": {
           "items": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/GroupLayoutItem"
             },
             "title": "Items",
             "type": "array"
@@ -8359,6 +8358,74 @@
           "items"
         ],
         "title": "GroupLayout",
+        "type": "object"
+      },
+      "GroupLayoutItem": {
+        "description": "V8: one item's place on the page — typed, so a bad value is a 422, not a 500 from `layout()`'s casts.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "asset",
+              "group"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "w": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "W"
+          },
+          "x": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X"
+          },
+          "y": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Y"
+          },
+          "z": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Z"
+          }
+        },
+        "required": [
+          "kind",
+          "id"
+        ],
+        "title": "GroupLayoutItem",
         "type": "object"
       },
       "GroupMake": {
@@ -15528,6 +15595,11 @@
       },
       "Purged": {
         "properties": {
+          "failed": {
+            "default": 0,
+            "title": "Failed",
+            "type": "integer"
+          },
           "ids": {
             "items": {
               "type": "string"
@@ -15542,7 +15614,8 @@
         },
         "required": [
           "purged",
-          "ids"
+          "ids",
+          "failed"
         ],
         "title": "Purged",
         "type": "object"

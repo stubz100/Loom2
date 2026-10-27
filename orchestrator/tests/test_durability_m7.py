@@ -133,6 +133,7 @@ def test_disk_guard_refuses_new_jobs_with_a_clear_422(tmp_path: Path, monkeypatc
         monkeypatch.setattr(queue_mod, "free_space_gb", lambda p: 500.0)
         svc = app.state.services
         monkeypatch.setattr(svc.catalogue, "usage_bytes", lambda: int(11 * 2**30))      # over the 10 GB cap
+        svc.queue._usage_cache = None                                                      # V20: the sum is cached for five seconds
         r = client.post("/jobs", json={"recipe": {"kind": "t2i", "prompt_text": "x", "seeds": [1]}, "stage": True}, headers=H)
         assert r.status_code == 422 and "over its 10 GB cap" in r.json()["detail"]
         assert client.get("/queue").json()["recovery"] == []

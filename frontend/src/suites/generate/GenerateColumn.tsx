@@ -513,7 +513,7 @@ function SizeSection() {
   const projectAspect = fmt ? `${fmt.aspect[0]}:${fmt.aspect[1]}` : '16:9'
   const applyAspect = (aw: number, ah: number) => { const w = Math.sqrt(p.width * p.height * aw / ah); g.set({ width: snap16(w), height: snap16(w * ah / aw), tier: 'custom' }) }
   const pv = g.preview
-  const tierItems: PresetIcon[] = (['thumb', 'draft', 'full'] as const).flatMap((t) => { const wh = tiers[t]?.[fam]; return wh ? [{ id: t, label: `${t} · ${wh[0]}×${wh[1]}`, icon: tierGlyph(t), hint: t === 'draft' ? 'the default (D18)' : undefined }] : [] })
+  const tierItems: PresetIcon[] = (['thumb', 'draft', 'full'] as const).flatMap((t) => { const wh = tiers[t]?.[p.model_id] ?? tiers[t]?.[fam]; return wh ? [{ id: t, label: `${t} · ${wh[0]}×${wh[1]}`, icon: tierGlyph(t), hint: t === 'draft' ? 'the default (D18)' : undefined }] : [] })
   return (
     <Section id="size" title={`Size · ${p.width}×${p.height}`}>
       <div className="gen-form">
@@ -522,7 +522,7 @@ function SizeSection() {
           selected={ASPECTS.find(([, aw, ah]) => Math.abs(p.width / p.height - aw / ah) < 0.02)?.[0] ?? null} onPick={(id) => { const a = ASPECTS.find(([n]) => n === id); if (a) applyAspect(a[1], a[2]) }} />
         <label>size</label>
         <PresetIcons label="size tier" size={36} items={[...tierItems, { id: 'custom', label: 'custom size', icon: tierGlyph('custom') }]} selected={p.tier}
-          onPick={(id) => { const wh = tiers[id]?.[fam]; g.set(id === 'custom' || !wh ? { tier: 'custom' } : { tier: id as PanelState['tier'], width: wh[0], height: wh[1] }) }} />
+          onPick={(id) => { const wh = tiers[id]?.[p.model_id] ?? tiers[id]?.[fam]; g.set(id === 'custom' || !wh ? { tier: 'custom' } : { tier: id as PanelState['tier'], width: wh[0], height: wh[1] }) }} />
         {p.tier === 'custom' && <><label>pixels</label>
           <div><input type="number" step={16} min={64} max={2048} value={p.width} aria-label="width" onChange={(e) => g.set({ width: snap16(Number(e.target.value)), tier: 'custom' })} style={{ width: 80 }} /> × <input type="number" step={16} min={64} max={2048} value={p.height} aria-label="height" onChange={(e) => g.set({ height: snap16(Number(e.target.value)), tier: 'custom' })} style={{ width: 80 }} />
             <span className="disabled-why"> {Math.round(p.width * p.height / 1e4) / 100} MP</span></div></>}

@@ -558,6 +558,7 @@ class Restored(Out):
 class Purged(Out):
     purged: int
     ids: list[str]
+    failed: int = 0                                # V4: assets kept trashed because a file was held open (try again)
 
 
 class IdsReply(Out):

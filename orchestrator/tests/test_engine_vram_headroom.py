@@ -81,6 +81,10 @@ def test_the_engine_restarts_only_when_the_headroom_changes(tmp_path: Path):
     sup.restart = restart                                                                        # type: ignore[method-assign]
     sup.proc = _Alive()                                                                          # type: ignore[assignment]
     sup.headroom_gb = 5.0
+
+    async def answers():
+        return True
+    sup.client.is_up = answers                                                                   # type: ignore[method-assign]  V15: alive *and* answering
     assert asyncio.run(sup.ensure_running(None)) is False and calls == []                      # the engine-wide value: as launched
     assert asyncio.run(sup.ensure_running(0.0)) is True and calls == [0.0]                     # Wan Animate: restarted without it
     assert asyncio.run(sup.ensure_running(0.0)) is False and calls == [0.0]                    # the next Wan Animate job: no restart

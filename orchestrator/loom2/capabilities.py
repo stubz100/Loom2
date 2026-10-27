@@ -28,11 +28,15 @@ def _by_family(specs: list[ModelSpec]) -> dict[str, ModelSpec]:
 
 
 def image_tiers() -> dict[str, dict[str, list[int]]]:
-    """{tier: {family: [w, h]}} — Generate's Thumb / Draft / Full sizes per family."""
+    """{tier: {family | model_id: [w, h]}} — Generate's Thumb / Draft / Full sizes: per model (V16: `krea2-raw`'s Full is 1344×768, the
+    turbo's 1920×1088 — the family's first spec stood for both) and, keyed by the family, its first spec's as before."""
     out: dict[str, dict[str, list[int]]] = {}
     for fam, s in _by_family(registry.image_specs()).items():
         for tier, wh in s.geometry.tiers.items():
             out.setdefault(tier, {})[fam] = list(wh)
+    for s in registry.image_specs():
+        for tier, wh in s.geometry.tiers.items():
+            out.setdefault(tier, {})[s.id] = list(wh)
     return out
 
 

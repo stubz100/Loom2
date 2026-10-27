@@ -4,7 +4,9 @@ fresh clone runs without configuration; the user overrides live in `app.json`.
 """
 from __future__ import annotations
 
+import logging
 import os
+import time
 import hashlib
 import hmac
 import secrets
@@ -256,6 +258,9 @@ class Settings(BaseModel):
         return v
 
 
+log = logging.getLogger(__name__)
+
+
 class AppRecord(BaseModel):
     schema_version: int = APP_SCHEMA_VERSION
     settings: Settings = Field(default_factory=Settings)
@@ -272,7 +277,15 @@ class AppState:
         self.state_dir.mkdir(parents=True, exist_ok=True)
         (self.state_dir / "logs").mkdir(exist_ok=True)
         self.app_json = self.state_dir / "app.json"
-        self.record = AppRecord.model_validate(read_json_or(self.app_json, AppRecord().model_dump()))
+        self.recovery: list[str] = []
+        try:
+            self.record = AppRecord.model_validate(read_json_or(self.app_json, AppRecord().model_dump()))
+        except Exception as e:  # noqa: BLE001 — V5: a torn or stale app.json (a bad enum from an older build) is moved aside, the launch goes on with the defaults
+            aside = self.app_json.with_name(f"app.json.corrupt-{time.strftime('%Y%m%d-%H%M%S')}")
+            self.app_json.replace(aside)
+            self.record = AppRecord()
+            self.recovery.append(f"app.json was unreadable ({str(e).splitlines()[0][:160]}); moved aside as {aside.name}, the settings are the defaults")
+            log.error("app.json unreadable (%s); moved aside as %s", e, aside.name)
         # C3 (D26): the build variant comes from the shell (LOOM2_VARIANT) and wins over whatever an earlier launch persisted
         self.variant_override: str | None = variant if variant in ("full", "open") else None
         if self.variant_override:

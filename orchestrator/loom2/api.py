@@ -72,9 +72,7 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
                   docs_url="/docs" if dev else None, redoc_url="/redoc" if dev else None, openapi_url="/openapi.json" if dev else None)
     open_paths = OPEN_PATHS | (DEV_DOCS if dev else set())
     app.state.services = svc
-    app.add_middleware(ErrorsAsJson)                          # inside CORS (a later add_middleware wraps an earlier one)
-    app.add_middleware(CORSMiddleware, allow_origins=DEV_ORIGINS, allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
-                       expose_headers=["X-Loom-Width", "X-Loom-Height", "X-Loom-Channels", "Content-Disposition"])
+    app.add_middleware(ErrorsAsJson)                          # inside the gate and CORS (a later add_middleware wraps an earlier one)
 
     @app.middleware("http")
     async def token_gate(request: Request, call_next):
@@ -87,6 +85,8 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
             return await call_next(request)
         return JSONResponse({"detail": "missing or wrong X-Loom-Token"}, status_code=401)
 
+    app.add_middleware(CORSMiddleware, allow_origins=DEV_ORIGINS, allow_credentials=True, allow_methods=["*"], allow_headers=["*"],   # V7: outermost —
+                       expose_headers=["X-Loom-Width", "X-Loom-Height", "X-Loom-Channels", "Content-Disposition"])                 # a 401 carries its headers too
     for exc, status in ERROR_STATUS.items():
         app.add_exception_handler(exc, _status_handler(status))
     for router in ROUTERS:

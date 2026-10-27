@@ -9,6 +9,7 @@ where the finishers read them and carries the same reserve, headroom and model m
 from __future__ import annotations
 
 import asyncio
+import logging
 import ctypes
 import os
 import subprocess
@@ -19,6 +20,8 @@ from typing import Callable
 
 from ..config import AppState
 from .client import ComfyClient, wait_for_engine
+
+log = logging.getLogger(__name__)
 
 IS_WINDOWS = sys.platform.startswith("win")
 ENGINE_ENV = {"PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1", "HF_HUB_OFFLINE": "1"}   # the engine's environment, over the orchestrator's
@@ -190,6 +193,8 @@ class EngineSupervisor:
                     old.unlink()
                 except OSError:
                     pass
+            if self._log_fh:                                             # V20: a crashed engine's log handle was never closed
+                self._log_fh.close()
             self._log_fh = self.log_path.open("ab")
             env = {**os.environ, **ENGINE_ENV}
             try:
@@ -230,7 +235,7 @@ class EngineSupervisor:
             try:
                 await asyncio.wait_for(asyncio.to_thread(self._stop_proc, proc, grace_s), timeout=grace_s + 15)
             except asyncio.TimeoutError:
-                _kill_tree(proc.pid)
+                await asyncio.to_thread(_kill_tree, proc.pid)             # V20: taskkill off the loop
         if self._log_fh:
             self._log_fh.close()
             self._log_fh = None
@@ -280,6 +285,11 @@ class EngineSupervisor:
         e = self.app.settings.engine
         alive = self.proc is not None and self.proc.poll() is None
         want = self.headroom_for(model_gb)
+        if alive and not await self.client.is_up():                      # V15: a process that lives but does not answer is wedged — restarted
+            log.warning("engine pid %s is alive but does not answer on %s:%s — restarting it", self.proc.pid, self.client.host, self.client.port)
+            self.restarts += 1
+            await self.restart(want)
+            return False
         if alive and want is not None and self.headroom_gb is not None and want != self.headroom_gb:
             await self.restart(want)
             return True

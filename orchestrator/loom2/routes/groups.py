@@ -8,7 +8,7 @@ import asyncio
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..groups import ROOT_ID, GroupRecord
 from ..schemas import AlbumNode, ChangedGroups, GroupDeleted, GroupPage, LayoutReply, Location, Ungrouped
@@ -35,8 +35,18 @@ class GroupPatch(BaseModel):
     cover_id: str | None = None
 
 
+class GroupLayoutItem(BaseModel):
+    """V8: one item's place on the page — typed, so a bad value is a 422, not a 500 from `layout()`'s casts."""
+    kind: Literal["asset", "group"]
+    id: str
+    x: float | None = None
+    y: float | None = None
+    w: float | None = Field(None, ge=1.0)
+    z: int | None = None
+
+
 class GroupLayout(BaseModel):
-    items: list[dict]
+    items: list[GroupLayoutItem]
     revision: int | None = None
 
 
@@ -106,7 +116,7 @@ async def groups_delete(svc: Svc, gid: str):
 
 @router.patch("/groups/{gid}/items", response_model=LayoutReply)
 async def groups_layout(svc: Svc, gid: str, body: GroupLayout):
-    g = await asyncio.to_thread(svc.require_groups().layout, gid, body.items, body.revision)
+    g = await asyncio.to_thread(svc.require_groups().layout, gid, [it.model_dump(exclude_none=True) for it in body.items], body.revision)
     svc.group_changed([gid])
     return {"revision": g.revision}
 

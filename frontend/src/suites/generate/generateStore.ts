@@ -142,7 +142,7 @@ export const maxRefsOf = (p: Panel): number => useSession.getState().capabilitie
 export function modelPatch(p: Panel, id: string): Partial<Panel> {
   const caps = useSession.getState().capabilities
   const cap = caps?.models[id]
-  const wh = p.tier !== 'custom' && cap ? caps?.tiers?.[p.tier]?.[cap.family] : undefined
+  const wh = p.tier !== 'custom' && cap ? caps?.tiers?.[p.tier]?.[id] ?? caps?.tiers?.[p.tier]?.[cap.family] : undefined   // V16: the model's own tier, else its family's
   return { model_id: id, turbo: cap?.turbo ? p.turbo : false, ...(wh ? { width: wh[0], height: wh[1] } : {}), ...(cap?.flux_shift === false ? { base_shift: null, max_shift: null } : {}) }
 }
 

@@ -92,11 +92,13 @@ async def job_requeue(svc: Svc, job_id: str):
     """LT2: a failed, resumable job back to the queue (a killed trainer continues from its newest save)."""
     _, _, q = svc.require_project()
     try:
-        return q.requeue(job_id)
+        rec = q.requeue(job_id)
     except KeyError:
         raise HTTPException(404, "job not found")
     except ValueError as e:
         raise HTTPException(409, str(e))
+    await q.flush()                                                       # V11: D64 — on disk before the reply
+    return rec
 
 
 @router.delete("/jobs/{job_id}", response_model=Deleted)

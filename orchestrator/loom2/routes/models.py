@@ -32,6 +32,7 @@ async def models(svc: Svc, include_retired: bool = False):
 async def models_scan(svc: Svc):
     roster = svc.roster
     await asyncio.to_thread(roster.scan)                     # D37: two model roots are walked; never on the event loop
+    await asyncio.to_thread(svc.publish_trained)             # V2: the project's trained LoRAs stay known
     return {"items": await asyncio.to_thread(roster.listing), "unlisted": await asyncio.to_thread(roster.unlisted_files)}
 
 

@@ -10420,3 +10420,48 @@ after its id (`test_review_v.py` +13; `createdFrame.test.ts`, `fetchOrder.test.t
   test reads the library's `poses`. Offline 648 passed (the full run 647 + 1 failed on `test_cuts_ce3`'s old mix name, its assertion moved to `mix_name` and rerun), Vitest 554 + 3 skipped, typecheck, build and lint (0 errors, 79 warnings)
   clean, agents_check, settings_audit and model_literals_check clean, e2e full 74/74. Not changed: V13 and V81 (rig first), CI and the
   shell (V46–V48, V52–V57), Story/Generate (V69–V77), stage (V84–V86, V88), Edit (V89–V96), V97.
+
+## 2026-10-27 16:18 — Fix group 7 (review V, journal 08:21): the queue, engine and catalogue lows V2–V12, V14–V18, V20
+
+The server's first section, the lows and the two mediums left there (V3, V5; V13's cache free still waits for its rig measurement).
+Each at its cause, a test named after its id (`test_review_v.py` +17; `modelTiers.test.ts` for V16's client side).
+
+- **The trained LoRAs survive a rescan (V2).** `Services.publish_trained` runs after every roster scan — `PUT /settings` and
+  `POST /models/scan` — not only at the queue's start: a settings change used to leave the project's LoRAs unknown (422 on submit, gone
+  from `/capabilities`) until the project was reopened.
+- **A batch is checked as a submit (V3).** `JobQueue.check` resolves the mentions and runs the disk guard, as `submit` does: a refused
+  item of `/jobs/batch` leaves no job behind, as the route promised.
+- **Empty Trash never stops half-way (V4).** `Catalogue.purge` takes `fsio.unlink`'s retries (D42) and, when a file is still held (a
+  thumbnail Edge streams, an antivirus), keeps that asset trashed with its row and names it in `failed`; the rest go. The reply's
+  `failed` count is the Bin's toast ("empty the trash again in a moment").
+- **A torn app.json never stops the launch (V5).** `AppState` moves an unreadable or stale-enum `app.json` aside as `app.json.corrupt-…`,
+  starts with the defaults and keeps a recovery note (`AppState.recovery`); before, `create_app()` raised before uvicorn bound and the
+  shell never saw `LOOM2_READY`.
+- **The album is not restructured over a transient read (V6).** `GroupStore._load` reads a group file three times on an `OSError`
+  and then stops the load (a 400 "open the project again"), never re-placing its children; a file that is not JSON is moved aside as
+  `.corrupt-…` and its items go back to the album, as for a hand edit.
+- **CORS outermost (V7).** The token gate sits inside the CORS middleware: a 401 carries its headers, so browser dev sees the status,
+  not "Failed to fetch".
+- **A typed layout (V8).** `GroupLayoutItem` (kind, id, x, y, w ≥ 1, z): a bad value is a 422 at the route, not a 500 from the casts.
+- **The uploaded thumbnail's temp file goes (V9).** `PUT /assets/{id}/thumbnail` unlinks `_temp/thumbs/<id>.png` after the thumbnails
+  are made (nothing swept that folder).
+- **Counts without the trashed (V10).** A group's card and tree counts leave trashed assets out, as its page hides them.
+- **A requeue is on disk before the reply (V11).** `job_requeue` awaits `q.flush()` (D64).
+- **A thumbnail's replace retries (V12).** `fsio.replace` instead of `Path.replace`: a transient `PermissionError` no longer stamps
+  `thumb_status: failed` for good.
+- **A preview without a graph (V14).** `preview_problems` answers `[]` for a kind with no compiler (train_lora, tts) instead of raising
+  `NotImplementedError` through `POST /recipes/preview` (a 500 once the engine had answered once).
+- **A wedged engine is restarted (V15).** `ensure_running` probes the engine before each job: a process that lives but does not
+  answer is restarted (counted in `restarts`), not left to fail every queued job in turn with a timeout each.
+- **Generate's tiers per model (V16).** `image_tiers()` keys every model id beside the family's first spec; `modelPatch` and the Size
+  section take the model's own tier size, else its family's (`krea2-raw`'s Full is 1344×768 — the turbo's 1920×1088 stood for both).
+- **The headroom of the models that run (V17).** `model_headroom` takes the largest `engine.vram_headroom_gb` among `plan().weights`
+  (fill_hero runs dev, upscale + refine two models, Reangle and a LayerPass theirs), not the panel's `model_id`.
+- **The history read again (V18).** `_outputs_after_success` reads `/history` up to six times, briefly — ComfyUI writes it after its
+  success event; one empty read used to fail the job non-resumable and delete its outputs.
+- **Off the loop and closed (V20).** The disk guard's SQLite sum once per five seconds (`_usage_cache`), the face pass's carry-frame
+  PNG copies in a thread, `_stop_locked`'s taskkill in a thread, and a crashed engine's log handle closed before the next is opened.
+- The `Purged` and `GroupLayout` schemas changed: the OpenAPI document and `schema.d.ts` regenerated (D38). Offline 665 passed (the full run 662 + 3 that followed the new behaviour afterwards: M7's cap check resets V20's cache, the headroom tests' fake engine answers V15's probe),
+  Vitest 555 + 3 skipped, typecheck, build and lint (0 errors, 79 warnings) clean, agents_check, settings_audit and
+  model_literals_check clean, e2e full 74/74. Not changed: V13 and V81 (rig first), CI and the shell (V46–V48, V52–V57),
+  Story/Generate (V69–V77), stage (V84–V86, V88), Edit (V89–V96), V97.

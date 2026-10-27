@@ -29,6 +29,7 @@ async def put_settings(svc: Svc, patch: dict):
     svc.roster = await asyncio.to_thread(Roster(svc.app.models_root, [Path(p) for p in s.mounted_model_trees], s.variant).scan)   # C7: off the loop
     if svc.queue:                                   # B7: the live queue compiles against the new roster at once
         svc.queue.roster = svc.roster
+    await asyncio.to_thread(svc.publish_trained)     # V2: the project's trained LoRAs are the fresh roster's too
     svc.engine.reconfigure()
     return s.model_dump()
 

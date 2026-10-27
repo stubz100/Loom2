@@ -6,6 +6,7 @@ Settings `cli` runs under this interpreter (the tests' fakes). Moved here from e
 from __future__ import annotations
 
 import json
+import logging
 import os
 import queue
 import subprocess
@@ -13,7 +14,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .config import AppState
 from .engine.supervisor import _assign_to_job
@@ -26,6 +27,9 @@ def cli_head(settings) -> list[str]:
     """The pinned CLI, or the tests' fake under this interpreter."""
     cli = settings.cli
     return [sys.executable, cli] if cli.lower().endswith(".py") else [cli]
+
+
+log = logging.getLogger(__name__)
 
 
 class McpSessionError(RuntimeError):
@@ -50,6 +54,7 @@ class McpSession:
         self._log_fh = None
         self.project: str | None = None            # the project file the session holds open (opened again after a restart)
         self.calls = 0
+        self.replays = 0                           # V97: requests sent once more after the session died under them
 
     # ---- what runs (a subclass says) --------------------------------------------------------------
     @property
@@ -166,7 +171,9 @@ class McpSession:
             p.stdin.flush()
         except (OSError, ValueError) as e:
             self.last_error = f"{method}: the session's pipe closed ({e})"
-            raise self.Error(self.last_error) from e
+            err = self.Error(self.last_error)
+            err.ended = True                                           # V97: the process is gone, not the request wrong — a caller may replay once
+            raise err from e
         deadline = time.monotonic() + limit
         while True:
             try:
@@ -178,7 +185,9 @@ class McpSession:
             if msg is None:
                 self.last_error = f"{method}: the session ended"
                 self._cleanup_after_death()
-                raise self.Error(self.last_error)
+                err = self.Error(self.last_error)
+                err.ended = True                                       # V97: an EOF under the request — a caller may replay once after the restart
+                raise err
             if msg.get("id") != n:
                 continue                                           # a notification, or a reply to a request given up on
             self.calls += 1
@@ -209,15 +218,29 @@ class McpSession:
         except json.JSONDecodeError:
             return {"text": text}
 
-    def call(self, method: str, params: dict | None = None, timeout: float | None = None) -> Any:
-        with self._lock:
+    def _replaying(self, fn: Callable[[], Any], replay: bool) -> Any:
+        """V97: a process that dies under a request (an EOF, a closed pipe — not a timeout, not a refusal) used to lose it ("the session
+        ended") and only the next call restarted the session. With `replay`, an idempotent request is sent once more after the restart
+        (the project it held is opened again by `_ensure_locked`); the second failure is the caller's."""
+        self._ensure_locked()
+        try:
+            return fn()
+        except self.Error as e:
+            if not (replay and getattr(e, "ended", False)):
+                raise
+            self.replays += 1
+            log.warning("%s: the session ended under a request — restarted and replayed once", self.name)
             self._ensure_locked()
-            return self._call_locked(method, params, timeout)
+            return fn()
 
-    def tool(self, name: str, args: dict | None = None) -> Any:
+    def call(self, method: str, params: dict | None = None, timeout: float | None = None, replay: bool = False) -> Any:
         with self._lock:
-            self._ensure_locked()
-            return self._tool_locked(name, args or {})
+            return self._replaying(lambda: self._call_locked(method, params, timeout), replay)
+
+    def tool(self, name: str, args: dict | None = None, replay: bool = False) -> Any:
+        """`replay`: the tool is idempotent (a render, a read) — sent once more when the session ended under it (V97)."""
+        with self._lock:
+            return self._replaying(lambda: self._tool_locked(name, args or {}), replay)
 
     def command(self, cid: str, params: dict | None = None) -> Any:
         """One engine command (`command_run`): its result, or the session's error with the engine's message."""

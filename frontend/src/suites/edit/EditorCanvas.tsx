@@ -94,6 +94,7 @@ export function EditorCanvas() {
   const meshRef = useRef<{ mesh: PerspectiveMesh; r: [number, number, number, number] }[]>([])
   const previewTex = useRef(new Map<HTMLCanvasElement, Texture>())
   const renderPending = useRef(0)
+  const fitPending = useRef(false)                                       // V91: a fit asked while hidden (kept alive) runs on the return
   const antsRef = useRef<{ rev: number; segs: number[] }>({ rev: -1, segs: [] })
   const negRef = useRef<ColorMatrixFilter[] | null>(null)              // C21: the two overlay filters are made once, not per rebuild
   const phaseRef = useRef(0)
@@ -133,6 +134,7 @@ export function EditorCanvas() {
     app.renderer.resize(host.clientWidth, host.clientHeight)
     markPassesDirty()
     requestRender()
+    if (fitPending.current) { fitPending.current = false; useEditor.getState().requestFit() }   // V91: the fit asked while hidden
   }, [stageActive]) // eslint-disable-line react-hooks/exhaustive-deps
   const docState = useEditor((s) => s.doc)
   const blendPreview = useEditor((s) => s.blendPreview)
@@ -410,8 +412,8 @@ export function EditorCanvas() {
       const ox = (ref.linked ? (n.x ?? 0) : 0) + ref.x, oy = (ref.linked ? (n.y ?? 0) : 0) + ref.y
       sp.position.set(ox, oy)
       const covers = ox <= bx && oy <= by && ox + m.width >= bx + bw && oy + m.height >= by + bh
-      if (!(ref.default ?? 0) || covers) return sp
-      const v = outsideValue(ref)
+      const v = outsideValue(ref)                                     // V89 (T8): what compose.py pads with — a default-0 mask at density < 1 shows 1 − density outside, not 0
+      if (!v || covers) return sp
       const c = new Container()
       c.addChild(new Graphics().rect(bx, by, bw, bh).fill({ r: v, g: v, b: v }), sp)
       return makePass(c, bw, bh, bx, by)
@@ -624,6 +626,7 @@ export function EditorCanvas() {
     const app = appRef.current, host = hostRef.current
     if (!app || !host || !doc) return
     const w = host.clientWidth, h = host.clientHeight
+    if (!w || !h) { fitPending.current = true; return }                 // V91: hidden (kept alive) — a fit now would be a negative zoom; on the return instead
     const z = Math.min((w - 40) / doc.w, (h - 40) / doc.h)
     useEditor.getState().setView({ zoom: z, pan: { x: (w - doc.w * z) / 2, y: (h - doc.h * z) / 2 } })
   }, [fitRequested, doc?.id]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -632,7 +635,7 @@ export function EditorCanvas() {
   // the ants march only while there is a selection to outline (and nothing else renders while idle)
   useEffect(() => {
     if (!hasSel || !overlay || quickMask) return
-    const t = setInterval(() => { phaseRef.current = (phaseRef.current + 1) % 8; drawAnts(); requestRender() }, 120)
+    const t = setInterval(() => { if (!hostRef.current?.clientWidth) return; phaseRef.current = (phaseRef.current + 1) % 8; drawAnts(); requestRender() }, 120)   // V92 (D69): hidden, no restroke
     return () => clearInterval(t)
   }, [hasSel, overlay, quickMask]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -650,8 +653,15 @@ export function EditorCanvas() {
       stroke?: Stroke; smoother?: Smoother; walker?: PathWalker; brushAt?: Pt; offset?: Pt; line?: boolean; movedAt?: number; targetId?: string; targetKind?: 'image' | 'mask' }
     let drag: Drag | null = null
     let spaceHeld = false
-    const onKey = (e: KeyboardEvent) => { if (e.code === 'Space') { if ((e.target as HTMLElement)?.closest('input, textarea, select')) return; spaceHeld = e.type === 'keydown'; host.style.cursor = spaceHeld ? 'grab' : '' } }
-    window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKey)
+    // Space holds the hand tool (the hand is the command; Space its hold accelerator). V93: not in a field or a modal, not while the editor is
+    // hidden (kept alive under another suite), and let go when the window loses focus (Alt+Tab mid-hold left the pan stuck)
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || !host.clientWidth) return
+      if ((e.target as HTMLElement)?.closest('input, textarea, select, [contenteditable], .modal')) return
+      spaceHeld = e.type === 'keydown'; host.style.cursor = spaceHeld ? 'grab' : ''
+    }
+    const onBlur = () => { spaceHeld = false; host.style.cursor = '' }
+    window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKey); window.addEventListener('blur', onBlur)
 
     const paintTarget = (): { lp: LayerPixels; kind: 'image' | 'mask'; offset: Pt; id: string } | null => {
       const st = useEditor.getState()
@@ -718,10 +728,10 @@ export function EditorCanvas() {
     }
 
     const onDown = (e: PointerEvent) => {
-      setInteracting(true)                                             // D70: no idle flush mid-gesture
       if (e.button !== 0 && e.button !== 1) return
       const st = useEditor.getState()
       if (!st.doc) return
+      setInteracting(true)                                             // D70: no idle flush mid-gesture — V94: only for a gesture this handler owns (a right-press released off the canvas left it set)
       host.setPointerCapture(e.pointerId)
       const p = toDoc(e)
       const tool = spaceHeld || e.button === 1 || st.tool === 'hand' ? 'hand' : st.tool
@@ -1252,7 +1262,7 @@ export function EditorCanvas() {
       host.removeEventListener('pointerdown', onDown); host.removeEventListener('pointermove', onMove); host.removeEventListener('pointerup', onUp); host.removeEventListener('pointercancel', onUp)
       host.removeEventListener('dblclick', onDouble); unsubPoly()
       host.removeEventListener('wheel', onWheel); host.removeEventListener('contextmenu', onContext)
-      window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKey)
+      window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKey); window.removeEventListener('blur', onBlur)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 

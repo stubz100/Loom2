@@ -10510,3 +10510,37 @@ were put right in group 5 — the index was never affected). Each at its cause; 
 - Offline 668 passed, Vitest 559 + 3 skipped, typecheck, build and lint (0 errors, 79 warnings) clean, `cargo check` clean, the workflow
   parses, agents_check, settings_audit and model_literals_check clean (the new Generate test uses made-up ids), e2e full 74/74 (the fake engine and the orchestrator started with --parent-pid).
   Not changed: V13 and V81 (rig first), stage (V84–V86, V88), Edit (V89–V96), V97.
+
+## 2026-10-27 20:18 — Fix group 9 (review V, journal 08:21): the stage lows V84–V86, V88, the Edit lows V89–V96 and the sidecar replay V97
+
+The last sections of the register but the two that wait on the rig (V13, V81) and the docs' re-verification. Each at its cause; the
+tests `stageFixes.test.ts` 2, `editFixes.test.ts` 2 and `test_review_v.py` +1.
+
+- **A render's reply lands on the document as it is now (V84).** `takeRendered` takes the reply's passes, album page and revision onto
+  the current document when an edit was made during the render (saved on the new revision), and the reply itself when none was —
+  the reply used to replace the document wholesale, the edit dropped silently.
+- **A seek during the idle fill is served now (V85).** The idle fetch's end pumps the frame asked meanwhile, instead of leaving it to the
+  300 ms settle (one skipped frame at play start).
+- **An external Cast change is not an undo step (V86).** `syncBodies` writes the bound figures' bodies and sets straight into the
+  document and schedules the save; it used to go through `apply`, so Undo took back a Cast edit.
+- **A removed parent takes its selected child out of the selection (V88).**
+- **The mask strip as compose.py pads it (V89, T8).** `maskSprite` pads by `outsideValue(ref)` — a default-0 mask at density < 1 shows
+  1 − density outside its layer, as the bakes do; the screen used to hide the strip.
+- **An all-zero selection is no selection (V90).** A subtract or intersect with nothing selected, one that takes everything away, or a
+  Quick Mask left with nothing painted used to leave a selection that showed no ants while every paint, fill, Delete and Ctrl+T did
+  nothing until Esc; `editSelection` and `setView` drop it, and the history step says `has: false`.
+- **No fit while hidden (V91).** The fit effect skips a hidden editor (kept alive under another suite) and runs the fit on the return;
+  an outpaint landing meanwhile used to set a negative zoom, the editor empty until Ctrl+0.
+- **No ants while hidden (V92, D69).** The marching-ants interval does nothing while the host has no size.
+- **Space-to-pan let go (V93).** The Space hold (the hand tool's accelerator) ignores fields, modals and a hidden editor, and lets go when
+  the window loses focus (Alt+Tab mid-hold left the pan stuck).
+- **A right-press off the canvas leaves nothing armed (V94).** `setInteracting(true)` only for a gesture the handler owns.
+- **The autosave never writes a half-painted stroke (V95).** The two-minute save waits while a gesture is under way, as the idle pre-save does.
+- **Nothing orphaned on a document change (V96).** `mergeServerLayers` fetches aside and writes into the maps of the document open after
+  its awaits, or destroys what it fetched when another document is open by then.
+- **A request the session died under is replayed once (V97).** An EOF or a closed pipe under a request marks the error `ended`;
+  `call` / `tool` with `replay` restart the session (its project opened again) and send the request once more — `render_frame` in
+  EffectCraft and FilmCraft ask for it; a timeout, a refusal or a second death are the caller's. `McpSession.replays` counts them.
+- Offline 669 passed, Vitest 563 + 3 skipped, typecheck, build and lint (0 errors, 79 warnings) clean, agents_check, settings_audit and
+  model_literals_check clean, e2e full 74/74. Not changed: V13 and V81 (rig first); the docs' re-verification (CLAUDE.md, the four
+  core AGENTS.md) is the next entry.

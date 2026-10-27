@@ -11,7 +11,8 @@ export timeout, a bad stack, the plate's id, a final deleted with its jobs). V2�
 (trained LoRAs after a rescan, a batch checked as a submit, a held file at purge, a torn app.json or group file, CORS on a 401, a typed
 layout, the thumbnail temp file, counts without the trashed, a requeue on disk, a retried thumbnail replace, a preview without a graph,
 a wedged engine restarted, tiers per model, the headroom of the models that run, the history read again, the disk guard cached).
-V53, V54, V56 — READY after the bind, a gone parent ends the process, a gain that is not a number refused."""
+V53, V54, V56 — READY after the bind, a gone parent ends the process, a gain that is not a number refused. V97 — a request the session
+died under is replayed once."""
 from __future__ import annotations
 
 import contextlib
@@ -1074,3 +1075,49 @@ def test_v56_a_gain_that_is_not_a_number_is_refused(tmp_path: Path):
         with pytest.raises(ValueError, match="not a number"):
             host.render(SimpleNamespace(), [], tmp_path / "in.wav", tmp_path / "out" / "out.wav", bad)
     assert not (tmp_path / "out").exists()
+
+
+# ---- the ninth group (journal 2026-10-27): the stage and Edit lows (Vitest) and the sidecar replay V97 -----------------------------------
+
+
+def test_v97_a_request_the_session_died_under_is_replayed_once(tmp_path: Path):
+    """An EOF under a request (the process died) raises with `ended`; `call(..., replay=True)` restarts the session and sends the request
+    once more; a timeout or a refusal is never replayed, and neither is a second death."""
+    from loom2.config import AppState
+    from loom2.mcp_session import McpSession, McpSessionError
+
+    class Fake(McpSession):
+        name = "Fake"
+        Error = McpSessionError
+        script: list
+
+        def __init__(self, app, script):
+            super().__init__(app)
+            self.script, self.ensured = list(script), 0
+
+        def _ensure_locked(self):
+            self.ensured += 1
+
+        def _call_locked(self, method, params, timeout=None):
+            step = self.script.pop(0)
+            if step == "ended":
+                err = self.Error(f"{method}: the session ended")
+                err.ended = True
+                raise err
+            if step == "timeout":
+                raise self.Error(f"{method} timed out")
+            return {"ok": step}
+    app = AppState(tmp_path / "state")
+    s = Fake(app, ["ended", "fine"])
+    assert s.call("render_frame", {}, replay=True) == {"ok": "fine"} and s.replays == 1 and s.ensured == 2
+    s = Fake(app, ["ended", "fine"])
+    with pytest.raises(McpSessionError, match="the session ended"):
+        s.call("command_run", {})                                           # not idempotent: no replay
+    assert s.replays == 0 and s.script == ["fine"]
+    s = Fake(app, ["timeout", "fine"])
+    with pytest.raises(McpSessionError, match="timed out"):
+        s.call("render_frame", {}, replay=True)                             # a timeout is not a death
+    s = Fake(app, ["ended", "ended", "fine"])
+    with pytest.raises(McpSessionError, match="the session ended"):
+        s.call("render_frame", {}, replay=True)                             # once, not for ever
+    assert s.replays == 1 and s.script == ["fine"]

@@ -634,15 +634,18 @@ export const useEditor = create<EditorState>()(
           if (!doc) return
           try {
             const server = asStack(await unwrap(http.GET('/documents/{doc_id}', { params: { path: { doc_id: doc.id } } })))
-            const pixels = get().pixels, masks = get().masks
+            const got = new Map<string, LayerPixels>(), gotMasks = new Map<string, LayerPixels>()        // V96: fetched aside, written into the maps of the document that is open *after* the awaits
             await Promise.all(added.map(async (lid) => {
               const lp = await fetchRaw(doc.id, lid, 'image')
-              if (lp) pixels.set(lid, lp)
+              if (lp) got.set(lid, lp)
               const n = findNode(server, lid)
-              if (n?.mask) { const m = await fetchRaw(doc.id, lid, 'mask'); if (m) masks.set(lid, m) }
+              if (n?.mask) { const m = await fetchRaw(doc.id, lid, 'mask'); if (m) gotMasks.set(lid, m) }
             }))
             const cur = get().doc
-            if (!cur || cur.id !== doc.id) return
+            if (!cur || cur.id !== doc.id) { for (const lp of [...got.values(), ...gotMasks.values()]) lp.destroy(); return }   // another document meanwhile: nothing orphaned
+            const pixels = get().pixels, masks = get().masks
+            for (const [lid, lp] of got) pixels.set(lid, lp)
+            for (const [lid, m] of gotMasks) masks.set(lid, m)
             const before = clone(cur)
             // C20: merge the server's additions into the *local* stack instead of adopting the server's — layers added, moved or
             // renamed while the job ran survive. When outpaint grew the canvas, shift local layers like the server shifted its own.
@@ -1000,7 +1003,10 @@ export const useEditor = create<EditorState>()(
           set({ brushPresets: [...get().brushPresets.filter((x) => x.name !== name), p] }) },
         deleteBrushPreset: (name) => set({ brushPresets: get().brushPresets.filter((x) => x.name !== name) }),
         applyBrushPreset: (p) => set({ brush: { ...get().brush, size: p.size, hardness: p.hardness, opacity: p.opacity, flow: p.flow, spacing: p.spacing, smoothing: p.smoothing } }),
-        setView: (p) => set(p),
+        setView: (p) => {
+          set(p)
+          if (p.quickMask === false) { const s = get().selection; if (s && !selectionValues(s).some((v) => v)) { s.destroy(); set({ selection: null }) } }   // V90: leaving Quick Mask with nothing painted leaves no selection
+        },
         requestFit: () => set({ fitRequested: get().fitRequested + 1 }),
         zoomTo: (z) => {
           const { doc, zoom, pan } = get()
@@ -1517,6 +1523,7 @@ export const useEditor = create<EditorState>()(
           const beforeImg = prev ? prev.ctx.getImageData(0, 0, prev.width, prev.height) : null
           const before = prev ? selectionValues(prev) : null
           fn()
+          { const s = get().selection; if (s && !selectionValues(s).some((v) => v)) { s.destroy(); set({ selection: null, quickMask: false }) } }   // V90: an all-zero selection is no selection (ants showed nothing, every verb did nothing until Esc)
           const cur = get().selection
           const after = cur ? selectionValues(cur) : null
           const sameSize = (!prev || (prev.width === doc.w && prev.height === doc.h)) && (!cur || (cur.width === doc.w && cur.height === doc.h))
@@ -1744,7 +1751,7 @@ let autosaveStarted = false
 export function ensureEditorAutosave(): void {
   if (autosaveStarted) return
   autosaveStarted = true
-  setInterval(() => { const st = useEditor.getState(); if (st.doc && (st.docDirty || fileDirty) && !st.saving) void st.save({ quiet: true }) }, 120_000)
+  setInterval(() => { const st = useEditor.getState(); if (st.doc && (st.docDirty || fileDirty) && !st.saving && !interacting) void st.save({ quiet: true }) }, 120_000)   // V95: never a half-painted stroke
   // D70 idle pre-save: 1.5 s after the last change, with no gesture under way and nothing in flight, the open document catches up (an AI
   // click then only waits for what changed since). Failures stay quiet here — the next explicit save reports them.
   let timer = 0

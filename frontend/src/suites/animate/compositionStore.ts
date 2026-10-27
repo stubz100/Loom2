@@ -659,7 +659,7 @@ export const useComposition = create<CompState>((set, get) => {
         if (!cache.has(key(comp.revision, frame, 'half'))) {
           set({ fetching: true })
           inflight = fetchFrame(final, comp.revision, frame, 'half').then(() => { set({ filled: count(), error: null }) }).catch((e: Error) => set({ error: e.message }))
-            .finally(() => { inflight = null; set({ fetching: false }) })
+            .finally(() => { inflight = null; set({ fetching: false }); if (wanted) pump() })   // V85: a seek asked during the idle fill is served now, not at the 300 ms settle
           await inflight
           return
         }

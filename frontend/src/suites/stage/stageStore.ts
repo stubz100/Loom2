@@ -385,6 +385,16 @@ function editPose(get: () => StageState, id: string, fn: (p: StageObject['pose']
   get().apply((d) => ({ ...d, objects: d.objects.map((x) => (x.id === id ? { ...x, pose: fn(x.pose) } : x)) }), label)
 }
 
+/** V84: a render's reply (the passes, the album page, the revision) onto the document as it is *now* — an edit made during the render
+ *  stays, and is saved on the new revision; before, the reply replaced the document wholesale and the edit was dropped silently. */
+export function takeRendered(next: StageDoc, rendered: StageDoc, get: () => StageState, set: (p: Partial<StageState>) => void): void {
+  const cur = get().current
+  const edited = !!cur && cur.id === next.id && cur !== rendered
+  const doc = edited ? { ...cur!, passes: next.passes, group_id: next.group_id, revision: next.revision, updated_at: next.updated_at } : next
+  set({ current: doc, stages: get().stages.map((x) => (x.id === next.id ? next : x)) })
+  if (edited) schedule(get, set)
+}
+
 function schedule(get: () => StageState, set: (p: Partial<StageState>) => void): void {
   if (saveTimer) window.clearTimeout(saveTimer)
   saveTimer = window.setTimeout(() => { saveTimer = null; void save(get, set) }, 300)
@@ -542,7 +552,7 @@ export const useStage = create<StageState>()((set, get) => ({
       }
       const next = await unwrap(http.POST('/stages/{st_id}/guide', { params: { path: { st_id: doc.id } },
         body: { camera_id: cam.id, revision: doc.revision, kind, fps: doc.size.fps, size: { w, h }, range: { start, end: start + n - 1 }, frames: shas, keypoints: out.keypoints as never } }))
-      set({ current: next, stages: get().stages.map((x) => (x.id === next.id ? next : x)) })
+      takeRendered(next, doc, get, set)                                                   // V84: an edit made during the render stays
       s.toast(`${kind === 'depth' ? 'Depth' : 'Pose'} sequence rendered: ${n} frames at ${w}×${h}, ${doc.size.fps} fps`, 'success')
       return true
     } catch (e) { s.toast(`Render sequence failed: ${(e as ApiError).detail ?? e}`, 'error'); return false } finally { set({ rendering: false, rendered: null }) }
@@ -613,7 +623,7 @@ export const useStage = create<StageState>()((set, get) => ({
       }
       const next = await unwrap(http.POST('/stages/{st_id}/passes', { params: { path: { st_id: doc.id } },
         body: { camera_id: cam.id, revision: doc.revision, size: out.size, passes, keypoints: out.keypoints as never, legend: out.legend as never } }))
-      set({ current: next, stages: get().stages.map((x) => (x.id === next.id ? next : x)) })
+      takeRendered(next, doc, get, set)                                                   // V84: an edit made during the render stays
       s.toast(`Passes rendered for ${cam.name} at ${w}×${h}`, 'success')
       void get().refreshShotPreview()
       return true
@@ -902,7 +912,8 @@ export const useStage = create<StageState>()((set, get) => ({
       return { ...d, objects: d.objects.filter((o) => !gone.has(o.id)).map((o) => (o.parent_joint && o.parent && gone.has(o.parent)          // D129: a held thing is let go where it is
         ? { ...o, parent: null, parent_joint: null, transform: worldOf?.(o.id) ?? o.transform } : o)) }
     }, 'remove')
-    if (get().selected === id) set({ selected: null })
+    const sel = get().selected                                                            // V88: a selected child of the removed parent went with it
+    if (sel && !get().current?.objects.some((o) => o.id === sel)) set({ selected: null })
   },
   duplicateObject: (id) => {
     const src = get().object(id)
@@ -1078,7 +1089,10 @@ export const useStage = create<StageState>()((set, get) => ({
     if (!d || !d.objects.some((o) => (o.kind === 'mannequin' || o.kind === 'mesh' || o.kind === 'set') && o.profile_id)) return
     const next = d.objects.map((o) => (o.kind === 'mannequin' && o.profile_id ? withBody(o, castBody(o.profile_id, o.version)) : o.kind === 'set' ? withPlaceSet(o) : withModel(o)))
     if (next.every((o, i) => o === d.objects[i])) return
-    get().apply((doc) => ({ ...doc, objects: doc.objects.map((o) => next.find((x) => x.id === o.id) ?? o) }), 'from Cast')
+    const doc = get().current                                                             // V86: an external Cast change is not the stage's undo step
+    if (!doc) return
+    set({ current: { ...doc, objects: doc.objects.map((o) => next.find((x) => x.id === o.id) ?? o) } })
+    schedule(get, set)
   },
 }))
 

@@ -79,7 +79,7 @@ class EffectCraft(McpSession):
         args: dict[str, Any] = {"time": float(time_s), "max_side": int(max_side), "transparent": bool(transparent)}
         if comp is not None:
             args["comp"] = comp
-        content = self.tool("render_frame", args)
+        content = self.tool("render_frame", args, replay=True)         # V97: a render is idempotent — once more if the session ended under it
         img = next((c for c in content if c.get("type") == "image"), None) if isinstance(content, list) else None
         if not img:
             raise EffectCraftError("render_frame returned no image")

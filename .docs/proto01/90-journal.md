@@ -10544,3 +10544,34 @@ tests `stageFixes.test.ts` 2, `editFixes.test.ts` 2 and `test_review_v.py` +1.
 - Offline 669 passed, Vitest 563 + 3 skipped, typecheck, build and lint (0 errors, 79 warnings) clean, agents_check, settings_audit and
   model_literals_check clean, e2e full 74/74. Not changed: V13 and V81 (rig first); the docs' re-verification (CLAUDE.md, the four
   core AGENTS.md) is the next entry.
+
+## 2026-10-27 20:35 — The agent docs re-verified at e66a779 (the review's last item but the two rig measurements)
+
+CLAUDE.md and the four core AGENTS.md said *Verified at … on 2026-10-10*; seventeen days and nine fix groups later they were read
+against the code and brought to e66a779:
+
+- **CLAUDE.md** — the counts (offline 660+ in ~3.5 min; Vitest 560+ in ≈ 8 s; the e2e 74 scenarios in ≈ 6 min, run alone), the later
+  waves' rig scripts, two rows for what the table lacked (`engine-start.ps1` — the orchestrator's own launch, V44 — and the sidecar pins
+  `build_effectcraft / filmcraft / vsthost.py --check`), the headed-check list's typo, and CI as it runs now (lint, the CSP check, the
+  contract, a `cargo check` of the shell; the shell-only installers on tags, V46).
+- **orchestrator/AGENTS.md** — the module map named 20 of the 47 modules: every module is in it now (the routes in their included
+  order; `main` / `parent`, `origin`, the stage family — `stages`, `set_fit`, `place_sets`, `sizes`, `body`, `motion` — the Story family
+  — `story`, `ideas`, `shot_recipe`, `shot_graph`, `loras`, `trainer`, `voices`, `lipsync`, `heads` — the final's — `finals`,
+  `final_assembly`, `compositions`, `effectcraft` — the cut's — `timelines`, `cuts`, `filmcraft`, `vsthost` — `mcp_session`, `poisson` /
+  `tone`, `models/`, the two tools); `queue.py`'s row says what the review changed (`check` = submit's guards, `job_live`, the origin
+  hook on every terminal transition, the `/history` read again); rule 1 names every quarantined state file (app.json and a torn group
+  file since V5 / V6, a transient read failure stops the load); rule 3 names the stores that lock themselves (`FinalStore` since V34) and
+  the chains that submit on the loop (V22); the tests section names `test_review_v.py`, `_project`, `url_path_for` and the D65 check on
+  tests; the footguns gain the line endings (`newline="\n"`) and `free_cache` (V13, open).
+- **engine/AGENTS.md** — the fourteen builders (seven were listed), the finishers as they are (`MeshFinisher`, `SetFinisher`,
+  `MatteFinisher`, `LayerPassFinisher`, the Story chains' landings, `run_cpu` and RIFE's watchdog), the supervisor's probe and the log
+  handle (V15, V20), `preview_problems` for a kind without a graph (V14), `free_cache` marked open (V13).
+- **frame/AGENTS.md** — the per-item rule names `onStoryItem`, `markerMenu(id)`, `onBinTile` and the right-click rule (V69); the keys
+  paragraph says what `onGlobalKeydown` answers in a field (V68) and the one literal hold left (Space, V93); the state section has the
+  reconnect's replay and gap (V65) and the fetch ordering (V67); the checks' timings and `--parent-pid` (V54).
+- **edit/AGENTS.md** — `tools` / `labels` / `parseNum` / `planSize` in the files table, the store row's merge and autosave (V95, V96),
+  invariant 7 with what a hidden editor must not do (V91–V93), invariant 9 with the all-zero selection (V90), invariant 11 with
+  `outsideValue` (V89).
+
+`scripts/agents_check.py`: 9 docs, 0 problems. Nothing in the code changed. What the review leaves: V13 and V81, each a rig measurement
+under the one-GPU-job rule, and the decision whether the installers should bundle the orchestrator (V46).

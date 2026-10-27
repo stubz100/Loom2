@@ -1,6 +1,6 @@
 # frontend/src/suites/edit — notes for coding agents
 
-Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (layout, tools, AI panel, acceptance),
+Verified at e66a779 on 2026-10-27. Specs: `.docs/proto01/10-ui-suite-edit.md` (layout, tools, AI panel, acceptance),
 `.docs/proto01/05-frontend-engine-evaluation.md` (why PixiJS v8). Decisions D3, D4, D5, D7, D22, D31 (compositing), D33, D39 (Photoshop compositing semantics), D40 (Photoshop oracle), D41 (PSD export), D43 (selection history), D44 (selection toolkit), D45 (Refine Edge), D46 (clipboard), D47–D49 (paste-back, match colour, colour to alpha), D50 / D51 (brush, smoothing), D52 (masks), D53 (partial uploads), D54 (mask mechanics from PhotoCraft), D55 (mouse-first kit), D56 (layers panel), D57 (properties, spline curves), D58 (free transform), D59 (Quick Selection, Magnetic Lasso), D62 (Spot Healing, Quick Remove).
 
 ## Files
@@ -8,7 +8,8 @@ Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (l
 | File | Owns |
 | --- | --- |
 | `EditorCanvas.tsx` | the PixiJS `Application`: WebGPU preferred, WebGL2 fallback, render on demand, render-texture passes, overlays, pointer input, drop target |
-| `editorStore.ts` | document stack, tools, selection, history, persistence against `/documents/*` (stack revision, 409 merge), AI runs and candidates, autosave |
+| `editorStore.ts` | document stack, tools, selection, history, persistence against `/documents/*` (stack revision, 409 merge; `mergeServerLayers` fetches aside and destroys what it fetched when another document is open by then, V96), AI runs and candidates, autosave (every two minutes, never while a gesture is under way — `interacting`, V95) |
+| `tools.ts` / `labels.ts` / `parseNum.ts` / `planSize.ts` | leaf modules the frame may import without the editor (D69): the tool table, one spelling per name (review U6), what a `ValueField` accepts when typed, the engine size of an Edit AI job (the orchestrator's `edit_ai._engine_size`, checked by the unit suite) |
 | `layerPixels.ts` | `LayerPixels`: a 2D canvas per raster layer or mask (the CPU truth), its Pixi texture, 256² tile snapshots for undo, raw RGBA transfer |
 | `blendModes.ts` | 24 blend modes (W3C formula, Photoshop's Soft / Vivid Light, Hard Mix, Burn / Dodge edges) as `BlendModeFilter` subclasses (GLSL + WGSL) with alternate `-b` names; `w3c-opaque` for clip-run bases; `BLEND_GL` / `BLEND_WGSL` (`w3_blendBy`) for the adjustment filters |
 | `adjustFilters.ts` | adjustment and filter layers previewed as per-layer filters |
@@ -48,14 +49,16 @@ Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (l
    releases the global resource pools, and the batch pool is shared by every renderer — a live one then draws destroyed batches
    ("Cannot read properties of null (reading 'geometry')"; `editorLifecycle.test.ts` guards it). Pixi's "textureSource destroyed while
    still bound" warnings on scene rebuilds are its batch bind-group cache noticing a destroyed texture — noise, not a fault. Leaving Edit does **not** unmount it (D69 keep-alive):
-   only the release policy does, so cleanup must stay complete; while hidden the host is 0 × 0 (`useStageActive()`), never resize to it.
+   only the release policy does, so cleanup must stay complete; while hidden the host is 0 × 0 (`useStageActive()`), never resize to it —
+   nor fit to it (a fit asked while hidden waits for the return, `fitPending`, V91), nor restroke the ants (V92), nor hold Space (V93).
 8. **Clipping groups are passes, not a shader variant (D39).** `buildClipRun`: the base's content (pixels × mask) renders into a pass,
    is drawn `w3c-opaque` into a second pass with the clipped layers over it, that pass is masked by the base's alpha
    (`setMask({channel: 'alpha'})`) in a third, and the unit blends with the base's mode and opacity × fill. A pass-through group below
    100 % or masked renders a copy of its target's earlier content (`prefixOf`) into a pass, its children over that, and draws the
    result at opacity × mask. Moving or transforming a layer must `markPassesDirty()`: it may sit inside a pass.
 9. **Selection changes go through `editSelection` (D43).** It diffs the selection before / after by tile and records presence, so undo
-   restores "no selection" too. Tools build a document-sized shape and call `applySelectionShape(shape, mode, label, feather)`; read
+   restores "no selection" too. An all-zero selection is no selection: `editSelection` drops it after the edit and `setView` on leaving
+   Quick Mask (V90 — a subtract with nothing selected used to leave one that showed no ants while every verb did nothing until Esc). Tools build a document-sized shape and call `applySelectionShape(shape, mode, label, feather)`; read
    values with `selectionValues()` / `toRaw()` (red × alpha), never the red channel alone.
 10. **`Ctrl+V` is not a registry key path (D46).** The key handler lets it through so the browser fires `paste` (which carries images
    from other apps without a permission prompt); `handleKeyFor` would `preventDefault` it. The Paste command keeps `Ctrl+V` as its
@@ -63,8 +66,9 @@ Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (l
 11. **A mask renders through `derivedMask` (D52).** Anything that shows or bakes a mask (the scene's mask sprites, merge down, Apply mask)
    takes `derivedMask(raw, node.mask)`, never the raw canvas, so density and feather match `compose.derived_mask` (same box radii, same
    rounding). The tools paint the raw mask; `LayerPixels.version` / `takeDamage()` tell the cache what to re-derive, so every write to a
-   mask must end in `refresh()` or `refreshRect()`. Outside its extent a mask reads `mask.default` (D54): `maskSprite` pads with a pass
-   when the content reaches past the extent, `maskAlphaCanvas` does the same for baking.
+   mask must end in `refresh()` or `refreshRect()`. Outside its extent a mask reads `outsideValue(mask)` — `mask.default` through the
+   density, as `compose.py` pads (D54, V89): `maskSprite` pads with a pass when the content reaches past the extent and the value is
+   not zero, `maskAlphaCanvas` does the same for baking.
 12. **Mask target and colours (D54).** `editingMask` is app-wide; a store subscription clears it when the active layer has no mask and
    swaps `brush.color / background` with `otherColours` whenever the live target changes between pixels and a mask (or Quick Mask) —
    so tools just read `brush`; mask strokes paint `lumaOf(colour)`, never a fixed white / black. Persisted state keeps the image pair in

@@ -1,6 +1,6 @@
 # loom2 — notes for coding agents
 
-Verified at a4b4cfb on 2026-10-10.
+Verified at e66a779 on 2026-10-27.
 
 loom2 is a local AI image and video studio for storyboard pre-production, running on one Windows machine with an AMD RX 9070 XT
 (16 GB, ROCm). It has a Tauri 2 shell, a React/TS frontend, a Python orchestrator (FastAPI) and a pinned ComfyUI used headless as
@@ -21,11 +21,11 @@ the engine. The author works mouse-first and is EU-based.
 
 | What | Command |
 | --- | --- |
-| Offline tests (620+, ~3.5 min) | `orchestrator/.venv/Scripts/python.exe -m pytest orchestrator -q` |
+| Offline tests (660+, ~3.5 min) | `orchestrator/.venv/Scripts/python.exe -m pytest orchestrator -q` |
 | Photoshop oracle (D40) | `python scripts/fetch_corpus.py` once, then `… -m pytest orchestrator -m corpus -s` (needs `--extra oracle`); floor in `bench/corpus/psd-tools.floor.json` |
 | Frontend typecheck + build | `cd frontend; npm run build` (`tsc -b` + `vite build`) |
 | Lint (frontend) | `cd frontend; npm run lint` (oxlint) |
-| Frontend tests (D68) | `cd frontend; npm test` (Vitest, ≈ 2 s) · `npm run build:e2e; npm run test:e2e` (Playwright on Edge against the orchestrator + fake engine, ≈ 20 s; needs 1420 free) · `npm run perf` then `python scripts/perf_compare.py` |
+| Frontend tests (D68) | `cd frontend; npm test` (Vitest, 560+ tests, ≈ 8 s) · `npm run build:e2e; npm run test:e2e` (Playwright on Edge against the orchestrator + fake engine, 74 scenarios, ≈ 6 min; needs 1420 free — run it alone, it flakes under load) · `npm run perf` then `python scripts/perf_compare.py` |
 | Agent-doc path check | `orchestrator/.venv/Scripts/python.exe scripts/agents_check.py` |
 | Settings audit (D60) | `orchestrator/.venv/Scripts/python.exe scripts/settings_audit.py` — every Settings field, recipe field and `/capabilities` parameter must reach the code that runs (allow-list with reasons) |
 | Model specs (D65) | `orchestrator/loom2/models/specs/*.toml` hold every model's knowledge; `orchestrator/.venv/Scripts/python.exe scripts/model_literals_check.py` (CI) fails on a model id in code. Add a model: `orchestrator/loom2/engine/AGENTS.md` |
@@ -33,14 +33,17 @@ the engine. The author works mouse-first and is EU-based.
 | Versions (D36) | `python scripts/bump_version.py --check` · `… patch\|minor\|major\|X.Y.Z` (rewrites every location from `VERSION`) |
 | Whole app | `scripts/dev.ps1` (Vite + shell + orchestrator; the engine starts on the first job) |
 | Browser dev | `scripts/dev.ps1 -Browser` → `http://127.0.0.1:1420/?token=devtoken&port=8766` |
-| Rig acceptance (GPU) | `scripts/m1_acceptance.py`, `m3_`, `m4_`, `m5_`, `m6_acceptance.py`, `m7_durability.py`, `lt_acceptance.py` (LoRA wave), `cn_acceptance.py --parts voice,animate,episode,extend,lipsync` (wave CN, D88), `cr_acceptance.py` (D89), `sm_acceptance.py` (sample models, D91) |
-| Headed editor / player checks | `scripts/edit_headed_check.py render\|paint\|kit\|layers\|props\|transform\|smartsel\|heal\|masks\|aipanel\|adjscreen\|media\|aiclick|keepalive|tour\|tour\|cmpdiag\|grid\|brush\|selection\|psd\|animate\|perf\|pip` (visible Edge, needs Vite on 1420; `psd` needs `uv sync --project orchestrator --extra dev --extra oracle`) |
+| Rig acceptance (GPU) | `scripts/m1_acceptance.py`, `m3_`, `m4_`, `m5_`, `m6_acceptance.py`, `m7_durability.py`, `lt_acceptance.py` (LoRA wave), `cn_acceptance.py --parts voice,animate,episode,extend,lipsync` (wave CN, D88), `cr_acceptance.py` (D89), `sm_acceptance.py` (sample models, D91); every later wave has its own (`st_`, `sy_`, `ca0_`–`ca5_`, `cs1_`, `cs3_`, `cw6_`, `cw7_`, `pf1_`, `ae5_`, `au_`, `ce1_`–`ce5_acceptance.py`); one GPU job at a time (rule 10) |
+| Engine by hand | `scripts/engine-start.ps1` runs the orchestrator's own launch (`python -m loom2.engine.supervisor --argv`, V44) so a hand-started engine writes where the finishers read; `engine-stop.ps1` |
+| Sidecar pins | `scripts/build_effectcraft.py --check`, `build_filmcraft.py --check`, `build_vsthost.py --check` (CI): the pin is well formed and matches the built CLI / host when it is present |
+| Headed editor / player checks | `scripts/edit_headed_check.py render\|paint\|kit\|layers\|props\|transform\|smartsel\|heal\|masks\|aipanel\|adjscreen\|media\|aiclick\|keepalive\|tour\|cmpdiag\|grid\|brush\|selection\|psd\|animate\|perf\|pip` (visible Edge, needs Vite on 1420; `psd` needs `uv sync --project orchestrator --extra dev --extra oracle`) |
 | CSP check of the production build | `scripts/csp_check.py` (headless Edge; incl. the smart-select Worker's WebAssembly) |
 | Content-aware wheel (D62) | `python scripts/build_pcalgo.py --check` (CI); installed by `uv sync --project orchestrator --extra native`; rebuild only when the PhotoCraft pin moves: `python scripts/build_pcalgo.py` then `uv lock --project orchestrator`. Rig: `scripts/d62_remove_rig.py` |
 | Smart-select WebAssembly (D59) | `python scripts/build_pcwasm.py --check` (CI); rebuild only when the PhotoCraft pin moves: `python scripts/build_pcwasm.py` (needs the PhotoCraft checkout beside this repository at the pin and `rustup target add wasm32-unknown-unknown`) |
 
-CI (`.github/workflows/ci.yml`) runs the offline suite and the frontend build for both variants (`full`, `open`) on every push and
-pull request, and builds both installers on pushes to `main` and on tags.
+CI (`.github/workflows/ci.yml`) runs the offline suite, the frontend build, lint, Vitest, the e2e, the CSP check and the API contract for
+both variants (`full`, `open`) plus a `cargo check` of the shell on every push and pull request, and builds the two shell-only
+installers (they need a checkout prepared by `scripts/setup.ps1` beside them, C22 / V46) for a tag's draft release.
 
 ## House rules
 

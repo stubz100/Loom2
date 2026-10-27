@@ -1,6 +1,6 @@
 # orchestrator — notes for coding agents
 
-Verified at 07cb440 on 2026-10-10. Specs: `.docs/proto01/06-architecture.md` (processes, storage, data model, API, flows).
+Verified at e66a779 on 2026-10-27. Specs: `.docs/proto01/06-architecture.md` (processes, storage, data model, API, flows).
 
 Python 3.13 package `loom2`, managed by uv (`orchestrator/pyproject.toml`, `orchestrator/uv.lock`). Torch-free: the GPU lives in the
 engine process (`engine/`). Run as `python -m loom2.main --port N [--state DIR] [--project DIR]`; it prints a `LOOM2_READY {json}`
@@ -12,10 +12,10 @@ line that the Tauri shell (`frontend/src-tauri/src/lib.rs`) parses for the port 
 | --- | --- |
 | `api.py` | `create_app()`: lifespan, CORS, the token gate, error → status mapping, includes `routes.ROUTERS` (D37) |
 | `services.py` | `Services`: app state, event hub, roster, engine supervisor and the open project's stores; `require_project/groups/documents` |
-| `routes/` | one `APIRouter` per domain (`meta`, `settings`, `projects`, `assets`, `groups`, `documents`, `clips`, `jobs`, `models`, `engine`, `blobs`, `events_ws`); request models live with their routes; `deps.py` gives handlers `svc: Svc` |
+| `routes/` | one `APIRouter` per domain, included in this order (`routes/__init__.py ROUTERS`): `meta`, `settings`, `projects`, `assets`, `groups`, `documents`, `clips`, `timelines`, `stages`, `finals`, `ideas`, `story`, `motion`, `jobs`, `models`, `engine`, `blobs`, `retouch`, `preset_icons`, `audio`, `events_ws`; request models live with their routes; `deps.py` gives handlers `svc: Svc` |
 | `capabilities.py` / `build_info.py` | the `/capabilities` document (07 §3d) and the `/version` facts (D36) |
 | `schemas.py` | response models (D38): `Out` (strict, every field present) and `Open` (composite dicts: extra fields pass, defaulted fields optional); the WebSocket event frames (`EVENT_FRAMES`) |
-| `queue.py` | `JobQueue` / `JobRecord`: durable queue (written off the loop: `persist()` → one writer, `await flush()`), admission (models, disk guard, VRAM), warm-group scheduling, the run loop `_run_one` (plan → finalize → submit → follow → finish → `_complete`, D64) |
+| `queue.py` | `JobQueue` / `JobRecord`: durable queue (written off the loop: `persist()` → one writer, `await flush()`), admission (`check()` is what `submit` would refuse — the models, the mentions, the disk guard — so a batch leaves no job behind, V3; VRAM), `job_live`, the origin hook on every terminal transition that is not *done* (`_origin_stopped`: a record waiting on the job lets go, V21; the job's temp folders go, V37), `_outputs_after_success` (the `/history` read, a few times, V18), warm-group scheduling, the run loop `_run_one` (plan → finalize → submit → follow → finish → `_complete`, D64) |
 | `engine/` | ComfyUI client, supervisor, recipe → graph builders, contract checks; the job pipeline (`pipeline.py`, `follow.py`, `finishers.py`, D64) — see `orchestrator/loom2/engine/AGENTS.md` |
 | `recipes.py` | pydantic recipes `T2I`, `I2I`, `Inpaint`, `Upscale`, `Segment`, `I2V` (discriminated on `kind`), sampler enums, `warm_group` |
 | `roster.py` | `ROSTER` (every weight file: repo, folder, licence, variants, retired), scan / resolve / sha256 ledger |
@@ -32,8 +32,18 @@ line that the Tauri shell (`frontend/src-tauri/src/lib.rs`) parses for the port 
 | `usedby.py` | D92 §4.2: what uses an album group (a Cast version's references / candidates, a style, a Flow board, a Stage page, a library entry) — computed from the records on request (`GET /groups/used-by`, `deep` adds the groups inside), nothing stored |
 | `relief.py` / `set_things.py` | SC3 (D120): what a MoGe relief GLB says (the lens, the floor, the depth) and its vertex / UV reader; D123 (SC3c): a picture set's things — its own document (SAM 3 finds a thing there: `/stages/{id}/sets/{set}/things/find`), the kept masks, *Make*: the Fill under them (`set_clean` → `clean_plate`), then from its finisher the relief's rebuild (`set_rebuild`) and a Pixal3D model per cut-out (`set_thing_model` → `model_landed` → `stand`: E30's footprint on the relief it was picked on, `carried` to the set's relief now by its pixel (projected with the old lens, cast with the new onto the new floor — SC3f), each thing's `placed` transform kept and `restand_things` standing again after a rebuild every prop not moved by hand; `model_bounds` from the vertices through the GLB's node transforms); SC3d: `floor_fit` (a seeded RANSAC over near-level planes, then least squares in a narrowed band — the one floor the levelling and the footprints share), `levelling` / `level_of_glb` (the set turned — about z, then x: `turn` is three's Euler XYZ — and raised so that floor is the stage floor, the picture camera pitched and rolled to match, `camera_roll`; D124: `shadows_of`; the store applies it in `add_image_set` / `replace_image_set` when given the relief), `to_stage`; SC3e: `subject_distance` / `frame_of_glb` (the picture camera's target where Stage's depth pass holds the picture's depths); a final on such a stage has a `picture` plate (`finals.picture_plate`), rendered by the client |
 | `events.py` | `EventHub`: WebSocket fan-out with seq numbers, a 200-frame history replayed to a reconnecting client from the seq it names (`replay`; V65: a gap → the client reloads), binary previews |
-| `fsio.py` | `atomic_write_json/bytes/text`, `atomic_copy/move`, `read_json`, `new_id` |
-| `tools/` | `facesim.py` (advisory identity), `fetch.py` (weights), `pngmeta.py` (import metadata) |
+| `main.py` / `parent.py` | the entry point: `ReadyServer` prints `LOOM2_READY` once uvicorn has run the lifespan *and* bound the socket (V53); `--parent-pid` ends the process when that parent is gone (`process_alive`, `watch_parent`, V54 — the e2e runner has no job object) |
+| `origin.py` | D66: `JobOrigin {suite, surface, ref, payload}` — where a job came from, echoed on the job, its events and the assets it makes; the finishers route results back by it |
+| `stages.py` / `set_fit.py` / `place_sets.py` / `sizes.py` / `body.py` / `motion.py` | the 3D blocking documents `stages/<id>.json` (objects, cameras, keyframes, passes; `StaleStage` → 409; the pose library `stages/poses.json` with its revision, V28); CW6: a place's set fitted to its picture (MoGe-2 → `set_fit`), baked, filled face by face (`place_sets`: `prepare_fill` → `start_fill` on the loop, `fill_landed`, `NothingToFill` says why); CW4: a prop's height from its words; CA0: a character's body on its Cast version and the bound figure; CA1: the motion library's files |
+| `story.py` / `ideas.py` / `shot_recipe.py` / `shot_graph.py` | Story (17, D85): the world, profiles with versions (`StoryStore`, `StaleProfile` → 409; CW6 `set_place_set` / `set_baked_faces` / `update_face`), shots with takes, the Flow, the Episode; `cast_uses` (Cast's readiness); CW1–CW2: ideas on their own album pages (`IdeaStore`, the clay steps `start_step` / `start_next`); RC0 / RC1: a shot version's recipe as a plan with its history and as a graph built on request |
+| `loras.py` / `trainer.py` / `voices.py` / `lipsync.py` / `heads.py` | LT1 / LT2: the LoRA slots, `publish` (the project's trained LoRAs onto the roster — after every scan, `Services.publish_trained`, V2) and the `train_lora` job (ai-toolkit in `trainers/.venv`); CN2: voices (Kokoro / cloning in `voices/.venv`); AE4c / AE4d: the head as its own layer and the lip-sync tool (LatentSync in `tools/lipsync/.venv`, `full` only) |
+| `finals.py` / `final_assembly.py` / `compositions.py` / `effectcraft.py` | D111 (PS5): the final shot — `finals/<id>/final.json` with one layer per entity, its passes, takes, keyframes (`FinalStore`, under one lock, `add_job` appends to a layer's jobs as they are now, V34); PS5e: the assembly on the CPU (`mix_audio`, `conform_24` under a watchdog, V35); AE1 (D114): the composition, an EffectCraft project beside the final (`CompositionStore`), and the EffectCraft session (`effectcraft-cli mcp`; `release` lets go of a project before its folder goes, V43) |
+| `timelines.py` / `cuts.py` / `filmcraft.py` / `vsthost.py` | P17 / D83: the single-lane sequence documents; CE1–CE5 (D126): the cut as a FilmCraft project (`Cuts`: the tracks, edits, prints, the mix by revision and loudness `mix_name`, captions, exports through `_export` — a timeout is a `CutError`, V40) and the FilmCraft session; D127 (AU3): loom2's own VST3 host as a sidecar (`VstHost.render` refuses a gain that is not a number, V56) |
+| `mcp_session.py` | the sidecar sessions' base (`McpSession`: one `<engine>-cli mcp` process, JSON-RPC over stdio, a lock, the project it holds reopened after a restart); an EOF under a request marks the error `ended`, and `call` / `tool` with `replay` send an idempotent request once more after the restart (V97) |
+| `poisson.py` / `tone.py` | Edit's AI paste-back: gradient-domain blending (D47) and Reinhard colour matching (D48) |
+| `fsio.py` | `atomic_write_json/bytes/text`, `atomic_copy/move`, `replace` / `unlink` (with retries, D42), `read_json`, `new_id` |
+| `tools/` | `facesim.py` (advisory identity), `fetch.py` (weights), `pngmeta.py` (import metadata), `outline.py` (a mask's outline as a polygon, D116), `upright.py` (a model's turn from its reference view undone, D109) |
+| `models/` | D65: `spec.py` (`ModelSpec`, what loom2 knows about a model, as data) and `registry.py` (the specs loaded from `specs/*.toml`, validated against the roster; `default_model`, `image_specs`, `video_specs`, `offered`) |
 | `native.py`, `heal.py` | D62: the optional PhotoCraft extension (content-aware fill, PatchMatch) and Spot Healing on top of it |
 
 ## Native extension (D62)
@@ -47,12 +57,16 @@ must answer cleanly when it is absent; `/capabilities.content_aware.available` t
 
 1. **Files are truth.** Asset sidecars, `groups/*.json`, documents, `jobs/queue.json` and `project.json` are authoritative; `catalogue.sqlite`
    is an index that `Catalogue.rebuild()` regenerates. Every write goes through `fsio` (temp → fsync → replace); every record has a
-   `schema_version`; a corrupt state file is quarantined, not trusted.
+   `schema_version`; a corrupt state file is quarantined, not trusted (`catalogue.sqlite`, `queue.json`, the preset icons' index, `app.json`
+   since V5, a group file that is not JSON since V6 — moved aside as `<name>.corrupt-<stamp>`; a *transient* read failure of a group file
+   stops the load instead of restructuring the album).
 2. **Durability.** After an unclean shutdown the queue loads paused with running jobs re-queued (`retry_count += 1`); non-resumable jobs
    fail. Never mark a job done before its outputs are moved into the project and the manifest is written.
 3. **Async discipline (D37).** FastAPI handlers run on the event loop; SQLite and file work belongs in `await asyncio.to_thread(...)`.
-   The catalogue (one connection behind an `RLock`, `check_same_thread=False`) and the group store lock themselves; **`JobQueue` is not
-   thread-safe** — call it on the loop; `DocumentStore` has no lock — only its `get` / `save` / `flatten` and pure encodes go to threads.
+   The catalogue (one connection behind an `RLock`, `check_same_thread=False`), the group store, `StoryStore` and `FinalStore` (V34: every
+   read-modify-write of a final under one lock, `add_job` appends a job as the layer is now) lock themselves; **`JobQueue` is not
+   thread-safe** — call it on the loop (a finisher's chain submits on the loop and stages the job until its record names it, V22);
+   `DocumentStore` has no lock — only its `get` / `save` / `flatten` and pure encodes go to threads.
 4. **Routes:** a new endpoint goes into the domain module under `routes/` (or a new module added to `routes.ROUTERS`). Register literal
    paths before parameterised ones (`/assets/counts` before `/assets/{asset_id}`); `tests/test_routes_d37.py` checks the order and the
    route table against `tests/fixtures/routes_d37.json` — update the snapshot in the same commit when you add or remove a route.
@@ -75,8 +89,10 @@ must answer cleanly when it is absent; `/capabilities.content_aware.available` t
   `-m 'not rig'`, so GPU tests (`@pytest.mark.rig`) never run by default.
 - Fixtures: `conftest.py` (`object_info` from `tests/fixtures/object_info.json`, a fake `models_tree`); `test_lifecycle.Rig` builds a
   real supervisor + queue against `tests/fake_comfy.py` (`FakeComfy` modes `success`, `silent` for the stall watchdog, `error`).
-- Test files are named by milestone (`test_*_m2` … `test_durability_m7`), review register (`test_review_c.py`) or decision
-  (`test_groups_d34.py`, `test_te_gguf.py`). A bug fix adds a regression test named after its register id.
+- Test files are named by milestone (`test_*_m2` … `test_durability_m7`), review register (`test_review_c.py`, `test_review_v.py` — the
+  2026-10-27 register, one test per fixed finding, `_project(tmp_path)` opens a project once) or decision (`test_groups_d34.py`,
+  `test_te_gguf.py`). A bug fix adds a regression test named after its register id. Route paths come from `app.url_path_for(name)`;
+  D65's `model_literals_check.py` reads the tests too, so a test names made-up model ids.
 - Rig scripts in `scripts/` (`m1_acceptance.py` …) drive a live orchestrator and engine; their results go to the journal.
 
 ## Footguns
@@ -89,3 +105,7 @@ must answer cleanly when it is absent; `/capabilities.content_aware.available` t
 - `fsio.replace` retries with `time.sleep` (up to ~0.63 s) while antivirus or the indexer holds the target. `JobQueue.persist()` calls it
   on the event loop (the queue is loop-only), so a held `queue.json` stalls the loop that long; anything new that writes from an async
   handler goes through `asyncio.to_thread` (as `blob_put` does since review R8).
+- `.gitattributes` wants LF for the source (`*.ps1` CRLF): a script that rewrites a file passes `newline="\n"` to `write_text`, or the
+  working copy turns CRLF (2026-10-27). Never convert line endings across the tree.
+- The engine's `free(unload_models=False, free_memory=True)` unloads every model on the pinned ComfyUI (`follow.free_cache`, V13): a rig
+  measurement before changing what the document, clip and refcontrol finishers free.

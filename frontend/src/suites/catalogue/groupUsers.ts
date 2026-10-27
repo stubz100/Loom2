@@ -5,13 +5,14 @@
 import { http, unwrap } from '../../api/client'
 import type { GroupUser } from '../../api/types'
 import { askConfirm, useSession } from '../../store/session'
-import { goToStory } from '../../store/origin'
+import { goToIdea, goToStory } from '../../store/origin'
 
-/** One user in words: "Mara v1 · references", "Style · Ink wash", "Flow · Arrival · board", "Stage · Pier", "Library · dusk". */
+/** One user in words: "Mara v1 · references", "Idea · Mara", "Style · Ink wash", "Flow · Arrival · board", "Stage · Pier", "Library · dusk". */
 export function userLabel(u: GroupUser): string {
   switch (u.kind) {
     case 'profile_ref': return `${u.name} ${u.extra} · references`
     case 'profile_candidates': return `${u.name} ${u.extra} · candidates`
+    case 'idea': return `Idea · ${u.name}`                                      // V26: an idea's page holds its variants
     case 'style': return `Style · ${u.name}`
     case 'flow_board': return `Flow · ${u.name} · board`
     case 'stage': return `Stage · ${u.name}`
@@ -21,7 +22,7 @@ export function userLabel(u: GroupUser): string {
 
 /** Where a link goes, for its tooltip. */
 export function userPlace(u: GroupUser): string {
-  return u.kind === 'profile_ref' || u.kind === 'profile_candidates' ? 'Story · Cast' : u.kind === 'style' ? 'Story · World › Styles'
+  return u.kind === 'profile_ref' || u.kind === 'profile_candidates' ? 'Story · Cast' : u.kind === 'idea' ? 'Story · Cast › Ideas' : u.kind === 'style' ? 'Story · World › Styles'
     : u.kind === 'library' ? 'Story · World › Library' : u.kind === 'flow_board' ? 'Story · Flow' : 'Stage'
 }
 
@@ -42,6 +43,7 @@ export function usedByWarning(users: GroupUser[], action: 'delete' | 'ungroup', 
 /** Open the user where it lives: Cast at the version, World at the style or the library, Flow at the node, the Stage. */
 export function openUser(u: GroupUser): void {
   if (u.kind === 'profile_ref' || u.kind === 'profile_candidates') return goToStory({ tab: 'cast', id: u.id, version: u.version })
+  if (u.kind === 'idea') return goToIdea(u.id)
   if (u.kind === 'style') return goToStory({ tab: 'world', id: u.id })
   if (u.kind === 'flow_board') return goToStory({ tab: 'flow', id: u.id })
   if (u.kind === 'library') {

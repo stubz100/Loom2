@@ -15,7 +15,7 @@ from .stages import StageStore
 from .story import StoryStore
 from .workspace import Workspace
 
-UserKind = Literal["profile_ref", "profile_candidates", "style", "flow_board", "stage", "library"]
+UserKind = Literal["profile_ref", "profile_candidates", "idea", "style", "flow_board", "stage", "library"]   # V26: an idea's page
 
 
 class GroupUser(BaseModel):
@@ -33,7 +33,7 @@ class GroupUser(BaseModel):
 
 
 def all_users(ws: Workspace) -> dict[str, list[GroupUser]]:
-    """Every group a record names → its users, in a fixed order (Cast, styles, Flow, Stage, library)."""
+    """Every group a record names → its users, in a fixed order (Cast, ideas, styles, Flow, Stage, library)."""
     out: dict[str, list[GroupUser]] = {}
 
     def add(gid: str | None, **u) -> None:
@@ -46,6 +46,9 @@ def all_users(ws: Workspace) -> dict[str, list[GroupUser]]:
             label = v.label or v.id
             add(v.group_id, kind="profile_ref", id=p.id, name=p.name, extra=label, version=v.id, cls=p.cls)
             add(v.candidates_group_id, kind="profile_candidates", id=p.id, name=p.name, extra=label, version=v.id, cls=p.cls)
+    from .ideas import IdeaStore                                                   # V26: an idea's page holds its variants (add_variant copies there)
+    for i in sorted(IdeaStore(ws).list(), key=lambda i: i.name.casefold()):
+        add(i.group_id, kind="idea", id=i.id, name=i.name, cls=i.cls)
     for s in store.world().styles:
         add(s.group_id, kind="style", id=s.id, name=s.name)
     for n in sorted(store.flow_nodes().values(), key=lambda n: (n.title.casefold(), n.id)):

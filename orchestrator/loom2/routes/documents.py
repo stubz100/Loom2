@@ -86,7 +86,11 @@ async def documents_get(svc: Svc, doc_id: str):
 async def documents_put(svc: Svc, doc_id: str, body: dict):
     """Replace the stack. The reply lists raster layers / masks the server has no bytes for, so the editor uploads
     them before `/save` even when it does not consider them dirty (B15: delete · save · undo · save)."""
-    od = await asyncio.to_thread(svc.require_documents().update_stack, doc_id, body)
+    from pydantic import ValidationError
+    try:
+        od = await asyncio.to_thread(svc.require_documents().update_stack, doc_id, body)
+    except (ValidationError, ValueError) as e:                                 # V41: a stack the model refuses is the client's error, not a 500
+        raise HTTPException(422, str(e)[:600])
     px, mk = od.missing_pixels()
     return od.doc.model_dump() | {"missing_pixels": px, "missing_masks": mk}
 

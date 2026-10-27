@@ -217,14 +217,13 @@ class IdeaStore:
         prompt = ""
         if asset_id:
             rec = groups.cat.get(asset_id)
-            prompt = (rec.prompt_text or "") if rec else ""
+            if rec is None or rec.kind != "image":                                       # V31: checked before the idea's page is made (no orphan page)
+                raise ValueError("a variant is a picture in the Catalogue")
+            prompt = rec.prompt_text or ""
         nm = (name or "").strip() or name_from_prompt(prompt, cls)
         g = groups.create(f"{nm} · idea")
         idea = Idea(cls=cls, name=nm[:80], note=note, group_id=g.id)
         if asset_id and move:
-            rec = groups.cat.get(asset_id)
-            if rec is None or rec.kind != "image":
-                raise ValueError("a variant is a picture in the Catalogue")
             groups.move([("asset", asset_id)], g.id)
             groups.update(g.id, cover_id=asset_id)
             v = Variant(asset_id=asset_id, made_from=made_from(rec))

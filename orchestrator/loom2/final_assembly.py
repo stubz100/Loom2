@@ -123,6 +123,8 @@ def mix_audio(timing: list[dict[str, Any]], seconds: float, out: Path) -> Path |
         if not p.is_file() or a["out"] <= a["in"]:
             continue
         data, sr = sf.read(str(p), dtype="float32", always_2d=True)
+        if data.shape[1] > 2:                                                   # V38: a sentence, not numpy's broadcast error
+            raise ValueError(f"{p.name} has {data.shape[1]} channels — a line's audio is mono or stereo")
         tracks.append((a, data, sr))
     if not tracks:
         return None

@@ -55,6 +55,15 @@ class EffectCraft(McpSession):
             self._tool_locked("open_project", {"path": want})
             self.project = want
 
+    def release(self, path: str | Path) -> bool:
+        """V43: let go of this .ecproj when the session holds it — the session ends (the next use starts it again and opens what it asks
+        for) — before the project's folder is deleted. True when it was held."""
+        with self._lock:
+            held = self.project == str(path)
+        if held:
+            self.stop()
+        return held
+
     def open(self, path: str | Path) -> None:
         """Hold this .ecproj open in the session (a no-op when it already is)."""
         path = str(path)

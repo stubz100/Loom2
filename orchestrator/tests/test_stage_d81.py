@@ -86,10 +86,10 @@ def test_pose_library_routes(tmp_path: Path):
     H = {"X-Loom-Token": app.state.services.app.token}
     with TestClient(app) as cl:
         cl.post("/project", json={"path": str(tmp_path / "proj"), "name": "S", "size_cap_gb": 10}, headers=H)
-        assert cl.get("/stages/poses", headers=H).json() == {"poses": {}}
+        assert cl.get("/stages/poses", headers=H).json()["poses"] == {}
         lib = {"poses": {"salute": {"preset": "stand", "joints": {"r_shoulder": [-150, 0, -20], "r_elbow": [-120, 0, 0]}}}}
         assert cl.put("/stages/poses", json=lib, headers=H).status_code == 200
-        assert cl.get("/stages/poses", headers=H).json() == lib
+        assert cl.get("/stages/poses", headers=H).json()["poses"] == lib["poses"]
         assert cl.put("/stages/poses", json={"poses": {"bad": {"joints": {"head": [1, 2]}}}}, headers=H).status_code == 422
         assert (Workspace(tmp_path / "proj").stages_dir / "poses.json").is_file()
         # the literal route is not shadowed by /stages/{st_id}

@@ -484,7 +484,7 @@ async def profile_body_refit(svc: Svc, pid: str, vid: str, body: BodyRefit):
         raise HTTPException(422, "only a character has a body to fit")
     person = person_of(body.points)
     try:
-        measured = reference_ratios(person)
+        measured = await asyncio.to_thread(reference_ratios, person)
     except ValueError as e:
         raise HTTPException(422, str(e))
     before = v.body_points or {}
@@ -497,7 +497,10 @@ async def profile_body_refit(svc: Svc, pid: str, vid: str, body: BodyRefit):
             _changed(svc, p)
         raise HTTPException(422, ARMS_DOWN)
     cur = v.body or Body()
-    fitted, report = fit_body(measured, cur, cur.locks)
+    try:
+        fitted, report = await asyncio.to_thread(fit_body, measured, cur, cur.locks)        # V29: ≈ 70 ms of least squares, off the loop
+    except (ValueError, ArithmeticError) as e:                                             # a degenerate measure is the reference's fault, not a 500
+        raise HTTPException(422, f"the reference cannot be fitted: {e}")
     pts = {**{k: x for k, x in body.points.items() if k != "sdpose"}, "canvas": body.points.get("canvas") or before.get("canvas") or [], "sdpose": sdpose}
     p = await asyncio.to_thread(store.set_fitted_body, pid, v.id, fitted, v.body_fit_from or v.anim_ref_asset_id or "", pts, note)
     _changed(svc, p)
@@ -684,15 +687,19 @@ async def profile_model_import(svc: Svc, pid: str, vid: str, body: PropModelImpo
     orientation and scale), then set on the version. Any build: no model weights involved."""
     from .assets import check_glb
     ws, cat, _ = svc.require_project()
+    p = await asyncio.to_thread(StoryStore(ws).profile, pid)                              # V31: the profile, its version and its class first —
+    if p is None:                                                                          # a refusal after the ingest left an orphan mesh
+        raise HTTPException(404, "profile not found")
+    try:
+        p.version(vid)
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    if p.cls != "prop":
+        raise HTTPException(422, "only a prop has a 3D model (a character has its body, a place its set)")
     src = Path(body.path.strip().strip('"'))
     if not src.is_file() or src.suffix.lower() != ".glb":
         raise HTTPException(422, f"not a .glb file: {body.path}")
     check_glb(src)
-    p = await asyncio.to_thread(StoryStore(ws).profile, pid)
-    if p is None:
-        raise HTTPException(404, "profile not found")
-    if p.cls != "prop":
-        raise HTTPException(422, "only a prop has a 3D model (a character has its body, a place its set)")
     rec = await asyncio.to_thread(cat.ingest_file, src, kind="mesh", move=False, suite="story",
                                   params={"imported_from": str(src), "format": "glb", "profile_id": pid, "version": vid})
     svc.hub.broadcast("asset.created", rec.model_dump())

@@ -265,6 +265,11 @@ export function createCatalogueStore(name: string, defaults: Partial<Query> = {}
           if (s.q.folder === 'trash' || (s.counts.trash ?? 0) > 0) refreshMetaSoon(get)          // a purge: the Trash count
         } else if (f.type === 'asset.created') {
           if (s.q.folder === 'trash' || s.q.search || s.q.collection_id || s.q.group_id) return      // new items land in Unprocessed (D34)
+          // V66: a list of one kind, suite or folder takes only what belongs to it (a clip never lands in Generate's results or an images folder)
+          const fits = (!s.q.kind || d.kind === s.q.kind) && (!s.q.suite || d.suite === s.q.suite)
+            && (s.q.folder === 'images' ? d.kind === 'image' : s.q.folder === 'clips' ? d.kind === 'video' : true)
+          if (!fits) { void s.refreshMeta(); return }
+          if (s.q.folder === 'documents' || s.q.folder === 'imported') { void s.load({ keepSelection: true }); void s.refreshMeta(); return }   // the server knows what belongs there
           if (s.q.group === 'none') {
             if (s.q.sort === 'created_desc') set({ items: [d as Asset, ...s.items], total: (s.total ?? 0) + 1 })
           } else {

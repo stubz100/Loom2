@@ -158,6 +158,7 @@ interface StageState {
   posing: boolean                                           // D121: pose mode on the selected figure (the pose pill) — its joint pickers in the viewport
   setPosing: (on: boolean) => void
   userPoses: Record<string, PoseDef>                        // ST2: the project's saved poses (stages/poses.json)
+  posesRevision: number                                     // V28: the library's revision as read — a save names it (409 → reloaded)
   selectJoint: (j: string | null) => void
   /** A pose edit; AP1b: the pinned hands and feet stay (`moved`: the limb the author turned or dragged, whose pin goes with it; undefined =
    *  read from the joints that changed). */
@@ -398,9 +399,22 @@ async function flushSave(get: () => StageState, set: (p: Partial<StageState>) =>
 let shotPreviewSeq = 0
 const thumbed = new Set<string>()                                            // P18: mesh assets whose thumbnail this session already rendered
 
+/** V28: the pose library saved with the revision it was read at; 409 (another window saved meanwhile) reloads it and says so, and the
+ *  caller's change is not applied over it (the author makes it again on the library as it is now). */
+async function putPoses(poses: Record<string, PoseDef>, set: (p: Partial<StageState>) => void, get: () => StageState): Promise<void> {
+  try {
+    const lib = await unwrap(http.PUT('/stages/poses', { body: { revision: get().posesRevision, poses: poses as never } }))
+    set({ userPoses: lib.poses as unknown as Record<string, PoseDef>, posesRevision: lib.revision })
+  } catch (e) {
+    if ((e as ApiError).status !== 409) throw e
+    await get().loadPoses()
+    throw new ApiError(409, 'the poses changed meanwhile (another window saved) — reloaded; make the change again')
+  }
+}
+
 export const useStage = create<StageState>()((set, get) => ({
   stages: [], current: null, selected: null, selectedCamera: null, stageSelected: false, posing: false, tool: 'select', snap: false, view: 'free', guides: true, pip: true, undo: [], redo: [], saving: false,
-  frameRequest: { ids: null, n: 0 }, selectedJoint: null, userPoses: {}, templates: [], pendingSet: null,
+  frameRequest: { ids: null, n: 0 }, selectedJoint: null, userPoses: {}, posesRevision: 0, templates: [], pendingSet: null,
   shot: DEFAULT_SHOT, shotPreview: null, shotPreviewError: null, rendering: false, shots: [], passRenderer: null, worldOf: null,
   frame: 0, playing: false, guideKind: 'depth', clipMethod: 'guided', shotStart: null, rendered: null, sequenceRenderer: null, plateProjector: null,
   meshes: [],
@@ -691,7 +705,10 @@ export const useStage = create<StageState>()((set, get) => ({
   // AP1b: the pins mirrored with the joints (not re-solved: the mirrored ends are where the mirrored pins are)
   mirrorPose: (id) => editPose(get, id, (p) => ({ preset: p?.preset ?? 'stand', joints: mirrorJoints(effectiveJoints({ pose: p } as StageObject)), extra: p?.extra ?? {}, ground: p?.ground ?? 0, pins: mirrorPins(p?.pins as Pins) }), 'mirror pose'),
   resetPose: (id) => get().applyPose(id, 'stand', {}),
-  loadPoses: async () => { try { set({ userPoses: (await unwrap(http.GET('/stages/poses'))).poses as unknown as Record<string, PoseDef> }) } catch { set({ userPoses: {} }) } },
+  loadPoses: async () => {
+    try { const lib = await unwrap(http.GET('/stages/poses')); set({ userPoses: lib.poses as unknown as Record<string, PoseDef>, posesRevision: lib.revision }) }
+    catch { set({ userPoses: {}, posesRevision: 0 }) }
+  },
   loadTemplates: async () => { try { set({ templates: (await unwrap(http.GET('/project/stage-templates'))).templates }) } catch { set({ templates: [] }) } },
   saveTemplate: async (name) => {
     const cur = get().current
@@ -724,13 +741,13 @@ export const useStage = create<StageState>()((set, get) => ({
     const o = get().object(id)
     if (!o || !name.trim()) return
     const poses = { ...get().userPoses, [name.trim()]: { preset: o.pose?.preset ?? 'stand', joints: effectiveJoints(o) } }
-    try { set({ userPoses: (await unwrap(http.PUT('/stages/poses', { body: { poses: poses as never } }))).poses as unknown as Record<string, PoseDef> }); useSession.getState().toast(`Pose "${name.trim()}" saved to the project`, 'success') }
+    try { await putPoses(poses, set, get); useSession.getState().toast(`Pose "${name.trim()}" saved to the project`, 'success') }
     catch (e) { useSession.getState().toast(`Save pose failed: ${(e as ApiError).detail ?? e}`, 'error') }
   },
   deletePose: async (name) => {
     const poses = { ...get().userPoses }
     delete poses[name]
-    try { set({ userPoses: (await unwrap(http.PUT('/stages/poses', { body: { poses: poses as never } }))).poses as unknown as Record<string, PoseDef> }) }
+    try { await putPoses(poses, set, get) }
     catch (e) { useSession.getState().toast(`Delete pose failed: ${(e as ApiError).detail ?? e}`, 'error') }
   },
 

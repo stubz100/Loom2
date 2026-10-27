@@ -10378,3 +10378,45 @@ cause, with a test named after its id in `test_review_v.py` (and `eventsReplay.t
   a reconnect). Offline 635 passed, Vitest 548 + 3 skipped,
   typecheck, build and lint (0 errors, 79 warnings) clean, agents_check, settings_audit and model_literals_check clean, e2e full 74/74.
   Not changed: V13 and V81 (rig first), the lows.
+
+## 2026-10-27 15:47 — Fix group 6 (review V, journal 08:21): the server lows V26–V29, V31, V32, V37–V43 and the frame's lows V66–V68
+
+The lows of the Story, finals, cuts, documents and media sections, and the three left in the frame. Each at its cause, a test named
+after its id (`test_review_v.py` +13; `createdFrame.test.ts`, `fetchOrder.test.ts`, `keyboardMap.test.ts`).
+
+- **An idea's page is a used group (V26).** `usedby.all_users` lists the ideas (`kind: idea`; the group Inspector says *Idea · Mara*,
+  the link opens the Ideas board): deleting the page from the Catalogue says who loses it, as for a Cast version's references.
+- **A built set bound to a place is a place use (V27).** `cast_uses` reads a stage's `set` object bound to a profile as `how: place`
+  (it was `prop`, and `place` was never produced for a stage).
+- **The pose library has a schema version and a revision (V28).** `stages/poses.json` carries `schema_version` 1 and a `revision`;
+  a save names the revision it read (409 when another window's save came first — the store reloads and says so, the change is made
+  again on the library as it is), the reply carries the next.
+- **The refit off the loop, a degenerate measure a 422 (V29).** `reference_ratios` and `fit_body` (≈ 70 ms) run in a thread; a
+  `ValueError` / `ArithmeticError` from the fit is "the reference cannot be fitted: …", not a 500.
+- **No orphan on a refused import (V31).** `profile_model_import` checks the profile, its version and its class before the GLB is
+  ingested; `IdeaStore.create` checks the picture before the idea's page is made.
+- **Why nothing is filled (V32).** `prepare_fill` keeps why each face was passed over and raises `NothingToFill` with it: the picture
+  saw the faces well enough (a mask under the minimum), the faces are filled (name one to fill it again), or the bakes are gone — only
+  then "bake the set again". The chain's end logs it as such.
+- **A job's temp folders go with it (V37).** `JobQueue._sweep_job_temp` removes `<temp>/{assemble,comp-render,render,movie}-<job>`
+  and `<temp>/{ai,lipsync,tts}/<job>` on every terminal transition that is not *done* (the origin hook's place), and the reconcile at
+  load takes the folders of jobs that are not queued or running; the lip-sync run folder goes with the take finished (it never did).
+- **A surround WAV is a sentence (V38).** `mix_audio` refuses a line's audio with more than two channels by name and count.
+- **The mix by revision and loudness (V39).** `cuts.mix_name(revision, loudness)` — `12-auto.wav`, `12-m16.wav` — so a changed
+  loudness target is a new mix.
+- **An export timeout is a CutError (V40).** `Cuts._export` runs FilmCraft's export process for the print and the interchange; a
+  `TimeoutExpired` is "FilmCraft did not … within N s" (the route's 422).
+- **A bad stack is a 422 (V41).** `PUT /documents/{id}` maps pydantic's `ValidationError` (a layer kind the model does not know) to
+  422 with the reason.
+- **The plate layer carries its id (V42).** `check()` requires the plate and shadows layers to carry their kind's id, which the routes
+  and finishers find them by.
+- **A final deleted with its jobs (V43).** `DELETE /finals/{id}` cancels the final's live jobs (its layers' and every job made for it)
+  and `EffectCraft.release` lets the session go of its `.ecproj` (the session ends; the next use starts it again) before the folder goes.
+- **The frame (V66–V68).** A catalogue store takes an `asset.created` only when the asset belongs to its list (its kind, suite, the
+  images and clips folders; documents and imported ask the server). The queue and project fetched after a job frame are applied only
+  when nothing newer arrived (a later fetch, a `queue.state` / `project.*` frame). The global Ctrl chords answer outside fields only;
+  the menu key and the palette everywhere (D72), as the comment said; `onGlobalKeydown` is exported for its test.
+- The `UserKind` and `PoseLibrary` schemas changed: the OpenAPI document and `schema.d.ts` regenerated (D38). `test_stage_d81`'s poses
+  test reads the library's `poses`. Offline 648 passed (the full run 647 + 1 failed on `test_cuts_ce3`'s old mix name, its assertion moved to `mix_name` and rerun), Vitest 554 + 3 skipped, typecheck, build and lint (0 errors, 79 warnings)
+  clean, agents_check, settings_audit and model_literals_check clean, e2e full 74/74. Not changed: V13 and V81 (rig first), CI and the
+  shell (V46–V48, V52–V57), Story/Generate (V69–V77), stage (V84–V86, V88), Edit (V89–V96), V97.

@@ -164,6 +164,8 @@ def check(f: Final) -> None:
     for kind in ("plate", "shadows"):
         if sum(1 for x in f.layers if x.kind == kind) != 1:
             raise ValueError(f"a final has one {kind} layer")
+        if next(x for x in f.layers if x.kind == kind).id != kind:            # V42: the routes and finishers find them by id
+            raise ValueError(f"the {kind} layer's id is {kind!r}")
     for x in f.layers:
         if x.kind in ("figure", "prop") and not x.object_id:
             raise ValueError(f"layer {x.id}: a {x.kind} layer names its Stage object")

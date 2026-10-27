@@ -78,6 +78,11 @@ TAIL_S = 8.0                                       # AU4: a print runs this far 
 PRINT_BUS = "loom2 · printed sources"              # the muted submix a printed track plays into
 
 
+def mix_name(revision: int, loudness: float | None) -> str:
+    """V39: the cut's mix file, by revision and loudness target (`12-auto.wav`, `12-m16.wav` for −16 LUFS)."""
+    return f"{revision}-{'auto' if loudness is None else format(loudness, 'g').replace('-', 'm').replace('.', '_')}.wav"
+
+
 class CutError(ValueError):
     """A cut's project cannot be read or written as asked (the API answers 422)."""
 
@@ -986,8 +991,7 @@ class Cuts:
                                                               "endSeconds": max(1.0 / tl.fps, print_span(seq, t, companions))}})
             script = Path(tmp) / "print.jsonl"
             script.write_text("".join(json.dumps(s) + "\n" for s in steps), encoding="utf-8")
-            r = subprocess.run(export_argv(self.fc.settings, self.fc.app, p, script), capture_output=True, text=True, encoding="utf-8", errors="replace",
-                               timeout=self.fc.settings.timeout_s, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            r = self._export(p, script, "render the track's sound for its print")
             if r.returncode != 0 or not src.is_file():
                 raise CutError(f"FilmCraft did not render the track's sound for its print: {(r.stdout + r.stderr).strip().splitlines()[-1:] or r.returncode}")
             fx = [{"bundle": e["bundle"], "uid": e.get("uid") or "", "state": p.parent / e["state"] if e.get("state") else None} for e in active(chain)]
@@ -1166,16 +1170,28 @@ class Cuts:
         self._open(tl, change=False)
         return self.fc.frame(seconds, side)
 
+    def _export(self, p: Path, script: Path, what: str):
+        """V40: FilmCraft's export process (a script against the project) with its timeout — a timeout is a `CutError` (the route's 422,
+        with the seconds), not a `TimeoutExpired` the routes never mapped (a 500)."""
+        import subprocess
+        from .filmcraft import export_argv
+        try:
+            return subprocess.run(export_argv(self.fc.settings, self.fc.app, p, script), capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                  timeout=self.fc.settings.timeout_s, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        except subprocess.TimeoutExpired:
+            raise CutError(f"FilmCraft did not {what} within {self.fc.settings.timeout_s} s — the export was stopped")
+
     def mix(self, tl: Timeline, loudness: float | None) -> Path:
         """CE3: the cut's sound as FilmCraft mixes it — a WAV of every audio track (gain, fades, ducking, the tracks' volume), at the movie's
-        loudness — kept per revision in `timelines/<id>/mix/` (the older ones go): what the page plays with the picture."""
-        out = self.path(tl.id).parent / "mix" / f"{tl.revision}.wav"
+        loudness — kept per revision and loudness in `timelines/<id>/mix/` (the older ones go): what the page plays with the picture.
+        V39: the loudness is in the file's name — a changed target used to be served the old WAV."""
+        out = self.path(tl.id).parent / "mix" / mix_name(tl.revision, loudness)
         if out.is_file():
             return out
         self._open(tl, change=False)
         self.sync_prints(tl)                                # AU4: a track with effects is heard through its print
         out.parent.mkdir(parents=True, exist_ok=True)
-        part = out.with_name(f"{tl.revision}.part.wav")
+        part = out.with_name(out.stem + ".part.wav")
         self.fc.command("file.exportMedia", {"path": str(part), "format": "wav", "wait": True, **({"loudnessLufs": loudness} if loudness is not None else {})})
         part.replace(out)
         for old in out.parent.glob("*.wav"):
@@ -1203,8 +1219,7 @@ class Cuts:
                 steps.append({"id": "file.exportInterchange", "params": {"format": fmt, "path": str(part)}})
                 script = Path(tmp) / "interchange.jsonl"
                 script.write_text("".join(json.dumps(s) + "\n" for s in steps), encoding="utf-8")
-                r = subprocess.run(export_argv(self.fc.settings, self.fc.app, p, script), capture_output=True, text=True, encoding="utf-8",
-                                   errors="replace", timeout=self.fc.settings.timeout_s, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                r = self._export(p, script, "export the cut with its prints")
                 if r.returncode != 0 or not part.is_file():
                     raise CutError(f"FilmCraft did not export the cut with its prints: {(r.stdout + r.stderr).strip().splitlines()[-1:] or r.returncode}")
         part.replace(out)

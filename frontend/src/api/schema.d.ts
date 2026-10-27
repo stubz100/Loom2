@@ -807,7 +807,11 @@ export interface paths {
         get: operations["final_get_finals__fid__get"];
         put?: never;
         post?: never;
-        /** Final Delete */
+        /**
+         * Final Delete
+         * @description V43: the final's live jobs are cancelled (its layers' and every job made for it) and the EffectCraft session lets go of its
+         *     composition before the folder goes.
+         */
         delete: operations["final_delete_finals__fid__delete"];
         options?: never;
         head?: never;
@@ -7934,7 +7938,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "profile_ref" | "profile_candidates" | "style" | "flow_board" | "stage" | "library";
+            kind: "profile_ref" | "profile_candidates" | "idea" | "style" | "flow_board" | "stage" | "library";
             /** Name */
             name: string;
             /** Version */
@@ -10276,7 +10280,9 @@ export interface components {
         };
         /**
          * PoseLibrary
-         * @description ST2: the project's saved poses — name → {preset?, joints {joint: [x, y, z] degrees}} — kept as `stages/poses.json`.
+         * @description ST2: the project's saved poses — name → {preset?, joints {joint: [x, y, z] degrees}} — kept as `stages/poses.json`. V28: a
+         *     `schema_version` like every record, and a `revision` the client sends back (409 when the library changed meanwhile — a second
+         *     window's save is not lost under the first's).
          */
         PoseLibrary: {
             /**
@@ -10288,6 +10294,16 @@ export interface components {
                     [key: string]: unknown;
                 };
             };
+            /**
+             * Revision
+             * @default 0
+             */
+            revision?: number;
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version?: number;
         };
         /** PresetIcon */
         PresetIcon: {

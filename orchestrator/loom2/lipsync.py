@@ -223,7 +223,7 @@ async def run_mouth(job: "JobRecord", recipe: "LayerPass", q: "JobQueue") -> boo
         lines = [{"layer": t.get("layer"), "text": t.get("text"), "f0": max(0, int(round(float(t["in"]) * rate))), "f1": min(n, int(round(float(t["out"]) * rate)))} for t in timing]
         await finish_face_take(job, recipe, q, store, f, layer, take_dir, work, plan, mouth_heads,
                                {"mouth": "model", "mouth_s": seconds, "mouth_steps": int(settings.lipsync.steps), "lines": lines})
-        shutil.rmtree(rdir / "temp", ignore_errors=True)
+        shutil.rmtree(rdir, ignore_errors=True)                                 # V37: the run folder goes with the take finished
         return True
     except Exception:
         shutil.rmtree(take_dir, ignore_errors=True)

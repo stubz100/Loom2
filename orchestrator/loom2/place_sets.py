@@ -122,6 +122,11 @@ def fill_order(ps: PlaceSet, only: list[str] | None = None) -> list[str]:
     return [f.id for f in sorted(faces, key=lambda f: (f.bad or 0.0, f.id))]
 
 
+class NothingToFill(ValueError):
+    """V32: no face of the order wants a Fill — and why: the route's 422 says it (it used to say "the bakes are gone" for a face whose
+    mask is under the minimum, with the bakes right there)."""
+
+
 class FillPlan(NamedTuple):
     """A face's Fill prepared off the loop (V22): its document made from the bake, the recipe and the origin to submit."""
     pid: str
@@ -142,6 +147,7 @@ def prepare_fill(q: Any, pid: str, vid: str, order: list[str], seed: int | None 
         raise ValueError("the Edit documents are not open")
     store = StoryStore(q.ws)
     seed = seed or secrets.randbelow(2**31 - 2) + 1
+    why: set[str] = set()
     for k, fid in enumerate(order):
         p = store.profile(pid)
         if p is None:
@@ -149,16 +155,25 @@ def prepare_fill(q: Any, pid: str, vid: str, order: list[str], seed: int | None 
         v = p.version(vid)
         ps = v.place_set
         face = next((f for f in ps.faces if f.id == fid), None) if ps is not None else None
-        if face is None or (face.filled and not again) or not face.baked_asset_id or not face.coverage_asset_id:
+        if face is None:
+            why.add("gone")
+            continue
+        if face.filled and not again:
+            why.add("filled")
+            continue
+        if not face.baked_asset_id or not face.coverage_asset_id:
+            why.add("unbaked")
             continue
         tex_rec, cov_rec = q.catalogue.get(face.baked_asset_id), q.catalogue.get(face.coverage_asset_id)
         if tex_rec is None or cov_rec is None:
+            why.add("unbaked")
             continue
         with Image.open(q.catalogue.abs_path(tex_rec)) as im:
             rgba = np.asarray(im.convert("RGBA")).copy()
         with Image.open(q.catalogue.abs_path(cov_rec)) as im:
             mask = fill_mask(np.asarray(im.convert("RGB")))
         if mask.shape != rgba.shape[:2] or float(mask.mean()) < FILL_MIN:
+            why.add("small")
             continue
         rgba[rgba[..., 3] < 255, :3] = 128                                      # unseen texels grey before the Fill paints them (E38)
         rgba[..., 3] = 255
@@ -173,7 +188,15 @@ def prepare_fill(q: Any, pid: str, vid: str, order: list[str], seed: int | None 
         origin = JobOrigin(suite="story", surface=SET_FILL_SURFACE, ref=pid,
                            payload={"version": vid, "face": fid, "rest": order[k + 1:], "seed": seed, "document_id": od.doc.id, "again": again})
         return FillPlan(pid, vid, fid, recipe, origin)
-    return None
+    if not why:
+        return None
+    if why <= {"filled"}:
+        raise NothingToFill("nothing to fill: these faces are filled — name a face to fill it again with another seed")
+    if why <= {"filled", "small"}:
+        raise NothingToFill("nothing to fill: the picture saw these faces well enough (under the Fill's minimum share)")
+    if why & {"unbaked"}:
+        raise NothingToFill("nothing to fill: the faces' bakes are gone from the Catalogue — bake the set again")
+    raise NothingToFill("nothing to fill: the faces are gone from the set — bake the set again")
 
 
 async def start_fill(q: Any, plan: FillPlan) -> Any:
@@ -255,6 +278,9 @@ async def fill_next(q: Any, job: Any, rest: list[str]) -> None:
     pid, vid = str(job.origin.ref or ""), str(payload.get("version") or "")
     try:
         nxt = await queue_fill(q, pid, vid, rest, int(payload.get("seed") or 0) or None, bool(payload.get("again")))
+    except NothingToFill as e:                                                  # V32: the chain's end, said as it is
+        job.log_tail.append(f"the set's Fill is done: {e}")
+        return
     except Exception as e:  # noqa: BLE001
         job.log_tail.append(f"the next face was not queued: {e}")
         return

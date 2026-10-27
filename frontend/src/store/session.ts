@@ -254,6 +254,18 @@ export const useSession = create<SessionState>()(
 
 /** Routes one WebSocket frame (D38: `EventFrame` is the generated union, so each case sees its own `data` type). Exported for the unit
  *  suite (D68); the app calls it only from the event socket. */
+/** V67: the queue and the project fetched after a job frame — each reply is applied only when nothing newer arrived meanwhile (a later
+ *  fetch, or a `queue.state` / `project.*` frame, which carries the state itself): a late reply never overwrites a newer state. */
+let queueFetch = 0, projectFetch = 0
+const fetchQueue = (set: (p: Partial<SessionState>) => void) => {
+  const n = ++queueFetch
+  void unwrap(http.GET('/queue')).then((queue) => { if (n === queueFetch) set({ queue }) }).catch(() => undefined)
+}
+const fetchProject = (set: (p: Partial<SessionState>) => void) => {
+  const n = ++projectFetch
+  void unwrap(http.GET('/project')).then((project) => { if (n === projectFetch) set({ project }) }).catch(() => undefined)
+}
+
 export function applyEvent(f: EventFrame, set: (p: Partial<SessionState>) => void, get: () => SessionState): void {
   const s = get()
   set({ events: [...s.events.slice(-199), f] })
@@ -267,10 +279,10 @@ export function applyEvent(f: EventFrame, set: (p: Partial<SessionState>) => voi
       }
       if (f.type === 'job.updated' && (job.status === 'done' || job.status === 'failed')) {
         s.toast(job.status === 'done' ? `Job ${job.id.slice(4)} done in ${job.wall_s} s` : `Job ${job.id.slice(4)} failed: ${job.error}`, job.status === 'done' ? 'success' : 'error')
-        void unwrap(http.GET('/queue')).then((queue) => set({ queue })).catch(() => undefined)
-        void unwrap(http.GET('/project')).then((project) => set({ project })).catch(() => undefined)
+        fetchQueue(set)
+        fetchProject(set)
       }
-      if (job.status === 'running' || job.status === 'queued') void unwrap(http.GET('/queue')).then((queue) => set({ queue })).catch(() => undefined)
+      if (job.status === 'running' || job.status === 'queued') fetchQueue(set)
       break
     }
     case 'job.progress': {
@@ -280,7 +292,7 @@ export function applyEvent(f: EventFrame, set: (p: Partial<SessionState>) => voi
       break
     }
     case 'job.deleted': { const jobs = { ...s.jobs }; delete jobs[f.data.id]; set({ jobs }); break }
-    case 'queue.state': set({ queue: f.data }); break
+    case 'queue.state': queueFetch++; set({ queue: f.data }); break          // V67: the state itself — a fetch in flight is stale now
     case 'preset_icons.changed': void import('../suites/generate/swatches').then((m) => m.useSwatches.getState().load()); break   // D90 (02 §6.3): a swatch was made or removed
     case 'engine.state': set({ engine: { ...(s.engine ?? {}), ...f.data } }); break
     case 'engine.vram_pressure': {                                     // D69: a GPU job needs the memory a hidden stage holds
@@ -297,8 +309,8 @@ export function applyEvent(f: EventFrame, set: (p: Partial<SessionState>) => voi
       if (st.status === 'failed') s.toast(`Fetch failed: ${st.error}`, 'error')
       break
     }
-    case 'project.opened': set({ project: f.data }); break
-    case 'project.closed': set({ project: { open: false } }); break
+    case 'project.opened': projectFetch++; set({ project: f.data }); break   // V67: as for the queue
+    case 'project.closed': projectFetch++; set({ project: { open: false } }); break
     case 'catalogue.changed':
       void import('../suites/catalogue/catalogueStore').then((m) => { for (const h of m.allCatalogueStores()) { const st = h.getState(); void st.load(); void st.refreshMeta() } })
       break

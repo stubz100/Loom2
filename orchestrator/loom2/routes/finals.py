@@ -896,8 +896,20 @@ async def final_assemble(svc: Svc, fid: str):
 
 @router.delete("/finals/{fid}", response_model=Deleted)
 async def final_delete(svc: Svc, fid: str):
+    """V43: the final's live jobs are cancelled (its layers' and every job made for it) and the EffectCraft session lets go of its
+    composition before the folder goes."""
     ws, _, _ = svc.require_project()
-    if not await asyncio.to_thread(FinalStore(ws).delete, fid):
+    store = FinalStore(ws)
+    f = await asyncio.to_thread(store.get, fid)
+    if f is None:
+        raise HTTPException(404, "final not found")
+    if svc.queue is not None:
+        mine = {j for x in f.layers for j in x.job_ids} | {j.id for j in svc.queue.jobs.values() if j.origin is not None and j.origin.ref == fid}
+        for jid in sorted(mine):
+            if svc.queue.job_live(jid):
+                await svc.queue.cancel(jid)
+    await asyncio.to_thread(svc.effectcraft.release, CompositionStore(ws).ecproj(fid))
+    if not await asyncio.to_thread(store.delete, fid):
         raise HTTPException(404, "final not found")
     svc.hub.broadcast("final.updated", {"id": fid, "revision": -1})
     return {"deleted": fid}

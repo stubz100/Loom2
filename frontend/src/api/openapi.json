@@ -8631,6 +8631,7 @@
             "enum": [
               "profile_ref",
               "profile_candidates",
+              "idea",
               "style",
               "flow_board",
               "stage",
@@ -14265,7 +14266,7 @@
         "type": "object"
       },
       "PoseLibrary": {
-        "description": "ST2: the project's saved poses — name → {preset?, joints {joint: [x, y, z] degrees}} — kept as `stages/poses.json`.",
+        "description": "ST2: the project's saved poses — name → {preset?, joints {joint: [x, y, z] degrees}} — kept as `stages/poses.json`. V28: a\n`schema_version` like every record, and a `revision` the client sends back (409 when the library changed meanwhile — a second\nwindow's save is not lost under the first's).",
         "properties": {
           "poses": {
             "additionalProperties": {
@@ -14275,6 +14276,16 @@
             "default": {},
             "title": "Poses",
             "type": "object"
+          },
+          "revision": {
+            "default": 0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "schema_version": {
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
           }
         },
         "title": "PoseLibrary",
@@ -26555,6 +26566,7 @@
     },
     "/finals/{fid}": {
       "delete": {
+        "description": "V43: the final's live jobs are cancelled (its layers' and every job made for it) and the EffectCraft session lets go of its\ncomposition before the folder goes.",
         "operationId": "final_delete_finals__fid__delete",
         "parameters": [
           {

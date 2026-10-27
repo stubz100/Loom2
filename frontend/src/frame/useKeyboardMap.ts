@@ -22,27 +22,30 @@ export function openContextMenuAtFocus(): void {
   target.dispatchEvent(Object.assign(ev, { [FROM_KEYS]: true }))
 }
 
+/** The frame's keydown: the menu key and the palette answer everywhere; every other global key — the Ctrl chords too (V68: Ctrl+B,
+ *  Ctrl+I, Ctrl+, and Ctrl+1–4 used to fire inside a field, against the rule below) — only outside a field or a modal, which own theirs. */
+export function onGlobalKeydown(e: KeyboardEvent): void {
+  const s = useSession.getState()
+  const inField = (e.target as HTMLElement)?.closest('input, textarea, select, [contenteditable], .modal')    // a modal owns its keys
+  // D72: the menu key and the palette answer in fields too, through their registry commands (so a remap applies)
+  const menu = command('global.contextMenu'), palette = command('global.palette')
+  if (menu && matchesCommand(e, menu)) { e.preventDefault(); openContextMenuAtFocus(); return }
+  if (palette && matchesCommand(e, palette)) { e.preventDefault(); usePalette.getState().toggle(); return }
+  if (usePalette.getState().open) return
+  if (inField) return
+  if ((e.ctrlKey || e.metaKey) && handleKeyFor('global', e)) return
+  if (e.key === 'Escape') {
+    if (s.helpOpen) s.setHelp(false)
+    else if (s.settingsOpen) s.openSettings(false)
+    else if (s.projectDialog) s.setProjectDialog(null)
+    return
+  }
+  handleKeyFor('global', e)                                         // incl. Tab → focus mode (global.focus, a fixed key)
+}
+
 export function useKeyboardMap() {
   useEffect(() => {
-    const h = (e: KeyboardEvent) => {
-      const s = useSession.getState()
-      const inField = (e.target as HTMLElement)?.closest('input, textarea, select, [contenteditable], .modal')    // a modal owns its keys
-      // D72: the menu key and the palette answer in fields too, through their registry commands (so a remap applies)
-      const menu = command('global.contextMenu'), palette = command('global.palette')
-      if (menu && matchesCommand(e, menu)) { e.preventDefault(); openContextMenuAtFocus(); return }
-      if (palette && matchesCommand(e, palette)) { e.preventDefault(); usePalette.getState().toggle(); return }
-      if (usePalette.getState().open) return
-      if (e.ctrlKey || e.metaKey) { if (handleKeyFor('global', e)) return }
-      if (inField) return
-      if (e.key === 'Escape') {
-        if (s.helpOpen) s.setHelp(false)
-        else if (s.settingsOpen) s.openSettings(false)
-        else if (s.projectDialog) s.setProjectDialog(null)
-        return
-      }
-      handleKeyFor('global', e)                                         // incl. Tab → focus mode (global.focus, a fixed key)
-    }
-    window.addEventListener('keydown', h)
-    return () => window.removeEventListener('keydown', h)
+    window.addEventListener('keydown', onGlobalKeydown)
+    return () => window.removeEventListener('keydown', onGlobalKeydown)
   }, [])
 }

@@ -16,6 +16,7 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from loom2.api import create_app  # noqa: E402
+from loom2.cuts import mix_name  # noqa: E402
 from loom2.clips import ClipStore  # noqa: E402
 from loom2.config import AppState  # noqa: E402
 from loom2.story import StoryStore  # noqa: E402
@@ -107,7 +108,7 @@ def test_sound_verbs_the_mix_and_the_movies_loudness(tmp_path: Path):
         music_before = rms(0.7, 1.4)
         assert rms(0.1, 0.4) > 0.1 and music_before > 0.1 and sr == 48000
         mixes = ws.timelines_dir / tl["id"] / "mix"
-        assert [p.name for p in mixes.glob("*.wav")] == [f"{r['timeline']['revision']}.wav"]
+        assert [p.name for p in mixes.glob("*.wav")] == [mix_name(r["timeline"]["revision"], cl.get("/settings").json()["audio"]["loudness_lufs"])]   # V39: by revision and loudness
         # the verbs: gain, fades on both edges, the music ducked under the dialogue, the dialogue evened out, a track's volume
         steps = [{"id": "clip.audioGain", "params": {"clips": [song["id"]], "db": -12, "mode": "set"}},
                  {"id": "sequence.applyAudioTransition", "params": {"clip": song["id"], "frames": 6, "edge": "in"}},
@@ -126,7 +127,7 @@ def test_sound_verbs_the_mix_and_the_movies_loudness(tmp_path: Path):
         m2 = cl.get(f"{base}/mix")
         pcm, sr = sf.read(__import__("io").BytesIO(m2.content), dtype="float32")
         assert abs(rms(0.7, 1.4) / music_before - 10 ** (-12 / 20)) < 0.02                           # the music 12 dB down
-        assert [p.name for p in mixes.glob("*.wav")] == [f"{r.json()['timeline']['revision']}.wav"]   # the older mix went
+        assert [p.name for p in mixes.glob("*.wav")] == [mix_name(r.json()["timeline"]["revision"], cl.get("/settings").json()["audio"]["loudness_lufs"])]   # the older mix went
         # the movie: FilmCraft's export at the loudness in Settings
         job = cl.post(f"{base}/render", json={"movie": True}).json()["jobs"][0]
         cl.post("/queue/unpause")

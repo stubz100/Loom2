@@ -1141,7 +1141,7 @@ def cast_uses(shots: list[Shot], nodes: dict[str, FlowNode], stages: dict[str, A
         st = stages.get(v.stage_id) if v.stage_id else None
         for o in getattr(st, "objects", []) or []:
             if o.profile_id and o.visible:
-                how.setdefault(o.profile_id, set()).add("figure" if o.kind == "mannequin" else "prop")
+                how.setdefault(o.profile_id, set()).add("figure" if o.kind == "mannequin" else "place" if o.kind == "set" else "prop")   # V27: a built set bound to a place
         route = (v.recipe.template if v.recipe else None) or default_template(v.stage_id)
         for pid, h in how.items():
             out.setdefault(pid, []).append(CastUse(shot_id=s.id, name=s.name, version=v.id, route=route, how=sorted(h)))   # type: ignore[arg-type]

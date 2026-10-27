@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Any
 
 from typing import Literal
@@ -140,16 +141,26 @@ async def stage_lineup(svc: Svc, body: LineupBody):
     return st.model_dump()
 
 
+POSES_SCHEMA_VERSION = 1
+
+
 class PoseLibrary(BaseModel):
-    """ST2: the project's saved poses — name → {preset?, joints {joint: [x, y, z] degrees}} — kept as `stages/poses.json`."""
+    """ST2: the project's saved poses — name → {preset?, joints {joint: [x, y, z] degrees}} — kept as `stages/poses.json`. V28: a
+    `schema_version` like every record, and a `revision` the client sends back (409 when the library changed meanwhile — a second
+    window's save is not lost under the first's)."""
+    schema_version: int = POSES_SCHEMA_VERSION
+    revision: int = 0
     poses: dict[str, dict] = {}
+
+
+def _poses_read(p: Path) -> PoseLibrary:
+    return PoseLibrary.model_validate(read_json_or(p, {"poses": {}}))
 
 
 @router.get("/stages/poses", response_model=PoseLibrary)
 async def poses_get(svc: Svc):
     ws, _, _ = svc.require_project()
-    p = ws.stages_dir / "poses.json"
-    return await asyncio.to_thread(lambda: read_json_or(p, {"poses": {}}))
+    return (await asyncio.to_thread(_poses_read, ws.stages_dir / "poses.json")).model_dump()
 
 
 @router.put("/stages/poses", response_model=PoseLibrary)
@@ -159,8 +170,19 @@ async def poses_put(svc: Svc, body: PoseLibrary):
         joints = pose.get("joints", {}) if isinstance(pose, dict) else None
         if not name.strip() or not isinstance(joints, dict) or any(not (isinstance(v, list) and len(v) == 3) for v in joints.values()):
             raise HTTPException(422, f"pose {name!r}: joints are {{name: [x, y, z]}} in degrees")
-    await asyncio.to_thread(atomic_write_json, ws.stages_dir / "poses.json", body.model_dump())
-    return body.model_dump()
+    p = ws.stages_dir / "poses.json"
+
+    def write() -> PoseLibrary:
+        cur = _poses_read(p)
+        if body.revision != cur.revision:
+            raise StaleStage(f"the poses are at revision {cur.revision}, the change is based on {body.revision} — reload them first")
+        out = PoseLibrary(schema_version=POSES_SCHEMA_VERSION, revision=cur.revision + 1, poses=body.poses)
+        atomic_write_json(p, out.model_dump())
+        return out
+    try:
+        return (await asyncio.to_thread(write)).model_dump()
+    except StaleStage as e:
+        raise HTTPException(409, str(e))
 
 
 

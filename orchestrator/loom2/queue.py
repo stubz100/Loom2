@@ -197,9 +197,23 @@ class JobQueue:
         self._reconcile_leftovers()
         self._task = asyncio.create_task(self._run_loop(), name="loom2-queue")
 
+    JOB_TEMP_PREFIXES = ("assemble", "comp-render", "render", "movie")       # V37: `<temp>/<prefix>-<job>` — the finishers' work folders
+    JOB_TEMP_SUBDIRS = ("ai", "lipsync", "tts")                              # and `<temp>/<sub>/<job>` — the crops, the lip-sync and TTS runs
+
+    def _sweep_job_temp(self, job_id: str) -> int:
+        """V37: the temp folders a job's finisher made go with the job when it fails, is cancelled or was interrupted (a finisher that
+        ends well removes its own); never raises."""
+        n = 0
+        for d in [self.ws.temp_dir / f"{p}-{job_id}" for p in self.JOB_TEMP_PREFIXES] + [self.ws.temp_dir / s / job_id for s in self.JOB_TEMP_SUBDIRS]:
+            if d.is_dir():
+                shutil.rmtree(d, ignore_errors=True)
+                n += 1
+        return n
+
     def _reconcile_leftovers(self) -> int:
         """B6 (06 §7): engine outputs and crop inputs that belong to no queued or running job — left by a crash or a
-        kill — are removed when the project opens. Jobs that were running were re-queued by load() and render again."""
+        kill — are removed when the project opens. Jobs that were running were re-queued by load() and render again.
+        V37: the finishers' work folders too (`_sweep_job_temp`'s places)."""
         live = {j.id for j in self.jobs.values() if j.status in ("queued", "running")}
         removed = 0
         out = self.app.state_dir / "engine_out" / "loom2"
@@ -208,10 +222,16 @@ class JobQueue:
                 if p.is_file() and not any(p.name.startswith(j) for j in live):
                     p.unlink(missing_ok=True)
                     removed += 1
-        ai = self.ws.temp_dir / "ai"
-        if ai.is_dir():
-            for d in ai.iterdir():
-                if d.is_dir() and d.name not in live:
+        for sub in self.JOB_TEMP_SUBDIRS:
+            root = self.ws.temp_dir / sub
+            if root.is_dir():
+                for d in root.iterdir():
+                    if d.is_dir() and d.name not in live:
+                        shutil.rmtree(d, ignore_errors=True)
+                        removed += 1
+        for prefix in self.JOB_TEMP_PREFIXES:
+            for d in self.ws.temp_dir.glob(f"{prefix}-job_*") if self.ws.temp_dir.is_dir() else []:
+                if d.is_dir() and d.name[len(prefix) + 1:] not in live:
                     shutil.rmtree(d, ignore_errors=True)
                     removed += 1
         if removed:
@@ -587,9 +607,10 @@ class JobQueue:
 
     def _origin_stopped(self, job: JobRecord, msg: str) -> None:
         """CW1: a job some record waits on failed or was cancelled — an idea variant's clay step says so; CW6: a set's face waits for the next
-        Fill (never raises)."""
+        Fill (never raises). V37: the job's temp folders go with it."""
         from .ideas import IDEA_CLAY_SURFACE, clay_failed
         from .place_sets import SET_FILL_SURFACE, fill_failed
+        self._sweep_job_temp(job.id)
         if job.origin is not None and job.origin.surface == IDEA_CLAY_SURFACE:
             clay_failed(self, job, msg)
         if job.origin is not None and job.origin.surface == SET_FILL_SURFACE:

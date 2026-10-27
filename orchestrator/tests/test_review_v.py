@@ -5,7 +5,9 @@ record's busy marker naming a job the queue no longer holds live is stale, not b
 loop, staged until their marker is on disk. V24 — a new version takes the set but not a Fill running on the source. V25 — a landing that
 fails lets go of its face. V23 — a bake lands on the set as it is now. V34 — the finals' writers take turns, a job is appended to the
 layer as it is. V35 — RIFE under a watchdog. V36 — a download named with any character. V65 — the hub replays what a reconnecting
-client missed."""
+client missed. V26–V29, V31, V32, V37–V43 — the server lows (an idea's page used, a place use, the poses' revision, a refit off the
+loop, no orphan on a refused import, why nothing is filled, temp folders gone with a job, a surround WAV, the mix by loudness, an
+export timeout, a bad stack, the plate's id, a final deleted with its jobs)."""
 from __future__ import annotations
 
 import json
@@ -460,3 +462,231 @@ def test_v65_the_socket_hands_a_reconnecting_client_what_it_missed(tmp_path: Pat
         with c.websocket_connect("/events") as ws:                         # a bad `since` is a first connect, not an error
             ws.send_json({"type": "auth", "token": token, "since": "three", "run": True})
             assert ws.receive_json()["data"]["gap"] is False
+
+
+# ---- the sixth group (journal 2026-10-27): the server lows V26–V29, V31, V32, V37–V43 ----------------------------------------------
+
+
+def test_v26_an_ideas_page_is_a_used_group(tmp_path: Path):
+    """An idea's album page holds its variants (`add_variant` copies there): `used-by` names it, so a delete from the Catalogue says so."""
+    from loom2.catalogue import Catalogue
+    from loom2.ideas import IdeaStore
+    from loom2.usedby import all_users
+    from loom2.workspace import Workspace
+    ws = Workspace.create(tmp_path / "p", name="P")
+    cat = Catalogue(ws)
+    groups = GroupStore(ws, cat)
+    Image.fromarray(np.full((16, 16, 3), 90, np.uint8)).save(tmp_path / "m.png")
+    pic = cat.ingest_file(tmp_path / "m.png", kind="image", move=False, suite="story")
+    idea = IdeaStore(ws).create("character", groups, pic.id, "Mara")
+    users = all_users(ws)[idea.group_id]
+    assert [(u.kind, u.id, u.name, u.cls) for u in users] == [("idea", idea.id, "Mara", "character")]
+
+
+def test_v27_a_built_set_bound_to_a_place_is_a_place_use(tmp_path: Path):
+    """Cast's readiness: a stage's `set` object bound to a place reads `how: place`; a mannequin `figure`, a mesh `prop`; hidden objects not."""
+    from loom2.story import cast_uses
+    from loom2.workspace import Workspace
+    ws = Workspace.create(tmp_path / "p", name="P")
+    shot = StoryStore(ws).create_shot("Kitchen, dawn", stage_id="stg_1", camera_id="cam_1")
+    objs = [SimpleNamespace(profile_id="prof_place", visible=True, kind="set"), SimpleNamespace(profile_id="prof_mara", visible=True, kind="mannequin"),
+            SimpleNamespace(profile_id="prof_jug", visible=True, kind="mesh"), SimpleNamespace(profile_id="prof_hidden", visible=False, kind="set")]
+    uses = cast_uses([shot], {}, {"stg_1": SimpleNamespace(objects=objs)})
+    assert uses["prof_place"][0].how == ["place"] and uses["prof_mara"][0].how == ["figure"] and uses["prof_jug"][0].how == ["prop"]
+    assert "prof_hidden" not in uses
+
+
+def test_v28_the_pose_library_has_a_schema_version_and_a_revision(tmp_path: Path):
+    """`stages/poses.json`: schema_version 1 and revision 0 at first; a save names the revision it read (409 when another save came
+    first), the reply carries the next."""
+    from test_skeleton_bench_cs2 import _client
+    app, cl = _client(tmp_path)
+    with cl:
+        assert cl.post("/project", json={"path": str(tmp_path / "p"), "name": "p", "size_cap_gb": 10}).status_code == 200
+        assert cl.get("/stages/poses").json() == {"schema_version": 1, "revision": 0, "poses": {}}
+        pose = {"preset": "stand", "joints": {"r_shoulder": [-150, 0, -20]}}
+        r = cl.put("/stages/poses", json={"revision": 0, "poses": {"salute": pose}})
+        assert r.status_code == 200 and r.json()["revision"] == 1 and r.json()["poses"] == {"salute": pose}
+        r = cl.put("/stages/poses", json={"revision": 0, "poses": {}})                   # another window's save, on the old revision
+        assert r.status_code == 409 and "revision 1" in r.json()["detail"]
+        assert cl.get("/stages/poses").json()["poses"] == {"salute": pose}
+        assert cl.put("/stages/poses", json={"revision": 1, "poses": {}}).json() == {"schema_version": 1, "revision": 2, "poses": {}}
+        ws, _, _ = app.state.services.require_project()
+        assert json.loads((ws.stages_dir / "poses.json").read_text(encoding="utf-8"))["schema_version"] == 1
+
+
+def test_v29_a_degenerate_refit_is_a_422(tmp_path: Path, monkeypatch):
+    """*Fit again* with points the fit cannot use answers 422 with the reason (it was a 500 raised on the loop)."""
+    from loom2 import body as body_mod
+    from test_skeleton_bench_cs2 import _client
+    app, cl = _client(tmp_path)
+    with cl:
+        assert cl.post("/project", json={"path": str(tmp_path / "p"), "name": "p", "size_cap_gb": 10}).status_code == 200
+        pid = cl.post("/story/profiles", json={"name": "Ines", "cls": "character", "appearance": "Ines"}).json()["id"]
+        monkeypatch.setattr(body_mod, "reference_ratios", lambda person: {"head": 0.0})
+        monkeypatch.setattr(body_mod, "stance_note", lambda person: "arms_open")
+
+        def degenerate(measured, body=None, locks=()):
+            raise ZeroDivisionError("float division by zero")
+        monkeypatch.setattr(body_mod, "fit_body", degenerate)
+        r = cl.post(f"/story/profiles/{pid}/versions/v1/body/refit", json={"points": {"pose": [[1, 2, 1]] * 18}})
+        assert r.status_code == 422 and "cannot be fitted: float division by zero" in r.json()["detail"]
+
+
+def test_v31_a_model_import_refused_leaves_no_orphan(tmp_path: Path):
+    """A GLB for a character (422) or for a version that is not there (404) is refused before anything is ingested: no orphan mesh."""
+    from test_skeleton_bench_cs2 import _client
+    app, cl = _client(tmp_path)
+    with cl:
+        assert cl.post("/project", json={"path": str(tmp_path / "p"), "name": "p", "size_cap_gb": 10}).status_code == 200
+        total = lambda: cl.get("/assets", params={"folder": "all"}).json()["total"]   # noqa: E731
+        n = total()
+        ines = cl.post("/story/profiles", json={"name": "Ines", "cls": "character", "appearance": "Ines"}).json()["id"]
+        box = cl.post("/story/profiles", json={"name": "Box", "cls": "prop"}).json()["id"]
+        r = cl.post(f"/story/profiles/{ines}/versions/v1/model/import", json={"path": str(tmp_path / "nothing.glb")})
+        assert r.status_code == 422 and "only a prop" in r.json()["detail"]
+        assert cl.post(f"/story/profiles/{box}/versions/v9/model/import", json={"path": str(tmp_path / "nothing.glb")}).status_code == 404
+        assert total() == n
+
+
+def test_v32_a_small_mask_is_not_a_missing_bake(tmp_path: Path):
+    """*Fill ▶* on faces whose coverage leaves under the minimum says so (422 'saw these faces well enough'); only bakes that are gone
+    say 'bake the set again'."""
+    from test_skeleton_bench_cs2 import _client
+    app, cl = _client(tmp_path)
+    with cl:
+        assert cl.post("/project", json={"path": str(tmp_path / "p"), "name": "p", "size_cap_gb": 10}).status_code == 200
+        svc = app.state.services
+        ws, cat, _ = svc.require_project()
+        pid = cl.post("/story/profiles", json={"name": "Kitchen", "cls": "place"}).json()["id"]
+        store = _faces(ws, cat, tmp_path, pid, spec=(("floor", 0),))                    # the coverage sees everything …
+        store.update_face(pid, "v1", "floor", bad=0.5)                                   # … while the face's share says half (a stale bake share)
+        svc.queue.paused = True
+        r = cl.post(f"/story/profiles/{pid}/versions/v1/set/fill", json={})
+        assert r.status_code == 422 and "saw these faces well enough" in r.json()["detail"], r.text
+        store.update_face(pid, "v1", "floor", baked_asset_id="ast_gone")
+        r = cl.post(f"/story/profiles/{pid}/versions/v1/set/fill", json={})
+        assert r.status_code == 422 and "bake the set again" in r.json()["detail"], r.text
+
+
+async def test_v37_a_jobs_temp_folders_go_with_it(tmp_path: Path, object_info: dict, monkeypatch):
+    """The finishers' work folders (`assemble-<job>`, `movie-<job>`, `lipsync/<job>`, `tts/<job>`, `ai/<job>`) go when the job fails or is
+    cancelled, and at load for jobs that are not queued or running; a live job's stay."""
+    rig = _rig(tmp_path, object_info, monkeypatch)
+    try:
+        q, t = rig.queue, rig.ws.temp_dir
+        gone = [t / "assemble-job_a", t / "movie-job_a", t / "comp-render-job_a", t / "lipsync" / "job_a", t / "tts" / "job_a", t / "ai" / "job_a"]
+        kept = [t / "render-job_live", t / "tts" / "job_live", t / "set_fills"]
+        for d in gone + kept:
+            d.mkdir(parents=True, exist_ok=True)
+            (d / "x.bin").write_bytes(b"x")
+        q._origin_stopped(JobRecord(id="job_a", kind="i2v", recipe={"kind": "i2v"}, status="failed", error="x"), "x")
+        assert not any(d.exists() for d in gone) and all(d.exists() for d in kept)
+        q.jobs["job_live"] = JobRecord(id="job_live", kind="i2v", recipe={"kind": "i2v"}, status="queued")
+        for d in gone:
+            d.mkdir(parents=True, exist_ok=True)
+        assert q._reconcile_leftovers() >= len(gone)
+        assert not any(d.exists() for d in gone) and all(d.exists() for d in kept)
+    finally:
+        await rig.close()
+
+
+def test_v38_a_surround_wav_is_a_sentence(tmp_path: Path):
+    """A line's audio with more than two channels: a sentence naming the file and its channels, not numpy's broadcast error."""
+    import soundfile as sf
+
+    from loom2.final_assembly import mix_audio
+    p = tmp_path / "six.wav"
+    sf.write(str(p), np.zeros((4800, 6), np.float32), 48000)
+    with pytest.raises(ValueError, match="six.wav has 6 channels"):
+        mix_audio([{"path": str(p), "in": 0.0, "out": 0.1, "start": 0.0, "layer": "a", "text": ""}], 1.0, tmp_path / "mix.wav")
+
+
+def test_v39_the_mix_is_cached_by_revision_and_loudness():
+    """The cut's mix file is named by revision and loudness target: a changed target is a new mix, not the old WAV."""
+    from loom2.cuts import mix_name
+    assert mix_name(12, None) == "12-auto.wav" and mix_name(12, -16.0) == "12-m16.wav" and mix_name(12, -14.5) == "12-m14_5.wav"
+    assert len({mix_name(12, None), mix_name(12, -16.0), mix_name(12, -23.0), mix_name(13, -16.0)}) == 4
+
+
+def test_v40_a_filmcraft_export_timeout_is_a_cut_error(tmp_path: Path, monkeypatch):
+    """FilmCraft's export process past its timeout: a CutError with the seconds (the route's 422), not a TimeoutExpired (a 500)."""
+    import subprocess
+
+    from loom2.cuts import CutError, Cuts
+
+    def hangs(*a, **k):
+        raise subprocess.TimeoutExpired(cmd="filmcraft", timeout=k.get("timeout"))
+    monkeypatch.setattr(subprocess, "run", hangs)
+    monkeypatch.setattr("loom2.filmcraft.export_argv", lambda *a: ["filmcraft"])
+    fake = SimpleNamespace(fc=SimpleNamespace(settings=SimpleNamespace(timeout_s=7), app=None))
+    with pytest.raises(CutError, match="did not export the cut within 7 s"):
+        Cuts._export(fake, tmp_path / "p.fcproj", tmp_path / "s.jsonl", "export the cut")
+
+
+def test_v41_a_bad_stack_is_a_422(tmp_path: Path):
+    """`PUT /documents/{id}` with a layer the model refuses (a bogus blend) answers 422 with the reason, not a 500."""
+    from fastapi.testclient import TestClient
+    from loom2.api import create_app
+    from loom2.config import AppState
+    state = tmp_path / "state"
+    AppState(state).update_settings({"engine": {"python": str(tmp_path / "missing.exe"), "health_timeout_s": 1}, "models_root": str(tmp_path / "models"), "mounted_model_trees": []})
+    app = create_app(state)
+    H = {"X-Loom-Token": app.state.services.app.token}
+    with TestClient(app, raise_server_exceptions=False) as client:
+        client.post("/project", json={"path": str(tmp_path / "proj"), "name": "D", "size_cap_gb": 10}, headers=H)
+        src = tmp_path / "src.png"
+        Image.fromarray(np.full((8, 8, 4), 200, np.uint8), "RGBA").save(src)
+        asset = client.post("/assets/import", json={"paths": [str(src)]}, headers=H).json()["items"][0]
+        d = client.post("/documents", json={"from_asset": asset["id"]}, headers=H).json()
+        r = client.put(f"/documents/{d['id']}", json={**d, "layers": [{"kind": "hologram", "id": "x"}]}, headers=H)       # a kind the model does not know: pydantic, not _validate_modes
+        assert r.status_code == 422 and "hologram" in r.json()["detail"]
+        assert client.get(f"/documents/{d['id']}", headers=H).json()["layers"] == d["layers"]
+
+
+def test_v42_the_plate_layer_carries_its_id(tmp_path: Path):
+    """`check()`: the plate and shadows layers carry their kind's id — the routes and finishers find them by it."""
+    from loom2.finals import check
+    from loom2.workspace import Workspace
+    from test_finals_d111 import _final_on_disk
+    f = _final_on_disk(Workspace.create(tmp_path / "p", name="P"), "stg_x", "cam_x")
+    check(f)
+    bad = f.model_copy(deep=True)
+    bad.layers[0].id = "background"
+    with pytest.raises(ValueError, match="the plate layer's id is 'plate'"):
+        check(bad)
+
+
+def test_v43_deleting_a_final_cancels_its_jobs_and_releases_the_session(tmp_path: Path, monkeypatch):
+    """DELETE /finals/{id}: the final's live jobs (its layers' and every job made for it) are cancelled, the EffectCraft session lets
+    go of its composition, then the folder goes; another final's job is not touched."""
+    from loom2.compositions import CompositionStore
+    from loom2.finals import FinalStore
+    from test_finals_d111 import _final_on_disk
+    from test_skeleton_bench_cs2 import _client
+    app, cl = _client(tmp_path)
+    with cl:
+        assert cl.post("/project", json={"path": str(tmp_path / "p"), "name": "p", "size_cap_gb": 10}).status_code == 200
+        svc = app.state.services
+        ws, _, _ = svc.require_project()
+        f = _final_on_disk(ws, "stg_x", "cam_x")
+        store = FinalStore(ws)
+        jobs = [JobRecord(id="job_layer", kind="i2v", recipe={"kind": "i2v"}, status="queued"),
+                JobRecord(id="job_made_for", kind="matte_sequence", recipe={"kind": "matte_sequence"}, status="queued",
+                          origin=JobOrigin(suite="stage", surface="final_layer", ref=f.id, payload={"layer": "mara"})),
+                JobRecord(id="job_other", kind="i2v", recipe={"kind": "i2v"}, status="queued")]
+        for j in jobs:
+            svc.queue.jobs[j.id] = j
+        store.update_layer(f.id, "plate", job_ids=["job_layer", "job_done_long_ago"])
+        svc.queue.paused = True
+        ec = svc.effectcraft
+        ecproj = str(CompositionStore(ws).ecproj(f.id))
+        ec.project = ecproj
+        stopped: list[str | None] = []
+        monkeypatch.setattr(type(ec), "stop", lambda self: (stopped.append(self.project), setattr(self, "project", None)))
+        assert cl.delete(f"/finals/{f.id}").status_code == 200
+        assert svc.queue.jobs["job_layer"].status == "cancelled" and svc.queue.jobs["job_made_for"].status == "cancelled"
+        assert svc.queue.jobs["job_other"].status == "queued"
+        assert stopped == [ecproj] and ec.project is None
+        assert not store.path(f.id).exists()
+        assert cl.delete(f"/finals/{f.id}").status_code == 404

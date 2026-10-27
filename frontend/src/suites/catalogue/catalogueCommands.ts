@@ -3,7 +3,7 @@
 // catalogue store instance is on screen (the Catalogue itself or Generate's results).
 import { Workflow, ArrowLeftRight, Wand2, Box, Clapperboard, ImageUp, ImagePlus, Inbox as InboxIcon, MapPin, Package, UserRound, ChevronLeft, Eraser, ImageUpscale, Orbit, ChevronRight, Columns2, Copy, Expand, GitBranch, ExternalLink, Film, FolderInput, FolderPlus, Image, Images, Inbox, Layers, ListTree, Pencil, Pin, PinOff, RotateCcw, Search, Shrink, Shuffle, SquareCheck, SquareX, Tag, Trash, Undo, Upload, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { ApiError, http, unwrap } from '../../api/client'
-import { registerCommands, sep, type MenuItem } from '../../frame/commands'
+import { registerCommands, sep, type MenuItem, type OnItem } from '../../frame/commands'
 import { openWith } from '../../frame/openWith'
 import { revealPath } from '../../shell/tauri'
 import { askConfirm, askText, useSession } from '../../store/session'
@@ -11,10 +11,10 @@ import { flatGroups, useAlbum } from './albumStore'
 import { activeCatalogue } from './catalogueContext'
 import { catView } from './viewKeys'
 import { allPlaced } from './placement'
-import type { JobOrigin } from '../../api/types'
+import type { Asset, JobOrigin } from '../../api/types'
 import { originFor, useMakeFor } from '../../store/origin'
 import { madeForIdea, prototypeMenu } from '../story/prototype'
-import { selectedOrPrimary, useGenerateResults, type GroupMode } from './catalogueStore'
+import { selectedOrPrimary, useBin, useGenerateResults, type GroupMode } from './catalogueStore'
 import { addToCastMenu, castTarget, madeFor } from '../story/addToCast'
 import { castPropMenu } from '../story/castProp'
 import { profilesForMentions, useStory } from '../story/storyStore'
@@ -210,6 +210,27 @@ export function tileMenu(): MenuItem[] {
     ...(inTrash() ? [{ cmd: 'cat.restore' }, { cmd: 'cat.purge' }, { cmd: 'cat.emptyTrash' }] : [{ cmd: 'cat.trash' }]),
   ]
 }
+// ---- the Bin's Trash (V59: D32 — every action a command) ------------------------------------------------------------------------------
+/** The tile a Bin verb acts on, set around the run by `onBinTile` (D90's per-item rule: never stale for the palette). */
+export const binTile: { asset?: Asset } = {}
+export const onBinTile = (a: Asset): OnItem => (f) => { binTile.asset = a; try { return f() } finally { delete binTile.asset } }
+const binFailed = (what: string) => (e: unknown) => useSession.getState().toast(`${what}: ${(e as ApiError).detail ?? e}`, 'error')   // V60: a toast, never the crash overlay
+registerCommands([
+  { id: 'bin.trash', scope: 'catalogue', label: 'Move to trash', icon: Trash, danger: true, placement: ['context', 'dock'], when: () => !!binTile.asset && !binTile.asset.trashed_at,
+    run: () => { const a = binTile.asset; if (a) void useBin.getState().trash([a.id]).catch(binFailed('Not moved to the trash')) } },   // the store's toast has its Undo
+  { id: 'bin.restore', scope: 'catalogue', label: 'Restore from trash', icon: Undo, placement: ['context', 'dock'], when: () => !!binTile.asset?.trashed_at,
+    run: () => { const a = binTile.asset; if (a) void useBin.getState().restore([a.id]).then(() => useSession.getState().toast('Restored — back in its place', 'success')).catch(binFailed('Not restored')) } },
+  { id: 'bin.purge', scope: 'catalogue', label: 'Delete permanently…', icon: Trash, danger: true, placement: ['context', 'dock'], when: () => !!binTile.asset?.trashed_at,
+    run: () => { const a = binTile.asset; if (!a) return
+      void askConfirm({ title: 'Delete it permanently?', text: 'The file is removed from the project. This cannot be undone.', okLabel: 'Delete permanently', danger: true })
+        .then((ok) => { if (ok) return useBin.getState().purge([a.id]) }).catch(binFailed('Not deleted')) } },
+  { id: 'bin.emptyTrash', scope: 'catalogue', label: 'Empty trash…', icon: Trash, danger: true, placement: ['dock', 'context'], when: () => (useBin.getState().counts.trash ?? 0) > 0 && !useBin.getState().purging,
+    run: () => { const n = useBin.getState().counts.trash ?? 0
+      void askConfirm({ title: 'Empty the Trash?', okLabel: 'Delete permanently', danger: true, text: `${n} item${n === 1 ? ' is' : 's are'} deleted permanently: files, manifests and thumbnails. This cannot be undone.` })
+        .then((ok) => { if (ok) return useBin.getState().emptyTrash().then((k) => useSession.getState().toast(`Trash emptied: ${k} item${k === 1 ? '' : 's'} deleted permanently`, 'success')) })
+        .catch(binFailed('The trash was not emptied')) } },
+])
+
 /** Right-click on empty grid space. */
 export function gridMenu(): MenuItem[] {
   const grouped = cat().q.group !== 'none'                         // Generate's results still group by batch (§9)

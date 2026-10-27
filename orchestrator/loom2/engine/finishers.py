@@ -122,7 +122,7 @@ class AssetFinisher:
         if assets and isinstance(panel, str) and panel:
             await asyncio.to_thread(_panel_thumb, q, panel, assets[0].id)
         if assets and job.origin and job.origin.surface == IDEA_CLAY_SURFACE:                # CW1: a variant's A-pose picture → its fit
-            await asyncio.to_thread(ideas.clay_aref_landed, q, job, assets[0].id)
+            await ideas.start_next(q, job, await asyncio.to_thread(ideas.clay_aref_landed, q, job, assets[0].id))   # V22: submitted on the loop
         if assets and job.origin and FOR_IDEA in (job.origin.payload or {}):                 # CW2: made while Image's For chip named an idea
             await asyncio.to_thread(ideas.made_for_landed, q, job, [a.id for a in assets])
         if assets and job.origin and job.origin.surface == "anim_ref":                        # CA0: the first result is the reference while there is none
@@ -224,7 +224,9 @@ class DocumentFinisher:
         if isinstance(recipe, Inpaint) and getattr(job, "origin", None) and job.origin.surface == FINAL_PLATE_KEY_SURFACE:   # PF1 (D135): a filled plate's keyframe
             await asyncio.to_thread(_final_plate_key, q, job, od)
         if isinstance(recipe, Inpaint) and getattr(job, "origin", None) and job.origin.surface == place_sets.SET_FILL_SURFACE:   # CW6 (D143): a set's face
-            await asyncio.to_thread(place_sets.fill_landed, q, job, od)
+            rest = await asyncio.to_thread(place_sets.fill_landed, q, job, od)
+            if rest:
+                await place_sets.fill_next(q, job, rest)                                       # V22: the next face submitted on the loop
         if isinstance(recipe, Inpaint) and getattr(job, "origin", None) and job.origin.surface == set_things.CLEAN_SURFACE:   # D123 (SC3c-3): a picture set's plate
             done = await asyncio.to_thread(set_things.clean_plate, q, job, od)
             q.hub.broadcast("asset.created", done["asset"].model_dump())
@@ -865,7 +867,7 @@ class KeypointsFinisher:
         if job.origin and job.origin.surface == BODY_FIT_SURFACE:
             await asyncio.to_thread(_body_fit_result, q, job, recipe, people)
         if job.origin and job.origin.surface == IDEA_CLAY_SURFACE:                             # CW1: an idea variant's fit → its shell
-            await asyncio.to_thread(ideas.clay_fit_landed, q, job, recipe, people)
+            await ideas.start_next(q, job, await asyncio.to_thread(ideas.clay_fit_landed, q, job, recipe, people))   # V22: submitted on the loop
 
 
 def _body_fit_result(q: JobQueue, job: JobRecord, recipe: Keypoints, people: list[dict]) -> None:

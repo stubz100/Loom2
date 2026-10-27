@@ -2656,6 +2656,46 @@ test('the Bin (D95 · AN1, 04 C1): the Dock\'s Bin tab shows the Catalogue in Im
   await expect(page.locator('.dock .dock-tabs')).toHaveCount(0)                                             // Story has the Catalogue itself
 })
 
+test("the Bin's Trash: a tile's right-click moves it to the trash, which counts it; there its double-click restores it and its right-click deletes it permanently (asked first)", async ({ page }) => {
+  await openApp(page, { suite: 'generate' })
+  await page.locator('.dock .dock-tabs button', { hasText: 'Bin' }).click()
+  const bin = page.locator('.dock .bin')
+  await bin.locator('.bin-places button', { hasText: /^Library/ }).click()
+  await bin.locator('.bin-bar .segmented button', { hasText: 'Images' }).click()
+  await expect(bin.locator('.bin-bar .meta').first()).not.toHaveText('loading…')                    // the filter's load settled: the tiles stay put
+  const id = (await bin.locator('.bin-grid .tile').last().getAttribute('data-id'))!
+  const tile = bin.locator(`.bin-grid .tile[data-id="${id}"]`)                                       // by its id: a landing asset moves the others
+  const trashedAt = async () => (await api<{ trashed_at: string | null }>('GET', `/assets/${id}`)).trashed_at
+  await tile.click({ button: 'right' })
+  await page.locator('.ctx-menu button.item', { hasText: /^Move to trash/ }).click()
+  await expect.poll(trashedAt, { timeout: 10_000 }).toBeTruthy()
+  await expect(bin.locator(`.bin-grid .tile[data-id="${id}"]`)).toHaveCount(0)                    // gone from the Library
+  const trash = bin.locator('.bin-places .bin-trash')
+  await expect(trash.locator('small')).toHaveText(/^[1-9]\d*$/)
+  await trash.click()
+  await expect(trash).toHaveClass(/active/)
+  const there = bin.locator(`.bin-grid .tile[data-id="${id}"]`)
+  await expect(there).toBeVisible()
+  await expect(bin.locator('.bin-bar button', { hasText: /Empty trash/ })).toBeEnabled()
+  await page.screenshot({ path: 'node_modules/.e2e/bin-trash.png' })
+  await there.dblclick()                                                                         // Restore
+  await expect.poll(trashedAt, { timeout: 10_000 }).toBeNull()
+  await expect(there).toHaveCount(0)
+  // trashed again, then deleted permanently from its right-click
+  await bin.locator('.bin-places button', { hasText: /^Library/ }).click()
+  await bin.locator(`.bin-grid .tile[data-id="${id}"]`).click({ button: 'right' })
+  await page.locator('.ctx-menu button.item', { hasText: /^Move to trash/ }).click()
+  await expect.poll(trashedAt, { timeout: 10_000 }).toBeTruthy()
+  await trash.click()
+  await there.click({ button: 'right' })
+  await page.locator('.ctx-menu button.item', { hasText: /^Delete permanently/ }).click()
+  const dialog = page.locator('.modal.ask')
+  await expect(dialog).toContainText('cannot be undone')
+  await dialog.locator('button', { hasText: /^Delete permanently$/ }).click()
+  await expect.poll(async () => { try { await trashedAt(); return 'there' } catch { return 'gone' } }, { timeout: 10_000 }).toBe('gone')
+  await expect(there).toHaveCount(0)
+})
+
 test('AN1 step 5 (D95): the Clay level adds an image plane from the Bin, renames it by right-click, shows the passes in Scene; Image · Make has From a stage', async ({ page }) => {
   await openApp(page, { suite: 'stage' })
   await page.locator('.placeholder button', { hasText: /^New stage/ }).click()

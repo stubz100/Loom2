@@ -188,7 +188,7 @@ async def test_the_fill_runs_face_after_face(tmp_path: Path, object_info: dict, 
         await rig.queue.start()
         order = fill_order(store.profile(p.id).version("v1").place_set)
         assert order == ["wall_left", "floor"]
-        first = queue_fill(rig.queue, p.id, "v1", order)
+        first = await queue_fill(rig.queue, p.id, "v1", order)                  # V22: submitted on the loop, staged until the face names it
         j = await rig.wait(first.id, timeout=60)
         assert j.status == "done", (j.error, j.log_tail[-5:])
         nxt = rig.queue.jobs[j.result["next_job_id"]]

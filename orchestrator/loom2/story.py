@@ -2196,6 +2196,8 @@ class StoryStore(_ShotMixin, _FlowMixin):
         g = groups.groups[g.id]
         v = ProfileVersion.model_validate({**src.model_dump(include={*SHEET_FIELDS, "poses", "place_set"}), "id": f"v{n}", "group_id": g.id,   # D93 (B4): the sheet copied, a label of its own; AP1b: the poses fitted to its body; CW6: a place's set
                                            "hero_asset_id": g.cover_id if src.hero_asset_id else None, "derived_from": src.id})
+        if v.place_set is not None and any(f.fill_job_id for f in v.place_set.faces):          # V24: a Fill running on the source stays the source's
+            v = v.model_copy(update={"place_set": v.place_set.model_copy(update={"faces": [f.model_copy(update={"fill_job_id": None}) for f in v.place_set.faces]})})
         p = cur.model_copy(update={"versions": [*cur.versions, v], "current": v.id, "revision": cur.revision + 1, "updated_at": utc_now()})
         check_profile(p)
         self.save_profile(p)

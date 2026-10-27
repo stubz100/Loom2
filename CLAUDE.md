@@ -21,7 +21,7 @@ the engine. The author works mouse-first and is EU-based.
 
 | What | Command |
 | --- | --- |
-| Offline tests (145+, ~40 s) | `orchestrator/.venv/Scripts/python.exe -m pytest orchestrator -q` |
+| Offline tests (620+, ~3.5 min) | `orchestrator/.venv/Scripts/python.exe -m pytest orchestrator -q` |
 | Photoshop oracle (D40) | `python scripts/fetch_corpus.py` once, then `… -m pytest orchestrator -m corpus -s` (needs `--extra oracle`); floor in `bench/corpus/psd-tools.floor.json` |
 | Frontend typecheck + build | `cd frontend; npm run build` (`tsc -b` + `vite build`) |
 | Lint (frontend) | `cd frontend; npm run lint` (oxlint) |

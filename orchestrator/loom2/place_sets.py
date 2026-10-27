@@ -13,9 +13,10 @@
 The set lives on the version (`ProfileVersion.place_set`); a bench binds it in Clay (D142), CW7 on any stage."""
 from __future__ import annotations
 
+import asyncio
 import secrets
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import numpy as np
 
@@ -121,9 +122,18 @@ def fill_order(ps: PlaceSet, only: list[str] | None = None) -> list[str]:
     return [f.id for f in sorted(faces, key=lambda f: (f.bad or 0.0, f.id))]
 
 
-def queue_fill(q: Any, pid: str, vid: str, order: list[str], seed: int | None = None, again: bool = False) -> Any | None:
-    """The first face of `order` that still wants its Fill queued (its document made from the bake, its selection the bad texels), the rest
-    carried in the origin; None when none does. `again`: a filled face is filled again from its bake."""
+class FillPlan(NamedTuple):
+    """A face's Fill prepared off the loop (V22): its document made from the bake, the recipe and the origin to submit."""
+    pid: str
+    vid: str
+    fid: str
+    recipe: dict
+    origin: JobOrigin
+
+
+def prepare_fill(q: Any, pid: str, vid: str, order: list[str], seed: int | None = None, again: bool = False) -> FillPlan | None:
+    """The first face of `order` that still wants its Fill (its document made from the bake, its selection the bad texels), the rest carried
+    in the origin; None when none does. `again`: a filled face is filled again from its bake. File and pixel work — a worker thread's."""
     from PIL import Image
 
     from .models import registry
@@ -158,19 +168,43 @@ def queue_fill(q: Any, pid: str, vid: str, order: list[str], seed: int | None = 
         od.dirty = True
         od.save()
         prompt = fill_prompt(fid, face.material, compose_sheet(v, name=p.name, cls=p.cls), ps.kind)
-        job = q.submit({"kind": "inpaint", "mode": "fill", "model_id": registry.default_model("inpaint", q.app.settings.variant),   # Klein 4B under `open` (D26)
-                        "document_id": od.doc.id, "prompt_text": prompt, "seeds": [seed], "expand": 6, "feather": 8},
-                       origin=JobOrigin(suite="story", surface=SET_FILL_SURFACE, ref=pid,
-                                        payload={"version": vid, "face": fid, "rest": order[k + 1:], "seed": seed, "document_id": od.doc.id, "again": again}))[0]
-        p = store.update_face(pid, vid, fid, fill_job_id=job.id)
-        q.hub.broadcast("story.changed", {"kind": "profile", "id": p.id, "revision": p.revision})
-        return job
+        recipe = {"kind": "inpaint", "mode": "fill", "model_id": registry.default_model("inpaint", q.app.settings.variant),   # Klein 4B under `open` (D26)
+                  "document_id": od.doc.id, "prompt_text": prompt, "seeds": [seed], "expand": 6, "feather": 8}
+        origin = JobOrigin(suite="story", surface=SET_FILL_SURFACE, ref=pid,
+                           payload={"version": vid, "face": fid, "rest": order[k + 1:], "seed": seed, "document_id": od.doc.id, "again": again})
+        return FillPlan(pid, vid, fid, recipe, origin)
     return None
 
 
-def fill_landed(q: Any, job: Any, od: Any) -> None:
-    """A face's Fill landed on its document: flattened, it is the face's texture (lineage `set-fill` ← the bake); the document closes and
-    the next face is queued. A face baked again meanwhile keeps its new bake. Never the job's failure."""
+async def start_fill(q: Any, plan: FillPlan) -> Any:
+    """V21 / V22: the Fill is submitted on the loop (the queue is loop-only), *staged* until its face names it, then released — the face
+    never names a job that is not there, and the job never runs before its marker is on disk. A job refused at submission (the VRAM
+    budget) sets no marker and raises with the reason."""
+    from .story import StoryStore
+    job = q.submit(plan.recipe, stage=True, origin=plan.origin)[0]
+    if job.status != "staged":
+        raise ValueError(job.error or "the Fill was refused")
+    store = StoryStore(q.ws)
+    try:
+        p = await asyncio.to_thread(store.update_face, plan.pid, plan.vid, plan.fid, fill_job_id=job.id)
+    except Exception:
+        await q.cancel(job.id)                                                  # the face is gone meanwhile: the job never runs
+        raise
+    q.release(job.id)
+    q.hub.broadcast("story.changed", {"kind": "profile", "id": p.id, "revision": p.revision})
+    return job
+
+
+async def queue_fill(q: Any, pid: str, vid: str, order: list[str], seed: int | None = None, again: bool = False) -> Any | None:
+    """*Fill ▶*'s next job: prepared on a thread, submitted on the loop (`start_fill`); None when no face in `order` wants a Fill."""
+    plan = await asyncio.to_thread(prepare_fill, q, pid, vid, order, seed, again)
+    return None if plan is None else await start_fill(q, plan)
+
+
+def fill_landed(q: Any, job: Any, od: Any) -> list[str]:
+    """A face's Fill landed on its document: flattened, it is the face's texture (lineage `set-fill` ← the bake); the document closes.
+    Returns the faces still to fill (`fill_next` queues the first). A face baked again meanwhile keeps its new bake. Never the job's
+    failure — and a landing that fails lets go of its face (V25), so the next *Fill ▶* can take it."""
     from PIL import Image
 
     from .fsio import new_id
@@ -199,13 +233,33 @@ def fill_landed(q: Any, job: Any, od: Any) -> None:
             job.log_tail.append(f"the set's {fid} was baked again meanwhile; {rec.id} not used")
         if q.documents is not None:
             q.documents.close(od.doc.id)
-        rest = [str(x) for x in payload.get("rest") or []]
-        if rest:
-            nxt = queue_fill(q, pid, vid, rest, int(payload.get("seed") or 0) or None, bool(payload.get("again")))
-            if nxt is not None:
-                job.result["next_job_id"] = nxt.id
+        return [str(x) for x in payload.get("rest") or []]
     except Exception as e:  # noqa: BLE001
         job.log_tail.append(f"the set's {fid}: {e}")
+        try:                                                                    # V25: the face is not left waiting on a job that is done
+            store = StoryStore(q.ws)
+            p = store.profile(pid)
+            ps = p.version(vid).place_set if p is not None else None
+            if ps is not None and any(f.id == fid and f.fill_job_id == job.id for f in ps.faces):
+                p = store.update_face(pid, vid, fid, fill_job_id=None)
+                q.hub.broadcast("story.changed", {"kind": "profile", "id": p.id, "revision": p.revision, "error": f"The set's {fid}: the Fill landed but {e}"})
+        except Exception:  # noqa: BLE001
+            pass
+        return []
+
+
+async def fill_next(q: Any, job: Any, rest: list[str]) -> None:
+    """After a landing: the next face's Fill from the landed job's origin (its seed and `again` carried). A refusal is noted on the landed
+    job, never its failure."""
+    payload = job.origin.payload or {}
+    pid, vid = str(job.origin.ref or ""), str(payload.get("version") or "")
+    try:
+        nxt = await queue_fill(q, pid, vid, rest, int(payload.get("seed") or 0) or None, bool(payload.get("again")))
+    except Exception as e:  # noqa: BLE001
+        job.log_tail.append(f"the next face was not queued: {e}")
+        return
+    if nxt is not None:
+        job.result["next_job_id"] = nxt.id
 
 
 def fill_failed(q: Any, job: Any, msg: str) -> None:

@@ -850,13 +850,18 @@ async def profile_set_fill(svc: Svc, pid: str, vid: str, body: SetFillBody):
     ps = v.place_set
     if ps is None or not any(f.baked_asset_id for f in ps.faces):
         raise HTTPException(422, "the set is not baked yet — Build the set ▶ bakes it")
-    if any(f.fill_job_id for f in ps.faces):
+    if any(f.fill_job_id and svc.queue.job_live(f.fill_job_id) for f in ps.faces):
         raise HTTPException(409, "the set's Fill is running — one at a time")
+    stale = [f.id for f in ps.faces if f.fill_job_id]
+    if stale:                                                                   # V21: a face naming a job that is gone or over (a shutdown, a crash) lets go
+        ws, _, _ = svc.require_project()
+        for fid in stale:
+            await asyncio.to_thread(StoryStore(ws).update_face, pid, vid, fid, fill_job_id=None)
     order = fill_order(ps, body.faces)
     if not order:
         raise HTTPException(422, "nothing to fill: every face the picture did not see well is filled")
     try:
-        job = await asyncio.to_thread(queue_fill, svc.queue, pid, vid, order, None, body.faces is not None)   # faces named: filled again when they were
+        job = await queue_fill(svc.queue, pid, vid, order, None, body.faces is not None)   # faces named: filled again when they were; V22: submitted on the loop
     except ValueError as e:
         raise HTTPException(422, str(e))
     if job is None:

@@ -32,10 +32,20 @@ foreach ($line in $nodes) {
   }
   Push-Location $dest
   $ErrorActionPreference = 'SilentlyContinue'
-  if ((git rev-parse --short=7 HEAD) -ne $commit) { git fetch --quiet origin 2>$null }; git checkout --quiet $commit
+  $want = $commit.Substring(0, 7)
+  $head = (git rev-parse --short=7 HEAD)
+  if ($head -ne $want) {
+    git checkout --quiet -- . 2>$null                 # V49: loom2's patch makes the tree dirty; dropped here, applied again below
+    git fetch --quiet origin 2>$null
+    git checkout --quiet $commit 2>$null
+    $rc = $LASTEXITCODE
+    $head = (git rev-parse --short=7 HEAD)
+    $ErrorActionPreference = 'Stop'
+    if ($rc -ne 0 -or $head -ne $want) { Pop-Location; throw "${name}: could not check out $commit (at $head) — nodes.lock and the checkout disagree" }
+  }
   $ErrorActionPreference = 'Stop'
   Pop-Location
-  Write-Host "       $name @ $commit"
+  Write-Host "       $name @ $head"
 }
 $patches = Get-Content engine/nodes.lock | Where-Object { $_ -match '^\S+\s+patch\s+\S+' }
 foreach ($line in $patches) {

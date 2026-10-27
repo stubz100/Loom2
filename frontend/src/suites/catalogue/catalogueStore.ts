@@ -130,11 +130,13 @@ export function createCatalogueStore(name: string, defaults: Partial<Query> = {}
       loadMore: async () => {
         const { q, nextCursor, loading } = get()
         if (!nextCursor || loading || q.group !== 'none') return
+        const seq = loadSeq                                           // V64: a page in flight belongs to this query — a newer load wins
         set({ loading: true })
         try {
           const page = await unwrap(http.GET('/assets', { params: { query: queryOf(q, { limit: 200, cursor: nextCursor }) } }))
+          if (seq !== loadSeq) return
           set({ items: [...get().items, ...page.items], nextCursor: page.next_cursor })
-        } finally { set({ loading: false }) }
+        } finally { if (seq === loadSeq) set({ loading: false }) }
       },
 
       loadGroup: async (key) => {
@@ -248,10 +250,19 @@ export function createCatalogueStore(name: string, defaults: Partial<Query> = {}
         const d = f.data as unknown as Asset & { id: string }
         if (f.type === 'asset.updated') {
           const upd = (a: Asset) => (a.id === d.id ? (d as Asset) : a)
-          if (d.trashed_at && s.q.folder !== 'trash') { removeLocal([d.id], set, get); return }
+          const here = s.items.some((a) => a.id === d.id) || Object.values(s.groupItems).some((v) => v.some((a) => a.id === d.id))
+          // V63: a trash or a restore made in any store reaches every other one — its list and its Trash count alike
+          if (d.trashed_at && s.q.folder !== 'trash') { if (here) removeLocal([d.id], set, get); refreshMetaSoon(get); return }
+          if (d.trashed_at && s.q.folder === 'trash') {
+            if (!here && s.q.group === 'none' && !s.q.search) set({ items: [d as Asset, ...s.items], total: (s.total ?? 0) + 1 })   // trashed elsewhere: into this trash
+            else if (here) set({ items: s.items.map(upd) })
+            refreshMetaSoon(get); return
+          }
+          if (!d.trashed_at && s.q.folder === 'trash') { if (here) { removeLocal([d.id], set, get); refreshMetaSoon(get) } return }   // restored elsewhere: out of this trash
           set({ items: s.items.map(upd), groupItems: Object.fromEntries(Object.entries(s.groupItems).map(([k, v]) => [k, v.map(upd)])) })
         } else if (f.type === 'asset.deleted') {
           removeLocal([d.id], set, get)
+          if (s.q.folder === 'trash' || (s.counts.trash ?? 0) > 0) refreshMetaSoon(get)          // a purge: the Trash count
         } else if (f.type === 'asset.created') {
           if (s.q.folder === 'trash' || s.q.search || s.q.collection_id || s.q.group_id) return      // new items land in Unprocessed (D34)
           if (s.q.group === 'none') {
@@ -292,15 +303,24 @@ async function patchMany(ids: string[], changes: Record<string, unknown>, set: (
   set({ items: s.items.map(upd), groupItems: Object.fromEntries(Object.entries(s.groupItems).map(([k, v]) => [k, v.map(upd)])) })
 }
 
+/** The counts and the tag cloud again, once the frames of one change have landed (V63: a trash of fifty assets is fifty frames, one round trip). */
+const metaTimers = new WeakMap<object, number>()                              // keyed by the store's `get` (stable; its state object is new after every set)
+function refreshMetaSoon(get: () => CatalogueState): void {
+  const t = metaTimers.get(get)
+  if (t) window.clearTimeout(t)
+  metaTimers.set(get, window.setTimeout(() => { metaTimers.delete(get); void get().refreshMeta() }, 250))
+}
+
 function removeLocal(ids: string[], set: (p: Partial<CatalogueState>) => void, get: () => CatalogueState) {
   const s = get()
   const gone = new Set(ids)
+  const listed = s.items.filter((a) => gone.has(a.id)).length + Object.values(s.groupItems).reduce((n, v) => n + v.filter((a) => gone.has(a.id)).length, 0)
   set({
     items: s.items.filter((a) => !gone.has(a.id)),
     groupItems: Object.fromEntries(Object.entries(s.groupItems).map(([k, v]) => [k, v.filter((a) => !gone.has(a.id))])),
     groups: s.groups.map((g) => ({ ...g, count: g.count - (s.groupItems[g.key] ?? []).filter((a) => gone.has(a.id)).length })).filter((g) => g.count > 0),
     selected: s.selected.filter((x) => !gone.has(x)), primary: s.primary && gone.has(s.primary) ? null : s.primary,
-    total: s.total === null ? null : Math.max(0, s.total - ids.length),
+    total: s.total === null ? null : Math.max(0, s.total - listed),                 // V62: by what this list held — the store and the broadcast both call this
     compare: s.compare.filter((x) => !gone.has(x)), loupe: s.loupe && gone.has(s.loupe) ? null : s.loupe,
   })
 }

@@ -1,48 +1,40 @@
 <#
 .SYNOPSIS
-  Start the loom2 inference engine: the pinned headless ComfyUI (engine/comfyui) in the engine venv.
+  Start the loom2 inference engine by hand, exactly as loom2 starts it (the pinned headless ComfyUI in engine/.venv).
 .DESCRIPTION
-  Flags follow 06 §3b / 04 §2 (D13): loopback only, no browser, PyTorch SDPA attention, no pinned memory,
-  loom2 model mounts via engine/extra_model_paths.yaml, outputs under engine/comfyui_out (gitignored).
-  ComfyUI is used for model and inference management only (D15); its UI is never opened.
-.PARAMETER Port       TCP port on 127.0.0.1 (default 8188).
-.PARAMETER LowVram    Add --lowvram (ComfyUI's aggressive offload) if dev FLUX.2 refuses to fit.
-.PARAMETER Extra      Additional raw ComfyUI arguments.
+  V44: the launch comes from the orchestrator (python -m loom2.engine.supervisor --argv) — the same flags (06 §3b / 04 §2, D13),
+  --reserve-vram and --vram-headroom from Settings, the model mounts written from Settings (V45) and the outputs under
+  <state>/engine_out — so the app, which adopts an engine already listening on its port, finds every job's files where its
+  finishers read them. ComfyUI is used for model and inference management only (D15); its UI is never opened.
+  scripts/engine-stop.ps1 stops it; an adopted engine cannot be restarted from the app.
+.PARAMETER State    The app state dir (default: $LOOM2_STATE or <repo>/.loom2_state — the orchestrator's own default).
+.PARAMETER LowVram  Add --lowvram (ComfyUI's aggressive offload) if dev FLUX.2 refuses to fit.
+.PARAMETER Extra    Additional raw ComfyUI arguments.
 #>
 param(
-  [int]$Port = 8188,
+  [string]$State,
   [switch]$LowVram,
   [string[]]$Extra = @()
 )
 $ErrorActionPreference = 'Stop'
-$repo   = Split-Path -Parent $PSScriptRoot
-$python = Join-Path $repo 'engine\.venv\Scripts\python.exe'
-$main   = Join-Path $repo 'engine\comfyui\main.py'
+$repo = Split-Path -Parent $PSScriptRoot
+$orch = Join-Path $repo 'orchestrator\.venv\Scripts\python.exe'
+if (-not (Test-Path $orch)) { throw "orchestrator venv missing: $orch (scripts/setup.ps1)" }
+
+$ask = @('-m', 'loom2.engine.supervisor', '--argv')
+if ($State) { $ask += @('--state', $State) }
+$launch = (& $orch @ask) | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0 -or -not $launch) { throw "the orchestrator did not give the engine's launch (python -m loom2.engine.supervisor --argv)" }
+
+$python = [string]$launch.argv[0]
+$engineArgs = @($launch.argv | Select-Object -Skip 1)
 if (-not (Test-Path $python)) { throw "engine venv missing: $python (see 12 §1a)" }
-if (-not (Test-Path $main))   { throw "ComfyUI checkout missing: $main (git submodule update --init)" }
+if (-not (Test-Path $engineArgs[0])) { throw "ComfyUI checkout missing: $($engineArgs[0]) (git submodule update --init)" }
+if ($LowVram) { $engineArgs += '--lowvram' }
+$engineArgs += $Extra
+foreach ($v in $launch.env.PSObject.Properties) { Set-Item -Path "env:$($v.Name)" -Value $v.Value }
 
-foreach ($d in 'engine\comfyui_out','engine\comfyui_tmp','engine\comfyui_user') {
-  New-Item -ItemType Directory -Force (Join-Path $repo $d) | Out-Null
-}
-
-$args = @(
-  $main,
-  '--listen', '127.0.0.1',
-  '--port', "$Port",
-  '--disable-auto-launch',
-  '--use-pytorch-cross-attention',
-  '--disable-pinned-memory',
-  '--preview-method', 'none',
-  '--log-stdout',
-  '--extra-model-paths-config', (Join-Path $repo 'engine\extra_model_paths.yaml'),
-  '--output-directory', (Join-Path $repo 'engine\comfyui_out'),
-  '--temp-directory',   (Join-Path $repo 'engine\comfyui_tmp'),
-  '--user-directory',   (Join-Path $repo 'engine\comfyui_user')
-)
-if ($LowVram) { $args += '--lowvram' }
-$args += $Extra
-
-# Keep the engine process confined to this repo's ComfyUI checkout.
-Set-Location (Join-Path $repo 'engine\comfyui')
-Write-Host "[loom2] engine: $python $($args -join ' ')"
-& $python @args
+# Keep the engine process confined to this repo's ComfyUI checkout, as the supervisor does.
+Set-Location $launch.cwd
+Write-Host "[loom2] engine on 127.0.0.1:$($launch.port), state $($launch.state): $python $($engineArgs -join ' ')"
+& $python @engineArgs

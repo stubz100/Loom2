@@ -11,10 +11,11 @@ Ideas stay out of production: no @mention, no place in Flow's pickers or Shots, 
 written through fsio with a schema version and a revision (409 when stale)."""
 from __future__ import annotations
 
+import asyncio
 import re
 import threading
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -327,41 +328,84 @@ def _broadcast(q: Any, idea: Idea | None, **extra: Any) -> None:
         q.hub.broadcast("story.changed", {"kind": "idea", "id": idea.id, "revision": idea.revision, **extra})
 
 
-def clay_aref_landed(q: Any, job: Any, asset_id: str) -> None:
-    """The A-pose picture: on the idea's page, the variant's; the fit queued. Never the job's failure (the variant shows the error)."""
+class ClayStep(NamedTuple):
+    """One step of a variant's clay to start (V22): the job `start_step` submits on the loop, and the clay's fields set with its id."""
+    iid: str
+    vid: str
+    recipe: dict
+    origin: JobOrigin
+    fields: dict
+
+
+async def start_step(q: Any, step: ClayStep) -> Any:
+    """V21 / V22 / V30: the step's job is submitted on the loop (the queue is loop-only), *staged* until the variant's clay names it, then
+    released — the marker is on disk before the job can run, so a landing is never overwritten by the write that queued it, and a crash
+    between the two leaves no job without its marker. A job refused at submission (the VRAM budget) marks the variant failed with the
+    reason and raises."""
+    store = IdeaStore(q.ws)
+    job = q.submit(step.recipe, stage=True, origin=step.origin)[0]
+    if job.status != "staged":
+        msg = (job.error or "the step was refused")[:400]
+        _broadcast(q, await asyncio.to_thread(store.set_clay, step.iid, step.vid, **{**step.fields, "step": "failed", "job_id": None, "error": msg}))
+        raise ValueError(job.error or "the step was refused")
+    try:
+        idea = await asyncio.to_thread(store.set_clay, step.iid, step.vid, **{**step.fields, "job_id": job.id, "error": None})
+    except Exception:
+        await q.cancel(job.id)                                                  # the variant is gone meanwhile: the job never runs
+        raise
+    q.release(job.id)
+    _broadcast(q, idea)
+    return job
+
+
+async def start_next(q: Any, job: Any, step: ClayStep | None) -> None:
+    """After a landing: the chain's next step (`start_step`); a refusal is noted on the landed job and the variant, never the job's failure."""
+    if step is None:
+        return
+    try:
+        nxt = await start_step(q, step)
+    except Exception as e:  # noqa: BLE001
+        job.log_tail.append(f"the next clay step was not queued: {e}")
+        return
+    job.result["next_job_id"] = nxt.id
+
+
+def clay_aref_landed(q: Any, job: Any, asset_id: str) -> ClayStep | None:
+    """The A-pose picture: on the idea's page, the variant's; the fit to start (`start_next`). Never the job's failure (the variant shows
+    the error)."""
     iid, vid = str(job.origin.ref or ""), str((job.origin.payload or {}).get("variant") or "")
     store = IdeaStore(q.ws)
     try:
         idea = store.get(iid)
         if idea is None:
-            return
+            return None
         if q.groups is not None and idea.group_id in q.groups.groups:
             q.groups.move([("asset", asset_id)], idea.group_id)
             q.hub.broadcast("group.changed", {"ids": [idea.group_id]})
-        fit = q.submit({"kind": "keypoints", "asset_id": asset_id}, origin=idea_clay_origin(iid, vid, "fit"))
-        _broadcast(q, store.set_clay(iid, vid, step="fitting", anim_ref_asset_id=asset_id, body=None, body_points=None, note=None,
-                                     shell_asset_id=None, job_id=fit[0].id, error=None))
+        return ClayStep(iid, vid, {"kind": "keypoints", "asset_id": asset_id}, idea_clay_origin(iid, vid, "fit"),
+                        {"step": "fitting", "anim_ref_asset_id": asset_id, "body": None, "body_points": None, "note": None, "shell_asset_id": None})
     except Exception as e:  # noqa: BLE001
         job.log_tail.append(f"the variant's clay stopped: {e}")
         try:
-            _broadcast(q, store.set_clay(iid, vid, step="failed", error=f"the fit was not queued: {e}"))
+            _broadcast(q, store.set_clay(iid, vid, step="failed", job_id=None, error=f"the fit was not queued: {e}"))
         except Exception:  # noqa: BLE001
             pass
+        return None
 
 
-def clay_fit_landed(q: Any, job: Any, recipe: Any, people: list[dict]) -> None:
+def clay_fit_landed(q: Any, job: Any, recipe: Any, people: list[dict]) -> ClayStep | None:
     """The fit (D104's, on the A-pose picture): the body and its points on the variant; an arms-down picture fits nothing (D140) and the
-    chain stops with the way out; otherwise the shell is queued (Pixal3D, full only — without it the figure is the clay)."""
+    chain stops with the way out; otherwise the shell to start (`start_next`; Pixal3D, full only — without it the figure is the clay)."""
     from .body import Body, body_points, fit_body, reference_ratios, stance_note
     from .models import registry
     iid, vid = str(job.origin.ref or ""), str((job.origin.payload or {}).get("variant") or "")
     store = IdeaStore(q.ws)
     if not people:
-        _broadcast(q, store.set_clay(iid, vid, step="failed", error="no figure found in the A-pose picture — make the clay again"))
+        _broadcast(q, store.set_clay(iid, vid, step="failed", job_id=None, error="no figure found in the A-pose picture — make the clay again"))
         raise ValueError("no figure found in the A-pose picture")
     note = stance_note(people[0])
     if note == "arms_close":
-        _broadcast(q, store.set_clay(iid, vid, step="failed", note=note, error="the picture holds its arms against the body: make the clay again for a new A-pose"))
+        _broadcast(q, store.set_clay(iid, vid, step="failed", job_id=None, note=note, error="the picture holds its arms against the body: make the clay again for a new A-pose"))
         raise ValueError("the A-pose picture holds its arms against the body (D140)")
     body, report = fit_body(reference_ratios(people[0]), Body(), ())
     pts = body_points(people[0], job.result.get("canvas"))
@@ -369,9 +413,9 @@ def clay_fit_landed(q: Any, job: Any, recipe: Any, people: list[dict]) -> None:
     spec = next((s for s in registry.mesh_specs() if registry.offered(s, getattr(job, "variant", None))), None)
     if spec is None:
         _broadcast(q, store.set_clay(iid, vid, step="done", body=body.model_dump(), body_points=pts, note=note, job_id=None, error=None))
-        return
-    shell = q.submit({"kind": "image_to_mesh", "asset_id": recipe.asset_id, "model_id": spec.id}, origin=idea_clay_origin(iid, vid, "shell"))
-    _broadcast(q, store.set_clay(iid, vid, step="shell", body=body.model_dump(), body_points=pts, note=note, job_id=shell[0].id, error=None))
+        return None
+    return ClayStep(iid, vid, {"kind": "image_to_mesh", "asset_id": recipe.asset_id, "model_id": spec.id}, idea_clay_origin(iid, vid, "shell"),
+                    {"step": "shell", "body": body.model_dump(), "body_points": pts, "note": note})
 
 
 def clay_shell_landed(q: Any, job: Any, mesh_id: str) -> None:
@@ -380,6 +424,10 @@ def clay_shell_landed(q: Any, job: Any, mesh_id: str) -> None:
         _broadcast(q, IdeaStore(q.ws).set_clay(iid, vid, step="done", shell_asset_id=mesh_id, job_id=None, error=None))
     except Exception as e:  # noqa: BLE001
         job.log_tail.append(f"the shell was not set on the variant: {e}")
+        try:                                                                    # V25: never left "shell" on a job that is done
+            _broadcast(q, IdeaStore(q.ws).set_clay(iid, vid, step="failed", job_id=None, error=f"the shell was not set on the variant: {e}"[:400]))
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def clay_failed(q: Any, job: Any, msg: str) -> None:

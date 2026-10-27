@@ -150,6 +150,7 @@ class JobQueue:
                     self.resumed_unclean = True
                 else:
                     rec.status, rec.error, rec.finished_at = "failed", "interrupted by shutdown", utc_now()
+                    self._origin_stopped(rec, "interrupted by shutdown")      # V21: the record waiting on it (a set's face, a variant's clay) lets go
             self.jobs[rec.id] = rec
         self.persist(sync=True)
 
@@ -237,6 +238,7 @@ class JobQueue:
             if not running.resumable:                        # C8: outputs may be half written — never render this one again
                 running.status, running.error, running.finished_at = "failed", "interrupted while its outputs were being written", utc_now()
                 self.catalogue.record_job(running.model_dump())
+                self._origin_stopped(running, running.error)     # V21: every terminal transition runs the hook
             else:
                 submitted = running.prompt_id is not None
                 running.status = "queued"           # a clean shutdown re-queues the interrupted job explicitly
@@ -297,6 +299,7 @@ class JobQueue:
             if rec.vram_estimate_gb > self.app.settings.vram_budget_gb:
                 rec.status, rec.error, rec.finished_at = "failed", f"VRAM estimate {rec.vram_estimate_gb} GB exceeds the budget {self.app.settings.vram_budget_gb} GB", utc_now()
                 self.catalogue.record_job(rec.model_dump())                 # C16: a refused job is still a job in the index
+                self._origin_stopped(rec, rec.error or "refused")            # V21: every terminal transition runs the hook
             self.jobs[rec.id] = rec
             out.append(rec)
             self.hub.broadcast("job.created", rec.model_dump())
@@ -335,6 +338,11 @@ class JobQueue:
         self.hub.broadcast("job.updated", rec.model_dump())
         self._wake.set()
         return rec
+
+    def job_live(self, job_id: str | None) -> bool:
+        """V21: whether the job a record waits on is still ahead or running; a marker naming a job that is gone or over is stale, not busy."""
+        rec = self.jobs.get(job_id or "")
+        return rec is not None and rec.status not in TERMINAL
 
     def release(self, job_id: str | None = None) -> list[JobRecord]:
         """Staged → queued (one job, or every staged job when no id is given) — 09 §3 'Stage' for overnight runs."""
@@ -753,7 +761,9 @@ class JobQueue:
             await self.irreversible(job)                     # C8: the engine's work is done; what follows must never run twice
             files = self.follower.outputs(await self.engine.client.history(job.prompt_id), text=getattr(recipe, "kind", None) == "keypoints")
             if not files:
-                self._fail(job, "the engine finished but produced no output files")
+                adopted = self.engine.proc is None                 # V44: an engine started outside loom2 writes where it was told, not where the finishers read
+                self._fail(job, "the engine finished but produced no output files" + (" — the engine was started outside loom2 (adopted): start it with "
+                                "scripts/engine-start.ps1, which takes loom2's own launch, or stop it and let loom2 start its own" if adopted else ""))
                 return
             fin = finisher_for(recipe)
             await fin.finish(job, recipe, files, sub, self)

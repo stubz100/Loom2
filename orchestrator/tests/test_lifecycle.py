@@ -159,7 +159,8 @@ async def test_stall_watchdog_fails_job_restarts_engine_and_pauses(tmp_path: Pat
         j = await rig.wait(job.id, timeout=30)
         assert j.status == "failed" and "stalled" in (j.error or "")
         assert rig.queue.paused and rig.queue.state()["running"] is None
-        assert rig.fake.interrupts >= 1 and rig.engine.restarts == 1
+        assert rig.fake.interrupts >= 1
+        assert rig.engine.restarts == 0 and "adopted" in j.error and "could not be restarted" in j.error   # V19: the fake is adopted, not loom2's to restart
     finally:
         await rig.close()
 

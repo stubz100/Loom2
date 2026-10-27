@@ -891,10 +891,10 @@ function Viewport() {
   const playing = useStage((s) => s.playing)
   useEffect(() => { const e = engineRef.current; if (e && current) { e.setAspect(current.size.w / current.size.h); e.sync(sampleDoc(current, frame)); setRect({ ...e.frameRect() }); setPipRect(e.pipRect()) } }, [current, frame])   // ST4: the document at the frame
   useEffect(() => {                                                                                                     // ST4: playback loops over the range at the project's fps
-    if (!playing || !current) return
+    if (!playing || !current || !active) return                                                                         // V87 (D69): hidden, the loop rests; it goes on when the level is back
     const t = window.setInterval(() => { const s = st(); const cur = s.current; if (!cur) return; s.setFrame(s.frame + 1 > cur.range.end ? cur.range.start : s.frame + 1) }, 1000 / Math.max(1, current.size.fps))
     return () => window.clearInterval(t)
-  }, [playing, current?.size.fps]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [playing, active, current?.size.fps]) // eslint-disable-line react-hooks/exhaustive-deps
   const selectedCamera = useStage((s) => s.selectedCamera)
   useEffect(() => { engineRef.current?.select(selected) }, [selected])
   useEffect(() => { engineRef.current?.selectCamera(selectedCamera) }, [selectedCamera])                   // D119 (SC1)

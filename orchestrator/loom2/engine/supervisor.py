@@ -1,6 +1,10 @@
 """The managed ComfyUI process (06 §3b): start with the pinned flags, probe health, restart on failure or every N
 jobs, and make sure it dies with the orchestrator (Windows Job Object with kill-on-close; `taskkill /T` as the
 belt to the braces because the uv venv launcher spawns the real interpreter as a child).
+
+`python -m loom2.engine.supervisor --argv [--state DIR]` prints the launch as loom2 makes it (V44): `scripts/engine-start.ps1` runs
+exactly that, so an engine started by hand — which the supervisor adopts when it already listens on the port — writes its outputs
+where the finishers read them and carries the same reserve, headroom and model mounts.
 """
 from __future__ import annotations
 
@@ -17,6 +21,7 @@ from ..config import AppState
 from .client import ComfyClient, wait_for_engine
 
 IS_WINDOWS = sys.platform.startswith("win")
+ENGINE_ENV = {"PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1", "HF_HUB_OFFLINE": "1"}   # the engine's environment, over the orchestrator's
 
 
 def _make_kill_on_close_job():
@@ -91,6 +96,7 @@ class EngineSupervisor:
         self._lock = asyncio.Lock()
         self.version: dict | None = None
         self.in_job_object = False
+        self.adopted = False                           # V19: the engine on the port was started outside loom2 — not ours to stop or restart
         self.headroom_gb: float | None = None          # D100: the --vram-headroom the running engine was launched with (None: a flag in `flags` decides)
 
     # ---- state ------------------------------------------------------------------------------------
@@ -117,6 +123,35 @@ class EngineSupervisor:
             return None
         return float(model_gb if model_gb is not None else (e.vram_headroom_gb or 0.0))
 
+    def model_paths_config(self) -> str:
+        """V45 (T8): the engine's model mounts written from Settings — `models_root` as the default tree, every `mounted_model_trees` entry
+        after it, each with the folder map of `engine/extra_model_paths.yaml` (the template) — into `<state>/extra_model_paths.yaml`.
+        The roster and the engine then read the same trees; a template that cannot be read is passed through unchanged."""
+        import yaml
+        e = self.app.settings.engine
+        try:
+            template = yaml.safe_load(Path(e.extra_model_paths).read_text(encoding="utf-8")) or {}
+            name, folders = next(iter(template.items()))
+            folders = {k: v for k, v in dict(folders).items() if k not in ("base_path", "is_default")}
+        except Exception as ex:  # noqa: BLE001
+            self.last_error = f"model mounts: the template {e.extra_model_paths} could not be read ({ex}); passed through as it is"
+            return e.extra_model_paths
+        class Block(str):
+            """A multi-line folder entry (`checkpoints: |` lists two folders) kept as a block scalar, as the engine's loader splits it."""
+
+        class Dumper(yaml.SafeDumper):
+            pass
+
+        Dumper.add_representer(Block, lambda d, s: d.represent_scalar("tag:yaml.org,2002:str", str(s), style="|"))
+        folders = {k: Block(v) if isinstance(v, str) and "\n" in v else v for k, v in folders.items()}
+        trees = {name: {"base_path": Path(self.app.settings.models_root).as_posix(), "is_default": True, **folders}}
+        for i, tree in enumerate(self.app.settings.mounted_model_trees, 1):
+            trees[f"mounted_{i}"] = {"base_path": Path(tree).as_posix(), **folders}
+        out = self.app.state_dir / "extra_model_paths.yaml"
+        out.write_text("# written by loom2 from Settings (models_root, mounted_model_trees) at every engine launch — edit the Settings, not this file\n"
+                       + yaml.dump(trees, Dumper=Dumper, sort_keys=False, allow_unicode=True), encoding="utf-8")
+        return str(out)
+
     def _argv(self, model_gb: float | None = None) -> list[str]:
         e = self.app.settings.engine
         state = self.app.state_dir
@@ -124,9 +159,16 @@ class EngineSupervisor:
         h = self.headroom_for(model_gb)
         headroom = ["--vram-headroom", str(h)] if h else []
         return [e.python, e.main, "--listen", e.host, "--port", str(e.port), *e.flags, *reserve, *headroom, "--log-stdout",
-                "--extra-model-paths-config", e.extra_model_paths,
+                "--extra-model-paths-config", self.model_paths_config(),
                 "--output-directory", str(state / "engine_out"), "--temp-directory", str(state / "engine_tmp"),
                 "--user-directory", str(state / "engine_user")]
+
+    def launch(self, model_gb: float | None = None) -> dict:
+        """V44: the launch as `start()` makes it — argv, cwd, env and port — for `scripts/engine-start.ps1` (`--argv`)."""
+        for d in ("engine_out", "engine_tmp", "engine_user"):
+            (self.app.state_dir / d).mkdir(parents=True, exist_ok=True)
+        return {"argv": self._argv(model_gb), "cwd": str(Path(self.app.settings.engine.main).parent), "env": dict(ENGINE_ENV),
+                "port": self.app.settings.engine.port, "state": str(self.app.state_dir)}
 
     async def start(self, model_gb: float | None = None) -> dict:
         async with self._lock:
@@ -134,6 +176,7 @@ class EngineSupervisor:
                 return self.state()
             if await self.client.is_up():
                 # an engine already listens on our port (e.g. started by a script) — adopt it read-only
+                self.adopted = True
                 self.last_error = "adopted an engine that was already listening; not supervised"
                 self.version = (await self.client.system_stats()).get("system")
                 self._emit()
@@ -148,7 +191,7 @@ class EngineSupervisor:
                 except OSError:
                     pass
             self._log_fh = self.log_path.open("ab")
-            env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1", "HF_HUB_OFFLINE": "1"}
+            env = {**os.environ, **ENGINE_ENV}
             try:
                 self.headroom_gb = self.headroom_for(model_gb)
                 self.proc = subprocess.Popen(self._argv(model_gb), cwd=str(Path(e.main).parent), stdout=self._log_fh, stderr=subprocess.STDOUT, env=env,
@@ -160,6 +203,7 @@ class EngineSupervisor:
                 self._emit()
                 raise
             self.in_job_object = _assign_to_job(self.proc)
+            self.adopted = False
             self.started_at = time.time()
             self.jobs_since_start = 0
             self.last_error = None
@@ -217,7 +261,14 @@ class EngineSupervisor:
             pass
 
     async def restart(self, model_gb: float | None = None) -> dict:
-        """Stop and start again — with the headroom the engine had (a hang, the restart-every-N policy) unless a model asks for another."""
+        """Stop and start again — with the headroom the engine had (a hang, the restart-every-N policy) unless a model asks for another.
+        V19: an adopted engine (started outside loom2) is not ours to stop; saying so beats re-adopting the same hung process and
+        counting a restart."""
+        if self.adopted and self.proc is None and await self.client.is_up():
+            self.last_error = ("the engine was adopted (started outside loom2) and cannot be restarted here — stop it "
+                               "(scripts/engine-stop.ps1) and loom2 starts its own, or start it with scripts/engine-start.ps1")
+            self._emit()
+            raise RuntimeError(self.last_error)
         keep = self.headroom_gb if model_gb is None else model_gb
         await self.stop()
         self.restarts += 1
@@ -235,10 +286,13 @@ class EngineSupervisor:
         if alive and e.restart_every_jobs and self.jobs_since_start >= e.restart_every_jobs:
             await self.restart()
             return False
-        if not alive and not await self.client.is_up():
-            if self.proc is not None:
-                self.restarts += 1
-            await self.start(model_gb)
+        if not alive:
+            if await self.client.is_up():
+                self.adopted = True                   # V19: an engine on the port that loom2 did not start — used, never restarted
+            else:
+                if self.proc is not None:
+                    self.restarts += 1
+                await self.start(model_gb)
         return False
 
     async def health(self) -> dict:
@@ -254,3 +308,22 @@ class EngineSupervisor:
             except Exception:
                 pass
         return s
+
+
+def main(argv: list[str] | None = None) -> int:
+    """`python -m loom2.engine.supervisor --argv [--state DIR]`: the engine's launch as loom2 makes it, as one JSON line (V44)."""
+    import argparse
+    import json
+    ap = argparse.ArgumentParser(description="the loom2 engine's launch, as the orchestrator makes it")
+    ap.add_argument("--argv", action="store_true", help="print {argv, cwd, env, port, state} as JSON")
+    ap.add_argument("--state", default=None, help="app state dir (default: $LOOM2_STATE or <repo>/.loom2_state)")
+    a = ap.parse_args(argv)
+    if not a.argv:
+        ap.error("nothing asked: --argv")
+    sup = EngineSupervisor(AppState(Path(a.state) if a.state else None))
+    print(json.dumps(sup.launch()))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

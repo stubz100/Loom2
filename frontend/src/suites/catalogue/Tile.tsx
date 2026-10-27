@@ -12,18 +12,19 @@ export interface TileProps {
   onUse?: (id: string) => void; useLabel?: string                 // D125 (I2): Image's results with the For chip — ✓ Use as the shot's frame
   onPrototype?: (e: React.MouseEvent, id: string) => void          // proto01_UIcast CW1: the hover button 🧪 — Prototype ▸ (a picture into an idea)
   mark?: string                                                    // D125 (I2): "frame ✓" on the For chip's shot's current frame
+  noDrag?: boolean                                                 // V58: a trashed tile is not used anywhere — it does not drag at all
 }
 
 /** The scene of a JSON prompt, else the prompt text, for the caption. */
 const promptLine = (a: Asset) => ((a.prompt_json as { scene?: string } | null)?.scene ?? a.prompt_text ?? '').trim()
 
-export const Tile = memo(function Tile({ a, size, fill, caption = 'off', selected, primary, pinned, onClick, onDouble, dragItems, onContext, onLineage, onEdit, corner, onUse, useLabel, mark, onPrototype }: TileProps) {
+export const Tile = memo(function Tile({ a, size, fill, caption = 'off', selected, primary, pinned, onClick, onDouble, dragItems, onContext, onLineage, onEdit, corner, onUse, useLabel, mark, onPrototype, noDrag }: TileProps) {
   const thumb = api.thumbUrl(a.id, size > 256 ? 512 : 256)
   const derived = a.root_id && a.root_id !== a.id
   return (
     <div className={`tile${selected ? ' selected' : ''}${primary ? ' primary' : ''}${fill ? ' fill' : ''}`}
       data-id={a.id} tabIndex={-1} onClick={(e) => onClick(e, a.id)} onDoubleClick={() => onDouble(a.id)} onContextMenu={(e) => onContext?.(e, a.id)}
-      onPointerDown={(e) => beginDrag(e, () => {                     // a selected tile carries the selection, another one only itself
+      onPointerDown={noDrag ? undefined : (e) => beginDrag(e, () => {   // a selected tile carries the selection, another one only itself
         const self: DragItem = { kind: 'asset', id: a.id, media: mediaOf(a.kind) }
         return { items: selected ? (dragItems?.() ?? [self]) : [self], thumb }
       })}

@@ -43,6 +43,30 @@ const deg = THREE.MathUtils.radToDeg, rad = THREE.MathUtils.degToRad
 const BEAUTY_ENV = 0.8                            // D109: the beauty pass's room-environment intensity (E28c: the models read near the plate's brightness)
 const BACKDROP_MARGIN = 0.06                      // SC3e: the picture behind a set carried on past its edge, a share of its size each side
 
+/** V78: every GPU resource under an object — its geometries, its materials and their textures — freed when it leaves the scene (a
+ *  rebuild, a removal, the engine's end); three.js frees nothing by itself. `keep` holds the engine's shared materials: freed, they
+ *  would only be compiled again on the next frame (a CS3 body transition rebuilds a figure every frame), so they outlive their objects.
+ *  Each resource is freed once however many meshes share it. */
+export function disposeObject(root: THREE.Object3D, keep: ReadonlySet<THREE.Material> = new Set()): { geometries: number; materials: number; textures: number } {
+  const seen = new Set<object>()
+  const n = { geometries: 0, materials: 0, textures: 0 }
+  root.traverse((o) => {
+    const m = o as THREE.Mesh
+    if (m.geometry && !seen.has(m.geometry)) { seen.add(m.geometry); m.geometry.dispose(); n.geometries++ }
+    const mats = Array.isArray(m.material) ? m.material : m.material ? [m.material] : []
+    for (const mat of mats) {
+      if (!mat || keep.has(mat) || seen.has(mat)) continue
+      seen.add(mat)
+      for (const v of Object.values(mat) as unknown[]) {
+        const t = v as THREE.Texture | null
+        if (t && t.isTexture && !seen.has(t)) { seen.add(t); t.dispose(); n.textures++ }
+      }
+      mat.dispose(); n.materials++
+    }
+  })
+  return n
+}
+
 export class StageEngine {
   readonly renderer: THREE.WebGLRenderer
   readonly scene = new THREE.Scene()
@@ -151,10 +175,21 @@ export class StageEngine {
     this.disposed = true
     this.stop()
     this.gizmo.dispose(); this.orbit.dispose()
-    this.scene.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) { m.geometry?.dispose(); const mat = m.material as THREE.Material | THREE.Material[]; (Array.isArray(mat) ? mat : [mat]).forEach((x) => x?.dispose()) } })
+    disposeObject(this.scene)                                                            // V82: textures too, the shared materials with them
     for (const l of this.lights.values()) { l.light.shadow.map?.dispose(); l.aim.geometry.dispose() }
     this.viewEnv.dispose()
     this.renderer.dispose()
+    this.renderer.forceContextLoss()                                                     // V82: the GL context goes now, not when the canvas is collected (D69's release)
+  }
+  /** The materials every object shares (V78: kept across rebuilds; freed with the engine). */
+  private sharedMaterials(): Set<THREE.Material> {
+    return new Set([this.clayMat, this.pickerMat, this.ikMat, this.pinMat, this.setMat, this.camMat, this.camActiveMat, this.catcherMat, this.pathMat, this.whiteMat, this.aimMat].filter(Boolean) as THREE.Material[])
+  }
+  /** V78: an entry leaves the scene with its GPU resources (a rebuild, a removal). */
+  private disposeEntry(e: Entry): void {
+    e.holder.removeFromParent()
+    e.proxy?.dispose()
+    disposeObject(e.holder, this.sharedMaterials())
   }
 
   // ---- views and cameras ----------------------------------------------------------------------------------------------------------
@@ -450,15 +485,17 @@ export class StageEngine {
       if (!e || e.doc.kind !== o.kind || e.doc.preset !== o.preset || e.doc.asset_id !== o.asset_id || JSON.stringify((e.doc as { body?: unknown }).body ?? null) !== JSON.stringify((o as { body?: unknown }).body ?? null)
         || (e.doc.detail ?? null) !== (o.detail ?? null) || (e.doc.shadow_proxy ?? null) !== (o.shadow_proxy ?? null) || (e.doc.floor_y ?? null) !== (o.floor_y ?? null)
         || (e.doc.height_m ?? null) !== (o.height_m ?? null) || JSON.stringify(e.doc.place_set ?? null) !== JSON.stringify(o.place_set ?? null)) {
-        if (e) { e.holder.removeFromParent(); e.proxy?.dispose() }
+        if (e) this.disposeEntry(e)                                                  // V78: the old one's GPU resources go with it
         e = this.build(o)
         this.entries.set(o.id, e)
         this.scene.add(e.holder)                                                     // placeChildren hangs it under its parent below
       }
       const t = o.transform
-      e.holder.position.set(t.pos[0], t.pos[1], t.pos[2])
-      e.holder.rotation.set(rad(t.rot[0]), rad(t.rot[1]), rad(t.rot[2]))
-      e.holder.scale.set(t.scale[0], t.scale[1], t.scale[2])
+      if (!(this.gizmo.dragging && this.gizmo.object === e.holder)) {                // V83: not under the hand that drags it (a save's reply, playback)
+        e.holder.position.set(t.pos[0], t.pos[1], t.pos[2])
+        e.holder.rotation.set(rad(t.rot[0]), rad(t.rot[1]), rad(t.rot[2]))
+        e.holder.scale.set(t.scale[0], t.scale[1], t.scale[2])
+      }
       e.holder.visible = o.visible
       e.proxy?.meshes.forEach((m) => { m.visible = o.visible })                     // E23d: a hidden figure's proxy casts nothing
       if (e.figure && o.pose && !this.ik && (e.doc.pose?.preset !== o.pose.preset || JSON.stringify(e.doc.pose?.joints) !== JSON.stringify(o.pose.joints) || (e.doc.pose?.ground ?? 0) !== (o.pose.ground ?? 0))) {
@@ -467,7 +504,7 @@ export class StageEngine {
       e.doc = o
       this.syncPins(e)
     }
-    for (const [id, e] of [...this.entries]) if (!seen.has(id)) { e.holder.removeFromParent(); e.proxy?.dispose(); this.entries.delete(id); if (this.selectedId === id) this.select(null) }
+    for (const [id, e] of [...this.entries]) if (!seen.has(id)) { this.disposeEntry(e); this.entries.delete(id); if (this.selectedId === id) this.select(null) }
     this.placeChildren()
     this.syncLight(doc)
     this.followAll()
@@ -572,7 +609,7 @@ export class StageEngine {
       const id = o.id
       this.track(new GLTFLoader().loadAsync(api.assetUrl(o.asset_id)).then((gltf) => {
         const e = this.entries.get(id)
-        if (!e || e.body !== group || this.disposed) return
+        if (!e || e.body !== group || this.disposed) { disposeObject(gltf.scene); return }   // V78: a model that arrives too late is freed
         const model = gltf.scene
         const box = new THREE.Box3().setFromObject(model, true)                 // SC3d: its vertices, not its boxes turned (D109's upright turn inflates those)
         const c = box.getCenter(new THREE.Vector3())
@@ -629,7 +666,7 @@ export class StageEngine {
     const id = o.id
     this.track(new GLTFLoader().loadAsync(api.assetUrl(o.asset_id!)).then((gltf) => {
       const e = this.entries.get(id)
-      if (!e || e.body !== group || this.disposed) return
+      if (!e || e.body !== group || this.disposed) { disposeObject(gltf.scene); return }   // V78
       const model = gltf.scene
       model.position.y = lift
       const surfaces: THREE.Mesh[] = []
@@ -714,7 +751,7 @@ export class StageEngine {
   private attachProxy(e: Entry, assetId: string): void {
     const id = e.doc.id
     this.track(new GLTFLoader().loadAsync(api.assetUrl(assetId)).then((gltf) => {
-      if (this.disposed || this.entries.get(id) !== e || !e.figure) return
+      if (this.disposed || this.entries.get(id) !== e || !e.figure) { disposeObject(gltf.scene); return }   // V78
       e.holder.updateMatrixWorld(true)
       const px = bindProxy(gltf.scene, e.figure.joints, e.figure.limbs, e.holder, e.doc.pose ?? null, { stance: shellStance(assetId), visible: true, hands: true, points: shellPoints(assetId), markers: e.figure.markers })   // D140: placed by its picture   // CS2: in its reference's stance
       for (const m of px.meshes) { m.material = this.clayMat; m.userData.stageId = id; m.visible = e.doc.visible; this.scene.add(m) }

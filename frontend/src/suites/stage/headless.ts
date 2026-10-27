@@ -2,6 +2,7 @@
 // the pass and sequence renderers cannot come from the mounted viewport (StageParts' Viewport registers them while it lives). A headless
 // engine on a detached canvas — never started, no loop, no pointer — follows the open document and renders the same passes; the viewport,
 // when it mounts, puts its own renderers back.
+import { sampleDoc } from './anim'
 import { StageEngine } from './engine'
 import { useStage } from './stageStore'
 
@@ -15,7 +16,7 @@ export function ensureHeadless(): boolean {
   engine ??= new StageEngine(document.createElement('canvas'), { onPick: () => undefined, onTransformed: () => undefined, onPosed: () => undefined })
   const e = engine
   useStage.setState({
-    passRenderer: (cam, w, h) => { const doc = useStage.getState().current; if (doc) e.sync(doc); return e.renderPasses(cam, w, h) },
+    passRenderer: (cam, w, h) => { const s = useStage.getState(); if (s.current) e.sync(sampleDoc(s.current, s.frame)); return e.renderPasses(cam, w, h) },   // V80: the document at the playhead, as the viewport shows it
     sequenceRenderer: (fr, w, h, kind, restore, on) => e.renderSequence(fr, w, h, kind, restore, on),
     plateProjector: (fr, w, h, plate, proj, aspect, restore, on, coverage) => e.renderProjected(fr, w, h, plate, proj, aspect, restore, on, coverage),
   })

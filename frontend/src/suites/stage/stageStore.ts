@@ -340,16 +340,23 @@ interface StageState {
 
 let saveTimer: number | null = null
 let benchBack: (() => void) | null = null                                     // D142: where *← Back* from a bench or the line-up goes (this session)
-let saveSeq = 0
+let saveChain: Promise<void> = Promise.resolve()                              // V79: one PUT at a time — the next starts from the revision the last reply gave
 
-async function save(get: () => StageState, set: (p: Partial<StageState>) => void): Promise<void> {
+/** The document's save, one after another: a save that starts while another is in flight waits for its reply and its revision, so the
+ *  author's own edits never answer 409 to each other (the old sequence guard dropped the first reply's revision instead). */
+function save(get: () => StageState, set: (p: Partial<StageState>) => void): Promise<void> {
+  const run = saveChain.then(() => saveNow(get, set))
+  saveChain = run.catch(() => undefined)
+  return run
+}
+
+async function saveNow(get: () => StageState, set: (p: Partial<StageState>) => void): Promise<void> {
   const cur = get().current
   if (!cur) return
-  const seq = ++saveSeq
   set({ saving: true })
   try {
     const next = await unwrap(http.PUT('/stages/{st_id}', { params: { path: { st_id: cur.id } }, body: cur as never }))
-    if (seq === saveSeq && get().current?.id === cur.id) {
+    if (get().current?.id === cur.id) {
       set({ current: { ...get().current!, revision: next.revision, updated_at: next.updated_at }, stages: get().stages.map((s) => (s.id === next.id ? next : s)) })
     }
   } catch (e) {
@@ -358,7 +365,7 @@ async function save(get: () => StageState, set: (p: Partial<StageState>) => void
       useSession.getState().toast('The stage changed elsewhere — reloaded; your last change was not saved', 'error')
       await get().open(cur.id)
     } else useSession.getState().toast(`Stage not saved: ${err.detail ?? e}`, 'error')
-  } finally { if (seq === saveSeq) set({ saving: false }) }
+  } finally { set({ saving: false }) }
 }
 
 /** A pose edit (joints, a preset, the Detailed level's own bones): on a keyed figure it is a key at the playhead — the figure as sampled
@@ -571,8 +578,8 @@ export const useStage = create<StageState>()((set, get) => ({
   },
   renderPasses: async () => {
     const s = useSession.getState()
-    const cur = get().current, cam = get().activeCamera()
-    if (!cur || !cam) { s.toast('No camera to render the passes from', 'error'); return false }
+    const cur = get().current, base = get().activeCamera()
+    if (!cur || !base) { s.toast('No camera to render the passes from', 'error'); return false }
     if (!get().passRenderer) (await import('./headless')).ensureHeadless()       // D95 (AN1): Image's From a stage — no viewport on screen
     const render = get().passRenderer
     if (!render) { s.toast('The stage is not ready to render', 'error'); return false }
@@ -581,6 +588,7 @@ export const useStage = create<StageState>()((set, get) => ({
       await flushSave(get, set)
       const doc = get().current
       if (!doc) return false
+      const cam = sampleDoc(doc, get().frame).cameras.find((c) => c.id === base.id) ?? base   // V80 (T8): the camera as the viewport shows it at the playhead, its keys applied
       const [w, h] = get().shotSize()
       const out = await render(cam, w, h)
       const passes: Record<string, string> = {}

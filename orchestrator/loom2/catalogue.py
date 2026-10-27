@@ -375,12 +375,17 @@ class Catalogue:
                     tmp = _tmp_for(out)                       # C5: unique per writer — the queue and GET /thumbs race on a fresh asset
                     t.save(tmp, "WEBP", quality=82, method=4)
                     tmp.replace(out)
-            rec.thumb_status = "done"
+            status = "done"
         except Exception:
-            rec.thumb_status = "failed"
-        atomic_write_json(self.manifest_path(rec), rec.model_dump())
-        self._index(rec)
-        return rec
+            status = "failed"
+        with self._lock:                                              # V1: the record as it is *now* — a trash, a restore or a tag edit made while the
+            latest = self.get(rec.id)                                 # thumbnails were being made stays; only the thumbnail fields are this pass's
+            base = latest if latest is not None else rec
+            params = {**(base.params or {}), **{k: v for k, v in (rec.params or {}).items() if k == "thumb_source"}}
+            out = base.model_copy(update={"thumb_status": status, "params": params})
+            atomic_write_json(self.manifest_path(out), out.model_dump())
+            self._index(out)
+        return out
 
     # ---- index ------------------------------------------------------------------------------------
     def _index(self, rec: AssetRecord) -> None:

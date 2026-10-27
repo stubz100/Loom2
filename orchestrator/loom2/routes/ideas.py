@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..body import Body
 
-from ..ideas import Idea, IdeaClass, IdeaStore, StaleIdea, keep, plan_clay
+from ..ideas import ClayStep, Idea, IdeaClass, IdeaStore, StaleIdea, keep, plan_clay, start_step
 from ..schemas import Deleted
 from ..story import Profile
 from .deps import Svc
@@ -202,21 +202,21 @@ async def idea_variant_clay(svc: Svc, iid: str, vid: str):
         v = idea.variant(vid)
     except KeyError as e:
         raise HTTPException(404, str(e.args[0]))
-    if v.clay is not None and v.clay.step in ("drawing", "fitting", "shell") and v.clay.job_id:
+    if v.clay is not None and v.clay.step in ("drawing", "fitting", "shell") and svc.queue.job_live(v.clay.job_id):   # V21: a job gone or over is not busy
         raise HTTPException(409, "the clay is being made — wait for it, or cancel its job in the Dock")
     fmt = ws.load().format
     h = 720
     w = max(64, round(h * fmt.width / fmt.height / 16) * 16)
     try:
         recipe, origin = plan_clay(idea, v, svc.app.settings.variant, width=w, height=h)
-        jobs = svc.queue.submit(recipe, origin=origin)
+        job = await start_step(svc.queue, ClayStep(iid, vid, recipe, origin, {"step": "drawing", "anim_ref_asset_id": None, "body": None, "body_points": None,
+                                                                             "note": None, "shell_asset_id": None}))   # V22 / V30: staged until the marker is written
     except ValueError as e:
         raise HTTPException(422, str(e))
-    idea = await asyncio.to_thread(store.set_clay, iid, vid, step="drawing", anim_ref_asset_id=None, body=None, body_points=None, note=None,
-                                   shell_asset_id=None, job_id=jobs[0].id, error=None)
+    idea = await asyncio.to_thread(store.get, iid)
     await svc.queue.flush()
     _changed(svc, idea)
-    return {"job_id": jobs[0].id, "idea": idea.model_dump()}
+    return {"job_id": job.id, "idea": idea.model_dump()}
 
 
 @router.post("/story/ideas/{iid}/keep", response_model=Kept)

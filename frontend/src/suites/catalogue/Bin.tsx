@@ -4,20 +4,25 @@
 // them all. It is the Catalogue's own store machinery on a store of its own (`useBin`), so the Catalogue and Image's results are untouched.
 // proto01_UIcast CW0: a Meshes filter, a 3D model's own verbs (on the stage, as a Cast prop's model, its lineage) and a picture's Cast
 // verbs (Add to Cast ▸, Make a character / place / prop…) — the Bin was the one place a picture had none.
-import { UserRound } from 'lucide-react'
+// The Trash as a place: a trashed tile's verbs are Restore (its double-click) and Delete permanently…; it does not drag (a trashed thing is
+// not used); Empty trash… in the bar. Elsewhere a tile's right-click ends with Move to trash (the store's toast has its Undo). The four are
+// the `bin.*` commands of catalogueCommands.ts (D32: every action a command; V59), run on the tile through `onBinTile`.
+import { Trash2, UserRound } from 'lucide-react'
 import { madeForIdea, prototypeMenu } from '../story/prototype'
 import { useEffect, useMemo, useState } from 'react'
 import type { Asset } from '../../api/types'
+import { CommandButton } from '../../frame/CommandButton'
 import { showMenu } from '../../frame/ContextMenu'
 import { mediaOf } from '../../frame/drag'
 import { editPresence } from '../../frame/editPresence'
-import { command, sep, type MenuItem } from '../../frame/commands'
+import { command, runCommand, sep, type MenuItem } from '../../frame/commands'
+import { Help } from '../../frame/Help'
 import { useSession } from '../../store/session'
 import { addToCastMenu, madeFor } from '../story/addToCast'
 import { castPropMenu } from '../story/castProp'
 import { profilesForMentions } from '../story/storyStore'
 import { useAlbum } from './albumStore'
-import { startProfile } from './catalogueCommands'
+import { onBinTile, startProfile } from './catalogueCommands'
 import { useBin, type Query } from './catalogueStore'
 import { openPlace, paneStore, useSplit } from './split'
 import { Tile } from './Tile'
@@ -77,7 +82,14 @@ function castItems(a: Asset): MenuItem[] {
     { label: 'Make a profile from it', icon: UserRound, items: (['character', 'place', 'prop'] as const).map((cls): MenuItem => ({ label: `Make a ${cls}…`, run: () => startProfile(cls, a.id) })) }]
 }
 
+/** A trashed tile's verbs: back to where it was, or gone for good (asked first) — the `bin.restore` / `bin.purge` commands on this tile. */
+function trashVerbs(a: Asset): Verb[] {
+  const via = (id: string) => () => { onBinTile(a)(() => runCommand(id)) }
+  return [{ id: 'restore', label: 'Restore from trash', run: via('bin.restore') }, { id: 'purge', label: 'Delete permanently…', run: via('bin.purge') }]
+}
+
 function verbs(a: Asset, suite: string): Verb[] {
+  if (a.trashed_at) return trashVerbs(a)
   if (a.kind === 'video') return [{ id: 'play', label: 'Play in Animate', run: () => playClip(a) }]
   if (a.kind === 'mesh') return [...(suite === 'stage' ? [{ id: 'stage.mesh', label: 'Add to the stage (a 3D model)', run: () => addMesh(a.id) }] : []),
     { id: 'lineage', label: 'Show its lineage (Catalogue)', run: () => showLineage(a.id) }]
@@ -98,11 +110,14 @@ export function Bin() {
   const items = useBin((s) => s.items)
   const total = useBin((s) => s.total)
   const loading = useBin((s) => s.loading)
+  const trashed = useBin((s) => s.counts.trash ?? 0)
+  const purging = useBin((s) => s.purging)
   const tree = useAlbum((s) => s.tree)
   const [selected, setSelected] = useState<string | null>(null)
   useEffect(() => {
     if (!project?.open) return
     void useBin.getState().load()
+    void useBin.getState().refreshMeta()                                   // the Trash's count
     if (!useAlbum.getState().tree) void useAlbum.getState().load()
   }, [project?.path])
   const shown = useMemo(() => (q.kind ? items.filter((a) => a.kind === q.kind) : items), [items, q.kind])   // a new asset lands before the next load
@@ -114,7 +129,12 @@ export function Bin() {
   }, [pick])
   if (!project?.open) return <span className="meta">No project open.</span>
   const place = q.group_id ?? q.folder
-  const open = (p: string) => void useBin.getState().setQuery(p === 'unprocessed' || p === 'all' ? { folder: p, group_id: undefined } : { folder: 'all', group_id: p })
+  const inTrash = place === 'trash'
+  const open = (p: string) => void useBin.getState().setQuery(p === 'unprocessed' || p === 'all' || p === 'trash' ? { folder: p, group_id: undefined } : { folder: 'all', group_id: p })
+  // the right-click: a trashed tile's two verbs and Empty trash; a live tile's verbs, its Cast verbs, then Move to trash (D32 / V59: the commands, on this tile)
+  const menuOf = (a: Asset): MenuItem[] => a.trashed_at
+    ? [{ cmd: 'bin.restore', on: onBinTile(a) }, { cmd: 'bin.purge', on: onBinTile(a) }, sep, { cmd: 'bin.emptyTrash' }]
+    : [...verbs(a, suite), ...castItems(a), sep, { cmd: 'bin.trash', on: onBinTile(a) }]
   const groups = tree?.children ?? []
   const first = (a: Asset) => verbs(a, suite)[0]
   // a pick started from a panel: the verb it names on each tile that has it — the corner button, and the double-click while it lasts
@@ -128,6 +148,8 @@ export function Bin() {
         <button className={place === 'all' ? 'active' : ''} onClick={() => open('all')}>Library</button>
         {groups.length > 0 && <span className="bin-label">Album</span>}
         {groups.map((g) => <button key={g.id} className={place === g.id ? 'active' : ''} onClick={() => open(g.id)} title={`${g.assets} items`}>{g.name}<small>{g.assets}</small></button>)}
+        <button className={`bin-trash${inTrash ? ' active' : ''}`} onClick={() => open('trash')} title="What was moved to the trash: restore it, or delete it permanently">
+          <Trash2 size={12} /> Trash{trashed > 0 && <small>{trashed}</small>}</button>
       </nav>
       <div className="bin-main">
         <div className="bin-bar">
@@ -137,19 +159,22 @@ export function Bin() {
           <input type="search" aria-label="search the Bin" placeholder="search" value={q.search} onChange={(e) => void useBin.getState().setQuery({ search: e.target.value })} />
           <span className="meta">{loading ? 'loading…' : `${shown.length}${total != null && total > shown.length ? ` of ${total}` : ''}`}</span>
           <span className="spacer" />
-          {pick
+          {inTrash
+            ? <><Help text="Double-click a tile to restore it; its right-click deletes it permanently (asked first). Empty trash… removes everything here." />
+              {purging ? <span className="meta">emptying…</span> : <CommandButton id="bin.emptyTrash" text className="quiet danger" />}</>
+            : pick
             ? <span className="meta picking">picking for: {pick.label} <button type="button" className="quiet" aria-label="stop picking" title="Stop picking (the tiles' corner buttons go)" onClick={endPick}>✕</button></span>
-            : <span className="meta">drag a tile where it is used · double-click: {suite === 'stage' ? 'an image plane / a 3D model / play' : suite === 'animate' ? 'start frame / play' : suite === 'edit' ? 'a layer' : 'a reference'}</span>}
+            : <Help text={`Drag a tile to where it is used. Double-click: ${suite === 'stage' ? 'an image plane, a 3D model, or play' : suite === 'animate' ? 'the start frame, or play' : suite === 'edit' ? 'a layer' : 'a reference'}. Right-click: every verb.`} />}
         </div>
         <div className="bin-grid" onContextMenu={(e) => { if (pick) { e.preventDefault(); endPick() } }}                 // a right-click ends the pick (on a tile the verbs still open)
           onScroll={(e) => { const el = e.currentTarget; if (el.scrollTop + el.clientHeight > el.scrollHeight - 200) void useBin.getState().loadMore() }}>
           {shown.map((a) => (
             <Tile key={a.id} a={a} size={TILE} fill caption="off" selected={selected === a.id} primary={selected === a.id} pinned={0}
-              onClick={(_e, id) => setSelected(id)} onDouble={() => { const pv = picked(a); if (pv) { pv.run(); endPick() } else first(a)?.run() }} onContext={(e) => { e.preventDefault(); setSelected(a.id); if (pick) endPick(); showMenu(e, [...verbs(a, suite), ...castItems(a)]) }}
+              onClick={(_e, id) => setSelected(id)} onDouble={() => { const pv = picked(a); if (pv) { pv.run(); endPick() } else first(a)?.run() }} onContext={(e) => { e.preventDefault(); setSelected(a.id); if (pick) endPick(); showMenu(e, menuOf(a)) }}
               corner={(() => { const pv = picked(a); return pv ? { icon: PickIcon ? <PickIcon size={13} /> : undefined, label: pv.label, run: () => { pv.run(); endPick() } } : undefined })()}
-              dragItems={() => [{ kind: 'asset', id: a.id, media: mediaOf(a.kind) }]} />
+              noDrag={!!a.trashed_at} dragItems={() => [{ kind: 'asset', id: a.id, media: mediaOf(a.kind) }]} />
           ))}
-          {!loading && !shown.length && <span className="meta">Nothing here.</span>}
+          {!loading && !shown.length && <span className="meta">{inTrash ? 'The trash is empty.' : 'Nothing here.'}</span>}
         </div>
       </div>
     </div>

@@ -9967,3 +9967,367 @@ on any skeleton (the preset itself): it goes to AP1's list of presets to correct
 - Tests: `test_place_in_clay_cw7.py` (the plate's method, the refusals, the still; the binding rule), `bench.test.ts` +1 (the card, once,
   following Cast, the free copy, the plate predicate), e2e *places in Clay*.
 - **D137 stage 6 is done** (E38, CW6, CW7): Cast's six stages are built.
+
+## 2026-10-27 08:21 — Review: the whole application at f68c6f0 and the Bin's Trash in the working tree; register V1–V97; where the schedule stands
+
+The author asked for a full review ("any issues with the code, and where we are with the development schedule"). Nothing in the code
+was changed: the register below is for the author to order; the fixes are a wave of their own, each group a journal entry and a commit.
+
+- **The state.** `main` == `origin/main` at f68c6f0 (2026-10-25 19:48); one branch, no merges, no tags, VERSION 0.1.0; 272 commits since
+  the agent docs' *Verified at* (2026-10-10). The working tree holds **the Bin's Trash** (`Bin.tsx`, `catalogueStore.ts`, `frame.css`, one
+  e2e scenario; written 2026-10-25 21:12–21:23): a tile's right-click *Move to trash*, the Trash place at the foot of the places with its
+  count, Restore on double-click, *Delete permanently…* and *Empty trash…* behind `askConfirm`. No journal entry, no D-number and no plan
+  line names it (proto01_UI 01's C3 / C74 / C77 and 03's NEW-A2 are the Catalogue's own Trash). It type-checks and its scenario passes;
+  V58–V61 are its defects, V1 the server race under it.
+- **The checks on the working tree:** offline 618 passed in 211 s; Vitest 538 + 3 skipped; typecheck and build clean; lint 0 errors, 79
+  warnings; agents_check 9 docs / 0; settings_audit 303 / 0 (12 allowed); model_literals_check 0; bump_version 10 / 0; the pcalgo wheel and
+  pcwasm match their pins; export_openapi: no drift; e2e `full` 72/74 with nine review agents running beside it (`ERR_NO_BUFFER_SPACE` on
+  `/projects`; the fake FilmCraft session's EOF — "The cut's sound: tools/call: the session ended"), the two scenarios alone 2/2 → 74/74.
+  The `open` variant's e2e was not run (the working tree changes nothing variant-specific).
+- **Method:** nine reviewers, one per subsystem (orchestrator core · engine pipeline · Story / Cast / Stage server · finals, cuts and media ·
+  build, shell and CI · frame and Catalogue · Story and Generate · Stage and Animate · Edit), each finding verified against its callers;
+  the highs and the key mediums were re-read at the line here (V1, V13, V21, V44, V58, V59, V78, V80 and the replay drift).
+
+### Register V1–V97 (by area; severity high · medium · low)
+
+**Orchestrator core**
+- V1 · medium · `catalogue.py:359–382` `_make_thumbs` writes the *caller's* in-memory record back over the manifest and the index after the
+  thumbnails (finishers.py:104, routes/assets.py:192, :204): a trash, restore or tag edit made while a 4K thumbnail is being made is reverted
+  and an `asset.updated` with `trashed_at: null` pulls the tile back out of the Trash. Re-read the record under the lock, patch `thumb_status` only.
+- V2 · medium · `routes/settings.py:141` `PUT /settings` replaces the roster with a fresh scan whose `trained` map is empty (`loras.publish` runs
+  only in `JobQueue.__init__`): after any settings change the project's trained LoRAs are unknown (422 on submit, gone from `/capabilities`)
+  until the project is reopened.
+- V3 · medium · `routes/jobs.py:559` `/jobs/batch` promises "a refused item leaves no job behind", but `JobQueue.check()` skips
+  `resolve_mentions` and `_disk_guard`, both of which `submit` runs: a bad mention in cell 4 leaves cells 1–3 queued behind a 422
+  (`routes/preset_icons.py:416` the same).
+- V4 · medium · `catalogue.py:652` purge unlinks with plain `Path.unlink` (not D42's retrying `fsio.unlink`) and deletes the row after the files:
+  a thumbnail held open (Edge streaming it, antivirus) aborts Empty Trash half-way with a 500 — earlier assets gone without `forget_assets`
+  or `asset.deleted`, the held one without file or manifest but with its row.
+- V5 · medium · `config.py:275` `app.json` is the one state file neither quarantined nor tolerated: a corrupt or stale-enum file raises out of
+  `create_app()` before uvicorn binds, so the shell never sees `LOOM2_READY`.
+- V6 · low · `groups.py:92`, `:123` an unreadable group file is skipped and `_repair` re-places its children on the album with a revision bump —
+  a transient read failure restructures the album for good.
+- V7 · low · `api.py:75` the token gate is the outermost middleware; its 401 bypasses CORS and surfaces as "Failed to fetch" in browser dev.
+- V8 · low · `groups.py:359` `layout()` casts untyped `list[dict]` items; a bad value is a 500, not a 422.
+- V9 · low · `routes/assets.py:190` `PUT /assets/{id}/thumbnail` leaves `_temp/thumbs/<id>.png` behind for ever (nothing sweeps that folder).
+- V10 · low · `groups.py:292` vs `:306` a group's count includes trashed assets while its page hides them.
+- V11 · low · `routes/jobs.py:496` `job_requeue` returns without `await q.flush()` (D64's on-disk-before-the-reply).
+- V12 · low · `catalogue.py:375` a thumbnail's `Path.replace` has no retry and a transient `PermissionError` stamps `thumb_status: failed` for good.
+
+**Engine pipeline and models**
+- V13 · medium · `engine/follow.py:84` `free_cache()` believes `free(unload_models=False, free_memory=True)` keeps the weights; the pinned
+  ComfyUI (`server.py:1201`, `main.py:398` `flags.get("unload_models", free_memory)`) unloads every model on it. Every document, clip and
+  refcontrol job evicts the model set; the warm-group scheduler buys nothing for Edit and Animate. Measure on the rig before and after.
+- V14 · medium · `engine/pipeline.py:247`, `routes/meta.py:85` `POST /recipes/preview` raises an unmapped `NotImplementedError` (500) for
+  `train_lora` and `tts` once the engine has answered once (`compile_recipe`'s `else`); no surface calls it today.
+- V15 · medium · `queue.py:719`, `supervisor.py:226` a wedged-but-alive engine fails every queued job in turn (one 60 s timeout each); only
+  `follow()` can restart or pause, `ensure_running` checks `proc.poll()` alone.
+- V16 · low–medium · `capabilities.py:27` Generate's tiers come from the first spec of a family, not the chosen model's (`krea2-raw` full
+  1344×768 is shown and run as the turbo's 1920×1088).
+- V17 · low · `queue.py:85` `model_headroom()` keys on the panel's `model_id`, not the model that runs (fill_hero → dev, upscale+refine,
+  Reangle, LayerPass); dormant until a spec sets `engine.vram_headroom_gb`.
+- V18 · low · `queue.py:753` one unretried `/history` read after `execution_success`, taken after `irreversible()`; the real engine writes
+  history after the event, the fake before, so the suite cannot see the order; a miss fails the job non-resumable and deletes its outputs.
+- V19 · low · `supervisor.py:131`, `:219` restart / recover on an adopted engine is a no-op reported as a restart.
+- V20 · low · `supervisor.py:150` a crashed engine's log handle is never closed; `_stop_locked`'s taskkill, `prepare_face_pass`'s PNG work and
+  `_disk_guard`'s SQLite run on the loop.
+
+**Story / Cast / Stage server**
+- V21 · high · `queue.py:152`, `:298` the `_origin_stopped` hook runs only on cancel and `_fail`: a job marked "interrupted by shutdown" at
+  load, or refused over the VRAM budget at submit, never clears `SetFace.fill_job_id` / `VariantClay.job_id`, and the routes
+  (`routes/story.py:853`, `routes/ideas.py:206`) check only that an id is set — *Fill ▶* and *Make the clay ▶* answer 409 for ever.
+- V22 · medium · `place_sets.py:161`, `ideas.py:341`, `:373` `JobQueue.submit()` is called from worker threads (`queue_fill` under `to_thread`,
+  the `fill_landed` / `clay_*_landed` finishers): persist, broadcast and `_wake` from a foreign thread (AGENTS.md rule 3).
+- V23 · medium · `routes/story.py:804` `PUT …/set/bake` carries no revision and writes back a `place_set` captured before a multi-second
+  ingest: a wall dragged or a fit landing meanwhile is lost without a 409.
+- V24 · medium · `story.py:2197` a new version copies `place_set` with `faces[].fill_job_id`: made during a Fill, v2's face is "filling" for ever.
+- V25 · medium · `place_sets.py:207`, `ideas.py:377` a finisher that swallows its own exception after the job succeeded leaves the busy
+  marker on a *done* job, which the hook never sees.
+- V26 · low–medium · `usedby.py:35` an idea's album page is reported unused; deleting it from the Catalogue breaks `add_variant`.
+- V27 · low · `story.py:1144` a built set bound to a place is classed `"prop"` in Cast's readiness (`how: "place"` is never produced).
+- V28 · low · `routes/stages.py:162` `stages/poses.json` has no `schema_version` and no revision guard.
+- V29 · low · `routes/story.py:500` `fit_body` (≈ 70 ms) and `reference_ratios` run on the loop; a degenerate measure is a 500, not a 422.
+- V30 · low · `routes/ideas.py:215` the variant's busy marker is written after `submit`, on a thread; a fast engine can land first and the
+  marker overwrites the finisher's.
+- V31 · low · `ideas.py:420`, `profile_model_import` the hero / GLB is ingested before the class or version check: an orphan on failure.
+- V32 · low · `routes/story.py:841` with `place_sets.queue_fill:148` a face skipped for a small mask still counts in `fill_order`, so the
+  route says "the bakes are gone — bake again" although they exist.
+
+**Finals, cuts, documents and media**
+- V33 · medium · `engine/finishers.py:324`, `:455` a character layer's batch landing runs `store.get` / `update_layer` and `set_frames`
+  (copying every frame) on the event loop; the sibling plate path is in `to_thread`.
+- V34 · medium · `finals.py:521` `FinalStore` has no lock and no revision: route threads and finishers interleave get → patch → save; a
+  keyframe landing while Stage posts the next can leave the plate `running` for ever (409 on the method route).
+- V35 · medium · `final_assembly.py:317` RIFE runs with `subprocess.run(check=True)`, no timeout, no pid: a Vulkan hang blocks the worker
+  thread and, one job at a time, the queue, until the orchestrator restarts (compare `run_comp_render`'s poll-and-kill).
+- V36 · medium · `routes/documents.py:170` `Content-Disposition: filename="<name>.png"` with a non-latin-1 name (an em dash, an ellipsis)
+  raises in Starlette → 500 on Export PNG.
+- V37 · low · `lipsync.py:226`, `voices.py:301`, the assemble / comp-render / movie temp folders are not cleaned on failure or cancel, the
+  mouth step never; the sweeper reconciles only `_temp/ai` and `engine_out`.
+- V38 · low · `final_assembly.py:132` `mix_audio` adds a > 2-channel WAV as-is → a numpy broadcast error instead of a sentence.
+- V39 · low · `cuts.py:1172` the cut's mix is cached by revision only; a changed loudness target keeps serving the old WAV.
+- V40 · low · `cuts.py:989`, `:1206` `subprocess.TimeoutExpired` from a FilmCraft export is neither a `CutError` nor mapped by the routes (500).
+- V41 · low · `routes/documents.py:86` `PUT /documents/{id}` takes a bare dict; pydantic's `ValidationError` is a 500, not a 422.
+- V42 · low · `routes/finals.py:210`, `:264`, `:333` the plate layer is assumed to carry id `"plate"`; `check()` enforces the kind only.
+- V43 · low · `routes/finals.py:897` deleting a final cancels none of its jobs and never lets the EffectCraft session go of its `.ecproj`.
+
+**Build, shell and CI**
+- V44 · high · `scripts/engine-start.ps1:36` launches ComfyUI with `--output-directory engine\comfyui_out` and no `--reserve-vram` /
+  `--vram-headroom`, the supervisor adopts it read-only (`supervisor.py:136`), and every finisher reads `<state>/engine_out`
+  (`finishers.py:67`): with a script-started engine every job fails "no output files", the editor has no VRAM reserve, and a headroom
+  change can never restart it.
+- V45 · medium · `engine/extra_model_paths.yaml:9` is static (`F:/loom2-models`) while `Settings.models_root` feeds only the roster:
+  a changed models root shows the weights present and the engine cannot find them (T8).
+- V46 · medium · `src-tauri/src/lib.rs:38` the shell finds the orchestrator by `CARGO_MANIFEST_DIR` or by walking up to `orchestrator/.venv`
+  and bundles nothing else: the installers CI builds on every push to main cannot run on their own (C22 said so; the release job presents
+  them as releases and costs two Rust builds a push).
+- V47 · medium · `.github/workflows/ci.yml:98` the Rust shell is compiled only in the push-only `installers` job; `npm run lint` and
+  `scripts/csp_check.py` are not in CI at all (a PR breaking `lib.rs` or the CSP passes green).
+- V48 · medium · `lib.rs:198` closing the window before `LOOM2_READY` sends no shutdown and still waits the full 20 s grace before the kill.
+- V49 · medium · `scripts/engine-setup.ps1:33` `git checkout` of a node's pin runs under `SilentlyContinue`; with the GGUF node's patched
+  tree a moved pin fails silently and setup prints the lock's value as if checked out.
+- V50 · low · `scripts/dev.ps1:13` the orchestrator on 8766 outlives Vite; the next `dev.ps1` talks to the stale one.
+- V51 · low · `dev.ps1:13`, `lib.rs:63`, `lipsync-setup.ps1:71` paths are interpolated unquoted (a space in the checkout path breaks argv).
+- V52 · low · `package.json:12` `api:types` runs `npx -y openapi-typescript@7` unpinned; the drift check depends on the day's 7.x.
+- V53 · low · `main.py:27` `LOOM2_READY` is printed from the lifespan, before uvicorn binds (milliseconds of `ECONNREFUSED` at launch).
+- V54 · low · `e2e/global-setup.ts:72` the fake engine and the orchestrator have no job object; a killed run leaves them behind.
+- V55 · low · `config.py:280` `LOOM2_TOKEN` from the environment overrides the per-launch token and the shell passes its environment through.
+- V56 · low · `engine/vsthost/src/main.cpp:146` `gain_db` is spliced raw into the JSON reply; `nan` / `inf` make it unparseable.
+- V57 · low · `.gitattributes`: 82 `eol=lf` files carry CRLF in the working tree (a tool wrote them); the index is clean, no functional effect.
+  Checked and clean: the production CSP (`'self' 'wasm-unsafe-eval'`, loopback only, `object-src 'none'`), the token over Tauri IPC only,
+  job objects in shell and orchestrator, the pins (submodule b0b7435 = v0.39.0, ROCm torch constraints, nodes.lock, idempotent patches),
+  bump_version's 10 locations, no large binaries. CI misses against CLAUDE.md's table: lint, csp_check, any shell compile on PRs.
+
+**Frame, session store and the Catalogue / Bin** (V58–V61 in the uncommitted Trash)
+- V58 · medium · `Bin.tsx:175` with `Tile.tsx:26` a trashed tile still drags: `dragItems={undefined}` falls back to the tile itself, and an
+  unselected tile never consults `dragItems` at all — a trashed asset drops as a reference, a layer or a start frame.
+- V59 · medium · `Bin.tsx:85`, `:137`, `:164` Move to trash, Restore, Delete permanently… and Empty trash… are bare menu items and a plain
+  button, not commands; `cat.trash` / `cat.restore` / `cat.purge` / `cat.emptyTrash` already exist with placements (D32 — the audit, the
+  palette and the help overlay cannot see four destructive verbs; the Bin's older verbs share the pattern).
+- V60 · low · `Bin.tsx:85`, `:135` every Trash action is `void store.action()` with no catch: a failed purge lands in the crash overlay, not a toast.
+- V61 · low · `Bin.tsx:163`, `:167` the bar carries an explanatory sentence as text (D116: behind a ? or a tooltip); the diff adds a second.
+- V62 · medium · `catalogueStore.ts:296` `removeLocal` decrements `total` by `ids.length` whether or not the ids were listed, and each
+  trash / purge removes twice (the store, then the broadcast): counts drift by one per trash until the next load; the diff's line 252
+  also decrements the Trash view's total and fires a counts + tags round-trip on every `asset.updated` of a live asset.
+- V63 · medium · `catalogueStore.ts:251` Trash counts and an open Trash view go stale across stores: a trash in the Catalogue reaches the
+  Bin as `asset.updated` without `refreshMeta`, and a store on the trash folder cannot add an asset it does not list; the diff fixed the
+  restore direction only.
+- V64 · medium · `catalogueStore.ts:130` `loadMore` has no `loadSeq` guard: a page in flight lands on the next query's list with its cursor
+  (a place click, a search, a project switch).
+- V65 · medium · `session.ts:125` a WebSocket reconnect refreshes jobs, queue, project and the editor only; frames carry no sequence the
+  client uses, so `asset.*`, `group.changed`, `story.changed` and `clip.*` missed during the outage are lost (the hub keeps 200 frames,
+  `events_ws.py:34` sends 20, the client reads none — AGENTS.md's "200-frame replay" is not what runs).
+- V66 · low · `catalogueStore.ts:256` `asset.created` prepends into a `created_desc` list without checking the query's kind / suite / folder.
+- V67 · low · `session.ts:266` `job.updated` fires unordered `GET /queue` / `GET /project` whose late replies overwrite a newer `queue.state`.
+- V68 · low · `useKeyboardMap.ts:35` global Ctrl chords (B, I, comma, 1–4) dispatch before the `inField` check, against the comment above.
+
+**Story, Generate and Models**
+- V69 · medium · `StoryParts.tsx:729`, `CastSet.tsx:130`, `CutStage.tsx:272` per-item context menus set `storyItem` / `markerItem` before
+  `showMenu` and never clear it on dismiss; the palette then runs *Use this take* / *Fill this face* / *Delete the marker* on the last
+  right-clicked item against the current shot (storyCommands.ts:165's "the palette never acts on a stale item" does not hold).
+- V70 · medium · `generateStore.ts:130`, `:213`, `:732` a panel naming a model this build does not offer is sent resolved to
+  `caps.defaults.t2i` while the column reads it unresolved: the job runs on the default, the grid shows no card, refs and size read the
+  wrong family (T8). Needs a retired model's saved panel or asset.
+- V71 · low · `storyStore.ts:327`, `sequenceStore.ts:325` the world and lane saves are debounced but not chained: a second save during a
+  slow PUT carries the old revision → a 409 and "changed elsewhere" for the author's own keystrokes.
+- V72 · low · `sequenceStore.ts:358` with `sequenceCommands.ts:227`, `CutStage.tsx:234` rename / lock / mute and the gestures do not check
+  `cutBusy`; two quick FilmCraft edits → 409, reload, the toast blames "elsewhere".
+- V73 · low · `Ideas.tsx:175` the Inspector's note inputs remount on every idea revision; a note typed during *Make the clay ▶* is lost.
+- V74 · low · `ShotsBoard.tsx:85` the frame / clip cells are enabled on a final version whose commands' `when` is false: a dead click.
+- V75 · low · `generateStore.ts:598` `expand` captures the panel before its confirm; edits made with the dialog up are not what runs.
+- V76 · low · `generateStore.ts:577` `castLook` submits without `withIdea(...)`, so a look made under the idea chip is not listed for the idea.
+- V77 · low · `FlowCanvas.tsx:127`, `storyStore.ts:922` every node click allocates a new `clipsById` → `setNodes` → xyflow drops its measured
+  sizes mid-drag (a frame of snap-back, scene frames flicker).
+
+**Stage and Animate**
+- V78 · high · `stage/engine.ts:453`, `:812`, `:569` a rebuilt or removed entry disposes only its shadow proxy: a built set's face textures
+  (six × ≤ 2048²), a picture set's relief and plate, a prop's GLB, a figure's picker geometries stay allocated in the GL context; every
+  Fill landing, every `open()`, every frame of a CS3 body transition rebuilds — hundreds of MB of dead textures beside ComfyUI on the card.
+- V79 · high · `stageStore.ts:345` a debounced save that starts while the previous PUT is in flight sends the pre-bump revision (the first
+  reply's revision is discarded by the `saveSeq` guard) → 409 → `open()` again: the edit and both undo stacks are lost, the toast says
+  "changed elsewhere". Any PUT slower than the 300 ms debounce while the author keeps dragging.
+- V80 · medium · `stageStore.ts:916`, `:574` `activeCamera()` reads `current` (the unkeyed base), so *Render the passes* and the Stage shot
+  render from the camera's base pose while the viewport shows the playhead; `passesStale` ignores the playhead (T8).
+- V81 · medium · `finalShot.ts:276` the final's frames are rendered at the Animate model's 832×480 whatever the project aspect while the
+  viewport, the Stage shot and the guide snap to the project's: a 9:16 project's final is landscape; 16:9 shows ≈ 2.5 % more picture.
+- V82 · medium · `engine.ts:150` `dispose()` disposes no textures and never `forceContextLoss()`: the D69 release on `vram_pressure` frees
+  almost nothing until the canvas is collected.
+- V83 · medium–low · `engine.ts:459`, `StageParts.tsx:892` `sync()` rewrites every holder's transform without a `gizmo.dragging` guard
+  (cameras have one): a save reply or playback mid-drag snaps the object back and the release commits the pre-drag pose.
+- V84 · low · `stageStore.ts:524`, `:594` the render's reply replaces `current` wholesale; an edit made during the render is dropped silently.
+- V85 · low · `compositionStore.ts:283`, `:649` a seek during an idle fill waits for the 300 ms settle (one skipped frame at play start).
+- V86 · low · `stageStore.ts` (≈ :1050) an external Cast change becomes a stage undo step.
+- V87 · low · `StageParts.tsx:895` Clay playback is a `setInterval` nothing clears on leaving the level: hidden, it syncs the scene 24×/s (D69).
+- V88 · low · `stageStore.ts removeObject` a selected child of a removed parent leaves `selected` dangling.
+
+**Edit**
+- V89 · medium · `EditorCanvas.tsx:413` the scene's `maskSprite` pads by `ref.default`, not `outsideValue(ref)`: a default-0 mask at
+  density < 1 that no longer covers its layer hides the strip on screen while `compose.py:545` and the bakes show it at 1 − density (T8).
+- V90 · medium · `selectionOps.ts:186`, `editorStore.ts:1527`, `EditorCanvas.tsx:660` an all-zero selection is created and kept (subtract /
+  intersect with no selection, Quick Mask + undo): ants show nothing, every paint, fill, Delete and Ctrl+T silently do nothing until Esc.
+- V91 · medium · `EditorCanvas.tsx:623` the fit effect has no hidden-stage guard: an outpaint landing while Edit is kept alive hidden sets a
+  negative zoom; on return the editor looks empty until Ctrl+0.
+- V92 · low · `EditorCanvas.tsx:633` the marching-ants interval restrokes every segment 8×/s while hidden (D69).
+- V93 · low · `EditorCanvas.tsx:653` Space-to-pan is a raw window listener on a literal code with no command and no blur reset (a stuck pan
+  after Alt+Tab); it runs in every suite and inside modals.
+- V94 · low · `EditorCanvas.tsx:721` `setInteracting(true)` precedes the button check: a right-press released off the canvas leaves
+  `interacting` true and the idle pre-save re-arms for ever.
+- V95 · low · `editorStore.ts:1747` the 2-minute autosave has no `interacting` check: it uploads a half-painted stroke and writes the .ora with it.
+- V96 · low · `editorStore.ts:637` `mergeServerLayers` fetches pixels into maps captured before its awaits; when the document changed
+  meanwhile the canvases and textures are orphaned.
+
+**Sidecar sessions**
+- V97 · low–medium · `mcp_session.py:178` a FilmCraft / EffectCraft process that dies loses the request in flight ("the session ended")
+  and only the next call restarts it; one replay of an idempotent request after an EOF would make the cut editor sturdier (the real
+  filmcraft-cli is alpha).
+
+### Documentation drift
+- `CLAUDE.md` *Verified at a4b4cfb, 2026-10-10* and the four core `AGENTS.md` (orchestrator, engine, frame, edit) at 07cb440 / ceb638d of the
+  same day: 272 commits since; the standing rule (12 §10) says re-verify at each milestone start. `CLAUDE.md`'s "Offline tests (145+, ~40 s)"
+  is 618 in 211 s. `orchestrator/AGENTS.md`'s module map has no row for audio, body, compositions, cuts, effectcraft, filmcraft,
+  final_assembly, heads, ideas, lipsync, loras, mcp_session, motion, place_sets, poisson, retouch, set_fit, shot_graph, shot_recipe, sizes,
+  timelines, tone, trainer, voices, vsthost (and their routes); its "200-frame replay" is 20 sent and none read (V65); the engine notes'
+  `free_cache` claim is V13; the edit notes' invariant 11 wording no longer matches the deliberate raw-mask views.
+
+### Where the schedule stands
+The "branching" is in the documents, not in git: one branch, no merges, no tags. Eight study folders each spawned waves that all landed on
+`main`, every track closed except what waits on the author:
+
+| Track | Plan | Status |
+| --- | --- | --- |
+| MVP M0–M7 | proto01 12 | closed 2026-10-07 |
+| ArtCraft H1–H4, X1, E10–E14, Stage ST1–ST4, P14 / P17 / P18 | artcraft 08 | built by 2026-10-13 |
+| PhotoCraft PE1–PE6 (PC1–PC26) | photocraft 06 | closed 2026-10-10 |
+| Story SY0–SY5 (D85) | proto01 17 | built, rig 71/71, 2026-10-14 |
+| LoRA training E16, LT1–LT3 (D86) | proto01 18 | accepted 2026-10-14 |
+| Continuity and voice CN (D87, D88) | proto01 19 | closed 2026-10-15; extend and lip-sync experimental |
+| Creative image CR (D89) | creative_image 04 | built 2026-10-15 |
+| Leonardo L0–L6 | proto01_leonardo | shelved 2026-10-10 |
+| UI reorganisation UI0–UI6 (D90, D91) | proto01_UI 02 | built 2026-10-16; the swatch-pack rig and the author's click-through never recorded as done |
+| Clay animation, phases 0–7 (D94–D135) | proto01_animate 07, 31 | 0–2 ✓ · 3 spikes ✓ · 4 editor ✓ (AE1–AE4, AP1) · 5 ✓ (PS1–PS5, AE5, CA3–CA5, HP1, PF1) · 6 review: 21 looked at, **27 owed** · 7 ✓ (RC1–RC4 → D125–D127, CE1–CE5, AU1–AU4) |
+| Story structure SP0–SP7 (D125) | proto01_UIcomp 04 | built 2026-10-23, A1 rig 7/7; **the click-through (05) owed** |
+| Cast workshop, stages 1–6 (D136–D143) | proto01_UIcast 06 | done 2026-10-25 |
+| The Bin's Trash | — | in the working tree, unplanned, uncommitted |
+
+- **Open questions:** Q15 (dev Turbo s/it alternation) and Q18 (Wan VAE time) open since 2026-10-06; nothing else.
+- **Owed by the author:** the click-throughs of proto01_animate 27 (Animate's modes), proto01_UIcomp 05 (Story) and D90's layout; the
+  looks at E34's contact sheet (31 §4c) and the E35 plates; the Resolve import (deferred 2026-10-18); the swatch-pack rig (D90).
+- **The post-MVP backlog of 13 (2026-10-07), item by item:** 1 Story ✓ · 2 fps conform: RIFE at the movie render (RC3) ✓, the unsharp pass
+  not measured · 3 Wan VAE = Q18 open · 4 LoRA slots ✓ (LT1) · 5 Klein references in Edit AI ✗, Fill Hero ✓, SeedVR2 ✗ · 6 LTX extend as
+  experimental (D88), latent previews ✗, camera control ✗, reference images ✗, H3 ✗ · 7 16-bit ✗, clone / heal ✓ (D62), text tool ✗, PSD
+  adjustment layers ✓ (D41), ICC ✗ · 8 Q15 open, Qwen-Image-Edit: a spec exists (`qwen_edit.toml`) · 9 detachable Loupe ✗, sd.cpp ✗ ·
+  10 pin bumps: v0.39.0 since 2026-10-07, `pin_review` last run 2026-10-16; the two-phase conditioning cache ✗.
+- **Not built, from the last waves' own lists:** AP1b — contacts to props and figures, the gaze, clips falling back on a character's poses,
+  arm clearance; CW3–CW5 — a prop's pivot and grip, textured shells in the line-up; CW6 — openings, a second picture, wall handles in 3D,
+  shadows caught by the faces, a place in the line-up, cleaning a picture with people; CW7 — a picture set's things as prop ideas,
+  Prototype ▸ on a free built set.
+- **Next:** the author orders the register (the highs V21, V44, V78, V79 and the Trash's V58–V59 first; V1 and V13 next, V13 with a rig
+  measurement); the Trash lands with its journal entry and a plan line; CLAUDE.md and the four AGENTS.md re-verified; the owed click-throughs.
+
+## 2026-10-27 13:05 — Review fixes, first group (V21, V22, V24, V25, V30): a chain's job never leaves its record stuck
+
+The register's high on the server: a job that ended outside `_fail` / cancel left a set face's `fill_job_id` or an idea variant's clay
+job id in place for ever (409 on every *Fill ▶* / *Make the clay ▶*). Three things make it impossible now, each with a test in
+`orchestrator/tests/test_review_v.py` named after its id.
+
+- **Every terminal transition runs the origin hook (V21).** `JobQueue.load()` calls `_origin_stopped` for a job it marks "interrupted by
+  shutdown"; `stop()` for the one it fails "interrupted while its outputs were being written"; `submit()` for a job refused over the VRAM
+  budget. `JobQueue.job_live(id)` says whether a record's job is still ahead or running; the Fill route and the clay route treat a marker
+  naming a job that is gone or over as stale — the Fill route clears it and goes on, the clay route starts the chain again.
+- **The chains' jobs are submitted on the loop, staged until their marker is on disk (V22, V30).** `place_sets.prepare_fill` (a thread:
+  the document from the bake) → `start_fill` (the loop: `submit(stage=True)`, `update_face` on a thread, `release`); `queue_fill` is the
+  async pair of the two, and `fill_landed` returns the faces still to fill for `fill_next`, which the finisher awaits on the loop. The
+  idea's chain the same way: `clay_aref_landed` / `clay_fit_landed` return a `ClayStep`, `ideas.start_step` submits it staged, writes the
+  variant's clay with the job's id, releases; `start_next` is the finisher's call. A job refused at submission sets no marker (the face)
+  or marks the variant failed with the reason, and the route answers 422. The route test asserts the released job is `queued` once its
+  record names it.
+- **A new version takes the set but not a Fill running on the source (V24)**: `new_version` clears `faces[].fill_job_id` on the copy.
+- **A landing that fails lets go (V25)**: `fill_landed`'s except clears the face's marker when it still names the job (and says so on the
+  profile's frame); `clay_shell_landed`'s marks the variant failed.
+- Tests: `test_review_v.py` 6 (a shutdown-interrupted Fill frees its face; a refused Fill sets no marker; the Fill route and the clay route
+  let go of a stale marker and release the staged job; a new version drops the running Fill; a failed landing frees its face);
+  `test_place_sets_cw6.py` awaits `queue_fill`. Not changed: V23 (the bake's revision) and V28 (the pose library's schema) — the next
+  server group.
+
+## 2026-10-27 13:05 — Review fixes, second group (V44, V45, V19, V49, V50, V51): the engine started by hand is the engine loom2 starts
+
+- **One launch (V44).** `python -m loom2.engine.supervisor --argv [--state DIR]` prints the launch as `start()` makes it — argv, cwd,
+  env, port, state (`EngineSupervisor.launch()`; `ENGINE_ENV` is the one environment). `scripts/engine-start.ps1` runs exactly that
+  (`-State`, `-LowVram`, `-Extra` kept), so an engine started by hand — which the supervisor adopts when it already listens on the port —
+  writes under `<state>/engine_out` where every finisher reads, with the same `--reserve-vram`, `--vram-headroom` and flags. Dry-run
+  against a stub `main.py` in a scratch state: the argv, cwd and env arrive as printed. The "no output files" failure names an adopted
+  engine as the likely cause and the way out.
+- **The engine reads the model trees the roster reads (V45, T8).** `EngineSupervisor.model_paths_config()` writes
+  `<state>/extra_model_paths.yaml` from Settings at every launch — `models_root` the default tree, every `mounted_model_trees` entry after
+  it, each with the folder map of `engine/extra_model_paths.yaml` (now the template; `checkpoints` stays the two-folder block scalar) —
+  and `_argv` passes that file. A template that cannot be read is passed through as before.
+- **An adopted engine is used, never restarted (V19).** `EngineSupervisor.adopted` is set where the port answers without a process of
+  ours (`start()`, `ensure_running()`); `restart()` on it raises with the way out instead of re-adopting the same hung process and
+  counting a restart; the stall watchdog's job error says what the restart did ("engine restarted, queue paused" or "could not be
+  restarted (…); queue paused"). `test_lifecycle`'s B4 expectation follows (the fake is adopted). The fuzz budget held once the probe was
+  gated on the flag (a bare restart probed the port twice).
+- **Scripts (V49–V51).** `engine-setup.ps1` drops loom2's patch before moving a node's pin, checks the checkout's exit code and HEAD, and
+  prints the commit it is at; `dev.ps1 -Browser` refuses a port 8766 already listening, keeps the orchestrator's pid and stops it when the
+  Vite server ends, and quotes the state path; `lipsync-setup.ps1` passes the checkpoint path as argv, not spliced into Python source.
+  The four scripts parse clean. `engine/AGENTS.md`'s supervisor row says all of it.
+- Tests: `test_review_v.py` +3 (the mounts from Settings with a mounted tree and the block scalar; the entry point against
+  `_argv()`; an adopted engine refusing a restart). Not changed: the shell's `LOOM2_ORCH_CMD` whitespace split (V51's Rust part — a
+  cargo build the review did not run), V46–V48 (CI and the shell: the infra group after the frontend highs).
+- Checks for both groups: offline 627 passed in 204 s; agents_check, settings_audit and model_literals_check clean.
+
+## 2026-10-27 13:12 — Review fixes, third group (V78, V82, V83, V87, V79, V80): the stage frees what it drops, saves in order, renders what it shows
+
+- **What leaves the stage frees its GPU resources (V78, V82).** `stage/engine.ts` `disposeObject(root, keep)` frees every geometry,
+  material and material texture under an object once, however many meshes share it; `disposeEntry` runs it on a rebuild and a removal
+  (with the engine's shared materials kept — freed, a CS3 body transition would compile them again every frame), the loaders free a
+  model that arrives for an entry already gone, and `dispose()` frees the whole scene, textures included, then `forceContextLoss()` so
+  D69's release on `vram_pressure` gives the context back now, not when the canvas is collected. Before: a rebuild disposed only the
+  shadow proxy — a built set's six face textures orphaned at every Fill landing, a picture set's relief and plate at every rebuild, a
+  figure's eighteen picker geometries on every body transition frame.
+- **Saves go out one after another (V79).** `stageStore.ts`: `save()` chains on the last save's promise; `saveNow` PUTs the current
+  document and takes the reply's revision. The old sequence guard discarded the first reply's revision when a second save had started,
+  so the second PUT carried the stale one — a 409, the stage reloaded, the edit and both undo stacks gone, "changed elsewhere" for the
+  author's own drag. `saveChain.test.ts` drives two edits through a held PUT: the second waits and carries the revision the first gave.
+- **Not under the hand that drags (V83).** `sync()` leaves an object's transform alone while the gizmo drags that holder (as it did for a
+  camera since D119): a save's reply or playback no longer snaps it back mid-drag.
+- **Playback rests while hidden (V87, D69).** The Clay level's `setInterval` depends on `active`: hidden, the loop stops; back, it goes on.
+- **The passes render what the viewport shows (V80, T8).** `renderPasses` renders through the active camera *as sampled at the playhead*
+  (its keys applied) and the headless engine syncs the document at the playhead too; before, the objects were at the playhead and the
+  camera at its unkeyed base. `passesStale` still ignores the playhead (the entry does not record the frame it was rendered at — an API
+  field, left for the next server group).
+- Not changed: V81 (the final's 832×480 whatever the project aspect) — a render-size change through the whole final pipeline wants a rig
+  measurement first, as does V13 (`free_cache` unloading every model); V84–V86, V88 (lows) wait.
+- Tests: `engineDispose.test.ts` 2, `saveChain.test.ts` 1 (the first store test with a held `fetch`); Vitest 541 + 3 skipped, typecheck
+  and build clean, lint 0 errors, 79 warnings.
+
+## 2026-10-27 13:40 — The Bin's Trash lands with the review's fixes (V58–V64, V1): a place of the Bin, on commands, counts that hold
+
+The Trash the author began on 2026-10-25 (uncommitted, unplanned — the review's working-tree note) is now the Bin's fourth place:
+*Move to trash* ends a tile's right-click, the Trash at the foot of the places with its count, Restore on a trashed tile's double-click,
+*Delete permanently…* and *Empty trash…* asked first. What the review found in it, fixed before it landed:
+
+- **A trashed tile does not drag (V58).** `Tile.noDrag` leaves the pointer alone; before, an undefined `dragItems` fell back to the tile
+  itself (an unselected tile never consulted it), so a trashed picture still dropped as a reference, a layer or a start frame.
+- **The four verbs are commands (V59, D32).** `bin.trash`, `bin.restore`, `bin.purge`, `bin.emptyTrash` in `catalogueCommands.ts`,
+  placements `context` and `dock`, run on the tile through `onBinTile` (D90's per-item rule: the item set around the run, never stale);
+  the menu names them (`{ cmd, on }`), the bar's *Empty trash…* is a `CommandButton`, the double-click runs `bin.restore` through the
+  same `onBinTile`. The audit, the palette and the help overlay see them. The Catalogue's own `cat.*` Trash commands act on its selection
+  and stay as they are; the Bin's act on one tile. Every run catches its failure into a toast (V60: before, a failed purge was the crash
+  overlay).
+- **Help behind a ? (V61, D116).** The bar's sentences ("double-click: restore · right-click: delete permanently", and the older "drag a
+  tile where it is used · double-click: …") are a `Help` hover each; the count stays the bar's one line.
+- **The counts hold (V62, V63).** `removeLocal` takes off `total` what the list held — the store's own removal and the orchestrator's
+  frame both call it, and every other store received the frame for an asset it never listed (one off per trash, anywhere). A trash or a
+  restore made in any store now reaches every other one: a store on the Library drops the asset; a store on the Trash lists it (or drops
+  it on a restore); the Trash counts follow through `refreshMetaSoon`, one round trip after the frames of a change (a bulk trash of fifty
+  is fifty frames). The diff's own branch fired a counts round trip on every `asset.updated` of a live asset while the Bin sat on the
+  Trash; it fires only for an asset this list holds.
+- **A page in flight belongs to its query (V64).** `loadMore` carries the load sequence like `loadGroup`: a Library page landing after
+  the author opened Unprocessed is dropped with its cursor.
+- **The server under it (V1).** `Catalogue._make_thumbs` writes the record as it is *now*, read again under the lock, with only the
+  thumbnail fields its own: a trash, a restore or a tag edit made while a 4K thumbnail was being made is no longer reverted by the
+  thumbnail pass (and no `asset.updated` with `trashed_at: null` pulls the tile back out of the Trash).
+- Tests: `trash.test.ts` 4 (V62 a removal counts what the list held; V63 both directions and one counts round trip; V64 the late page),
+  `test_review_v.py::test_v1_…` (a trash and a tag during the thumbnails stay); the e2e scenario *the Bin's Trash* from the author's diff
+  unchanged. Vitest 545 + 3 skipped, typecheck and build clean, lint 0 errors, 79 warnings; the D32 audit clean with the four commands.
+  Not changed: V65–V68 (the session store's reconnect and the global chords in fields) — the frame group.

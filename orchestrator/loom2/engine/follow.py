@@ -66,8 +66,10 @@ class EngineFollower:
             pass
         try:
             await asyncio.wait_for(self.engine.restart(), 90.0)
+            job.error = f"{why} — engine restarted, queue paused"
         except Exception as e:  # noqa: BLE001
-            job.log_tail.append(f"engine restart failed: {e}")
+            job.log_tail.append(f"engine restart failed: {e}")                 # V19: an adopted engine is not ours to restart — the job says so
+            job.error = f"{why} — the engine could not be restarted ({e}); queue paused"
         self.on_stall()
 
     async def alive(self) -> bool:
@@ -103,8 +105,8 @@ class EngineFollower:
                 ev = await asyncio.wait_for(self.events.get(), timeout=poll_s)
             except asyncio.TimeoutError:
                 if time.time() - t_last > stall_s:
-                    job.error = f"engine stalled: no progress for {int(stall_s)} s (GPU hang?) — engine restarted, queue paused"
-                    await self.recover(job, job.error)
+                    job.error = f"engine stalled: no progress for {int(stall_s)} s (GPU hang?)"
+                    await self.recover(job, job.error)                      # says what the restart did (V19)
                     return False
                 try:                                        # B4: a hung or refused poll is not a crash of the queue
                     hist = await asyncio.wait_for(self.engine.client.history(job.prompt_id or ""), 30.0)

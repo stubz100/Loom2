@@ -68,7 +68,7 @@ foreach ($f in $files) {
   $from = Join-Path $spike $f
   if (Test-Path $from) { Copy-Item $from $dst; Write-Host "  copied $f from the spike's checkout" }
   else {
-    & $py -c "from huggingface_hub import hf_hub_download; hf_hub_download('ByteDance/LatentSync-1.5', '$f', local_dir=r'$ck')"
+    & $py -c "import sys; from huggingface_hub import hf_hub_download; hf_hub_download('ByteDance/LatentSync-1.5', sys.argv[1], local_dir=sys.argv[2])" $f $ck   # V51: paths as argv, never spliced into the source
     if ($LASTEXITCODE -ne 0) { throw "fetch of $f failed" }
   }
 }

@@ -13,7 +13,8 @@ import { mirrorJoints, type Chain } from './ik'
 import { lensGuess, parseLens } from './lens'
 import { figureMentions, prebind as prebindOf } from './figures'
 import { matrixOf, transformOf } from './held'
-import { chainOf, endsOf, mirrorPins, pinPose, poseContact, type End, type Pins } from './motion/contact'
+import { chainOf, clearArms, endsOf, mirrorPins, pinPose, poseContact, type End, type Pins } from './motion/contact'
+import { docFrames, mirrorContacts, portable, resolvePins, toContact, type Contact, type Contacts, type Gaze } from './motion/contacts'
 import { setShellPoints } from './proxy'
 import type { Keypoint, WholeBody } from './passes'
 import { profilesForMentions, useStory, versionPointsOfShell } from '../story/storyStore'
@@ -63,7 +64,7 @@ function newObject(cur: StageDoc, kind: Kind, preset: string | null = null, pos?
   const scale = kind === 'mannequin' ? (MANNEQUIN_PRESETS[preset ?? 'adult']?.scale ?? 1) : 1
   return { id: newId(kind === 'mannequin' ? 'fig' : kind), kind, name: `${NAMES[kind] ?? kind} ${cur.objects.filter((o) => o.kind === kind).length + 1}`, preset, asset_id: assetId,
     transform: { pos: pos ?? [0, 0, 0], rot: [0, 0, 0], scale: [scale, scale, scale] }, parent: null, parent_joint: null,
-    locked: false, visible: true, colour_id: (cur.objects.length % 12) + 1, pose: kind === 'mannequin' ? { preset: 'stand', joints: {}, extra: {}, ground: 0, pins: {} } : null, billboard: kind === 'plane', profile_id: null, version: null, body: null, detail: kind === 'mannequin' ? newDetail(cur.objects) : null, path: null, shadow_proxy: null,
+    locked: false, visible: true, colour_id: (cur.objects.length % 12) + 1, pose: kind === 'mannequin' ? { preset: 'stand', joints: {}, extra: {}, ground: 0, pins: {}, contacts: {}, gaze: null } : null, billboard: kind === 'plane', profile_id: null, version: null, body: null, detail: kind === 'mannequin' ? newDetail(cur.objects) : null, path: null, shadow_proxy: null,
     light: kind === 'light' ? { ...NEW_LIGHT, target: [...NEW_LIGHT.target] } : null,
     lens_deg: null, plate_asset_id: null, floor_y: null, plate_camera_id: null, level: null, things: [], things_document_id: null, height_m: null, place_set: null }
 }
@@ -168,8 +169,12 @@ interface StageState {
   /** AP1b: one of the character's own poses (fitted to its body: as saved, its drop and pins with it). */
   applyCharacterPose: (id: string, name: string) => void
   /** AP1b (D141): pin hands or feet where they are now; unpin some (none named: all). */
-  pinEnds: (id: string, ends: readonly End[]) => void
+  pinEnds: (id: string, ends: readonly End[], to?: Contact | null) => void
   unpinEnds: (id: string, ends?: readonly End[]) => void
+  /** AP1b, the rest: a pinned end held to a thing or a joint from now on (null: in the figure's own space again), where it is now. */
+  setContact: (id: string, end: End, to: Contact | null) => void
+  /** AP1b, the rest: what the figure looks at (null: the pose's own head). */
+  setGaze: (id: string, gaze: Gaze | null) => void
   /** AP1b: *Save for ‹character›* — the figure's pose into its character version's own library. */
   saveForCharacter: (id: string, name: string) => Promise<void>
   mirrorPose: (id: string) => void
@@ -372,6 +377,8 @@ async function saveNow(get: () => StageState, set: (p: Partial<StageState>) => v
 /** A pose edit (joints, a preset, the Detailed level's own bones): on a keyed figure it is a key at the playhead — the figure as sampled
  *  there, its pose changed — as a transform edit is (ST4); otherwise the figure's pose itself. Before CA1 a pose edit on a keyed figure
  *  changed only the unkeyed pose, which the keys hide: a preset or a hand after a library clip did nothing. */
+/** AP1b, the rest: a pose edit that leaves the contacts and the gaze as they are. */
+const rest = (p: StageObject['pose']) => ({ contacts: p?.contacts ?? {}, gaze: p?.gaze ?? null })
 function editPose(get: () => StageState, id: string, fn: (p: StageObject['pose']) => NonNullable<StageObject['pose']>, label: string): void {
   const cur = get().current
   if (!cur) return
@@ -464,9 +471,15 @@ export const useStage = create<StageState>()((set, get) => ({
   addPathPoint: (id, p) => get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id ? { ...o, path: [...(o.path ?? []), [Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000]] } : o)) }), 'path point'),
   clearPath: (id) => get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id ? { ...o, path: null, shadow_proxy: null } : o)) }), 'clear path'),
   setDetail: (id, detail) => get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id && o.kind === 'mannequin' ? { ...o, detail } : o)) }), detail === 'male' ? 'figure ♂' : 'figure ♀'),
-  setExtra: (id, extra, label = 'hand') => editPose(get, id, (p) => ({ preset: p?.preset ?? 'stand', joints: p?.joints ?? {}, extra: { ...(p?.extra ?? {}), ...extra }, ground: p?.ground ?? 0, pins: p?.pins ?? {} }), label),
+  setExtra: (id, extra, label = 'hand') => editPose(get, id, (p) => ({ preset: p?.preset ?? 'stand', joints: p?.joints ?? {}, extra: { ...(p?.extra ?? {}), ...extra }, ground: p?.ground ?? 0, pins: p?.pins ?? {}, ...rest(p) }), label),
   applyMotion: (id, keys, label) => {
     if (!keys.length) return
+    const o = get().sampledDoc()?.objects.find((x) => x.id === id) ?? get().object(id)                      // AP1b, the rest: the contacts and the gaze ride the clip
+    const contacts = o?.pose?.contacts ?? {}, gaze = o?.pose?.gaze ?? null
+    if (Object.keys(contacts).length || gaze) {
+      const pins = Object.fromEntries(Object.entries(o?.pose?.pins ?? {}).filter(([k]) => k in contacts))
+      keys = keys.map((k) => (k.pose ? { ...k, pose: { ...k.pose, pins: { ...pins }, contacts: { ...contacts }, gaze } } : k))
+    }
     const first = keys[0].frame, last = keys[keys.length - 1].frame
     get().apply((d) => {
       const k = keyframesOf(d)
@@ -674,9 +687,16 @@ export const useStage = create<StageState>()((set, get) => ({
     const o = get().sampledDoc()?.objects.find((x) => x.id === id) ?? get().object(id)
     if (!o || JSON.stringify(effectiveJoints(o)) === JSON.stringify(joints)) return        // a gizmo click without a turn commits nothing (no undo entry)
     // AP1b (D141): the pinned limbs bent back onto their pins; the one the author worked takes its pin along
-    const pins = (o.pose?.pins ?? {}) as Pins
-    const held = Object.keys(pins).length ? pinPose(o.pose?.preset ?? 'stand', joints, o.pose?.ground ?? 0, pins, o.body as never, moved === undefined ? movedChain(effectiveJoints(o), joints) : moved) : { joints, pins }
-    editPose(get, id, (p) => ({ preset: p?.preset ?? 'stand', joints: held.joints, extra: p?.extra ?? {}, ground: p?.ground ?? 0, pins: held.pins }), 'pose')
+    const pins = (o.pose?.pins ?? {}) as Pins, contacts = (o.pose?.contacts ?? {}) as Contacts
+    const frames = Object.keys(contacts).length ? docFrames(get().sampledDoc() ?? get().current!, id) : null
+    const which = moved === undefined ? movedChain(effectiveJoints(o), joints) : moved
+    const held = Object.keys(pins).length ? pinPose(o.pose?.preset ?? 'stand', joints, o.pose?.ground ?? 0, resolvePins(pins, contacts, frames), o.body as never, which) : { joints, pins }
+    for (const end of Object.keys(contacts) as End[]) {                       // a contact pin stays written in its frame: the worked limb's where its end now is, the rest as stored
+      const c = contacts[end]
+      if (!held.pins[end] || !c) continue
+      held.pins[end] = (frames && toContact(held.pins[end]!, c, frames)) ?? pins[end] ?? held.pins[end]
+    }
+    editPose(get, id, (p) => ({ preset: p?.preset ?? 'stand', joints: held.joints, extra: p?.extra ?? {}, ground: p?.ground ?? 0, pins: held.pins, ...rest(p) }), 'pose')
   },
   applyPose: (id, preset, joints = {}) => {
     const name = preset ?? 'stand'
@@ -688,7 +708,8 @@ export const useStage = create<StageState>()((set, get) => ({
     // would go under (a run is in the air: as it is)
     const o = get().object(id)
     const on = name !== 'run' && o?.kind === 'mannequin' ? poseContact(name, full, o.body as never) : { ground: 0, joints: full }
-    editPose(get, id, (p) => ({ preset: name, joints: on.joints, extra: p?.extra ?? {}, ground: on.ground, pins: {} }), 'pose preset'); set({ selectedJoint: null })
+    const joints2 = o?.kind === 'mannequin' && o.body ? clearArms(name, on.joints, on.ground, o.body as never) : on.joints   // AP1b, the rest: the arms clear of a broad torso
+    editPose(get, id, (p) => ({ preset: name, joints: joints2, extra: p?.extra ?? {}, ground: on.ground, pins: {}, contacts: {}, gaze: p?.gaze ?? null }), 'pose preset'); set({ selectedJoint: null })
   },
   applyCharacterPose: (id, name) => {
     const own = castPoses(get().object(id))[name]
@@ -696,24 +717,40 @@ export const useStage = create<StageState>()((set, get) => ({
     const keyed = !!keyframesOf(get().current ?? { keyframes: {} } as never).objects[id]?.length
     const preset = own.preset ?? 'stand'
     const joints = keyed ? { ...Object.fromEntries(JOINTS.map((j) => [j, [...(POSES[preset]?.j[j] ?? [0, 0, 0])]])), ...own.joints } : { ...own.joints }
-    editPose(get, id, (p) => ({ preset, joints, extra: { ...(p?.extra ?? {}), ...(own.extra ?? {}) }, ground: own.ground ?? 0, pins: { ...(own.pins ?? {}) } }), 'pose'); set({ selectedJoint: null })
+    editPose(get, id, (p) => ({ preset, joints, extra: { ...(p?.extra ?? {}), ...(own.extra ?? {}) }, ground: own.ground ?? 0, pins: { ...(own.pins ?? {}) }, contacts: { ...(own.contacts ?? {}) }, gaze: own.gaze ?? p?.gaze ?? null }), 'pose'); set({ selectedJoint: null })
   },
-  pinEnds: (id, ends) => {
+  pinEnds: (id, ends, to = null) => {
     const o = get().sampledDoc()?.objects.find((x) => x.id === id) ?? get().object(id)
     if (o?.kind !== 'mannequin') return
     const at = endsOf(o.pose?.preset ?? 'stand', effectiveJoints(o), o.pose?.ground ?? 0, o.body as never)
-    editPose(get, id, (p) => ({ preset: p?.preset ?? 'stand', joints: p?.joints ?? {}, extra: p?.extra ?? {}, ground: p?.ground ?? 0, pins: { ...(p?.pins ?? {}), ...Object.fromEntries(ends.map((e) => [e, at[e]])) } }), ends.length > 1 ? 'pin' : `pin ${ends[0]?.replace('_', ' ')}`)
+    const frames = to ? docFrames(get().sampledDoc() ?? get().current!, id) : null
+    const point = (e: End) => (to && frames ? toContact(at[e], to, frames) : null) ?? at[e]
+    editPose(get, id, (p) => ({ preset: p?.preset ?? 'stand', joints: p?.joints ?? {}, extra: p?.extra ?? {}, ground: p?.ground ?? 0, pins: { ...(p?.pins ?? {}), ...Object.fromEntries(ends.map((e) => [e, point(e)])) },
+      contacts: { ...Object.fromEntries(Object.entries(p?.contacts ?? {}).filter(([k]) => !ends.includes(k as End))), ...(to && frames ? Object.fromEntries(ends.map((e) => [e, to])) : {}) }, gaze: p?.gaze ?? null }),
+      ends.length > 1 ? 'pin' : `pin ${ends[0]?.replace('_', ' ')}`)
   },
-  unpinEnds: (id, ends) => editPose(get, id, (p) => ({ preset: p?.preset ?? 'stand', joints: p?.joints ?? {}, extra: p?.extra ?? {}, ground: p?.ground ?? 0, pins: ends ? Object.fromEntries(Object.entries(p?.pins ?? {}).filter(([k]) => !ends.includes(k as End))) : {} }), 'unpin'),
+  setContact: (id, end, to) => {
+    const o = get().sampledDoc()?.objects.find((x) => x.id === id) ?? get().object(id)
+    if (o?.kind !== 'mannequin' || !o.pose?.pins?.[end]) return
+    const frames = docFrames(get().sampledDoc() ?? get().current!, id)
+    const own = resolvePins(o.pose.pins as Pins, o.pose.contacts as Contacts, frames)[end]!                     // where the end is held now, in the figure's own space
+    const point = (to && frames ? toContact(own, to, frames) : null) ?? own
+    editPose(get, id, (p) => ({ preset: p?.preset ?? 'stand', joints: p?.joints ?? {}, extra: p?.extra ?? {}, ground: p?.ground ?? 0, pins: { ...(p?.pins ?? {}), [end]: point },
+      contacts: { ...Object.fromEntries(Object.entries(p?.contacts ?? {}).filter(([k]) => k !== end)), ...(to && frames ? { [end]: to } : {}) }, gaze: p?.gaze ?? null }), to ? 'hold to' : 'release')
+  },
+  setGaze: (id, gaze) => editPose(get, id, (p) => ({ preset: p?.preset ?? 'stand', joints: p?.joints ?? {}, extra: p?.extra ?? {}, ground: p?.ground ?? 0, pins: p?.pins ?? {}, contacts: p?.contacts ?? {}, gaze }), gaze ? 'look at' : 'look away'),
+  unpinEnds: (id, ends) => editPose(get, id, (p) => ({ preset: p?.preset ?? 'stand', joints: p?.joints ?? {}, extra: p?.extra ?? {}, ground: p?.ground ?? 0, pins: ends ? Object.fromEntries(Object.entries(p?.pins ?? {}).filter(([k]) => !ends.includes(k as End))) : {},
+    contacts: ends ? Object.fromEntries(Object.entries(p?.contacts ?? {}).filter(([k]) => !ends.includes(k as End))) : {}, gaze: p?.gaze ?? null }), 'unpin'),
   saveForCharacter: async (id, name) => {
     const o = get().sampledDoc()?.objects.find((x) => x.id === id) ?? get().object(id)
     const p = o?.profile_id ? useStory.getState().profiles.find((x) => x.id === o.profile_id) : undefined
     if (!o || !p || !name.trim()) return
-    const pose = { preset: o.pose?.preset ?? 'stand', joints: effectiveJoints(o), extra: { ...(o.pose?.extra ?? {}) }, ground: o.pose?.ground ?? 0, pins: { ...(o.pose?.pins ?? {}) } }
+    const port = portable((o.pose?.pins ?? {}) as Pins, (o.pose?.contacts ?? {}) as Contacts, o.pose?.gaze as Gaze | null, o.id, docFrames(get().sampledDoc() ?? get().current!, o.id))
+    const pose = { preset: o.pose?.preset ?? 'stand', joints: effectiveJoints(o), extra: { ...(o.pose?.extra ?? {}) }, ground: o.pose?.ground ?? 0, ...port }
     if (await useStory.getState().saveCharacterPose(p.id, o.version ?? p.current, name.trim(), pose)) useSession.getState().toast(`"${name.trim()}" saved for ${p.name}${POSES[name.trim()] ? ` — the ${name.trim()} preset takes it on ${p.name}'s figures` : ''}`, 'success')
   },
   // AP1b: the pins mirrored with the joints (not re-solved: the mirrored ends are where the mirrored pins are)
-  mirrorPose: (id) => editPose(get, id, (p) => ({ preset: p?.preset ?? 'stand', joints: mirrorJoints(effectiveJoints({ pose: p } as StageObject)), extra: p?.extra ?? {}, ground: p?.ground ?? 0, pins: mirrorPins(p?.pins as Pins) }), 'mirror pose'),
+  mirrorPose: (id) => editPose(get, id, (p) => ({ preset: p?.preset ?? 'stand', joints: mirrorJoints(effectiveJoints({ pose: p } as StageObject)), extra: p?.extra ?? {}, ground: p?.ground ?? 0, pins: mirrorPins(p?.pins as Pins), contacts: mirrorContacts(p?.contacts as Contacts), gaze: p?.gaze ?? null }), 'mirror pose'),
   resetPose: (id) => get().applyPose(id, 'stand', {}),
   loadPoses: async () => {
     try { const lib = await unwrap(http.GET('/stages/poses')); set({ userPoses: lib.poses as unknown as Record<string, PoseDef>, posesRevision: lib.revision }) }

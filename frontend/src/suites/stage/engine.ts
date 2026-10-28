@@ -13,7 +13,8 @@ import type { StageCamera, StageDoc, StageObject } from '../../api/types'
 import { applyPose, clay, JOINTS, mannequin, POSES, prop, set as buildSet, setMaterial, vfovFor, type Body, type Joint, type Mannequin } from './builders'
 import { HAND_MARKER, heldWorld, onHand, ownTraverse, transformOf } from './held'
 import { CHAINS, eulerDeg, figureChain, solveTwoBone, type Chain } from './ik'
-import { chainOf, holdPins, type Pins } from './motion/contact'
+import { aimHead, chainOf, holdPins, type Pins } from './motion/contact'
+import { gazeTarget, resolvePins, type Contacts, type Frames, type Gaze } from './motion/contacts'
 import { placeSet, type PlaceSetDoc } from './placeSet'
 import { makeDetailed, type Detailed, type HandPreset } from './detailed'
 import { measure } from './motion/path'
@@ -387,16 +388,57 @@ export class StageEngine {
     return out
   }
   /** AP1b (D141): while a joint turns, the figure's pinned hands and feet stay on their pins (the turned joint's own limb aside). */
+  private lastDoc: StageDoc | null = null
   private holdPinned(): void {
     const e = this.posing ? this.entries.get(this.posing.id) : undefined
     const pins = e?.doc.pose?.pins
-    if (!e?.figure || !this.posing || !pins || !Object.keys(pins).length) return
-    holdPins(e.figure, pins as Pins, chainOf(this.posing.joint))
+    if (!e?.figure || !this.posing) return
+    const f = this.framesOf(e, this.lastDoc)
+    if (pins && Object.keys(pins).length) holdPins(e.figure, resolvePins(pins as Pins, e.doc.pose?.contacts as Contacts, f), chainOf(this.posing.joint))
+    const look = gazeTarget(e.doc.pose?.gaze as Gaze | null, f)
+    if (look) aimHead(e.figure, look)
     this.selection.setFromObject(e.holder)
+  }
+  /** AP1b, the rest: the frames a figure's contacts and gaze are read in — the live scene's holders, joints and the active camera. */
+  private framesOf(e: Entry, doc: StageDoc | null): Frames | null {
+    e.holder.updateWorldMatrix(true, true)
+    const own = e.holder.matrixWorld.clone()
+    const entry = (id: string | null | undefined) => (!id || id === 'self' ? e : this.entries.get(id))
+    return {
+      own,
+      frame: (c) => { const t = entry(c.object_id); if (!t) return null; if (c.joint) { const j = t.figure?.joints[c.joint]; if (!j) return null; j.updateWorldMatrix(true, false); return j.matrixWorld.clone() } t.holder.updateWorldMatrix(true, false); return t.holder.matrixWorld.clone() },
+      gaze: (g) => {
+        if (g.camera) { const c = doc?.cameras.find((x) => x.id === doc.active_camera) ?? doc?.cameras[0]; return c ? new THREE.Vector3(c.pos[0], c.pos[1], c.pos[2]) : null }
+        const t = entry(g.object_id)
+        if (!t) return null
+        if (t.figure && (!g.joint || g.joint === 'head')) return t.figure.markers[0].getWorldPosition(new THREE.Vector3())
+        if (t.figure && g.joint) return t.figure.joints[g.joint].getWorldPosition(new THREE.Vector3())
+        return t.holder.getWorldPosition(new THREE.Vector3())
+      },
+    }
+  }
+  /** AP1b, the rest: on every sync, each figure's pinned ends with a contact bent onto the thing or the joint they are held to (read in its
+   *  frame now — a prop dragged, another figure posed, a clip's frame), and its head turned to what it looks at; the rings follow. */
+  private holdContacts(doc: StageDoc): void {
+    this.lastDoc = doc
+    for (const e of this.entries.values()) {
+      const pose = e.doc.pose
+      if (!e.figure || !pose) continue
+      const contacts = (pose.contacts ?? {}) as Contacts, gaze = pose.gaze as Gaze | null | undefined
+      if (!Object.keys(contacts).length && !(gaze && (gaze.camera || gaze.object_id))) continue
+      const f = this.framesOf(e, doc)
+      const held: Pins = {}
+      const all = resolvePins(pose.pins as Pins, contacts, f)
+      for (const end of Object.keys(contacts) as (keyof Pins)[]) if (all[end]) held[end] = all[end]
+      if (Object.keys(held).length && !(this.ik && this.ik.id === e.doc.id)) holdPins(e.figure, held, this.posing?.id === e.doc.id ? chainOf(this.posing.joint) : null)
+      const look = gazeTarget(gaze, f)
+      if (look) aimHead(e.figure, look)
+      this.syncPins(e)                                                                   // the rings at the resolved points (keyed on them)
+    }
   }
   /** AP1b: a ring at each pin of a figure (pose mode's, with its pickers: shown on the selected figure, never in a pass). */
   private syncPins(e: Entry): void {
-    const pins = (e.doc.pose?.pins ?? {}) as Pins, key = JSON.stringify(pins)
+    const pins = resolvePins(e.doc.pose?.pins as Pins, e.doc.pose?.contacts as Contacts, Object.keys(e.doc.pose?.contacts ?? {}).length ? this.framesOf(e, this.lastDoc) : null), key = JSON.stringify(pins)
     if (!e.figure || !e.pickers || e.pinKey === key) return
     e.pinKey = key
     for (const m of e.pickers.filter((p) => p.userData.pin)) { m.removeFromParent(); (m as THREE.Mesh).geometry.dispose() }
@@ -498,7 +540,8 @@ export class StageEngine {
       }
       e.holder.visible = o.visible
       e.proxy?.meshes.forEach((m) => { m.visible = o.visible })                     // E23d: a hidden figure's proxy casts nothing
-      if (e.figure && o.pose && !this.ik && (e.doc.pose?.preset !== o.pose.preset || JSON.stringify(e.doc.pose?.joints) !== JSON.stringify(o.pose.joints) || (e.doc.pose?.ground ?? 0) !== (o.pose.ground ?? 0))) {
+      if (e.figure && o.pose && !this.ik && (e.doc.pose?.preset !== o.pose.preset || JSON.stringify(e.doc.pose?.joints) !== JSON.stringify(o.pose.joints) || (e.doc.pose?.ground ?? 0) !== (o.pose.ground ?? 0)
+        || JSON.stringify(e.doc.pose?.gaze ?? null) !== JSON.stringify(o.pose.gaze ?? null) || JSON.stringify(e.doc.pose?.contacts ?? {}) !== JSON.stringify(o.pose.contacts ?? {}))) {   // AP1b, the rest: a gaze or a hold let go gives the pose back
         applyPose(e.figure.joints, POSES[o.pose.preset ?? 'stand'] ?? POSES.stand, o.pose.joints, o.pose.ground ?? 0)
       }
       e.doc = o
@@ -506,6 +549,7 @@ export class StageEngine {
     }
     for (const [id, e] of [...this.entries]) if (!seen.has(id)) { this.disposeEntry(e); this.entries.delete(id); if (this.selectedId === id) this.select(null) }
     this.placeChildren()
+    this.holdContacts(doc)
     this.syncLight(doc)
     this.followAll()
     this.placeHeld()

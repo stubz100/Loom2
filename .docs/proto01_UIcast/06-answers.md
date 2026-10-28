@@ -308,10 +308,23 @@ the hands off the hips and the head somewhere else.
   - The character's other poses appear beside the presets.
 - **Cast's bench lists the library.** Each pose can be deleted there. Editing a pose in the bench waits for CW3, which puts the bench
   on Stage's engine.
-- **Not built.**
-  - Contacts to a prop or another figure, and the gaze: a pin holds a point in the figure's space.
-  - Clips falling back on the character's poses: the contact fits clips frame by frame.
-  - An automatic arm clearance: the sitting hands E39 found inside a broad shell are set with hand pins.
+- **The rest (2026-10-28, journal).**
+  - **Contacts to a thing or a joint.** A pinned hand or foot can be *held to* a prop (the pin's point in the prop's own space: the hand
+    goes with it), another figure's joint (a hand on a shoulder follows that figure), or one of the figure's own joints (a hand on the hip
+    stays there through a walk) — the Poses panel's *Held to* row, a select per pinned end. The point is read in that frame on every sync
+    of the viewport, so through keys and clips too (`motion/contacts.ts`, `engine.ts holdContacts`; the store solves the same way for the
+    joints it writes). A pose saved for a character keeps the holds to its own joints (`"self"`); holds to a stage's things become plain
+    pins where the hand is. *Hold the pins in place* on the right-click releases them all.
+  - **The gaze.** *Looks at* — the active camera, a thing, or another figure's face — turns the head to it with a third of the turn on the
+    neck, within a neck's reach (80° to either side, 35° up, 45° down; `aimHead`), and keeps looking through keys and clips. *Look at the
+    camera* and *Stop looking* on the panel and the right-click. A preset keeps the gaze; a saved pose keeps only a look at the camera.
+  - **Clips fitted frame by frame.** A clip applied on a figure keeps the figure's contacts and gaze on every key, and the viewport
+    re-solves them each frame; the plain pins stay off the keys as before (a clip walks away from a point held in the figure's space).
+  - **Arm clearance.** A preset applied on a figure with a body has each arm swung clear of the torso and the hips when its elbow, forearm
+    or wrist lies inside them — 3° at a time, forward or outward whichever clears more, up to 45°, a 2 cm margin (`clearArms`): E39's
+    sitting hands on a broad shell. A character's own pose is applied as saved.
+  - Not done: a clearance on a clip's frames (motion capture was clear on its own body; the contacts hold what matters) and a gaze at a
+    free point (the things of the stage are the targets).
 
 ### 2.10 Skeleton changes in a shot are deliberate (U19)
 
@@ -379,7 +392,7 @@ About 9½ weeks in all, the spikes included.
 | **D140 · The fit on an A-pose, the bench in two panes** | 2026-10-25: the fit (and *Fit again*) only on an A-pose — an arms-down read fits nothing; the prompt asks for open hands, the wrists straight; the whole hand measured and not kept (SDPose reads it 12–24 % short of the palm's estimate); *From a picture ▾* reads the rest hand from a reference-set picture; the figure pane folded into the reference pane (the shell in x-ray and the skeleton over the picture, *side* in 3D); a shell placed by its picture again (it lies on it; 82/96 joints inside). Rig `cs3_acceptance.py --fingers` | journal 2026-10-25 13:50; `img/d140-*.jpg` |
 | **E39 · Poses and clips on characters' skeletons** | 2026-10-25 → D141: ten presets and ten starter clips on seven skeletons; slides 0 cm; the deep knee bends miss the floor by 3–7 cm already on the default adult, proportions move it; a vertical contact plus leg IK puts every foot within 0.3 cm; hands through the body only sitting on broad or dressed shells — contacts and IK, no retargeting model | journal 2026-10-25 14:05; `img/e39-*.jpg` |
 | **CS3 · The shell in the shots, the skeleton over time** | the passes from the shell, the pose pass's landmarks (§2.5); skeleton keys on the timeline, *the skeleton changed* with its two choices, the guide's hash per segment (§2.10) | yes (rig) | 4 |
-| **AP1 · Feet on the floor, the pose editor** | 2026-10-25 (§2.9 as built): AP1a — presets and clips on the character's feet (the pose's drop, the stances' vertical contact, leg IK); AP1b — pins on hands and feet held by twist-keeping two-bone IK in the figure's own space, red rings in Pose, the Pins row; *Save for ‹character›* into the Cast version's own poses, a starter pose's name standing in for the preset; the bench lists them | no | 1 |
+| **AP1 · Feet on the floor, the pose editor** | 2026-10-25 (§2.9 as built): AP1a — presets and clips on the character's feet (the pose's drop, the stances' vertical contact, leg IK); AP1b — pins on hands and feet held by twist-keeping two-bone IK in the figure's own space, red rings in Pose, the Pins row; *Save for ‹character›* into the Cast version's own poses, a starter pose's name standing in for the preset; the bench lists them; the rest 2026-10-28 (§2.9): contacts to things and joints, the gaze, clips fitted frame by frame, arm clearance | no | 1 |
 | **CW3–CW5 · The bench, Clay's cards, props' height, the line-up** | 2026-10-25 (§2.7 as built, D142): *Bench ▶* opens Clay on a bench stage bound to the version (a character's figure; a prop at its height beside a 1.75 m figure); Cast's characters as figure cards; *Make a free copy*; *Prototype ▸* on free figures and meshes; `height_m` on props (from their words) and meshes; *Line-up ▶* on both boards with *Pose all* and *Send to a stage* | no | 1 |
 | **CW1–CW2 · Ideas** | 2026-10-25 (§2.2 as built): the ideas store and its routes; Cast's *Cast · Ideas* switch, the board, the idea's bench and Inspector; *Prototype ▸* on every picture (copied, named from the prompt); *Make the clay ▶* (the A-pose picture, the fit, the shell, chained); *Keep ▶* (a profile or a version: hero, drafted sheet, clay, `from_idea`); Image's For chip on an idea, `for_idea` on the results, *Made for this idea*, *＋ variant* | no (the clay's jobs: yes, through the queue) | 1 |
 | **E39 → AP1 · The pose editor** | §2.9: E39 first; then contacts and IK on every pose and clip, the pose editor in Animate › Clay and Cast's bench, the character's pose library | yes (rig) | 1.5 + 4 |

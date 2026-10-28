@@ -83,6 +83,10 @@
 .shot-tab .segmented button.active { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--fg); }
 .lib-row[data-group="pins"] .segmented button { white-space: nowrap; }
 .lib-row[data-group="pins"] .segmented button.active { background: color-mix(in srgb, #ff5a6e 24%, transparent); color: var(--fg); }   /* AP1b: the pins' rings are this red */
+.lib-row[data-group="contacts"] { flex-wrap: wrap; row-gap: 4px; }                                     /* AP1b, the rest: a select per pinned end, wrapping */
+.lib-row[data-group="contacts"] .kv { display: inline-flex; align-items: center; gap: 6px; }
+.lib-row[data-group="contacts"] .kv > span:first-child { min-width: 44px; font-size: 12px; color: var(--fg2); }
+.lib-row[data-group="contacts"] select, .lib-row[data-group="gaze"] select { max-width: 190px; }
 .shot-tab .angle-count { display: inline-flex; align-items: center; gap: 8px; }
 .shot-tab .prompt-preview { font-size: 11px; line-height: 1.35; max-height: 80px; overflow: auto; }
 .shot-tab .shot-results { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }

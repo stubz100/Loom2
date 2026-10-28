@@ -28,7 +28,7 @@ import { useStageActive } from '../../frame/stageKeep'
 import { askConfirm, askText, useSession } from '../../store/session'
 import { ShotHead } from './ShotStepper'
 import { AnimColumn, Sec } from '../animate/column'
-import type { StageCamera, StageObject } from '../../api/types'
+import type { StageCamera, StageDoc, StageObject } from '../../api/types'
 import { keyedFrames as keyedFramesOf, keyframesOf, sampleCamera, sampleDoc } from './anim'
 import { Timeline as TimelineView, TransportBar, type TLRow } from '../animate/Timeline'
 import { keyRuns, stageSpan } from '../animate/timelineMath'
@@ -41,6 +41,7 @@ import { descendsFrom, HAND_LABEL } from './held'
 import { meshLabel, propMeshes } from './meshes'
 import { castPoses, effectiveJoints, st, TEMPLATE_KINDS, useStage, type ShotState, imageSetBudget } from './stageStore'
 import { ENDS, type End } from './motion/contact'
+import { contactChoices, SELF, type Contact, type Contacts } from './motion/contacts'
 import './stage.css'
 
 const FOCALS = [24, 35, 50, 85]
@@ -448,7 +449,7 @@ export function PosesTab() {
       })()}
       <div className="verbs"><CommandButton id="stage.pose.mirror" text /><CommandButton id="stage.pose.reset" text label="Reset" /><CommandButton id="stage.pose.save" text />
         {o.profile_id && <CommandButton id="stage.pose.saveForCharacter" text label={`Save for ${profiles.find((p) => p.id === o.profile_id)?.name ?? 'the character'}…`} />}</div>
-      <Pins id={o.id} pins={(shown?.pose?.pins ?? {}) as Partial<Record<End, number[]>>} />
+      <Pins id={o.id} pose={shown?.pose ?? null} doc={current} />
       <h4>Joint <CommandButton id="stage.pose.mode" text label={posing ? 'Done posing' : 'Pose'} active={posing} /></h4>
       <div className="kv"><span>joint</span><select value={joint ?? ''} onChange={(e) => st().selectJoint(e.target.value || null)}><option value="">— click one in the viewport —</option>{JOINTS.map((j) => <option key={j} value={j}>{j}</option>)}</select></div>
       {v && <Vec label="x · y · z °" v={v} onChange={setJoint} step={5} />}
@@ -459,19 +460,45 @@ export function PosesTab() {
 }
 
 const END_LABEL: Record<End, string> = { r_hand: 'right hand', l_hand: 'left hand', r_foot: 'right foot', l_foot: 'left foot' }
-/** AP1b (D141): the figure's pins — a toggle per hand and foot (pinned where it is now), the commands for both feet / both hands / none. */
-function Pins({ id, pins }: { id: string; pins: Partial<Record<End, number[]>> }) {
+const JOINT_LABEL: Record<string, string> = { head: 'head', spine: 'chest', root: 'hips', r_shoulder: 'right shoulder', l_shoulder: 'left shoulder', r_elbow: 'right hand', l_elbow: 'left hand',
+  r_hip: 'right hip', l_hip: 'left hip', r_knee: 'right knee', l_knee: 'left knee' }
+const short = (s: string) => s.replace('right ', 'R ').replace('left ', 'L ')
+/** AP1b (D141): the figure's pins — a toggle per hand and foot (pinned where it is now), the commands for both feet / both hands / none;
+ *  the rest: each pinned end held to a thing or a joint (a select per pin — the frame the pin is read in), and what the figure looks at. */
+function Pins({ id, pose, doc }: { id: string; pose: StageObject['pose'] | null; doc: StageDoc | null }) {
+  const pins = (pose?.pins ?? {}) as Partial<Record<End, number[]>>, contacts = (pose?.contacts ?? {}) as Contacts, gaze = pose?.gaze ?? null
   const n = ENDS.filter((e) => pins[e]).length
+  const choices = useMemo(() => (doc ? contactChoices(doc, id) : []), [doc, id])
+  const key = (c: { object_id?: string | null; joint?: string | null } | null | undefined) => (c?.object_id ? `${c.object_id}:${c.joint ?? ''}` : '')
+  const parse = (v: string): Contact | null => { if (!v) return null; const at = v.indexOf(':'); return { object_id: v.slice(0, at), joint: (v.slice(at + 1) || null) as Contact['joint'] } }
+  const held = choices.flatMap((c) => (c.joints.length ? c.joints.map((j) => <option key={`${c.object_id}:${j}`} value={`${c.object_id}:${j}`}>{c.name} · {JOINT_LABEL[j] ?? j}</option>)
+    : [<option key={c.object_id} value={`${c.object_id}:`}>{c.name}</option>]))
+  const looked = choices.filter((c) => c.object_id !== SELF).map((c) => <option key={c.object_id} value={c.joints.length ? `${c.object_id}:head` : `${c.object_id}:`}>{c.name}</option>)
   return (
+    <>
     <div className="lib-row" data-group="pins"><span className="lib-label">Pins</span>
       <span className="segmented" role="group" aria-label="pins">{ENDS.map((e) => (
         <button key={e} type="button" className={pins[e] ? 'active' : ''} aria-pressed={!!pins[e]} data-end={e}
           title={pins[e] ? `Unpin the ${END_LABEL[e]}` : `Pin the ${END_LABEL[e]} where it is`}
-          onClick={() => (pins[e] ? st().unpinEnds(id, [e]) : st().pinEnds(id, [e]))}>{END_LABEL[e].replace('right ', 'R ').replace('left ', 'L ')}</button>))}</span>
+          onClick={() => (pins[e] ? st().unpinEnds(id, [e]) : st().pinEnds(id, [e]))}>{short(END_LABEL[e])}</button>))}</span>
       <CommandButton id="stage.pose.unpin" />
       <span className="hint">{n ? `${n} pinned` : 'none'}</span>
       <Help text="A pinned hand or foot stays where it is while the hips, the spine or the other limbs turn: its arm or leg bends to keep it there (red rings in Pose). Turn or drag that limb itself and the pin goes with it." />
     </div>
+    {n > 0 && <div className="lib-row" data-group="contacts"><span className="lib-label">Held to</span>
+      {ENDS.filter((e) => pins[e]).map((e) => (
+        <span key={e} className="kv"><span>{short(END_LABEL[e])}</span>
+          <select value={key(contacts[e])} data-end={e} aria-label={`the ${END_LABEL[e]} held to`} onChange={(ev) => st().setContact(id, e, parse(ev.target.value))}>
+            <option value="">the figure's own space</option>{held}</select></span>))}
+      <Help text="A pinned hand or foot held to a thing goes with it (a hand on a prop that is then moved); held to another figure's joint it follows that limb (a hand on a shoulder); held to one of the figure's own joints it stays on it (a hand on the hip through a walk). It is read in that frame from now on — through keys and clips too. A pose saved for a character keeps the holds to its own joints; the others become plain pins." />
+    </div>}
+    <div className="lib-row" data-group="gaze"><span className="lib-label">Looks at</span>
+      <select value={gaze?.camera ? 'camera' : key(gaze)} aria-label="looks at" onChange={(ev) => { const v = ev.target.value; st().setGaze(id, v === 'camera' ? { camera: true, object_id: null, joint: null } : v ? { ...parse(v)!, camera: false } : null) }}>
+        <option value="">— the pose's own head —</option><option value="camera">the camera</option>{looked}</select>
+      <CommandButton id="stage.pose.lookAtCamera" /><CommandButton id="stage.pose.lookAway" />
+      <Help text="The head turns to what the figure looks at — the active camera, a thing, or another figure's face — a third of the turn on the neck, as far as a neck goes, and keeps looking through keys and clips. A preset keeps it; Stop looking gives the head back to the pose. A pose saved for a character keeps only a look at the camera." />
+    </div>
+    </>
   )
 }
 

@@ -57,10 +57,10 @@ describe('pins (AP1b, D141)', () => {
 const ver = (v: Partial<ProfileVersion>): ProfileVersion => ({ id: 'v1', label: 'v1', state: 'open', group_id: 'grp_1', candidates_group_id: null, hero_asset_id: null, body: null, anim_ref_asset_id: null,
   anim_ref_back_asset_id: null, anim_test_clip_id: null, shell_asset_id: null, shell_from: null, poses: {}, from_idea: null, height_m: null, place_set: null, model_asset_id: null, model_from: null, body_fit_from: null, body_points: null, anim_ref_note: null,
   appearance: '', outfit: '', colours: [], marks: '', trigger: null, lora: null, derived_from: null, created_at: '', locked_at: null, ...v })
-const MINE = { preset: 'crouch', joints: { r_knee: [100, 0, 0] }, extra: {}, ground: 0.2, pins: { r_foot: [-0.1, 0.04, 0.2] } }
+const MINE = { preset: 'crouch', joints: { r_knee: [100, 0, 0] }, extra: {}, ground: 0.2, pins: { r_foot: [-0.1, 0.04, 0.2] }, contacts: {}, gaze: null }
 const MARA = { id: 'prf_m', name: 'Mara', cls: 'character', current: 'v1', schema_version: 2, revision: 0, voice_id: null, created_at: '', updated_at: '', versions: [ver({ poses: { crouch: MINE } })] } as unknown as Profile
 const FIG = { id: 'fig_1', kind: 'mannequin', name: 'Mara', preset: 'adult', asset_id: null, body: null, detail: null, path: null, shadow_proxy: null, light: null, parent: null, parent_joint: null, locked: false,
-  visible: true, colour_id: 1, pose: { preset: 'stand', joints: {}, extra: {}, ground: 0, pins: {} }, billboard: false, profile_id: 'prf_m', version: null,
+  visible: true, colour_id: 1, pose: { preset: 'stand', joints: {}, extra: {}, ground: 0, pins: {}, contacts: {}, gaze: null }, billboard: false, profile_id: 'prf_m', version: null,
   transform: { pos: [0, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] } } as unknown as StageObject
 const DOC = { schema_version: 2, id: 'stg_1', name: 'Quay', size: { w: 1920, h: 1080, fps: 24 }, objects: [FIG], cameras: [{ id: 'cam_1', name: 'Camera 1', pos: [0, 1.5, 5], target: [0, 1, 0], roll: 0, focal_mm: 35, sensor_mm: 36 }],
   active_camera: 'cam_1', keyframes: { camera: {}, objects: {} }, range: { start: 0, end: 120 }, passes: [], group_id: null, revision: 1, created_at: '', updated_at: '' } as unknown as StageDoc

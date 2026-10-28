@@ -10747,3 +10747,89 @@ alternation said so; Q15 stays open, `--phases a,a,a --jobs 1 --no-variants` a c
 progress, not the clock — not measured. **Q18 resolved → D147**: the clip's decode stays plain and MIOpen off; 04 §5's runtime-flags
 table says what Wan measured; no code changed. Rig lesson, in the script's docstring: phase b's tiled variants re-sampled because they
 resubmitted the first job's graph while the cache held the second job's seed — the last job's graph is the one to resubmit.
+
+## 2026-10-28 08:09 — Q15 measured with the cheap instrument: the slow mode is a model's first pass from disk, once; nothing alternates (D148)
+
+Open since 2026-10-05 (E0 / E7: dev Turbo sampling at ≈ 4.5 or ≈ 7.2 s/it under sustained load against 3.5 fresh; the candidates heat,
+DynamicVRAM, the LoRA patching; the telemetry it wanted needs HWiNFO or ADLX). The author took the cheap option: `scripts/q15_speed_rig.py`
+runs the same job through the queue on the real engine, by process and by order, and reads the samplers' seconds per step from the job's
+node times — a pattern tied to a process's first job, to sustained load, or to rest shows as a table. Nothing else on the card.
+
+**dev Turbo, the bench's alley at 960×544, 8 steps — two engine processes of six jobs back to back:**
+
+| dev Turbo — flux2-dev-fp8mixed, 8 steps | process · job | the samplers | s/it | the rest of the job | VRAM free after |
+| --- | --- | --- | --- | --- | --- |
+| 07:48:20 | 1 · 1 | 62.05 s | **7.76** | CLIPLoader 1.5 s, CLIPTextEncode 18.3 s | 10.31 GB |
+| 07:49:00 | 1 · 2 | 36.67 s | **4.58** | VAEDecode 2.1 s | 11.37 GB |
+| 07:49:38 | 1 · 3 | 36.73 s | **4.59** | — | 11.37 GB |
+| 07:50:17 | 1 · 4 | 37.65 s | **4.71** | — | 11.37 GB |
+| 07:50:56 | 1 · 5 | 37.36 s | **4.67** | — | 11.37 GB |
+| 07:51:34 | 1 · 6 | 36.81 s | **4.6** | — | 11.34 GB |
+| 07:52:35 | 2 · 1 | 37.45 s | **4.68** | CLIPLoader 1.5 s, CLIPTextEncode 5.9 s | 10.31 GB |
+| 07:53:15 | 2 · 2 | 36.85 s | **4.61** | VAEDecode 2.1 s | 11.34 GB |
+| 07:53:54 | 2 · 3 | 37.16 s | **4.64** | — | 11.34 GB |
+| 07:54:32 | 2 · 4 | 36.95 s | **4.62** | — | 11.34 GB |
+| 07:55:10 | 2 · 5 | 37.12 s | **4.64** | — | 11.37 GB |
+| 07:55:48 | 2 · 6 | 36.95 s | **4.62** | — | 11.37 GB |
+
+**Wan 2.2 Draft (the fish-market walk, 832×480 × 81) — four jobs in one process, then three processes of one job:**
+
+| Wan, one process — wan22-i2v-high-fp8, 4 steps | process · job | the samplers | s/it | the rest of the job | VRAM free after |
+| --- | --- | --- | --- | --- | --- |
+| 07:57:52 | 1 · 1 | 80.9 s | **20.23** | CLIPTextEncode 3.9 s, WanImageToVideo 7.4 s, VAEDecode 11.0 s | 15.0 GB |
+| 07:59:34 | 1 · 2 | 79.55 s | **19.89** | WanImageToVideo 6.4 s, VAEDecode 11.0 s | 15.41 GB |
+| 08:01:16 | 1 · 3 | 79.53 s | **19.88** | WanImageToVideo 6.8 s, VAEDecode 11.0 s | 15.41 GB |
+| 08:03:02 | 1 · 4 | 79.64 s | **19.91** | WanImageToVideo 6.4 s, VAEDecode 14.2 s | 15.41 GB |
+
+| Wan, cold processes — wan22-i2v-high-fp8, 4 steps | process · job | the samplers | s/it | the rest of the job | VRAM free after |
+| --- | --- | --- | --- | --- | --- |
+| 08:05:09 | 1 · 1 | 80.93 s | **20.23** | CLIPTextEncode 3.9 s, WanImageToVideo 7.3 s, VAEDecode 14.1 s | 15.0 GB |
+| 08:07:15 | 2 · 1 | 80.88 s | **20.22** | CLIPTextEncode 3.9 s, WanImageToVideo 7.4 s, VAEDecode 11.9 s | 15.0 GB |
+| 08:09:21 | 3 · 1 | 80.9 s | **20.23** | CLIPTextEncode 4.0 s, WanImageToVideo 7.5 s, VAEDecode 12.4 s | 15.41 GB |
+
+**Reading.** Eleven of twelve Turbo jobs sampled at 4.58–4.71 s/it; the one at 7.76 was the first job of the session, and everything of it
+was slow — the text encoder's 18 s against 6, the loaders — while the first job of the second process, an engine started cold but the
+files already in the page cache, was 4.68. A process's cold start costs nothing on the samplers; a file's first pass from disk costs that
+job, once per session. Six jobs back to back neither drift nor alternate (± 0.07 s/it); Wan's four in a row and three cold starts are
+19.9–20.2 s/it throughout — its files were cached by Q18's run, and the 15 % slower first Wan job of that run (47 + 46 s against 41 + 40,
+journal 07:14) was the same first pass: the i2v experts had not been read since the Animate runs. The 2026-10-05 runs behind the question
+loaded several models in turn across the E0 / E7 configurations, each a first pass through the cache, and the alternation they saw is what
+a first pass looks like beside a cached one; the numbers of that day (3.5 fresh, 4.5 and 7.2) do not reproduce on today's stack.
+**Q15 resolved → D148**: the slow mode is disk, not heat — a session's first job per model family pays the file's read, nothing else
+changes with load; no code, no telemetry. The expectation goes in 04 §5's weight-formats row. `q15_speed_rig.py` stays as the
+instrument (`--kind t2i|i2v --processes M --jobs N --idle S`) should the pattern ever change.
+
+## 2026-10-28 08:24 — AP1b, the rest (D141; 06 §2.9): contacts to things and joints, the gaze, clips fitted frame by frame, arm clearance
+
+The three items 06 §2.9 left as "not built" on 2026-10-25, built as the plan wrote them. No new decision: D141's pose editor, finished.
+
+- **A pin held to a thing or a joint** (`stage/motion/contacts.ts`, `stages.Pose.contacts`, the Poses panel's *Held to* row — a select per
+  pinned end). A contact names the frame a pin's point is read in: a prop's own transform (the hand goes with the prop), another figure's
+  joint (a hand on a shoulder follows that figure), or one of the figure's own joints (a hand on the hip stays there through a walk;
+  `"self"`). The engine resolves every figure's contact pins on every sync (`holdContacts`: the live holders and joints, after the figures
+  are posed and the children placed, before the held things follow the hands) and bends the limbs onto them with AP1b's `reach`; the store
+  resolves them the same way from the document (`DocFrames`: an off-screen figure for a joint, `held.heldWorld` for a held thing) when it
+  writes joints, so what is drawn is what is stored. The rings sit at the resolved points. Mirror swaps the ends and a contact to the
+  figure's own side joint; a preset clears the contacts with the pins; *Hold the pins in place* (right-click) releases them all into the
+  figure's own space where they are.
+- **The gaze** (`contact.ts aimHead`, `Pose.gaze`, the *Looks at* row; *Look at the camera* / *Stop looking* on the panel and the
+  right-click). The head turns to the active camera, a thing's origin or a figure's face with a third of the turn on the neck, within a
+  neck's reach (80° to either side, 35° up, 45° down); the rest of the turn is the exact remainder (quaternions), so the face's +Z lands on
+  the point. The engine aims on every sync; the pose's own neck and head give way while a gaze is set. A preset keeps the gaze.
+- **Clips fitted frame by frame.** `applyMotion` keeps the figure's contacts and gaze (and the pins those contacts own) on every key of
+  a clip; the viewport re-solves them each frame. The plain pins stay off the keys as before — a walk leaves a point held in the figure's
+  space behind. The keys' sampling carries contacts and gaze with the nearer key (`anim.ts`).
+- **Arm clearance** (`contact.ts clearArms`): a preset applied on a figure with a body has each arm swung clear of the torso and the hips
+  when its elbow, forearm or wrist lies inside the figure's boxes (a 2 cm margin) — 3° at a time, forward or outward, whichever lessens
+  the penetration more, up to 45°. A character's own pose is applied as saved (it was fitted by hand).
+- **What travels with a character** (`portable`): *Save for ‹character›* keeps the holds to the figure's own joints as `"self"`, turns
+  the holds to a stage's things into plain pins where the hand is, and keeps a gaze only at the camera; `applyCharacterPose` brings them
+  back. `Contact` and `Gaze` on the server (`stages.py`): a joint is one of the twelve, a bad one a 422; a stage from before reads with
+  neither (`contacts` {} and `gaze` None); OpenAPI and `schema.d.ts` regenerated.
+- **Not done, said in 06 §2.9:** a clearance on a clip's frames; a gaze at a free point.
+- **Tests:** `contacts.test.ts` 7 (a hand on a crate goes where the crate goes and the arm bends onto it; a hand on the figure's own hip
+  through a 40° turn of the hips and on another figure's shoulder where that figure stands; the gaze within 1° and the limit behind; the
+  arms clear on a heavy body and untouched on the default; mirror and what travels; the store: pin to the crate, re-hold, look at the
+  camera, the contacts and gaze on a clip's keys and the plain pin off them; a preset and unpin), `test_character_poses_ap1.py` +1; the
+  e2e's pose-editor scenario grew the *Held to* and *Looks at* rows (the right hand held to its own hips, the look at the camera, both on
+  the saved crouch, the bench's "3 pinned"). **Checks:** typecheck, build clean and lint (0 errors, 79 warnings) clean; Vitest 572 + 3 skipped; offline 671 passed; e2e 74 passed (alone); settings_audit clean, model_literals_check clean, agents_check clean.

@@ -56,6 +56,27 @@ class Transform(BaseModel):
 
 
 PinEnd = Literal["r_hand", "l_hand", "r_foot", "l_foot"]
+JointName = Literal["root", "spine", "neck", "head", "r_shoulder", "r_elbow", "l_shoulder", "l_elbow", "r_hip", "r_knee", "l_hip", "l_knee"]
+
+
+class Contact(BaseModel):
+    """AP1b (D141, proto01_UIcast 06 §2.9), the rest: what a pinned hand or foot is held to — a thing (the pin's point in its own
+    transform's space, so the hand goes with the prop it rests on) or a figure's joint (that joint's frame: a hand on another's shoulder, or
+    on the figure's own hip). `object_id` "self" is the figure itself, as a character's saved pose keeps a contact to its own joint; a
+    stage's figure names the object. The point is `Pose.pins[end]`, read in that frame (frontend motion/contacts.ts)."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    object_id: str
+    joint: JointName | None = None
+
+
+class Gaze(BaseModel):
+    """AP1b, the rest: what the figure looks at — a thing (its origin), a figure (its face; `joint` "head" or none), or the active camera.
+    The head turns to it with a third of the turn on the neck, within what a neck does (frontend motion/contact.ts aimHead); a saved
+    pose keeps only a camera gaze (a thing of a stage means nothing on another)."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    object_id: str | None = None
+    joint: JointName | None = None
+    camera: bool = False
 
 
 class Pose(BaseModel):
@@ -67,6 +88,8 @@ class Pose(BaseModel):
     # AP1b: the pose editor's pins — a hand or a foot held at [x, y, z] metres in the figure's own space while the rest of the pose changes
     # (frontend motion/contact.ts)
     pins: dict[PinEnd, Annotated[list[float], Field(min_length=3, max_length=3)]] = Field(default_factory=dict)
+    contacts: dict[PinEnd, Contact] = Field(default_factory=dict)   # AP1b, the rest: the frame a pin is read in (none: the figure's own space)
+    gaze: Gaze | None = None                       # AP1b, the rest: what the figure looks at (None: the pose's own head)
 
 
 class LightSpec(BaseModel):

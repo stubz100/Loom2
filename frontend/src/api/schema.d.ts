@@ -5833,6 +5833,32 @@ export interface components {
             result: unknown;
         };
         /**
+         * Contact
+         * @description AP1b (D141, proto01_UIcast 06 §2.9), the rest: what a pinned hand or foot is held to — a thing (the pin's point in its own
+         *     transform's space, so the hand goes with the prop it rests on) or a figure's joint (that joint's frame: a hand on another's shoulder, or
+         *     on the figure's own hip). `object_id` "self" is the figure itself, as a character's saved pose keeps a contact to its own joint; a
+         *     stage's figure names the object. The point is `Pose.pins[end]`, read in that frame (frontend motion/contacts.ts).
+         */
+        "Contact-Input": {
+            /** Joint */
+            joint?: ("root" | "spine" | "neck" | "head" | "r_shoulder" | "r_elbow" | "l_shoulder" | "l_elbow" | "r_hip" | "r_knee" | "l_hip" | "l_knee") | null;
+            /** Object Id */
+            object_id: string;
+        };
+        /**
+         * Contact
+         * @description AP1b (D141, proto01_UIcast 06 §2.9), the rest: what a pinned hand or foot is held to — a thing (the pin's point in its own
+         *     transform's space, so the hand goes with the prop it rests on) or a figure's joint (that joint's frame: a hand on another's shoulder, or
+         *     on the figure's own hip). `object_id` "self" is the figure itself, as a character's saved pose keeps a contact to its own joint; a
+         *     stage's figure names the object. The point is `Pose.pins[end]`, read in that frame (frontend motion/contacts.ts).
+         */
+        "Contact-Output": {
+            /** Joint */
+            joint: ("root" | "spine" | "neck" | "head" | "r_shoulder" | "r_elbow" | "l_shoulder" | "l_elbow" | "r_hip" | "r_knee" | "l_hip" | "l_knee") | null;
+            /** Object Id */
+            object_id: string;
+        };
+        /**
          * ContentAwareCaps
          * @description D62: whether the native extension (PhotoCraft's content-aware fill + PatchMatch) is installed, and the modes it enables.
          */
@@ -7613,6 +7639,40 @@ export interface components {
         Freed: {
             /** Freed */
             freed: boolean;
+        };
+        /**
+         * Gaze
+         * @description AP1b, the rest: what the figure looks at — a thing (its origin), a figure (its face; `joint` "head" or none), or the active camera.
+         *     The head turns to it with a third of the turn on the neck, within what a neck does (frontend motion/contact.ts aimHead); a saved
+         *     pose keeps only a camera gaze (a thing of a stage means nothing on another).
+         */
+        "Gaze-Input": {
+            /**
+             * Camera
+             * @default false
+             */
+            camera?: boolean;
+            /** Joint */
+            joint?: ("root" | "spine" | "neck" | "head" | "r_shoulder" | "r_elbow" | "l_shoulder" | "l_elbow" | "r_hip" | "r_knee" | "l_hip" | "l_knee") | null;
+            /** Object Id */
+            object_id?: string | null;
+        };
+        /**
+         * Gaze
+         * @description AP1b, the rest: what the figure looks at — a thing (its origin), a figure (its face; `joint` "head" or none), or the active camera.
+         *     The head turns to it with a third of the turn on the neck, within what a neck does (frontend motion/contact.ts aimHead); a saved
+         *     pose keeps only a camera gaze (a thing of a stage means nothing on another).
+         */
+        "Gaze-Output": {
+            /**
+             * Camera
+             * @default false
+             */
+            camera: boolean;
+            /** Joint */
+            joint: ("root" | "spine" | "neck" | "head" | "r_shoulder" | "r_elbow" | "l_shoulder" | "l_elbow" | "r_hip" | "r_knee" | "l_hip" | "l_knee") | null;
+            /** Object Id */
+            object_id: string | null;
         };
         /** Geometry */
         Geometry: {
@@ -10248,10 +10308,15 @@ export interface components {
         };
         /** Pose */
         "Pose-Input": {
+            /** Contacts */
+            contacts?: {
+                [key: string]: components["schemas"]["Contact-Input"];
+            };
             /** Extra */
             extra?: {
                 [key: string]: number[];
             };
+            gaze?: components["schemas"]["Gaze-Input"] | null;
             /**
              * Ground
              * @default 0
@@ -10270,10 +10335,15 @@ export interface components {
         };
         /** Pose */
         "Pose-Output": {
+            /** Contacts */
+            contacts: {
+                [key: string]: components["schemas"]["Contact-Output"];
+            };
             /** Extra */
             extra: {
                 [key: string]: number[];
             };
+            gaze: components["schemas"]["Gaze-Output"] | null;
             /**
              * Ground
              * @default 0

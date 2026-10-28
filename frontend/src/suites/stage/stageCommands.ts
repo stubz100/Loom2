@@ -105,6 +105,14 @@ registerCommands([
     when: () => sel()?.kind === 'mannequin', run: () => st().pinEnds(st().selected!, ['r_hand', 'l_hand']) },
   { id: 'stage.pose.unpin', scope: 'stage', label: 'Unpin the hands and feet', icon: PinOff, placement: ['panel', 'inspector', 'context'],
     when: () => sel()?.kind === 'mannequin' && Object.keys(st().sampledDoc()?.objects.find((o) => o.id === st().selected)?.pose?.pins ?? {}).length > 0, run: () => st().unpinEnds(st().selected!) },
+  // AP1b, the rest: the gaze and the contacts' common verbs (the Poses panel's rows pick a thing or a joint)
+  { id: 'stage.pose.lookAtCamera', scope: 'stage', label: 'Look at the camera', icon: Eye, hint: 'the head turns to the active camera, and keeps turning to it through keys and clips', placement: ['panel', 'context'],
+    when: () => sel()?.kind === 'mannequin' && !st().sampledDoc()?.objects.find((o) => o.id === st().selected)?.pose?.gaze?.camera, run: () => st().setGaze(st().selected!, { camera: true, object_id: null, joint: null }) },
+  { id: 'stage.pose.lookAway', scope: 'stage', label: 'Stop looking', icon: EyeOff, hint: "the head is the pose's own again", placement: ['panel', 'context'],
+    when: () => sel()?.kind === 'mannequin' && !!st().sampledDoc()?.objects.find((o) => o.id === st().selected)?.pose?.gaze, run: () => st().setGaze(st().selected!, null) },
+  { id: 'stage.pose.release', scope: 'stage', label: 'Hold the pins in place', icon: PinOff, hint: "every pinned hand and foot held where it is now, in the figure's own space, no longer to a thing or a joint", placement: ['context'],
+    when: () => sel()?.kind === 'mannequin' && Object.keys(st().sampledDoc()?.objects.find((o) => o.id === st().selected)?.pose?.contacts ?? {}).length > 0,
+    run: () => { const id = st().selected!; for (const end of Object.keys(st().sampledDoc()?.objects.find((o) => o.id === id)?.pose?.contacts ?? {})) st().setContact(id, end as never, null) } },
   { id: 'stage.pose.saveForCharacter', scope: 'stage', label: 'Save the pose for the character…', icon: BookmarkPlus, placement: ['panel', 'inspector', 'context'],
     when: () => sel()?.kind === 'mannequin' && !!sel()?.profile_id,
     run: () => {
@@ -204,7 +212,7 @@ export function viewportMenu(onObject: boolean): MenuItem[] {
   return onObject
     ? [{ cmd: 'stage.frameSel' }, { cmd: 'stage.object.rename' }, { cmd: 'stage.object.duplicate' }, { cmd: 'stage.object.lock' }, { cmd: 'stage.object.hide' }, { cmd: 'stage.object.reset' }, sep,
       ...holdItems(),
-      ...(sel()?.kind === 'mannequin' ? [...bindItems(), { cmd: 'stage.pose.mode' }, { label: 'Pins', icon: Pin, items: [{ cmd: 'stage.pose.pinFeet' }, { cmd: 'stage.pose.pinHands' }, sep, { cmd: 'stage.pose.unpin' }] }, { cmd: 'stage.pose.mirror' }, { cmd: 'stage.pose.reset' }, { cmd: 'stage.pose.save' }, { cmd: 'stage.pose.saveForCharacter' }, { cmd: 'stage.motion.apply' }, { cmd: 'stage.path.clear' }, sep] : []),
+      ...(sel()?.kind === 'mannequin' ? [...bindItems(), { cmd: 'stage.pose.mode' }, { label: 'Pins', icon: Pin, items: [{ cmd: 'stage.pose.pinFeet' }, { cmd: 'stage.pose.pinHands' }, sep, { cmd: 'stage.pose.release' }, { cmd: 'stage.pose.unpin' }] }, { label: 'Looks at', icon: Eye, items: [{ cmd: 'stage.pose.lookAtCamera' }, { cmd: 'stage.pose.lookAway' }] }, { cmd: 'stage.pose.mirror' }, { cmd: 'stage.pose.reset' }, { cmd: 'stage.pose.save' }, { cmd: 'stage.pose.saveForCharacter' }, { cmd: 'stage.motion.apply' }, { cmd: 'stage.path.clear' }, sep] : []),
       ...(sel()?.profile_id ? [{ cmd: 'stage.object.freeCopy' }] : sel()?.kind === 'mannequin' || sel()?.kind === 'mesh' ? [{ cmd: 'stage.object.prototype' }] : []),
       ...(sel()?.kind === 'set' && sel()?.profile_id ? [{ cmd: 'stage.figure.openInCast' }] : []),                      // CW7: a bound set's way to its place
       ...(sel()?.kind === 'set' && sel()?.preset === 'image' ? [{ cmd: 'stage.set.toPlace' }] : []),

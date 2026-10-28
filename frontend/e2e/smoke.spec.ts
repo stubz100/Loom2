@@ -838,7 +838,7 @@ test('posing (P13 / ST2, D81): the Poses tab applies a preset, mirrors it, edits
 test("the pose editor (AP1b, D141): a crouch stands on the character's feet, the feet pinned stay as the hips turn, Save for ‹character› keeps it in Cast, the crouch preset then takes it, the bench lists it", async ({ page }) => {
   test.setTimeout(90_000)
   const name = `Mara ${Date.now().toString(36)}`
-  type Pose = { preset: string; joints: Record<string, number[]>; ground: number; pins: Record<string, number[]> }
+  type Pose = { preset: string; joints: Record<string, number[]>; ground: number; pins: Record<string, number[]>; contacts: Record<string, { object_id: string; joint: string | null }>; gaze: { camera: boolean } | null }
   type ProfileLite = { id: string; versions: { id: string; poses: Record<string, Pose> }[] }
   const p = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', appearance: `${name}, a fisher` })
   const st = await api<{ id: string } & Record<string, unknown>>('POST', '/stages', { name: `Quay ${name}` })
@@ -857,6 +857,15 @@ test("the pose editor (AP1b, D141): a crouch stands on the character's feet, the
   await pins.locator('button[data-end="l_foot"]').click()
   await expect(pins.locator('button[aria-pressed="true"]')).toHaveCount(2)
   await expect.poll(async () => Object.keys((await figure())?.pins ?? {}).sort().join(), { timeout: 10_000 }).toBe('l_foot,r_foot')
+  // AP1b, the rest: the right hand pinned and held to the figure's own hips (the Held-to row), the look at the camera (the Looks-at row)
+  await pins.locator('button[data-end="r_hand"]').click()
+  await page.locator('.lib-row[data-group="contacts"] select[data-end="r_hand"]').selectOption('self:root')
+  await expect.poll(async () => (await figure())?.contacts?.r_hand?.object_id ?? null, { timeout: 10_000 }).toBe('self')
+  expect((await figure())!.contacts.r_hand.joint).toBe('root')
+  await page.locator('.lib-row[data-group="gaze"] select').selectOption('camera')
+  await expect.poll(async () => (await figure())?.gaze?.camera ?? false, { timeout: 10_000 }).toBe(true)
+  await page.locator('.lib-row[data-group="gaze"]').scrollIntoViewIfNeeded()
+  await page.screenshot({ path: 'node_modules/.e2e/ap1b-contacts-rows.png' })
   await page.locator('.pose-pill button').click()                                                           // Pose: the rings at the pins with the pickers
   const at = async (what: string) => (await page.evaluate((w) => (window as unknown as { __loom2Stage: { screenOf: (at: string) => { x: number; y: number } | null } }).__loom2Stage.screenOf(w), what))!
   const foot = await at('r_leg'), hip0 = (await figure())!.joints.r_hip
@@ -881,18 +890,23 @@ test("the pose editor (AP1b, D141): a crouch stands on the character's feet, the
   await expect(dialog.locator('input')).toHaveValue('crouch')
   await dialog.locator('button.primary').click()
   await expect.poll(async () => (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0].poses.crouch?.joints.root?.[1] ?? null, { timeout: 10_000 }).toBe(30)
+  {                                                                                                         // AP1b, the rest: the saved pose keeps the hold to its own hips and the look at the camera
+    const saved = (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0].poses.crouch
+    expect(saved.contacts.r_hand).toEqual({ object_id: 'self', joint: 'root' }); expect(saved.gaze?.camera).toBe(true)
+  }
   // a stand, then the crouch preset again: on this character it is its own
   await page.locator('.stage-panel button', { hasText: /^Reset$/ }).click()
   await expect.poll(async () => Object.keys((await figure())?.pins ?? {}).length, { timeout: 10_000 }).toBe(0)
   await libAdd(page, 'poses', 'crouch')
   await expect.poll(async () => (await figure())?.joints.root?.[1], { timeout: 10_000 }).toBe(30)
-  expect(Object.keys((await figure())!.pins).sort()).toEqual(['l_foot', 'r_foot'])
+  expect(Object.keys((await figure())!.pins).sort()).toEqual(['l_foot', 'r_foot', 'r_hand'])
+  expect((await figure())!.contacts.r_hand.object_id).toBe('self')
   // Cast's bench lists the character's poses
   await openApp(page, { suite: 'story', tab: 'cast' })
   await page.locator(`.profile-row[data-id="${p.id}"]`).click()
   await page.locator('.cast-body button', { hasText: 'body' }).click()                                    // a body of its own (the default adult's)
   await page.locator('.cast-body button', { hasText: /^Skeleton…/ }).click()
-  await expect(page.locator('.skel-parts [data-group="poses"] [data-pose="crouch"]')).toContainText('its starter pose · 2 pinned')
+  await expect(page.locator('.skel-parts [data-group="poses"] [data-pose="crouch"]')).toContainText('its starter pose · 3 pinned')
   await page.locator('.skel-parts [data-group="poses"]').scrollIntoViewIfNeeded()
   await page.screenshot({ path: 'node_modules/.e2e/ap1b-bench-poses.png' })
 })

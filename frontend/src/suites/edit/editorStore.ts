@@ -13,6 +13,7 @@ import { maskAlphaCanvas } from './maskDerived'
 import { compositeOver, Homography, homographyOf, isIdentity, premultiply, rectCorners, splitSelected, toStraight8, warpGray, warpRaster, type Raster, type Xform } from './transform'
 import { typeLabel } from './labels'
 import { flattenBlocker, flattenCounts, flattenedStack } from './flatten'
+import { navigate } from '../../frame/router'
 
 export type NodeKind = 'raster' | 'group' | 'adjustment' | 'filter'
 export interface MaskRef { enabled: boolean; linked: boolean; x: number; y: number; density?: number; feather?: number; default?: number }   // D52: density 0–1, feather σ px; D54: the value outside the extent
@@ -839,7 +840,7 @@ export const useEditor = create<EditorState>()(
           try {
             const existing = (await unwrap(http.GET('/documents'))).items.find((d) => d.source_asset_id === assetId)
             const doc = existing ?? asStack(await unwrap(http.POST('/documents', { body: { from_asset: assetId } })))
-            s.setSuite('edit')
+            navigate({ suite: 'edit' })
             await get().openDocument(doc.id)
             s.toast(existing ? 'Opened the asset\'s document' : 'Document created from the asset', 'success')
           } catch (e) { s.toast(`Open in Edit failed: ${(e as ApiError).detail ?? e}`, 'error') }

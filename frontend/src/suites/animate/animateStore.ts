@@ -10,6 +10,7 @@ import { FOR_SHOT, forLabel, originFor, useMakeFor } from '../../store/origin'
 import { useSession } from '../../store/session'
 import { DEV_HOOKS } from '../../devHooks'
 import { registerTransport } from './transport'
+import { navigate } from '../../frame/router'
 
 export type AnimPreset = 'draft' | 'motion' | 'quality'
 /** D156 (E41): the camera's move on the camera model — the core's WanCameraEmbedding paths; `static` holds it. */
@@ -189,12 +190,12 @@ export const useAnimate = create<AnimateState>()(
       },
       setStart: (id, goTo = false) => {
         get().set({ start: id })
-        if (goTo) useSession.getState().setSuite('animate')
+        if (goTo) navigate({ suite: 'animate' })
         if (id) void get().loadAsset(id)
       },
       setEnd: (id, goTo = false) => {
         get().set({ end: id })
-        if (goTo) useSession.getState().setSuite('animate')
+        if (goTo) navigate({ suite: 'animate' })
         if (id) void get().loadAsset(id)
       },
       swap: () => { const p = get().panel; if (p.end) get().set({ start: p.end, end: p.start }) },
@@ -284,7 +285,7 @@ export const useAnimate = create<AnimateState>()(
           }
           const c = r.items.find((x) => x.id === d.clip_id)
           s.toast(`Clip ready${c ? ` — seed ${c.seed}` : ''}`, 'success', { label: 'Play', run: () => {
-            useSession.getState().setSuite('animate'); get().select(d.clip_id); get().togglePlay(true)
+            navigate({ suite: 'animate' }); get().select(d.clip_id); get().togglePlay(true)
           } })
         }).catch(() => undefined)
       },

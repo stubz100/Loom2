@@ -2,7 +2,7 @@
 // `#${prefix}${tab}`; scrolling the Panel's body moves the rail's highlight to the last section whose top has passed the body's top (+24 px).
 // Generate's column (Image · Make) and Edit's (Image · Edit) use it; Animate's will (AN1).
 import { useEffect, useRef, type RefObject } from 'react'
-import { setRailTab } from './suiteRegistry'
+import { setRailTab } from './router'
 
 export function useColumnSync(host: RefObject<HTMLElement | null>, suite: string, sections: readonly string[], prefix: string, tab: string): void {
   const fromScroll = useRef(false)

@@ -10,7 +10,7 @@ import { CommandRow } from '../../../frame/CommandButton'
 import { showMenu } from '../../../frame/ContextMenu'
 import { useDropTarget, type DragPayload } from '../../../frame/drag'
 import { useSession } from '../../../store/session'
-import { useAnimate } from '../../animate/animateStore'
+import { useClips } from '../../../store/clips'
 import { useStory } from '../storyStore'
 import { storyKey } from '../storyKeys'
 import { laneTake } from './bin'
@@ -93,7 +93,7 @@ interface Drag { id: number; grip: Grip; dx: number; toTrack: number }
 
 function ClipBlock({ cut, track, item, ppf, drag, onDown, changed }: { cut: CutTracks; track: CutTrack; item: CutItem; ppf: number; drag: Drag | null; onDown: (e: ReactPointerEvent, item: CutItem) => void; changed?: LaneChange }) {
   const selected = useSequence((s) => s.selClip === item.id)
-  const clips = useAnimate((s) => s.clips)
+  const clips = useClips()
   const width = Math.max(2, item.duration * ppf)
   let left = item.start * ppf, w = width, moved = false
   if (drag?.id === item.id) {
@@ -131,7 +131,7 @@ function ClipBlock({ cut, track, item, ppf, drag, onDown, changed }: { cut: CutT
 
 function TrackRow({ cut, track, ppf, len, drag, onDown, frameAt, changed }: { cut: CutTracks; track: CutTrack; ppf: number; len: number; drag: Drag | null; onDown: (e: ReactPointerEvent, item: CutItem) => void; frameAt: (x: number) => number; changed: Map<number, LaneChange> }) {
   const video = cut.video.some((x) => x.id === track.id)
-  const clips = useAnimate((s) => s.clips)
+  const clips = useClips()
   const shots = useStory((s) => s.shots)
   const rule = (p: DragPayload) => trackDrop(p.items, video, clips)
   const { ref, over } = useDropTarget((p) => rule(p).verdict.ok, (p, info) => {

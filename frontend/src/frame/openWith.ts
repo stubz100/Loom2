@@ -3,7 +3,7 @@
 // stores come through dynamic imports.
 import type { AiOp, SelMode } from '../suites/edit/aiPanelStore'
 import { TOOL_IDS, type Tool } from '../suites/edit/tools'
-import { useSession } from '../store/session'
+import { navigate, setRailTab } from './router'
 
 export interface OpenWith { suite: 'edit' | 'generate' | 'animate'; tool?: Tool; aiOp?: AiOp; selMode?: SelMode; slot?: 'start' | 'end' | 'ref' | 'angle' }
 
@@ -12,11 +12,10 @@ const SEL_MODES: SelMode[] = ['subject', 'text', 'points', 'box']
 
 /** Open `assetId` (or nothing) in a suite with a tool, an AI operation and a slot chosen. An AI operation selects the AI tool and its panel. */
 export async function openWith(assetId: string | null, o: OpenWith): Promise<void> {
-  const s = useSession.getState()
   if (o.suite === 'edit') {
-    const [{ useEditor }, { useAiPanel }, { setRailTab }] = await Promise.all([import('../suites/edit/editorStore'), import('../suites/edit/aiPanelStore'), import('./suiteRegistry')])
+    const [{ useEditor }, { useAiPanel }] = await Promise.all([import('../suites/edit/editorStore'), import('../suites/edit/aiPanelStore')])
     if (assetId) await useEditor.getState().openFromAsset(assetId)
-    else s.setSuite('edit')
+    else navigate({ suite: 'edit' })
     const tool = o.tool ?? (o.aiOp ? 'ai' : undefined)
     if (tool) useEditor.getState().setTool(tool)
     if (o.aiOp) { useAiPanel.getState().set({ op: o.aiOp, ...(o.selMode ? { selMode: o.selMode } : {}) }); setRailTab('edit', 'ai') }
@@ -25,14 +24,14 @@ export async function openWith(assetId: string | null, o: OpenWith): Promise<voi
     const a = useAnimate.getState()
     if (assetId && o.slot === 'end') a.setEnd(assetId, true)
     else if (assetId) a.setStart(assetId, true)
-    else s.setSuite('animate')
+    else navigate({ suite: 'animate' })
   } else {
     const { useGenerate } = await import('../suites/generate/generateStore')
     if (o.slot === 'angle') {                                          // P14 / D90: the New angle sheet with this image as the source, over the suite you are in
       useGenerate.getState().setAngle({ asset_id: assetId })
       useGenerate.setState({ angleOpen: true })
     } else if (assetId) useGenerate.getState().addRef(assetId)
-    else s.setSuite('generate')
+    else navigate({ suite: 'generate' })
   }
 }
 

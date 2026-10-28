@@ -7,6 +7,7 @@ import type { Asset, Backend, Capabilities, EngineState, EventFrame, FetchState,
 import type { Theme } from '../frame/theme'
 import { discoverBackend } from '../shell/tauri'
 import { DEV_HOOKS } from '../devHooks'
+import { publish } from './records'
 
 /** A toast's one button (Undo, Play, …); a bare function passed to `toast()` is an Undo. */
 export interface ToastAction { label: string; run: () => void }
@@ -125,13 +126,8 @@ export const useSession = create<SessionState>()(
           ({ first, gap }) => {                                         // V65: a reconnect — the frames missed were just replayed through applyEvent …
             if (first) return
             void get().refreshAll().catch(() => undefined)              // B21: the session's own state fetched, not assumed
-            void import('../suites/edit/editorStore').then((m) => m.useEditor.getState().resync())
-            if (!gap) return                                            // … or are gone (an orchestrator restart, more than its history): the lists reload
-            void import('../suites/catalogue/catalogueStore').then((m) => { for (const h of m.allCatalogueStores()) { const st = h.getState(); void st.load({ keepSelection: true }); void st.refreshMeta() } })
-            void import('../suites/catalogue/albumStore').then((m) => void m.useAlbum.getState().load())
-            void import('../suites/story/storyStore').then((m) => void m.useStory.getState().load())
-            void import('../suites/animate/animateStore').then((m) => void m.useAnimate.getState().loadClips())
-            get().toast('Reconnected after a gap — the lists were reloaded', 'info')
+            publish({ type: 'resync', data: { gap } })                  // U1: the records resync (store/records.ts) …
+            if (gap) get().toast('Reconnected after a gap — the lists were reloaded', 'info')   // … and after a gap (an orchestrator restart, more than its history) reload
           },
         )
         socket.connect()
@@ -170,7 +166,7 @@ export const useSession = create<SessionState>()(
         const project = await unwrap(http.POST('/project', { body: { path, name } }))
         set({ project, projectDialog: null })
         await get().refreshAll()
-        void import('../frame/suiteRegistry').then((m) => { m.setRailTab('story', 'world'); get().setSuite('story') })   // D125: a new project starts with its bible
+        void import('../frame/router').then((m) => m.navigate({ suite: 'story', tab: 'world' }))   // D125: a new project starts with its bible
         get().toast(`Created ${project.name}`, 'success')
       },
       closeProject: async () => {
@@ -293,7 +289,6 @@ export function applyEvent(f: EventFrame, set: (p: Partial<SessionState>) => voi
     }
     case 'job.deleted': { const jobs = { ...s.jobs }; delete jobs[f.data.id]; set({ jobs }); break }
     case 'queue.state': queueFetch++; set({ queue: f.data }); break          // V67: the state itself — a fetch in flight is stale now
-    case 'preset_icons.changed': void import('../suites/generate/swatches').then((m) => m.useSwatches.getState().load()); break   // D90 (02 §6.3): a swatch was made or removed
     case 'engine.state': set({ engine: { ...(s.engine ?? {}), ...f.data } }); break
     case 'engine.vram_pressure': {                                     // D69: a GPU job needs the memory a hidden stage holds
       void import('../frame/stageKeep').then((m) => {
@@ -311,42 +306,7 @@ export function applyEvent(f: EventFrame, set: (p: Partial<SessionState>) => voi
     }
     case 'project.opened': projectFetch++; set({ project: f.data }); break   // V67: as for the queue
     case 'project.closed': projectFetch++; set({ project: { open: false } }); break
-    case 'catalogue.changed':
-      void import('../suites/catalogue/catalogueStore').then((m) => { for (const h of m.allCatalogueStores()) { const st = h.getState(); void st.load(); void st.refreshMeta() } })
-      break
-    case 'group.changed':                                         // D34: placements moved; the tree, counts and open views follow
-      void import('../suites/catalogue/albumStore').then((m) => void m.useAlbum.getState().load())
-      void import('../suites/story/storyStore').then((m) => m.useStory.getState().onGroupChanged(((f.data as { ids?: string[] } | null)?.ids) ?? []))   // 17 SY1: a version's pages
-      void import('../suites/generate/generateStore').then((m) => m.mentionsMoved({ groups: ((f.data as { ids?: string[] } | null)?.ids) ?? [] }))   // D93: a mentioned set grew → the preview's references
-      void import('../suites/catalogue/catalogueStore').then((m) => { for (const h of m.allCatalogueStores()) { const st = h.getState(); void st.refreshMeta(); if (st.q.folder === 'unprocessed' || st.q.group_id) void st.load({ keepSelection: true }) } })
-      break
-    case 'asset.created': case 'asset.updated': case 'asset.deleted':
-      void import('../suites/catalogue/catalogueStore').then((m) => { for (const h of m.allCatalogueStores()) h.getState().applyEvent(f) })
-      if (f.type === 'asset.created' && ((f.data as { origin?: { suite?: string } } | null)?.origin?.suite === 'stage' || (f.data as { kind?: string } | null)?.kind === 'mesh'))   // ST3: a shot or a pass of a stage; proto01_UIcast CB2: a mesh made anywhere joins Clay's Meshes
-        void import('../suites/stage/stageStore').then((m) => m.useStage.getState().onAssetCreated(f.data as never))
-      if (f.type === 'asset.deleted')
-        void import('../suites/stage/stageStore').then((m) => m.useStage.getState().onAssetDeleted(String((f.data as { id?: string } | null)?.id ?? '')))
-      break
-    case 'clip.updated':
-      void import('../suites/animate/animateStore').then((m) => m.useAnimate.getState().onClipUpdated(f.data))
-      break
-    case 'clip.ready':
-      void import('../suites/animate/animateStore').then((m) => m.useAnimate.getState().onClipReady(f.data))
-      break
-    case 'document.changed':
-      void import('../suites/edit/editorStore').then((m) => m.useEditor.getState().onDocumentChanged(f.data))
-      break
-    case 'story.changed':                                         // 17 (D85): the world (later profiles, shots, the flow) moved on the server
-      void import('../suites/story/storyStore').then((m) => m.useStory.getState().onChanged(f.data as never))
-      { const d = f.data as { kind?: string; id?: string } | null; if (d?.kind === 'shot' && d.id) { const id = d.id; void import('../suites/story/recipeTick').then((m) => m.useRecipeTick.getState().bump(id)) } }   // RC0: an open recipe refetches
-      void import('../suites/catalogue/albumStore').then((m) => void m.useAlbum.getState().loadUsedBy())      // D92 §4.2: a version, style, board or entry may name another group
-      void import('../suites/generate/generateStore').then((m) => { const d = f.data as { kind?: string; id?: string } | null; if (d?.kind === 'profile' && d.id) m.mentionsMoved({ profile: d.id }) })   // D93: a linked character got a hero
-      break
-    case 'lora.changed':                                          // 18 (D86) LT2: a LoRA trained or deleted — the registry and the versions' slots moved
-      void import('../suites/story/storyStore').then((m) => m.useStory.getState().onLoraChanged(f.data as never))
-      void import('../suites/generate/generateStore').then((m) => { const g = m.useGenerate.getState(); void g.loadLoras(g.panel.model_id) })
-      break
-    default: break
+    default: publish(f)                                               // U1 (D157): the records' frames (store/records.ts owns the fan-out)
   }
 }
 

@@ -4,7 +4,6 @@
 // at import (D32: Help, menus and accelerators list them before the first visit): Animate's load with the frame; Edit's import the editor
 // store, which owns Pixi textures, so they register with Edit's code, preloaded on the first idle moment after startup (below).
 import type { ComponentType } from 'react'
-import { create } from 'zustand'
 import { useSession } from '../store/session'
 import '../suites/animate/animateCommands'
 import { CatalogueSuite } from '../suites/catalogue/CatalogueSuite'
@@ -12,6 +11,7 @@ import { GenerateSuite } from '../suites/generate/GenerateSuite'
 import { ImageModeSwitch } from './ImageModeSwitch'
 import { lazySuite, preloadSuite } from './lazySuite'
 import { DEFAULT_RAIL, STORY_RAIL, type GroupRailTab, type RailTab } from './railTabs'
+import { navigate, setRailTab, useRailState } from './router'
 
 export interface SuiteDef {
   id: string
@@ -49,10 +49,8 @@ export const SUITE_DEFS: Record<string, SuiteDef> = {
   idle(() => preloadSuite('edit'))
 }
 
-interface RailState { active: Record<string, string>; setActive: (suite: string, tab: string) => void }
-const useRailState = create<RailState>()((set, get) => ({ active: {}, setActive: (suite, tab) => set({ active: { ...get().active, [suite]: tab } }) }))
-
-export const setRailTab = (suite: string, tab: string) => useRailState.getState().setActive(suite, tab)
+// U1 (D157): the rail tabs live in the router (frame/router.ts); kept here for the suites that import them from the registry
+export { setRailTab }
 
 // ?suite=X&tab=Y opens that panel section at launch (07 §1.7 deep links; scripts/csp_check.py and the acceptance loops use it)
 {
@@ -86,7 +84,7 @@ export function useRailEntries(): { entries: GroupRailTab[]; isActive: (e: Group
   return {
     entries,
     isActive: (e) => e.suite === suite && activeOf(e.suite) === e.id,
-    open: (e) => { useRailState.getState().setActive(e.suite, e.id); if (e.suite !== suite) useSession.getState().setSuite(e.suite as never) },
+    open: (e) => { if (e.suite !== suite) navigate({ suite: e.suite as never, tab: e.id }); else setRailTab(e.suite, e.id) },
   }
 }
 

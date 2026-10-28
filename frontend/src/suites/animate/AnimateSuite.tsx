@@ -35,6 +35,8 @@ import { AnimColumn, Sec } from './column'
 import './animate.css'
 import { onlyAssets, useDropTarget, type DragPayload } from '../../frame/drag'
 import { beatDrop, endDrop, startDrop } from '../../frame/dropRules'
+import { navigate } from '../../frame/router'
+import { registerKeyHost } from '../../frame/keyHosts'
 
 const an = () => useAnimate.getState()
 const EMPTY_PINS: { frame: number; asset_id: string }[] = []
@@ -164,7 +166,6 @@ function EstimateLine() {
   const pv = useAnimate((s) => s.preview)
   const err = useAnimate((s) => s.previewError)
   const count = useAnimate((s) => s.panel.count)
-  const setSuite = useSession((s) => s.setSuite)
   if (err) return <div className="estimate-line"><span className="missing">{err}</span></div>
   if (!pv) return <div className="estimate-line">preparing…</div>
   const secs = pv.estimate.seconds ?? 0
@@ -173,7 +174,7 @@ function EstimateLine() {
       <span>runs at <b>{pv.width}×{pv.height}</b> · <b>{pv.frames}</b> f @ {pv.fps} fps ({(pv.frames / pv.fps).toFixed(1)} s)</span>
       <span>{pv.label}</span>
       <span>≈ <b>{Math.round(secs / 60)} min</b>{count > 1 ? ` × ${count}` : ''} <small>({pv.estimate.source})</small></span>
-      {pv.missing.length > 0 && <span className="missing">missing: {pv.missing.map((m) => m.model_id).join(', ')} <button onClick={() => setSuite('models')}>Fetch {pv.missing.reduce((a, m) => a + (m.approx_gb ?? 0), 0).toFixed(0)} GB</button></span>}
+      {pv.missing.length > 0 && <span className="missing">missing: {pv.missing.map((m) => m.model_id).join(', ')} <button onClick={() => navigate({ suite: 'models' })}>Fetch {pv.missing.reduce((a, m) => a + (m.approx_gb ?? 0), 0).toFixed(0)} GB</button></span>}
     </div>
   )
 }
@@ -387,7 +388,8 @@ function Strip() {
     </>
   )
 }
-function StripWithKeys() { useAnimateKeys(); return <Strip /> }
+// U1 (D157): the keys are the shell's (frame/keyHosts.tsx), not the Strip's
+registerKeyHost('animate', function AnimateKeys() { useAnimateKeys(); return null })
 
 // ------------------------------------------------------------------ Stage (11 §4/§5)
 function usePlayback() {
@@ -631,7 +633,7 @@ function LineageTab({ clip }: { clip: Clip }) {
 export const AnimateSuite: SuiteDef = {
   id: 'animate',
   rail: DEFAULT_RAIL.animate,
-  Panel: PerformanceColumn, Strip: StripWithKeys, Stage, Inspector: () => null, PrimaryAction: PerformanceFoot, keepAlive: true, noInspector: true, panelTitle: 'Animate',
+  Panel: PerformanceColumn, Strip, Stage, Inspector: () => null, PrimaryAction: PerformanceFoot, keepAlive: true, noInspector: true, panelTitle: 'Animate',
 }
 
 /** D125 (A4): the clip's Story verb — with the For chip it becomes that shot's clip (no second shot), without one a shot is made from it. */

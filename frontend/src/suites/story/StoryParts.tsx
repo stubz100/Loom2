@@ -49,6 +49,7 @@ import type { FlowNode, FlowOption, StageObject } from '../../api/types'
 import { speakersOf, speakerVersion } from './makeFor'
 import { CommandRow } from '../../frame/CommandButton'
 import './story.css'
+import { navigate, setRailTab } from '../../frame/router'
 
 /** Dev hook (`window.__loom2Story`, DEV_HOOKS only): the smoke test and scripts/sy_acceptance.py drive the suite through the store. */
 // CS2: the skeleton bench loads with the stage's code (three.js), only when opened
@@ -77,8 +78,8 @@ function devHook(): Record<string, unknown> {
     addNode: (t: FlowNode['type'], title?: string, at?: { x: number; y: number }) => sy().addNode(t, title, at), connect: (a: string, port: string, b: string) => sy().connect(a, port, b),
     patchNode: (id: string, patch: Record<string, unknown>) => sy().patchNode(id, patch as never), selectNode: (id: string | null) => sy().selectNode(id), validate: () => sy().validate(),
     playStart: () => sy().playStart(), playNext: (o?: string) => sy().playNext(o), playStop: () => sy().playStop(),
-    openShots: (id: string | null) => { void import('../../frame/suiteRegistry').then((m) => { m.setRailTab('story', 'shots'); useSession.getState().setSuite('story'); sy().selectShot(id) }) },
-    openTab: (tab: 'world' | 'cast' | 'shots' | 'flow' | 'episode') => { void import('../../frame/suiteRegistry').then((m) => { m.setRailTab('story', tab); useSession.getState().setSuite('story') }) } }
+    openShots: (id: string | null) => { navigate({ suite: 'story', tab: 'shots' }); sy().selectShot(id) },
+    openTab: (tab: 'world' | 'cast' | 'shots' | 'flow' | 'episode') => navigate({ suite: 'story', tab }) }
   return w.__loom2Story
 }
 if (DEV_HOOKS) devHook()
@@ -638,7 +639,7 @@ function AnimTestSlot({ clipId }: { clipId: string | null }) {
 }
 
 /** D125 (S5): a use of *In N shots* opens its shot on the Shots board. */
-const openShotRow = (id: string) => { sy().selectShot(id); void import('../../frame/suiteRegistry').then((m) => m.setRailTab('story', 'shots')) }
+const openShotRow = (id: string) => { sy().selectShot(id); setRailTab('story', 'shots') }
 
 function CastPage() {
   const profiles = useStory((s) => s.profiles)

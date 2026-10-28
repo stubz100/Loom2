@@ -34,6 +34,8 @@
 
 **U0 is built** (2026-10-28 23:34 and 2026-10-29 00:26 in the journal): every item above, with tests; e2e 79/79.
 
+**U1 is built** (2026-10-29 00:43): the router, the key hosts, the records' fan-out and the context slots; the empty `?ui=2` shell.
+
 **The order.** U0 can start at once. U1 and U2 are the foundation. After them, U3 and U4 can run in either order: World first follows the work's order;
 Shots first answers the author's biggest change sooner. U5 and U6 follow U4. Most of U7 can run once U6 has the shot's final.
 

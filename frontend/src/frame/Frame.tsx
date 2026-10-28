@@ -23,6 +23,7 @@ import { Toasts } from './Toasts'
 import { TopBar } from './TopBar'
 import { useKeyboardMap } from './useKeyboardMap'
 import { useSuite } from './suiteRegistry'
+import { KeyHosts } from './keyHosts'
 import './frame.css'
 
 export function Frame() {
@@ -90,6 +91,7 @@ export function Frame() {
       <AngleSheet />
       <TrainAlbumSheet />
       <AskDialog />
+      <KeyHosts />{/* U1 (D157): the suites' key hooks, the shell's */}
     </div>
   )
 }

@@ -7,6 +7,7 @@
 import { create } from 'zustand'
 import type { Job, JobOrigin } from '../api/types'
 import { useSession } from './session'
+import { navigate } from '../frame/router'
 
 type Origin = NonNullable<Job['origin']>
 
@@ -57,9 +58,8 @@ export function goBackToIdea(): void {
 }
 /** Story › Cast's Ideas board with an idea open on its bench. */
 export function goToIdea(id: string): void {
-  useSession.getState().setSuite('story')
-  void Promise.all([import('../suites/story/ideasStore'), import('../frame/suiteRegistry')]).then(async ([m, reg]) => {
-    reg.setRailTab('story', 'cast')
+  navigate({ suite: 'story', tab: 'cast' })
+  void import('../suites/story/ideasStore').then(async (m) => {
     const st = m.useIdeas.getState()
     if (!st.loaded) await st.load()
     m.useIdeas.setState({ board: 'ideas', ideaId: id })
@@ -85,9 +85,8 @@ export function storyPlace(o: Pick<Origin, 'suite' | 'surface' | 'ref' | 'payloa
 
 /** Story at a place: the tab, then the profile / shot / node / style selected (records loaded first when they are not yet). */
 export function goToStory(place: StoryPlace): void {
-  useSession.getState().setSuite('story')
-  void Promise.all([import('../suites/story/storyStore'), import('../frame/suiteRegistry')]).then(async ([m, reg]) => {
-    reg.setRailTab('story', place.tab)
+  navigate({ suite: 'story', tab: place.tab })
+  void import('../suites/story/storyStore').then(async (m) => {
     const st = m.useStory.getState()
     if (place.tab === 'cast') {
       if (!st.profilesLoaded) await st.loadProfiles()
@@ -123,24 +122,23 @@ export function originLabel(o: Origin | null | undefined): string {
 export function goToOrigin(j: Job): void {
   const o = j.origin
   if (!o || !canGoToOrigin(j)) return
-  const s = useSession.getState()
   const place = storyPlace(o)                                     // D90 (F24): Story jobs and jobs made for a shot go to their Story object
   if (place) { goToStory(place); return }
   switch (o.suite) {
     case 'generate':                                              // the job's batch in Generate's results ("this batch")
-      s.setSuite('generate')
+      navigate({ suite: 'generate' })
       void import('../suites/generate/generateStore').then((m) => m.useGenerate.setState({ lastBatch: m.batchOf(j), show: 'batch' }))
       break
     case 'animate':                                               // the clip the job was started on, when there was one
-      s.setSuite('animate')
+      navigate({ suite: 'animate' })
       if (o.ref) { const ref = o.ref; void import('../suites/animate/animateStore').then((m) => { const an = m.useAnimate.getState(); void an.loadClips().then(() => an.select(ref)) }) }
       break
     case 'edit':                                                  // the document the AI request ran on
-      s.setSuite('edit')
+      navigate({ suite: 'edit' })
       if (o.ref) { const ref = o.ref; void import('../suites/edit/editorStore').then((m) => { const ed = m.useEditor.getState(); if (ed.doc?.id !== ref) void ed.openDocument(ref) }) }
       break
     case 'catalogue':                                             // the group page (or, without one, the folder) in the active pane
-      s.setSuite('catalogue')
+      navigate({ suite: 'catalogue' })
       void import('../suites/catalogue/split').then((m) => {
         const sp = m.useSplit.getState()
         const c = m.paneStore(sp.mode === 'single' ? 0 : sp.active).getState()
@@ -151,12 +149,12 @@ export function goToOrigin(j: Job): void {
       })
       break
     case 'stage':                                                 // ST3: the stage the shot was framed in, at that camera
-      s.setSuite('stage')
+      navigate({ suite: 'stage' })
       if (o.ref) { const ref = o.ref; const cam = typeof o.payload?.camera_id === 'string' ? o.payload.camera_id : null
         void import('../suites/stage/stageStore').then((m) => { const st = m.useStage.getState(); const go = st.current?.id === ref ? Promise.resolve() : st.open(ref); void go.then(() => { if (cam) m.useStage.getState().setActiveCamera(cam) }) }) }
       break
     case 'story':                                                 // a Story job storyPlace does not place: the suite
-      s.setSuite('story')
+      navigate({ suite: 'story' })
       break
     default: break
   }

@@ -10,7 +10,7 @@ import type { Clip } from '../../../api/types'
 import { CommandRow } from '../../../frame/CommandButton'
 import { showMenu } from '../../../frame/ContextMenu'
 import { useDropTarget } from '../../../frame/drag'
-import { useAnimate } from '../../animate/animateStore'
+import { useClips } from '../../../store/clips'
 import { useStory } from '../storyStore'
 import { storyKey } from '../storyKeys'
 import { laneTake } from './bin'
@@ -103,7 +103,7 @@ function LaneView({ lane, byId }: { lane: Lane; byId: Map<string, Clip> }) {
   const ppf = useSequence((s) => s.pxPerFrame)
   const selected = useSequence((s) => s.selected)
   const playhead = useSequence((s) => s.playhead)
-  const clips = useAnimate((st) => st.clips)
+  const clips = useClips()
   const shots = useStory((st) => st.shots)
   const changed = useMemo(() => new Map(laneChanges(lane, shots).map((x) => [x.i, x])), [lane, shots])   // D125 (S13): a newer approved take
   const { ref: dropRef, over } = useDropTarget((d) => laneTake(d, clips, shots).verdict.ok,
@@ -223,7 +223,7 @@ function LaneStage() {
   const lane = useSequence((s) => s.lane)
   const playhead = useSequence((s) => s.playhead)
   const playing = useSequence((s) => s.playing)
-  const clips = useAnimate((s) => s.clips)
+  const clips = useClips()
   const byId = useMemo(() => new Map(clips.map((c) => [c.id, c])), [clips])
   usePlayback(lane)
   if (!current || !lane) {

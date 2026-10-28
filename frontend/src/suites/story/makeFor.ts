@@ -13,6 +13,7 @@ import { useSession } from '../../store/session'
 import type { FramePrefill } from '../generate/generateStore'
 import { poseWords } from '../stage/poseWords'
 import { useStory } from './storyStore'
+import { navigate } from '../../frame/router'
 
 /** The version to make for: the one asked for (a node pins one) when it is open, else the shot's current one when that is open; null when
  *  both are final (a retake is a new version). */
@@ -91,8 +92,7 @@ const toast = (text: string, kind: 'info' | 'error' = 'info') => useSession.getS
 
 /** D125 (I1): Image › Make opened on a section of its column (the rail's tab, and the column scrolled there once it renders). */
 function landOn(suite: 'generate', section: string): void {
-  useSession.getState().setSuite(suite)
-  void import('../../frame/suiteRegistry').then((m) => m.setRailTab(suite, section))
+  navigate({ suite, tab: section })
   const go = (n: number) => { const el = document.getElementById(`gen-sec-${section}`); if (el) el.scrollIntoView({ block: 'start' }); else if (n) requestAnimationFrame(() => go(n - 1)) }
   requestAnimationFrame(() => go(20))
 }
@@ -142,6 +142,6 @@ export async function makeClipFor(s: Shot, v: ShotVersion, nodeId?: string | nul
   an.set({ end: null, beats: [], prompt: line ?? '', camera: null })
   an.setStart(v.frame_asset_id ?? null)
   void import('../animate/routeStore').then((r) => r.useAnimRoute.getState().set('i2v'))   // D121: the frame is the start of an image-to-video clip
-  useSession.getState().setSuite('animate')
+  navigate({ suite: 'animate' })
   toast(`Animate for ${forLabel(f)} — ${v.frame_asset_id ? 'its frame is the start; ' : 'it has no frame yet: set a start; '}the clips come back as its takes`)
 }

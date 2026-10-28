@@ -11,6 +11,7 @@ import { flattenBlocker } from './flatten'
 import { DEV_HOOKS } from '../../devHooks'
 import { useAiPanel, type AiOp } from './aiPanelStore'
 import { aiReason, aiRecipe, opCandidates, rerunRecipe, subjectPlan, type AiCtx } from './aiRecipes'
+import { setRailTab } from '../../frame/router'
 
 const ed = () => useEditor.getState()
 const hasDoc = () => !!ed().doc
@@ -32,7 +33,7 @@ const runAiOp = (op: AiOp, stage = false) => { const c = aiCtx(); if (!aiReason(
 const showAiOp = (op: AiOp) => {
   const a = useAiPanel.getState()
   if (a.op !== op) a.set({ op, candidates: opCandidates(aiCtx(), op) })
-  void import('../../frame/suiteRegistry').then((m) => m.setRailTab('edit', 'ai'))   // dynamic, as frame/openWith.ts: the registry imports the suites
+  setRailTab('edit', 'ai')
 }
 const AI_RUNS: [AiOp, string, typeof Hand, string][] = [
   ['select', 'AI select ▶', ScanFace, 'with the AI tab\'s model and prompt; the mask joins the selection'],

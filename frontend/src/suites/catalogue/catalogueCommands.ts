@@ -19,6 +19,7 @@ import { selectedOrPrimary, useBin, useGenerateResults, type GroupMode } from '.
 import { addToCastMenu, castTarget, madeFor } from '../story/addToCast'
 import { castPropMenu } from '../story/castProp'
 import { profilesForMentions, useStory } from '../story/storyStore'
+import { navigate } from '../../frame/router'
 
 export const GROUP_MODES: [GroupMode, string][] = [['batch', 'Batch'], ['lineage', 'Lineage'], ['session', 'Session'], ['model', 'Model'], ['none', 'None']]
 
@@ -46,9 +47,9 @@ export function startProfile(cls: 'character' | 'place' | 'prop', assetId: strin
   void askText({ title: `Make a ${cls} from this image`, text: 'The image moves onto a new reference page as the hero and cover; @name mentions it in prompts; Expand fills the coverage grid from it.', placeholder: `${cls} name` })
     .then(async (name) => {
       if (!name?.trim()) return
-      const [m, reg] = await Promise.all([import('../story/storyStore'), import('../../frame/suiteRegistry')])
+      const m = await import('../story/storyStore')
       const p = await m.useStory.getState().createProfile(name.trim(), cls, assetId)
-      if (p) { m.revealClass(cls); reg.setRailTab('story', 'cast'); useSession.getState().setSuite('story') }   // D125: a prop is a class of Cast
+      if (p) { m.revealClass(cls); navigate({ suite: 'story', tab: 'cast' }) }   // D125: a prop is a class of Cast
     })
 }
 
@@ -63,7 +64,7 @@ registerCommands([
   { id: 'cat.variations', scope: 'catalogue', label: 'Variations (new seeds)', icon: Shuffle, keys: 'V', placement: ['context', 'inspector'], when: () => !!primary()?.params?.recipe, run: () => { const a = primary(); const o = originHere(); if (a) void gen().then((g) => g.variations(a, undefined, o)) } },
   // D90 (01 §11.2): the asset's prompt and parameters into Generate's panel (was an Inspector-only button)
   { id: 'cat.loadInGenerate', scope: 'catalogue', label: 'Load in Image', icon: Wand2, placement: ['context', 'inspector'], hint: 'this asset\'s prompt and parameters into Image\'s Make column panel', when: () => !!primary()?.params?.recipe,
-    run: () => { const a = primary(); if (a) void gen().then((g) => { g.loadFromAsset(a, false); useSession.getState().setSuite('generate') }) } },
+    run: () => { const a = primary(); if (a) void gen().then((g) => { g.loadFromAsset(a, false); navigate({ suite: 'generate' }) }) } },
   // D125 (I2): the result becomes the For chip's shot version's frame where it is picked (the tile's ✓, its right-click, the Inspector)
   { id: 'cat.useFrame', scope: 'catalogue', label: "Use as the shot's frame", icon: Clapperboard, placement: ['context', 'inspector'], hint: "Image is making for a shot (the For chip): this image becomes that version's frame",
     when: () => { const a = primary(); return !!forFrame() && a?.kind === 'image' && !a.trashed_at }, run: () => { const f = forFrame(); const a = primary(); if (f && a) void useStory.getState().takeFor(f, 'image', a.id) } },
@@ -79,7 +80,7 @@ registerCommands([
   { id: 'cat.unpinAll', scope: 'catalogue', label: 'Unpin all', icon: PinOff, placement: ['context', 'strip'], when: () => cat().compare.length > 0, run: () => cat().clearCompare() },
   { id: 'cat.animate', scope: 'catalogue', label: 'Animate from this frame', icon: Film, keys: 'Shift+A', placement: ['context', 'inspector'], when: () => !!primary(), run: () => { const a = primary(); if (!a) return
       void import('../animate/animateStore').then((m) => { const an = m.useAnimate.getState(); const clipId = (a.params as { clip_id?: string }).clip_id
-        if (a.kind === 'video' && clipId) { useSession.getState().setSuite('animate'); void an.loadClips().then(() => an.select(clipId)) } else an.setStart(a.id, true) }) } },
+        if (a.kind === 'video' && clipId) { navigate({ suite: 'animate' }); void an.loadClips().then(() => an.select(clipId)) } else an.setStart(a.id, true) }) } },
   { id: 'cat.animateEnd', scope: 'catalogue', label: 'Use as the end frame', icon: Film, hint: 'in Animate', keys: 'Shift+Z', placement: ['context', 'inspector'], when: () => !!primary() && primary()!.kind === 'image', run: () => { const a = primary(); if (a) void import('../animate/animateStore').then((m) => m.useAnimate.getState().setEnd(a.id, true)) } },
   { id: 'cat.reveal', scope: 'catalogue', label: 'Reveal in folder', icon: ExternalLink, keys: 'Ctrl+Shift+R', placement: ['context', 'inspector'], when: () => !!primary(), run: () => { const a = primary(); if (a) void revealPath(a.path) } },
   { id: 'cat.trash', scope: 'catalogue', label: 'Move to trash', icon: Trash, keys: 'Delete', alt: ['Backspace'], danger: true, placement: ['context', 'strip', 'inspector'], when: () => hasSel() && !inTrash(),

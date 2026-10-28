@@ -6,7 +6,7 @@ import type { CutItem, CutTrack, CutTracks } from '../../../api/types'
 import { CommandRow } from '../../../frame/CommandButton'
 import { Help } from '../../../frame/Help'
 import { askText } from '../../../store/session'
-import { useAnimate } from '../../animate/animateStore'
+import { useClips } from '../../../store/clips'
 import { useStory } from '../storyStore'
 import { GRADE_SLIDERS, gradeLabel, itemLabel } from './cut'
 import { useSequence } from './sequenceStore'
@@ -18,7 +18,7 @@ export function GradeControls({ cut, track, item }: { cut: CutTracks; track: Cut
   const looks = useSequence((s) => s.looks)
   const busy = useSequence((s) => s.cutBusy)
   const shots = useStory((s) => s.shots)
-  const clips = useAnimate((s) => s.clips)
+  const clips = useClips()
   const [moving, setMoving] = useState<Record<string, number | undefined>>({})
   const g = item.grade
   const value = (k: string, neutral: number): number => moving[k] ?? g?.values[k] ?? neutral

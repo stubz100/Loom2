@@ -13,6 +13,7 @@ import { neighbour, transport, TRANSPORT_IDS } from './transport'
 import { ArrowDown as ArrowDownIcon, ArrowUp as ArrowUpIcon, Circle as EllipseIcon, Crosshair as SoloIcon, Diamond as KeyIcon, EyeOff as HideIcon, Lock as LockIcon, Redo2 as RedoIcon,
   Square as RectIcon, Undo2 as UndoIcon, ArrowLeftToLine as TrimInIcon, ArrowRightToLine as TrimOutIcon, Columns2 as BeforeIcon, PenTool as PenIcon,
   Scan as FromLayerIcon, MousePointerClick as ObjectIcon, PaintBucket as FillIcon, Route as TrackIcon, Wand2 as PassIcon } from 'lucide-react'
+import { navigate } from '../../frame/router'
 
 const an = () => useAnimate.getState()
 const cp = () => useComposition.getState()
@@ -48,21 +49,21 @@ registerCommands([
   { id: 'anim.clearEnd', scope: 'animate', label: 'Clear end frame', icon: X, placement: ['panel', 'context'], when: () => !!an().panel.end, run: () => an().setEnd(null) },
   // transport — D90 (02 §8.2): the one key set of Animate, the Stage timeline and the Episode lane; `,` `.` and Shift+, / Shift+. stay as alternates
   // D99 (UX0 #19): the viewer levels by number — 1 goes to Clay (the stage) from here; the strip's switch is their mouse home
-  { id: 'anim.level.clay', scope: 'animate', label: 'Animate · Clay', keys: '1', placement: ['strip'], run: () => useSession.getState().setSuite('stage') },
+  { id: 'anim.level.clay', scope: 'animate', label: 'Animate · Clay', keys: '1', placement: ['strip'], run: () => navigate({ suite: 'stage' }) },
   // AE1 / AP1 (D114): the Final level — the composition's frames; its own transport (the clip player's keys stay the clip's)
-  { id: 'anim.level.performance', scope: 'animate', label: 'Animate · Performance', keys: '2', placement: ['strip'], run: () => useSession.getState().setSuite('animate') },
-  { id: 'anim.level.final', scope: 'animate', label: 'Animate · Final', keys: '3', placement: ['strip'], run: () => useSession.getState().setSuite('final') },
+  { id: 'anim.level.performance', scope: 'animate', label: 'Animate · Performance', keys: '2', placement: ['strip'], run: () => navigate({ suite: 'animate' }) },
+  { id: 'anim.level.final', scope: 'animate', label: 'Animate · Final', keys: '3', placement: ['strip'], run: () => navigate({ suite: 'final' }) },
   // RC1 (D96, proto01_animate 28): the Graph — the For chip's shot's recipe over the viewer, in whichever mode is on
   { id: 'anim.level.graph', scope: 'animate', label: "Animate · Graph (the shot's recipe)", icon: Workflow, keys: '4', placement: ['strip'], run: () => { const s = useSession.getState(); s.setUi({ graph: !s.ui.graph }) } },
   // D121 (AW3): the Shot stepper's steps — each opens the level and card where the step's verb is (the foot); the frame's is stage.frame.make
-  { id: 'anim.step.passes', scope: 'animate', label: 'The passes (Animate · Clay)', icon: Layers, placement: ['panel'], run: () => useSession.getState().setSuite('stage') },
-  { id: 'anim.step.clip', scope: 'animate', label: "The stage's clip (Performance · Stage clip)", icon: Clapperboard, placement: ['panel'], run: () => { useAnimRoute.getState().set('clip'); useSession.getState().setSuite('animate') } },
-  { id: 'anim.step.final', scope: 'animate', label: 'The final shot (Performance · Final shot)', icon: Layers, placement: ['panel'], run: () => { useAnimRoute.getState().set('final'); useSession.getState().setSuite('animate') } },
+  { id: 'anim.step.passes', scope: 'animate', label: 'The passes (Animate · Clay)', icon: Layers, placement: ['panel'], run: () => navigate({ suite: 'stage' }) },
+  { id: 'anim.step.clip', scope: 'animate', label: "The stage's clip (Performance · Stage clip)", icon: Clapperboard, placement: ['panel'], run: () => { useAnimRoute.getState().set('clip'); navigate({ suite: 'animate' }) } },
+  { id: 'anim.step.final', scope: 'animate', label: 'The final shot (Performance · Final shot)', icon: Layers, placement: ['panel'], run: () => { useAnimRoute.getState().set('final'); navigate({ suite: 'animate' }) } },
   { id: 'anim.step.final.open', scope: 'animate', label: "The final's composition (Animate · Final)", icon: Film, placement: ['panel'],
     run: () => void Promise.all([import('../stage/finalShot'), import('../stage/stageStore')]).then(([m, s]) => {     // the stage's newest final with a composition, else the Final level as it is
       const id = s.useStage.getState().current?.id
       const f = m.newestFinal(m.useFinals.getState().finals, id)
-      if (f && m.useFinals.getState().compositions[f.id]) m.useFinals.getState().openFinal(f.id); else useSession.getState().setSuite('final')
+      if (f && m.useFinals.getState().compositions[f.id]) m.useFinals.getState().openFinal(f.id); else navigate({ suite: 'final' })
     }) },
   // AE2: the editor — each one engine command on the composition (Layers' toolbar, the row's menu; the keys as accelerators)
   { id: 'anim.final.undo', scope: 'animate', label: 'Undo', icon: UndoIcon, keys: 'Ctrl+Z', placement: ['toolbar', 'context'], when: atFinal, run: () => void cp().undo() },
@@ -143,7 +144,7 @@ registerCommands([
         .then((n) => { if (n?.trim()) void import('../story/storyStore').then((m) => m.makeShotAndOpen(n.trim(), { clip_id: c.id })) }) } },
   // D90 (02 §9, A8): a clip goes to the Trash as in the Catalogue (Undo in the toast; Empty trash deletes it)
   { id: 'anim.trash', scope: 'animate', label: 'Move to trash', icon: Trash, danger: true, placement: ['inspector', 'context'], when: () => !!an().clip()?.asset_id, run: () => void an().trashClip() },
-  { id: 'anim.toCatalogue', scope: 'animate', label: 'Show in Catalogue', icon: Film, placement: ['inspector', 'context'], when: () => !!an().clip()?.asset_id, run: () => { useSession.getState().setSuite('catalogue'); void import('../catalogue/catalogueStore').then((m) => { const c = m.useCatalogue.getState(); void c.setQuery({ folder: 'clips' }).then(() => { const id = an().clip()?.asset_id; if (id) c.select(id, 'single') }) }) } },
+  { id: 'anim.toCatalogue', scope: 'animate', label: 'Show in Catalogue', icon: Film, placement: ['inspector', 'context'], when: () => !!an().clip()?.asset_id, run: () => { navigate({ suite: 'catalogue' }); void import('../catalogue/catalogueStore').then((m) => { const c = m.useCatalogue.getState(); void c.setQuery({ folder: 'clips' }).then(() => { const id = an().clip()?.asset_id; if (id) c.select(id, 'single') }) }) } },
 ])
 
 // D121: what each mode's keys reach (commands.ts reachOf), one rule for its key hook, the help overlay and the palette. The three share the

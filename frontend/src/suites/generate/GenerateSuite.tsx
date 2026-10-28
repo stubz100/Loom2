@@ -20,6 +20,7 @@ import { profilesForMentions, useStory } from '../story/storyStore'
 import { useLibrary } from '../story/libraryStore'
 import { ImageModeSwitch } from '../../frame/ImageModeSwitch'
 import './generate.css'
+import { registerKeyHost } from '../../frame/keyHosts'
 
 /** D93: drop the panel's links to profiles / groups the open project lacks (it is remembered across projects), with a toast. */
 async function pruneForeignLinks(): Promise<void> {
@@ -213,7 +214,8 @@ export function useGenerateKeys() {
   }, [])
 }
 
-function StripWithKeys() { useGenerateKeys(); return <Strip /> }
+// U1 (D157): the keys are the shell's (frame/keyHosts.tsx), not the Strip's
+registerKeyHost('generate', function GenerateKeys() { useGenerateKeys(); return null })
 
 export const GenerateSuite: SuiteDef = {
   id: 'generate',
@@ -221,7 +223,7 @@ export const GenerateSuite: SuiteDef = {
   rail: [{ id: 'presets', label: 'Saved panels', icon: <Bookmark size={18} /> }, { id: 'prompt', label: 'Prompt', icon: <Wand2 size={18} /> }, { id: 'refs', label: 'References', icon: <Images size={18} /> },
     { id: 'look', label: 'Look', icon: <Palette size={18} /> }, { id: 'camera', label: 'Camera', icon: <Camera size={18} /> }, { id: 'model', label: 'Model', icon: <Boxes size={18} /> },
     { id: 'size', label: 'Size & count', icon: <SlidersHorizontal size={18} /> }, { id: 'poses', label: 'Poses', icon: <PersonStanding size={18} /> }],   // D115: the poses Expand runs
-  Panel, Strip: withResults(StripWithKeys), Stage: withResults(Stage), Inspector: withResults(CatInspector),
+  Panel, Strip: withResults(Strip), Stage: withResults(Stage), Inspector: withResults(CatInspector),
   PrimaryAction, panelTitle: 'Image', PanelHead: ImageModeSwitch,   // D95 (IM1): Image's Make mode
 }
 

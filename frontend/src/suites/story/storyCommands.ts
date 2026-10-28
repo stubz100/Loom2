@@ -16,6 +16,7 @@ import { findNode, pickSampleModel, sampleJob, sampleRecipe, styleGroupName } fr
 import { useLibrary } from './libraryStore'
 import { FIELD_LABEL, type FieldKey } from '../generate/fieldPresets'
 import { needsPicture, swatchJob, useSwatches } from '../generate/swatches'
+import { navigate, setRailTab } from '../../frame/router'
 
 const hasWorld = () => !!sy().world
 const selected = () => sy().selected
@@ -28,7 +29,7 @@ const panelPreset = async () => { const n = panelName(); if (!n) return null; co
 const entryAt = (delta: -1 | 1) => { const e = entry(); if (!e) return false; const same = (useLibrary.getState().library?.entries ?? []).filter((x) => x.field === e.field); const i = same.findIndex((x) => x.id === e.id) + delta; return i >= 0 && i < same.length }
 /** Story · World on a section (the library, the saved panels …). */
 function openWorld(section: 'library' | 'panels' | 'styles'): void {
-  void import('../../frame/suiteRegistry').then((m) => { m.setRailTab('story', 'world'); sy().setSection(section); useSession.getState().setSuite('story') })
+  sy().setSection(section); navigate({ suite: 'story', tab: 'world' })
 }
 const style = () => { const s = selected(); return s?.kind === 'style' ? sy().world?.styles.find((x) => x.id === s.id) : undefined }
 const sampleModel = () => { const ss = useSession.getState(); return pickSampleModel(ss.capabilities, ss.settings?.samples?.model_id) }   // D91: Settings › Samples' model, else the default
@@ -73,8 +74,8 @@ const placeTargets = (): string[] => { const n = node(); const g = sy().flowGrap
 function openStageAt(stageId: string, cam: string | null, speakers?: (Profile & { version?: string | null })[], where: 'image' | 'animate' = 'animate', card: 'clay' | 'clip' | 'final' = 'clay', start: string | null = null): void {
   // D95 (AN1): a still from the stage is made in Image (From a stage); the stage itself in Animate's Clay, its clips in Performance's Stage clip card (D121).
   // D125 (A2): a card asked for opens on Performance (the stage clip with the shot's frame as its start, or the final shot), not on Clay
-  if (where === 'image') { void import('../generate/generateStore').then((g) => g.useGenerate.setState({ source: 'stage' })); useSession.getState().setSuite('generate') }
-  else { void import('../animate/routeStore').then((r) => r.useAnimRoute.getState().set(card === 'final' ? 'final' : 'clip')); useSession.getState().setSuite(card === 'clay' ? 'stage' : 'animate') }
+  if (where === 'image') { void import('../generate/generateStore').then((g) => g.useGenerate.setState({ source: 'stage' })); navigate({ suite: 'generate' }) }
+  else { void import('../animate/routeStore').then((r) => r.useAnimRoute.getState().set(card === 'final' ? 'final' : 'clip')); navigate({ suite: card === 'clay' ? 'stage' : 'animate' }) }
   void import('../stage/stageStore').then((m) => { const st = m.useStage.getState(); const go = st.current?.id === stageId ? Promise.resolve() : st.open(stageId); void go.then(() => {
     if (cam) m.useStage.getState().setActiveCamera(cam)
     if (start && card === 'clip') m.useStage.getState().setShotStart(start)
@@ -130,7 +131,7 @@ export const STEP_VERB: Record<Step, (v: ShotVersion, c: Cell) => { label: strin
   approved: (v) => ({ label: v.state === 'final' ? 'Marked final' : 'Mark final' }),
   cut: () => ({ label: 'Open the Episode' }),
 }
-const openStory = (tab: string, then?: () => void) => void import('../../frame/suiteRegistry').then((m) => { m.setRailTab('story', tab); useSession.getState().setSuite('story'); then?.() })
+const openStory = (tab: string, then?: () => void) => { navigate({ suite: 'story', tab }); then?.() }
 /** Run a step's verb for the selected shot (its cell's click, the foot's next step). */
 export function runStep(step: Step): void {
   const v = shotTarget() ?? shotVersion()
@@ -249,7 +250,7 @@ export async function addStyleSamples(id: string, assetIds: string[]): Promise<v
 
 /** A group page in the active Catalogue pane (the Catalogue tab, D125). */
 export function openGroupPage(gid: string): void {
-  useSession.getState().setSuite('catalogue')
+  navigate({ suite: 'catalogue' })
   void import('../catalogue/split').then((m) => { const sp = m.useSplit.getState(); m.openPlace(m.paneStore(sp.mode === 'single' ? 0 : sp.active).getState(), { group: gid }) })
 }
 
@@ -257,7 +258,7 @@ export async function newProfile(cls: ProfileClass = 'character', hero: string |
   const name = await askText({ title: `New ${CLASS_LABEL[cls]}`, text: hero ? 'The image becomes the hero and the cover of a new reference set; @name mentions it in prompts.' : 'An empty profile: give it a hero from the Catalogue ("Make a character…" on a tile) before expanding.', placeholder: `${CLASS_LABEL[cls]} name` })
   if (!name?.trim()) return
   const p = await sy().createProfile(name.trim(), cls, hero)
-  if (p) { revealClass(cls); void import('../../frame/suiteRegistry').then((m) => m.setRailTab('story', 'cast')) }   // D125: Cast shows its class
+  if (p) { revealClass(cls); setRailTab('story', 'cast') }   // D125: Cast shows its class
 }
 
 // proto01_UIcast CW1: the ideas store, loaded with the board (the commands' `when` reads it synchronously once it is there)
@@ -280,15 +281,15 @@ function ideaLineup() {
   return st.ideas.filter((i) => (s.castFilter === 'all' || i.cls === s.castFilter) && (!q || i.name.toLowerCase().includes(q)) && i.variants.some((v) => v.clay?.body)).slice(0, 12)
 }
 /** Back from the line-up: Cast's board it was opened from. */
-const backToBoard = (board: 'cast' | 'ideas') => () => void Promise.all([import('../../frame/suiteRegistry'), import('./ideasStore')]).then(([reg, m]) => {
-  useSession.getState().setSuite('story'); reg.setRailTab('story', 'cast'); m.useIdeas.setState({ board }) })
+const backToBoard = (board: 'cast' | 'ideas') => () => void import('./ideasStore').then((m) => {
+  navigate({ suite: 'story', tab: 'cast' }); m.useIdeas.setState({ board }) })
 /** CW2: Image for the idea — the chip, its picture in focus as reference 1, its prompt (a text prompt). */
 async function exploreIdea(i: NonNullable<ReturnType<typeof idea>>): Promise<void> {
   const v = ideasMod?.focusOf(i)
   useMakeFor.getState().setIdea({ idea_id: i.id, name: i.name })
   const g = (await import('../generate/generateStore')).useGenerate.getState()
   g.set({ ...(v ? { refs: [{ asset_id: v.asset_id }] } : {}), prompt_mode: 'text', text: v?.made_from.prompt || i.name })   // 02 §5: the picture as reference 1, its prompt (the name without one)
-  useSession.getState().setSuite('generate')
+  navigate({ suite: 'generate' })
 }
 
 const cmds: Command[] = [
@@ -303,7 +304,7 @@ const cmds: Command[] = [
     when: () => !!style()?.group_id && !!findNode(useAlbum.getState().tree, style()?.group_id),
     run: () => { const g = style()?.group_id; if (g) openGroupPage(g) } },
   { id: 'story.world.open', scope: 'story', label: 'Open Story · World', icon: BookOpen, placement: ['panel', 'context'], when: () => !!useSession.getState().project?.open,
-    run: () => { void import('../../frame/suiteRegistry').then((m) => { m.setRailTab('story', 'world'); sy().setSection('styles'); useSession.getState().setSuite('story') }) } },
+    run: () => { sy().setSection('styles'); navigate({ suite: 'story', tab: 'world' }) } },
   { id: 'story.world.defaultStyle', scope: 'story', label: 'Make it the default style', icon: Star, placement: ['inspector', 'context'], when: () => selStyle() && sy().world?.default_style !== selected()?.id,
     run: () => { const s = selected(); if (s?.kind === 'style') sy().setDefaultStyle(s.id) } },
   // D92: the World library — an entry is written here only (the Inspector); Generate's tiles and its field's + read and add to it
@@ -319,7 +320,7 @@ const cmds: Command[] = [
   { id: 'story.world.entryEarlier', scope: 'story', label: 'Move earlier', icon: ChevronLeft, placement: ['inspector', 'context'], when: () => entryAt(-1), run: () => { const e = entry(); if (e) void useLibrary.getState().move(e.id, -1) } },
   { id: 'story.world.entryLater', scope: 'story', label: 'Move later', icon: ChevronRight, placement: ['inspector', 'context'], when: () => entryAt(1), run: () => { const e = entry(); if (e) void useLibrary.getState().move(e.id, 1) } },
   { id: 'story.world.applyPanel', scope: 'story', label: 'Apply in Image', icon: Wand2, placement: ['inspector', 'context'], when: () => !!panelName(),
-    run: () => void panelPreset().then((x) => { if (!x?.p) return; x.g.applyPreset(x.p.name); useSession.getState().setSuite('generate') }) },
+    run: () => void panelPreset().then((x) => { if (!x?.p) return; x.g.applyPreset(x.p.name); navigate({ suite: 'generate' }) }) },
   { id: 'story.world.renamePanel', scope: 'story', label: 'Rename…', icon: Pencil, placement: ['inspector', 'context'], when: () => !!panelName(),
     run: () => void panelPreset().then(async (x) => { if (!x?.p) return; const from = x.p.name
       const to = await askText({ title: 'Rename the saved panel', initial: from, placeholder: 'name' })
@@ -361,13 +362,13 @@ const cmds: Command[] = [
   { id: 'story.cast.expand', scope: 'story', label: 'Expand in Image…', icon: Sparkles, keys: 'Ctrl+Enter', placement: ['panel', 'inspector', 'context'],
     when: () => openVersion() && !!version()?.hero_asset_id && !!useSession.getState().capabilities?.story?.model_id && !sy().expanding,
     run: () => { const p = profile(); const v = version(); if (!p || !v) return
-      void Promise.all([import('../generate/generateStore'), import('../../frame/suiteRegistry')]).then(([g, r]) => {
+      void import('../generate/generateStore').then((g) => {
         const gs = g.useGenerate.getState(); gs.useAsSubject(p)
         const story = useSession.getState().capabilities?.story
         if (story?.model_id) gs.set({ model_id: story.model_id })          // the model Expand ran on in Cast: it takes the hero as a reference and renders the same person
         const plan = ((story?.presets as Record<string, { plan?: { shot: string; angle: string; expression: string }[] }> | undefined)?.full?.plan ?? [])
         gs.setPoses({ cells: plan.map((c) => ({ shot: c.shot, angle: c.angle, expression: c.expression })), expressions: Array.from(new Set(plan.map((c) => c.expression))) })
-        gs.setRun('expand'); r.setRailTab('generate', 'poses'); useSession.getState().setSuite('generate')
+        gs.setRun('expand'); navigate({ suite: 'generate', tab: 'poses' })
         useSession.getState().toast(`${p.name} ${v.id}: pick the poses, then Expand ▶ — the images land as its candidates`, 'info') }) } },
   // D125 (SP5): the readiness row's Sheet item, and the foot's next owed step
   { id: 'story.cast.editSheet', scope: 'story', label: 'Write the sheet', icon: Pencil, hint: "the version's look in words — Make frame and Expand compose it into every image of it", placement: ['strip'],
@@ -543,7 +544,7 @@ const cmds: Command[] = [
     run: () => useMakeFor.getState().set('animate', null) },
   { id: 'story.shot.openAnimate', scope: 'story', label: 'Open in Animate', icon: Film, placement: ['strip', 'inspector', 'context'], when: () => !!shotVersion()?.clip_id,
     run: () => { const v = shotVersion(); if (!v?.clip_id) return; const cid = v.clip_id
-      useSession.getState().setSuite('animate')
+      navigate({ suite: 'animate' })
       void import('../animate/animateStore').then((m) => { const an = m.useAnimate.getState(); void an.loadClips().then(() => an.select(cid)) }) } },
   // RC2a (proto01_animate 31 §3b): a shot is in its node — releasing it moves it to a Shot node of its own beside it; the node gets a fresh shot
   { id: 'story.shot.release', scope: 'story', label: 'Move to a node of its own', icon: Unlink, placement: ['inspector', 'context'],
@@ -630,9 +631,9 @@ const cmds: Command[] = [
   { id: 'story.shot.graphInAnimate', scope: 'story', label: 'Open the graph in Animate', icon: Workflow, hint: "Animate's Graph on this shot (its For chip set): a node opens where it is made",
     placement: ['strip', 'inspector', 'context'], when: () => !!shot() && !!shotVersion(),
     run: () => { const s = shot(); const v = shotVersion(); if (!s || !v) return
-      useMakeFor.getState().set('animate', forShot(s, v)); const ses = useSession.getState(); ses.setUi({ graph: true }); ses.setSuite('animate') } },
+      useMakeFor.getState().set('animate', forShot(s, v)); useSession.getState().setUi({ graph: true }); navigate({ suite: 'animate' }) } },
   { id: 'story.flow.openShot', scope: 'story', label: 'Open the shot', icon: Link, placement: ['inspector', 'context'], when: () => !!node()?.shot_id,
-    run: () => { const n = node(); if (!n?.shot_id) return; const sid = n.shot_id, v = n.shot_version; void import('../../frame/suiteRegistry').then((m) => { m.setRailTab('story', 'shots'); sy().selectShot(sid, v) }) } },
+    run: () => { const n = node(); if (!n?.shot_id) return; const sid = n.shot_id, v = n.shot_version; setRailTab('story', 'shots'); sy().selectShot(sid, v) } },
   // D90 (02 §4.2, §5): a node's board (an album group) and Make ▸ for its shot (the board's images as Generate's references)
   { id: 'story.flow.makeFrame', scope: 'story', label: 'Make frame in Image', icon: ImagePlus, placement: ['inspector', 'context'], when: () => projectOpen() && !!nodeTarget() && !sy().play,
     run: () => { const s = nodeShot(); const v = nodeTarget(); const n = node(); if (s && v && n) void makeFrameFor(s, v, n.id) } },
@@ -683,11 +684,11 @@ const cmds: Command[] = [
   // D92: subjects are Cast characters — Generate's Tree prompt with a subject card linked to the profile (its reference set and LoRA follow)
   { id: 'story.cast.useAsSubject', scope: 'story', label: 'Use as a subject in Image', icon: UserRoundPlus, placement: ['inspector', 'context'], when: () => !!profile() && profile()!.cls !== 'place',
     run: () => { const p = profile(); if (!p) return
-      void Promise.all([import('../generate/generateStore'), import('../../frame/suiteRegistry')]).then(([g, r]) => {
-        g.useGenerate.getState().useAsSubject(p); r.setRailTab('generate', 'prompt'); useSession.getState().setSuite('generate')
+      void import('../generate/generateStore').then((g) => {
+        g.useGenerate.getState().useAsSubject(p); navigate({ suite: 'generate', tab: 'prompt' })
         useSession.getState().toast(`${p.name} is a subject in Image's Tree prompt — its reference set${version()?.lora ? ' and LoRA' : ''} follow`, 'info') }) } },
   { id: 'story.cast.openInStory', scope: 'story', label: 'Open in Story · Cast', icon: Users, placement: ['context'], when: () => !!profile(),
-    run: () => { const p = profile(); if (p) revealClass(p.cls); void import('../../frame/suiteRegistry').then((m) => { m.setRailTab('story', 'cast'); useSession.getState().setSuite('story') }) } },
+    run: () => { const p = profile(); if (p) revealClass(p.cls); navigate({ suite: 'story', tab: 'cast' }) } },
   { id: 'story.cast.delete', scope: 'story', label: 'Delete profile', icon: Trash2, placement: ['inspector', 'context'], danger: true, when: () => !!profile(),
     run: () => { const p = profile(); if (!p) return
       void askConfirm({ title: `Delete ${p.name}?`, okLabel: 'Delete', danger: true, text: 'The profile record goes; its reference sets and images stay in the album (no longer final). @mentions of it stop resolving.' }).then((ok) => { if (ok) void sy().deleteProfile() }) } },

@@ -43,6 +43,7 @@ import { castPoses, effectiveJoints, st, TEMPLATE_KINDS, useStage, type ShotStat
 import { ENDS, type End } from './motion/contact'
 import { contactChoices, SELF, type Contact, type Contacts } from './motion/contacts'
 import './stage.css'
+import { registerKeyHost } from '../../frame/keyHosts'
 
 const FOCALS = [24, 35, 50, 85]
 const num = (v: number) => +v.toFixed(2)
@@ -716,8 +717,8 @@ export function StageFoot() {
   )
 }
 
-// ------------------------------------------------------------------ Strip
-export function Strip() {
+// ------------------------------------------------------------------ keys (U1, D157: the shell's, frame/keyHosts.tsx — not the Strip's)
+function useStageKeys(): void {
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (useSession.getState().ui.suite !== 'stage') return
@@ -728,6 +729,11 @@ export function Strip() {
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
   }, [])
+}
+registerKeyHost('stage', function StageKeys() { useStageKeys(); return null })
+
+// ------------------------------------------------------------------ Strip
+export function Strip() {
   const guides = useStage((s) => s.guides)
   const pip = useStage((s) => s.pip)
   const current = useStage((s) => s.current)

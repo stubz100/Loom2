@@ -1,0 +1,5 @@
+/* U1 (D157): the new shell's frame — the top bar, the layer's place, the dock (02 §5); the layers' own columns come with their waves. */
+.frame.ui2 { grid-template-rows: var(--top) auto 1fr auto; grid-template-columns: 1fr; grid-template-areas: "top" "banner" "layer" "dock"; }
+.ui2-layer { grid-area: layer; min-height: 0; display: flex; align-items: center; justify-content: center; background: var(--bg0); }
+.ui2-pending { display: flex; flex-direction: column; align-items: center; gap: 6px; color: var(--fg3); }
+.ui2-pending b { font-size: 18px; color: var(--fg2); font-weight: 600; }

@@ -1,5 +1,5 @@
 import { Boxes, ChevronDown, FolderOpen, Menu } from 'lucide-react'
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { requestAppExit } from '../shell/tauri'
 import { selectRunningJob, useSession } from '../store/session'
 import { runCommand } from './commands'
@@ -11,6 +11,7 @@ import { onlyAssets, useDropTarget, type DragPayload, type DropVerdict } from '.
 import { editOpenDrop, layerDrop, startDrop } from './dropRules'
 import { editPresence } from './editPresence'
 import { dropRefs, refDropFor } from '../suites/generate/generateStore'
+import { navigate, UI2 } from './router'
 
 function useOutside(onClose: () => void) {
   const ref = useRef<HTMLDivElement>(null)
@@ -56,7 +57,7 @@ function SuiteTab({ t, active, onOpen }: { t: TopTab; active: boolean; onOpen: (
         const a = m.useAnimate.getState()
         if (r.play) void a.loadAsset(r.play).then((asset) => {             // a clip plays (as the tile menu's Animate does)
           const clip = (asset?.params as { clip_id?: string } | undefined)?.clip_id
-          useSession.getState().setSuite('animate'); if (clip) void a.loadClips().then(() => a.select(clip))
+          navigate({ suite: 'animate' }); if (clip) void a.loadClips().then(() => a.select(clip))
         })
         else if (r.start) { a.setStart(r.start, true); if (r.end) a.setEnd(r.end) }
       })
@@ -76,7 +77,8 @@ function SuiteTab({ t, active, onOpen }: { t: TopTab; active: boolean; onOpen: (
   )
 }
 
-export function TopBar() {
+/** The top bar: ☰, Project ▾, the tabs (the suites', or U1 (D157) the new shell's layers through `tabs`), the status chips. */
+export function TopBar({ tabs }: { tabs?: ReactNode } = {}) {
   const s = useSession()
   const [menu, setMenu] = useState<'project' | 'app' | null>(null)
   const top = topTabOf(s.ui.suite)?.id
@@ -98,7 +100,7 @@ export function TopBar() {
           <FolderOpen size={14} style={{ verticalAlign: '-2px' }} /> Project <span className="project-name">{s.project?.open ? s.project.name : 'none open'}</span> <ChevronDown size={14} style={{ verticalAlign: '-2px' }} />
         </button>
         <span className="tabs-sep" aria-hidden="true" />
-        {TOP_TABS.map((t) => <SuiteTab key={t.id} t={t} active={top === t.id} onOpen={() => openTopTab(t)} />)}
+        {tabs ?? TOP_TABS.map((t) => <SuiteTab key={t.id} t={t} active={top === t.id} onOpen={() => openTopTab(t)} />)}
       </nav>
       <div className="spacer" />
       {menu === 'project' && (
@@ -130,6 +132,7 @@ export function TopBar() {
           <button onClick={() => { setMenu(null); s.setUi({ theme: s.ui.theme === 'light' ? 'dark' : 'light' }) }}>Theme: {THEMES.find(([t]) => t === s.ui.theme)?.[1] ?? 'Dark'}</button>
           <button onClick={() => { setMenu(null); s.setUi({ density: s.ui.density === 'compact' ? 'comfortable' : 'compact' }) }}>Density: {s.ui.density}</button>
           <div className="sep" />
+          <button onClick={() => { setMenu(null); runCommand('global.ui2') }}>{UI2 ? 'Back to the current UI' : 'Try the new UI'}</button>{/* U1 (D157, 07 §1) */}
           <button onClick={() => { setMenu(null); void s.refreshAll() }}>Refresh state</button>
           {import.meta.env.DEV && <button onClick={() => { setMenu(null); window.open('/spikes.html', '_blank') }}>M0 spike harness (dev)</button>}
           <div className="sep" />

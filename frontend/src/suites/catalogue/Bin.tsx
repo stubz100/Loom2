@@ -26,6 +26,7 @@ import { onBinTile, startProfile } from './catalogueCommands'
 import { useBin, type Query } from './catalogueStore'
 import { openPlace, paneStore, useSplit } from './split'
 import { Tile } from './Tile'
+import { navigate } from '../../frame/router'
 
 type Kind = Query['kind'] | undefined
 const KINDS: [Kind, string][] = [[undefined, 'All'], ['image', 'Images'], ['video', 'Clips'], ['mesh', 'Meshes']]
@@ -38,7 +39,7 @@ const asStart = (id: string) => void import('../animate/animateStore').then((m) 
 const playClip = (a: Asset) => void import('../animate/animateStore').then(async (m) => {
   const clip = (a.params as { clip_id?: string } | undefined)?.clip_id
   const an = m.useAnimate.getState()
-  useSession.getState().setSuite('animate')
+  navigate({ suite: 'animate' })
   if (clip) { await an.loadClips(); an.select(clip) }
 })
 
@@ -67,7 +68,7 @@ function addMesh(id: string): void {
 
 /** The Catalogue's lineage of an asset: what it was made from and what came of it. */
 function showLineage(id: string): void {
-  useSession.getState().setSuite('catalogue')
+  navigate({ suite: 'catalogue' })
   const sp = useSplit.getState()
   const c = paneStore(sp.mode === 'single' ? 0 : sp.active).getState()
   openPlace(c, 'library'); c.openLineage(id)

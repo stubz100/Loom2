@@ -8,7 +8,7 @@ import { CommandButton, CommandRow } from '../../../frame/CommandButton'
 import { beginDrag } from '../../../frame/drag'
 import { Help } from '../../../frame/Help'
 import { useSession } from '../../../store/session'
-import { useAnimate } from '../../animate/animateStore'
+import { loadClips, useClips } from '../../../store/clips'
 import { duration, ticks } from './lane'
 import { lastMovie, useSequence } from './sequenceStore'
 import { db, findItem, isVideo, itemLabel, stripLabel, trackRef, transitionInto } from './cut'
@@ -27,12 +27,12 @@ export function SequencePanel() {
   const project = useSession((s) => s.project)
   const timelines = useSequence((s) => s.timelines)
   const current = useSequence((s) => s.current)
-  const clips = useAnimate((s) => s.clips)
+  const clips = useClips()
   const shots = useStory((s) => s.shots)
   const flowNodes = useStory((s) => s.flowNodes)
   const flowGraph = useStory((s) => s.flowGraph)
   const load = useSequence((s) => s.load)
-  useEffect(() => { if (project?.open) { void load(); void useAnimate.getState().loadClips(); void useStory.getState().loadShots(); void useStory.getState().loadFlow() } }, [project?.path, load]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (project?.open) { void load(); void loadClips(); void useStory.getState().loadShots(); void useStory.getState().loadFlow() } }, [project?.path, load]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!project?.open) return <span className="hint">Open or create a project to begin.</span>
   markUsed('story.episode.addShot'); markUsed('story.episode.addClip')    // the bins' + run them on their entry
   return (
@@ -91,7 +91,7 @@ function AssembleBody({ target }: { target: { tlId: string | null } }) {
   const flowNodes = useStory((s) => s.flowNodes)
   const world = useStory((s) => s.world)
   const shots = useStory((s) => s.shots)
-  const clips = useAnimate((s) => s.clips)
+  const clips = useClips()
   const cut = target.tlId ? timelines.find((t) => t.id === target.tlId) : undefined
   const [picks, setPicks] = useState<Record<string, string>>(() => cut?.route ?? {})
   const [name, setName] = useState<string | null>(null)
@@ -132,7 +132,7 @@ export function SequenceInspector() {
   const selected = useSequence((s) => s.selected)
   const saving = useSequence((s) => s.saving)
   const lastExport = useSequence((s) => s.lastExport)
-  const clips = useAnimate((s) => s.clips)
+  const clips = useClips()
   const shots = useStory((s) => s.shots)
   const jobs = useSession((s) => s.jobs)
   const tracks = useSequence((s) => s.tracks)

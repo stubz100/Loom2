@@ -11,6 +11,7 @@ import { useLibrary } from './libraryStore'
 import { startPlay, stepPlay, type PlayState } from './flow/play'
 import { spineEdges, spineRow, spineTodo } from './episodeVerbs'
 import type { BoardSort } from './board'
+import { navigate, setRailTab } from '../../frame/router'
 
 export type Section = 'logline' | 'synopsis' | 'styles' | 'library' | 'panels' | 'templates' | 'spine' | 'variables'
 /** A variable's id is its name; D92: a library entry's id is its `lib_` id, a saved panel's its name. */
@@ -778,7 +779,7 @@ export const useStory = create<StoryState>()((set, get) => {
       if (!model_id) { toast(`no model of the ${rec.base} base is offered in this build`); return }
       const text = g.panel.text.includes(rec.trigger) ? g.panel.text : `${rec.trigger}, ${g.panel.text}`.replace(/, $/, '')
       g.set({ model_id, loras: [{ model_id: rec.id, strength: 1 }], prompt_mode: 'text', text })
-      s.setSuite('generate')
+      navigate({ suite: 'generate' })
       toast(`Generate: ${rec.name} in slot 1 with its trigger`, 'info')
     },
     checkLora: async (id) => {
@@ -1190,7 +1191,7 @@ export const useStory = create<StoryState>()((set, get) => {
     nodeFromBeat: async (beatId) => {
       const b = get().world?.spine.find((x) => x.id === beatId); if (!b) return
       const made = await get().addNode('shot', b.title, null, { text: b.line })
-      if (made) { const { setRailTab } = await import('../../frame/suiteRegistry'); setRailTab('story', 'flow') }
+      if (made) setRailTab('story', 'flow')
     },
   }
 })
@@ -1238,13 +1239,11 @@ function saveGraph(get: () => StoryState, set: (p: Partial<StoryState>) => void,
 
 /** Other suites' way in (Stage's "New shot from this camera", Animate's "Make a shot from this clip"): the shot is made, Story opens on it. */
 export async function makeShotAndOpen(name: string, src: { stage_id?: string; camera_id?: string; clip_id?: string; frame_asset_id?: string }): Promise<void> {
-  const [{ setRailTab }] = await Promise.all([import('../../frame/suiteRegistry')])
   const st = useStory.getState()
   if (!st.shotsLoaded) await st.loadShots()
   const s = await st.createShot(name, src)
   if (!s) return
-  setRailTab('story', 'shots')
-  useSession.getState().setSuite('story')
+  navigate({ suite: 'story', tab: 'shots' })
 }
 
 export const sy = () => useStory.getState()

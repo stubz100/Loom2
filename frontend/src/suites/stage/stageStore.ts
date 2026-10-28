@@ -18,6 +18,8 @@ import { docFrames, mirrorContacts, portable, resolvePins, toContact, type Conta
 import { setShellPoints } from './proxy'
 import type { Keypoint, WholeBody } from './passes'
 import { profilesForMentions, useStory, versionPointsOfShell } from '../story/storyStore'
+import { navigate } from '../../frame/router'
+import { contextSlot } from '../../store/contexts'
 
 /** CA0: the body of a bound figure's Cast version (its pinned version, else the character's current one); null = the preset's dummy;
  *  undefined = the character is not loaded (the figure keeps what it has). */
@@ -992,7 +994,7 @@ export const useStage = create<StageState>()((set, get) => ({
       const r = await unwrap(http.POST('/stages/bench', { body: { profile_id: profileId, version } }))
       await get().open(r.stage.id)
       benchBack = () => void import('../../store/origin').then((m) => m.goToStory({ tab: 'cast', id: profileId, version: r.stage.bound?.version ?? version }))
-      useSession.getState().setSuite('stage')
+      navigate({ suite: 'stage' })
       return true
     } catch (e) { useSession.getState().toast(`The bench: ${(e as ApiError).detail ?? e}`, 'error'); return false }
   },
@@ -1001,7 +1003,7 @@ export const useStage = create<StageState>()((set, get) => ({
       const st = await unwrap(http.POST('/stages/lineup', { body: { items: items.map((x) => ({ profile_id: x.profile_id ?? null, version: x.version ?? null, idea_id: x.idea_id ?? null, variant_id: null })) } }))
       await get().open(st.id)
       benchBack = back ?? null
-      useSession.getState().setSuite('stage')
+      navigate({ suite: 'stage' })
       const left = items.length - st.objects.filter((o) => o.kind !== 'set').length
       if (left > 0) useSession.getState().toast(`${left} left out: an idea needs its clay (Make the clay ▶), a prop its 3D model; places come with their sets`, 'info')
       return true
@@ -1182,3 +1184,6 @@ export const st = () => useStage.getState()
     marks: () => s().keyedFrames(),
   })
 }
+
+/** U1 (D157, 06 §5.3): the open stage per context (Shots: a shot's scene) — the stage a context had open is opened again on returning. */
+export const stageContext = contextSlot<string | null>(() => useStage.getState().current?.id ?? null, (id) => { if (id && useStage.getState().current?.id !== id) void useStage.getState().open(id) })

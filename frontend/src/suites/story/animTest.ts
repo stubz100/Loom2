@@ -5,6 +5,7 @@
 import { api, http, sha256Hex, unwrap, type ApiError } from '../../api/client'
 import { askConfirm, useSession } from '../../store/session'
 import { useStory } from './storyStore'
+import { navigate } from '../../frame/router'
 
 const secs = (s: number | null | undefined) => (s == null ? 'unmeasured' : s < 90 ? `≈ ${Math.round(s)} s` : `≈ ${Math.round(s / 60)} min`)
 
@@ -52,7 +53,7 @@ export function playAnimTest(): void {
   const clip = v?.anim_test_clip_id
   if (!clip) return
   void import('../animate/animateStore').then(async (m) => {
-    useSession.getState().setSuite('animate')
+    navigate({ suite: 'animate' })
     const an = m.useAnimate.getState()
     await an.loadClips(); an.select(clip)
   })

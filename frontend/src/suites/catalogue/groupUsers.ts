@@ -4,8 +4,9 @@
 // and deleting or ungrouping a used group says so in its confirm.
 import { http, unwrap } from '../../api/client'
 import type { GroupUser } from '../../api/types'
-import { askConfirm, useSession } from '../../store/session'
+import { askConfirm } from '../../store/session'
 import { goToIdea, goToStory } from '../../store/origin'
+import { navigate } from '../../frame/router'
 
 /** One user in words: "Mara v1 · references", "Idea · Mara", "Style · Ink wash", "Flow · Arrival · board", "Stage · Pier", "Library · dusk". */
 export function userLabel(u: GroupUser): string {
@@ -51,7 +52,7 @@ export function openUser(u: GroupUser): void {
     void import('../story/storyStore').then((m) => setTimeout(() => { m.useStory.getState().setSection('library'); m.useStory.setState({ selected: null }) }))
     return
   }
-  useSession.getState().setSuite('stage')
+  navigate({ suite: 'stage' })
   void import('../stage/stageStore').then((m) => { const st = m.useStage.getState(); if (st.current?.id !== u.id) void st.open(u.id) })
 }
 

@@ -20,6 +20,7 @@ import { useComposition } from './compositionStore'
 import { LayersSection } from './FinalEditor'
 import { FinalViewer } from './FinalViewer'
 import './animate.css'
+import { registerKeyHost } from '../../frame/keyHosts'
 
 const FINAL_SECTIONS = ['shot', 'layers', 'output'] as const
 
@@ -103,8 +104,10 @@ function useFinalKeys(): void {
   }, [])
 }
 
+// U1 (D157): the keys are the shell's (frame/keyHosts.tsx), not the Strip's
+registerKeyHost('final', function FinalKeys() { useFinalKeys(); return null })
+
 function FinalStrip() {
-  useFinalKeys()
   const final = useComposition((s) => s.final)
   return (
     <>

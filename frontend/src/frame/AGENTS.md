@@ -108,7 +108,9 @@ field or a kind, `tileGlyph` for both); a picture (`img`) covers it, `busy` mark
 ## State
 
 `frontend/src/store/session.ts` holds the app-wide store (backend, health, project, engine, queue, jobs, previews, capabilities, toasts,
-banners, the ask dialog, persisted `ui` layout) and `applyEvent()`, which routes WebSocket frames to the suite stores. Project data never lives
+banners, the ask dialog, persisted `ui` layout) and `applyEvent()`, which keeps the session's own frames and publishes the rest to
+`frontend/src/store/records.ts` (U1, D157): the records layer owns the fan-out — today's holders by dynamic import, and any store may
+`onRecords(id, kinds, h)`; a reconnect publishes `resync`. Project data never lives
 in component state. `frontend/src/api/client.ts` is the only HTTP / WebSocket client (`EventsSocket` keeps the last frame it applied and the
 hub's run; a reconnect's auth names them and the hello replays the missed frames through `applyEvent` in order, or says `gap` and the
 session fetches and reloads the lists — V65; the queue and project fetched after a job frame are applied only when nothing newer
@@ -126,6 +128,20 @@ into a place (`goToOrigin`, the Dock's "Go to origin"). Interim strips list thei
 **API calls are typed (D38):** `await unwrap(http.GET('/assets/{asset_id}', { params: { path: { asset_id } } }))` — paths, parameters, bodies
 and replies come from `frontend/src/api/schema.d.ts`, generated from the orchestrator. `frontend/src/api/types.ts` re-exports the reply types
 (never hand-write an API shape). Bytes and URLs stay on `api.putBlob` / `api.thumbUrl` / `api.assetUrl` / `api.fileUrl`.
+
+## The seams of the new shell (U1, D157)
+
+The UI2 plan (`.docs/proto01_UI2`) builds a second shell beside this one (`?ui=2`, `frontend/src/ui2/Shell.tsx`; ☰ › *Try the new UI*,
+`global.ui2`) on four seams — keep them when adding code:
+
+- **Navigate, never set the suite.** `router.ts` has `navigate({ suite, tab? })` (the tab first, then the suite, then the listeners),
+  `setRailTab` (the rail state lives here), `currentPlace()`, `onNavigate` and `layerOf` (an old place's layer). Only the router calls
+  `setSuite`; `router.test.ts` fails on any other caller. The new shell's layer follows every navigation and the hash (`ui2/layers.ts`).
+- **Keys are the shell's.** A suite's key hook mounts through `registerKeyHost(id, Host)` (`keyHosts.tsx`) at its module's load, and
+  both shells render `<KeyHosts />`; a host checks `ui.suite` itself. Never mount a key hook inside a Strip.
+- **Records are shared through the records layer.** Episode reads clips through `frontend/src/store/clips.ts`, not Animate's store.
+- **Singletons have context slots.** `frontend/src/store/contexts.ts`'s `contextSlot(read, write)`: `makeContext` (the Make panel),
+  `stageContext` (the open stage), `compositionContext` (the composition) keep a context's state on leaving and restore it on returning.
 
 ## The detached loupe (D155)
 

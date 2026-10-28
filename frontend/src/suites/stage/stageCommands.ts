@@ -11,6 +11,7 @@ import { canHold, HAND_LABEL, holders } from './held'
 import { profilesForMentions, useStory } from '../story/storyStore'
 import { useMakeFor } from '../../store/origin'
 import { useMotion } from './motion/motionStore'
+import { navigate } from '../../frame/router'
 
 const hasStage = () => !!st().current
 const sel = () => st().object(st().selected)
@@ -166,7 +167,7 @@ registerCommands([
     run: () => void (async () => { if ((!st().guideEntry() || st().guideStale()) && !(await st().renderGuide())) return; await st().animateShot() })() },   // D121: the sequence first when missing or stale
   // D121: the stills of a stage are made in Image (D95) — the stage clip's start picker sends there; pose mode by the figure, not by the column
   { id: 'stage.frame.make', scope: 'stage', label: 'Make a frame (Image · From a stage)', icon: Aperture, placement: ['panel'], when: hasStage,
-    run: () => { void import('../generate/generateStore').then((g) => g.useGenerate.setState({ source: 'stage' })); useSession.getState().setSuite('generate') } },
+    run: () => { void import('../generate/generateStore').then((g) => g.useGenerate.setState({ source: 'stage' })); navigate({ suite: 'generate' }) } },
   { id: 'stage.pose.mode', scope: 'stage', label: 'Pose the figure', hint: 'its joints and hands in the viewport; again (Done) to stop', icon: PersonStanding, placement: ['toolbar', 'context'],
     when: () => sel()?.kind === 'mannequin', run: () => st().setPosing(!st().posing) },
   // D111 (PS5): the finished scene split into layers (the passes rendered here; the layers are made from them on the queue)

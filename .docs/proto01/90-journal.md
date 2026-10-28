@@ -11401,3 +11401,55 @@ The author's `tauri dev` window and Vite were still up (the author asked them cl
 shell shut its orchestrator down itself; the dev tree exited with it and port 1420 was free.
 `npm run build:e2e; npm run test:e2e` on the U0 working tree: **79 passed in 6.2 min**, alone (no GPU job, no other server). U0 is committed
 with this entry; next is U1, the seams (07 §2, 06 §5.3).
+
+## 2026-10-29 00:43 — U1 built: the four seams of the new shell, and the empty `?ui=2` shell (D157, proto01_UI2 06 §5.3, 07 §2)
+
+No visible change in the old UI apart from one ☰ item. The four seams the new shell stands on (06 §5.3):
+
+- **The router** (`frame/router.ts`):
+  - `navigate({ suite, tab? })` sets the tab first, then the suite, then tells its listeners where it went; the rail state moved here
+    (`setRailTab`, `useRailState`; the registry re-exports them).
+  - `currentPlace()`, `onNavigate`, and `layerOf`, which maps an old place onto D157's layers: Image and Story's World / Cast are World;
+    Animate's levels and Story's Flow / Shots are Shots; Story's Episode is Episode; the Catalogue is the Bin.
+  - Every `setSuite` and `setRailTab` + `setSuite` pair in 27 files now calls it; the dynamic imports of the registry that existed only to
+    reach the rail are gone. `router.test.ts` fails on any `setSuite` caller but the router and the session.
+- **Keys are the shell's** (`frame/keyHosts.tsx`):
+  - Image's, Edit's (with its paste, deep links and autosave), Animate's, Final's and Clay's key hooks register a host when their module
+    loads, and both shells render `<KeyHosts />`. Before, they were mounted inside their Strips.
+  - Each host still checks `ui.suite`; Edit's key-up and its `?doc=` deep link gained the same check, so a host mounted early does nothing.
+- **The records layer** (`store/records.ts`) owns the events socket's fan-out:
+  - `session.applyEvent` keeps its own frames (jobs, the queue, the engine, models, the project) and publishes the rest.
+  - Today's holders are reached as before, by dynamic import, and the table moved here unchanged; any store may `onRecords(id, kinds, h)`.
+  - A reconnect publishes `resync`.
+  - Episode reads the clips through `store/clips.ts`, not Animate's store, which still holds them.
+- **Context slots** (`store/contexts.ts`): `contextSlot(read, write)` keeps a context's state when it is left and restores it on return; a
+  context never seen keeps what is on screen. `makeContext` (the Make panel), `stageContext` (the open stage) and `compositionContext` (the
+  composition) are ready for the layers. Nothing enters them yet.
+
+**The new shell** (`ui2/Shell.tsx`, `ui2/layers.ts`, lazy in `App.tsx` behind `?ui=2`):
+
+- the top bar with World · Shots · Episode · Bin (the same Ctrl+1–4 commands, labelled and run for the layers when `UI2`);
+- the layer kept in the hash (`#world`, `#shots`, …, so a reload stays) and following every `navigate`;
+- the dock and the frame's services (toasts, menus, palette, dialogs, the keyboard map, the key hosts);
+- each layer's place says "not built yet" behind a ? (rule 11).
+
+☰ › *Try the new UI* (`global.ui2`) reloads on the other entry, and in the new shell it reads *Back to the current UI*.
+
+**Tests:** `router.test.ts` 3, `ui2/layers.test.ts` 3, `store/seams.test.tsx` 4 (the records' subscribers and one failing, the slots, the
+Make panel's slot over the real store, the key hosts).
+
+**Checks:**
+
+- Vitest 611 + 3 skipped; typecheck, build and lint clean (two new only-export-components warnings, as the codebase has elsewhere);
+- e2e 79/79 (alone); `agents_check` and `model_literals_check` clean;
+- the frame's AGENTS note has a section on the seams.
+
+**Looked at** in headless Edge against `vite preview` of the production build and a throwaway orchestrator (no GPU job):
+
+- the old shell is unchanged, with *Try the new UI* in ☰;
+- `?ui=2`: the four tabs, Ctrl+2 / Ctrl+3 and a click on Bin move the layer and the hash, a reload keeps Shots, and ☰ says
+  *Back to the current UI*;
+- no console error.
+
+Next is U2, the records (07 §2): one Shot node type, the scene owning its stage, a shot as a camera and a range, the bin tree with
+homes and roles, and the Look as a record.

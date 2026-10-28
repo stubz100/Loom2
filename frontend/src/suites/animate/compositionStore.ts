@@ -9,6 +9,7 @@ import { baseUrl, getBackend, http, unwrap } from '../../api/client'
 import type { Composition, Final } from '../../api/types'
 import { useSession } from '../../store/session'
 import { registerTransport } from './transport'
+import { contextSlot } from '../../store/contexts'
 
 export type Side = 'half' | 'full'
 export const REST_MS = 300                 // the playhead still this long: the full frame
@@ -677,3 +678,6 @@ export const useComposition = create<CompState>((set, get) => {
     marks: () => { const rate = c().final?.rate ?? 16; return Object.values(c().keysOf).flat().map((k) => Math.round(k.time * rate)) },
   })
 }
+
+/** U1 (D157, 06 §5.3): the composition per context (Shots: a shot version's final) — the final a context had open is opened again on returning. */
+export const compositionContext = contextSlot<string | null>(() => useComposition.getState().finalId, (id) => { if (id && useComposition.getState().finalId !== id) void useComposition.getState().open(id) })

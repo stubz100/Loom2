@@ -5,7 +5,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { activeCatalogue, type CatalogueHook } from './catalogueContext'
 import { useCatalogue, useCataloguePane2, type CatalogueState } from './catalogueStore'
-import { useSession } from '../../store/session'
+import { navigate } from '../../frame/router'
 
 export type SplitMode = 'single' | 'stacked' | 'side'
 export type Place = 'unprocessed' | 'library' | 'trash' | { group: string }
@@ -44,7 +44,7 @@ export function openPlace(c: CatalogueState, place: Place): void {
  *  and the place opens in its active pane; the host's own grid stays what it was. A pane's own store opens it in place. */
 export function openPlaceFrom(host: CatalogueHook, place: Place): void {
   if (host === useCatalogue || host === useCataloguePane2) { openPlace(host.getState(), place); return }
-  useSession.getState().setSuite('catalogue')
+  navigate({ suite: 'catalogue' })
   const sp = useSplit.getState()
   openPlace(paneStore(sp.mode === 'single' ? 0 : sp.active).getState(), place)
 }

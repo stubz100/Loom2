@@ -36,6 +36,8 @@ import { fontFamilies, fontString } from './textFonts'
 import { padOf, type TextBlock } from './textRaster'
 import { onlyAssets, useDropTarget } from '../../frame/drag'
 import { editOpenDrop, layerDrop, refDrop } from '../../frame/dropRules'
+import { navigate } from '../../frame/router'
+import { registerKeyHost } from '../../frame/keyHosts'
 
 const TOOLS = TOOL_TABLE.map(([tool, label, key, icon]) => ({ tool, label, key, icon }))
 /** min, max, step for the numeric adjustment / filter parameters (names from compose.py). */
@@ -762,7 +764,6 @@ function TransformBar() {
 }
 
 function Strip() {
-  useEditKeys()
   const doc = useEditor((s) => s.doc)
   const dirty = useEditor((s) => s.docDirty)
   const zoom = useEditor((s) => s.zoom)
@@ -834,7 +835,7 @@ function Stage() {
       <h2>Edit</h2>
       {loading ? <p>loading document…</p> : <>
         <p>Select an asset in the Catalogue and press <kbd>E</kbd>, drop a tile here or on the Edit tab, or start empty.</p>
-        <p><button onClick={() => void ed().newDocument(1920, 1080)}>New 1920×1080 document</button> <button onClick={() => useSession.getState().setSuite('catalogue')}>Open the Catalogue</button></p>
+        <p><button onClick={() => void ed().newDocument(1920, 1080)}>New 1920×1080 document</button> <button onClick={() => navigate({ suite: 'catalogue' })}>Open the Catalogue</button></p>
         <RecentDocuments />
       </>}
       {error && <p style={{ color: 'var(--error)' }}>{error}</p>}
@@ -1213,7 +1214,7 @@ function useEditKeys() {
       // suite switch (Ctrl+1/2, 07 §4) yields to the view keys of 10 §5 while a document is open
       if (handleKeyFor('edit', e)) e.stopImmediatePropagation()
     }
-    const up = (e: KeyboardEvent) => { const b = command('edit.view.before')?.keys; if (b && e.key.toLowerCase() === parseChord(b).key) ed().setView({ before: false }) }
+    const up = (e: KeyboardEvent) => { if (useSession.getState().ui.suite !== 'edit') return; const b = command('edit.view.before')?.keys; if (b && e.key.toLowerCase() === parseChord(b).key) ed().setView({ before: false }) }
     const paste = (e: ClipboardEvent) => {                              // D46: Ctrl+V — an image from another app, or the editor's clipboard
       if (useSession.getState().ui.suite !== 'edit' || !ed().doc) return
       if (e.target instanceof Element && e.target.closest('input, textarea, [contenteditable], .modal')) return   // the target may be the window
@@ -1231,7 +1232,7 @@ function useEditKeys() {
     if (deep) {
       const tryOpen = () => {
         const st = ed()
-        if (!useSession.getState().project?.open || st.doc || st.loading) return false
+        if (!useSession.getState().project?.open || useSession.getState().ui.suite !== 'edit' || st.doc || st.loading) return false   // U1: as when it mounted with Edit's strip
         void st.openDocument(deep).then(() => {
           if (q.get('verify')) {                                                                        // wait for the renderer (GPU init is slow headless), then compare
             const t0 = Date.now(); const tick = () => { if (ed().extractor) void ed().compareWithExact(); else if (Date.now() - t0 < 30000) setTimeout(tick, 250) }; setTimeout(tick, 500)
@@ -1246,10 +1247,13 @@ function useEditKeys() {
       }
       if (!tryOpen()) unsubDeep = useSession.subscribe(() => { if (tryOpen()) unsubDeep() })
     }
-    ensureEditorAutosave()                                       // B20: survives suite switches (this hook unmounts with the strip)
+    ensureEditorAutosave()                                       // B20: survives suite switches (U1: the shell keeps this hook mounted)
     return () => { window.removeEventListener('keydown', down, { capture: true }); window.removeEventListener('keyup', up); window.removeEventListener('paste', paste); unsubDeep() }
   }, [])
 }
+
+// U1 (D157): the keys, paste, deep links and autosave are the shell's (frame/keyHosts.tsx), not the Strip's
+registerKeyHost('edit', function EditKeys() { useEditKeys(); return null })
 
 /** The empty Edit stage takes a dropped tile and opens it (frame/drag.ts). */
 function EmptyDrop({ children }: { children: React.ReactNode }) {

@@ -4,6 +4,7 @@ import { AppWindow, ArrowDown, ArrowLeft, ArrowLeftRight, ArrowRight, ArrowRight
 import { registerCommands, sep, type MenuItem, type OnItem } from '../../../frame/commands'
 import { askConfirm, askText, useSession } from '../../../store/session'
 import { useAnimate } from '../../animate/animateStore'
+import { clipList, loadClips } from '../../../store/clips'
 import { useStory } from '../storyStore'
 import { assembleLane, laneChanges, routeLabel, routePicks, updateClip, walkRoute } from './assemble'
 import { duration, ticks } from './lane'
@@ -61,7 +62,7 @@ export function laneChecklist(): { i: number; what: string }[] {
 export function laneBelowFormat(): { count: number; sizes: string[] } {
   const lane = sq().lane; const fmt = useSession.getState().project?.format
   if (!lane || !fmt) return { count: 0, sizes: [] }
-  const byId = new Map(an().clips.map((c) => [c.id, c]))
+  const byId = new Map(clipList().map((c) => [c.id, c]))
   const small = lane.clips.map((c) => byId.get(c.source)).filter((c): c is NonNullable<typeof c> => !!c && (Math.abs(c.w - fmt.width) > 32 || Math.abs(c.h - fmt.height) > 32))
   const sizes = [...new Set(small.sort((a, b) => b.w * b.h - a.w * a.h).map((c) => `${c.w}×${c.h}`))]
   return { count: small.length, sizes }
@@ -91,7 +92,7 @@ export async function assembleCut(picks: Record<string, string>, name: string | 
   if (name !== null && !(await sq().create(name))) return
   const cur = sq().current
   if (!cur) return
-  const { lane, missing } = assembleLane(walk.nodes, st.shots, new Map(an().clips.map((c) => [c.id, c])), cur.fps, name === null ? sq().lane : null)
+  const { lane, missing } = assembleLane(walk.nodes, st.shots, new Map(clipList().map((c) => [c.id, c])), cur.fps, name === null ? sq().lane : null)
   useSequence.setState({ current: { ...cur, route: routePicks(walk.choices) } })
   sq().apply(() => lane, 'assemble')
   const label = routeLabel(walk.choices)
@@ -103,8 +104,8 @@ const selChange = () => { const l = sq().lane; const i = sq().selected; return l
 const allChanges = () => { const l = sq().lane; return l ? laneChanges(l, useStory.getState().shots) : [] }
 /** *Update* the changes: each clip swapped for its shot's approved take, the trims kept (one undo step). */
 async function updateChanges(list: ReturnType<typeof allChanges>): Promise<void> {
-  if (list.some((x) => !an().clips.some((c) => c.id === x.clip))) await an().loadClips()          // a take made since the clips were listed
-  const byId = new Map(an().clips.map((c) => [c.id, c]))
+  if (list.some((x) => !clipList().some((c) => c.id === x.clip))) await loadClips()          // a take made since the clips were listed
+  const byId = new Map(clipList().map((c) => [c.id, c]))
   const ok = list.filter((x) => byId.has(x.clip))
   if (!ok.length) { useSession.getState().toast('The newer take is not loaded yet — try again in a moment', 'info'); return }
   if (isCut()) {                                                    // CE2: FilmCraft plays the new take in place; the edits around it stay
@@ -330,7 +331,7 @@ export function cutClipMenu(): MenuItem[] {
   const video = !!s && !!t && isVideo(t, s.track)
   const takes = s && t && video ? t.video[0].items.filter((i) => i.id !== s.item.id && i.kind === 'take') : []
   const colour: MenuItem[] = video ? [{ cmd: 'story.cut.grade.scene' }, { cmd: 'story.cut.grade.own' }, ...(takes.length ? [{ label: 'Match its colour to', icon: Palette, items: takes.map((i) => ({
-    label: itemLabel(i, useStory.getState().shots.find((x) => x.id === i.shot_id), an().clips.find((c) => c.id === i.clip_id)), run: () => void sq().cutGrade(s!.item.id, { match: i.id }) })) } as MenuItem] : []),
+    label: itemLabel(i, useStory.getState().shots.find((x) => x.id === i.shot_id), clipList().find((c) => c.id === i.clip_id)), run: () => void sq().cutGrade(s!.item.id, { match: i.id }) })) } as MenuItem] : []),
     { cmd: 'story.cut.grade.reset' }, sep] : []
   const look: MenuItem[] = video ? [...colour, { cmd: 'story.cut.dissolveIn' }, { cmd: 'story.cut.dissolveOut' }, { cmd: 'story.cut.dipIn' }, { cmd: 'story.cut.dipOut' }]
     : [{ cmd: 'story.cut.gain' }, { cmd: 'story.cut.fadeIn' }, { cmd: 'story.cut.fadeOut' }, { cmd: 'story.cut.duck' }, { cmd: 'story.cut.evenDialogue' }]   // CE3: a sound's verbs

@@ -15,6 +15,8 @@ import { profilesForMentions as profilesNow, styleFor } from '../story/storyStor
 import type { Profile } from '../../api/types'
 import { castOrigin, keptSubject, needsLook, sentIndex } from './subjectCast'
 import { adoptDescription, composeSheet, versionOf } from './sheet'
+import { navigate } from '../../frame/router'
+import { contextSlot } from '../../store/contexts'
 
 /** A subject card of the Tree prompt. D92: `profile_id` links it to a Cast character or prop — its version's reference set and LoRA ride on
  *  the profile mention the link records (never sent in the prompt itself). D93 (B4): a linked card has no words of its own — the server
@@ -689,13 +691,13 @@ export const useGenerate = create<GenerateState>()(
         if (!r) { useSession.getState().toast('This asset has no recipe to vary', 'error'); return }
         get().loadFromAsset(asset, false)
         get().set({ seed_mode: 'random', count: n })
-        useSession.getState().setSuite('generate')
+        navigate({ suite: 'generate' })
         await get().generate(false, origin)
       },
       rerun: async (asset, origin) => {
         if (!asset.params?.recipe) { useSession.getState().toast('This asset has no recipe to re-run', 'error'); return }
         get().loadFromAsset(asset, true)
-        useSession.getState().setSuite('generate')
+        navigate({ suite: 'generate' })
         await get().generate(false, origin)
       },
       loadFromAsset: (asset, keepSeeds = false) => {
@@ -713,7 +715,7 @@ export const useGenerate = create<GenerateState>()(
           const label = s.capabilities?.models[panelModel(p)]?.label ?? 'this model'
           s.toast(!max ? `${label} takes no reference images` : take.length ? `Added ${take.length}; ${fresh.length - take.length} over the limit of ${max} references on ${label}` : `All ${max} reference slots are full on ${label}`, take.length ? 'info' : 'error')
         }
-        if (take.length) { get().set({ refs: [...p.refs, ...take.map((asset_id) => ({ asset_id }))] }); s.setSuite('generate') }
+        if (take.length) { get().set({ refs: [...p.refs, ...take.map((asset_id) => ({ asset_id }))] }); navigate({ suite: 'generate' }) }
         return take.length
       },
       setModel: (id) => get().set(modelPatch(get().panel, id)),
@@ -782,3 +784,6 @@ function schedulePreview(get: () => GenerateState) {
 
 // V70: the capabilities arrive after the remembered panel — a model this build does not offer is settled then
 useSession.subscribe((s, prev) => { if (s.capabilities && s.capabilities !== prev.capabilities) settleModel(useGenerate.getState, useGenerate.setState) })
+
+/** U1 (D157, 06 §5.3): the Make panel per context (World: an entity version, a sketch) — saved on leaving, restored on returning. */
+export const makeContext = contextSlot<Panel>(() => structuredClone(useGenerate.getState().panel), (p) => useGenerate.getState().set(p))

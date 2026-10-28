@@ -12,6 +12,7 @@ import { askConfirm, useSession } from '../../store/session'
 import { forLabel, useMakeFor } from '../../store/origin'
 import { bodyHash, keyframesOf, sampleDoc, withKey, type SkeletonKey } from './anim'
 import { st, type SequenceRenderer } from './stageStore'
+import { navigate } from '../../frame/router'
 
 export type Rate = 16 | 24
 export interface PlanLayer { id: string; kind: 'plate' | 'figure' | 'prop' | 'shadows'; name: string; object_id: string | null; profile_id: string | null; version: string | null }
@@ -382,7 +383,7 @@ export const useFinals = create<FinalsState>((set, get) => ({
       if (useComposition.getState().finalId === id) void useComposition.getState().reload()
     } catch (e) { useSession.getState().toast(`Make the composition: ${(e as ApiError).detail ?? (e as Error).message ?? e}`, 'error') }
   },
-  openFinal: (id) => { void useComposition.getState().open(id); useSession.getState().setSuite('final') },   // D121: the Final level is a suite of its own
+  openFinal: (id) => { void useComposition.getState().open(id); navigate({ suite: 'final' }) },   // D121: the Final level is a suite of its own
   render: async (id) => {
     const f = get().finals.find((x) => x.id === id)
     if (!f) return
@@ -491,7 +492,7 @@ export const useFinals = create<FinalsState>((set, get) => ({
     const clip = get().finals.find((x) => x.id === id)?.clip_id
     if (!clip) return
     void import('../animate/animateStore').then(async (m) => {
-      useSession.getState().setSuite('animate')
+      navigate({ suite: 'animate' })
       const an = m.useAnimate.getState()
       await an.loadClips(); an.select(clip)
     })

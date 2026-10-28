@@ -14,7 +14,7 @@ import { loupeMedia, type LoupeMedia } from './media'
 
 interface Xf { s: number; x: number; y: number }
 
-function useZoomPan(fitFor: { w: number; h: number } | null) {
+export function useZoomPan(fitFor: { w: number; h: number } | null) {
   const [xf, setXf] = useState<Xf>({ s: 1, x: 0, y: 0 })
   const ref = useRef<HTMLDivElement>(null)
   const fit = useCallback(() => {
@@ -46,9 +46,10 @@ function useZoomPan(fitFor: { w: number; h: number } | null) {
 }
 
 const style = (xf: Xf) => ({ transform: `translate(${xf.x}px, ${xf.y}px) scale(${xf.s})` })
+export const xfStyle = style                                                   // D155: the detached window draws the same way
 
 /** D90 (B10): a clip plays in a <video>, a spoken line in an <audio> under its thumbnail — never an <img> of a file it cannot show. */
-function Playable({ m }: { m: LoupeMedia }) {
+export function Playable({ m }: { m: LoupeMedia }) {
   if (m.kind === 'video') return <video key={m.src} className="loupe-media" src={m.src} poster={m.poster} controls preload="metadata" aria-label="the clip" />
   if (m.kind === 'audio') return <div className="loupe-audio"><img src={m.poster} alt="" draggable={false} /><audio key={m.src} src={m.src} controls preload="metadata" aria-label="the spoken line" /></div>
   return null
@@ -78,7 +79,7 @@ export function Loupe({ asset }: { asset: Asset }) {
   const pinned = c.compare.indexOf(asset.id) + 1
   const subItems = (m: MenuItem): MenuItem[] => ('items' in m ? m.items : [])
   return (
-    <div className="loupe" tabIndex={0} onContextMenu={(e) => { if (!c.selected.includes(asset.id)) c.select(asset.id, 'single'); showMenu(e, [{ cmd: 'cat.prev' }, { cmd: 'cat.next' }, { cmd: 'cat.closeLoupe' }, sep, ...tileMenu()]) }}>
+    <div className="loupe" tabIndex={0} onContextMenu={(e) => { if (!c.selected.includes(asset.id)) c.select(asset.id, 'single'); showMenu(e, [{ cmd: 'cat.prev' }, { cmd: 'cat.next' }, { cmd: 'cat.closeLoupe' }, { cmd: 'cat.loupe.detach' }, sep, ...tileMenu()]) }}>
       <div className={`view${m.zoom ? '' : ' play'}`} ref={ref} {...(m.zoom ? handlers : {})}>
         {m.zoom ? <img src={m.src} alt="" style={style(xf)} draggable={false} /> : <Playable m={m} />}
       </div>
@@ -92,6 +93,7 @@ export function Loupe({ asset }: { asset: Asset }) {
         <span className="spacer" />
         {m.zoom ? <><span>{Math.round(xf.s * 100)}%</span><CommandButton id="cat.loupe.fit" text label="Fit" /><CommandButton id="cat.loupe.one" text label="1:1" /></>
           : m.kind === 'video' && m.clipId ? <CommandButton id="cat.animate" text label="Play in Animate" /> : null}
+        <CommandButton id="cat.loupe.detach" text label="Detach ↗" />
         <button className="quiet" onClick={() => c.openLoupe(null)}>Back (Esc)</button>
       </div>
       {/* D71 (P11): the loupe is the send-to hub — every verb of the tile menu on one bar; the secondary ones fold into More when narrow.

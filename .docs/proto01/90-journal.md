@@ -11156,3 +11156,27 @@ compose.py: a text layer is a raster layer that *also* carries its `text` block,
   check gained `text` (a real WebGPU window: the editor opens on a click, `Input.insertText`, Apply keeps the words on the layer whose
   pixels carry 4 817 inked of 27 390 at 415×66, the Inter face loaded, a size change to 96 with an outline re-rasterises to 834 px wide,
   one undo takes it back, Rasterize keeps the pixels — 11/11, screenshots under `.loom2_state/headed/text-*.png`). Offline 686 passed, Vitest 592 + 3 skipped, typecheck, build and lint clean, e2e 76/76 in the full run (alone), then the D154 scenario's locators fixed (the toolbox button by its name, the Layers tab back before the last look) and the scenario passed alone — 77 scenarios; agents_check and settings_audit clean.
+
+## 2026-10-28 16:43 — D155: the detachable loupe / player window (post-MVP item 9), built and checked
+
+The fifth post-MVP item: 07 §8's one-line open question ("a detachable Loupe/Player window for a second monitor") answered with the
+smallest design that keeps every rule — the same bundle in a second window, nothing edits from there. **D155** recorded first.
+
+- **The window.** `App.tsx` branches on `?view=loupe` and renders `frame/DetachedLoupe.tsx` (lazy, so the main window never loads it)
+  instead of the Frame. `loupeLink.openDetached(assetId)`: in the shell a `WebviewWindow` labelled `loupe` (1280×800; the capability
+  `default.json` lists the label and grants create-webview-window, set-focus, close, set-fullscreen, is-fullscreen, set-title — `cargo
+  check` clean in 13 s); in a browser a `window.open` popup carrying the token / port / host / theme of the main page's URL (`detachedUrl`).
+  Pressed again it focuses the window that is open and shows the asset there.
+- **The view.** Boots on its own: `discoverBackend` (the shell's handshake or the URL), `setBackend`, the media key from `/session` — no
+  session init, no events socket. Loads the asset by id (`GET /assets/{id}`) and shows the loupe's viewer (`useZoomPan`, `Playable`,
+  `xfStyle`, now exported from `Loupe.tsx`): zoom / pan, Fit / 1:1 (Ctrl+0 / Ctrl+Alt+0 as accelerators), a clip in its player, *Full
+  screen* (the shell's window or the Fullscreen API; Esc leaves it), *Close*. The title names the asset.
+- **The link.** One `BroadcastChannel` (`loom2-loupe`). The Catalogue's `Stage` publishes `show` with `followedAsset(loupe, primary)` — the
+  loupe's asset, else the primary selection — whenever it changes and answers the detached window's `hello`; the detached window follows
+  unless its *Following / Held* latch is pressed, and says `closed` on `pagehide`. D32: *Detach ↗* on the loupe's facts bar and in its
+  right-click (`cat.loupe.detach`, enabled with a loupe or a selection; no key — the second window is a mouse act).
+- **Tests.** `loupeLink.test.ts` 4 (what is followed; the URL with the browser's token / port / theme; one popup, a second press focuses
+  it and posts the asset, a closed popup is reopened; hello / show / closed over the channel and a listener leaving); the e2e scenario
+  (Detach opens a second page, its image is the loupe's; *Next image* in the main window moves it; *Following* pressed → held, the next
+  press leaves it; a screenshot `d155-detached.png`). The shell's path (the `WebviewWindow`) is the author's click-through — the e2e
+  runs in Edge where a popup stands in for it. Vitest 596 + 3 skipped, typecheck, build and lint clean, e2e 78/78 (alone), cargo check clean, agents_check clean; no orchestrator code changed (the offline suite stands at 686).

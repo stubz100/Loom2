@@ -1,12 +1,19 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "enables the default permissions",
+  "description": "enables the default permissions; D155: the main window may open the detached loupe window (label `loupe`), which may focus, go full screen, retitle and close itself",
   "windows": [
-    "main"
+    "main",
+    "loupe"
   ],
   "permissions": [
     "core:default",
-    "dialog:allow-open"
+    "dialog:allow-open",
+    "core:webview:allow-create-webview-window",
+    "core:window:allow-set-focus",
+    "core:window:allow-close",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-is-fullscreen",
+    "core:window:allow-set-title"
   ]
 }

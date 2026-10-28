@@ -120,6 +120,13 @@ Klein"). Advanced controls are behind a disclosure, remembered per suite.
 ### 3e. Command palette
 `Ctrl+K`: every verb and navigation target, fuzzy-searchable; shows the key binding.
 
+### 3f. The detached loupe / player window (D155, 2026-10-28)
+*Detach ↗* on the loupe's bar (and in its right-click) opens a second window of the same app — `?view=loupe`, a `WebviewWindow` labelled `loupe`
+in the shell, a popup in a browser — that boots against the backend on its own and shows the loupe's viewer alone: zoom / pan, Fit / 1:1, a clip in
+its player, full screen, close. It **follows** the main window over a `BroadcastChannel`: the loupe's asset, else the primary selection, until its
+*Following / Held* latch is pressed; a second *Detach* focuses the open window and shows the asset there. Nothing edits from the second screen: the
+verbs stay on the main window's loupe. Built for a second monitor; `frame/loupeLink.ts` and `frame/DetachedLoupe.tsx`.
+
 ## 4. Global keyboard map
 
 **Remappable (D72, 2026-10-11).** Every key below is a registry command's default; Settings › Keyboard changes them (search, by scope,
@@ -184,4 +191,4 @@ deep link for checks. Small grey text (`--fg3`) is `#8c8c8c` in Dark (was `#7474
 
 ## 8. Open questions
 - Whether the Models suite is a full tab (proposed) or a Settings page.
-- Multi-window: a detachable Loupe/Player window for a second monitor (post-MVP).
+- ~~Multi-window: a detachable Loupe/Player window for a second monitor (post-MVP).~~ Built: §3f (D155, 2026-10-28).

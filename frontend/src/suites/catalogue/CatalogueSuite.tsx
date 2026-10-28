@@ -21,6 +21,7 @@ import { showMenu } from '../../frame/ContextMenu'
 import { madeForIdea, prototypeItems } from '../story/prototype'
 import { isMenuFromKeys } from '../../frame/useKeyboardMap'                // D90 (B16): Shift+F10 with a selection opens the tile menu
 import { frameUseLabel, gridMenu, headerMenu, tileMenu } from './catalogueCommands'
+import { followedAsset, onLoupe, postLoupe } from '../../frame/loupeLink'
 import { useMakeFor } from '../../store/origin'
 import { useStory } from '../story/storyStore'
 import { CatalogueStrip, EmptyTrashButton } from './CatalogueStrip'
@@ -127,6 +128,10 @@ export function Stage() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(1000)
   useActiveCatalogue()
+  // D155: the detached window follows the loupe's asset, else the primary selection; it says hello when it opens and gets the current one
+  const followed = followedAsset(c.loupe, c.primary)
+  useEffect(() => { postLoupe({ type: 'show', assetId: followed }) }, [followed])
+  useEffect(() => onLoupe((m) => { if (m.type === 'hello') postLoupe({ type: 'show', assetId: followed }) }), [followed])
   const compareOpen = c.compareOpen
   useEffect(() => {
     const el = scrollRef.current

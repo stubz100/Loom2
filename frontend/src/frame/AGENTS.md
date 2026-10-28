@@ -127,6 +127,14 @@ into a place (`goToOrigin`, the Dock's "Go to origin"). Interim strips list thei
 and replies come from `frontend/src/api/schema.d.ts`, generated from the orchestrator. `frontend/src/api/types.ts` re-exports the reply types
 (never hand-write an API shape). Bytes and URLs stay on `api.putBlob` / `api.thumbUrl` / `api.assetUrl` / `api.fileUrl`.
 
+## The detached loupe (D155)
+
+`?view=loupe` makes `App.tsx` render `DetachedLoupe.tsx` (lazy) instead of the Frame: a second window — `openDetached` in `loupeLink.ts` opens a
+`WebviewWindow` labelled `loupe` in the shell (the capability in `src-tauri/capabilities/default.json` names the label and its window permissions)
+or a `window.open` popup in a browser, with the browser's token / port in the URL. The windows talk over one `BroadcastChannel` (`loom2-loupe`):
+the Catalogue's `Stage` publishes `show` with `followedAsset(loupe, primary)` and answers `hello`; the detached view follows unless held. It boots
+with `discoverBackend` + `setBackend` + the media key only (no session init, no events socket) and reuses the loupe's `useZoomPan` / `Playable`.
+
 ## Checks
 
 `npm run build` (tsc + vite), `npm run lint`, **`npm test`** (Vitest + jsdom, `src/**/*.test.ts(x)`, 560+ tests in ≈ 8 s — incl. `commandAudit.test.ts`, the

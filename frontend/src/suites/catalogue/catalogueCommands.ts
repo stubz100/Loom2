@@ -10,6 +10,7 @@ import { askConfirm, askText, useSession } from '../../store/session'
 import { flatGroups, useAlbum } from './albumStore'
 import { activeCatalogue } from './catalogueContext'
 import { catView } from './viewKeys'
+import { followedAsset, openDetached } from '../../frame/loupeLink'
 import { allPlaced } from './placement'
 import type { Asset, JobOrigin } from '../../api/types'
 import { originFor, useMakeFor } from '../../store/origin'
@@ -157,6 +158,9 @@ registerCommands([
   // D72: the loupe's and compare's own keys, now remappable (the buttons in their bars are these commands)
   { id: 'cat.loupe.fit', scope: 'catalogue', label: 'Fit to view', keys: 'Ctrl+0', placement: ['toolbar'], when: () => !!catView.fit, run: () => catView.fit?.() },
   { id: 'cat.loupe.one', scope: 'catalogue', label: 'Actual pixels (1:1)', keys: 'Ctrl+Alt+0', placement: ['toolbar'], when: () => !!catView.one, run: () => catView.one?.() },
+  // D155: the detached loupe / player window — it follows what the loupe shows (else the selection); pressed again it focuses the open window
+  { id: 'cat.loupe.detach', scope: 'catalogue', label: 'Detach the loupe', icon: ExternalLink, placement: ['toolbar', 'context'], when: () => !!cat().loupe || !!cat().primary,
+    hint: 'a second window that follows what the loupe shows — for another monitor', run: () => { void openDetached(followedAsset(cat().loupe, cat().primary)) } },
   { id: 'cat.compare.swap', scope: 'catalogue', label: 'Swap the compared images', icon: ArrowLeftRight, keys: 'Tab', placement: ['toolbar'], when: () => !!catView.swap, run: () => catView.swap?.() },
   { id: 'cat.lineage', scope: 'catalogue', label: 'Show lineage', icon: GitBranch, keys: 'L', placement: ['context', 'inspector'], when: () => !!cat().primary, run: () => cat().openLineage(cat().primary) },
 ])

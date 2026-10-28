@@ -367,6 +367,28 @@ test('text layers (D154): the Text tool places text typed in place; the layer is
   await expect(row.locator('.kind')).not.toContainText('T ·')
 })
 
+test('the detachable loupe (D155): Detach opens a second window that follows the loupe until it is held', async ({ page, context }) => {
+  await openApp(page, { suite: 'catalogue' })
+  await tiles(page).nth(7).dblclick()
+  await expect(page.locator('.loupe')).toBeVisible()
+  const [popup] = await Promise.all([context.waitForEvent('page'), page.locator('.loupe .facts').getByRole('button', { name: /^Detach/ }).click()])
+  await popup.waitForLoadState()
+  const img = popup.locator('.detached-loupe .view img')
+  await expect(img).toBeVisible({ timeout: 30_000 })
+  const src0 = (await img.getAttribute('src'))!
+  expect(src0).toContain('/assets/')
+  await page.locator('.loupe .facts').getByRole('button', { name: 'Next image' }).click()           // the main window moves on: the second follows
+  await expect.poll(() => img.getAttribute('src')).not.toBe(src0)
+  await popup.getByRole('button', { name: /^Following/ }).click()                                  // held: it stays
+  const held = await img.getAttribute('src')
+  await page.locator('.loupe .facts').getByRole('button', { name: 'Next image' }).click()
+  await page.waitForTimeout(600)
+  expect(await img.getAttribute('src')).toBe(held)
+  await expect(popup.locator('.detached-loupe')).toHaveAttribute('data-following', 'held')
+  await popup.screenshot({ path: 'node_modules/.e2e/d155-detached.png' })
+  await popup.close()
+})
+
 test('remappable keys (D72): Pin for compare to G is refused (Cycle grouping has it); to J — menu, tooltip and help show J, J pins, C does not, it survives a reload', async ({ page }) => {
   await openApp(page, { suite: 'catalogue' })
   const openKeys = async () => {

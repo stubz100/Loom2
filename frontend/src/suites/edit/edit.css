@@ -20,6 +20,14 @@
 
 .tool-opts { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 8px 10px; align-items: center; }   /* the value column never grows past the panel */
 .tool-opts > * { min-width: 0; }
+/* D152: the AI tab's reference deck — Generate's slots (generate.css is the Generate suite's; Edit loads on its own, D69) */
+.tool-opts .ref-slots { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.tool-opts .ref-slot { position: relative; border: 1px dashed var(--line2); border-radius: var(--radius); aspect-ratio: 1; display: grid; place-items: center; color: var(--fg3); font-size: 11px; overflow: hidden; background: var(--bg2); }
+.tool-opts .ref-slot img { width: 100%; height: 100%; object-fit: cover; }
+.tool-opts .ref-slot .n { position: absolute; top: 4px; left: 4px; background: var(--accent); color: var(--accent-fg); font-weight: 700; font-size: 11px; border-radius: 4px; padding: 0 6px; }
+.tool-opts .ref-slot .x { position: absolute; top: 4px; right: 4px; }
+.tool-opts .ref-slot .mv { position: absolute; bottom: 4px; left: 4px; }
+.tool-opts .ref-slot.over { border-color: var(--accent); color: var(--fg); }
 .tool-opts label { color: var(--fg2); }
 .tool-opts .slider { display: flex; gap: 6px; align-items: center; }
 .tool-opts .slider input[type=range] { flex: 1; min-width: 0; }

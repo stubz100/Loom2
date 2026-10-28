@@ -186,6 +186,10 @@ def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = 
     else:
         keep = ("mode", "model_id", "source", "strength", "margin_pct", "min_size", "feather", "expand", "blend", "refine", "refine_model_id", "as_layer", "op", "max_size")
         params = {k: v for k, v in recipe.model_dump().items() if k in keep}
+        if isinstance(recipe, (Inpaint, I2I)):                        # D152: the deck the model takes, and what it leaves out
+            spec = registry.get(recipe.model_id)
+            kept = kept_refs(recipe, spec) if spec else []
+            params |= {"refs": len(kept), "max_refs": (spec.inputs.refs_max if spec and spec.graph in registry.FLUX_GRAPHS else 0), "refs_dropped": max(0, len(recipe.refs) - len(kept))}
         est = doc_estimate_seconds(recipe, variant)
     resolved = isinstance(recipe, (Reangle, StageShot))               # the model the method runs in this build, not the property's `full` answer
     return Plan(kind=recipe.kind, model_id=None if quick else str(params["model_id"]) if resolved else getattr(recipe, "model_id", None), engine=not quick,
@@ -292,8 +296,8 @@ async def finalize(job: JobRecord, recipe: AnyRecipe, q: JobQueue) -> Submission
             object_info = await q.object_info_refresh()
     ref_files: dict[str, str] = {}
     refs = getattr(recipe, "refs", []) or []
-    if isinstance(recipe, T2I) and (spec := registry.get(recipe.model_id)):
-        refs = kept_refs(recipe, spec)                                 # D73: references over the model's limit are not uploaded (preview says so)
+    if isinstance(recipe, (T2I, Inpaint, I2I)) and (spec := registry.get(recipe.model_id)):
+        refs = kept_refs(recipe, spec)                                 # D73 / D152: references over the model's limit are not uploaded (preview says so)
     for ref in refs:
         key = ref.asset_id or ref.blob or ""
         src = None

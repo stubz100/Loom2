@@ -1,6 +1,6 @@
 // Edit suite (10): toolbox and tool options in the Panel, zoom/overlay strip, PixiJS stage, inspector with
 // Layers / Properties / History / Info; Save (the document and a Catalogue version, D95) · Export as the pinned primary actions.
-import { Ellipsis, Eye, EyeOff, Link2, Lock, LockOpen, SlidersHorizontal, Sparkles, Trash2, Unlink2 } from 'lucide-react'
+import { Ellipsis, Eye, EyeOff, Link2, Lock, LockOpen, SlidersHorizontal, Sparkles, Trash2, Unlink2, X } from 'lucide-react'
 import { Help } from '../../frame/Help'
 import { PresetPanel } from '../../frame/PresetPanel'
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
@@ -8,7 +8,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { api, http, unwrap } from '../../api/client'
 import { isDocumentPreview, type DocumentPreview, type DocumentRecipe } from '../../api/types'
 import { CommandButton, CommandRow, MenuButton } from '../../frame/CommandButton'
-import { command, handleKeyFor, isEnabled, markUsed, matchesCommand, parseChord, runCommand, titleFor, type MenuItem } from '../../frame/commands'
+import { command, handleKeyFor, isEnabled, markUsed, matchesCommand, parseChord, runCommand, sep, titleFor, type MenuItem } from '../../frame/commands'
 import { useKeymap } from '../../frame/keymap'
 import { openPressMenu, showMenu } from '../../frame/ContextMenu'
 import { DEV_HOOKS } from '../../devHooks'
@@ -32,7 +32,7 @@ import { useAiPanel, type AiOp, type AiPanelState } from './aiPanelStore'
 import { planSize } from './planSize'
 import './edit.css'
 import { onlyAssets, useDropTarget } from '../../frame/drag'
-import { editOpenDrop, layerDrop } from '../../frame/dropRules'
+import { editOpenDrop, layerDrop, refDrop } from '../../frame/dropRules'
 
 const TOOLS = TOOL_TABLE.map(([tool, label, key, icon]) => ({ tool, label, key, icon }))
 /** min, max, step for the numeric adjustment / filter parameters (names from compose.py). */
@@ -274,6 +274,46 @@ function SelectionTab() {
   )
 }
 
+/** D152: the reference deck in the AI tab — Generate's slots (drop a Catalogue tile, ✕, ◀, a right-click), the model's limit; a model that
+ *  takes none says so. The images go in after the region's own (a character's face, a material the fill should match). */
+function RefSlotsAi({ model }: { model: string }) {
+  const p = useAiPanel()
+  const caps = useSession((s) => s.capabilities)
+  const max = aiModels({ p, caps }).refsMax(model)
+  const current = p.refs.map((r) => r.asset_id)
+  const { ref: dropRef, over } = useDropTarget((d) => onlyAssets(d) && refDrop(current, d, max).verdict.ok,
+    (d) => { const { take, verdict } = refDrop(current, d, max); p.addRefs(take); if (verdict.ok && verdict.label?.includes(' · ')) useSession.getState().toast(verdict.label.replace(/^Add/, 'Added'), 'info') },
+    (d) => refDrop(current, d, max).verdict)
+  if (!max) return p.refs.length ? <><label /><p className="hint">{caps?.models[model]?.label ?? model} takes no reference images — the {p.refs.length} in the deck are not sent <CommandButton id="edit.ai.clearRefs" text /></p></> : null
+  const slots = Array.from({ length: Math.min(10, Math.max(max, p.refs.length)) }, (_, i) => p.refs[i])
+  return (
+    <>
+      <label>references</label>
+      <div ref={dropRef} className="ref-slots ai-refs" data-max={max}>
+        {slots.map((r, i) => (
+          <div key={i} className={`ref-slot${over ? ' over' : ''}`} title={r ? `reference image ${i + 1}` : `drop a Catalogue tile here · reference ${i + 1} of ${max}`}
+            onContextMenu={(e) => { if (!r) return; showMenu(e, [
+              { label: 'Remove reference', icon: X, run: () => p.removeRef(r.asset_id) },
+              { label: 'Move first', disabled: i === 0, run: () => p.moveRef(i, 0) },
+              { label: 'Move left', disabled: i === 0, run: () => p.moveRef(i, i - 1) },
+              { label: 'Move right', disabled: i >= p.refs.length - 1, run: () => p.moveRef(i, i + 1) },
+              sep, { cmd: 'edit.ai.clearRefs' },
+            ]) }}>
+            {r ? <>
+              <img src={api.thumbUrl(r.asset_id, 256)} alt="" />
+              <span className="n">{i + 1}</span>
+              <button className="quiet x" title="Remove" onClick={() => p.removeRef(r.asset_id)}>✕</button>
+              {i > 0 && <button className="quiet mv" title="Move left" onClick={() => p.moveRef(i, i - 1)}>◀</button>}
+            </> : <span className="empty">{i + 1}</span>}
+          </div>
+        ))}
+      </div>
+      {p.refs.length > 0 && <><label>downscale</label><div><select value={p.refMaxPx} onChange={(e) => p.set({ refMaxPx: Number(e.target.value) })} title="a 1024² reference ≈ 4 096 tokens"><option value={512}>≤ 512²</option><option value={768}>≤ 768²</option><option value={1024}>≤ 1024²</option></select> <CommandButton id="edit.ai.clearRefs" text /></div></>}
+      <Help className="full" text={`Reference images go in after the region itself — a character's face, a material the fill should match. ${caps?.models[model]?.label ?? 'The model'} takes up to ${max}; drop Catalogue tiles on the slots, right-click a slot to move or remove one. The preview says how many go in.`} />
+    </>
+  )
+}
+
 /** D45 Refine Edge: settings over /capabilities.refine_edge (ranges and defaults from the server, T8); one undo step per run. */
 function RefineEdgeControls() {
   const caps = useSession((s) => s.capabilities?.refine_edge)
@@ -417,6 +457,7 @@ function AiTab() {
           </select>
           {mode === 'remove' && contentAware && <><label /><label className="chk" title="the hole is content-aware filled (PhotoCraft, CPU) and the model starts from that instead of a grey hole — try it where Remove leaves an object's ghost"><input type="checkbox" checked={p.prefill} onChange={(e) => setP({ prefill: e.target.checked })} /> pre-fill the hole (content-aware)</label></>}
           {mode === 'quick_remove' && <Help className="full" text={"PhotoCraft's content-aware fill on the CPU — no model, no GPU, a few seconds; best on small or textured areas, it smears large ones."} />}
+          {mode !== 'quick_remove' && mode !== 'remove' && <RefSlotsAi model={mode === 'fill_hero' && heroId ? heroId : kleinId} />}
           {mode !== 'quick_remove' && <><label>prompt</label><textarea value={p.prompt} rows={3} placeholder={p.mode === 'remove' ? 'what is behind: "wet cobblestones and a brick wall"' : 'what to paint there'} onChange={(e) => setP({ prompt: e.target.value })} />
 </>}
           {advanced('inpaint', <>
@@ -433,6 +474,7 @@ function AiTab() {
         {p.op === 'outpaint' && <>
           <label>grow</label><div className="grow-grid">{(['left', 'top', 'right', 'bottom'] as const).map((k) => <span key={k} className="grow-cell"><small>{k}</small><ValueField bare label={`grow ${k}`} value={p.pad[k]} min={0} max={2048} step={16} unit="px" onChange={(v) => setP({ pad: { ...p.pad, [k]: v } })} /></span>)}</div>
           <label>prompt</label><textarea value={p.prompt} rows={3} placeholder="what continues beyond the edge" onChange={(e) => setP({ prompt: e.target.value })} />
+          <RefSlotsAi model={outpaintId} />
           <label>model</label><div className="segmented"><button className={!hero ? 'active' : ''} onClick={() => setP({ outpaintHero: false, candidates: 4 })}>{fam(kleinId) || 'default'} + LanPaint</button>{heroId && <button className={hero ? 'active' : ''} onClick={() => setP({ outpaintHero: true, candidates: 2 })}>{capModels?.[heroId]?.short ?? heroId} (hero)</button>}</div>
           {advanced('outpaint', <>
           <EncoderPick model={outpaintId} />
@@ -444,6 +486,7 @@ function AiTab() {
           <label>on</label><div className="segmented">{(['visible', 'active', 'selection'] as const).map((s) => <button key={s} className={p.refineSource === s ? 'active' : ''} onClick={() => setP({ refineSource: s })}>{s}</button>)}</div>
           <Slider label="strength" value={p.strength} min={0.1} max={0.8} step={0.01} onChange={(v) => setP({ strength: v })} />
           <label>prompt</label><textarea value={p.prompt} rows={3} placeholder="defaults to the source asset's prompt when empty" onChange={(e) => setP({ prompt: e.target.value })} />
+          <RefSlotsAi model={refineModel} />
           {advanced('refine', <>
           <EncoderPick model={refineModel} />
           {p.refineSource === 'selection' && <Slider label="feather" value={p.feather} min={0} max={64} step={1} unit="px" onChange={(v) => setP({ feather: v })} />}
@@ -480,6 +523,8 @@ function AiTab() {
         {running.length > 0 && <span className="kind">{running.filter((j) => j.status === 'running').length ? `running · ${Math.round((running.find((j) => j.status === 'running')?.progress ?? 0) * 100)} %` : `${running.length} queued`}</span>}
       </div>}
       {reason && <p className="hint" style={{ marginTop: 6 }}>{reason}</p>}
+      {p.op !== 'select' && typeof preview?.params?.refs === 'number' && ((preview.params.refs as number) > 0 || (preview.params.refs_dropped as number) > 0) && (
+        <p className={`hint${(preview.params.refs_dropped as number) > 0 ? ' warn' : ''}`} style={{ marginTop: 6 }}>references {preview.params.refs as number} of {preview.params.max_refs as number}{(preview.params.refs_dropped as number) > 0 ? ` — ${preview.params.refs_dropped as number} over the limit left out` : ''}</p>)}   {/* D152 */}
       {engineSize && <p className="hint" style={{ marginTop: 6 }}>engine image ≈ {engineSize.w}×{engineSize.h} ({engineSize.scale > 1.01 ? `upscaled ×${engineSize.scale.toFixed(2)}` : engineSize.scale < 0.99 ? `downscaled ×${engineSize.scale.toFixed(2)} to stay within 1 MP` : '1:1'})</p>}
       {p.op !== 'select' && <p className="hint" style={{ marginTop: 8 }}><Help text={"Runs on the saved document; results come back as layers in an \"AI\" group with the recipe attached."} />{preview?.estimate?.seconds != null ? ` ≈ ${fmtSeconds(preview.estimate.seconds)} per ${p.op === 'upscale' ? 'run' : 'candidate'} — ${preview.estimate.source}.` : ''}</p>}
       {p.op !== 'select' && preview && preview.missing.length > 0 && <p className="hint warn" style={{ marginTop: 6 }}>weights not fetched: {preview.missing.map((m) => m.model_id).join(', ')} — fetch them in Models</p>}

@@ -431,9 +431,38 @@ def flatten_json_prompt(p: dict | list | str | int | float | None, depth: int = 
     return ". ".join(parts) if depth == 0 else ", ".join(parts)
 
 
-def kept_refs(recipe: T2I, spec: ModelSpec) -> list:
-    """D73: the references the model takes (its `refs_max`, in order); the rest are dropped — and said so (`refs_dropped`), never silently."""
-    return recipe.refs[: spec.inputs.refs_max]
+def kept_refs(recipe: T2I | Inpaint | I2I, spec: ModelSpec) -> list:
+    """D73: the references the model takes (its `refs_max`, in order); the rest are dropped — and said so (`refs_dropped`), never silently.
+    D152: the Edit graphs chain references only on the FLUX.2 family (ReferenceLatent); another family takes none there."""
+    limit = spec.inputs.refs_max if isinstance(recipe, T2I) or spec.graph in registry.FLUX_GRAPHS else 0
+    return recipe.refs[:limit]
+
+
+def _ref_chain(g: dict[str, Any], cond: list, refs: list, ref_files: dict[str, str] | None, vae: list, max_px: int, nid: int = 30) -> tuple[list, int]:
+    """D73 / D152: the reference images chained on the conditioning — LoadImage → (an ImageScale guard) → VAEEncode → ReferenceLatent each —
+    as the T2I graph has done since D73 (node ids from 30); the Edit graphs chain them after the source's own ReferenceLatent. Returns the
+    conditioning the sampler takes, and the next free node id."""
+    ref_files = ref_files or {}
+    for i, ref in enumerate(refs):
+        key = ref.asset_id or ref.blob or ""
+        name = ref_files.get(key)
+        if not name:
+            raise CompileError(f"reference {i + 1} ({key}) was not uploaded to the engine")
+        g[str(nid)] = {"class_type": "LoadImage", "inputs": {"image": name}}
+        img: list = [str(nid), 0]
+        nid += 1
+        if max_px:
+            g[str(nid)] = {"class_type": "ImageScale", "inputs": {"image": img, "upscale_method": "lanczos", "width": int(max_px), "height": int(max_px), "crop": "disabled"}}
+            # ImageScale needs both sizes; the orchestrator pre-fits references to ≤ max_px² before upload, so this is a no-op guard
+            img = [str(nid), 0]
+            nid += 1
+        g[str(nid)] = {"class_type": "VAEEncode", "inputs": {"pixels": img, "vae": vae}}
+        lat = [str(nid), 0]
+        nid += 1
+        g[str(nid)] = {"class_type": "ReferenceLatent", "inputs": {"conditioning": cond, "latent": lat}}
+        cond = [str(nid), 0]
+        nid += 1
+    return cond, nid
 
 
 def _unmention(v: Any, names: list[str]) -> Any:
@@ -704,29 +733,8 @@ def build_t2i(recipe: T2I, roster: Roster, seed: int, out_prefix: str, ref_files
                                                               "temporal_size": 64, "temporal_overlap": 8}}
     else:
         g["10"] = {"class_type": "VAEDecode", "inputs": {"samples": ["9", 0], "vae": vae}}
-    # reference images: LoadImage → (downscale) → VAEEncode → ReferenceLatent chained on the conditioning
-    cond: list = ["5", 0]
-    nid = 30
-    ref_files = ref_files or {}
-    for i, ref in enumerate(kept_refs(recipe, spec)):
-        key = ref.asset_id or ref.blob or ""
-        name = ref_files.get(key)
-        if not name:
-            raise CompileError(f"reference {i + 1} ({key}) was not uploaded to the engine")
-        g[str(nid)] = {"class_type": "LoadImage", "inputs": {"image": name}}
-        img: list = [str(nid), 0]
-        nid += 1
-        if recipe.ref_max_px:
-            g[str(nid)] = {"class_type": "ImageScale", "inputs": {"image": img, "upscale_method": "lanczos", "width": int(recipe.ref_max_px), "height": int(recipe.ref_max_px), "crop": "disabled"}}
-            # ImageScale needs both sizes; the orchestrator pre-fits references to ≤ ref_max_px² before upload, so this is a no-op guard
-            img = [str(nid), 0]
-            nid += 1
-        g[str(nid)] = {"class_type": "VAEEncode", "inputs": {"pixels": img, "vae": vae}}
-        lat = [str(nid), 0]
-        nid += 1
-        g[str(nid)] = {"class_type": "ReferenceLatent", "inputs": {"conditioning": cond, "latent": lat}}
-        cond = [str(nid), 0]
-        nid += 1
+    # reference images: LoadImage → (downscale) → VAEEncode → ReferenceLatent chained on the conditioning (D152: one helper with the Edit graphs)
+    cond, nid = _ref_chain(g, ["5", 0], kept_refs(recipe, spec), ref_files, vae, recipe.ref_max_px)
     positive: list = cond
     if fam.flux_guidance:
         g["6"] = {"class_type": "FluxGuidance", "inputs": {"conditioning": cond, "guidance": float(ep["guidance"])}}
@@ -814,7 +822,7 @@ def _image_loaders(g: dict[str, Any], roster: Roster, spec: ModelSpec, te_id: st
 
 
 def build_inpaint(recipe: Inpaint, roster: Roster, seed: int, out_prefix: str, image_name: str, mask_name: str, w: int, h: int,
-                  variant: str = "full") -> Compiled:
+                  variant: str = "full", ref_files: dict[str, str] | None = None) -> Compiled:
     model_id = inpaint_model_id(recipe, variant)
     spec = image_spec(model_id, "preset for inpaint model")
     sm = spec.sampling
@@ -836,7 +844,8 @@ def build_inpaint(recipe: Inpaint, roster: Roster, seed: int, out_prefix: str, i
         g["6"] = {"class_type": "FluxGuidance", "inputs": {"conditioning": ["5", 0], "guidance": guidance}}
         g["7"] = {"class_type": "LanPaint_ImageEncode", "inputs": {"image": image, "vae": ["3", 0], "mask": mask}}
         g["8"] = {"class_type": "ReferenceLatent", "inputs": {"conditioning": ["6", 0], "latent": ["7", 0]}}
-        g["9"] = {"class_type": "BasicGuider", "inputs": {"model": model_link, "conditioning": ["8", 0]}}
+        cond, _ = _ref_chain(g, ["8", 0], kept_refs(recipe, spec), ref_files, ["3", 0], recipe.ref_max_px)   # D152: the deck after the source
+        g["9"] = {"class_type": "BasicGuider", "inputs": {"model": model_link, "conditioning": cond}}
         g["10"] = {"class_type": "RandomNoise", "inputs": {"noise_seed": int(seed)}}
         g["11"] = {"class_type": "KSamplerSelect", "inputs": {"sampler_name": "euler"}}
         g["12"] = {"class_type": "Flux2Scheduler", "inputs": {"steps": steps, "width": w, "height": h}}
@@ -857,7 +866,8 @@ def build_inpaint(recipe: Inpaint, roster: Roster, seed: int, out_prefix: str, i
             ref_pixels = ["16", 0]
         g["7"] = {"class_type": "VAEEncode", "inputs": {"pixels": ref_pixels, "vae": ["3", 0]}}
         g["8"] = {"class_type": "ReferenceLatent", "inputs": {"conditioning": ["5", 0], "latent": ["7", 0]}}
-        g["9"] = {"class_type": "InpaintModelConditioning", "inputs": {"positive": ["8", 0], "negative": ["6", 0], "vae": ["3", 0], "pixels": image, "mask": mask, "noise_mask": True}}
+        cond, _ = _ref_chain(g, ["8", 0], kept_refs(recipe, spec), ref_files, ["3", 0], recipe.ref_max_px)   # D152: the deck after the source
+        g["9"] = {"class_type": "InpaintModelConditioning", "inputs": {"positive": cond, "negative": ["6", 0], "vae": ["3", 0], "pixels": image, "mask": mask, "noise_mask": True}}
         g["10"] = {"class_type": "DifferentialDiffusion", "inputs": {"model": model_link}}
         g["11"] = {"class_type": "KSampler", "inputs": {"model": ["10", 0], "seed": int(seed), "steps": int(sm.steps), "cfg": float(sm.cfg),
                                                         "sampler_name": "euler", "scheduler": "simple", "positive": ["9", 0], "negative": ["9", 1],
@@ -866,11 +876,12 @@ def build_inpaint(recipe: Inpaint, roster: Roster, seed: int, out_prefix: str, i
         g["13"] = {"class_type": "ImageCompositeMasked", "inputs": {"destination": image, "source": ["12", 0], "x": 0, "y": 0, "resize_source": False, "mask": mask}}
         out = "13"
         summary |= {"sampler": "icm", "steps": int(sm.steps), "cfg": float(sm.cfg), "hole": recipe.mode == "remove", "prefill": bool(recipe.prefill)}
+    summary["refs"] = len(kept_refs(recipe, spec))
     g["99"] = {"class_type": "SaveImage", "inputs": {"images": [out, 0], "filename_prefix": out_prefix}}
     return Compiled(graph=g, output_node="99", summary=summary, serialized_prompt=prompt)
 
 
-def build_i2i(recipe: I2I, roster: Roster, seed: int, out_prefix: str, image_name: str, w: int, h: int) -> Compiled:
+def build_i2i(recipe: I2I, roster: Roster, seed: int, out_prefix: str, image_name: str, w: int, h: int, ref_files: dict[str, str] | None = None) -> Compiled:
     spec = image_spec(recipe.model_id, "preset for refine model")
     sm = spec.sampling
     if not spec.recipes.i2i:
@@ -894,6 +905,8 @@ def build_i2i(recipe: I2I, roster: Roster, seed: int, out_prefix: str, image_nam
     if fam.flux_guidance:
         g["6"] = {"class_type": "FluxGuidance", "inputs": {"conditioning": ["5", 0], "guidance": float(sm.guidance)}}
         positive = ["6", 0]
+    if flux:                                                                        # D152: the deck's references on the FLUX.2 family (ReferenceLatent)
+        positive, _ = _ref_chain(g, positive, kept_refs(recipe, spec), ref_files, vae, recipe.ref_max_px)
     if sm.edit_negative == "zero_out" or (not flux and sm.distilled):
         g["7"] = {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["5", 0]}}
     else:
@@ -1594,10 +1607,10 @@ def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V | Reangle | Instr
         c = build_t2i(recipe, roster, seed, out_prefix, ref_files)
     elif isinstance(recipe, Inpaint):
         i = inputs or {}
-        c = build_inpaint(recipe, roster, seed, out_prefix, i["image"], i["mask"], int(i["w"]), int(i["h"]), variant)
+        c = build_inpaint(recipe, roster, seed, out_prefix, i["image"], i["mask"], int(i["w"]), int(i["h"]), variant, ref_files=ref_files)
     elif isinstance(recipe, I2I):
         i = inputs or {}
-        c = build_i2i(recipe, roster, seed, out_prefix, i["image"], int(i["w"]), int(i["h"]))
+        c = build_i2i(recipe, roster, seed, out_prefix, i["image"], int(i["w"]), int(i["h"]), ref_files=ref_files)
     elif isinstance(recipe, Upscale):
         i = inputs or {}
         c = build_upscale(recipe, roster, out_prefix, i["image"], int(i.get("w", 0)), int(i.get("h", 0)), seed)

@@ -320,6 +320,26 @@ test("Instruct (D151): the AI tab's edit by instruction — the deep link opens 
   await expect.poll(() => editorTool(page), { timeout: 30_000 }).toMatchObject({ tool: 'ai', op: 'instruct' })
 })
 
+test("the reference deck (D152): Inpaint and Refine show the model's slots in the AI tab, Remove shows none; the deck keeps its shape across operations", async ({ page }) => {
+  await openApp(page, { suite: 'catalogue' })
+  await tiles(page).nth(8).click()
+  await page.locator('.insp .quick-card', { hasText: 'Select subject' }).click()                         // Edit with a document (D71)
+  await expect.poll(() => editorTool(page), { timeout: 30_000 }).toMatchObject({ doc: true, tool: 'ai' })
+  await page.getByRole('button', { name: 'Inpaint', exact: true }).click()
+  const slots = page.locator('.ref-slots.ai-refs')
+  await expect(slots).toBeVisible()
+  const max = Number(await slots.getAttribute('data-max'))
+  expect(max).toBeGreaterThanOrEqual(1)
+  await expect(slots.locator('.ref-slot')).toHaveCount(max)
+  await expect(slots.locator('.ref-slot').first()).toHaveAttribute('title', /drop a Catalogue tile here/)
+  await page.screenshot({ path: 'node_modules/.e2e/d152-refs.png' })
+  await page.locator('.tool-opts select').first().selectOption('remove')                                 // Remove: no references
+  await expect(page.locator('.ref-slots.ai-refs')).toHaveCount(0)
+  await page.locator('.tool-opts select').first().selectOption('fill')
+  await page.getByRole('button', { name: 'Refine', exact: true }).click()
+  await expect(page.locator('.ref-slots.ai-refs')).toHaveCount(1)
+})
+
 test('remappable keys (D72): Pin for compare to G is refused (Cycle grouping has it); to J — menu, tooltip and help show J, J pins, C does not, it survives a reload', async ({ page }) => {
   await openApp(page, { suite: 'catalogue' })
   const openKeys = async () => {

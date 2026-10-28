@@ -197,6 +197,7 @@ registerCommands([
   // D90 (02 §9, 01 §11.2): the AI runs are commands — the AI tab's buttons run them; each is enabled exactly when the tab's button is
   // (aiReason), so Ctrl+K, the keyboard map and the canvas menu never start a run the tab would refuse
   ...AI_RUNS.map(([op, label, icon, hint]) => ({ id: `edit.ai.${op}`, scope: 'edit' as const, label, icon, placement: ['panel'] as ['panel'], hint, when: () => !aiReason(aiCtx(), op), run: () => runAiOp(op) })),
+  { id: 'edit.ai.clearRefs', scope: 'edit', label: 'Clear references', icon: Eraser, placement: ['panel'], hint: "the AI tab's reference deck emptied", when: () => useAiPanel.getState().refs.length > 0, run: () => useAiPanel.getState().clearRefs() },   // D152
   { id: 'edit.ai.stage', scope: 'edit', label: 'Queue the AI job', icon: Hourglass, placement: ['panel'], hint: 'the AI tab\'s operation: add to the queue and run it later — Run now in the Dock', when: () => !aiReason(aiCtx(), useAiPanel.getState().op), run: () => runAiOp(useAiPanel.getState().op, true) },
   { id: 'edit.ai.subject', scope: 'edit', label: 'Select subject', icon: ScanFace, placement: ['context'], hint: 'the main subject\'s matte joins the selection (the AI tab\'s combine, expand and feather)', when: () => !subjectPlan(aiCtx()).reason,
     run: () => { const c = aiCtx(), s = subjectPlan(c); if (!s.reason) void ed().runAi(s.recipe()) } },

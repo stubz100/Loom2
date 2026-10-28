@@ -131,6 +131,8 @@ class I2I(BaseModel):
     margin_pct: int = Field(25, ge=0, le=200)     # selection source: context ring
     feather: int = Field(8, ge=0, le=256)         # selection source: paste-back feather
     match_colour: bool = False                    # D48: undo the refine's colour drift — the result's Lab statistics mapped onto the plate's
+    refs: list[RefImage] = Field(default_factory=list)   # D152: the reference deck (ReferenceLatents after the source's; Klein base and dev)
+    ref_max_px: int = 1024                        # D152: references are downscaled to fit this square
                                                   # (on the context ring for a selection, over the whole image / layer otherwise)
     te_device: str | None = None                  # CLIPLoader.device: "cpu" keeps the 8 GB encoder out of VRAM (2026-10-07 DynamicVRAM measurements)
     te_id: str | None = None                      # text encoder override: the preset's encoder or one of /capabilities.te_alternates (a .gguf loads through CLIPLoaderGGUF)
@@ -157,6 +159,8 @@ class Inpaint(BaseModel):
     prefill: bool = False                         # D62: Remove — the hole pre-filled by content-aware fill (the reference instead of mid grey)
     prompt_mode: Literal["image_first", "prompt_first"] = "image_first"   # LanPaint (E8b: prompt_first λ 8)
     outpaint: dict[str, Annotated[int, Field(ge=0, le=4096)]] | None = None   # {left, top, right, bottom} for mode == outpaint
+    refs: list[RefImage] = Field(default_factory=list)   # D152: the reference deck — a character's look, a material — chained after the source's ReferenceLatent
+    ref_max_px: int = 1024                        # D152: references are downscaled to fit this square
     image_blob: str | None = None                 # 10 §13 shape kept for blob-fed callers; unused with document_id
     mask_blob: str | None = None
     te_device: str | None = None                  # CLIPLoader.device (see I2I)

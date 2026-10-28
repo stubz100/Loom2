@@ -8254,6 +8254,13 @@ export interface components {
              * @default
              */
             prompt_text?: string;
+            /**
+             * Ref Max Px
+             * @default 1024
+             */
+            ref_max_px?: number;
+            /** Refs */
+            refs?: components["schemas"]["RefImage"][];
             /** Seeds */
             seeds?: number[];
             /**
@@ -8820,6 +8827,13 @@ export interface components {
              * @default
              */
             prompt_text?: string;
+            /**
+             * Ref Max Px
+             * @default 1024
+             */
+            ref_max_px?: number;
+            /** Refs */
+            refs?: components["schemas"]["RefImage"][];
             /** Seeds */
             seeds?: number[];
             /**

@@ -12,8 +12,9 @@ import { useEditor, type DocumentStack, type Node } from './editorStore'
 
 const CAPS = {
   models: {
-    klein: { order: 0, label: 'Klein 4B', family: 'flux2', recipes: { inpaint: true, i2i: true }, tiled_refine: true },
-    hero: { order: 1, label: 'Hero', family: 'flux2', recipes: { inpaint: true, inpaint_hero: true, i2i: true }, tiled_refine: true },
+    klein: { order: 0, label: 'Klein 4B', family: 'klein', recipes: { inpaint: true, i2i: true }, tiled_refine: true, max_refs: 4 },
+    hero: { order: 1, label: 'Hero', family: 'flux2', recipes: { inpaint: true, inpaint_hero: true, i2i: true }, tiled_refine: true, max_refs: 10 },
+    zimage: { order: 2, label: 'Z-Image', family: 'zimage', recipes: { i2i: true }, tiled_refine: false, max_refs: 0 },
   },
   tools: {
     matte: { order: 0, label: 'Subject', recipes: { segment: ['subject'] } },
@@ -182,5 +183,33 @@ describe('Instruct (D151): an edit by instruction', () => {
     const c = ctx({ caps: withModel, activeId: 'lyr_1' }, { prompt: 'snow on the street', instructSource: 'active', seedMode: 'fixed', seed: 5, candidates: 2 })
     expect(aiRecipe(c, 'instruct')).toEqual({ kind: 'instruct', model_id: 'qwen-edit-x', source: 'active', layer_id: 'lyr_1', seeds: [5, 6], prompt_text: 'snow on the street' })
     expect(opCandidates(c, 'instruct')).toBe(2)
+  })
+})
+
+describe('the reference deck (D152)', () => {
+  it('rides inpaint, outpaint and refine where the model takes references, with the downscale; not Remove, not a family without ReferenceLatent', () => {
+    const refs = [{ asset_id: 'ast_hero', note: 'the hero' }, { asset_id: 'ast_coat' }]
+    const want = { refs: [{ asset_id: 'ast_hero', note: 'the hero' }, { asset_id: 'ast_coat', note: null }], ref_max_px: 768 }
+    expect(aiRecipe(ctx({ hasSel: true }, { refs, refMaxPx: 768, seedMode: 'fixed', seed: 1, candidates: 1 }), 'inpaint')).toMatchObject(want)
+    expect(aiRecipe(ctx({}, { refs, refMaxPx: 768, mode: 'remove', seedMode: 'fixed', seed: 1, candidates: 1 }), 'inpaint')).not.toHaveProperty('refs')
+    expect(aiRecipe(ctx({}, { refs, pad: { left: 0, top: 0, right: 128, bottom: 0 }, seedMode: 'fixed', seed: 1, candidates: 1 }), 'outpaint')).toMatchObject({ refs: want.refs })
+    expect(aiRecipe(ctx({}, { refs, refineModel: 'klein', seedMode: 'fixed', seed: 1, candidates: 1 }), 'refine')).toMatchObject({ refs: want.refs })
+    expect(aiRecipe(ctx({}, { refs, refineModel: 'zimage', seedMode: 'fixed', seed: 1, candidates: 1 }), 'refine')).not.toHaveProperty('refs')
+    expect(aiRecipe(ctx({ hasSel: true }, { seedMode: 'fixed', seed: 1, candidates: 1 }), 'inpaint')).not.toHaveProperty('refs')
+  })
+  it('the store adds in order without doubles, moves, removes and clears; the command follows the deck', () => {
+    useAiPanel.setState({ refs: [] })
+    useAiPanel.getState().addRefs(['a', 'b', 'a'])
+    useAiPanel.getState().addRefs(['b', 'c'])
+    expect(useAiPanel.getState().refs.map((r) => r.asset_id)).toEqual(['a', 'b', 'c'])
+    useAiPanel.getState().moveRef(2, 0)
+    expect(useAiPanel.getState().refs.map((r) => r.asset_id)).toEqual(['c', 'a', 'b'])
+    useAiPanel.getState().setRefNote('a', 'the hero')
+    useAiPanel.getState().removeRef('b')
+    expect(useAiPanel.getState().refs).toEqual([{ asset_id: 'c' }, { asset_id: 'a', note: 'the hero' }])
+    expect(isEnabled(command('edit.ai.clearRefs')!)).toBe(true)
+    useAiPanel.getState().clearRefs()
+    expect(useAiPanel.getState().refs).toEqual([])
+    expect(isEnabled(command('edit.ai.clearRefs')!)).toBe(false)
   })
 })

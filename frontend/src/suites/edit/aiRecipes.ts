@@ -22,6 +22,8 @@ export interface AiCtx {
 /** The operations with a run of their own (Select has its own controls); the label of the tab's run button. */
 export const AI_OP_LABEL: Record<AiOp, string> = { select: 'Select', inpaint: 'Inpaint', refine: 'Refine', upscale: 'Upscale', outpaint: 'Outpaint', instruct: 'Instruct' }
 
+/** D152: the graphs that take reference images (`ReferenceLatent`): the FLUX.2 family — dev and Klein; the creative families take none. */
+const FLUX_FAMILIES = ['flux2', 'klein']
 /** C3 (D26) / D65: the models the AI tab offers and resolves — every one from /capabilities (open: Klein 4B, no hero, no SAM 3). */
 export function aiModels({ p, caps }: Pick<AiCtx, 'p' | 'caps'>) {
   const capModels = caps?.models
@@ -39,9 +41,10 @@ export function aiModels({ p, caps }: Pick<AiCtx, 'p' | 'caps'>) {
   const heroFor = (op: AiOp) => !!heroId && (op === 'inpaint' ? p.mode === 'fill_hero' : op === 'outpaint' ? p.outpaintHero : op === 'refine' ? isHero(refineModel) : false)
   const outpaintId = heroFor('outpaint') && heroId ? heroId : kleinId
   const teId = (mid: string) => (p.teId && capModels?.[mid]?.te_options?.some((o) => o.id === p.teId) ? p.teId : undefined)   // D31: only where it pairs
+  const refsMax = (mid: string) => (FLUX_FAMILIES.includes(capModels?.[mid]?.family ?? '') ? capModels?.[mid]?.max_refs ?? 0 : 0)   // D152: ReferenceLatent is the FLUX.2 family's
   const instructModel = caps?.instruct?.default ?? null                                  // D151: the build's edit-by-instruction model (null: none offered)
   const instructHealth = instructModel ? caps?.instruct?.models?.[instructModel]?.health ?? 'missing' : 'missing'
-  return { contentAware, heroId, mode, i2iIds, upIds, refineModel, tiledIds, tiledModel, upscaleModel, kleinId, isHero, heroFor, outpaintId, teId, instructModel, instructHealth }
+  return { contentAware, heroId, mode, i2iIds, upIds, refineModel, tiledIds, tiledModel, upscaleModel, kleinId, isHero, heroFor, outpaintId, teId, instructModel, instructHealth, refsMax }
 }
 
 /** The candidate count an operation starts with when the tab switches to it (hero models are slow: 2). */
@@ -101,9 +104,11 @@ export function aiRecipe(c: AiCtx, op: AiOp, seeds: number[] = aiSeeds(c.p)): Do
   const { p, activeId } = c
   const m = aiModels(c)
   const base = { seeds, prompt_text: p.prompt }
-  if (op === 'inpaint') return { kind: 'inpaint', mode: m.mode, model_id: m.kleinId, te_id: m.teId(m.kleinId), margin_pct: p.margin, min_size: p.minSize, feather: p.feather, expand: p.expand, blend: p.blend, prompt_mode: p.promptMode, prefill: m.mode === 'remove' && p.prefill && m.contentAware, ...base } as DocumentRecipe
-  if (op === 'outpaint') return { kind: 'inpaint', mode: 'outpaint', model_id: m.outpaintId, te_id: m.teId(m.outpaintId), outpaint: p.pad, feather: p.feather, prompt_mode: p.promptMode, ...base } as DocumentRecipe
-  if (op === 'refine') return { kind: 'i2i', model_id: m.refineModel, te_id: m.teId(m.refineModel), source: p.refineSource, layer_id: activeId, strength: p.strength, margin_pct: p.margin, feather: p.feather, match_colour: p.matchColour, ...base } as DocumentRecipe
+  const deck = (mid: string) => (m.refsMax(mid) > 0 && p.refs.length ? { refs: p.refs.map((r) => ({ asset_id: r.asset_id, note: r.note ?? null })), ref_max_px: p.refMaxPx } : {})   // D152
+  const inpaintModel = m.mode === 'fill_hero' && m.heroId ? m.heroId : m.kleinId
+  if (op === 'inpaint') return { kind: 'inpaint', mode: m.mode, model_id: m.kleinId, te_id: m.teId(m.kleinId), margin_pct: p.margin, min_size: p.minSize, feather: p.feather, expand: p.expand, blend: p.blend, prompt_mode: p.promptMode, prefill: m.mode === 'remove' && p.prefill && m.contentAware, ...(m.mode === 'remove' || m.mode === 'quick_remove' ? {} : deck(inpaintModel)), ...base } as DocumentRecipe
+  if (op === 'outpaint') return { kind: 'inpaint', mode: 'outpaint', model_id: m.outpaintId, te_id: m.teId(m.outpaintId), outpaint: p.pad, feather: p.feather, prompt_mode: p.promptMode, ...deck(m.outpaintId), ...base } as DocumentRecipe
+  if (op === 'refine') return { kind: 'i2i', model_id: m.refineModel, te_id: m.teId(m.refineModel), source: p.refineSource, layer_id: activeId, strength: p.strength, margin_pct: p.margin, feather: p.feather, match_colour: p.matchColour, ...deck(m.refineModel), ...base } as DocumentRecipe
   if (op === 'instruct') return { kind: 'instruct', model_id: m.instructModel ?? '', source: p.instructSource, layer_id: activeId, ...base } as DocumentRecipe   // D151
   return { kind: 'upscale', model_id: m.upscaleModel, source: p.upscaleSource, layer_id: activeId, as_layer: p.asLayer, seeds: p.refineTiled ? seeds.slice(0, 1) : [0],
     refine: p.refineTiled, refine_model_id: m.tiledModel, te_id: p.refineTiled ? m.teId(m.tiledModel) : undefined, strength: p.tiledStrength, tile: p.tile, overlap: p.overlap, prompt_text: p.prompt } as DocumentRecipe

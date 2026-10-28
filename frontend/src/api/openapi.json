@@ -9312,6 +9312,18 @@
             "title": "Prompt Text",
             "type": "string"
           },
+          "ref_max_px": {
+            "default": 1024,
+            "title": "Ref Max Px",
+            "type": "integer"
+          },
+          "refs": {
+            "items": {
+              "$ref": "#/components/schemas/RefImage"
+            },
+            "title": "Refs",
+            "type": "array"
+          },
           "seeds": {
             "items": {
               "type": "integer"
@@ -10647,6 +10659,18 @@
             "default": "",
             "title": "Prompt Text",
             "type": "string"
+          },
+          "ref_max_px": {
+            "default": 1024,
+            "title": "Ref Max Px",
+            "type": "integer"
+          },
+          "refs": {
+            "items": {
+              "$ref": "#/components/schemas/RefImage"
+            },
+            "title": "Refs",
+            "type": "array"
           },
           "seeds": {
             "items": {

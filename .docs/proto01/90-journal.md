@@ -10978,3 +10978,48 @@ The snow falls *inside* the market hall: the model does what it is told, not wha
 Not measured: the active-layer path on a cut-out (the rig edits the visible composite), 2511 (GGUF Q4) against 2509; both wait for a
 use the author brings. The sheet is `engine/spikes/out/instruct/sheet.jpg`, the numbers in `results.json`.
 
+
+## 2026-10-28 12:22 — D152: references in Edit AI (the post-MVP backlog's item 5), built and measured with FaceSim
+
+The second post-MVP item. Generate has had D73's reference deck since 2026-10-11; the Edit graphs never saw it, so a fill could not be told
+whose face or which coat. **D152** recorded first.
+
+- **The recipes** `Inpaint.refs` / `I2I.refs` (`RefImage[]`: an asset or a blob, a note) and `ref_max_px` (1024), the shape Generate sends.
+- **The graphs**: `graphs._ref_chain` — the T2I graph's reference nodes (LoadImage → an ImageScale guard → VAEEncode → ReferenceLatent,
+  ids from 30) in one helper now, the T2I graph node for node as before (the parity snapshot's hashes unchanged); the inpaint graphs chain
+  the deck after the region's own ReferenceLatent — LanPaint's (fill, Fill Hero, outpaint) before the guider, ICM's (fill_match, remove)
+  before `InpaintModelConditioning` — and the refine graph after its FluxGuidance on the FLUX.2 family only (the creative families have
+  no ReferenceLatent: `kept_refs` gives them none). `kept_refs` keeps the model's `refs_max`; a reference not uploaded is a CompileError.
+- **The pipeline** uploads an Inpaint's or I2I's references like a T2I's (fitted to `ref_max_px`); the planner's document params carry
+  `refs`, `max_refs`, `refs_dropped`, so the preview says what goes in and what is left out.
+- **The AI tab**: the deck's slots under Inpaint (not Remove), Outpaint and Refine — drop Catalogue tiles (Generate's rule: images only,
+  no doubles, the limit), ✕ and ◀ on a slot, a right-click (remove, move first / left / right, clear), a downscale select, *Clear
+  references* as a command; a model that takes none says so when the deck holds images. The recipes carry the deck only where the model
+  takes it (`aiModels().refsMax`: the flux2 and klein families); the preview line reads "references n of m" and warns of the dropped.
+- **Tests**: `test_edit_refs_d152.py` 4 (the chains in fill, fill_match and the plain graph; the refine on Klein base and none on a creative
+  family; the limit kept and said; the route and the preview carry the deck); `aiRecipes.test.ts` +2 (the recipes with and without the deck;
+  the store's verbs and the command); the parity snapshot's inpaint summaries gain `refs: 0`; an e2e scenario (the slots under Inpaint,
+  none under Remove, Refine's). Offline 679 passed, Vitest 576 + 3 skipped, typecheck, build and lint (0 errors, 79 warnings) clean, e2e 76/76 (alone), settings_audit, model_literals_check and agents_check clean.
+- **The rig** (`scripts/edit_refs_rig.py`: the inpaint bench's face fix — the box around her face on the alley render, "the same young
+  woman's face…" — as the AI tab runs it, Klein 9B + LanPaint, with the hero's close-up as reference 1 against none, two seeds each;
+  FaceSim of each result pasted over the source against the hero's face):
+
+| fill (Klein 9B + LanPaint, the face box, 1 MP) | seed | wall | the sampler (node 13) | FaceSim to the hero |
+  | --- | --- | --- | --- | --- |
+  | without the reference | 1 | 76.1 s (the session's first: loads 8.5 + 6.1 s, the first decode 4.2) | 43.1 s | 0.393 |
+  | without the reference | 2 | 47.5 s | 42.3 s | 0.443 |
+  | with the hero as reference 1 | 1 | 70.4 s | 67.3 s | 0.517 |
+  | with the hero as reference 1 | 2 | 81.5 s (the model re-read, 5.4 + 5.3 s) | 67.8 s | 0.510 |
+
+  The source's own face against the hero: 0.376. Means 0.418 without, 0.514 with. The reference's VAE encode (node 32): 0.2 s. Peak VRAM
+  9.31 GB (15 GB free before). Every job done; FaceSim with ≥ without; the sheet under `engine/spikes/out/edit_refs/sheet.jpg` (the source,
+  the four fills, the hero).
+
+**Reading.** The deck reaches the fill: with the hero as reference the fills carry her freckles and the fuller face (FaceSim 0.51–0.52
+  against 0.39–0.44 without; the alley render's own face scores 0.38, so a plain fill keeps the render's face and a referenced one moves
+  toward the hero's). The reference's price is the sampler's: 42 → 67 s on Klein 9B (+25 s, 59 %), the 1024 px reference's tokens beside
+  the source's through LanPaint's iterations — its encode is 0.2 s. The rig's warm bar (≤ 60 s, written for the plain fill) was missed by
+  the referenced fills (70.4 / 81.5 s) and split after the run into ≤ 60 s without and ≤ 90 s with (the run's record carries the first bar's
+  FAIL; nothing stalled, the cost is the attention's, the same price Generate's deck pays). A user who wants a cheaper referenced fill has
+  the downscale select (512 / 768 / 1024 px). The second referenced fill re-read the model (5.4 + 5.3 s): the cache dropped under D145's
+  pressure rule between document jobs, as designed.

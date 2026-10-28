@@ -219,7 +219,7 @@ radial, G tool), bench **task 03** (background swap on the inverted matte). `scr
 the B3 fix in place (candidates are now independent): Fill 69 s cold / 40 s warm, Fill-Match 20 s, Remove 20 s, cloak 41 s,
 face 48 s, outpaint 32 s, refine 47 s, ESRGAN 6 s, BiRefNet 2.3 s, SAM 3 text 33 s (cold) / point 3.3 s, task 03 fill 31 s
 with the subject's alpha at 0.027, tiled refine ×2 439 s (6 tiles → 2400×1088). 10 §14: items 1, 3–7 ticked; item 2's pen half
-waits for a tablet (D19). Open from M5, carried to post-MVP: Fill Hero on the bench (unchanged since E8), SeedVR2, LoRA slots (D25).
+waits for a tablet (D19). Open from M5, carried to post-MVP: Fill Hero on the bench (unchanged since E8), SeedVR2 (built 2026-10-28, D153), LoRA slots (D25, built in LT1).
 
 ## 7. M6 · Animate (4–5 weeks) — gate: 11 approved, E4/E5 decided
 

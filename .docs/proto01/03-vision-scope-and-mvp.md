@@ -104,7 +104,7 @@ The MVP is **four suites on one foundation**, each gated by an executable accept
 2. **LoRA slots live** (D25) and LoRA training via ai-toolkit (proven on this rig) from a collection.
 3. Klein tiers in Generate if they slipped past MVP (D21).
 4. Video extension, keyframe chains, pose/VACE control, lip-sync; fps conform per spike E9.
-5. SeedVR2 / tiled upscale as Edit actions; Muse prompt drafting as queued jobs.
+5. SeedVR2 / tiled upscale as Edit actions (SeedVR2 built 2026-10-28, D153; the tiled refine since M5); Muse prompt drafting as queued jobs.
 
 ## 6. Success measures for the MVP
 

@@ -53,6 +53,8 @@ CLASSES = [
     # SC3 (D120): a picture set — MoGe's point map to a relief, its render, the GLB; the sigma split and the alpha join of the later graphs
     # (in the fixture by hand since 2026-10-22; listed here at the v0.43.1 bump, 2026-10-28, so a re-capture keeps them)
     "MoGePointMapToMesh", "MoGeRender", "SaveGLB", "SplitSigmasDenoise", "JoinImageWithAlpha",
+    # D153 (E40): SeedVR2 — the Upscale tool's "add real detail" model on the core nodes
+    "ImageScaleBy", "VAEEncodeTiled", "SeedVR2Preprocess", "SeedVR2Conditioning", "SeedVR2PostProcessing",
 ]
 
 

@@ -188,7 +188,7 @@ source as reference) → low-denoise refinement uses **Klein base or dev** (0.2�
 with loom's corrected `[strength, 0]` schedule semantics, or distilled Klein with an "enhance detail, keep
 composition" instruction. Tiled refine (Ultimate-SD-Upscale pattern) with Klein for creative upscales;
 **SeedVR2 3B fp8** (Apache, one-step, in ComfyUI core since Jul 2026, ROCm fixes in the numz pack) as the
-"add real detail" upscaler; ESRGAN for cheap 2×. SeedVR2 is post-MVP unless the spike shows it is trivial.
+"add real detail" upscaler; ESRGAN for cheap 2×. **Built (D153, E40 2026-10-28):** SeedVR2 3B int8 convrot on the core nodes is the Upscale tool's default at ×2 — 7–8 s warm, peak 8.7 GB on this card, 2–10× ESRGAN's detail; ×4 over-textures a Draft board (offered at ×2 only); the fp8 was equal and is deleted.
 
 ## 5. Target c — image-to-video
 

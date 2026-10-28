@@ -1,10 +1,26 @@
 # Edit tools (M5): upscalers and AI Select. Seconds from the M5 acceptance (warm).
+# E40 → D153 (2026-10-28): SeedVR2 3B is the Upscale tool's default — the "add real detail" upscaler of 04 §4 — on ComfyUI's core nodes (no custom
+# node): a Lanczos resize by the factor, a one-step restoration at that size (euler / simple, cfg 1, denoise 1), the colour matched in Lab to the
+# resize. Measured (E40, the bench's 960×544 boards): ×2 7–8 s warm, 11 s cold, peak 8.7 GB, 2–10× ESRGAN's detail by the Laplacian measure;
+# ×4 fits (30–33 s) but over-textures a Draft board's small faces → offered at ×2 only (an FHD board to 4K is a second ×2). ESRGAN stays the cheap one.
+[[model]]
+id = "seedvr2-3b"
+family = "tools"
+label = "SeedVR2 3B ×2 · adds real detail"
+short = "SeedVR2"
+hint = "a one-step restoration at twice the size — hair, weave and skin drawn in (E40); the colour matched to the source"
+order = 90
+graph = "seedvr2"
+roles.vae = "seedvr2-vae"
+recipes = { default_for = ["upscale"], upscale_factor = 2 }
+estimates = { vram_gb = 9.0, doc_seconds = 8.0, cold_seconds = 11.0 }
+
 [[model]]
 id = "realesrgan-x2"
 family = "tools"
-label = "Real-ESRGAN 2×"
+label = "Real-ESRGAN 2× · cheap"
 graph = "esrgan"
-recipes = { default_for = ["upscale"], upscale_factor = 2 }
+recipes = { upscale_factor = 2 }
 estimates = { vram_gb = 2.0, doc_seconds = 6.0 }
 
 [[model]]

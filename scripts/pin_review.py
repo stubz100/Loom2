@@ -70,6 +70,8 @@ def recipes() -> list[tuple[str, object, dict]]:
         ("inpaint outpaint", Inpaint(document_id="d", mode="outpaint", outpaint={"right": 240}, prompt_text="x", seeds=[1]), img),
         ("upscale x2", Upscale(document_id="d", model_id="realesrgan-x2", source="visible", seeds=[0]), img),
         ("upscale + tiled refine", Upscale(document_id="d", model_id="realesrgan-x2", source="visible", refine=True, refine_model_id="klein-base-9b", seeds=[0]), img),
+        ("upscale seedvr2 x2", Upscale(document_id="d", model_id="seedvr2-3b", source="visible", seeds=[0]), img),                       # D153
+        ("upscale seedvr2 x2 + tiled refine", Upscale(document_id="d", model_id="seedvr2-3b", source="visible", refine=True, refine_model_id="klein-base-9b", seeds=[0]), img),
         # D89 (wave CR): the creative families — T2I on Krea 2 Turbo / Raw, Z-Image, Chroma; Refine on Krea 2 Raw, Z-Image, Chroma, SD 3.5 Large
         ("t2i krea2 turbo", T2I(model_id="krea2-turbo-fp8", prompt_mode="text", prompt_text="a cat", seeds=[1]), {}),
         ("t2i krea2 raw", T2I(model_id="krea2-raw-fp8", prompt_mode="text", prompt_text="a cat", negative="blurry", seeds=[1]), {}),

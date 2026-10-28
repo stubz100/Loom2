@@ -1272,15 +1272,40 @@ def upscale_factor(model_id: str) -> int:
 
 def build_upscale(recipe: Upscale, roster: Roster, out_prefix: str, image_name: str, w: int = 0, h: int = 0, seed: int = 0) -> Compiled:
     """Model upscale, optionally followed by the tiled refine (10 §4): every tile of the upscaled image is re-sampled at
-    `strength` with the refine model and pasted back through a feathered mask, in one engine graph."""
+    `strength` with the refine model and pasted back through a feathered mask, in one engine graph.
+    Two upscalers by the spec's graph: `esrgan` (a spandrel model, ×2 / ×4) and `seedvr2` (D153, E40: a Lanczos resize by the factor, then
+    SeedVR2's one-step restoration at that size — the core nodes as the engine's own template wires them — the colour matched in Lab to the
+    resize; the VAE is the spec's `roles.vae`)."""
+    spec = registry.get(recipe.model_id)
     _, name = roster.require(recipe.model_id)
-    g: dict[str, Any] = {
-        "100": {"class_type": "LoadImage", "inputs": {"image": image_name}},
-        "101": {"class_type": "UpscaleModelLoader", "inputs": {"model_name": name}},
-        "102": {"class_type": "ImageUpscaleWithModel", "inputs": {"upscale_model": ["101", 0], "image": ["100", 0]}},
-    }
+    g: dict[str, Any] = {"100": {"class_type": "LoadImage", "inputs": {"image": image_name}}}
     summary: dict[str, Any] = {"model_id": recipe.model_id, "source": recipe.source, "factor": upscale_factor(recipe.model_id)}
-    out: list = ["102", 0]
+    if spec is not None and spec.graph == "seedvr2":
+        if not spec.roles.vae:
+            raise CompileError(f"{recipe.model_id!r} names no VAE (roles.vae)")
+        _, vae = roster.require(spec.roles.vae)
+        tiles_vae = {"tile_size": 512, "overlap": 128, "temporal_size": 4096, "temporal_overlap": 8}
+        g |= {
+            "101": {"class_type": "ImageScaleBy", "inputs": {"image": ["100", 0], "upscale_method": "lanczos", "scale_by": float(summary["factor"])}},
+            "102": {"class_type": "SeedVR2Preprocess", "inputs": {"resized_images": ["101", 0]}},
+            "103": {"class_type": "VAELoader", "inputs": {"vae_name": vae}},
+            "104": {"class_type": "VAEEncodeTiled", "inputs": {"pixels": ["102", 0], "vae": ["103", 0], **tiles_vae}},
+            "105": {"class_type": "UNETLoader", "inputs": {"unet_name": name, "weight_dtype": "default"}},
+            "106": {"class_type": "SeedVR2Conditioning", "inputs": {"model": ["105", 0], "vae_conditioning": ["104", 0]}},
+            "107": {"class_type": "KSampler", "inputs": {"model": ["105", 0], "seed": int(seed), "steps": 1, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple",
+                                                        "positive": ["106", 0], "negative": ["106", 1], "latent_image": ["104", 0], "denoise": 1.0}},
+            "108": {"class_type": "VAEDecodeTiled", "inputs": {"samples": ["107", 0], "vae": ["103", 0], **tiles_vae}},
+            "109": {"class_type": "SeedVR2PostProcessing", "inputs": {"images": ["108", 0], "original_resized_images": ["101", 0], "color_correction_method": "lab"}},
+        }
+        out: list = ["109", 0]
+        summary["colour_match"] = "lab"
+    else:
+        g |= {
+            "101": {"class_type": "UpscaleModelLoader", "inputs": {"model_name": name}},
+            "102": {"class_type": "ImageUpscaleWithModel", "inputs": {"upscale_model": ["101", 0], "image": ["100", 0]}},
+        }
+        out = ["102", 0]
+    upscaled = out
     prompt = ""
     if recipe.refine:
         if not (w and h):
@@ -1303,7 +1328,7 @@ def build_upscale(recipe: Upscale, roster: Roster, out_prefix: str, image_name: 
         for i, (x, y, tw, th) in enumerate(tiles):
             crop, enc, ks, dec, solid, feath, comp = (str(nid + k) for k in range(7))
             nid += 7
-            g[crop] = {"class_type": "ImageCrop", "inputs": {"image": ["102", 0], "width": tw, "height": th, "x": x, "y": y}}
+            g[crop] = {"class_type": "ImageCrop", "inputs": {"image": upscaled, "width": tw, "height": th, "x": x, "y": y}}
             g[enc] = {"class_type": "VAEEncode", "inputs": {"pixels": [crop, 0], "vae": ["3", 0]}}
             g[ks] = {"class_type": "KSampler", "inputs": {"model": model_link, "seed": int(seed) + i, "steps": steps, "cfg": float(sm.cfg), "sampler_name": "euler",
                                                         "scheduler": "simple", "positive": ["6", 0], "negative": ["7", 0], "latent_image": [enc, 0], "denoise": float(recipe.strength)}}
@@ -1752,7 +1777,7 @@ def recipe_weights(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V | Reang
     elif isinstance(recipe, I2I):
         ids += model_ids(recipe.model_id, True)
     elif isinstance(recipe, Upscale):
-        ids.append(recipe.model_id)
+        ids += model_ids(recipe.model_id, False)                       # D153: SeedVR2 loads its VAE too
         if recipe.refine:
             ids += model_ids(recipe.refine_model_id, True)
     else:

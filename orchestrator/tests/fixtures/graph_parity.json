@@ -950,6 +950,36 @@
    ]
   }
  },
+ "upscale seedvr2 x2": {
+  "graph_hash": "7912af426498c81d",
+  "problems": [],
+  "summary": {
+   "colour_match": "lab",
+   "factor": 2,
+   "model_id": "seedvr2-3b",
+   "source": "visible"
+  }
+ },
+ "upscale seedvr2 x2 + tiled refine": {
+  "graph_hash": "70fffafff2ef3449",
+  "problems": [],
+  "summary": {
+   "colour_match": "lab",
+   "factor": 2,
+   "model_id": "seedvr2-3b",
+   "overlap": 128,
+   "refine_model_id": "klein-base-9b",
+   "source": "visible",
+   "steps": 20,
+   "strength": 0.25,
+   "tile": 1024,
+   "tiles": 4,
+   "upscaled": [
+    1920,
+    1088
+   ]
+  }
+ },
  "upscale x2": {
   "graph_hash": "061bece3e004bce2",
   "problems": [],

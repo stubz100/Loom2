@@ -10,8 +10,11 @@ import pytest
 
 from loom2 import edit_ai
 from loom2.engine import graphs
+from loom2.models import registry
 from loom2.recipes import I2I, Inpaint, Upscale, parse_recipe, warm_group
 from loom2.roster import Roster
+
+CHEAP = next(s.id for s in registry.SPECS.values() if s.graph == "esrgan" and s.recipes.upscale_factor == 2)   # D153: SeedVR2 is the default upscaler; these tests stub the cheap one
 
 
 def _tree(tmp_path: Path) -> Roster:
@@ -101,7 +104,7 @@ def test_recipes_parse_and_warm_groups():
     r2 = parse_recipe({"kind": "i2i", "document_id": "doc_x", "strength": 0.25})
     assert isinstance(r2, I2I) and r2.model_id == "klein-base-9b"
     r3 = parse_recipe({"kind": "upscale", "document_id": "doc_x"})
-    assert isinstance(r3, Upscale) and r3.model_id == "realesrgan-x2"
+    assert isinstance(r3, Upscale) and r3.model_id == registry.default_model("upscale")      # D153: SeedVR2 3B is the default upscaler
 
 
 @pytest.mark.parametrize("mode", ["fill", "fill_match", "fill_hero", "remove", "outpaint"])
@@ -134,7 +137,7 @@ def test_build_i2i_and_upscale(tmp_path: Path, object_info: dict):
     assert ks["inputs"]["denoise"] == 0.3 and ks["inputs"]["steps"] == 20 and ks["inputs"]["cfg"] == 3.5
     with pytest.raises(graphs.CompileError):
         graphs.compile_recipe(I2I(model_id="klein-9b", document_id="doc_x"), roster, object_info, 3, "p", inputs={"image": img, "w": 960, "h": 544})
-    u = graphs.compile_recipe(Upscale(document_id="doc_x"), roster, object_info, 0, "p", inputs={"image": img})
+    u = graphs.compile_recipe(Upscale(document_id="doc_x", model_id=CHEAP), roster, object_info, 0, "p", inputs={"image": img})
     # the fixture predates the upscaler on disk: only the model-name enum may complain
     assert all("UpscaleModelLoader" in p for p in u.problems), u.problems
     assert {n["class_type"] for n in u.graph.values()} >= {"UpscaleModelLoader", "ImageUpscaleWithModel", "SaveImage"}

@@ -41,7 +41,7 @@ def compile_all(tmp_path: Path, object_info: dict) -> dict[str, dict]:
 
 def test_graph_parity(tmp_path: Path, object_info: dict, request: pytest.FixtureRequest) -> None:
     got = compile_all(tmp_path, object_info)
-    assert len(got) == 44                                                       # D89: + 4 t2i and 4 i2i on the creative families; D91: + 2 t2i, 1 i2i (the sample models); D151: + instruct;
+    assert len(got) == 46                                                       # D89: + 4 t2i and 4 i2i on the creative families; D91: + 2 t2i, 1 i2i (the sample models); D151: + instruct; D153: + 2 SeedVR2 upscales;
                                                                             # 2026-10-28 (the review against v0.43.1): + 15 — animate (two), s2v, LTX guided and extend, Wan extend,
                                                                             # reangle (two), stage shot (two), mesh, set, keypoints, matte (two)
     if request.config.getoption("--parity-update"):

@@ -134,6 +134,12 @@ MANIFEST = [
     # ---- open variant: Klein 4B text encoder (transformer already present) ----
     dict(spike="klein4b", repo="Comfy-Org/flux2-klein-4B", file="split_files/text_encoders/qwen_3_4b.safetensors",
          dest="text_encoders", license="apache-2.0"),
+    # ---- E40 (2026-10-28, post-MVP item 5): SeedVR2 as the "add real detail" upscaler — ComfyUI core nodes at the pin (nodes_seedvr), Apache-2.0
+    #      (ByteDance-Seed; Comfy-Org's repack). The 3B in the template's int8 convrot and in fp8 (04 §4 named fp8); the shared VAE. The loser is deleted (D30).
+    dict(spike="e40", repo="Comfy-Org/SeedVR2", file="vae/seedvr2_ema_vae_fp16.safetensors", dest="vae", license="apache-2.0"),
+    dict(spike="e40", repo="Comfy-Org/SeedVR2", file="diffusion_models/seedvr2_3b_int8_convrot.safetensors", dest="diffusion_models", license="apache-2.0"),
+    dict(spike="e40", repo="Comfy-Org/SeedVR2", file="diffusion_models/seedvr2_3b_fp8_e4m3fn.safetensors", dest="diffusion_models", license="apache-2.0",
+         retired="E40 2026-10-28: equal to int8 convrot on the sheet and the numbers (Laplacian 308 against 334, the same seconds and peak); int8 — the template's — kept"),
 ]
 
 

@@ -11023,3 +11023,94 @@ whose face or which coat. **D152** recorded first.
   FAIL; nothing stalled, the cost is the attention's, the same price Generate's deck pays). A user who wants a cheaper referenced fill has
   the downscale select (512 / 768 / 1024 px). The second referenced fill re-read the model (5.4 + 5.3 s): the cache dropped under D145's
   pressure rule between document jobs, as designed.
+
+## 2026-10-28 12:35 — E40 planned: SeedVR2 as the "add real detail" upscaler (post-MVP item 5, 03 §5 item 5, 04 §4)
+
+The third post-MVP item after D151 and D152. **The question:** does SeedVR2 3B fit this card and beat Real-ESRGAN on a Draft board
+and a Draft clip, as the Upscale tool's "add real detail" model (10 §4's row has carried "SeedVR2 (post-MVP)" since M5)?
+
+- **What exists.** SeedVR2 is in the pinned ComfyUI's core (`comfy_extras/nodes_seedvr.py` at v0.39.0: `SeedVR2Preprocess`,
+  `SeedVR2Conditioning`, `SeedVR2PostProcessing`, `SeedVR2TemporalChunk` / `Merge`; the model loads through `UNETLoader`, the VAE through
+  `VAELoader`; the sampler is a plain one-step `KSampler`, euler / simple, cfg 1, denoise 1) — no custom node (rule 2 holds). The engine
+  venv's template `utility_seedvr2_3b_int8_upscale_image.json` is the graph: Lanczos resize by the factor → Preprocess → `VAEEncodeTiled`
+  512/128 → Conditioning → KSampler → `VAEDecodeTiled` → PostProcessing (a colour match: lab / wavelet / adain / none). The weights are
+  Comfy-Org's repack of ByteDance-Seed's, **Apache-2.0** (D17 / D26: `open` too): the 3B in int8 convrot (3.46 GB, the template's), fp8
+  e4m3fn (3.39 GB, what 04 §4 named) and fp16 (6.78 GB); the 7B in fp8 (8.24 GB); the shared VAE fp16 (0.48 GB). The 04 §4 note's "ROCm
+  fixes in the numz pack" is about the custom node, not core; what core does on this card is the measurement.
+- **The spike** (`engine/spikes/e40_seedvr2.py`; the engine started by hand with `scripts/engine-start.ps1`, graphs straight to it as
+  E12 did): the bench's six Draft boards (`bench/i2v/frames/*.png`, 960×544, the t2i bench prompts' Klein renders) at ×2 (1920×1088,
+  the FHD tier) and ×4 (3840×2176) through SeedVR2 3B int8 and fp8, against Real-ESRGAN ×2 / ×4 — seconds (the first run of a weight
+  cold, the rest warm), peak VRAM, a detail measure (the Laplacian variance of the result against ESRGAN's, as D149's rig scored
+  sharpness), colour drift (mean ΔE against the Lanczos resize, with the lab match and with none) and a sheet of 1:1 crops for the author's
+  eye; then a Wan clip from the rig's outputs at ×2 through the video path (`SeedVR2TemporalChunk` auto) for the Full tier's frame upscale.
+- **Bars, set before the run:** ×2 of a Draft board warm ≤ 60 s and peak ≤ 15.5 GB (the Upscale tool's use); ×4 fits or is said not to;
+  sharper than ESRGAN at the same factor on the Laplacian measure without colour drift (ΔE ≤ 3 with the match) and without artefacts
+  on the sheet (the author's eye); the clip at ×2 fits and ends inside 10 min. Kill: ×2 over 120 s warm or out of memory → SeedVR2 3B
+  stays out on this card (the 7B is not tried). The loser of int8 / fp8 is deleted (D30); the weights are approved spike downloads
+  (2026-10-11's standing note). The decision after the numbers: D153 if adopted (the Upscale tool gains the model as a `graph = "seedvr2"`
+  spec in `tools.toml`, the fixture recaptured for the five classes).
+
+## 2026-10-28 13:18 — E40 measured: SeedVR2 3B on this card (fits, fast, adopted → D153)
+
+`engine/spikes/e40_seedvr2.py` as planned at 12:35 (the engine started by the script as the orchestrator starts it; the graphs straight to
+it; one GPU job at a time): three boards at ×2 and ×4 through SeedVR2 3B int8 convrot and fp8 against Real-ESRGAN, then the clip.
+
+**The boards** (960×544 → 1920×1088 at ×2, 3840×2176 at ×4; the engine's node cache warm after a weight's first run; Real-ESRGAN through
+  the same engine; the detail as the Laplacian variance of the result over ESRGAN's at the same factor; ΔE in Lab against the Lanczos
+  resize at full size — ESRGAN itself scores 2.8 / 3.3 / 1.6 on it — and, the detail averaged out, the output taken back to 960×544
+  against the source):
+
+  | run | alley-rain | fish-market | portrait-grief |
+  | --- | --- | --- | --- |
+  | Real-ESRGAN ×2 | 3.3 s · ΔE 2.8 | 1.7 s · ΔE 3.3 | 1.8 s · ΔE 1.6 |
+  | SeedVR2 3B int8 ×2 | 10.9 s (the weight's first) · peak 8.6 GB · detail 3.3× · ΔE 4.3 | 7.8 s · 8.6 GB · 2.0× · 4.7 | 7.6 s · 8.6 GB · 9.8× · 2.4 |
+  | SeedVR2 3B fp8 ×2 | 6.5 s · 4.4 GB · 3.1× · 4.3 | 7.2 s · 8.7 GB · 1.8× · 4.7 | 7.2 s · 8.7 GB · 9.2× · 2.4 |
+  | Real-ESRGAN ×4 | 10.4 s · ΔE 3.9 | 8.4 s · 4.4 | 8.3 s · 2.4 |
+  | SeedVR2 int8 ×4 | 31.9 s · 8.4 GB · 1.7× · 4.0 | 30.1 s · 4.6 GB · 1.0× · 4.6 | — |
+  | SeedVR2 fp8 ×4 | 33.1 s · 8.5 GB · 1.6× · 3.9 | 33.1 s · 4.6 GB · 0.9× · 4.4 | — |
+  | int8 ×2, no colour match | 7.1 s · ΔE 6.6 (ΔL −2.5 at the source's size) | | |
+
+  Back at the source's size (the colour alone): ESRGAN ×2 ΔE 2.6 / 3.0 / 1.5 (ΔL −0.6 / −0.4 / −0.2); SeedVR2 ×2 with the lab match 3.9 / 4.3 / 2.2
+  (ΔL −0.01 / −0.05 / −0.03); without the match 6.3 (ΔL −2.5). int8 against fp8: the same seconds and peaks, the detail 334 against 308
+  (alley), the sheets indistinguishable.
+
+  **The clip** (`engine/spikes/out/a1/final.mp4`, the A1 rig's Wan Animate final: 832×480 × 121 frames at 24 fps → 1664×960, int8, the
+  lab match; `SeedVR2TemporalChunk` auto with 14.9 GB free chose 13 frames a chunk): 121 of 121 frames in **1078 s** (18 min, 8.9 s a
+  frame), peak 5.3 GB, ΔE 2.4–2.5 a frame; the sheet shows the hair, the coat's weave and the face drawn in. The sheets: `engine/spikes/out/e40/`
+  (`sheet_x2.jpg`, `sheet_x4.jpg`, `sheet_clip_results_clip.jpg`, `clip_x2.mp4`, every full-size output).
+
+  **Bars:** every job done ✓ · ×2 warm ≤ 60 s ✓ (7–8 s) · peak ≤ 15.5 GB ✓ (8.7) · sharper than ESRGAN ✓ (1.8–9.8×) · ΔE ≤ 3 under the
+  match ✗ as written — the bar was set without a calibration: ESRGAN scores 2.8–3.3 on the same measure, and the detail the restoration
+  adds counts in a full-size ΔE; at the source's size the match holds the luminance to a hundredth of an L unit and the chroma within
+  1.3 ΔE of ESRGAN's own distance, the sheets show no cast → the colour reading is "matched, with the lab step on"; a kill never came
+  near · ×4 fits ✓ (30–33 s, 8.5 GB) · the clip inside 10 min ✗ (18 min).
+
+**Reading → D153.** SeedVR2 3B on the pinned engine's own nodes is the "add real detail" upscaler 04 §4 wanted, and it is cheap on this
+  card: a Draft board to FHD in eight seconds at under 9 GB, with hair, weave, skin and rigging drawn in where ESRGAN only smooths
+  (the sheets; 2–10× by the measure). The product shape follows the measurement: **×2 only** — ×4 from a 0.5 MP Draft fits in 30 s but
+  over-textures the crowd's small faces (the fish-market row of `sheet_x4.jpg`: an oil-painting skin on every head), and an FHD board to 4K
+  is a second ×2 from the detailed FHD, the better path anyway. **The Lab colour match always on** (without it the model darkens by 2.5 L).
+  **int8 convrot kept** (the template's; comfy-kitchen's int8 runs on ROCm as Pixal3D's does), **fp8 deleted** — equal on the sheet and
+  the numbers (D30). **The clip path fits but is not offered**: 18 min for five seconds of Draft is a render, not a step; Animate's frame
+  upscale for the Full tier (04 §4's table) waits for a reason to spend it — the number is the baseline. No custom node (rule 2); Apache-2.0
+  (D17 / D26: `open` too). **D153** recorded; built:
+
+  - `tools.toml` `seedvr2-3b` (graph `seedvr2`, `roles.vae = "seedvr2-vae"`, `upscale_factor` 2, `default_for` upscale — Real-ESRGAN ×2
+    stays as "cheap", ×4 as it was; estimates vram 9.0, doc 8 s, cold 11 s); the roster's `seedvr2-3b` and `seedvr2-vae` entries (Comfy-Org's
+    repack, Apache-2.0, `full` + `open`); `spec.Graph` gains `seedvr2`.
+  - `graphs.build_upscale` branches on the spec's graph: the template's chain (`ImageScaleBy` lanczos → `SeedVR2Preprocess` → `VAEEncodeTiled`
+    512 / 128 → `SeedVR2Conditioning` → a one-step `KSampler` euler / simple, cfg 1, denoise 1 → `VAEDecodeTiled` → `SeedVR2PostProcessing`
+    lab); the tiled refine cuts its tiles from whichever upscaler ran (`upscaled`, not node 102); `recipe_weights` lists the VAE
+    (`model_ids`), so the admission and the fetch see both files.
+  - The fixture re-captured from the engine at the pin with the five classes (`make_object_info_fixture.py` lists them; 129 classes);
+    `pin_review.py` + 2 recipes (46), the parity snapshot gains the two graphs, nothing else changed.
+  - Tests: `test_seedvr2_d153.py` 5 (the default in both variants and in `parse_recipe`, the graph node for node, the weights and the
+    estimate, the refine cut from SeedVR2's output, ESRGAN still the cheap one); `test_edit_ai_m5` and `test_te_gguf` name the cheap
+    upscaler where they stub its file (`CHEAP` from the registry, no literal). The frontend needed nothing: the panel lists `caps.tools`
+    with the default first; the API contract unchanged.
+  - The rig through the app (`scripts/seedvr2_rig.py`: a document from the alley board, Upscale with the default twice, the cheap one,
+    the default + tiled refine): 8/8 — the default is SeedVR2 (health verified; the preview says 8 s, VRAM 9.0 of 16, fit ok); ×2 **23.3 s** the session's first (the 3.2 GB read from disk,
+    Q15's pattern) and **7.0 s** warm (the decode 5.4 s of it — `VAEDecodeTiled` at 512 / 128 on 2 MP; the sampler 0.8 s: a larger decode tile is the first
+    thing to try if the eight seconds ever matter), peak 8.6 GB, the asset 1920×1088; Real-ESRGAN ×2 3.9 s; SeedVR2 ×2 + the tiled refine (Klein base, four
+    1024² tiles at 40–51 s each) 204.5 s, peak 9.5 GB. The sheet: `engine/spikes/out/seedvr2/sheet.jpg`.
+  Offline 684 passed, Vitest 576 + 3 skipped, e2e 76/76 (alone), model_literals_check, settings_audit (316 fields, 0 problems) and agents_check clean; the API contract unchanged.

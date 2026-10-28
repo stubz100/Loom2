@@ -19,6 +19,8 @@ from loom2.engine import graphs
 from loom2.recipes import Segment, Upscale, parse_recipe, warm_group
 from loom2.roster import Roster
 
+CHEAP = next(s.id for s in registry.SPECS.values() if s.graph == "esrgan" and s.recipes.upscale_factor == 2)   # D153: SeedVR2 is the default upscaler; this test stubs the cheap one
+
 
 def _tree(tmp_path: Path) -> Roster:
     root = tmp_path / "models"
@@ -87,9 +89,9 @@ def test_segment_graphs_compile_against_the_engine(tmp_path: Path, object_info):
 
 def test_tiled_refine_upscale_graph(tmp_path: Path, object_info):
     roster = _tree(tmp_path)
-    plain = graphs.compile_recipe(Upscale(document_id="d"), roster, object_info, 0, "loom2/u", inputs={"image": "image.png", "w": 960, "h": 544})
+    plain = graphs.compile_recipe(Upscale(document_id="d", model_id=CHEAP), roster, object_info, 0, "loom2/u", inputs={"image": "image.png", "w": 960, "h": 544})
     assert not plain.problems and plain.graph["99"]["inputs"]["images"] == ["102", 0] and plain.summary["factor"] == 2
-    r = Upscale(document_id="d", refine=True, strength=0.25, tile=1024, overlap=128, prompt_text="alley")
+    r = Upscale(document_id="d", model_id=CHEAP, refine=True, strength=0.25, tile=1024, overlap=128, prompt_text="alley")
     c = graphs.compile_recipe(r, roster, object_info, 5, "loom2/u", inputs={"image": "image.png", "w": 960, "h": 544})
     assert not c.problems, c.problems
     tiles = [n for n in c.graph.values() if n["class_type"] == "ImageCrop"]
@@ -103,7 +105,7 @@ def test_tiled_refine_upscale_graph(tmp_path: Path, object_info):
     assert first["inputs"]["right"] == 64 and first["inputs"]["bottom"] == 64            # the corner tile feathers only inward
     assert warm_group(r) == "klein-base-9b" and graphs.estimate_vram_gb(r) == registry.get("klein-base-9b").estimates.vram_gb
     with pytest.raises(graphs.CompileError):
-        graphs.compile_recipe(Upscale(document_id="d", refine=True, refine_model_id="klein-9b"), roster, object_info, 0, "loom2/u", inputs={"image": "image.png", "w": 960, "h": 544})
+        graphs.compile_recipe(Upscale(document_id="d", model_id=CHEAP, refine=True, refine_model_id="klein-9b"), roster, object_info, 0, "loom2/u", inputs={"image": "image.png", "w": 960, "h": 544})
 
 
 # ---- API: selection round trip, segment accepted ---------------------------------------------------------------------

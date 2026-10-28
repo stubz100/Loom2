@@ -64,6 +64,13 @@ ROSTER: list[RosterEntry] = [
     RosterEntry(id="sam3", name="sam3.pt", folder="sam3", family="tools", role="tool",
                 repo="facebook/sam3", file="sam3.pt", license="sam-license (gated)", variants=["full"], approx_gb=3.45,
                 note="SAM 3 detector + its text encoder in one checkpoint; loads through CheckpointLoaderSimple (the sam3 folder is mounted as a checkpoints path)"),
+    # E40 → D153 (2026-10-28): SeedVR2 3B, the "add real detail" upscaler (04 §4) on ComfyUI's core nodes; Comfy-Org's repack of ByteDance-Seed's, Apache-2.0.
+    #      int8 convrot (the template's) kept over fp8 e4m3fn (equal on the sheet and the numbers; deleted, D30). The VAE is shared by every SeedVR2 size.
+    RosterEntry(id="seedvr2-3b", name="seedvr2_3b_int8_convrot.safetensors", folder="diffusion_models", family="tools", role="upscaler",
+                repo="Comfy-Org/SeedVR2", file="diffusion_models/seedvr2_3b_int8_convrot.safetensors", license="apache-2.0", variants=["full", "open"], approx_gb=3.22,
+                note="SeedVR2 3B (UNETLoader + the core SeedVR2 nodes): one-step restoration at the resized size — hair, weave, skin drawn in; E40: ×2 of a 960×544 board 7–8 s, peak 8.7 GB"),
+    RosterEntry(id="seedvr2-vae", name="seedvr2_ema_vae_fp16.safetensors", folder="vae", family="tools", role="vae",
+                repo="Comfy-Org/SeedVR2", file="vae/seedvr2_ema_vae_fp16.safetensors", license="apache-2.0", variants=["full", "open"], approx_gb=0.47),
     RosterEntry(id="realesrgan-x2", name="RealESRGAN_x2.pth", folder="upscale_models", family="tools", role="upscaler",
                 repo="ai-forever/Real-ESRGAN", file="RealESRGAN_x2.pth", license="bsd-3-clause", variants=["full", "open"], approx_gb=0.07,
                 note="Real-ESRGAN 2× (spandrel loader); cheap detail-preserving upscale (10 §4)"),

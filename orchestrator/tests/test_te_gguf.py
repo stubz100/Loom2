@@ -14,6 +14,8 @@ from loom2.engine.contract import check_graph
 from loom2.recipes import I2I, Inpaint, T2I, Upscale
 from loom2.roster import ROSTER_BY_ID, Roster
 
+CHEAP = next(s.id for s in registry.SPECS.values() if s.graph == "esrgan" and s.recipes.upscale_factor == 2)   # D153: SeedVR2 is the default upscaler; these tests stub the cheap one
+
 
 def _tree(tmp_path: Path) -> Roster:
     root = tmp_path / "models"
@@ -39,13 +41,13 @@ def test_roster_and_presets_follow_d31():
 def test_default_is_clip_loader_gguf_and_fp8_is_the_alternate(tmp_path: Path, object_info):
     roster = _tree(tmp_path)
     inputs = {"image": "image.png", "w": 960, "h": 544}
-    base = graphs.compile_recipe(Upscale(document_id="d", refine=True, prompt_text="alley"), roster, object_info, 0, "loom2/u", inputs=inputs)
+    base = graphs.compile_recipe(Upscale(document_id="d", model_id=CHEAP, refine=True, prompt_text="alley"), roster, object_info, 0, "loom2/u", inputs=inputs)
     assert base.graph["2"] == {"class_type": "CLIPLoaderGGUF", "inputs": {"clip_name": "Qwen3-8B-Q4_K_M.gguf", "type": "flux2"}}
     assert not base.problems, base.problems                                        # the fixture carries CLIPLoaderGGUF (recaptured 2026-10-07)
     assert not check_graph(object_info, base.graph)
     enc = [n for n in base.graph.values() if n["class_type"] == "CLIPTextEncode"]
     assert enc and all(n["inputs"]["clip"] == ["2", 0] for n in enc)
-    fp8 = graphs.compile_recipe(Upscale(document_id="d", refine=True, prompt_text="alley", te_id="qwen3-8b-fp8mixed"), roster, object_info, 0, "loom2/u", inputs=inputs)
+    fp8 = graphs.compile_recipe(Upscale(document_id="d", model_id=CHEAP, refine=True, prompt_text="alley", te_id="qwen3-8b-fp8mixed"), roster, object_info, 0, "loom2/u", inputs=inputs)
     assert fp8.graph["2"] == {"class_type": "CLIPLoader", "inputs": {"clip_name": "qwen_3_8b_fp8mixed.safetensors", "type": "flux2", "device": "default"}} and not fp8.problems
     # T2I / I2I / Inpaint take the same override; the fp8 encoder may still go to the CPU
     t = graphs.compile_recipe(T2I(model_id="klein-9b", prompt_mode="text", prompt_text="a cat", te_id="qwen3-8b-fp8mixed", te_device="cpu"), roster, object_info, 1, "loom2/t")
@@ -60,21 +62,21 @@ def test_unlisted_mismatched_or_retired_encoder_is_a_compile_error(tmp_path: Pat
     roster = _tree(tmp_path)
     inputs = {"image": "image.png", "w": 960, "h": 544}
     with pytest.raises(graphs.CompileError, match="does not pair"):                # the 4B encoder on a 9B model: a shape error inside the engine otherwise
-        graphs.compile_recipe(Upscale(document_id="d", refine=True, te_id="qwen3-4b"), roster, object_info, 0, "loom2/u", inputs=inputs)
+        graphs.compile_recipe(Upscale(document_id="d", model_id=CHEAP, refine=True, te_id="qwen3-4b"), roster, object_info, 0, "loom2/u", inputs=inputs)
     with pytest.raises(graphs.CompileError, match="does not pair"):                # an 8B encoder on the 4B model
         graphs.compile_recipe(T2I(model_id="klein-4b", prompt_mode="text", prompt_text="x", te_id="qwen3-8b-q4km"), roster, object_info, 0, "loom2/t")
     with pytest.raises(graphs.CompileError, match="does not pair"):                # retired quantizations are not offered
-        graphs.recipe_te_id(Upscale(document_id="d", refine=True, te_id="qwen3-8b-q3km"))
+        graphs.recipe_te_id(Upscale(document_id="d", model_id=CHEAP, refine=True, te_id="qwen3-8b-q3km"))
     with pytest.raises(graphs.CompileError, match="default device"):               # CLIPLoaderGGUF has no device input: cpu needs the fp8 alternate
-        graphs.compile_recipe(Upscale(document_id="d", refine=True, te_device="cpu"), roster, object_info, 0, "loom2/u", inputs=inputs)
-    assert graphs.recipe_te_id(Upscale(document_id="d")) is None                   # no refine → no encoder
+        graphs.compile_recipe(Upscale(document_id="d", model_id=CHEAP, refine=True, te_device="cpu"), roster, object_info, 0, "loom2/u", inputs=inputs)
+    assert graphs.recipe_te_id(Upscale(document_id="d", model_id=CHEAP)) is None                   # no refine → no encoder
 
 
 def test_weight_list_queue_gate_and_capabilities_see_the_encoder(tmp_path: Path):
-    r = Upscale(document_id="d", refine=True)
-    assert graphs.recipe_weights(r) == ["realesrgan-x2", "klein-base-9b", "qwen3-8b-q4km", "flux2-vae"]
-    assert graphs.recipe_weights(Upscale(document_id="d", refine=True, te_id="qwen3-8b-fp8mixed"))[2] == "qwen3-8b-fp8mixed"
-    assert graphs.recipe_weights(Upscale(document_id="d", refine=True, te_id="qwen3-4b"))[2] == "qwen3-8b-q4km"   # tolerant here; compile / submission reject it
+    r = Upscale(document_id="d", model_id=CHEAP, refine=True)
+    assert graphs.recipe_weights(r) == [CHEAP, "klein-base-9b", "qwen3-8b-q4km", "flux2-vae"]
+    assert graphs.recipe_weights(Upscale(document_id="d", model_id=CHEAP, refine=True, te_id="qwen3-8b-fp8mixed"))[2] == "qwen3-8b-fp8mixed"
+    assert graphs.recipe_weights(Upscale(document_id="d", model_id=CHEAP, refine=True, te_id="qwen3-4b"))[2] == "qwen3-8b-q4km"   # tolerant here; compile / submission reject it
     from loom2.api import create_app
     from fastapi.testclient import TestClient
     state = tmp_path / "state"

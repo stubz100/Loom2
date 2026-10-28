@@ -7,7 +7,7 @@ import { useSession } from '../store/session'
 
 export interface OpenWith { suite: 'edit' | 'generate' | 'animate'; tool?: Tool; aiOp?: AiOp; selMode?: SelMode; slot?: 'start' | 'end' | 'ref' | 'angle' }
 
-const AI_OPS: AiOp[] = ['select', 'inpaint', 'refine', 'upscale', 'outpaint']
+const AI_OPS: AiOp[] = ['select', 'inpaint', 'refine', 'upscale', 'outpaint', 'instruct']   // D151
 const SEL_MODES: SelMode[] = ['subject', 'text', 'points', 'box']
 
 /** Open `assetId` (or nothing) in a suite with a tool, an AI operation and a slot chosen. An AI operation selects the AI tool and its panel. */

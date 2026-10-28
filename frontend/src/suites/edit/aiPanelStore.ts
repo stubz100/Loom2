@@ -4,7 +4,7 @@
 import { create } from 'zustand'
 import { DEV_HOOKS } from '../../devHooks'
 
-export type AiOp = 'select' | 'inpaint' | 'refine' | 'upscale' | 'outpaint'
+export type AiOp = 'select' | 'inpaint' | 'refine' | 'upscale' | 'outpaint' | 'instruct'
 export type SelMode = 'subject' | 'text' | 'points' | 'box'
 export type SelOp = 'replace' | 'add' | 'subtract' | 'intersect'
 
@@ -23,6 +23,7 @@ export interface AiPanelState {
   blend: 'feather' | 'seamless'              // D47: paste-back — feather only, or Poisson-cloned onto the plate inside the feather
   matchColour: boolean                       // D48 (Refine): map the result's colour statistics onto the original's
   prefill: boolean                           // D62 (Remove): the hole content-aware filled before the engine sees it
+  instructSource: 'visible' | 'active'       // D151 (Instruct): the whole picture, or the active layer alone
 }
 
 export const AI_DEFAULT: AiPanelState = {
@@ -30,11 +31,11 @@ export const AI_DEFAULT: AiPanelState = {
   refineModel: '', strength: 0.3, refineSource: 'visible', upscaleModel: '', upscaleSource: 'visible', asLayer: true,
   refineTiled: false, tiledModel: '', tiledStrength: 0.25, tile: 1024, overlap: 128,
   pad: { left: 0, top: 0, right: 256, bottom: 0 }, outpaintHero: false, teId: null,
-  selModel: null, selMode: 'subject', selText: '', selThreshold: 0.5, selOp: 'replace', selExpand: 0, selFeather: 2, selRefine: false, blend: 'feather', matchColour: false, prefill: false,
+  selModel: null, selMode: 'subject', selText: '', selThreshold: 0.5, selOp: 'replace', selExpand: 0, selFeather: 2, selRefine: false, blend: 'feather', matchColour: false, prefill: false, instructSource: 'visible',
 }
 
 const OP_KEY = 'loom2.edit.aiOp'
-const OPS: AiOp[] = ['select', 'inpaint', 'refine', 'upscale', 'outpaint']
+const OPS: AiOp[] = ['select', 'inpaint', 'refine', 'upscale', 'outpaint', 'instruct']
 function lastOp(): AiOp {
   try { const v = localStorage.getItem(OP_KEY) as AiOp | null; return v && OPS.includes(v) ? v : AI_DEFAULT.op } catch { return AI_DEFAULT.op }
 }

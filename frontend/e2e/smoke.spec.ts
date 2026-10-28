@@ -302,6 +302,24 @@ test('quick actions (D71): "Select subject" in the Inspector reaches Edit with A
   await expect.poll(() => editorTool(page), { timeout: 30_000 }).toMatchObject({ tool: 'ai', op: 'upscale' })
 })
 
+test("Instruct (D151): the AI tab's edit by instruction — the deep link opens it, it refuses without an instruction and runs with one; the canvas menu shows it", async ({ page }) => {
+  await openApp(page, { suite: 'catalogue' })
+  await tiles(page).nth(8).click()
+  await page.locator('.insp .quick-card', { hasText: 'Select subject' }).click()                         // Edit with a document (D71)
+  await expect.poll(() => editorTool(page), { timeout: 30_000 }).toMatchObject({ doc: true, tool: 'ai' })
+  await page.getByRole('button', { name: 'Instruct', exact: true }).click()
+  await expect.poll(() => editorTool(page), { timeout: 10_000 }).toMatchObject({ op: 'instruct' })
+  const run = page.getByRole('button', { name: /^AI ▶ Instruct/ })
+  await expect(run).toBeDisabled()
+  await expect(page.locator('p.hint', { hasText: 'say what to change' })).toBeVisible()
+  await page.locator('textarea[placeholder^="what to change"]').fill('make it dusk, the lamps lit')
+  await expect(run).toBeEnabled()
+  await expect(run).toHaveText(/×2$/)                                                                     // two candidates by default (≈ 32 s each)
+  await page.screenshot({ path: 'node_modules/.e2e/d151-instruct.png' })
+  await openApp(page, { suite: 'edit', tool: 'ai', ai: 'instruct' })
+  await expect.poll(() => editorTool(page), { timeout: 30_000 }).toMatchObject({ tool: 'ai', op: 'instruct' })
+})
+
 test('remappable keys (D72): Pin for compare to G is refused (Cycle grouping has it); to J — menu, tooltip and help show J, J pins, C does not, it survives a reload', async ({ page }) => {
   await openApp(page, { suite: 'catalogue' })
   const openKeys = async () => {

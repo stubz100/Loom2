@@ -34,13 +34,14 @@ def compile_all(tmp_path: Path, object_info: dict) -> dict[str, dict]:
     out: dict[str, dict] = {}
     for name, recipe, inputs in pr.recipes():
         c = compile_recipe(recipe, roster, object_info, 1, "loom2/parity", ref_files=inputs.get("refs"), inputs=inputs)
-        out[name] = {"graph_hash": c.graph_hash, "problems": c.problems, "summary": json.loads(json.dumps(c.summary, sort_keys=True, default=str))}
+        problems = [x for x in c.problems if "not in enum" not in x]        # 2026-10-28: an uploaded file's name against the capture's input folder is the engine's, not the graph's (as pin_review reads it)
+        out[name] = {"graph_hash": c.graph_hash, "problems": problems, "summary": json.loads(json.dumps(c.summary, sort_keys=True, default=str))}
     return out
 
 
 def test_graph_parity(tmp_path: Path, object_info: dict, request: pytest.FixtureRequest) -> None:
     got = compile_all(tmp_path, object_info)
-    assert len(got) == 43                                                       # D89: + 4 t2i and 4 i2i on the creative families; D91: + 2 t2i, 1 i2i (the sample models);
+    assert len(got) == 44                                                       # D89: + 4 t2i and 4 i2i on the creative families; D91: + 2 t2i, 1 i2i (the sample models); D151: + instruct;
                                                                             # 2026-10-28 (the review against v0.43.1): + 15 — animate (two), s2v, LTX guided and extend, Wan extend,
                                                                             # reangle (two), stage shot (two), mesh, set, keypoints, matte (two)
     if request.config.getoption("--parity-update"):

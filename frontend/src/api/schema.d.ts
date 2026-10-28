@@ -5322,6 +5322,7 @@ export interface components {
             experimental?: components["schemas"]["ExperimentalCaps"] | null;
             facesim: components["schemas"]["FaceSimCaps"];
             i2v: components["schemas"]["I2vCaps"];
+            instruct: components["schemas"]["InstructCaps"];
             mesh: components["schemas"]["MeshCaps"];
             /** Models */
             models: {
@@ -8846,6 +8847,91 @@ export interface components {
             refs_max?: number;
             refs_suggest?: components["schemas"]["RefsSuggest"] | null;
         };
+        /**
+         * Instruct
+         * @description Post-MVP item 8 (D151): an edit by instruction on the document — Qwen-Image-Edit 2509 fp8 + Lightning 4-step (the angles verb's
+         *     weights without its LoRA): the visible composite or the active layer at ≤ `max_pixels` through TextEncodeQwenImageEditPlus with the
+         *     instruction, the result a new layer the source's size. E8 (04 §4) found 2509 softer than Klein and no remover, so the fills stay Klein's;
+         *     this is for what a mask cannot say — the time of day, the weather, a thing in a hand, a costume.
+         */
+        Instruct: {
+            /**
+             * Document Id
+             * @default
+             */
+            document_id?: string;
+            /**
+             * Kind
+             * @default instruct
+             * @constant
+             */
+            kind?: "instruct";
+            /**
+             * Layer Id
+             * @default null
+             */
+            layer_id?: string | null;
+            /**
+             * Max Pixels
+             * @default 1048576
+             */
+            max_pixels?: number;
+            /**
+             * Model Id
+             * @description roster id; default: the registry's instruct model (D65)
+             */
+            model_id?: string;
+            /**
+             * Prompt Text
+             * @default
+             */
+            prompt_text?: string;
+            /** Seeds */
+            seeds?: number[];
+            /**
+             * Source
+             * @default visible
+             * @enum {string}
+             */
+            source?: "visible" | "active";
+        };
+        /** InstructCaps */
+        InstructCaps: {
+            /** Default */
+            default?: string | null;
+            /** Models */
+            models: {
+                [key: string]: components["schemas"]["InstructModelCaps"];
+            };
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * InstructModelCaps
+         * @description D151: one edit-by-instruction model as /capabilities.instruct lists it.
+         */
+        InstructModelCaps: {
+            /** Approx Gb */
+            approx_gb: number;
+            /** Health */
+            health: string;
+            /** Hint */
+            hint?: string | null;
+            /** Label */
+            label: string;
+            /** License */
+            license?: string | null;
+            /** Missing */
+            missing: string[];
+            /** Seconds */
+            seconds?: number | null;
+            /** Short */
+            short: string;
+            /** Vram Gb */
+            vram_gb?: number | null;
+        } & {
+            [key: string]: unknown;
+        };
         /** ItemRef */
         ItemRef: {
             /** Id */
@@ -11034,7 +11120,7 @@ export interface components {
             recents: string[];
         };
         /** Recipe */
-        Recipe: components["schemas"]["T2I"] | components["schemas"]["I2I"] | components["schemas"]["Inpaint"] | components["schemas"]["Upscale"] | components["schemas"]["Segment"] | components["schemas"]["I2V"];
+        Recipe: components["schemas"]["T2I"] | components["schemas"]["I2I"] | components["schemas"]["Inpaint"] | components["schemas"]["Upscale"] | components["schemas"]["Segment"] | components["schemas"]["I2V"] | components["schemas"]["Instruct"];
         /** RecipeBody */
         RecipeBody: {
             /** Recipe */
@@ -11181,6 +11267,11 @@ export interface components {
              * @default false
              */
             inpaint_hero?: boolean;
+            /**
+             * Instruct
+             * @default false
+             */
+            instruct?: boolean;
             /**
              * Keypoints
              * @default false

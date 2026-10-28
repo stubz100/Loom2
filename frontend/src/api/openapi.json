@@ -1918,6 +1918,9 @@
           "i2v": {
             "$ref": "#/components/schemas/I2vCaps"
           },
+          "instruct": {
+            "$ref": "#/components/schemas/InstructCaps"
+          },
           "mesh": {
             "$ref": "#/components/schemas/MeshCaps"
           },
@@ -2075,6 +2078,7 @@
           "refine_edge",
           "content_aware",
           "reangle",
+          "instruct",
           "stage",
           "mesh"
         ],
@@ -10706,6 +10710,179 @@
         "title": "Inputs",
         "type": "object"
       },
+      "Instruct": {
+        "description": "Post-MVP item 8 (D151): an edit by instruction on the document — Qwen-Image-Edit 2509 fp8 + Lightning 4-step (the angles verb's\nweights without its LoRA): the visible composite or the active layer at ≤ `max_pixels` through TextEncodeQwenImageEditPlus with the\ninstruction, the result a new layer the source's size. E8 (04 §4) found 2509 softer than Klein and no remover, so the fills stay Klein's;\nthis is for what a mask cannot say — the time of day, the weather, a thing in a hand, a costume.",
+        "properties": {
+          "document_id": {
+            "default": "",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "instruct",
+            "default": "instruct",
+            "title": "Kind",
+            "type": "string"
+          },
+          "layer_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Layer Id"
+          },
+          "max_pixels": {
+            "default": 1048576,
+            "maximum": 2097152,
+            "minimum": 262144,
+            "title": "Max Pixels",
+            "type": "integer"
+          },
+          "model_id": {
+            "description": "roster id; default: the registry's instruct model (D65)",
+            "title": "Model Id",
+            "type": "string"
+          },
+          "prompt_text": {
+            "default": "",
+            "title": "Prompt Text",
+            "type": "string"
+          },
+          "seeds": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Seeds",
+            "type": "array"
+          },
+          "source": {
+            "default": "visible",
+            "enum": [
+              "visible",
+              "active"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "title": "Instruct",
+        "type": "object"
+      },
+      "InstructCaps": {
+        "additionalProperties": true,
+        "properties": {
+          "default": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default"
+          },
+          "models": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/InstructModelCaps"
+            },
+            "title": "Models",
+            "type": "object"
+          }
+        },
+        "required": [
+          "models"
+        ],
+        "title": "InstructCaps",
+        "type": "object"
+      },
+      "InstructModelCaps": {
+        "additionalProperties": true,
+        "description": "D151: one edit-by-instruction model as /capabilities.instruct lists it.",
+        "properties": {
+          "approx_gb": {
+            "title": "Approx Gb",
+            "type": "number"
+          },
+          "health": {
+            "title": "Health",
+            "type": "string"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "license": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seconds"
+          },
+          "short": {
+            "title": "Short",
+            "type": "string"
+          },
+          "vram_gb": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vram Gb"
+          }
+        },
+        "required": [
+          "label",
+          "short",
+          "health",
+          "missing",
+          "approx_gb"
+        ],
+        "title": "InstructModelCaps",
+        "type": "object"
+      },
       "ItemRef": {
         "properties": {
           "id": {
@@ -16259,6 +16436,9 @@
           },
           {
             "$ref": "#/components/schemas/I2V"
+          },
+          {
+            "$ref": "#/components/schemas/Instruct"
           }
         ],
         "title": "Recipe"
@@ -16648,6 +16828,11 @@
           "inpaint_hero": {
             "default": false,
             "title": "Inpaint Hero",
+            "type": "boolean"
+          },
+          "instruct": {
+            "default": false,
+            "title": "Instruct",
             "type": "boolean"
           },
           "keypoints": {

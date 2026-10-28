@@ -30,7 +30,7 @@ from ..edit_ai import RegionPlan, assemble_layer, combine_selection, dilate, mas
 from ..fsio import StateError, new_id
 from ..models import registry
 from ..origin import JobOrigin
-from ..recipes import I2I, I2V, TTS, AssembleFinal, CompRender, ImageToMesh, ImageToSet, Inpaint, Keypoints, LayerPass, MatteSequence, Reangle, Render, Segment, StageShot, TrainLora, Upscale, stage_model_id
+from ..recipes import I2I, I2V, TTS, AssembleFinal, CompRender, ImageToMesh, ImageToSet, Inpaint, Instruct, Keypoints, LayerPass, MatteSequence, Reangle, Render, Segment, StageShot, TrainLora, Upscale, stage_model_id
 from ..roster import ROSTER_BY_ID
 from ..fsio import utc_now
 from ..body import Body
@@ -176,7 +176,7 @@ class DocumentFinisher:
     frees_cache = True
     free_force = False
 
-    async def finish(self, job: JobRecord, recipe: Inpaint | I2I | Upscale, files: list[dict], sub: Submission, q: JobQueue) -> None:
+    async def finish(self, job: JobRecord, recipe: Inpaint | I2I | Upscale | Instruct, files: list[dict], sub: Submission, q: JobQueue) -> None:
         """Paste the engine result back as a new layer (or a Catalogue asset for upscale)."""
         assert q.documents is not None
         inputs = sub.inputs
@@ -216,6 +216,10 @@ class DocumentFinisher:
             rgba = assemble_layer(arr, plan, inputs.get("alpha_mask"), recipe.feather)
             await add_result_layer(q, job, od, recipe, rgba, 0, 0, "outpaint", as_mask=True)
             return
+        if isinstance(recipe, Instruct):                                 # D151: the whole source back at its size, its own alpha kept
+            rgba = await asyncio.to_thread(assemble_layer, arr, plan, inputs.get("alpha_mask"), 0)
+            await add_result_layer(q, job, od, recipe, rgba, plan.x, plan.y, f"instruct · {recipe.prompt_text.strip()[:32]}")
+            return
         feather_px = recipe.feather if isinstance(recipe, Inpaint) or recipe.source == "selection" else 0
         if isinstance(recipe, Inpaint):
             rgba = await asyncio.to_thread(assemble_layer, arr, plan, inputs.get("alpha_mask"), feather_px, inputs.get("context"), recipe.blend)
@@ -245,7 +249,7 @@ class DocumentFinisher:
             job.log_tail.append(f"the clean plate {done['asset'].id}; the relief rebuilt from it next ({nxt.id}), then {len(models)} model{'s' if len(models) != 1 else ''}")
 
 
-async def add_result_layer(q: Any, job: Any, od: Any, recipe: Inpaint | I2I | Upscale, rgba: np.ndarray, x: int, y: int, label: str, as_mask: bool = False) -> None:
+async def add_result_layer(q: Any, job: Any, od: Any, recipe: Inpaint | I2I | Upscale | Instruct, rgba: np.ndarray, x: int, y: int, label: str, as_mask: bool = False) -> None:
     """Candidates of one batch share a group at the top of the stack; only the first is visible (10 §4 variant strip). With
     `as_mask` (D47) the alpha becomes a linked layer mask over opaque pixels, so the paste-back edge can be repainted."""
     gid = f"grp_{job.batch_id or job.id}"
@@ -1136,7 +1140,7 @@ def finisher_for(recipe: AnyRecipe) -> Finisher:
         return ClipFinisher()
     if isinstance(recipe, Segment):
         return SelectionFinisher()
-    if isinstance(recipe, (Inpaint, I2I, Upscale)):
+    if isinstance(recipe, (Inpaint, I2I, Upscale, Instruct)):
         return DocumentFinisher()
     fin = AssetFinisher()
     if isinstance(recipe, StageShot) and recipe.method == "refcontrol":

@@ -169,7 +169,9 @@ removed an object). FLUX.1 Fill is dropped (second-slowest and weakest on 3 of 4
 is deferred post-MVP (does not fit 16 GB, softer, no removal), and Klein base brought nothing to inpaint (wrong
 cloak colour, 46–155 s) and stays on the refine path only. The editor's "AI inpaint" verb exposes **Fill
 (Klein + LanPaint) · Fill-Match (Klein ICM) · Fill Hero (dev + LanPaint)** with the same selection → mask →
-new-layer contract; "Edit by instruction" waits for a model that beats Klein on this bench. Candidate defaults
+new-layer contract; "Edit by instruction" waited for a model that beats Klein on this bench — and became the AI tab's **Instruct**
+operation on 2509 fp8 + Lightning without the angles LoRA (D151, 2026-10-28; E12 had shown the 16 GB path), for what a mask cannot
+say rather than for the fills. Candidate defaults
 (D22): **4 on Klein, 2 on dev**. In the `open` variant Fill Hero is absent and Fill runs on Klein 4B
 (unmeasured). **Q17 resolved by E8b (2026-10-05):** Klein removes objects once the reference stops showing
 them — ICM with the hole neutralised to mid grey in the reference image (`klein_icm_hole`, 10 s warm) and

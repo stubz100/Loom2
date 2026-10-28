@@ -122,7 +122,7 @@ describe('edit.ai.* commands mirror the AI tab (D32, D90)', () => {
     useEditor.setState({ doc: stack([raster('a')]), activeId: 'a' })
     const menu = canvasMenu()
     const ai = menu.find((x) => 'items' in x && x.label === 'AI') as { items: MenuItem[] } | undefined
-    expect(ai && cmds(ai.items)).toEqual(['edit.ai.subject', 'edit.ai.show.inpaint', 'edit.ai.show.refine', 'edit.ai.show.upscale', 'edit.ai.show.outpaint'])
+    expect(ai && cmds(ai.items)).toEqual(['edit.ai.subject', 'edit.ai.show.inpaint', 'edit.ai.show.refine', 'edit.ai.show.upscale', 'edit.ai.show.outpaint', 'edit.ai.show.instruct'])   // D151
     expect(isEnabled(command('edit.ai.show.inpaint')!)).toBe(false)                           // "Inpaint the selection…" needs one
     useEditor.setState({ selection: {} as never })
     expect(isEnabled(command('edit.ai.show.inpaint')!)).toBe(true)
@@ -162,5 +162,25 @@ describe('the first screen and the developer items (D90 02 §10, 01 §11.6)', ()
     expect(isEnabled(command('edit.layer.mergeVisible')!)).toBe(true)
     command('edit.layer.mergeVisible')!.run()
     expect(toasts[0]).toMatch(/^Merge visible merges pixel layers only/)
+  })
+})
+
+describe('Instruct (D151): an edit by instruction', () => {
+  const model = { label: 'Qwen', short: 'Qwen', health: 'present', missing: [], seconds: 32, vram_gb: 15, approx_gb: 20 }
+  const withModel = { ...CAPS, instruct: { models: { 'qwen-edit-x': model }, default: 'qwen-edit-x' } } as unknown as Capabilities
+  const noModel = { ...CAPS, instruct: { models: {}, default: null } } as unknown as Capabilities
+  const missing = { ...CAPS, instruct: { models: { 'qwen-edit-x': { ...model, health: 'missing', missing: ['a.safetensors'] } }, default: 'qwen-edit-x' } } as unknown as Capabilities
+  it('needs a document, a model with its weights, an instruction, and a raster layer when it edits the active one', () => {
+    expect(aiReason(ctx({ caps: withModel, doc: null }, { prompt: 'make it dusk' }), 'instruct')).toBe('no document')
+    expect(aiReason(ctx({ caps: noModel }, { prompt: 'make it dusk' }), 'instruct')).toBe('no edit-by-instruction model in this build')
+    expect(aiReason(ctx({ caps: missing }, { prompt: 'make it dusk' }), 'instruct')).toMatch(/weights missing/)
+    expect(aiReason(ctx({ caps: withModel }, { prompt: '  ' }), 'instruct')).toBe('say what to change')
+    expect(aiReason(ctx({ caps: withModel, activeKind: 'group' }, { prompt: 'make it dusk', instructSource: 'active' }), 'instruct')).toBe('the active layer is not a raster layer')
+    expect(aiReason(ctx({ caps: withModel }, { prompt: 'make it dusk' }), 'instruct')).toBeNull()
+  })
+  it('sends the kind with the model, what it edits and the instruction; two candidates by default', () => {
+    const c = ctx({ caps: withModel, activeId: 'lyr_1' }, { prompt: 'snow on the street', instructSource: 'active', seedMode: 'fixed', seed: 5, candidates: 2 })
+    expect(aiRecipe(c, 'instruct')).toEqual({ kind: 'instruct', model_id: 'qwen-edit-x', source: 'active', layer_id: 'lyr_1', seeds: [5, 6], prompt_text: 'snow on the street' })
+    expect(opCandidates(c, 'instruct')).toBe(2)
   })
 })

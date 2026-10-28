@@ -12,7 +12,7 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..recipes import (FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES, T2I, I2I, ImageToMesh, ImageToSet, Inpaint, Keypoints, LayerPass, MatteSequence, AssembleFinal, CompRender,I2V, LoraRef, Reangle, RefImage, Render, Segment, StageShot, TrainLora, TTS, Upscale,
+from ..recipes import (FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES, T2I, I2I, ImageToMesh, ImageToSet, Inpaint, Instruct, Keypoints, LayerPass, MatteSequence, AssembleFinal, CompRender,I2V, LoraRef, Reangle, RefImage, Render, Segment, StageShot, TrainLora, TTS, Upscale,
                        inpaint_model_id, reangle_method, reangle_model_id, stage_model_id)
 from ..edit_ai import plan_tiles
 from ..models import registry
@@ -990,6 +990,41 @@ def build_reangle(recipe: Reangle, roster: Roster, seed: int, out_prefix: str, i
     return Compiled(graph=g, output_node="99", summary=summary, serialized_prompt=prompt)
 
 
+def build_instruct(recipe: Instruct, roster: Roster, seed: int, out_prefix: str, image_name: str) -> Compiled:
+    """D151: an edit by instruction — the angles verb's graph (build_reangle, angles_lora) without the angles LoRA: Qwen-Image-Edit 2509 fp8 +
+    Lightning 4-step, the source through TextEncodeQwenImageEditPlus with the instruction and as the latent at ≤ max_pixels (the
+    pipeline brings the result back to the source's size)."""
+    spec = registry.get(recipe.model_id)
+    if spec is None or not spec.recipes.instruct:
+        raise CompileError(f"{recipe.model_id!r} does not edit by instruction")
+    prompt = recipe.prompt_text.strip()
+    if not prompt:
+        raise CompileError("an edit by instruction needs the instruction (what to change)")
+    _, unet = roster.require(spec.id)
+    _, te = roster.require(spec.roles.te.default)                      # type: ignore[union-attr]
+    _, vae = roster.require(spec.roles.vae or "")
+    _, lightning = roster.require(spec.roles.extra["lightning"])
+    g: dict[str, Any] = {"100": {"class_type": "LoadImage", "inputs": {"image": image_name}}}
+    g["1"] = {"class_type": "UNETLoader", "inputs": {"unet_name": unet, "weight_dtype": spec.sampling.weight_dtype}}
+    g["2"] = {"class_type": "CLIPLoader", "inputs": {"clip_name": te, "type": "qwen_image", "device": "default"}}
+    g["3"] = {"class_type": "VAELoader", "inputs": {"vae_name": vae}}
+    g["4"] = {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ["1", 0], "lora_name": lightning, "strength_model": 1.0}}
+    g["5"] = {"class_type": "ModelSamplingAuraFlow", "inputs": {"model": ["4", 0], "shift": float(spec.sampling.model_shift or 3.0)}}
+    g["6"] = {"class_type": "CFGNorm", "inputs": {"model": ["5", 0], "strength": 1.0}}
+    g["20"] = {"class_type": "ImageScaleToTotalPixels", "inputs": {"image": ["100", 0], "upscale_method": "lanczos", "megapixels": round(recipe.max_pixels / 1048576, 2), "resolution_steps": 8}}
+    g["7"] = {"class_type": "TextEncodeQwenImageEditPlus", "inputs": {"clip": ["2", 0], "prompt": prompt, "vae": ["3", 0], "image1": ["20", 0]}}
+    g["8"] = {"class_type": "TextEncodeQwenImageEditPlus", "inputs": {"clip": ["2", 0], "prompt": "", "vae": ["3", 0], "image1": ["20", 0]}}
+    g["9"] = {"class_type": "VAEEncode", "inputs": {"pixels": ["20", 0], "vae": ["3", 0]}}
+    g["10"] = {"class_type": "KSampler", "inputs": {"model": ["6", 0], "seed": int(seed), "steps": int(spec.sampling.steps), "cfg": float(spec.sampling.cfg),
+                                                  "sampler_name": spec.sampling.sampler, "scheduler": spec.sampling.scheduler,
+                                                  "positive": ["7", 0], "negative": ["8", 0], "latent_image": ["9", 0], "denoise": 1.0}}
+    g["11"] = {"class_type": "VAEDecode", "inputs": {"samples": ["10", 0], "vae": ["3", 0]}}
+    g["99"] = {"class_type": "SaveImage", "inputs": {"images": ["11", 0], "filename_prefix": out_prefix}}
+    summary = {"model_id": spec.id, "instruction": prompt, "source": recipe.source, "max_pixels": recipe.max_pixels, "steps": int(spec.sampling.steps),
+               "cfg": float(spec.sampling.cfg), "seed": int(seed)}
+    return Compiled(graph=g, output_node="99", summary=summary, serialized_prompt=prompt)
+
+
 # ---- P13 ST3 (D78, 16 §7): the Stage → image graphs, ported from engine/spikes/e10_stage.py ----------------------------------------
 STAGE_CLAY_LEAD = ("Image 1 is a grey clay blocking of this exact shot: the grey mannequins stand for the people described below, the grey blocks for the "
                    "set and props. Render it as a finished cinematic still: keep image 1's camera, framing, composition, and every figure's pose, "
@@ -1552,7 +1587,7 @@ def build_face_pass(recipe: LayerPass, roster: Roster, seed: int, out_prefix: st
     return Compiled(graph=g, output_node="99", summary=summary, serialized_prompt=prompt)
 
 
-def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V | Reangle | StageShot | ImageToMesh | ImageToSet | Keypoints | MatteSequence | LayerPass, roster: Roster, object_info: dict, seed: int, out_prefix: str,
+def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V | Reangle | Instruct | StageShot | ImageToMesh | ImageToSet | Keypoints | MatteSequence | LayerPass, roster: Roster, object_info: dict, seed: int, out_prefix: str,
                    ref_files: dict[str, str] | None = None, inputs: dict[str, Any] | None = None, variant: str = "full") -> Compiled:
     """`inputs` carries the uploaded engine input names and sizes for the document recipes (queue._prepare_document_inputs)."""
     if isinstance(recipe, T2I):
@@ -1579,6 +1614,11 @@ def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V | Reangle | Stage
         if "image" not in i:
             raise CompileError("reangle needs the uploaded source (pipeline.prepare_reangle)")
         c = build_reangle(recipe, roster, seed, out_prefix, i["image"], int(i.get("w", 0)), int(i.get("h", 0)), variant)
+    elif isinstance(recipe, Instruct):                                 # D151: the document's source, uploaded by prepare_document
+        i = inputs or {}
+        if "image" not in i:
+            raise CompileError("an edit by instruction needs the uploaded source (pipeline.prepare_document)")
+        c = build_instruct(recipe, roster, seed, out_prefix, i["image"])
     elif isinstance(recipe, StageShot):
         i = inputs or {}
         if not (i.get("clay") or i.get("pose")):

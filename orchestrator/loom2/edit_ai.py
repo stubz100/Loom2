@@ -93,13 +93,13 @@ def plan_region(mask: np.ndarray, doc_w: int, doc_h: int, margin_pct: int = 25, 
     return RegionPlan(x, y, w, h, scale, ew, eh)
 
 
-def whole_plan(doc_w: int, doc_h: int, max_size: int = 2048) -> RegionPlan:
-    scale, ew, eh = _engine_size(doc_w, doc_h, 0, max_size)
+def whole_plan(doc_w: int, doc_h: int, max_size: int = 2048, max_pixels: int = 0) -> RegionPlan:
+    scale, ew, eh = _engine_size(doc_w, doc_h, 0, max_size, max_pixels)
     return RegionPlan(0, 0, doc_w, doc_h, scale, ew, eh)
 
 
-def layer_plan(x: int, y: int, w: int, h: int, max_size: int = 2048) -> RegionPlan:
-    scale, ew, eh = _engine_size(w, h, 0, max_size)
+def layer_plan(x: int, y: int, w: int, h: int, max_size: int = 2048, max_pixels: int = 0) -> RegionPlan:
+    scale, ew, eh = _engine_size(w, h, 0, max_size, max_pixels)
     return RegionPlan(x, y, w, h, scale, ew, eh)
 
 

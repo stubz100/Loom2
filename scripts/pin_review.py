@@ -24,7 +24,7 @@ sys.path.insert(0, str(REPO / "orchestrator" / "tests"))
 
 from loom2.engine import graphs  # noqa: E402
 from loom2.engine.contract import check_graph  # noqa: E402
-from loom2.recipes import (AnimateChain, AudioRef, Beat, ExtendFrom, Guide, I2I, I2V, ImageToMesh, ImageToSet, Inpaint, Keypoints, MatteSequence,  # noqa: E402
+from loom2.recipes import (AnimateChain, AudioRef, Beat, ExtendFrom, Guide, I2I, I2V, ImageToMesh, ImageToSet, Inpaint, Instruct, Keypoints, MatteSequence,  # noqa: E402
                            Reangle, RefImage, Segment, StageShot, T2I, Upscale)
 from loom2.roster import ROSTER_BY_ID, Roster  # noqa: E402
 
@@ -108,6 +108,7 @@ def recipes() -> list[tuple[str, object, dict]]:
         ("keypoints (sdpose)", Keypoints(asset_id="a"), {"image": png}),
         ("matte sequence sam3 (text)", MatteSequence(final_id="f", layer_id="l"), {"video": "frames.mp4"}),
         ("matte sequence birefnet (subject)", MatteSequence(final_id="f", layer_id="l", mode="subject"), {"video": "frames.mp4"}),
+        ("instruct (qwen edit)", Instruct(document_id="d", prompt_text="make it dusk"), img),                       # D151 (2026-10-28)
     ]
 
 

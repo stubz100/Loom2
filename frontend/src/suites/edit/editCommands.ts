@@ -39,8 +39,10 @@ const AI_RUNS: [AiOp, string, typeof Hand, string][] = [
   ['refine', 'Refine ▶', Wand2, 'image to image with the AI tab\'s model and strength; results arrive as candidate layers'],
   ['upscale', 'Upscale ▶', ImageUpscale, 'with the AI tab\'s upscaler (Upscale (detailed) when it is ticked)'],
   ['outpaint', 'Outpaint ▶', Expand, 'grows the canvas by the AI tab\'s sides; results arrive as candidate layers'],
+  ['instruct', 'Instruct ▶', WandSparkles, 'the AI tab\'s instruction on the picture or the active layer (Qwen-Image-Edit); results arrive as candidate layers'],   // D151
 ]
-const AI_SHOW: [Exclude<AiOp, 'select'>, string, typeof Hand][] = [['inpaint', 'Inpaint the selection…', Sparkles], ['refine', 'Refine…', Wand2], ['upscale', 'Upscale…', ImageUpscale], ['outpaint', 'Outpaint…', Expand]]
+const AI_SHOW: [Exclude<AiOp, 'select'>, string, typeof Hand][] = [['inpaint', 'Inpaint the selection…', Sparkles], ['refine', 'Refine…', Wand2], ['upscale', 'Upscale…', ImageUpscale], ['outpaint', 'Outpaint…', Expand],
+  ['instruct', 'Instruct…', WandSparkles]]   // D151
 /** D90 (02 §9, §10): the toolbox shows the storyboard essentials; these sit behind its More tools button (keys and Tool ▸ unchanged). */
 export const MORE_TOOLS: Tool[] = ['wand', 'heal', 'eyedropper']
 /** The tools: id, label, accelerator, icon — the toolbox (EditSuite) and the canvas menu's Tool submenu both read this. */

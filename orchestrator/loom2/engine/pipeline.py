@@ -24,7 +24,7 @@ from PIL import Image
 from .. import native
 from ..documents import RasterLayer
 from ..edit_ai import RegionPlan, crop_inputs, dilate, layer_plan, outpaint_inputs, outpaint_plan, plan_region, whole_plan
-from ..recipes import I2I, I2V, T2I, TTS, AssembleFinal, CompRender, ImageToMesh, ImageToSet, Inpaint, Keypoints, LayerPass, MatteSequence, Reangle, Render, Segment, StageShot, Upscale, reangle_method, reangle_model_id, stage_model_id, warm_group, TrainLora
+from ..recipes import I2I, I2V, T2I, TTS, AssembleFinal, CompRender, ImageToMesh, ImageToSet, Inpaint, Instruct, Keypoints, LayerPass, MatteSequence, Reangle, Render, Segment, StageShot, Upscale, reangle_method, reangle_model_id, stage_model_id, warm_group, TrainLora
 from ..models import registry
 from ..roster import Roster
 from .graphs import (kept_refs, CompileError, Compiled, compile_recipe, doc_estimate_seconds, effective_params, estimate_i2v_seconds, estimate_seconds,
@@ -34,7 +34,7 @@ if TYPE_CHECKING:
     from ..queue import JobQueue, JobRecord
 
 AnyRecipe = T2I | I2I | Inpaint | Upscale | Segment | I2V
-DOCUMENT_KINDS = (Inpaint, I2I, Upscale, Segment)
+DOCUMENT_KINDS = (Inpaint, I2I, Upscale, Segment, Instruct)        # D151: + an edit by instruction
 
 
 class JobCancelled(Exception):
@@ -141,6 +141,12 @@ def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = 
         params = {"move": recipe.move, "method": reangle_method(recipe, variant), "model_id": mid, "prompt": reangle_prompt(recipe, variant),
                   "label": spec.label if spec else mid}
         est = {"seconds": spec.estimates.base_seconds if spec else None, "source": "baseline (E12 2026-10-12, warm)"}
+    elif isinstance(recipe, Instruct):                                # D151: the angles verb's weights, one LoRA fewer — E12's warm seconds
+        spec = registry.get(recipe.model_id)
+        if spec is None or not spec.recipes.instruct:
+            raise CompileError(f"{recipe.model_id!r} does not edit by instruction")
+        params = {"model_id": spec.id, "label": spec.label, "instruction": recipe.prompt_text, "source": recipe.source, "max_pixels": recipe.max_pixels}
+        est = {"seconds": spec.estimates.base_seconds, "source": "baseline (E12 2026-10-12, warm; D151's rig)"}
     elif isinstance(recipe, ImageToMesh):                             # P18 (D84): a background job — E14's warm and cold seconds shown together
         spec = registry.get(recipe.model_id)
         if spec is None or not spec.recipes.mesh:
@@ -386,7 +392,7 @@ def pad_reference(q: JobQueue, src: Path, w: int, h: int, key: str) -> Path:
 
 
 # ---- M5 document jobs (10 §4, D7): the region in ----------------------------------------------------------------------------------
-async def prepare_document(job: JobRecord, recipe: Inpaint | I2I | Upscale | Segment, q: JobQueue) -> dict[str, Any]:
+async def prepare_document(job: JobRecord, recipe: Inpaint | I2I | Upscale | Segment | Instruct, q: JobQueue) -> dict[str, Any]:
     """Crop/scale the document's composite (and mask) for the engine, upload them and keep the plan (edit_ai)."""
     if q.documents is None:
         raise ValueError("documents are not available (no project open)")
@@ -461,6 +467,22 @@ async def prepare_document(job: JobRecord, recipe: Inpaint | I2I | Upscale | Seg
                 img, _ = crop_inputs(comp, None, plan)
                 out["alpha_mask"] = None
                 out["context"] = np.ascontiguousarray(comp[..., :3])
+            Image.fromarray(img, "RGB").save(tmp / "image.png")
+        elif isinstance(recipe, Instruct):                                 # D151: the source at ≤ max_pixels; the result comes back at its size
+            if recipe.source == "active":
+                node = od.doc.find(recipe.layer_id or "")
+                px = od.pixels.get(recipe.layer_id or "")
+                if node is None or px is None or not isinstance(node, RasterLayer):
+                    raise ValueError("an edit by instruction on the active layer needs a raster layer with pixels")
+                plan = layer_plan(node.x, node.y, int(px.shape[1]), int(px.shape[0]), max_pixels=recipe.max_pixels)
+                img = np.ascontiguousarray(px[..., :3])
+                if (plan.ew, plan.eh) != (plan.w, plan.h):
+                    img = np.asarray(Image.fromarray(img).resize((plan.ew, plan.eh), Image.Resampling.LANCZOS))
+                out["alpha_mask"] = np.ascontiguousarray(px[..., 3])         # the layer keeps its own alpha
+            else:
+                plan = whole_plan(od.doc.w, od.doc.h, max_pixels=recipe.max_pixels)
+                img, _ = crop_inputs(comp, None, plan)
+                out["alpha_mask"] = None
             Image.fromarray(img, "RGB").save(tmp / "image.png")
         else:
             if recipe.source == "active":

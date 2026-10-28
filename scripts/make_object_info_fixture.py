@@ -2,7 +2,7 @@
 tests (06 §9). Re-run after an engine pin bump:
 
   engine/.venv/Scripts/python.exe scripts/make_object_info_fixture.py \
-      [--capture engine/spikes/out/object_info_v0.38.2.json] [--out orchestrator/tests/fixtures/object_info.json]
+      [--capture engine/spikes/out/object_info_v0.39.0.json] [--out orchestrator/tests/fixtures/object_info.json]
 
 The capture is produced by GET /object_info (+ /system_stats) on the running engine; the fixture keeps the
 engine version and only the listed classes, so it stays small enough to commit.
@@ -50,12 +50,15 @@ CLASSES = [
     "LTXVAudioVAEEncode",
     # wave CR (D89): the creative families' T2I / I2I graphs (Krea 2, Z-Image, Chroma; SD 3.5 through CheckpointLoaderSimple)
     "EmptyLatentImage", "EmptySD3LatentImage", "T5TokenizerOptions",
+    # SC3 (D120): a picture set — MoGe's point map to a relief, its render, the GLB; the sigma split and the alpha join of the later graphs
+    # (in the fixture by hand since 2026-10-22; listed here at the v0.43.1 bump, 2026-10-28, so a re-capture keeps them)
+    "MoGePointMapToMesh", "MoGeRender", "SaveGLB", "SplitSigmasDenoise", "JoinImageWithAlpha",
 ]
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--capture", default="engine/spikes/out/object_info_v0.38.2.json")
+    ap.add_argument("--capture", default="engine/spikes/out/object_info_v0.39.0.json")
     ap.add_argument("--out", default="orchestrator/tests/fixtures/object_info.json")
     a = ap.parse_args()
     cap = json.loads(Path(a.capture).read_text(encoding="utf-8"))

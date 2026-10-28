@@ -2,7 +2,7 @@
 .SYNOPSIS
   Recreate the loom2 inference engine environment from the pinned sources (06 §3b, 12 §1a, D15/D16).
 .DESCRIPTION
-  1. engine/comfyui submodule at its pinned commit (Comfy-Org/ComfyUI v0.39.0 since 2026-10-07; v0.38.2 before)
+  1. engine/comfyui submodule at its pinned commit (Comfy-Org/ComfyUI v0.39.0 since 2026-10-07; v0.38.2 before; v0.43.1 tried and rolled back 2026-10-28, D150)
   2. custom nodes at the commits recorded in engine/nodes.lock, plus the local patches in engine/patches/
   3. engine/.venv via uv on Python 3.13 with torch 2.13.0+rocm10.0.0 (AMD stable index, [device-all] extras)
      and ComfyUI's requirements under engine/constraints.txt (torch can never be swapped for a CPU build)

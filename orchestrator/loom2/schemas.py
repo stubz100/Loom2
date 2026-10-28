@@ -235,6 +235,24 @@ class ReangleMethodCaps(Open):
     approx_gb: float
 
 
+class InstructModelCaps(Open):
+    """D151: one edit-by-instruction model as /capabilities.instruct lists it."""
+    label: str
+    short: str
+    hint: str | None = None
+    license: str | None = None
+    health: str
+    missing: list[str]
+    seconds: float | None = None
+    vram_gb: float | None = None
+    approx_gb: float
+
+
+class InstructCaps(Open):
+    models: dict[str, InstructModelCaps]
+    default: str | None = None
+
+
 class ReangleCaps(Open):
     moves: list[str]
     methods: dict[str, ReangleMethodCaps]
@@ -369,6 +387,7 @@ class Capabilities(Open):
     refine_edge: RefineEdgeCaps
     content_aware: ContentAwareCaps
     reangle: ReangleCaps                           # P14 (D82)
+    instruct: InstructCaps                         # D151: the edit-by-instruction models and the default
     stage: StageCaps                               # P13 ST3 (D78)
     mesh: MeshCaps                                 # P18 (D84)
     story: StoryCaps | None = None                # 17 (D85): the Cast tab's Expand model and presets

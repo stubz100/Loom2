@@ -72,6 +72,7 @@ def capabilities(svc: Services) -> dict:
             "advanced": advanced(), "tiers": image_tiers(), "refine_edge": matting.capabilities(),
             "content_aware": native.capabilities(),                            # D62: Quick Remove, the Remove pre-fill, Spot Healing
             "reangle": _reangle(svc, variant),                                 # P14 (D82): the Angle tab's moves and methods
+            "instruct": _instruct(svc, variant),                               # D151: the AI tab's edit by instruction
             "stage": _stage(svc, variant),                                     # P13 ST3 (D78): the Shot tab's methods and passes
             "mesh": _mesh(svc, variant), "story": _story(svc, variant), "train": _train(svc, variant), "voice": _voice(svc, variant), "experimental": _experimental(svc, variant)}   # LT2 (D86): the LoRA trainer                                       # P18 (D84): image → mesh props
 
@@ -269,6 +270,28 @@ def _offered(spec: ModelSpec, variant: str) -> bool:
 def _blocks(spec: ModelSpec) -> dict:
     return {"recipes": spec.recipes.model_dump(), "inputs": spec.inputs.model_dump(), "geometry": spec.geometry.model_dump(),
             "short": spec.short or spec.label.split(" · ")[0], "hint": spec.hint, "order": spec.order}
+
+
+def _instruct(svc: Services, variant: str) -> dict:
+    """D151: the edit-by-instruction models this build offers — the default first — with the health of every weight each loads, E12's
+    measured seconds and the size; the AI tab's Instruct operation picks from them."""
+    models = {}
+    for spec in registry.instruct_specs():
+        if not _offered(spec, variant):
+            continue
+        needs = spec.weights()
+        healths = {x: svc.roster.resolve(x).health for x in needs}
+        missing = [ROSTER_BY_ID[x].name for x, hh in healths.items() if hh in ("missing", "retired")]
+        models[spec.id] = {"label": spec.label, "short": spec.short or spec.label, "hint": spec.hint, "license": ROSTER_BY_ID[spec.id].license,
+                           "health": "missing" if missing else ("verified" if all(h == "verified" for h in healths.values()) else "present"),
+                           "missing": missing, "seconds": spec.estimates.base_seconds, "vram_gb": spec.estimates.vram_gb,
+                           "approx_gb": round(sum((ROSTER_BY_ID[x].approx_gb or 0) for x in needs), 1)}
+    default = next((i for i in models), None)
+    try:
+        default = registry.default_model("instruct", variant)
+    except Exception:  # noqa: BLE001  (no spec offered under this variant)
+        pass
+    return {"models": models, "default": default if default in models else next(iter(models), None)}
 
 
 def _image_models(svc: Services, variant: str) -> dict:

@@ -10880,3 +10880,101 @@ samplers, Wan and LTX moved four minor versions). Recommended when the author wa
 loom2 needs them today. The capture and the log are under `engine/spikes/out/pin_review/` (`object_info-v0.43.1.json`,
 `run-v0.43.1.log`); the candidate engine was stopped after the run.
 
+
+## 2026-10-28 11:34 — ComfyUI pin bumped to v0.43.1 (D150): the venv, the fixture, the parity guard, and the re-acceptance on the card
+
+The author took the review of 09:07 as the go: **D150**, recorded first. The steps, as the last bump went (2026-10-07) — and, at the end, the rig's no:
+
+- **The submodule** `engine/comfyui` → **v0.43.1** (`086099f5`, 2026-10-28; from `b0b7435`, v0.39.0 of 2026-10-05). The custom nodes stay at
+  nodes.lock's commits (their upstream heads are the pins), the GGUF patch "already applied".
+- **The engine venv** by `engine-setup.ps1 -SkipTorch`: eight packages moved under `engine/constraints.txt` — comfy-kitchen 0.2.37 → 0.2.40
+  (v0.43.1 imports its `int8_decode` at start), comfy-aimdo 0.5.5 → 0.6.0, the frontend package 1.53.10 → 1.57.4, the workflow templates
+  0.11.76 → 0.11.98 (with their core / json / media-assets packages), the embedded docs 0.5.13 → 0.5.15; torch 2.13.0+rocm10.0.0, hip
+  7.15, untouched. `engine-setup.ps1`'s comment names the new pin; CLAUDE.md's layout line too.
+- **The fixture** re-captured from the live engine started by hand (`engine-start.ps1`, 1040 classes at 0.43.1) and reduced by
+  `make_object_info_fixture.py` — which had lost five classes merged into the fixture by hand since 2026-10-22 (MoGePointMapToMesh,
+  MoGeRender, SaveGLB, SplitSigmasDenoise, JoinImageWithAlpha): they are in its list now, the fixture is 124 classes again, none missing
+  at capture. The capture is `engine/spikes/out/object_info_v0.43.1.json`.
+- **The parity guard** (`test_graph_parity_d64.py`): every one of the 43 graphs hashes as before against the new fixture — the only
+  differences were uploaded-file names against the capture's input folder (`LoadVideo` / `LoadAudio` enums list what the engine had lying
+  there), which are the engine's, not the graph's; the test drops "not in enum" problems now as `pin_review` does, and its snapshot was
+  rewritten. Offline: 670 passed before that fix with the one parity failure, then the parity and contract tests 4 passed.
+- **The re-acceptance on the card** (one job at a time; `engine/spikes/out/bump-v0.43.1/`):
+
+| rig | on v0.43.1 | before (v0.39.0) |
+| --- | --- | --- |
+| `m1_acceptance.py` (a new project, one image, the hard kill, the relaunch) | **20/20** in 102.4 s | 20/20 |
+| `m6_acceptance.py --tasks 01,03,ltx` | **17/17**; wan draft 101.8 s · wan draft FLF 104.2 s · ltx draft 174.5 s | 17/17; a Wan Draft clip 119–131 s today at v0.39.0 (Q18 / Q15's runs), LTX 172–184 s |
+| `m5_acceptance.py` (Edit AI: fills, AI Select, upscale + tiled refine) | **25/25**; AI select · subject (BiRefNet) 3.4 s · AI select · SAM 3 text 7.5 s · upscale ×2 + tiled refine (Klein base, tile 1024 / 128, strength 0.25) 257.1 s | 25/25 |
+| `cn_acceptance.py --parts animate` (Wan Animate on E11's walk, 848×480; PCK@0.1, bar 0.8) | 09:42 v0.43.1 as launched: **0.618** in 150.4 s · 11:06 v0.43.1 as launched: **0.854** in 137.0 s · 11:09 v0.43.1 as launched: **0.653** in 136.6 s · 11:17 v0.43.1, `--disable-dynamic-vram`: **1.0** in 327.8 s · 11:23 v0.43.1, `--disable-dynamic-vram`: **0.792** in 332.2 s · 11:30 v0.39.0, back: **0.924** in 138.5 s | 2026-10-18: 1.0 · 0.986 · 1.0 · 0.806 · 0.993 in 197–261 s |
+
+**The one red item, chased.** m1, m6 and m5 passed as before (m6's Wan Draft clips 102–104 s — another clip than Q18's task 02 at 119–131 earlier today, so no
+gain is claimed); the CN rig's Animate clip followed the pose at **0.618, 0.854 and 0.653** on three runs (the bar 0.8; the five runs of
+2026-10-18 at v0.39.0: 1.0, 0.986, 1.0, 0.806, 0.993), in 137–151 s — the same clip at v0.39.0 later today took 138.5 s, so the speed is the
+day's, not the version's. The scorer is not the cause: SDPose on the v0.43.1 engine gives today's earlier clips
+their old numbers to the third decimal (`v81_score.py`: 1.0 and 0.965). The sheets show the character small and far, barely walking —
+the guide's figure is mid-frame and walks in. Between the tags upstream rewrote the Linear and attention paths (#16816, #16861, #16806)
+and moved Dynamic VRAM to Aimdo 0.6 with "KV caches part I" (#17274); the engine log says "DynamicVRAM support detected and enabled",
+the eager and hip kitchen backends, pytorch attention. The A/B: `cn_acceptance.py --parts animate --engine-flags=--disable-dynamic-vram`
+(the rig gained the option) — **PCK 1.0 and 0.792 with Dynamic VRAM off, in 328 and 332 s**. So v0.43.1's Dynamic VRAM path is what broke Animate's
+pose-following; without it the clip follows (at the bar's edge once) at 2.4× the time (the 2026-10-07 note: `--disable-dynamic-vram`
+quadruples dev Turbo, the 34 GB transformer streams through it). Neither launch is acceptable: the fast one performs wrong, the right
+one is slow for every model.
+
+**Rolled back to v0.39.0** (`b0b7435`): the submodule, `engine-setup.ps1 -SkipTorch` (the eight packages back under the constraints),
+the fixture of 2026-10-22 restored and the parity snapshot rewritten against it (the 44 graphs, the file enums ignored — that fix stays),
+CLAUDE.md and the setup script's comment, and the CN animate part run once more at v0.39.0 — its engine the restored one (below). **D150 is recorded as attempted and rolled back**; what stays from the attempt: the review's 43-graph compile
+list, the fixture maker's five missing classes, the parity test's file-enum filter, the CN rig's `--engine-flags`, the capture
+`object_info_v0.43.1.json` and the logs under `engine/spikes/out/bump-v0.43.1/`. The next candidate is reviewed the same way, and the
+bump waits for an upstream Dynamic VRAM that leaves Wan Animate's pose alone (a repro for Comfy-Org: the CN rig's clip, 0.62–0.85
+against 1.0 with `--disable-dynamic-vram`) — or for Aimdo's next release.
+
+
+## 2026-10-28 11:41 — D151: Edit by instruction in the AI tab (the post-MVP backlog's item 8), built and measured
+
+The author asked for the post-MVP tasks after the bump. Item 8 — *Qwen-Image-Edit as the instruction editor when a 16 GB path exists* — had
+its path since E12 (2026-10-12: 2509 fp8 + Lightning at 1 MP, 31.6 s warm, 15 GB) and its weights on disk for the Angle tab; E8's verdict
+(04 §4) stands for the fills — softer than Klein, no removal — so this is the verb for what a mask cannot say. **D151** recorded first.
+
+- **The recipe** `Instruct {document_id, source: visible | active, layer_id?, prompt_text (the instruction), seeds[], max_pixels ≤ 2 MP (1 MP)}`
+  (`recipes.py`), a document kind beside inpaint, i2i, upscale and segment (`DOCUMENT_KINDS`, the route's list, the API's `RECIPES` tuple so
+  the client's `InstructRecipe` type exists). `registry.RUNS` and the spec model gain `instruct`; `qwen_edit.toml` serves both verbs now
+  (`reangle` and `instruct = true, default_for = ["instruct"]`; its label is "Qwen-Image-Edit 2509", the LoRA no longer in it).
+- **The graph** `graphs.build_instruct`: the angles graph without node 41 — UNETLoader → Lightning → ModelSamplingAuraFlow → CFGNorm,
+  the source through `ImageScaleToTotalPixels` (max_pixels / 1 Mi) into `TextEncodeQwenImageEditPlus` with the instruction (and once empty,
+  the negative) and `VAEEncode`, KSampler at the spec's 4 steps / cfg 1, VAEDecode, SaveImage. An empty instruction is a CompileError.
+- **The pipeline** `prepare_document`: the visible composite (whole_plan) or the active layer (layer_plan) scaled to ≤ max_pixels
+  (`edit_ai.whole_plan` / `layer_plan` take `max_pixels` now), the layer's alpha kept aside; `plan()` estimates with the spec's measured
+  seconds (needs: document). **The finisher**: the result resized back to the plan and landed by `add_result_layer` as "instruct · ‹the
+  instruction›" (a candidate group when several seeds), the active layer's alpha restored.
+- **`/capabilities.instruct`** `{models: {id: {label, short, hint, license, health, missing, seconds, vram_gb, approx_gb}}, default}`
+  (`InstructCaps`, D38); `settings_audit` maps it to the recipe's model, source and size.
+- **The AI tab's Instruct operation** (`aiPanelStore.AiOp`, `aiRecipes.ts`, `EditSuite.tsx`): *on* visible / active, *change* (the instruction;
+  the placeholder gives three), count (2 by default — ≈ 32 s a candidate) and seed as the other operations; the reasons: no document, no
+  model in this build, weights missing (fetch in Models), the active layer not raster, "say what to change"; a ? says what it is for and
+  what it is not (a precise area: Inpaint; removing: Remove). The preview plans it like the others (`/recipes/preview`).
+- **Tests:** `test_instruct_d151.py` 4 (the recipe and its default from the registry; the graph — one LoRA, the instruction in node 7,
+  1.0 MP, the empty instruction and the missing upload refused; the estimate; the route, two staged candidates, the capabilities, the
+  preview); `aiRecipes.test.ts` +2 (the reasons; the recipe and the count); `pin_review.recipes()` 44 (the parity snapshot carries it).
+  Offline 675 passed, Vitest 574 + 3 skipped, typecheck, build and lint (0 errors, 79 warnings) clean, settings_audit 312 fields 0 problems,
+  model_literals_check and agents_check clean, e2e 74 passed (alone) and a new scenario — the deep link `?ai=instruct`, the refusal without an
+  instruction, the run button with one (×2) — run alone after it; the AI tab's six operations wrap in the panel now.
+- **The rig** (`scripts/instruct_rig.py`: two pictures, two instructions each, one seed, through `POST /documents/{id}/ai`):
+
+| picture | the instruction | the job | the layer | 
+| --- | --- | --- | --- |
+| source.png | make it dusk, the lamps lit, a warm light from the windows | done, **54.7 s** (nodes 10 26.2, 8 10.6) | [960, 544] |
+| source.png | snow falling, the ground and the roofs white | done, **18.8 s** (nodes 10 12.9, 8 2.3) | [960, 544] |
+| fish-market_s20261004.png | make it dusk, the lamps lit, a warm light from the windows | done, **18.2 s** (nodes 10 12.6, 8 2.3) | [960, 544] |
+| fish-market_s20261004.png | snow falling, the ground and the roofs white | done, **19.4 s** (nodes 10 13.2, 8 2.2) | [960, 544] |
+
+Peak VRAM over the run **9.14 GB**; the model qwen-edit-2509-fp8; failures: none.
+
+**Reading.** Four edits, four results at the document's size: the alley at dusk with the lamps lit and the sky gone violet, the alley
+under snow with the crates and the cobbles white and the flakes falling, the market at dusk with the lanterns on, the market in snow —
+the braids, the cloak and the compass held through every one. Warm jobs **18–19 s** (the first 54.7 s: the transformer's and the
+encoder's first pass from disk, Q15's rule), the peak **9.1 GB** — well under E12's 15 GB with the angles LoRA, so a 2 MP edit has room.
+The snow falls *inside* the market hall: the model does what it is told, not what the place allows — a thing to say in the instruction.
+Not measured: the active-layer path on a cut-out (the rig edits the visible composite), 2511 (GGUF Q4) against 2509; both wait for a
+use the author brings. The sheet is `engine/spikes/out/instruct/sheet.jpg`, the numbers in `results.json`.
+

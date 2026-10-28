@@ -263,8 +263,8 @@ async def documents_ai(svc: Svc, doc_id: str, body: JobSubmit):
     _, _, q = svc.require_project()
     await asyncio.to_thread(svc.require_documents().get, doc_id)            # 404 if the document does not exist
     recipe = dict(body.recipe)
-    if recipe.get("kind") not in ("inpaint", "i2i", "upscale", "segment"):
-        raise HTTPException(422, "document jobs are inpaint, i2i (refine), upscale or segment (AI Select)")
+    if recipe.get("kind") not in ("inpaint", "i2i", "upscale", "segment", "instruct"):
+        raise HTTPException(422, "document jobs are inpaint, i2i (refine), upscale, segment (AI Select) or instruct (an edit by instruction)")
     recipe["document_id"] = doc_id
     try:
         origin = body.origin or JobOrigin(suite="edit", surface="ai", ref=doc_id)   # D66: an Edit AI job comes back to its document

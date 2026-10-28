@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -436,6 +437,7 @@ def main() -> int:
     ap.add_argument("--parts", default="voice")
     ap.add_argument("--tier", default="both", choices=["draft", "cloning", "both"])
     ap.add_argument("--vram-headroom", type=float, default=None, help="force --vram-headroom for every model through Settings.engine.flags (D98 / D100; 0 = none) — an A/B of the engine's headroom")
+    ap.add_argument("--engine-flags", default="", help="raw ComfyUI flags appended to the engine's (an A/B of a runtime flag: the bump of 2026-10-28 ran --disable-dynamic-vram)")
     a = ap.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
     tmp = Path(tempfile.mkdtemp(prefix="loom2-cn-"))
@@ -449,14 +451,15 @@ def main() -> int:
         except Exception:
             pass
     AppState(tmp / "state").update_settings({"models_root": os.environ.get("LOOM2_MODELS", "F:/loom2-models"), "mounted_model_trees": [], "variant": "full",
-                                             "engine": {"port": engine_port, **({"flags": [*EngineSettings().flags, "--vram-headroom", f"{a.vram_headroom:g}"]} if a.vram_headroom is not None else {})}})
+                                             "engine": {"port": engine_port, **({"flags": [*EngineSettings().flags, *(["--vram-headroom", f"{a.vram_headroom:g}"] if a.vram_headroom is not None else []),
+                                                                                   *shlex.split(a.engine_flags)]} if a.vram_headroom is not None or a.engine_flags else {})}})
     env = {**os.environ, "LOOM2_TOKEN": TOKEN, "PYTHONIOENCODING": "utf-8"}
     orch_log = (OUT / "orchestrator.log").open("w", encoding="utf-8")
     argv = [sys.executable, "-m", "loom2.main", "--port", str(PORT), "--state", str(tmp / "state")]
     orch = subprocess.Popen(argv, cwd=str(ROOT / "orchestrator"), env=env, stdout=orch_log, stderr=subprocess.STDOUT, text=True)
     log(f"orchestrator on {PORT}, state {tmp} (engine port {engine_port})")
     failures: list[str] = []
-    row: dict = {"stamp": time.strftime("%Y-%m-%d %H:%M"), "parts": a.parts, "tier": a.tier}
+    row: dict = {"stamp": time.strftime("%Y-%m-%d %H:%M"), "parts": a.parts, "tier": a.tier, "engine_flags": a.engine_flags}
 
     def check(ok: bool, text: str) -> None:
         print(("ok   " if ok else "FAIL ") + text, flush=True)

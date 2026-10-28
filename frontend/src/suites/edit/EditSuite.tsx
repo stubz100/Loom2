@@ -406,7 +406,7 @@ function AiTab() {
   return (
     <div>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
-        <div className="segmented">{ops.map(([k, l]) => <button key={k} className={p.op === k ? 'active' : ''} onClick={() => { if (k !== p.op) setP({ op: k, candidates: opCandidates(c, k) }) }}>{l}</button>)}</div>
+        <div className="segmented" style={{ flexWrap: 'wrap' }}>{ops.map(([k, l]) => <button key={k} className={p.op === k ? 'active' : ''} onClick={() => { if (k !== p.op) setP({ op: k, candidates: opCandidates(c, k) }) }}>{l}</button>)}</div>   {/* D151: six operations wrap in the narrow panel */}
         <CommandButton id="edit.ai.angle" text label="Angle ▸" />{/* D95 (UX0 #8): the New angle sheet, one implementation */}
       </div>
       {p.op === 'select' && <SelectControls />}
@@ -449,6 +449,11 @@ function AiTab() {
           {p.refineSource === 'selection' && <Slider label="feather" value={p.feather} min={0} max={64} step={1} unit="px" onChange={(v) => setP({ feather: v })} />}
           <label /><label className="chk" title="undo the refine's colour drift: the result's colour statistics are mapped onto the original's — around the selection, or over the whole image / layer"><input type="checkbox" checked={p.matchColour} onChange={(e) => setP({ matchColour: e.target.checked })} /> match colour to the original</label>
           </>)}
+        </>}
+        {p.op === 'instruct' && <>
+          <label>on</label><div className="segmented">{(['visible', 'active'] as const).map((s) => <button key={s} className={p.instructSource === s ? 'active' : ''} onClick={() => setP({ instructSource: s })}>{s}</button>)}</div>
+          <label>change</label><textarea value={p.prompt} rows={3} placeholder={'what to change: "make it dusk, the lamps lit", "snow on the street", "a lantern in her hand"'} onChange={(e) => setP({ prompt: e.target.value })} />
+          <Help className="full" text={`${caps?.instruct?.models?.[caps.instruct.default ?? '']?.label ?? 'The edit model'} redraws the whole picture (or the active layer) from your instruction at about 1 megapixel and lands it as a new layer, ${caps?.instruct?.models?.[caps.instruct.default ?? '']?.seconds ?? 32} s a candidate. It follows meaning a mask cannot say — the time of day, the weather, a thing in a hand, a costume — and keeps the composition; for a precise area, Inpaint with a selection does better, and it does not remove things (Remove does).`} />
         </>}
         {p.op === 'upscale' && <>
           <label>model</label><select value={upscaleModel} onChange={(e) => setP({ upscaleModel: e.target.value })}>{upIds.map((id) => <option key={id} value={id}>{caps?.tools[id]?.label ?? id} {health(id) === 'missing' ? '(not fetched)' : ''}</option>)}</select>

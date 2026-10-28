@@ -326,6 +326,21 @@ STAGE_METHODS = ("clay", "refcontrol")
 STAGE_PASSES = ("clay", "depth", "normal", "pose", "mask")
 
 
+class Instruct(BaseModel):
+    """Post-MVP item 8 (D151): an edit by instruction on the document — Qwen-Image-Edit 2509 fp8 + Lightning 4-step (the angles verb's
+    weights without its LoRA): the visible composite or the active layer at ≤ `max_pixels` through TextEncodeQwenImageEditPlus with the
+    instruction, the result a new layer the source's size. E8 (04 §4) found 2509 softer than Klein and no remover, so the fills stay Klein's;
+    this is for what a mask cannot say — the time of day, the weather, a thing in a hand, a costume."""
+    kind: Literal["instruct"] = "instruct"
+    model_id: str = _default("instruct")
+    document_id: str = ""
+    source: Literal["visible", "active"] = "visible"
+    layer_id: str | None = None                   # for source == active
+    prompt_text: str = ""                         # the instruction
+    seeds: list[int] = Field(default_factory=lambda: [0])
+    max_pixels: int = Field(1_048_576, ge=262_144, le=2_097_152)   # the engine image (E12: 1 MP is the model's size); the result comes back at the source's
+
+
 class StageShot(BaseModel):
     """P13 ST3 (D78, 16 §7): a stage camera's blocking rendered as an image. `clay`: Klein 9B with the clay pass as image 1 ("keep image 1's
     camera, framing and poses"), the reference deck as images 2…; `refcontrol`: Klein base 9B + RefControl's pose LoRA, the pose pass as
@@ -552,9 +567,9 @@ class LayerPass(BaseModel):
         return self
 
 
-Recipe = Annotated[Union[T2I, I2I, Inpaint, Upscale, Segment, I2V, Reangle, Render, StageShot, ImageToMesh, ImageToSet, TrainLora, TTS, Keypoints, MatteSequence, AssembleFinal, CompRender, LayerPass],
+Recipe = Annotated[Union[T2I, I2I, Inpaint, Upscale, Segment, I2V, Reangle, Instruct, Render, StageShot, ImageToMesh, ImageToSet, TrainLora, TTS, Keypoints, MatteSequence, AssembleFinal, CompRender, LayerPass],
                    Field(discriminator="kind")]
-AnyRecipe = T2I | I2I | Inpaint | Upscale | Segment | I2V | Reangle | Render | StageShot | ImageToMesh | ImageToSet | TrainLora | TTS | Keypoints | MatteSequence | AssembleFinal | CompRender | LayerPass
+AnyRecipe = T2I | I2I | Inpaint | Upscale | Segment | I2V | Reangle | Instruct | Render | StageShot | ImageToMesh | ImageToSet | TrainLora | TTS | Keypoints | MatteSequence | AssembleFinal | CompRender | LayerPass
 
 
 class RecipeEnvelope(BaseModel):

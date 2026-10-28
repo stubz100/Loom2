@@ -76,6 +76,7 @@ class Recipes(Strict):
     flf: bool = False                              # first + last frame
     beats: bool = False                            # keyframes in between
     reangle: str | None = None                     # P14 (D82): the angles method this model implements — angles_lora | klein_prompt
+    instruct: bool = False                         # D151: an edit by instruction (Qwen-Image-Edit: the source and the instruction, the whole image back)
     reangle_moves: list[str] = []                  # the moves it is good for (E12 ≥ 7/10): auto picks the first model listing the move
     stage: str | None = None                       # P13 ST3 (D78): the Stage → image method this model implements — clay | refcontrol
     stage_lora: str | None = None                  # refcontrol: the pose LoRA's roster id (only the Stage graph loads it)

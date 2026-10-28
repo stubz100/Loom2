@@ -125,9 +125,7 @@
  },
  "i2v ltx extend (9 lead frames)": {
   "graph_hash": "2901c318b93232f6",
-  "problems": [
-   "56 (LoadVideo): 'file'='lead.mp4' not in enum ['alley_ltx_guide_s1_lead.mp4', 'alley_ltx_guide_s2_lead.mp4', 'alley_ltx_guide_s3_lead.mp4', 'alley_wan_ltx_s1_lead.mp4', 'alley_wan_ltx_s2_lead.mp4', 'alley_wan_ltx_s3_lead.mp4' \u2026]"
-  ],
+  "problems": [],
   "summary": {
    "beats": 0,
    "experimental": true,
@@ -148,9 +146,7 @@
  },
  "i2v ltx guided (depth)": {
   "graph_hash": "2081558033d1647d",
-  "problems": [
-   "52 (LoadVideo): 'file'='depth.mp4' not in enum ['alley_ltx_guide_s1_lead.mp4', 'alley_ltx_guide_s2_lead.mp4', 'alley_ltx_guide_s3_lead.mp4', 'alley_wan_ltx_s1_lead.mp4', 'alley_wan_ltx_s2_lead.mp4', 'alley_wan_ltx_s3_lead.mp4' \u2026]"
-  ],
+  "problems": [],
   "summary": {
    "beats": 0,
    "family": "ltx23",
@@ -284,9 +280,7 @@
  },
  "i2v wan s2v (a line)": {
   "graph_hash": "6b9bf69fae90f934",
-  "problems": [
-   "8 (LoadAudio): 'audio'='line.wav' not in enum ['alley_ltx_guide_s1_lead.mp4', 'alley_ltx_guide_s2_lead.mp4', 'alley_ltx_guide_s3_lead.mp4', 'alley_wan_ltx_s1_lead.mp4', 'alley_wan_ltx_s2_lead.mp4', 'alley_wan_ltx_s3_lead.mp4' \u2026]"
-  ],
+  "problems": [],
   "summary": {
    "audio": "x",
    "beats": 0,
@@ -424,6 +418,19 @@
    "width": 960
   }
  },
+ "instruct (qwen edit)": {
+  "graph_hash": "74fad38a69d10865",
+  "problems": [],
+  "summary": {
+   "cfg": 1.0,
+   "instruction": "make it dusk",
+   "max_pixels": 1048576,
+   "model_id": "qwen-edit-2509-fp8",
+   "seed": 1,
+   "source": "visible",
+   "steps": 4
+  }
+ },
  "keypoints (sdpose)": {
   "graph_hash": "d499cccb69b6bf4c",
   "problems": [],
@@ -435,9 +442,7 @@
  },
  "matte sequence birefnet (subject)": {
   "graph_hash": "fabd079587fc43a8",
-  "problems": [
-   "2 (LoadVideo): 'file'='frames.mp4' not in enum ['alley_ltx_guide_s1_lead.mp4', 'alley_ltx_guide_s2_lead.mp4', 'alley_ltx_guide_s3_lead.mp4', 'alley_wan_ltx_s1_lead.mp4', 'alley_wan_ltx_s2_lead.mp4', 'alley_wan_ltx_s3_lead.mp4' \u2026]"
-  ],
+  "problems": [],
   "summary": {
    "mode": "subject",
    "model_id": "birefnet",
@@ -447,9 +452,7 @@
  },
  "matte sequence sam3 (text)": {
   "graph_hash": "4a157844a825af50",
-  "problems": [
-   "2 (LoadVideo): 'file'='frames.mp4' not in enum ['alley_ltx_guide_s1_lead.mp4', 'alley_ltx_guide_s2_lead.mp4', 'alley_ltx_guide_s3_lead.mp4', 'alley_wan_ltx_s1_lead.mp4', 'alley_wan_ltx_s2_lead.mp4', 'alley_wan_ltx_s3_lead.mp4' \u2026]"
-  ],
+  "problems": [],
   "summary": {
    "mode": "text",
    "model_id": "sam3",

@@ -20,7 +20,7 @@ export interface AiCtx {
 }
 
 /** The operations with a run of their own (Select has its own controls); the label of the tab's run button. */
-export const AI_OP_LABEL: Record<AiOp, string> = { select: 'Select', inpaint: 'Inpaint', refine: 'Refine', upscale: 'Upscale', outpaint: 'Outpaint' }
+export const AI_OP_LABEL: Record<AiOp, string> = { select: 'Select', inpaint: 'Inpaint', refine: 'Refine', upscale: 'Upscale', outpaint: 'Outpaint', instruct: 'Instruct' }
 
 /** C3 (D26) / D65: the models the AI tab offers and resolves — every one from /capabilities (open: Klein 4B, no hero, no SAM 3). */
 export function aiModels({ p, caps }: Pick<AiCtx, 'p' | 'caps'>) {
@@ -39,11 +39,13 @@ export function aiModels({ p, caps }: Pick<AiCtx, 'p' | 'caps'>) {
   const heroFor = (op: AiOp) => !!heroId && (op === 'inpaint' ? p.mode === 'fill_hero' : op === 'outpaint' ? p.outpaintHero : op === 'refine' ? isHero(refineModel) : false)
   const outpaintId = heroFor('outpaint') && heroId ? heroId : kleinId
   const teId = (mid: string) => (p.teId && capModels?.[mid]?.te_options?.some((o) => o.id === p.teId) ? p.teId : undefined)   // D31: only where it pairs
-  return { contentAware, heroId, mode, i2iIds, upIds, refineModel, tiledIds, tiledModel, upscaleModel, kleinId, isHero, heroFor, outpaintId, teId }
+  const instructModel = caps?.instruct?.default ?? null                                  // D151: the build's edit-by-instruction model (null: none offered)
+  const instructHealth = instructModel ? caps?.instruct?.models?.[instructModel]?.health ?? 'missing' : 'missing'
+  return { contentAware, heroId, mode, i2iIds, upIds, refineModel, tiledIds, tiledModel, upscaleModel, kleinId, isHero, heroFor, outpaintId, teId, instructModel, instructHealth }
 }
 
 /** The candidate count an operation starts with when the tab switches to it (hero models are slow: 2). */
-export const opCandidates = (c: Pick<AiCtx, 'p' | 'caps'>, op: AiOp): number => op === 'inpaint' || op === 'outpaint' || op === 'refine' ? (aiModels(c).heroFor(op) ? 2 : 4) : 1
+export const opCandidates = (c: Pick<AiCtx, 'p' | 'caps'>, op: AiOp): number => op === 'inpaint' || op === 'outpaint' || op === 'refine' ? (aiModels(c).heroFor(op) ? 2 : 4) : op === 'instruct' ? 2 : 1   // D151: ≈ 32 s a candidate
 
 /** AI Select with the panel's tool and prompt (D63 / D65): the subject matte by default, a prompted tool (text / points / box) where offered. */
 export function selectPlan(c: AiCtx) {
@@ -80,7 +82,11 @@ export function aiReason(c: AiCtx, op: AiOp): string | null {
     : op === 'refine' && p.refineSource === 'selection' && !c.hasSel ? 'no selection'
     : (op === 'refine' || op === 'upscale') && (op === 'refine' ? p.refineSource : p.upscaleSource) === 'active' && c.activeKind !== 'raster' ? 'the active layer is not a raster layer'
     : op === 'upscale' && !m.upscaleModel ? 'no upscaler offered' : op === 'upscale' && c.health(m.upscaleModel) === 'missing' ? `weights missing: fetch ${m.upscaleModel} in Models`
-    : op === 'outpaint' && !Object.values(p.pad).some((v) => v > 0) ? 'set at least one side' : null
+    : op === 'outpaint' && !Object.values(p.pad).some((v) => v > 0) ? 'set at least one side'
+    : op === 'instruct' && !m.instructModel ? 'no edit-by-instruction model in this build'                                              // D151
+    : op === 'instruct' && m.instructHealth === 'missing' ? `weights missing: fetch ${m.instructModel} in Models`
+    : op === 'instruct' && p.instructSource === 'active' && c.activeKind !== 'raster' ? 'the active layer is not a raster layer'
+    : op === 'instruct' && !p.prompt.trim() ? 'say what to change' : null
 }
 
 /** The seeds of one run: `candidates` of them, random or counting up from the fixed seed. */
@@ -98,6 +104,7 @@ export function aiRecipe(c: AiCtx, op: AiOp, seeds: number[] = aiSeeds(c.p)): Do
   if (op === 'inpaint') return { kind: 'inpaint', mode: m.mode, model_id: m.kleinId, te_id: m.teId(m.kleinId), margin_pct: p.margin, min_size: p.minSize, feather: p.feather, expand: p.expand, blend: p.blend, prompt_mode: p.promptMode, prefill: m.mode === 'remove' && p.prefill && m.contentAware, ...base } as DocumentRecipe
   if (op === 'outpaint') return { kind: 'inpaint', mode: 'outpaint', model_id: m.outpaintId, te_id: m.teId(m.outpaintId), outpaint: p.pad, feather: p.feather, prompt_mode: p.promptMode, ...base } as DocumentRecipe
   if (op === 'refine') return { kind: 'i2i', model_id: m.refineModel, te_id: m.teId(m.refineModel), source: p.refineSource, layer_id: activeId, strength: p.strength, margin_pct: p.margin, feather: p.feather, match_colour: p.matchColour, ...base } as DocumentRecipe
+  if (op === 'instruct') return { kind: 'instruct', model_id: m.instructModel ?? '', source: p.instructSource, layer_id: activeId, ...base } as DocumentRecipe   // D151
   return { kind: 'upscale', model_id: m.upscaleModel, source: p.upscaleSource, layer_id: activeId, as_layer: p.asLayer, seeds: p.refineTiled ? seeds.slice(0, 1) : [0],
     refine: p.refineTiled, refine_model_id: m.tiledModel, te_id: p.refineTiled ? m.teId(m.tiledModel) : undefined, strength: p.tiledStrength, tile: p.tile, overlap: p.overlap, prompt_text: p.prompt } as DocumentRecipe
 }

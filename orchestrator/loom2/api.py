@@ -22,12 +22,12 @@ from . import __version__
 from .documents import DocumentTooNew, StaleStack
 from .fsio import StateError
 from .groups import GroupLocked, GroupNotFound, StaleGroup
-from .recipes import I2I, I2V, T2I, Inpaint, Segment, Upscale
+from .recipes import I2I, I2V, Instruct, T2I, Inpaint, Segment, Upscale
 from .routes import ROUTERS
 from .schemas import EVENT_FRAMES
 from .services import Services
 
-RECIPES = (T2I, I2I, Inpaint, Upscale, Segment, I2V)
+RECIPES = (T2I, I2I, Inpaint, Upscale, Segment, I2V, Instruct)   # D151: the AI tab's edit by instruction is typed for the client too
 
 FileResponse.chunk_size = 4 * 2**20   # E2: 64 KiB chunks cap loopback at ~400 MiB/s; 4 MiB gives > 1 GiB/s
 log = logging.getLogger("loom2.api")

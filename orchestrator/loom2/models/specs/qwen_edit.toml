@@ -1,19 +1,20 @@
 # Qwen-Image-Edit 2509 (P14 / D82): E12's angles method (D77) — dx8152's Multiple-angles LoRA + lightx2v's Lightning 4-step on the fp8
-# transformer with the Qwen2.5-VL 7B fp8 encoder. Not a Generate model (no t2i): the Angle tab runs it for the rotations. All Apache-2.0.
+# transformer with the Qwen2.5-VL 7B fp8 encoder. Not a Generate model (no t2i): the Angle tab runs it for the rotations, and (D151,
+# 2026-10-28) the AI tab's Instruct operation runs the same weights without the angles LoRA for an edit by instruction. All Apache-2.0.
 # Measured 2026-10-12 (E12, weights on F:): warm 31.6 s, cold 27 s (file cache warm); identity 0.67; the correct move on the ten sources:
 # left 8/10, right 7/10, top-down 9/10, close-up 9/10, wide 5/10 — so `auto` leaves the framing moves to Klein (klein.toml).
 [[model]]
 id = "qwen-edit-2509-fp8"
 family = "qwen_image"
-label = "Qwen-Image-Edit 2509 · angles LoRA"
-short = "angles"
-hint = "rotates the camera around the subject"
+label = "Qwen-Image-Edit 2509"
+short = "Qwen edit"
+hint = "rotates the camera around the subject (Angle); edits the picture by instruction (Instruct)"
 order = 50
 graph = "qwen_edit"
 roles.te = { default = "qwen25vl-7b-fp8" }
 roles.vae = "qwen-image-vae"
 roles.extra = { lightning = "qwen-edit-2509-lightning-4", angles = "qwen-edit-2509-angles" }
 sampling = { steps = 4, guidance = 1.0, cfg = 1.0, weight_dtype = "default", distilled = true, json_prompt = false, model_shift = 3.0 }
-recipes = { reangle = "angles_lora", reangle_moves = ["left45", "right45", "topdown", "closeup"] }
+recipes = { reangle = "angles_lora", reangle_moves = ["left45", "right45", "topdown", "closeup"], instruct = true, default_for = ["instruct"] }
 geometry = { size_mult = 8 }
 estimates = { vram_gb = 15.0, base_seconds = 32.0 }

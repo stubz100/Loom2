@@ -151,7 +151,7 @@ seconds; the result lands as a take as ST4's do. `WanAnimateToVideo.continue_mot
 `wan22.toml`, graph `wan_animate`: the transformer, umT5, the Wan 2.1 VAE, `clip_vision_h`, the LightX2V 4-step LoRA; one window of ≤ 77
 frames on the 4n+1 grid, 4 steps CFG 1 shift 8; `guide_seconds` 285 and `guide_figures` 1 from E19) with `guide.kind = pose` — the
 start image is the character's reference. The spec stays out of the Animate suite's I2V list (`registry.animate_specs`). The graph is
-E19's; `prepare_i2v` pads the reference into the clip on its own edge colour before upload (`pad_reference` — never cropped); the queue
+E19's; `prepare_i2v` pads the reference into the clip on its own edge colour before upload (`pad_reference` — never cropped; at any aspect, D146: a 9:16 clip's padded full-figure reference performed three of three on the rig, 2026-10-28); the queue
 refuses with a sentence a pass that is not a pose sequence, a pose sequence with more than one figure in any frame (its keypoints, as
 the guide route stored them), an end frame or beats. `/capabilities.stage.animate` (model, health, seconds, size, frame step,
 `frames_max`, `figures_max`). The Shot tab's clip section gains the method — **IC-LoRA** · **Wan Animate** — the guide's size, frame grid

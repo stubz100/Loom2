@@ -369,7 +369,8 @@ def fit_reference(q: JobQueue, src: Path, max_px: int, key: str) -> Path:
 
 def pad_reference(q: JobQueue, src: Path, w: int, h: int, key: str) -> Path:
     """CN4 (E19): the reference fitted inside w × h on its own mean edge colour — a portrait centre-cropped to landscape came back as a ghost
-    in the background of the Animate clip."""
+    in the background of the Animate clip. D146 (2026-10-28): at any aspect — CA0's full-figure reference padded into a 480×848 clip performed
+    three of three at PCK 1.0, as its cut-out placed did; what the rule needs is a full figure (a close-up stays a close-up, V81's rig)."""
     out_dir = q.ws.temp_dir / "refs"
     out_dir.mkdir(parents=True, exist_ok=True)
     out = out_dir / f"loom2ref-{key[:24]}-{w}x{h}.png"

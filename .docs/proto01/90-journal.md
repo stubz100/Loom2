@@ -10660,3 +10660,37 @@ Animate kept the reference's band and ignored the pose in two runs of three, the
 9:16 final's character layer therefore wants a portrait reference — the figure cut to the clip's aspect before the padding, or a
 portrait hero — which is a change to CN4's rule and needs its own rig run: **Q31** in the decision log, with that as the proposed
 default. The sheets of all three runs are under `engine/spikes/out/v81/`, the scores in `pck.json`.
+
+## 2026-10-28 06:38 — Q31 measured: Mara's reference at 480×848, padded and placed, six of six at PCK 1.0 — resolved, CN4 stands (D146)
+
+The 05:52 entry's finding run again with the reference the app actually sends. `scripts/v81_final_size_rig.py` grew `--ref PATH`,
+`--ref-mode pad,place` and `--runs N`: the same Wan Animate job repeated, the reference reaching the clip the two ways the app sends
+one — **pad**, the picture padded into the clip on its edge colour (`pad_reference`, CN4's never-cropped rule: the final's fallback and
+the Cast's test animation), and **place**, the figure's cut-out placed where the guide's figure starts on the reference's own ground
+(`finals.place_reference`, the final's character layer, E23c). The reference: Mara v2's animation reference from the CA0 rig (1280×720,
+the whole figure in an A-pose centred on a plain grey ground — CA0's sentence); the guide: E11's walk_dolly made portrait (scaled to the
+height, cropped to the width, the keypoints with it); the clip 480×848, 77 frames, Draft; the engine started once, the six jobs through
+the queue one after the other, SDPose scoring every tenth frame after each job (nothing else on the GPU).
+
+| run | the reference | wall | the sampler | free after the job | people found (8 frames) | PCK@0.1 |
+| --- | --- | --- | --- | --- | --- | --- |
+| pad 0 | padded 16:9 → 480×848 | 136.9 s (the loaders cold) | 90.2 s | 15.3 GB | 1 in every frame | **1.0** |
+| pad 1 |  | 122.1 s | 90.6 s | 14.9 GB | 1 in every frame | **1.0** |
+| pad 2 |  | 122.0 s | 90.7 s | 15.1 GB | 1 in every frame | **1.0** |
+| place 0 | the cut-out placed, 480×848 | 122.1 s | 90.6 s | 15.1 GB | 1 in every frame | **1.0** |
+| place 1 |  | 121.9 s | 90.4 s | 14.9 GB | 1 in every frame | **1.0** |
+| place 2 |  | 122.0 s | 90.4 s | 14.9 GB | 1 in every frame | **1.0** |
+
+Six of six walked full-height on the grey ground, the guide followed in every scored frame, padded and placed alike (`sheet_pad_*` and
+`sheet_place_*` under `engine/spikes/out/v81/`, the placed reference beside them). So the band of the 05:52 entry was the rig's own doing,
+not the rule's: its reference was `bench/angles/07.jpg` — a landscape close-up, head and shoulders in a room — which has nothing a walk
+is made of and whose content stops where the padding starts; padded into a portrait frame, the model kept the picture twice and invented
+a body once. The app never sends such a reference to a performed clip: CA0's animation reference is the whole figure centred on a plain
+ground (padded on its edge colour the join is invisible — the sheets show no band), the final's character layer places that figure's
+cut-out at the final's own size (E23c; the padded picture is its fallback when the figure is not whole in the first frame), the Cast's
+test animation runs at the model's own landscape size, and a Stage shot picked as the character is at the project's aspect, so nothing
+is padded at all. The aspect of the picture is not the rule's business; what the rule needs is a full figure. **Q31 resolved → D146**:
+CN4's padded reference stands at every aspect, no code changes (the docstring of `pad_reference` and 19 §3 say so); the 05:52 entry's
+proposed cut to the clip's aspect would have been a rule for a picture the app does not make. The rig script keeps
+`--ref-mode pad,place --runs N` as the instrument for the next question of this kind, and a rig reference is what the app sends — the
+CA0 reference, not the bench hero.

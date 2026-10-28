@@ -52,7 +52,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .clips import ClipRecord, ClipStore
 from .config import TRACK_ROLES, AudioSettings, TrackStrip
 from .filmcraft import TICK, TIMEBASES, FilmCraft, prefs, ticks
-from .fsio import atomic_copy, new_id
+from .fsio import atomic_copy, new_id, plain_name
 from .timelines import Timeline, TimelineClip, duration, line_spans, starts
 from .timelines import ticks as lane_ticks
 from .workspace import Workspace
@@ -543,7 +543,7 @@ class Cuts:
         return self.fc.available()
 
     def path(self, tl_id: str) -> Path:
-        return self.ws.timelines_dir / tl_id / CUT_FILE
+        return self.ws.timelines_dir / plain_name(tl_id) / CUT_FILE
 
     def forget(self, tl_id: str) -> None:
         """The session closes the cut's project (it is being deleted)."""

@@ -865,7 +865,7 @@ function LensReadout() {
 // ------------------------------------------------------------------ Stage · the viewport
 function Viewport() {
   const hostRef = useRef<HTMLDivElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const canvasHolderRef = useRef<HTMLDivElement>(null)
   const engineRef = useRef<StageEngine | null>(null)
   const lastPointer = useRef<{ x: number; y: number } | null>(null)
   const active = useStageActive()
@@ -887,10 +887,14 @@ function Viewport() {
     (d) => { const it = d.items.find((i) => i.kind === 'asset' && i.media !== 'video'); const e = engineRef.current; const p = lastPointer.current
       if (it && e) st().addObject(it.media === 'mesh' ? 'mesh' : 'plane', null, (p ? e.place(p.x, p.y) : null) ?? e.centre(), it.id) },         // P18: a mesh lands as a prop
     (d) => { const it = d.items.find((i) => i.kind === 'asset' && i.media !== 'video'); return it ? { ok: true, label: it.media === 'mesh' ? 'Place the prop here' : 'Place as an image plane' } : { ok: false, reason: 'Only images and meshes go on the stage' } })
-  // the engine: one per mounted viewport (kept alive with the suite, D69)
+  // the engine: one per mounted viewport (kept alive with the suite, D69). U0 (F34): the canvas is made here, a fresh one per mount — dispose()
+  // force-loses its GL context (V82), and StrictMode's mount → cleanup → mount in a dev build would hand the second engine that dead context
   useEffect(() => {
-    const canvas = canvasRef.current, host = hostRef.current
-    if (!canvas || !host) return
+    const holder = canvasHolderRef.current, host = hostRef.current
+    if (!holder || !host) return
+    const canvas = document.createElement('canvas')
+    canvas.className = 'stage-canvas'
+    holder.appendChild(canvas)
     const engine = new StageEngine(canvas, {
       onPick: (id) => st().select(id),
       onTransformed: (id, t) => st().setTransform(id, t),
@@ -911,7 +915,7 @@ function Viewport() {
     const ro = new ResizeObserver(() => { const r = host.getBoundingClientRect(); engine.resize(Math.round(r.width), Math.round(r.height)); setRect({ ...engine.frameRect() }); setPipRect(engine.pipRect()) })
     ro.observe(host)
     engine.start()
-    return () => { ro.disconnect(); engine.dispose(); engineRef.current = null; viewport.centre = undefined; viewport.freePose = undefined; viewport.frame = undefined; viewport.handPreset = undefined; viewport.snapshot = undefined; useStage.setState({ worldOf: null }); useStage.setState({ passRenderer: null, sequenceRenderer: null, plateProjector: null }) }
+    return () => { ro.disconnect(); engine.dispose(); canvas.remove(); engineRef.current = null; viewport.centre = undefined; viewport.freePose = undefined; viewport.frame = undefined; viewport.handPreset = undefined; viewport.snapshot = undefined; useStage.setState({ worldOf: null }); useStage.setState({ passRenderer: null, sequenceRenderer: null, plateProjector: null }) }
   }, [])
   useEffect(() => { const e = engineRef.current; if (!e) return; if (active) e.start(); else e.stop() }, [active])
   const frame = useStage((s) => s.frame)
@@ -967,7 +971,7 @@ function Viewport() {
   return (
     <div ref={(el) => { (hostRef as React.MutableRefObject<HTMLDivElement | null>).current = el; dropRef(el) }} className={`stage-host${over ? ' over' : ''}`}
       onPointerDown={onDown} onPointerUp={onUp} onPointerMove={(e) => { lastPointer.current = { x: e.clientX, y: e.clientY } }} onContextMenu={onMenu} onDoubleClick={onDouble}>
-      <canvas ref={canvasRef} className="stage-canvas" />
+      <div ref={canvasHolderRef} className="stage-canvas-holder" />
       {current && <div className="gizmo-bar" onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}>
         <CommandRow ids={['stage.tool.select', 'stage.tool.move', 'stage.tool.rotate', 'stage.tool.scale', 'stage.tool.path', 'gap', 'stage.snap', 'gap', 'stage.undo', 'stage.redo']} active={`stage.tool.${tool}`} />
         {snap && <span className="hint">snap</span>}

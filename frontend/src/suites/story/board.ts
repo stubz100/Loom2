@@ -1,6 +1,7 @@
 // D125 (proto01_UIcomp 04 §2.4, §3.1; SP3): the Shots board — every shot in the Flow's order against its steps, each step's state read from
 // records that exist (the shot version, its node, its clips, the finals made for it, the cuts). Pure: board.test.ts.
 import type { Final, FlowGraph, FlowNode, SceneOut, Shot, ShotCard, ShotVersion } from '../../api/types'
+import { binVersion } from './episode/bin'
 
 export type Step = 'lines' | 'voice' | 'frame' | 'stage' | 'clip' | 'final' | 'lipsync' | 'approved' | 'cut'
 export const STEPS: { id: Step; label: string }[] = [
@@ -76,6 +77,13 @@ export interface CellInput {
   finals: Pick<Final, 'shot_id' | 'stage_id' | 'camera_id' | 'clip_id' | 'layers'>[]
   cuts: { clips: { shot_id: string | null; shot_version: string | null; clip_id: string }[] }[]
   busy: (shotId: string) => Set<Step>                     // the steps a queued or running job of this shot is making
+  /** U0 (FE#3): the steps of a shot's version its recipe graph finds stale (the shot cards' `stale_steps`); empty when not loaded. */
+  stale?: (shotId: string, version: string) => ReadonlySet<string>
+}
+
+/** U0 (FE#3): the shot cards' stale steps, for the version the card was read for only. */
+export function staleFrom(cards: Record<string, Pick<ShotCard, 'version' | 'stale_steps'>>): NonNullable<CellInput['stale']> {
+  return (shotId, version) => { const c = cards[shotId]; return new Set(c && c.version === version ? c.stale_steps ?? [] : []) }
 }
 
 /** Every step's cell for a shot's version (04 §2.4). */
@@ -102,9 +110,12 @@ export function cellsOf(s: Shot, v: ShotVersion, node: FlowNode | null, x: CellI
     cells.final = f.clip_id ? { state: 'done', text: 'assembled' } : busy.has('final') ? { state: 'running', text: `${done}/${f.layers.length} layers` } : { state: 'owed', text: `${done}/${f.layers.length} layers` }
   } else cells.final = owed('final')
   cells.lipsync = v.clip_id && x.clipAudio(v.clip_id) ? { state: 'done' } : owed('lipsync')
+  const stale = x.stale?.(s.id, v.id)                                     // U0 (FE#3): a made step whose inputs changed since
+  for (const k of ['frame', 'stage', 'clip', 'final', 'lipsync'] as const) if (stale?.has(k) && cells[k].state === 'done') cells[k] = { state: 'stale', text: 'changed' }
   cells.approved = v.state === 'final' ? { state: 'done' } : { state: 'owed' }
   const onLane = x.cuts.flatMap((c) => c.clips).filter((c) => c.shot_id === s.id)
-  cells.cut = !onLane.length ? { state: 'owed' } : onLane.some((c) => c.shot_version === v.id && c.clip_id === v.clip_id) ? { state: 'done' } : { state: 'stale', text: 'changed' }
+  const taken = binVersion(s) ?? v                                        // U0 (FE#2): the version the Episode takes (the final one first), as its bin does
+  cells.cut = !onLane.length ? { state: 'owed' } : onLane.some((c) => c.shot_version === taken.id && c.clip_id === taken.clip_id) ? { state: 'done' } : { state: 'stale', text: 'changed' }
   return cells
 }
 

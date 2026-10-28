@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .fsio import atomic_write_json, new_id, read_json, utc_now
+from .fsio import atomic_write_json, new_id, plain_name, read_json, utc_now
 from .recipes import TTS
 
 if TYPE_CHECKING:
@@ -96,7 +96,7 @@ class VoiceStore:
         self.dir: Path = ws.story_dir / "voices"
 
     def path(self, vid: str) -> Path:
-        return self.dir / f"{vid}.json"
+        return self.dir / f"{plain_name(vid)}.json"
 
     def list(self) -> list[VoiceRecord]:
         out = []

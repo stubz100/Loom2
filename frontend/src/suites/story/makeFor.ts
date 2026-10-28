@@ -129,16 +129,18 @@ export async function makeFrameFor(s: Shot, v: ShotVersion, nodeId?: string | nu
   toast(`Generate for ${forLabel(f)} — the results come back as its takes${who}${over.length ? ` (${over.join('; ')})` : ''}${pre.place ? '; the scene is its place' : ''}${refs ? `; ${refs} reference${refs === 1 ? '' : 's'} from the board` : ''}`)
 }
 
-/** Make clip ▸ Animate: the For chip set, the version's frame as the start, a Shot node's line as the motion. */
+/** Make clip ▸ Animate: the For chip set, the version's frame as the start, a Shot node's line as the motion. U0 (F29, FE#1): the shot's
+ *  own content only — the last shot's start, end, beats, words and camera move never carry over (The seal was queued with Departure's
+ *  prompt and zoom-out); the model and the production settings stay. */
 export async function makeClipFor(s: Shot, v: ShotVersion, nodeId?: string | null): Promise<void> {
   const st = useStory.getState()
   const f = forShot(s, v, nodeId)
   useMakeFor.getState().set('animate', f)
   const { useAnimate } = await import('../animate/animateStore')
   const an = useAnimate.getState()
-  if (v.frame_asset_id) an.setStart(v.frame_asset_id)
   const line = clipPrefill(f.node_id ? st.flowNodes[f.node_id] : undefined)
-  if (line) an.set({ prompt: line })
+  an.set({ end: null, beats: [], prompt: line ?? '', camera: null })
+  an.setStart(v.frame_asset_id ?? null)
   void import('../animate/routeStore').then((r) => r.useAnimRoute.getState().set('i2v'))   // D121: the frame is the start of an image-to-video clip
   useSession.getState().setSuite('animate')
   toast(`Animate for ${forLabel(f)} — ${v.frame_asset_id ? 'its frame is the start; ' : 'it has no frame yet: set a start; '}the clips come back as its takes`)

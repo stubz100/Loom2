@@ -412,8 +412,13 @@ def _lora_check_result(q: JobQueue, payload: dict, asset_id: str) -> None:
 
 
 def _run(job: JobRecord, recipe: Any, q: JobQueue) -> dict[str, Any]:
-    """RC0 (D96): what a shot's recipe records of a finished job — the resolved recipe it ran, its id and its wall time."""
-    return {"recipe": recipe.model_dump(), "job_id": job.id, "seconds": q.wall_s()}
+    """RC0 (D96): what a shot's recipe records of a finished job — the resolved recipe it ran, its id and its wall time. U0 (BE#3): the
+    recipe's seeds are this job's own seed — the submitted list (a batch, or 0 for random) made Run stale queue new random seeds and a
+    whole batch again, and chain each of them on."""
+    r = recipe.model_dump()
+    if "seeds" in r:
+        r["seeds"] = [job.seed]
+    return {"recipe": r, "job_id": job.id, "seconds": q.wall_s()}
 
 
 def _use(payload: dict | None) -> bool | None:

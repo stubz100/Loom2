@@ -17,7 +17,7 @@ from typing import Any, Callable
 from pydantic import BaseModel, ConfigDict, Field
 
 from .clips import ClipRecord
-from .fsio import atomic_write_json, atomic_write_text, new_id, read_json, slugify, utc_now
+from .fsio import atomic_write_json, atomic_write_text, new_id, plain_name, read_json, slugify, utc_now
 from .workspace import Workspace
 
 TIMELINE_SCHEMA_VERSION = 1
@@ -357,10 +357,10 @@ class TimelineStore:
         self.cuts = cuts
 
     def path(self, tl_id: str) -> Path:
-        return self.dir / f"{tl_id}.json"
+        return self.dir / f"{plain_name(tl_id)}.json"
 
     def export_dir(self, tl_id: str) -> Path:
-        return self.dir / tl_id
+        return self.dir / plain_name(tl_id)
 
     def view(self, rec: Timeline) -> Timeline:
         """The cut as loom2 shows it: a FilmCraft cut's lane, dissolves and route read from its project."""

@@ -87,7 +87,7 @@ function FileRow({ f }: { f: MotionFile }) {
 
 /** The picked clip on the default dummy, looping in a small canvas of its own (the stage's viewport is not touched until Apply). */
 function MotionPreview({ clip, start, end, speed, inPlace }: { clip: MotionClip; start: number; end: number | null; speed: number; inPlace: boolean }) {
-  const host = useRef<HTMLCanvasElement>(null)
+  const host = useRef<HTMLDivElement>(null)
   const [r, setR] = useState<Retargeted | { error: string } | null>(null)
   useEffect(() => {
     let live = true
@@ -95,8 +95,10 @@ function MotionPreview({ clip, start, end, speed, inPlace }: { clip: MotionClip;
     return () => { live = false }
   }, [clip, start, end, speed, inPlace])
   useEffect(() => {
-    const canvas = host.current
-    if (!canvas || !r || 'error' in r) return
+    const mount = host.current
+    if (!mount || !r || 'error' in r) return
+    const canvas = document.createElement('canvas')                                    // U0 (F34): a fresh canvas per mount, as the viewport's — the cleanup force-loses its context
+    mount.appendChild(canvas)
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1))
     renderer.setSize(canvas.clientWidth || 240, canvas.clientHeight || 150, false)
@@ -124,11 +126,11 @@ function MotionPreview({ clip, start, end, speed, inPlace }: { clip: MotionClip;
       renderer.render(scene, cam)
     }
     raf = requestAnimationFrame(tick)
-    return () => { cancelAnimationFrame(raf); renderer.dispose(); renderer.forceContextLoss(); mat.dispose() }
+    return () => { cancelAnimationFrame(raf); renderer.dispose(); renderer.forceContextLoss(); mat.dispose(); canvas.remove() }
   }, [r])
   return (
     <div className="motion-preview">
-      <canvas ref={host} aria-label={`preview of ${clip.name}`} />
+      <div ref={host} role="img" aria-label={`preview of ${clip.name}`} />
       {!r && <span className="hint">retargeting…</span>}
       {r && 'error' in r && <span className="hint error">{r.error}</span>}
       {r && !('error' in r) && <span className="hint">{r.frames.length} frames at {r.fps} fps · {r.rig}{r.travel > 0.05 ? ` · ${r.travel.toFixed(2)} m` : ''}</span>}

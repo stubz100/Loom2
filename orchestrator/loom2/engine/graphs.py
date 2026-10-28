@@ -1826,20 +1826,40 @@ def doc_estimate_seconds(recipe: I2I | Inpaint | Upscale | Segment, variant: str
     return {"seconds": spec.estimates.doc_seconds if spec else None, "source": "baseline (rig, warm, incl. model swap)"}
 
 
+def ref_load(n: int, ref_max_px: int) -> float:
+    """F27 (U0): a recipe's reference load in ≤ 512² references — a reference's tokens grow with its area, so one at ≤ 1024² counts four
+    and one at its original size (0) counts as 1536²."""
+    return n * ((ref_max_px or 1536) / 512) ** 2
+
+
+REF_SPILL = 4.0                                   # F27: FLUX.2 dev's 8 refs at ≤ 1024² ran ≈ 4× the linear estimate (117 s/it) once they spilled
+
+
 def estimate_seconds(recipe: T2I, history: list[dict] | None = None) -> dict[str, Any]:
     """ETA per image (09 §3c): rolling average of this project's matching jobs, else the spike baseline scaled by
-    pixels (≈ linear) and steps. `history` rows: {model_id, px, steps, wall_s}."""
+    pixels (≈ linear) and steps. `history` rows: {model_id, px, steps, wall_s, ref_load}. F27 (U0): the references count — a measured
+    job matches only with a like load, the baseline adds each reference by its area, and a load past the model's fit says it spills."""
     ep = effective_params(recipe)
     px = ep["width"] * ep["height"]
-    matches = [h for h in (history or []) if h.get("model_id") == recipe.model_id and h.get("wall_s") and abs(h.get("px", 0) - px) / px < 0.25 and h.get("steps") == ep["steps"]]
-    if len(matches) >= 2:
-        recent = matches[-5:]
-        return {"seconds": round(sum(h["wall_s"] for h in recent) / len(recent), 1), "source": f"measured ({len(recent)} jobs)"}
     spec = registry.get(recipe.model_id)
     est = spec.estimates if spec else None
+    n = min(len(recipe.refs), spec.inputs.refs_max if spec else len(recipe.refs))
+    load = ref_load(n, recipe.ref_max_px)
+    fit = est.ref_fit if est else None
+    spill = fit is not None and load > fit
+    refs: dict[str, Any] = {"refs_fit": ("spill" if spill else "ok") if n else None,
+                            "refs_fit_px": next((s for s in (768, 512) if ref_load(n, s) <= fit), None) if spill and fit is not None else None}
+    matches = [h for h in (history or []) if h.get("model_id") == recipe.model_id and h.get("wall_s") and abs(h.get("px", 0) - px) / px < 0.25 and h.get("steps") == ep["steps"]
+               and abs(h.get("ref_load", 0.0) - load) <= 0.25 * load]
+    if len(matches) >= 2:
+        recent = matches[-5:]
+        return {"seconds": round(sum(h["wall_s"] for h in recent) / len(recent), 1), "source": f"measured ({len(recent)} jobs)", **refs}
     base = (est.turbo_seconds if ep["turbo"] else est.base_seconds) if est else None
     base = base if base is not None else 60.0
     turbo = spec.sampling.turbo if spec else None
     base_steps = (turbo.steps if ep["turbo"] and turbo else (spec.sampling.steps if spec else 20))
-    seconds = base * (px / (960 * 544)) * (ep["steps"] / max(1, base_steps)) + 4 * min(len(recipe.refs), spec.inputs.refs_max if spec else len(recipe.refs))
-    return {"seconds": round(seconds, 1), "source": "baseline (spikes)"}
+    per = est.ref_step_seconds if est else None
+    ref_s = load * per * ep["steps"] if per is not None else 4 * load
+    seconds = (base * (px / (960 * 544)) * (ep["steps"] / max(1, base_steps)) + ref_s) * (REF_SPILL if spill else 1.0)
+    source = "baseline (spikes)" + (f"; {n} reference{'s' if n > 1 else ''} ≈ {ref_s:.0f} s" if n else "") + ("; they spill out of VRAM" if spill else "")
+    return {"seconds": round(seconds, 1), "source": source, **refs}

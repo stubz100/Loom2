@@ -408,6 +408,8 @@ class Estimate(Open):
     vram_gb: float | None = None
     vram_budget_gb: float | None = None
     vram_fit: Literal["ok", "tight", "over"] | None = None
+    refs_fit: Literal["ok", "spill"] | None = None                  # F27 (U0): the references' load against the model's measured fit
+    refs_fit_px: int | None = None                                   # the panel's largest downscale (768 or 512) that fits, when they spill
 
 
 class RefOut(Out):
@@ -770,6 +772,7 @@ class ShotCard(Out):
     length_from: Literal["clip", "final", "lines"] | None
     stale: int
     owed: int
+    stale_steps: list[str] = []                     # U0 (FE#3): the board's steps that are stale (frame, stage, clip, final, lipsync)
 
 
 class SceneOut(Out):

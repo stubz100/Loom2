@@ -5,7 +5,7 @@ import { command, isEnabled, registerCommands, runCommand, sep, type Command, ty
 import { nextOwed, readinessOf, type ReadyCell, type ReadyItem } from './castReady'
 import { linesToVoice, spineTodo } from './episodeVerbs'
 import { goBack, goBackToIdea, useMakeFor } from '../../store/origin'
-import { bareNode, cellsOf, hasWork, nextStep, routeOf, type Cell, type Step } from './board'
+import { bareNode, cellsOf, hasWork, nextStep, routeOf, staleFrom, type Cell, type Step } from './board'
 import { askConfirm, askConfirmCheck, askText, useSession } from '../../store/session'
 import { useAlbum } from '../catalogue/albumStore'
 import { CLASS_LABEL, latestModelJob, latestTrainJob, modelSource, nodesAfterWithoutPlace, revealClass, sy, ttsJobFor, useStory, type ProfileClass, shellBlocked, fitBlocked } from './storyStore'
@@ -153,7 +153,7 @@ function selectedCells(): Record<Step, Cell> | null {
   if (!s || !v) return null
   const st = sy()
   return cellsOf(s, v, s.owner_node ? st.flowNodes[s.owner_node] ?? null : null, {
-    clipAudio: (id) => (st.clipsById[id] ? !!st.clipsById[id].audio_asset_id : undefined), finals: st.boardFinals, cuts: st.boardCuts, busy: () => new Set() })
+    clipAudio: (id) => (st.clipsById[id] ? !!st.clipsById[id].audio_asset_id : undefined), finals: st.boardFinals, cuts: st.boardCuts, busy: () => new Set(), stale: staleFrom(st.cards) })
 }
 export const NEXT_LABEL: Record<Step, string> = { lines: 'Write its lines', voice: 'Voice its lines', frame: 'Make its frame', stage: 'Link a stage camera', clip: 'Make its clip',
   final: 'Make the final shot', lipsync: 'Lip-sync it', approved: 'Mark it final', cut: 'Put it in the cut' }

@@ -281,7 +281,11 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            // U0 (RC#1): only the main window's close ends the app; the detached loupe (D155, label "loupe") just closes
             if let WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() != "main" {
+                    return;
+                }
                 api.prevent_close();
                 let app = window.app_handle().clone();
                 let b: Shared = app.state::<Shared>().inner().clone();

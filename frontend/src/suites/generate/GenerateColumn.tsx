@@ -529,7 +529,8 @@ function SizeSection() {
         <label>count</label>
         <div className="stepper"><button onClick={() => g.set({ count: Math.max(1, p.count - 1) })} disabled={p.count <= 1} aria-label="fewer"><Minus size={12} /></button><b aria-label="count">{p.count}</b><button onClick={() => g.set({ count: Math.min(8, p.count + 1) })} disabled={p.count >= 8} aria-label="more"><Plus size={12} /></button><span className="disabled-why"> one seed each</span></div>
       </div>
-      <div className="estimate"><span className={`dot ${pv?.estimate.vram_fit ?? 'ok'}`} />{pv?.estimate.seconds ? `≈ ${Math.round(pv.estimate.seconds)} s each · ${Math.round(pv.estimate.seconds * p.count)} s for ${p.count}` : '…'}{pv?.estimate.vram_gb ? ` · VRAM ≈ ${pv.estimate.vram_gb} of ${pv.estimate.vram_budget_gb ?? '?'} GB` : ''}</div>
+      <div className="estimate"><span className={`dot ${pv?.estimate.vram_fit ?? 'ok'}`} />{pv?.estimate.seconds ? `≈ ${Math.round(pv.estimate.seconds)} s each · ${Math.round(pv.estimate.seconds * p.count)} s for ${p.count}` : '…'}{pv?.estimate.vram_gb ? ` · VRAM ≈ ${pv.estimate.vram_gb} of ${pv.estimate.vram_budget_gb ?? '?'} GB` : ''}
+        {pv?.estimate.refs_fit === 'spill' && <span className="spill" title={`the references' tokens do not fit beside the model and run from shared memory (≈ 4× slower)${pv.estimate.refs_fit_px ? `; set References › downscale to ≤ ${pv.estimate.refs_fit_px}²` : '; use fewer references'}`}> · refs spill VRAM{pv.estimate.refs_fit_px ? ` · ≤ ${pv.estimate.refs_fit_px}² fits` : ''}</span>}</div>
     </Section>
   )
 }

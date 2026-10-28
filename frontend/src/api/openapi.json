@@ -5831,6 +5831,32 @@
       "Estimate": {
         "additionalProperties": true,
         "properties": {
+          "refs_fit": {
+            "anyOf": [
+              {
+                "enum": [
+                  "ok",
+                  "spill"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refs Fit"
+          },
+          "refs_fit_px": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refs Fit Px"
+          },
           "seconds": {
             "anyOf": [
               {
@@ -18954,6 +18980,14 @@
             "title": "Stale",
             "type": "integer"
           },
+          "stale_steps": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Stale Steps",
+            "type": "array"
+          },
           "take_asset_id": {
             "anyOf": [
               {
@@ -18979,7 +19013,8 @@
           "length_s",
           "length_from",
           "stale",
-          "owed"
+          "owed",
+          "stale_steps"
         ],
         "title": "ShotCard",
         "type": "object"

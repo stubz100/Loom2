@@ -19,7 +19,7 @@ import { CLASS_LABEL, sy, useStory } from '../storyStore'
 import { edgeMenu, flowView, nodeMenu, sceneMenu, templateItems } from '../storyCommands'
 import { storyKey } from '../storyKeys'
 import { NODE_LABEL } from './types'
-import { cellsOf, lengthLine, owes, routeOf, STEPS, type CellState, type Step } from '../board'
+import { cellsOf, lengthLine, owes, routeOf, staleFrom, STEPS, type CellState, type Step } from '../board'
 import { TriangleAlert } from 'lucide-react'
 
 const NODE_W = 220
@@ -135,7 +135,7 @@ export function FlowCanvas() {
       const thumb = v?.frame_asset_id ?? (v?.clip_id ? clipsById[v.clip_id]?.asset_id ?? null : null)
       const sp = n.lines[0]?.speaker ? profiles.find((x) => x.id === n.lines[0].speaker) : undefined
       const g = findNode(tree, n.board_group_id)
-      const cells = sh && v ? cellsOf(sh, v, n, { clipAudio: (id) => (clipsById[id] ? !!clipsById[id].audio_asset_id : undefined), finals: boardFinals, cuts: boardCuts, busy: () => new Set() }) : null
+      const cells = sh && v ? cellsOf(sh, v, n, { clipAudio: (id) => (clipsById[id] ? !!clipsById[id].audio_asset_id : undefined), finals: boardFinals, cuts: boardCuts, busy: () => new Set(), stale: staleFrom(cards) }) : null
       const pills = cells && v ? STEPS.filter((s) => s.id !== 'lines' && s.id !== 'cut' && owes(routeOf(v), n, s.id)).map((s) => ({ step: s.id, label: s.label, state: cells[s.id].state })) : null
       const card = sh ? cards[sh.id] : undefined
       return { id: p.id, type: 'story' as const, position: { x: p.x, y: p.y }, selected: p.id === nodeId, data: { node: n, thumb, speaker: sp ? `${sp.name} (${CLASS_LABEL[sp.cls]})` : null, problem: byProblem.get(p.id) ?? null, shotState: v?.state ?? null, pills,

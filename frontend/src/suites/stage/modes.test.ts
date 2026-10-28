@@ -58,7 +58,9 @@ describe("D121: the Final shot card's next step", () => {
   })
   afterEach(() => { useStage.setState({ current: null }); useFinals.setState({ finals: [], making: null, compositions: {} }) })
   const step = () => nextFinalStep('stg_1')
-  const set = (f: Final, comps: Record<string, Composition | null> = {}) => useFinals.setState({ finals: [fin('old', 'stg_1', []), fin('other', 'stg_2', []), f], compositions: comps })
+  // the server's order, newest first (U0 F41: the newest by its creation time, not the list's last)
+  const set = (f: Final, comps: Record<string, Composition | null> = {}) => useFinals.setState({ finals: [{ ...f, created_at: '2026-10-22T12:00:00Z' } as Final, fin('other', 'stg_2', []),
+    fin('old', 'stg_1', [], { created_at: '2026-10-22T10:00:00Z' } as Partial<Final>)], compositions: comps })
 
   it('makes the final first, and waits while it is split', () => {
     expect(nextFinalStep(null)).toMatchObject({ label: 'Make the final shot… ▶', run: null })

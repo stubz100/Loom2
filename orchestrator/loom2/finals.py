@@ -14,7 +14,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .fsio import atomic_write_json, new_id, read_json, utc_now
+from .fsio import atomic_write_json, new_id, plain_name, read_json, utc_now
 from .recipes import RenderSettings
 from .workspace import Workspace
 
@@ -359,7 +359,7 @@ class FinalStore:
         self.dir.mkdir(parents=True, exist_ok=True)
 
     def folder(self, fid: str) -> Path:
-        return self.dir / fid
+        return self.dir / plain_name(fid)
 
     def path(self, fid: str) -> Path:
         return self.folder(fid) / "final.json"

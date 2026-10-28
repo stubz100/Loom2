@@ -34,6 +34,7 @@ log = logging.getLogger("loom2.api")
 # D67: routes anyone may call, and the media routes the read-only key (`?k=`) opens — pixels only, never settings, jobs or prompts
 OPEN_PATHS = {"/health"}
 DEV_DOCS = {"/docs", "/docs/oauth2-redirect", "/redoc", "/openapi.json"}
+DRIVE = re.compile(r"^[A-Za-z]:")
 MEDIA_PATH = re.compile(r"^/(thumbs/[^/]+/[^/]+|assets/[^/]+/file|clips/[^/]+/(proxy\.mp4|frames/[^/]+)|documents/[^/]+/thumbnail|blobs/[^/]+|preset-icons/[^/]+/file|finals/[^/]+/layers/[^/]+/[^/]+/\d+|finals/[^/]+/composition/frame)$")   # D90: + the preset swatches; AE1: + the composition's frames
 DEV_ORIGINS = ["http://localhost:1420", "http://127.0.0.1:1420", "tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"]
 ERROR_STATUS = {StaleStack: 409,       # C1: the editor merges the newer server layers and saves again
@@ -79,6 +80,8 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
         """D67: every route needs the token (`X-Loom-Token`) but /health; the media GETs an <img> / <video> makes also take the
         read-only media key as `?k=`. CORS preflights pass (they carry no headers by design)."""
         path = request.url.path
+        if not plain_path(request.scope["path"]):
+            return JSONResponse({"detail": "a path segment is not a plain name"}, status_code=400)
         if request.method == "OPTIONS" or path in open_paths or request.headers.get("X-Loom-Token") == svc.app.token:
             return await call_next(request)
         if request.method in ("GET", "HEAD") and MEDIA_PATH.match(path) and request.query_params.get("k") == svc.app.media_key:
@@ -93,6 +96,13 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
         app.include_router(router)
     app.openapi = _openapi_with_contract(app)
     return app
+
+
+def plain_path(path: str) -> bool:
+    """U0 (BE#1): the ids in a URL become file and folder names (cuts, stages, nodes, finals, documents …), so a decoded segment with a
+    backslash, a NUL, a drive or a dot segment is refused before any route sees it — `DELETE /timelines/..%5Cproject` deleted a
+    throwaway project's project.json. The stores' path builders refuse the same names (`fsio.plain_name`)."""
+    return not any(s in (".", "..") or chr(92) in s or chr(0) in s or DRIVE.match(s) for s in path.split("/"))
 
 
 def _openapi_with_contract(app: FastAPI):

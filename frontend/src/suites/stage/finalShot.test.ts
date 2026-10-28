@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setBackend } from '../../api/client'
 import type { Final, StageDoc, StageObject } from '../../api/types'
 import { useSession } from '../../store/session'
-import { batchCount, batchOf, bodyStamp, cameraTravel, framesAt, hasPictureSet, keysFrom, nextFinalStep, picturePlate, planFinal, plateChoice, skeletonChange, useFinals } from './finalShot'
+import { batchCount, batchOf, bodyStamp, cameraTravel, framesAt, hasPictureSet, keysFrom, newestFinal, nextFinalStep, picturePlate, planFinal, plateChoice, skeletonChange, useFinals } from './finalShot'
 import { useStage } from './stageStore'
 
 const obj = (id: string, kind: StageObject['kind'], extra: Partial<StageObject> = {}): StageObject => ({ id, kind, name: id, preset: null, asset_id: null, transform: { pos: [0, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] },
@@ -86,6 +86,16 @@ describe('SC3e the plate of a picture set', () => {
     expect(nextFinalStep('stg_1')).toMatchObject({ label: 'Rendering the plate…', run: null })
     useFinals.setState({ finals: [{ ...final, layers: [{ ...final.layers[0], method: 'projected' }] } as unknown as Final], projecting: null })
     expect(nextFinalStep('stg_1').label).toBe('Make the plate ▶')
+  })
+  it("names the step of the stage's newest final, not the list's last (U0 F41: the list is newest first and a new final is prepended)", () => {
+    const older = { ...final, id: 'fin_0', name: 'Final 1', created_at: '2026-10-28T10:00:00Z', layers: [{ ...final.layers[0], status: 'done' }] } as unknown as Final
+    const newer = { ...final, id: 'fin_2', name: 'Final 2', created_at: '2026-10-28T11:00:00Z' } as unknown as Final
+    const elsewhere = { ...final, id: 'fin_9', stage_id: 'stg_9', created_at: '2026-10-28T12:00:00Z' } as unknown as Final
+    expect(newestFinal([newer, older, elsewhere], 'stg_1')?.id).toBe('fin_2')
+    expect(newestFinal([older, newer], 'stg_1')?.id).toBe('fin_2')
+    expect(newestFinal([elsewhere], 'stg_1')).toBeUndefined()
+    useFinals.setState({ finals: [newer, older], making: null, projecting: null })
+    expect(nextFinalStep('stg_1').label).toBe('Render the plate ▶')
   })
 })
 

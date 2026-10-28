@@ -6858,6 +6858,10 @@ export interface components {
         };
         /** Estimate */
         Estimate: {
+            /** Refs Fit */
+            refs_fit?: ("ok" | "spill") | null;
+            /** Refs Fit Px */
+            refs_fit_px?: number | null;
             /** Seconds */
             seconds?: number | null;
             /** Source */
@@ -12170,6 +12174,11 @@ export interface components {
             shot_id: string;
             /** Stale */
             stale: number;
+            /**
+             * Stale Steps
+             * @default []
+             */
+            stale_steps: string[];
             /** Take Asset Id */
             take_asset_id: string | null;
             /** Version */

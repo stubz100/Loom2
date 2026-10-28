@@ -13,4 +13,4 @@ sampling = { steps = 20, guidance = 4.0, cfg = 1.0, weight_dtype = "default", js
 recipes = { default_for = ["t2i"], t2i = true, i2i = true, inpaint = ["fill", "outpaint"], inpaint_hero = true }
 inputs = { refs_max = 10, bind_refs = false }   # D93 rig (journal 2026-10-17 18:03, d93_bind_rig.py --source): dev keeps both identities from D73's notes alone (FaceSim own 0.80 when placed right) and the ranges only moved who stands where — right 4/6 off, 2/6 on — so the JSON binding is off by default; a recipe's bind_refs still turns it on
 geometry = { size_mult = 16, tiers = { thumb = [896, 512], draft = [960, 544], full = [1920, 1088] } }
-estimates = { vram_gb = 14.0, base_seconds = 65.0, turbo_seconds = 40.0, doc_seconds = 270.0 }
+estimates = { vram_gb = 14.0, base_seconds = 65.0, turbo_seconds = 40.0, doc_seconds = 270.0, ref_step_seconds = 0.85, ref_fit = 24.0 }   # F27 (journal 2026-10-28 22:39 and D98's table): Turbo at 960×544 adds ≈ 6 s a ≤ 512² reference (4–10 refs) and ≈ 30 s a ≤ 1024² one (4–6 refs); 8 at ≤ 1024² spilled to 117 s/it

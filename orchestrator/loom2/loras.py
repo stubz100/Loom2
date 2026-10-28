@@ -18,7 +18,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .fsio import atomic_write_json, read_json, utc_now
+from .fsio import atomic_write_json, plain_name, read_json, utc_now
 from .models import registry
 from .recipes import LoraRef
 from .roster import ROSTER, ROSTER_BY_ID, Roster, RosterEntry
@@ -60,10 +60,10 @@ class LoraRegistry:
         self.dir: Path = ws.story_dir / "loras"
 
     def path(self, lid: str) -> Path:
-        return self.dir / f"{lid}.json"
+        return self.dir / f"{plain_name(lid)}.json"
 
     def file(self, lid: str) -> Path:
-        return self.dir / f"{lid}.safetensors"
+        return self.dir / f"{plain_name(lid)}.safetensors"
 
     def list(self) -> list[LoraRecord]:
         out = []

@@ -10,6 +10,8 @@ orchestrator and state folder) and the real engine, one job at a time:
 - a Clay final shot;
 - an Episode cut, the Resolve export and the movie.
 
+**Fixed in U0** (2026-10-28 23:34 in the journal): F27, F29, F34, F41, FE#1, FE#2, FE#3, BE#1, BE#3 and RC#1. The rest wait for their wave.
+
 The project is `F:/loom2-projects/ux-walk-last-ferry`. The full report, with screenshots, was published to the author as an artifact. Tests at the start
 of the session: offline 692 passed; Vitest 597 passed and 3 skipped.
 

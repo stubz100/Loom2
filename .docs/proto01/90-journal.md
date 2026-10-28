@@ -11324,3 +11324,80 @@ The main readings:
 Recommendations awaiting the author: one stage per scene with a camera per shot (Q2), image-to-video kept as a Performance method fed by the clay
 (Q5), and the new UI built beside the old one (Q9). No code changed; D157 is recorded when the author answers.
 
+## 2026-10-28 23:34 — The author's answers → D157 (the UI2 proposal accepted); U0 built: today's defects fixed in today's UI
+
+**The answers.** All thirteen as recommended, with three of the author's own:
+
+- Q1: the synopsis stays as a note field; the logline goes.
+- Q6: no LoRA, and no Expand at all ("we now use clay for keeping the character consistent"). The training and Expand routes retire at U8
+  (`proto01_UI2/09-answers.md` §1).
+- Q10: light templates in Clay, adjustable in a full light editor like the pose editor (09 §2).
+
+D157 was recorded in 13 before any of the work, superseding D90, D95, D121, D125, D136's ideas store, D142's bench listing and the LoRA training.
+
+**U0 (07 §2): the fixes worth making whatever the new UI.**
+
+- **F34, Clay dead in dev builds since V82.** StrictMode's mount → cleanup → mount handed the second engine the canvas whose GL context the
+  first one's `dispose()` had force-lost ("reading 'precision'"). The viewport (`StageParts.tsx`) and the motion preview (`MotionLibrary.tsx`)
+  now make a fresh `<canvas>` per mount inside a holder and remove it in the cleanup.
+- **F41, the final foot acting on the oldest final.** The list is newest first from the server and a new final is prepended, so `.at(-1)`
+  was the oldest. `finalShot.newestFinal` picks by `created_at`; `nextFinalStep`, the Shot stepper and `anim.step.final.open` use it.
+- **RC#1, closing the detached loupe exited the app.** `lib.rs`: only the `main` window's CloseRequested shuts the orchestrator down.
+- **BE#1, ids from URLs as paths.**
+  - The API refuses a decoded path segment with a backslash, a NUL, a drive or a dot segment (`api.plain_path`, 400), before any route.
+  - `fsio.plain_name` guards the path builders of cuts, timelines, stages, nodes, profiles, voices, LoRAs, ideas, groups, finals, clips and
+    documents.
+  - `DELETE /timelines/..%5Cproject` and five like it are 400 now; project.json stays.
+- **BE#3, Run stale replaying the seeds list.** A shot's recorded run now carries the job's own seed (`finishers._run`), so a rerun is one job
+  with the same take. `rerun_recipe` trims an older record's list to its first seed.
+- **F27, the estimate ignoring references.**
+  - A measured job matches only with a like reference load (`ref_load`: a reference counts by its area, ≤ 1024² as four ≤ 512² ones).
+  - The baseline adds `estimates.ref_step_seconds` per step per unit. Calibrated from the walkthrough's runs and D98's table: FLUX.2 dev 0.85,
+    Klein 9B 0.56; others 4 s a unit.
+  - Past `estimates.ref_fit` (FLUX.2 dev 24) the estimate is ×4 and says `refs_fit: spill` with the largest downscale that fits.
+  - Against the measured runs at 960×544 Turbo:
+    - 4 / 8 / 10 refs at ≤ 512²: 67 / 94 / 108 s, measured 64 / 88 / 108;
+    - 4 at ≤ 1024²: 149 s, measured 150–170;
+    - 6 at ≤ 1024²: 203 s, measured 238;
+    - 8 at ≤ 1024²: 1030 s with the spill, measured ≈ 940.
+  - The Image panel's estimate line shows *refs spill VRAM · ≤ 768² fits*, with the reason in its tooltip.
+- **F29 / FE#1, Make clip ▸ carrying the last shot's content.** `makeClipFor` resets the start (the version's frame or none), the end, the
+  beats, the words (the node's line or nothing) and the camera move. The model and the production settings stay.
+- **FE#3, the board never marking a step stale.** The shot cards carry `stale_steps` from RC1's graph: the frame, clip and lip-sync steps; the
+  final when a layer, its composition, finish or render is behind; the stage when it moved on since the version's pin. The board, the Flow's
+  pills and the foot's next step read them for the card's version only.
+- **FE#2, In cut against the current version.** It now compares with the version the Episode takes (`binVersion`: the final one first).
+
+**Tests:**
+
+- `test_plain_ids_u0.py` (3);
+- `test_generate_m3` + 1 (the walkthrough's numbers as the bars);
+- `test_shot_recipe_rc0` (a random seed recorded and rerun as itself, an old batch trimmed);
+- `test_shot_cards_rc2b` (`stale_steps` = frame and stage after a stage edit);
+- Vitest: `finalShot.test.ts` + 1, `makeFor.test.ts` + 1, `board.test.ts` + 2; `modes.test.ts`'s finals fixture now in the server's order.
+
+**Checks:**
+
+- offline 696 passed; Vitest 601 + 3 skipped; typecheck, build and lint clean; `cargo check` clean;
+- `agents_check`, `model_literals_check` and `settings_audit` (319, 0) clean;
+- the API contract regenerated (`Estimate.refs_fit` / `refs_fit_px`, `ShotCard.stale_steps`).
+
+**The dev build, checked** in headless Edge against the author's running Vite, with a throwaway orchestrator and project in the session's scratch
+folder. No GPU job ran:
+
+- Clay's viewport and the motion preview both kept a live WebGL context: the figure is drawn, and a starter (CC0) walk loops in the preview;
+- no console error;
+- the Image panel showed the spill line for eight references at ≤ 1024² on FLUX.2 dev.
+
+**Owed:**
+
+- **The e2e**: the author's `tauri dev` holds port 1420. Also, the `lib.rs` edit made it rebuild and restart the author's app at 23:09, so the
+  orchestrator that app runs predates the Python changes.
+- **The commit**: nothing is committed.
+
+## 2026-10-29 00:26 — U0's e2e: 79/79 (alone)
+
+The author's `tauri dev` window and Vite were still up (the author asked them closed if so). The window was closed by a close request, so the
+shell shut its orchestrator down itself; the dev tree exited with it and port 1420 was free.
+`npm run build:e2e; npm run test:e2e` on the U0 working tree: **79 passed in 6.2 min**, alone (no GPU job, no other server). U0 is committed
+with this entry; next is U1, the seams (07 §2, 06 §5.3).

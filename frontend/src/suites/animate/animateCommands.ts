@@ -61,7 +61,7 @@ registerCommands([
   { id: 'anim.step.final.open', scope: 'animate', label: "The final's composition (Animate · Final)", icon: Film, placement: ['panel'],
     run: () => void Promise.all([import('../stage/finalShot'), import('../stage/stageStore')]).then(([m, s]) => {     // the stage's newest final with a composition, else the Final level as it is
       const id = s.useStage.getState().current?.id
-      const f = m.useFinals.getState().finals.filter((x) => x.stage_id === id).at(-1)
+      const f = m.newestFinal(m.useFinals.getState().finals, id)
       if (f && m.useFinals.getState().compositions[f.id]) m.useFinals.getState().openFinal(f.id); else useSession.getState().setSuite('final')
     }) },
   // AE2: the editor — each one engine command on the composition (Layers' toolbar, the row's menu; the keys as accelerators)

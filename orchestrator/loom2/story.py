@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .fsio import atomic_move, atomic_write_json, new_id, read_json, read_json_or, unlink, utc_now
+from .fsio import atomic_move, atomic_write_json, new_id, plain_name, read_json, read_json_or, unlink, utc_now
 from .models import registry
 from .body import Body
 from .origin import JobOrigin
@@ -1188,7 +1188,7 @@ class _FlowMixin:
         return self.dir / "flow"
 
     def node_path(self, nid: str) -> Path:
-        return self.flow_dir / "nodes" / f"{nid}.json"
+        return self.flow_dir / "nodes" / f"{plain_name(nid)}.json"
 
     def _record(self, nid: str) -> NodeRecord | None:
         p = self.node_path(nid)
@@ -1909,7 +1909,7 @@ class StoryStore(_ShotMixin, _FlowMixin):
 
     # -- profiles --
     def profile_path(self, pid: str) -> Path:
-        return self.profiles_dir / f"{pid}.json"
+        return self.profiles_dir / f"{plain_name(pid)}.json"
 
     def profile(self, pid: str) -> Profile | None:
         p = self.profile_path(pid)

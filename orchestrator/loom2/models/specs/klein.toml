@@ -44,7 +44,7 @@ sampling = { steps = 4, guidance = 1.0, cfg = 1.0, weight_dtype = "fp8_e4m3fn", 
 recipes = { default_for = ["inpaint"], t2i = true, inpaint = ["fill", "fill_match", "remove", "outpaint"], icm_default = ["full"], reangle = "klein_prompt", reangle_moves = ["topdown", "closeup", "wide"], stage = "clay", stage_seconds = 12.0 }   # P14 / D82: E12's framing moves (9 / 10 / 9 of 10, 6 s warm). ST3 / D78: the clay reference (E10: 10/10 blocking kept, 12 s warm)
 inputs = { refs_max = 4, bind_refs = true, refs_suggest = { at = 2, model = "klein-9b-kv", why = "2.5× faster with several references" } }
 geometry = { size_mult = 16, tiers = { thumb = [896, 512], draft = [1280, 720], full = [1920, 1088] } }
-estimates = { vram_gb = 15.0, base_seconds = 18.0, doc_seconds = 28.0 }
+estimates = { vram_gb = 15.0, base_seconds = 18.0, doc_seconds = 28.0, ref_step_seconds = 0.56 }   # F27: 4 refs at ≤ 1024² added ≈ 36 s over 4 steps at 1280×720 (the walkthrough, 2026-10-28)
 
 [[model]]
 id = "klein-base-9b"

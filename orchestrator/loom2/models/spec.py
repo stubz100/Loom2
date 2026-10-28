@@ -153,6 +153,8 @@ class Estimates(Strict):
     doc_seconds: float | None = None               # one Edit candidate, warm, incl. the model swap (D64)
     tile_seconds: float | None = None              # one 1024² tile of a tiled refine
     cold_seconds: float | None = None              # P18: the same job with nothing resident (shown beside the warm figure)
+    ref_step_seconds: float | None = None          # F27 (U0): one reference at ≤ 512² adds this per sampling step (a ≤ 1024² one four times it)
+    ref_fit: float | None = None                   # F27: the reference load (in ≤ 512² references) past which the job spills out of VRAM
 
 
 class EngineHints(Strict):

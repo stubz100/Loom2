@@ -12,7 +12,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from .body import Body
-from .fsio import atomic_write_json, new_id, read_json, utc_now
+from .fsio import atomic_write_json, new_id, plain_name, read_json, utc_now
 from .workspace import Workspace
 
 STAGE_SCHEMA_VERSION = 3                           # 2 (D108): a set is architecture; schema 1's set blocks are read as props;
@@ -384,7 +384,7 @@ class StageStore:
         self.dir.mkdir(parents=True, exist_ok=True)
 
     def path(self, st_id: str) -> Path:
-        return self.dir / f"{st_id}.json"
+        return self.dir / f"{plain_name(st_id)}.json"
 
     def get(self, st_id: str) -> Stage | None:
         p = self.path(st_id)

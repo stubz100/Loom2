@@ -84,6 +84,24 @@ def test_estimate_seconds():
     assert big["seconds"] > 3 * graphs.estimate_seconds(T2I(prompt_json=TREE)).get("seconds", 0)
 
 
+def test_estimate_counts_references():
+    """F27 (U0): the foot promised 42 s for frames with 8 references at <= 1024 squared that ran 16 minutes. A measured job matches only
+    with a like reference load, the baseline adds each reference by its area, and a load past the model's fit spills (FLUX.2 dev's
+    walkthrough runs: 4 / 8 / 10 refs at <= 512 in 64 / 88 / 108 s, 4 at <= 1024 in 150-170 s, 8 at <= 1024 in about 16 min)."""
+    def r(n: int, mx: int) -> T2I:
+        return T2I(prompt_json=TREE, turbo=True, refs=[{"asset_id": f"ast_{i}"} for i in range(n)], ref_max_px=mx)
+    plain = [{"model_id": "flux2-dev-fp8mixed", "px": 960 * 544, "steps": 8, "wall_s": 42.0, "ref_load": 0.0}] * 3
+    assert graphs.estimate_seconds(r(0, 1024), plain)["source"].startswith("measured")
+    eight = graphs.estimate_seconds(r(8, 1024), plain)
+    assert eight["source"].startswith("baseline") and eight["refs_fit"] == "spill" and eight["refs_fit_px"] == 768 and eight["seconds"] > 600
+    for n, mx, lo, hi in ((4, 512, 55, 80), (8, 512, 75, 105), (10, 512, 95, 125), (4, 1024, 130, 180)):
+        e = graphs.estimate_seconds(r(n, mx))
+        assert lo <= e["seconds"] <= hi and e["refs_fit"] == "ok", (n, mx, e)
+    like = [{"model_id": "flux2-dev-fp8mixed", "px": 960 * 544, "steps": 8, "wall_s": w, "ref_load": 8.0} for w in (87.1, 89.9)]
+    assert graphs.estimate_seconds(r(8, 512), plain + like) == {"seconds": 88.5, "source": "measured (2 jobs)", "refs_fit": "ok", "refs_fit_px": None}
+    assert graphs.ref_load(2, 0) == 18.0                                                   # original size counts as 1536 squared
+
+
 def test_preview_stage_release_presets(tmp_path: Path):
     state = tmp_path / "state"
     AppState(state).update_settings({"engine": {"python": str(tmp_path / "missing.exe"), "health_timeout_s": 1}, "models_root": str(_tree(tmp_path).models_root), "mounted_model_trees": [], "variant": "full"})

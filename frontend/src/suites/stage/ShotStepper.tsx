@@ -12,7 +12,7 @@ import type { Job } from '../../api/types'
 import { useMakeFor } from '../../store/origin'
 import { ForChip } from '../story/ForChip'
 import { ForRecipe } from '../story/RecipeSteps'
-import { assembling, rendering, useFinals, useFinalsPoll } from './finalShot'
+import { assembling, newestFinal, rendering, useFinals, useFinalsPoll } from './finalShot'
 import { st, useStage } from './stageStore'
 import { stageSteps, STATE_WORD, type StepInput } from './steps'
 
@@ -33,7 +33,7 @@ function useStepInput(): StepInput | null {
   useFinalsPoll(current?.id)                                           // the final's and its composition's states, whichever level is open
   if (!current) return null
   const mine = (surface: string) => Object.values(jobs).some((j) => live(j) && j.origin?.suite === 'stage' && j.origin.surface === surface && j.origin.ref === current.id)
-  const f = finals.filter((x) => x.stage_id === current.id).at(-1) ?? null
+  const f = newestFinal(finals, current.id) ?? null
   const made = (l: { kind: string; status: string; frames_done: number }) => (l.kind === 'plate' || l.kind === 'figure' ? l.status === 'done' && l.frames_done === f!.frames : l.status !== 'failed')
   const c = f ? comps[f.id] ?? null : null
   return {

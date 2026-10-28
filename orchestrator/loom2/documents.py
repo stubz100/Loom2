@@ -29,7 +29,7 @@ from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field
 
 from .compose import BLEND_MODES, COMPOSE_VERSION, Renderer
-from .fsio import StateError, _tmp_for, new_id, replace, utc_now
+from .fsio import StateError, _tmp_for, new_id, plain_name, replace, utc_now
 from .workspace import Workspace
 
 DOC_SCHEMA_VERSION = 3          # 2 (D52): masks carry density and feather; 3 (D54): masks carry their default value (older documents load with the defaults)
@@ -343,7 +343,7 @@ class DocumentStore:
         self.open: dict[str, OpenDocument] = {}
 
     def path_for(self, doc_id: str) -> Path:
-        return self.ws.documents_dir / f"{doc_id}.ora"
+        return self.ws.documents_dir / f"{plain_name(doc_id)}.ora"
 
     def list(self) -> list[dict]:
         out = []

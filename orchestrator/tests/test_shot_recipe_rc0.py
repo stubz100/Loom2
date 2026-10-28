@@ -187,6 +187,8 @@ def test_rerun_recipe_and_the_plan():
     assert rerun_recipe(clip, ShotVersion(id="v1", frame_asset_id="ast_new"))["start_asset"] == "ast_new"
     still = RecipeRun(kind="stage_shot", settings={"kind": "stage_shot", "passes": {"clay": "old"}})
     assert rerun_recipe(still, ShotVersion(id="v1"), {"clay": "new", "pose": "p"})["passes"] == {"clay": "new", "pose": "p"}
+    batch = RecipeRun(kind="t2i", settings={"kind": "t2i", "seeds": [11, 12, 13, 14]})                    # U0 (BE#3): a run recorded before the job's own seed
+    assert rerun_recipe(batch, ShotVersion(id="v1"))["seeds"] == [11]                                       # one take again, not the batch
     assert [how_to_run(x) for x in (run, clip, still, RecipeRun(kind="i2v", settings={"guide": {"asset_id": "g"}}), RecipeRun(kind="inpaint"))] == ["server", "server", "passes", "stage", "manual"]
     # the plan: the frame first, the clip after it
     story = _Story()
@@ -219,10 +221,12 @@ async def test_run_stale_runs_the_frame_then_the_clip(tmp_path: Path, object_inf
         st = StoryStore(rig.ws)
         shot = st.create_shot("Gate")
         mid = next(i for i, sp in registry.SPECS.items() if sp.recipes.t2i and rig.roster.resolve(i).path and sp.inputs.refs_max > 0)
-        job = rig.queue.submit({"kind": "t2i", "model_id": mid, "prompt_mode": "text", "prompt_text": "Mara at the gate", "width": 64, "height": 64, "seeds": [3],
+        job = rig.queue.submit({"kind": "t2i", "model_id": mid, "prompt_mode": "text", "prompt_text": "Mara at the gate", "width": 64, "height": 64, "seeds": [0],
                                 "mentions": [{"group_id": g.id, "name": "Mara"}]}, origin=_origin(shot.id))[0]
         assert (await rig.wait(job.id)).status == "done"
         frame = st.shot(shot.id).version().frame_asset_id
+        seed = job.seed
+        assert seed > 0 and st.shot(shot.id).version().recipe.step("frame").runs[-1].settings["seeds"] == [seed]   # U0 (BE#3): the job's own seed, not "random"
         job = rig.queue.submit({"kind": "i2v", "model_id": WAN, "start_asset": frame, "prompt_text": "she turns", "frames": 9, "fps": 16, "width": 832, "height": 480},
                                origin=_origin(shot.id, suite="animate"))[0]
         assert (await rig.wait(job.id, timeout=60)).status == "done"
@@ -238,6 +242,7 @@ async def test_run_stale_runs_the_frame_then_the_clip(tmp_path: Path, object_inf
         # what POST …/run-stale queues: the frame now, the clip in the chain
         jobs = rig.queue.submit(rerun_recipe(used_run(v.recipe.step("frame"), v), v),
                                 origin=JobOrigin(suite="animate", surface=FOR_SHOT, ref=None, payload={"shot_id": shot.id, "version": "v1", "use": True, "chain": ["clip"]}))
+        assert len(jobs) == 1 and jobs[0].seed == seed                                                    # the same take, brought up to date
         assert (await rig.wait(jobs[0].id)).status == "done"
         v = st.shot(shot.id).version()
         assert v.frame_asset_id != frame and v.frame_asset_id in v.recipe.step("frame").runs[-1].outputs

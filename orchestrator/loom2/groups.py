@@ -17,7 +17,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from .catalogue import AssetQuery, Catalogue, culled_filter
-from .fsio import StateError, atomic_write_json, new_id, read_json, utc_now
+from .fsio import StateError, atomic_write_json, new_id, plain_name, read_json, utc_now
 from .workspace import Workspace
 
 log = logging.getLogger(__name__)
@@ -85,7 +85,7 @@ class GroupStore:
 
     # ---- load / integrity -------------------------------------------------------------------------
     def _path(self, gid: str) -> Path:
-        return self.dir / f"{gid}.json"
+        return self.dir / f"{plain_name(gid)}.json"
 
     def _load(self) -> None:
         with self._lock:

@@ -46,7 +46,7 @@ def test_cards(tmp_path: Path):
         st.record_run(s.shot_id, "v1", {"kind": "stage_shot", "stage_id": stg.id, "camera_id": stg.cameras[0].id}, outputs=[img], job_id=None, seconds=12.0,
                       stage_id=stg.id, stage_revision=stg.revision)
         cards = {c["shot_id"]: c for c in cl.get("/story/shots/cards").json()["items"]}
-        assert cards[s.shot_id]["stale"] == 0
+        assert cards[s.shot_id]["stale"] == 0 and cards[s.shot_id]["stale_steps"] == []
         cur = stages.get(stg.id)
         stages.put(stg.id, {**cur.model_dump(), "revision": cur.revision, "name": "Alley at night"})
         r = cl.get("/story/shots/cards").json()
@@ -56,6 +56,7 @@ def test_cards(tmp_path: Path):
         assert cards[a.shot_id]["node_id"] == a.id and cards[a.shot_id]["version"] == "v1"
         assert cards[d.shot_id]["length_from"] == "lines" and abs(cards[d.shot_id]["length_s"] - 1.0) < 0.05 and cards[d.shot_id]["take_asset_id"] is None
         assert cards[s.shot_id]["stale"] >= 1 and cards[s.shot_id]["take_asset_id"] == img and cards[s.shot_id]["route"] == "stage"
+        assert cards[s.shot_id]["stale_steps"] == ["frame", "stage"] and cards[a.shot_id]["stale_steps"] == []   # U0 (FE#3): the board's cells
 
 
 def _png(p: Path) -> Path:

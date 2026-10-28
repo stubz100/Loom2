@@ -1,8 +1,10 @@
 // D90 (02 §5, §4.2): Make ▸ for a shot version — the version it works for, what the makers start from, a board's references in mention
 // order, and the board drop rule on a Flow node.
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { Asset, FlowNode, GroupPage, Profile, Shot } from '../../api/types'
-import { boardDrop, boardRefs, clipPrefill, forShot, framePrefill, lineAction, makeTarget, speakerVersion } from './makeFor'
+import { useAnimate } from '../animate/animateStore'
+import { boardDrop, boardRefs, clipPrefill, forShot, framePrefill, lineAction, makeClipFor, makeTarget, speakerVersion } from './makeFor'
+import { useStory } from './storyStore'
 
 const node = (type: FlowNode['type'], extra: Partial<FlowNode> = {}): FlowNode => ({
   schema_version: 1, id: 'node_1', type, title: '', lines: [], options: [], cond: null, set: [], target: null, text: '', shot_id: null, shot_version: null, board_group_id: null, place_id: null, speaker_versions: {}, colour: null, beat_id: null, scene_id: null, own: [],
@@ -82,5 +84,21 @@ describe('boardRefs / boardDrop', () => {
     expect(boardDrop({ items: [{ kind: 'asset', id: 'ast_1' }] }, 'Gate').verdict).toMatchObject({ ok: false, reason: expect.stringMatching(/A board is a group/) })
     expect(boardDrop({ items: [{ kind: 'group', id: 'grp_1' }, { kind: 'group', id: 'grp_2' }] }, 'Gate').verdict).toMatchObject({ ok: false, reason: expect.stringMatching(/One board per node/) })
     expect(boardDrop({ items: [] }, 'Gate').verdict.ok).toBe(false)
+  })
+})
+
+describe('U0 (F29, FE#1) Make clip ▸ starts from the shot, not from the last one', () => {
+  it("clears the last shot's start, end, beats, words and camera move, and keeps the model", async () => {
+    vi.spyOn(useAnimate.getState(), 'refreshPreview').mockImplementation(() => {})
+    vi.spyOn(useAnimate.getState(), 'loadAsset').mockResolvedValue(undefined)
+    const p = useAnimate.getState().panel
+    useAnimate.setState({ panel: { ...p, model_id: 'test-camera-model', start: 'ast_departure', end: 'ast_end', prompt: 'the ferry pulls away', beats: [{ frame: 40, asset_id: 'ast_b', strength: 0.6 }],
+      camera: { move: 'zoom_out', speed: 1 } as never } })
+    useStory.setState({ flowNodes: { node_7: node('dialogue', { id: 'node_7', text: 'x' }) } })
+    await makeClipFor(shot('v1', [version('v1')], 'node_7'), version('v1'), 'node_7')
+    expect(useAnimate.getState().panel).toMatchObject({ start: null, end: null, prompt: '', beats: [], camera: null, model_id: 'test-camera-model' })
+    useStory.setState({ flowNodes: { node_8: node('shot', { id: 'node_8', text: 'the seal breaks' }) } })
+    await makeClipFor(shot('v1', [version('v1')], 'node_8'), { ...version('v1'), frame_asset_id: 'ast_seal' }, 'node_8')
+    expect(useAnimate.getState().panel).toMatchObject({ start: 'ast_seal', prompt: 'the seal breaks', camera: null })
   })
 })

@@ -1202,6 +1202,20 @@ async def shots_list(svc: Svc):
 SHOT_GUIDE_S = 30.0                                # D96 (05 §3): about 30 s a Shot, a guideline — the card warns past it
 
 
+FINAL_KINDS = ("plate", "layer", "composition", "finish", "take")
+
+
+def _stale_steps(g: Any, v: Any, st: Any) -> list[str]:
+    """U0 (FE#3): the board's cells that are stale, from RC1's graph — the frame, the clip and the lip-sync steps, the final when any of its
+    layers, its composition, its finish or its render is behind, and the stage when it moved on since the version pinned it."""
+    out = [k for k in ("frame", "clip", "lipsync") if any(n.id == f"step:{k}" and n.state == "stale" for n in g.nodes)]
+    if st is not None and v.stage_id == st.id and v.stage_revision is not None and st.revision > v.stage_revision:
+        out.append("stage")
+    if any(n.kind in FINAL_KINDS and n.state == "stale" for n in g.nodes):
+        out.append("final")
+    return out
+
+
 def _cards(svc, ws) -> dict:
     """RC2b: every shot's card, its records read once (the finals, the nodes, the Cast, the stages, the clips) and RC1's graph per shot for
     its stale and owed counts."""
@@ -1251,7 +1265,8 @@ def _cards(svc, ws) -> dict:
             if secs:
                 length, src = float(sum(secs)), "lines"
         items.append({"shot_id": s.id, "node_id": s.owner_node, "version": v.id, "route": g.route, "take_asset_id": v.frame_asset_id or (c.asset_id if c else None),
-                      "length_s": round(length, 2) if length is not None else None, "length_from": src, "stale": g.stale, "owed": g.owed})
+                      "length_s": round(length, 2) if length is not None else None, "length_from": src, "stale": g.stale, "owed": g.owed,
+                      "stale_steps": _stale_steps(g, v, st)})
     return {"items": items, "guide_s": SHOT_GUIDE_S}
 
 

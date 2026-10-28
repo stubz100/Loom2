@@ -20,7 +20,7 @@ from .config import AppState
 from .engine.client import EngineError
 from .engine.follow import EngineFollower
 from .engine.finishers import finisher_for, run_cpu
-from .engine.graphs import CompileError, estimate_vram_gb, recipe_te_id, recipe_weights
+from .engine.graphs import CompileError, estimate_vram_gb, recipe_te_id, recipe_weights, ref_load
 from .models import registry
 from .engine.pipeline import JobCancelled, finalize, plan
 from .engine.supervisor import EngineSupervisor
@@ -394,7 +394,8 @@ class JobQueue:
         for j in self.jobs.values():
             if j.status == "done" and j.wall_s and j.kind == "t2i":
                 comp = j.result.get("compiled") or {}
-                rows.append({"model_id": j.recipe.get("model_id"), "px": (comp.get("width") or 0) * (comp.get("height") or 0), "steps": comp.get("steps"), "wall_s": j.wall_s})
+                rows.append({"model_id": j.recipe.get("model_id"), "px": (comp.get("width") or 0) * (comp.get("height") or 0), "steps": comp.get("steps"), "wall_s": j.wall_s,
+                             "ref_load": ref_load(int(comp.get("refs") or 0), int(j.recipe.get("ref_max_px", 1024)))})   # F27: references count
         return rows
 
     def estimate(self, recipe: Any) -> dict:

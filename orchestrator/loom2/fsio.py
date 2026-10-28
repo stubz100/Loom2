@@ -31,6 +31,14 @@ def new_id(prefix: str, n: int = 8) -> str:
     return f"{prefix}_{uuid.uuid4().hex[:n]}"
 
 
+def plain_name(name: str) -> str:
+    """U0 (BE#1): an id that becomes a file or folder name is one plain name — no separator, drive, NUL or dot segment — so an id from
+    a URL (`%5C..%5Cproject` deleted a project's project.json) never reaches a file outside its store."""
+    if not name or name in (".", "..") or any(c in name for c in "/\\\0:"):
+        raise StateError(f"not a plain name: {name!r}")
+    return name
+
+
 def slugify(name: str, fallback: str = "item") -> str:
     out = "".join(c if c.isalnum() else "-" for c in name.strip().lower())
     out = "-".join(p for p in out.split("-") if p)

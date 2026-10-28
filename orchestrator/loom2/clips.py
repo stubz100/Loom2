@@ -13,7 +13,7 @@ from typing import Annotated, Any
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, WithJsonSchema
 
-from .fsio import atomic_move, atomic_write_json, new_id, read_json_or, utc_now
+from .fsio import atomic_move, atomic_write_json, new_id, plain_name, read_json_or, utc_now
 from .workspace import Workspace
 
 # D38: beats and the FaceSim result stay plain dicts at runtime (stored as written); their JSON schemas type them for the frontend.
@@ -62,7 +62,7 @@ class ClipStore:
         self.ws = ws
 
     def dir(self, clip_id: str) -> Path:
-        return self.ws.clips_dir / clip_id
+        return self.ws.clips_dir / plain_name(clip_id)
 
     def json_path(self, clip_id: str) -> Path:
         return self.dir(clip_id) / "clip.json"

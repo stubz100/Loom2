@@ -311,6 +311,8 @@ def rerun_recipe(run: RecipeRun, version: Any, passes: dict[str, str] | None = N
         r["start_asset"] = version.frame_asset_id
     if r.get("kind") == "stage_shot" and passes:
         r["passes"] = dict(passes)
+    if len(r.get("seeds") or []) > 1:
+        r["seeds"] = r["seeds"][:1]                         # U0 (BE#3): one take again, never the batch (runs recorded before the job's own seed)
     return r
 
 

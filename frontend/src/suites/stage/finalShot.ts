@@ -346,6 +346,13 @@ export const assembling = (fid: string): boolean => Object.values(useSession.get
 /** PS5e: every layer made — the plate projected, each character performed and matted. */
 export const readyToAssemble = (f: Final): boolean => f.layers.every((l) => (l.kind === 'plate' || l.kind === 'figure' ? l.status === 'done' && l.frames_done === f.frames : true))
 const replace = (list: Final[], f: Final) => list.map((x) => (x.id === f.id ? f : x))
+/** U0 (F41): a stage's newest final, by its creation time — the list is newest first from the server and a new final is prepended, so
+ *  `.at(-1)` was the oldest (the walkthrough's foot performed and assembled Final 1 while Final 2 was the one being made). */
+export function newestFinal(finals: Final[], stageId: string | null | undefined): Final | undefined {
+  let best: Final | undefined
+  for (const f of finals) if (f.stage_id === stageId && (!best || f.created_at > best.created_at)) best = f
+  return best
+}
 
 export const useFinals = create<FinalsState>((set, get) => ({
   finals: [], making: null, projecting: null, filling: null, awaiting: {}, compositions: {},
@@ -607,7 +614,7 @@ export interface FinalStep { label: string; run: (() => void) | null; why?: stri
 export function nextFinalStep(stageId: string | null): FinalStep {
   const fs = useFinals.getState()
   if (fs.making) return { label: 'Splitting…', run: null, why: `${fs.making.what} · ${fs.making.done} / ${fs.making.total}` }
-  const f = stageId ? fs.finals.filter((x) => x.stage_id === stageId).at(-1) : undefined
+  const f = stageId ? newestFinal(fs.finals, stageId) : undefined
   if (!f) {
     const s = st()
     const why = !stageId || !s.current ? 'open a stage in Clay' : !s.activeCamera() ? 'the stage has no camera' : s.rendering ? 'rendering…' : undefined

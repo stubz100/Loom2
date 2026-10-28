@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 from pydantic import BaseModel, ConfigDict, Field
 
 from .body import Body
-from .fsio import atomic_write_json, new_id, read_json, utc_now
+from .fsio import atomic_write_json, new_id, plain_name, read_json, utc_now
 from .origin import JobOrigin
 
 if TYPE_CHECKING:
@@ -169,7 +169,7 @@ class IdeaStore:
         self.dir: Path = ws.story_dir / "ideas"
 
     def path(self, iid: str) -> Path:
-        return self.dir / f"{iid}.json"
+        return self.dir / f"{plain_name(iid)}.json"
 
     def get(self, iid: str) -> Idea | None:
         p = self.path(iid)

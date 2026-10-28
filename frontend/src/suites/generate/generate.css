@@ -33,6 +33,7 @@
 .estimate { display: flex; gap: 10px; align-items: center; font-size: 12px; color: var(--fg2); margin-top: 8px; }
 .estimate .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .estimate .dot.ok { background: var(--keep); } .estimate .dot.tight { background: var(--warn); } .estimate .dot.over { background: var(--reject); }
+.estimate .spill { color: var(--warn); }   /* F27 (U0): the references would spill out of VRAM */
 .interim { display: flex; gap: 8px; padding: 8px; overflow-x: auto; border-bottom: 1px solid var(--line); background: var(--bg1); }
 .interim .card { width: 160px; flex: none; border-radius: var(--radius); background: var(--bg2); overflow: hidden; font-size: 11px; color: var(--fg2); }
 .interim .card .img { height: 90px; background: var(--media-bg); display: grid; place-items: center; }

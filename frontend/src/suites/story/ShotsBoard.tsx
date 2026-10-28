@@ -7,7 +7,7 @@ import { runCommand } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import { Help } from '../../frame/Help'
 import { useSession } from '../../store/session'
-import { STEPS, SORT_LABEL, arrange, cellsOf, flowOrder, lengthLine, madeFinal, routeOf, ROUTE_LABEL, type BoardSort, type Cell, type Step } from './board'
+import { STEPS, SORT_LABEL, arrange, cellsOf, flowOrder, lengthLine, madeFinal, routeOf, ROUTE_LABEL, staleFrom, type BoardSort, type Cell, type Step } from './board'
 import type { ShotCard } from '../../api/types'
 import { runStep, shotMenu, STEP_VERB } from './storyCommands'
 import { linesToVoice } from './episodeVerbs'
@@ -59,8 +59,8 @@ export function ShotsBoard() {
   useEffect(() => { void sy().loadBoard() }, [shots])
   const rows = useMemo(() => flowOrder(flowGraph, flowNodes, shots).map((r) => {
     const v = r.shot.versions.find((x) => x.id === r.shot.current) ?? r.shot.versions[0]
-    return { ...r, v, cells: cellsOf(r.shot, v, r.node, { clipAudio: (id) => (clipsById[id] ? !!clipsById[id].audio_asset_id : undefined), finals, cuts, busy }) }
-  }), [flowGraph, flowNodes, shots, clipsById, finals, cuts, busy])
+    return { ...r, v, cells: cellsOf(r.shot, v, r.node, { clipAudio: (id) => (clipsById[id] ? !!clipsById[id].audio_asset_id : undefined), finals, cuts, busy, stale: staleFrom(cards) }) }
+  }), [flowGraph, flowNodes, shots, clipsById, finals, cuts, busy, cards])
   const shown = arrange(rows.filter((r) => keep(filter, r.cells)), search, sort, scenes, cards)
   return (
     <div className="shots-board" data-testid="shots-board">

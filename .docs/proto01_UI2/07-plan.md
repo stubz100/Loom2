@@ -32,6 +32,8 @@
 | **U7 · Episode** | Reads finals; backend assemble that keeps edits; lines held; clips named; conform on landing; the cut's capabilities | G14 | M | U6 |
 | **U8 · The Bin and parity** | The Bin tab and drawer; the e2e for every layer; the click-through by the author; the new UI the default; then the old shell removed | — | M | U3–U7 |
 
+**U0 is built** (2026-10-28 23:34 and 2026-10-29 00:26 in the journal): every item above, with tests; e2e 79/79.
+
 **The order.** U0 can start at once. U1 and U2 are the foundation. After them, U3 and U4 can run in either order: World first follows the work's order;
 Shots first answers the author's biggest change sooner. U5 and U6 follow U4. Most of U7 can run once U6 has the shot's final.
 

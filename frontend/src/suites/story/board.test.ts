@@ -1,7 +1,7 @@
 // D125 (SP3): the Shots board's order (the Flow's routes, the branches naming their rows) and its cells (what each route owes, what is done).
 import { describe, expect, it } from 'vitest'
 import type { FlowGraph, FlowNode, Shot, ShotVersion } from '../../api/types'
-import { arrange, bareNode, cellsOf, flowOrder, hasWork, lengthLine, nextStep, routeOf, type CellInput } from './board'
+import { arrange, bareNode, cellsOf, flowOrder, hasWork, lengthLine, nextStep, routeOf, staleFrom, type CellInput } from './board'
 
 const node = (id: string, type: FlowNode['type'], extra: Partial<FlowNode> = {}): FlowNode =>
   ({ id, type, title: id, lines: [], options: [], cond: null, set: [], target: null, text: '', shot_id: null, shot_version: null, board_group_id: null, place_id: null, speaker_versions: {}, colour: null, revision: 0, schema_version: 1, created_at: '', updated_at: '', ...extra }) as FlowNode
@@ -69,6 +69,24 @@ describe('the board\'s cells (D125 SP3)', () => {
     const s = shot('s', 'n')
     const c = cellsOf(s, s.versions[0], node('n', 'shot'), { ...none, busy: () => new Set(['clip']) })
     expect(c.clip.state).toBe('running')
+  })
+  it("U0 (FE#3): a made step its recipe graph finds stale is stale on the board — for the card's version only", () => {
+    const s = shot('s', 'n', { frame_asset_id: 'ast_f', stage_id: 'stg', camera_id: 'cam', clip_id: 'clp_1' })
+    const cards = { s: { version: 'v1', stale_steps: ['frame', 'stage', 'clip'] } }
+    const c = cellsOf(s, s.versions[0], node('n', 'shot'), { ...none, stale: staleFrom(cards) })
+    expect([c.frame, c.stage, c.clip].map((x) => x.state)).toEqual(['stale', 'stale', 'stale'])
+    expect(c.frame.text).toBe('changed')
+    const other = cellsOf(s, s.versions[0], node('n', 'shot'), { ...none, stale: staleFrom({ s: { version: 'v2', stale_steps: ['frame'] } }) })
+    expect(other.frame.state).toBe('done')                                                   // a card read for another version says nothing here
+    const owedFrame = cellsOf(shot('t', 'n'), ver(), node('n', 'shot'), { ...none, stale: staleFrom({ t: { version: 'v1', stale_steps: ['frame'] } }) })
+    expect(owedFrame.frame.state).toBe('owed')                                               // only a made step can be stale
+  })
+  it('U0 (FE#2): In cut reads the version the Episode takes — the final one, though a newer version is open', () => {
+    const s = { ...shot('s', 'n'), current: 'v3', versions: [ver({ id: 'v2', state: 'final', clip_id: 'clp_2' }), ver({ id: 'v3', clip_id: 'clp_3' })] } as Shot
+    const cuts = [{ clips: [{ shot_id: 's', shot_version: 'v2', clip_id: 'clp_2' }] }]
+    expect(cellsOf(s, s.versions[1], node('n', 'shot'), { ...none, cuts }).cut.state).toBe('done')
+    const open = { ...s, versions: [ver({ id: 'v2', clip_id: 'clp_2' }), ver({ id: 'v3', clip_id: 'clp_3' })] } as Shot
+    expect(cellsOf(open, open.versions[1], node('n', 'shot'), { ...none, cuts }).cut).toEqual({ state: 'stale', text: 'changed' })   // no final: the current one
   })
 })
 

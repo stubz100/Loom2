@@ -123,6 +123,93 @@
    "width": 1024
   }
  },
+ "i2v ltx extend (9 lead frames)": {
+  "graph_hash": "2901c318b93232f6",
+  "problems": [
+   "56 (LoadVideo): 'file'='lead.mp4' not in enum ['alley_ltx_guide_s1_lead.mp4', 'alley_ltx_guide_s2_lead.mp4', 'alley_ltx_guide_s3_lead.mp4', 'alley_wan_ltx_s1_lead.mp4', 'alley_wan_ltx_s2_lead.mp4', 'alley_wan_ltx_s3_lead.mp4' \u2026]"
+  ],
+  "summary": {
+   "beats": 0,
+   "experimental": true,
+   "extend_from": "c",
+   "family": "ltx23",
+   "flf": false,
+   "fps": 24,
+   "frames": 121,
+   "height": 576,
+   "label": "LTX-2.3 distilled \u00b7 8 steps",
+   "lead": 9,
+   "model_id": "ltx23-distilled-fp8",
+   "preset": "draft",
+   "shift": null,
+   "steps": 8,
+   "width": 1024
+  }
+ },
+ "i2v ltx guided (depth)": {
+  "graph_hash": "2081558033d1647d",
+  "problems": [
+   "52 (LoadVideo): 'file'='depth.mp4' not in enum ['alley_ltx_guide_s1_lead.mp4', 'alley_ltx_guide_s2_lead.mp4', 'alley_ltx_guide_s3_lead.mp4', 'alley_wan_ltx_s1_lead.mp4', 'alley_wan_ltx_s2_lead.mp4', 'alley_wan_ltx_s3_lead.mp4' \u2026]"
+  ],
+  "summary": {
+   "beats": 0,
+   "family": "ltx23",
+   "flf": false,
+   "fps": 24,
+   "frames": 121,
+   "guide": "depth",
+   "guide_strength": 1.0,
+   "height": 576,
+   "label": "LTX-2.3 distilled \u00b7 8 steps",
+   "model_id": "ltx23-distilled-fp8",
+   "preset": "draft",
+   "shift": null,
+   "steps": 8,
+   "width": 1024
+  }
+ },
+ "i2v wan animate (pose guide)": {
+  "graph_hash": "18e92abae6236dc6",
+  "problems": [],
+  "summary": {
+   "beats": 0,
+   "cfg": 1.0,
+   "family": "wan22",
+   "flf": false,
+   "fps": 16,
+   "frames": 77,
+   "guide": "pose",
+   "guide_strength": 1.0,
+   "height": 480,
+   "label": "Draft \u00b7 LightX2V 4 steps (\u2248 3\u20134 min for 77 frames at 480p)",
+   "model_id": "wan22-animate-fp8",
+   "preset": "draft",
+   "shift": 8.0,
+   "steps": 4,
+   "width": 832
+  }
+ },
+ "i2v wan animate, batch 2 (carry)": {
+  "graph_hash": "86e0fa285bc03510",
+  "problems": [],
+  "summary": {
+   "beats": 0,
+   "cfg": 1.0,
+   "family": "wan22",
+   "flf": false,
+   "fps": 16,
+   "frames": 77,
+   "guide": "pose",
+   "guide_strength": 1.0,
+   "height": 480,
+   "label": "Draft \u00b7 LightX2V 4 steps (\u2248 3\u20134 min for 77 frames at 480p)",
+   "model_id": "wan22-animate-fp8",
+   "preset": "draft",
+   "shift": 8.0,
+   "steps": 4,
+   "width": 832
+  }
+ },
  "i2v wan draft": {
   "graph_hash": "1dbcdd06e91114e2",
   "problems": [],
@@ -136,6 +223,32 @@
    "frames": 81,
    "height": 480,
    "label": "Draft \u00b7 Lightning 2 + 2 (\u2248 2 min at 480p)",
+   "lora_high": true,
+   "lora_low": true,
+   "model_id": "wan22-i2v-high-fp8",
+   "preset": "draft",
+   "shift": 5.0,
+   "split": 2,
+   "steps": 4,
+   "width": 832
+  }
+ },
+ "i2v wan extend (the last frame)": {
+  "graph_hash": "1dbcdd06e91114e2",
+  "problems": [],
+  "summary": {
+   "beats": 0,
+   "cfg_high": 1.0,
+   "cfg_low": 1.0,
+   "experimental": true,
+   "extend_from": "c",
+   "family": "wan22",
+   "flf": false,
+   "fps": 16,
+   "frames": 81,
+   "height": 480,
+   "label": "Draft \u00b7 Lightning 2 + 2 (\u2248 2 min at 480p)",
+   "lead": 1,
    "lora_high": true,
    "lora_low": true,
    "model_id": "wan22-i2v-high-fp8",
@@ -167,6 +280,53 @@
    "split": 4,
    "steps": 8,
    "width": 832
+  }
+ },
+ "i2v wan s2v (a line)": {
+  "graph_hash": "6b9bf69fae90f934",
+  "problems": [
+   "8 (LoadAudio): 'audio'='line.wav' not in enum ['alley_ltx_guide_s1_lead.mp4', 'alley_ltx_guide_s2_lead.mp4', 'alley_ltx_guide_s3_lead.mp4', 'alley_wan_ltx_s1_lead.mp4', 'alley_wan_ltx_s2_lead.mp4', 'alley_wan_ltx_s3_lead.mp4' \u2026]"
+  ],
+  "summary": {
+   "audio": "x",
+   "beats": 0,
+   "cfg": 6.0,
+   "experimental": true,
+   "family": "wan22",
+   "flf": false,
+   "fps": 16,
+   "frames": 77,
+   "height": 480,
+   "label": "Draft \u00b7 20 steps (\u2248 16 min for 77 frames at 480p)",
+   "model_id": "wan22-s2v-fp8",
+   "preset": "draft",
+   "shift": 8.0,
+   "steps": 20,
+   "width": 832
+  }
+ },
+ "image to mesh (pixal3d)": {
+  "graph_hash": "9c9ef88183fec70e",
+  "problems": [],
+  "summary": {
+   "faces": 50000,
+   "model_id": "pixal3d-int8",
+   "nodes": 45,
+   "resolution": 1024,
+   "seed": 1,
+   "template": "3d_pixal3d_trellis2_image_to_model.json"
+  }
+ },
+ "image to set (moge)": {
+  "graph_hash": "1e26146cee1f3d30",
+  "problems": [],
+  "summary": {
+   "decimation": 2,
+   "lens_deg": null,
+   "model_id": "moge2-vitl",
+   "relief": "cut",
+   "stage_id": null,
+   "threshold": 0.04
   }
  },
  "inpaint fill": {
@@ -264,6 +424,73 @@
    "width": 960
   }
  },
+ "keypoints (sdpose)": {
+  "graph_hash": "d499cccb69b6bf4c",
+  "problems": [],
+  "summary": {
+   "asset_id": "a",
+   "detector": "rtdetr-v4",
+   "model_id": "sdpose-wholebody"
+  }
+ },
+ "matte sequence birefnet (subject)": {
+  "graph_hash": "fabd079587fc43a8",
+  "problems": [
+   "2 (LoadVideo): 'file'='frames.mp4' not in enum ['alley_ltx_guide_s1_lead.mp4', 'alley_ltx_guide_s2_lead.mp4', 'alley_ltx_guide_s3_lead.mp4', 'alley_wan_ltx_s1_lead.mp4', 'alley_wan_ltx_s2_lead.mp4', 'alley_wan_ltx_s3_lead.mp4' \u2026]"
+  ],
+  "summary": {
+   "mode": "subject",
+   "model_id": "birefnet",
+   "text": "person",
+   "threshold": 0.4
+  }
+ },
+ "matte sequence sam3 (text)": {
+  "graph_hash": "4a157844a825af50",
+  "problems": [
+   "2 (LoadVideo): 'file'='frames.mp4' not in enum ['alley_ltx_guide_s1_lead.mp4', 'alley_ltx_guide_s2_lead.mp4', 'alley_ltx_guide_s3_lead.mp4', 'alley_wan_ltx_s1_lead.mp4', 'alley_wan_ltx_s2_lead.mp4', 'alley_wan_ltx_s3_lead.mp4' \u2026]"
+  ],
+  "summary": {
+   "mode": "text",
+   "model_id": "sam3",
+   "text": "person",
+   "threshold": 0.4
+  }
+ },
+ "reangle angles lora (left45)": {
+  "graph_hash": "3dd2bc2c2b603104",
+  "problems": [],
+  "summary": {
+   "cfg": 1.0,
+   "method": "angles_lora",
+   "method_requested": "auto",
+   "model_id": "qwen-edit-2509-fp8",
+   "move": "left45",
+   "seed": 1,
+   "source_size": [
+    960,
+    544
+   ],
+   "steps": 4
+  }
+ },
+ "reangle klein (wide)": {
+  "graph_hash": "7f110b1d2f801041",
+  "problems": [],
+  "summary": {
+   "cfg": 1.0,
+   "method": "klein_prompt",
+   "method_requested": "auto",
+   "model_id": "klein-9b",
+   "move": "wide",
+   "seed": 1,
+   "source_size": [
+    960,
+    544
+   ],
+   "steps": 4
+  }
+ },
  "segment birefnet": {
   "graph_hash": "b2bedef258e8de06",
   "problems": [],
@@ -287,6 +514,42 @@
    "op": "replace",
    "points": 0,
    "threshold": 0.5
+  }
+ },
+ "stage shot clay": {
+  "graph_hash": "ca98fb62c0b72844",
+  "problems": [],
+  "summary": {
+   "camera_id": "c",
+   "cfg": 1.0,
+   "height": 720,
+   "image1": "clay",
+   "method": "clay",
+   "model_id": "klein-9b",
+   "refs": 1,
+   "refs_dropped": 0,
+   "seed": 1,
+   "stage_id": "s",
+   "steps": 4,
+   "width": 1280
+  }
+ },
+ "stage shot refcontrol": {
+  "graph_hash": "bc14486c6221a73c",
+  "problems": [],
+  "summary": {
+   "camera_id": "c",
+   "cfg": 4.0,
+   "height": 720,
+   "image1": "pose",
+   "method": "refcontrol",
+   "model_id": "klein-base-9b",
+   "refs": 1,
+   "refs_dropped": 0,
+   "seed": 1,
+   "stage_id": "s",
+   "steps": 30,
+   "width": 1280
   }
  },
  "t2i chroma": {

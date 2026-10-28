@@ -10833,3 +10833,50 @@ The three items 06 §2.9 left as "not built" on 2026-10-25, built as the plan wr
   camera, the contacts and gaze on a clip's keys and the plain pin off them; a preset and unpin), `test_character_poses_ap1.py` +1; the
   e2e's pose-editor scenario grew the *Held to* and *Looks at* rows (the right hand held to its own hips, the look at the camera, both on
   the saved crouch, the bench's "3 pinned"). **Checks:** typecheck, build clean and lint (0 errors, 79 warnings) clean; Vitest 572 + 3 skipped; offline 671 passed; e2e 74 passed (alone); settings_audit clean, model_literals_check clean, agents_check clean.
+
+## 2026-10-28 09:07 — The unsharp pass after RIFE measured (D27's follow-up, the backlog's item 2): not adopted; and the pin review against ComfyUI v0.43.1
+
+**The unsharp pass.** E9 (2026-10-07) found RIFE's 24 fps conform keeps ≈ 80 % of the master's Laplacian variance, uniformly, and left "a
+mild unsharp pass after RIFE" as a candidate, unmeasured. `scripts/unsharp_rig.py` conforms E9's own Wan master (clp_33774c9c, 81 frames
+at 832×480, the M6 acceptance's) with the app's `final_assembly.conform_24` (RIFE v4.6, 2.1 s) and gives every frame an unsharp mask at
+each radius and amount, scoring the sharpness ratio against the master, the mean absolute error of the frames at the master's own
+timestamps against the master (what the render was; a mask that invents detail raises it), the flicker between frames (E9's measure) and
+the overshoot (pixels pushed past the master's local range by more than 8 levels — halos):
+
+| | sharpness ratio (1 = the master) | MAE at the master's frames | overshoot | flicker mean / std |
+| --- | --- | --- | --- | --- |
+| RIFE as it is | 0.787 | **1.307** | — | 3.70 / 1.22 |
+| unsharp r 0.7 · 10 % | 0.848 | 1.303 | 0.35 % | 3.73 / 1.23 |
+| r 0.7 · 15 % | 0.891 | 1.309 | 0.35 % | 3.75 / 1.23 |
+| r 0.7 · 20 % | 0.943 | 1.325 | 0.36 % | 3.78 / 1.24 |
+| r 1.0 · 10 % | 0.888 | 1.312 | 0.35 % | 3.76 / 1.23 |
+| r 1.0 · 20 % | 1.028 | 1.387 | 0.40 % | 3.86 / 1.26 |
+| r 1.0 · 30 % | 1.168 | 1.489 | 0.54 % | 3.96 / 1.28 |
+| r 1.0 · 50 % | 1.493 | 1.773 | 1.09 % | 4.18 / 1.33 |
+| r 1.5 · 30 % | 1.239 | 1.662 | 0.77 % | 4.09 / 1.32 |
+
+The sharpness number can be bought back — r 1.0 at 20 % lands on 1.03 — but every mask that does so moves the frames away from the
+master (the MAE rises from 1.31 to 1.39 and on), puts halos in (0.4 % of the pixels and more) and lifts the flicker; the one mask that
+does not add error (r 0.7 at 10 %, MAE 1.303) buys a sixth of the lost sharpness back. RIFE's softening is detail smoothed away, and an
+unsharp mask sharpens the edges that remain, not the ones that went. **Not adopted → D149**: the conform stays RIFE alone; where detail
+matters more than the rate, the clip is rendered natively at 24 (LTX) or kept at 16 (D27). The instrument and its sheet are under
+`engine/spikes/out/unsharp/` (`results.json` the mild run, `results_strong.json` the 30–80 % one).
+
+**The pin review (12 §8 slice 3, D15): ComfyUI v0.43.1 against the pin v0.39.0.** Upstream is at v0.43.1 (the pin since
+2026-10-07; the review last ran 2026-10-16); the two custom nodes' heads are the pins (GGUF 6ea2651, LanPaint 2d7912f). The candidate was
+started on the CPU from a scratch worktree (`.loom2_state/comfy-v0.43.1`, the pinned custom nodes copied in) — it needs five newer
+packages (comfy-kitchen 0.2.40, comfy-aimdo 0.6.0, the frontend package 1.57.4, the templates 0.11.98, the embedded docs 0.5.15;
+`comfy_kitchen.int8_decode` is imported at start), installed into a side folder on `PYTHONPATH` (`.loom2_state/comfy-v0.43.1-deps`) so the
+pinned engine venv stays as it is. `scripts/pin_review.py` captured its 1040 node classes: of the 124 loom2 uses, none missing, none
+with changed inputs; and every recipe compiles. The review's list had stopped at the 28 graphs of 2026-10-16, so it grew the 15 built
+since — the pose-driven clip and its second batch, the lip-sync clip, LTX's guided clip and extension, Wan's extension, the reangle pair,
+the stage shot's two methods, a prop's mesh, a picture set, the keypoints and the two mattes — 43 in all, every one `ok` against v0.43.1
+and against the pin; `test_graph_parity_d64.py` counts 43 now and its snapshot carries the 15 new graphs' hashes (`--parity-update`).
+**Verdict: safe to bump by the contract** — which is the review's whole claim: the graphs will be accepted. Whether they still
+*render* the same is the rig's to say, and a bump is D15's decision, not a chore: the submodule to v0.43.1, the engine venv's five
+packages (`scripts/setup.ps1`, `engine/constraints.txt` unchanged — torch stays 2.13.0+rocm10), the fixture `tests/fixtures/object_info.json`
+re-captured, the GGUF patch re-applied, CLAUDE.md's pin line, and a re-acceptance on the card (m1, m6 and the CN rig at least — the
+samplers, Wan and LTX moved four minor versions). Recommended when the author wants something the four versions bring; nothing in
+loom2 needs them today. The capture and the log are under `engine/spikes/out/pin_review/` (`object_info-v0.43.1.json`,
+`run-v0.43.1.log`); the candidate engine was stopped after the run.
+

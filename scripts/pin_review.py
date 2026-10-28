@@ -24,7 +24,8 @@ sys.path.insert(0, str(REPO / "orchestrator" / "tests"))
 
 from loom2.engine import graphs  # noqa: E402
 from loom2.engine.contract import check_graph  # noqa: E402
-from loom2.recipes import I2V, I2I, Beat, Inpaint, RefImage, Segment, T2I, Upscale  # noqa: E402
+from loom2.recipes import (AnimateChain, AudioRef, Beat, ExtendFrom, Guide, I2I, I2V, ImageToMesh, ImageToSet, Inpaint, Keypoints, MatteSequence,  # noqa: E402
+                           Reangle, RefImage, Segment, StageShot, T2I, Upscale)
 from loom2.roster import ROSTER_BY_ID, Roster  # noqa: E402
 
 FIXTURE = REPO / "orchestrator" / "tests" / "fixtures" / "object_info.json"
@@ -54,7 +55,8 @@ def full_roster(tmp: Path) -> Roster:
 
 
 def recipes() -> list[tuple[str, object, dict]]:
-    img = {"image": "alley-rain_s20261004.png", "mask": "alley-rain_s20261004.png", "w": 960, "h": 544}
+    png = "alley-rain_s20261004.png"
+    img = {"image": png, "mask": png, "w": 960, "h": 544}
     return [
         ("t2i dev json", T2I(prompt_mode="text", prompt_text="a cat", seeds=[1]), {}),
         ("t2i dev turbo", T2I(prompt_mode="text", prompt_text="a cat", turbo=True, seeds=[1]), {}),
@@ -87,6 +89,25 @@ def recipes() -> list[tuple[str, object, dict]]:
         ("i2v wan motion FLF", I2V(start_asset="a", end_asset="b", preset="motion"), {"start": "alley-rain_s20261004.png", "end": "captain-cabin_s20261004.png"}),
         ("i2v ltx beats", I2V(start_asset="a", end_asset="b", model_id="ltx23-distilled-fp8", frames=121, fps=24, width=1024, height=576, beats=[Beat(frame=40, asset_id="k")]),
          {"start": "alley-rain_s20261004.png", "end": "captain-cabin_s20261004.png", "beats": {"k": "01-remove-crates.png"}}),
+        # 2026-10-28 (the review against v0.43.1): the graphs built since this list was written — the Stage's pose-driven clip and its second
+        # batch (CN4, D111), the lip-sync clip (D88), LTX's guided clip (ST4) and extension (D88), the reangle pair (D82), the stage shot's two
+        # methods (ST3), a prop's mesh (P18), a picture set (SC3), the keypoints (CA1b) and the two mattes (PS5d)
+        ("i2v wan animate (pose guide)", I2V(model_id="wan22-animate-fp8", start_asset="a", frames=77, guide=Guide(asset_id="g", kind="pose")), {"start": png, "guide": "pose.mp4"}),
+        ("i2v wan animate, batch 2 (carry)", I2V(model_id="wan22-animate-fp8", start_asset="a", frames=77, guide=Guide(asset_id="g", kind="pose"), chain=AnimateChain(clip_id="c", carry=5, offset=72)),
+         {"start": png, "guide": "pose.mp4", "carry": [png] * 5}),
+        ("i2v wan s2v (a line)", I2V(model_id="wan22-s2v-fp8", start_asset="a", frames=77, audio=AudioRef(asset_id="x")), {"start": png, "audio": "line.wav"}),
+        ("i2v ltx guided (depth)", I2V(model_id="ltx23-distilled-fp8", start_asset="a", frames=121, fps=24, width=1024, height=576, guide=Guide(asset_id="g", kind="depth")), {"start": png, "guide": "depth.mp4"}),
+        ("i2v ltx extend (9 lead frames)", I2V(model_id="ltx23-distilled-fp8", start_asset="a", frames=121, fps=24, width=1024, height=576, extend_from=ExtendFrom(clip_id="c", lead=9)), {"start": png, "lead": "lead.mp4"}),
+        ("i2v wan extend (the last frame)", I2V(start_asset="a", extend_from=ExtendFrom(clip_id="c", lead=1)), {"start": png}),
+        ("reangle angles lora (left45)", Reangle(asset_id="a", move="left45"), img),
+        ("reangle klein (wide)", Reangle(asset_id="a", move="wide"), img),
+        ("stage shot clay", StageShot(stage_id="s", camera_id="c", passes={"clay": "p"}, refs=[RefImage(asset_id="a")]), {"clay": png, "w": 1280, "h": 720, "refs": {"a": png}}),
+        ("stage shot refcontrol", StageShot(stage_id="s", camera_id="c", passes={"pose": "p"}, method="refcontrol", refs=[RefImage(asset_id="a")]), {"pose": png, "w": 1280, "h": 720, "refs": {"a": png}}),
+        ("image to mesh (pixal3d)", ImageToMesh(asset_id="a"), {"image": png}),
+        ("image to set (moge)", ImageToSet(asset_id="a"), {"image": png}),
+        ("keypoints (sdpose)", Keypoints(asset_id="a"), {"image": png}),
+        ("matte sequence sam3 (text)", MatteSequence(final_id="f", layer_id="l"), {"video": "frames.mp4"}),
+        ("matte sequence birefnet (subject)", MatteSequence(final_id="f", layer_id="l", mode="subject"), {"video": "frames.mp4"}),
     ]
 
 
@@ -131,16 +152,10 @@ def main() -> int:
     print("\nrecipes compiled against the candidate:")
     for label, recipe, inputs in recipes():
         try:
-            if isinstance(recipe, T2I):
-                c = graphs.compile_recipe(recipe, roster, cand, 1, "loom2/pin", ref_files=inputs.get("refs") or None)
-            else:
-                c = graphs.compile_recipe(recipe, roster, cand, 1, "loom2/pin", inputs=inputs)
+            c = graphs.compile_recipe(recipe, roster, cand, 1, "loom2/pin", ref_files=inputs.get("refs") or None, inputs=inputs)
             problems = [p for p in c.problems if "not in enum" not in p]            # uploaded-file enums differ per engine: not a pin problem
             # also check against the pinned fixture to see whether a problem is new
-            if isinstance(recipe, T2I):
-                old = graphs.compile_recipe(recipe, roster, pinned, 1, "loom2/pin", ref_files=inputs.get("refs") or None)
-            else:
-                old = graphs.compile_recipe(recipe, roster, pinned, 1, "loom2/pin", inputs=inputs)
+            old = graphs.compile_recipe(recipe, roster, pinned, 1, "loom2/pin", ref_files=inputs.get("refs") or None, inputs=inputs)
             old_problems = [p for p in old.problems if "not in enum" not in p]
             new_problems = [p for p in problems if p not in old_problems]
             problems_total += len(new_problems)

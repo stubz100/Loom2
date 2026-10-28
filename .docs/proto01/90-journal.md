@@ -11245,3 +11245,82 @@ on the engine's own nodes, under Apache. Adopted with the tone match on the way 
 - **Tests**: `test_camera_d156.py` 6 (the spec in both variants, the graph node for node and the pose names, the plain graph without a
   move, the refusals, the plan's parameters, the tone match on a lifted synthetic clip), `animateStore.test.ts` + 1, an e2e scenario (the
   camera model's control, none on the plain model; `d156-camera.png`); 7/7 — the camera model offered with its weights verified, the plain model the default; the Pan Left clip done in 132.7 s at a peak of 9.0 GB, the pan read at +7.7 % of the width with every pair agreeing, the finisher's tone match applied (gains 1.01 / 1.04 / 1.03, offsets −14 / −14 / −18; the first frame's MAE 14.5 → 5.6 by its own measure, 9.5 against the bench board), the sheet under engine/spikes/out/camera/. Offline 692 passed (the open-variant test now expects the Apache camera model too), Vitest 597 + 3 skipped, typecheck, build and lint clean, e2e 79/79 (alone), model_literals_check, settings_audit (319, 0) and agents_check clean.
+
+## 2026-10-28 22:39 — A full walkthrough ("The Last Ferry"), a code review, and the UI2 study (proto01_UI2, a proposal → D157 when answered)
+
+**The walkthrough (18:45–21:30).** The author asked for a full build of a story with every feature, an account of the settings that offer only
+loom2's own choices, and a review of the code. "The Last Ferry" was built from an empty project (`F:/loom2-projects/ux-walk-last-ferry`, its app
+state in `F:/loom2-projects/_ux-walk-state`, so the author's `.loom2_state` was not touched) through every workspace in Edge over CDP, against
+its own orchestrator (8766) and the real engine, one job at a time. The parts:
+
+- World: logline, 5 beats, a style, a variable, a custom lighting entry;
+- Cast: Ines and Tomas cast, heroes, references, Kokoro voices; Harbour pier, Town street (set picture, built street set), The letter;
+- Flow: a Dialogue node with two voiced lines, a Choice, an Action;
+- frames and clips: 5 shot frames; 4 Wan 2.2 clips, one with Fun-Camera Zoom Out;
+- Clay: Stay on a stage with a CC0 walk along a path and a final shot (split, plate, Wan Animate, matte, assembly, composition, render);
+- Edit: a text layer saved as Arrival's frame;
+- Episode: a cut assembled from the Flow, exported for Resolve, and the movie rendered.
+
+44 findings, F1–F44, are in `.docs/proto01_UI2/08-register.md` §1; the full report with screenshots went to the author as an artifact.
+
+| Measured (draft sizes) | |
+| --- | --- |
+| FLUX.2 dev casting image, 0 references | 42 s (the session's first 85 s) |
+| FLUX.2 dev frame, 8–10 references at ≤ 1024² | **117 s per step** (≈ 16 min an image; 10 jobs cancelled) |
+| the same at ≤ 512² | 10.5 s per step, 83–108 s an image |
+| Klein 9B A-pose / set picture | 32–60 s / 11 s |
+| Wan 2.2 Draft clip, 81 f at 832×480 | 173–196 s |
+| Fun-Camera Zoom Out | 183 s; tone match first-frame MAE 17.7 → 5.0 (gains 1.04, offsets −19 … −27) |
+| Wan Animate, one character, 65 f | 152–162 s |
+| matte / assembly / composition render | 27 s / 13 s / 3 s |
+| the movie (FilmCraft, CPU, 20 s at 1080p, −16 LUFS) | 20 s |
+| offline / Vitest at the start | 692 passed / 597 passed, 3 skipped |
+
+**What stood out:**
+
+- Clay cannot render in any dev build since V82 (8e52771), F34. StrictMode remounts the viewport's effect on the same canvas after
+  `forceContextLoss()`; reproduced in isolation. The walkthrough went on on `vite preview` of the production build.
+- The image estimate ignores references (F27, `graphs.py:1829-1845`).
+- The final shot's foot acts on the oldest final (F41, `finalShot.ts:607-610`).
+- Animate's For trip carried Departure's prompt and camera move into The seal (F29).
+- A preset set's plate is "The room is empty…", a concrete box (F38).
+- Assembly cuts a dialogue shot at its clip, so its lines play over the next shot (F39).
+
+**The settings inventory** (a read-only survey, the author's question): 96 creative choices. 34 are open, 9 partial, 10 fixed by the model, 10 a
+data file away, 33 hard-coded. Animations can be keyed by hand and imported from a folder, but not imported in the UI or saved as a clip. The World
+Library takes ＋ Add in all 17 fields, but the fields themselves are fixed and every addition is per project.
+
+**The code review** (four read-only reviewers: the Story backend, the Story frontend, the commits f68c6f0..e8ce296):
+- BE#1: ids as paths, a `%5C` deletes `project.json`, reproduced on a throwaway project;
+- RC#1: closing the detached loupe ends the app (`lib.rs:283-293`);
+- BE#3: Run stale replays the whole `seeds` list;
+- BE#4 / BE#5: missing locks on profiles, world, graph, ideas, and the cut's check-then-write;
+- BE#7: voice results land by index;
+- FE#1–FE#3: the For leak, In-cut against Episode, no stale cells.
+
+The register is in `.docs/proto01_UI2/08-register.md` §2. Nothing was fixed; the author has not asked yet.
+
+**The UI2 study (21:30–22:39).** The author, after the walkthrough, asked for a new UI from the ground up: World (characters, props, places with
+Image's Make / Edit and a bin per entity version, no batches, no Story › World) → Shots (every shot a clay stage, Shot and Dialogue as one node, an
+animation editor with templates, Performance refining the clay, Final with voice and processing) → Episode (the finals cut). It was documented in
+`.docs/proto01_UI2/` 00–08 before any change:
+
+- 01: the evaluation, point by point;
+- 02–05: the structure and the screens, with eight wireframes from `mock/ui2-mock.html` using the walkthrough's own pictures;
+- 06: the backend and the frontend read against it by four read-only surveys, with the gap list G1–G15;
+- 07: the waves U0–U8, spike E42 (a figure walking away is performed facing the camera even with a back view, F42–F43), the risks, and the
+  decisions Q1–Q13.
+
+The main readings:
+
+- Shot and Dialogue nodes are identical in data, so the merge moves no data;
+- a bin is a group tree whose role pages are today's reference-set and candidates pages, which mentions, the trainer and staleness read;
+- a stage has one range for all its cameras, so a shot needs its own;
+- an applied clip is baked into keys, so clip blocks are new, and templates are best kept as stage-key JSON (a GLB loses the Detailed bones, pins
+  and contacts);
+- `Cuts.write` clears V1 and A1 on every Assemble;
+- the frontend's engines mount cleanly, but `ui.suite` (37 reads, 80 `setSuite` calls) is the seam to cut first.
+
+Recommendations awaiting the author: one stage per scene with a camera per shot (Q2), image-to-video kept as a Performance method fed by the clay
+(Q5), and the new UI built beside the old one (Q9). No code changed; D157 is recorded when the author answers.
+

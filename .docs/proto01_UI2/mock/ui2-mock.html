@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UI2 wireframes</title>
+<!-- proto01_UI2: wireframes of the proposed three-layer UI (a static mock, not the app). Pictures are the walkthrough's own ("The Last Ferry",
+     2026-10-28), copied to ../img/src/. Rendered to ../img/ui-*.jpg by render.cjs (Playwright, Edge, 1600 × 1000):
+     ui2-mock.html?s=character | place | flow | clay | performance | final | episode | bin -->
+<style>
+  :root { --bg: #121212; --panel: #181818; --raise: #202020; --line: #2c2c2c; --fg: #dcdcdc; --fg2: #a8a8a8; --fg3: #6f6f6f;
+    --acc: #f0a030; --acc2: #6b4a17; --ok: #3fb950; --warn: #d29922; --bad: #e5534b; --run: #58a6ff; --clay: #9a9a9e; --new: #f0a030; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 13px/1.35 "Segoe UI", system-ui, sans-serif; width: 1600px; height: 1000px; overflow: hidden; }
+  .top { height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-bottom: 1px solid var(--line); background: #151515; }
+  .top .tab { padding: 5px 14px; border-radius: 6px; color: var(--fg2); font-size: 14px; }
+  .top .tab.on { background: var(--raise); color: var(--fg); border: 1px solid #3a3a3a; }
+  .top kbd { font: 11px Consolas, monospace; color: var(--fg3); border: 1px solid #333; border-radius: 4px; padding: 0 4px; margin-left: 6px; }
+  .top .sp { flex: 1; } .top .proj { color: var(--fg2); margin-right: 8px; } .top .proj b { color: var(--fg); font-weight: 600; }
+  .chip { border: 1px solid var(--line); border-radius: 12px; padding: 3px 10px; color: var(--fg2); font-size: 12px; white-space: nowrap; }
+  .chip i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); margin-right: 6px; }
+  .board { height: 92px; display: flex; align-items: center; gap: 8px; padding: 0 12px 0 68px; border-bottom: 1px solid var(--line); background: #141414; }
+  .card { width: 150px; height: 76px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; position: relative; background: #1b1b1b; flex: none; }
+  .card img { width: 100%; height: 52px; object-fit: cover; display: block; }
+  .card .t { font-size: 11px; padding: 2px 6px; white-space: nowrap; overflow: hidden; display: flex; gap: 6px; align-items: center; }
+  .card.on { outline: 2px solid var(--acc); }
+  .dots { display: inline-flex; gap: 3px; margin-left: auto; } .dots b { width: 8px; height: 8px; border-radius: 50%; border: 1px solid var(--fg3); display: inline-block; }
+  .dots b.d { background: var(--ok); border-color: var(--ok); } .dots b.s { background: var(--warn); border-color: var(--warn); } .dots b.r { background: var(--run); border-color: var(--run); }
+  .fork { color: var(--acc); border: 1px dashed var(--acc); border-radius: 6px; padding: 6px 8px; font-size: 12px; flex: none; }
+  .plus { width: 40px; height: 76px; border: 1px dashed #444; border-radius: 6px; display: grid; place-items: center; color: var(--fg3); font-size: 20px; flex: none; }
+  .main { display: grid; grid-template-columns: 56px 380px 1fr 320px; height: calc(1000px - 40px - 28px); }
+  .main.shots { height: calc(1000px - 40px - 28px - 92px); }
+  .rail { border-right: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; gap: 4px; padding-top: 8px; }
+  .rail .r { width: 48px; padding: 6px 0 4px; border-radius: 8px; text-align: center; color: var(--fg3); font-size: 10px; }
+  .rail .r b { display: block; font-size: 17px; font-weight: 400; color: var(--fg2); line-height: 20px; }
+  .rail .r.on { background: var(--raise); outline: 1px solid var(--acc); color: var(--fg); } .rail .r.on b { color: var(--acc); }
+  .rail .div { width: 30px; border-top: 1px solid var(--line); margin: 4px 0; }
+  .col { border-right: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+  .hdr { border-bottom: 1px solid var(--line); padding: 10px 12px; background: #1c1c1c; display: grid; gap: 6px; }
+  .hdr .ent { display: flex; align-items: center; gap: 8px; } .hdr .ent img { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; }
+  .hdr .ent b { font-size: 16px; } .hdr .ent .v { color: var(--fg2); border: 1px solid #3a3a3a; border-radius: 5px; padding: 1px 6px; font-size: 12px; }
+  .kv { display: grid; grid-template-columns: 84px 1fr; gap: 4px 8px; align-items: start; font-size: 12px; }
+  .kv span:nth-child(odd) { color: var(--fg3); padding-top: 3px; }
+  .fld { background: #141414; border: 1px solid #333; border-radius: 4px; padding: 3px 6px; color: var(--fg); min-height: 22px; }
+  .sw { display: inline-block; width: 11px; height: 11px; border-radius: 2px; vertical-align: -1px; margin-right: 4px; }
+  .ready { display: flex; flex-wrap: wrap; gap: 4px; font-size: 11px; }
+  .ready span { border: 1px solid var(--line); border-radius: 10px; padding: 1px 7px; color: var(--fg2); }
+  .ready .d { color: var(--ok); border-color: #24502d; } .ready .o { color: var(--warn); border-color: #5a4310; } .ready .end { margin-left: auto; color: var(--acc); border-color: var(--acc2); }
+  .seg { display: inline-flex; border: 1px solid #3a3a3a; border-radius: 6px; overflow: hidden; } .seg span { padding: 4px 12px; color: var(--fg2); } .seg span.on { background: var(--raise); color: var(--fg); }
+  .body { flex: 1; overflow: hidden; padding: 10px 12px; display: grid; gap: 10px; align-content: start; }
+  .sec h5 { margin: 0 0 6px; font-size: 11px; letter-spacing: .06em; color: var(--fg3); font-weight: 600; text-transform: uppercase; display: flex; gap: 6px; align-items: center; }
+  .pills { display: flex; flex-wrap: wrap; gap: 5px; } .pills span { border: 1px solid #3a3a3a; border-radius: 12px; padding: 2px 9px; font-size: 12px; color: var(--fg2); }
+  .pills span.on { border-color: var(--acc); color: var(--acc); background: #2a1d07; }
+  .tiles { display: flex; gap: 6px; } .tiles .tl { width: 62px; text-align: center; font-size: 10px; color: var(--fg2); } .tiles img { width: 62px; height: 42px; object-fit: cover; border-radius: 4px; border: 1px solid #333; display: block; }
+  .tiles .tl.on img { outline: 2px solid var(--acc); }
+  .foot { border-top: 1px solid var(--line); padding: 10px 12px; }
+  .primary { background: var(--acc); color: #1a1205; border-radius: 6px; text-align: center; padding: 8px 12px; font-weight: 600; }
+  .est { color: var(--fg3); font-size: 12px; margin-top: 5px; } .est .w { color: var(--warn); }
+  .center { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  .strip { height: 36px; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-bottom: 1px solid var(--line); color: var(--fg2); white-space: nowrap; }
+  .strip b { color: var(--fg); } .strip .path { font-family: Consolas, monospace; font-size: 12px; color: var(--acc); }
+  .grid { padding: 12px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; align-content: start; overflow: hidden; }
+  .tile { position: relative; border-radius: 6px; overflow: hidden; border: 1px solid #2a2a2a; background: #1a1a1a; }
+  .tile img { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; } .tile.sel { outline: 2px solid var(--acc); }
+  .tile .role { position: absolute; left: 6px; top: 6px; background: rgba(0,0,0,.7); border-radius: 4px; padding: 1px 6px; font-size: 11px; color: #fff; }
+  .tile .role.h { color: var(--acc); } .tile .role.r { color: #9fd3a8; } .tile .role.a { color: #9cc4ff; }
+  .tile.run { display: grid; place-items: center; aspect-ratio: 16/9; color: var(--fg3); font-size: 12px; border-style: dashed; }
+  .tile.run .bar { position: absolute; left: 0; bottom: 0; height: 3px; width: 40%; background: var(--acc); }
+  .insp { background: var(--panel); border-left: 1px solid var(--line); padding: 10px 12px; display: grid; gap: 10px; align-content: start; overflow: hidden; }
+  .insp h4 { margin: 0; font-size: 13px; } .insp img.pv { width: 100%; border-radius: 6px; border: 1px solid #333; }
+  .verbs { display: grid; gap: 5px; } .verbs span { border: 1px solid #333; border-radius: 6px; padding: 5px 9px; color: var(--fg); background: #1e1e1e; font-size: 12px; }
+  .verbs span.on { border-color: var(--acc); color: var(--acc); }
+  .hint { color: var(--fg3); font-size: 12px; }
+  .new { outline: 2px dashed var(--new); outline-offset: 2px; border-radius: 6px; }
+  .view { flex: 1; position: relative; overflow: hidden; background: #0d0d0d; }
+  .view img.full { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .pill { position: absolute; background: rgba(20,20,20,.85); border: 1px solid #3a3a3a; border-radius: 14px; padding: 4px 11px; font-size: 12px; color: var(--fg); }
+  .tl2 { height: 250px; border-top: 1px solid var(--line); background: #141414; display: flex; flex-direction: column; position: relative; }
+  .tbar { height: 32px; display: flex; align-items: center; gap: 12px; padding: 0 10px; border-bottom: 1px solid var(--line); color: var(--fg2); font-size: 12px; }
+  .tbar .sp { flex: 1; } .tbar .btn2 { border: 1px solid #3a3a3a; border-radius: 5px; padding: 2px 8px; color: var(--fg); }
+  .tracks { flex: 1; position: relative; display: grid; grid-auto-rows: 34px; }
+  .trk { display: grid; grid-template-columns: 110px 1fr; border-bottom: 1px solid #222; }
+  .trk .nm { padding: 9px 10px; color: var(--fg2); font-size: 12px; border-right: 1px solid #222; white-space: nowrap; overflow: hidden; }
+  .lane { position: relative; } .lane .blk { position: absolute; top: 6px; height: 22px; border-radius: 4px; padding: 3px 8px; font-size: 11px; white-space: nowrap; overflow: hidden; color: #111; }
+  .blk.clip { background: #7aa6e8; } .blk.tpl { background: #c7a0f0; } .blk.line { background: #6bc28a; } .blk.take { background: #d6a85a; } .blk.lay { background: #5a5a62; color: #ddd; }
+  .key { position: absolute; top: 12px; width: 10px; height: 10px; background: var(--acc); transform: rotate(45deg); }
+  .rng { position: absolute; top: 0; bottom: 0; background: rgba(240,160,48,.08); border-left: 1px solid var(--acc); border-right: 1px solid var(--acc); pointer-events: none; }
+  .ph { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; opacity: .7; }
+  .drawer { position: absolute; right: 0; top: 0; bottom: 0; width: 230px; background: #1a1a1a; border-left: 1px solid var(--line); padding: 8px 10px; display: grid; gap: 6px; align-content: start; font-size: 12px; }
+  .drawer .cl { border: 1px solid #2c2c2c; border-radius: 5px; padding: 4px 7px; display: flex; justify-content: space-between; color: var(--fg2); }
+  .drawer .cl.on { border-color: var(--acc); color: var(--fg); }
+  .layer { border: 1px solid #2c2c2c; border-radius: 6px; padding: 7px 9px; display: grid; gap: 5px; background: #1b1b1b; }
+  .layer .h { display: flex; gap: 8px; align-items: center; } .layer .h b { flex: 1; } .ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+  .takes { display: flex; gap: 6px; } .takes span { border: 1px solid #333; border-radius: 5px; padding: 1px 7px; font-size: 11px; color: var(--fg2); } .takes span.on { border-color: var(--ok); color: var(--ok); }
+  .graph { position: relative; flex: 1; background: radial-gradient(#262626 1px, transparent 1px) 0 0/18px 18px, #101010; overflow: hidden; }
+  .node { position: absolute; width: 168px; border: 1px solid #3a3a3a; border-radius: 7px; background: #1c1c1c; overflow: hidden; font-size: 12px; }
+  .node img { width: 100%; height: 66px; object-fit: cover; display: block; } .node .nt { padding: 4px 7px; display: flex; gap: 6px; align-items: center; } .node .ty { color: var(--fg3); font-size: 10px; }
+  .node.logic { width: 140px; padding: 8px; } .node.on { outline: 2px solid var(--acc); }
+  svg.edges { position: absolute; inset: 0; } svg.edges path { stroke: #666; stroke-width: 1.5; fill: none; }
+  .status { height: 28px; border-top: 1px solid var(--line); display: flex; align-items: center; padding: 0 12px; gap: 14px; color: var(--fg3); font-size: 12px; background: #151515; }
+  .tree { font-size: 12.5px; display: grid; gap: 3px; } .tree div { white-space: nowrap; color: var(--fg2); } .tree .on { color: var(--fg); background: var(--raise); border-radius: 4px; outline: 1px solid var(--acc2); }
+  .tree .n { color: var(--fg3); float: right; }
+  .warnbox { border: 1px solid #5a4310; background: #251c08; color: #e9c46a; border-radius: 6px; padding: 6px 9px; font-size: 12px; }
+  .lines { display: grid; gap: 4px; } .lines div { display: grid; grid-template-columns: 62px 1fr 44px; gap: 6px; font-size: 12px; align-items: center; }
+  .lines .who { color: var(--fg2); } .lines .ok2 { color: var(--ok); font-size: 11px; text-align: right; }
+  section.s { display: none; } section.s.on { display: block; }
+</style>
+</head>
+<body>
+
+<!-- ============================== 1 · World · Character ============================== -->
+<section class="s" id="character">
+  <div class="top"><span>☰</span><span class="proj">Project <b>The Last Ferry</b> ▾</span><span class="tab on">World<kbd>Ctrl+1</kbd></span><span class="tab">Shots<kbd>Ctrl+2</kbd></span><span class="tab">Episode<kbd>Ctrl+3</kbd></span><span class="tab">Bin<kbd>Ctrl+4</kbd></span><span class="sp"></span><span class="chip"><i></i>engine idle</span><span class="chip">0 running · 0 queued</span><span class="chip">454 GB free</span></div>
+  <div class="main">
+    <div class="rail"><div class="r on"><b>👤</b>Characters</div><div class="r"><b>📦</b>Props</div><div class="r"><b>📍</b>Places</div><div class="div"></div><div class="r"><b>🎨</b>Look</div><div class="r"><b>✏️</b>Sketches</div></div>
+    <div class="col">
+      <div class="hdr new">
+        <div class="ent"><img src="../img/src/ines-hero.jpg" alt=""><b>Ines ▾</b><span class="v">v1 · rain gear ▾</span><span class="sp" style="flex:1"></span><span class="hint">＋ New</span></div>
+        <div class="kv">
+          <span>appearance</span><span class="fld">a young woman in her mid-twenties, short dark wavy hair, light freckles, slim build, a thin silver ring on her left hand</span>
+          <span>outfit</span><span class="fld"><span class="sw" style="background:#c0392b"></span>a red hooded raincoat over a grey knit sweater, dark jeans, a worn leather satchel</span>
+          <span>body</span><span class="fld">1.68 m · slim · <span class="warn">not fitted</span> · <u>Fit ▶</u> · ⚙ body sheet</span>
+          <span>voice</span><span class="fld">Emma · British, female ▾ · 🎙 New voice…</span>
+        </div>
+        <div class="ready"><span class="d">hero ✓</span><span class="d">references 4</span><span class="d">A-pose front ✓</span><span class="d">back ✓</span><span class="o">body ○</span><span class="d">voice ✓</span><span class="end">1 to go</span></div>
+      </div>
+      <div style="padding:8px 12px; border-bottom:1px solid var(--line)"><span class="seg"><span class="on">Make</span><span>Edit</span></span></div>
+      <div class="body">
+        <div class="sec"><h5>Framing</h5><div class="pills"><span>portrait</span><span>waist-up</span><span class="on">full body</span><span>A-pose front</span><span>A-pose back</span><span>coverage cell…</span></div></div>
+        <div class="sec"><h5>This picture only</h5><div class="fld">hood up, soaked by the rain</div></div>
+        <div class="sec"><h5>Look</h5><div class="tiles"><div class="tl on"><img src="../img/src/f1.jpg" alt="">★ Harbour noir</div><div class="tl"><img src="../img/src/pier.jpg" alt="">Daylight</div><div class="tl"><div style="width:62px;height:42px;border:1px dashed #444;border-radius:4px;display:grid;place-items:center;color:#666">＋</div>none</div></div></div>
+        <div class="sec"><h5>References <span class="hint">Ines's 4 by themselves · ＋ from the Bin</span></h5><div class="tiles"><div class="tl"><img src="../img/src/ines-hero.jpg" alt=""></div><div class="tl"><img src="../img/src/ines-ref1.jpg" alt=""></div><div class="tl"><img src="../img/src/ines-ref2.jpg" alt=""></div><div class="tl"><img src="../img/src/ines-ref3.jpg" alt=""></div></div></div>
+        <div class="sec"><h5>Model</h5><div class="pills"><span class="on">FLUX.2 dev</span><span>Klein 9B</span><span>Krea 2</span><span>…</span></div><div class="hint" style="margin-top:6px">draft 960×544 · count 4 · random seeds</div></div>
+      </div>
+      <div class="foot"><div class="primary">Give Ines a look ▶</div><div class="est">≈ 90 s each · 6 min for 4 · <span class="w">references downscaled to 512² to stay in VRAM</span></div></div>
+    </div>
+    <div class="center">
+      <div class="strip"><span class="path">bin/world/character/Ines/v1</span><span class="sp" style="flex:1"></span><span class="pills"><span class="on">all 11</span><span>hero</span><span>references</span><span>A-pose</span><span>candidates</span></span></div>
+      <div class="grid">
+        <div class="tile run"><span>Ines · full body · step 3/8</span><div class="bar"></div></div>
+        <div class="tile run"><span>queued</span></div>
+        <div class="tile"><img src="../img/src/ines-hero.jpg" alt=""><span class="role h">★ hero</span></div>
+        <div class="tile"><img src="../img/src/ines-ref1.jpg" alt=""><span class="role r">ref</span></div>
+        <div class="tile"><img src="../img/src/ines-ref2.jpg" alt=""><span class="role r">ref</span></div>
+        <div class="tile"><img src="../img/src/ines-ref3.jpg" alt=""><span class="role r">ref</span></div>
+        <div class="tile sel"><img src="../img/src/ines-c1.jpg" alt=""><span class="role a">A-pose front</span></div>
+        <div class="tile"><img src="../img/src/ines-c3.jpg" alt=""><span class="role a">A-pose back</span></div>
+        <div class="tile"><img src="../img/src/ines-c2.jpg" alt=""></div>
+        <div class="tile"><img src="../img/src/ines-c4.jpg" alt=""></div>
+        <div class="tile"><img src="../img/src/f4.jpg" alt=""></div>
+      </div>
+    </div>
+    <div class="insp">
+      <h4>A-pose front · Klein 9B · 960×544</h4>
+      <img class="pv" src="../img/src/ines-c1.jpg" alt="">
+      <div class="warnbox">The feet touch the frame's edge: the body fit needs the ankles. <u>Make it again, framed whole ▶</u></div>
+      <div class="verbs"><span>★ Make it the hero</span><span>✓ Use as a reference</span><span class="on">● the A-pose front</span><span>Use as the A-pose back</span><span>Edit ▸</span><span>Trash</span></div>
+      <div class="hint">home: bin/world/character/Ines/v1 · made by the A-pose run, 2 seeds · lineage ▸</div>
+    </div>
+  </div>
+  <div class="status">Idle · queue 0 · <span style="color:var(--acc)">Bin ▸</span></div>
+</section>
+
+<!-- ============================== 2 · World · Place ============================== -->
+<section class="s" id="place">
+  <div class="top"><span>☰</span><span class="proj">Project <b>The Last Ferry</b> ▾</span><span class="tab on">World<kbd>Ctrl+1</kbd></span><span class="tab">Shots<kbd>Ctrl+2</kbd></span><span class="tab">Episode<kbd>Ctrl+3</kbd></span><span class="tab">Bin<kbd>Ctrl+4</kbd></span><span class="sp"></span><span class="chip"><i></i>engine idle</span><span class="chip">0 running · 0 queued</span></div>
+  <div class="main">
+    <div class="rail"><div class="r"><b>👤</b>Characters</div><div class="r"><b>📦</b>Props</div><div class="r on"><b>📍</b>Places</div><div class="div"></div><div class="r"><b>🎨</b>Look</div><div class="r"><b>✏️</b>Sketches</div></div>
+    <div class="col">
+      <div class="hdr new">
+        <div class="ent"><img src="../img/src/town.jpg" alt=""><b>Town street ▾</b><span class="v">v1 ▾</span><span style="flex:1"></span><span class="hint">＋ New</span></div>
+        <div class="kv">
+          <span>appearance</span><span class="fld">a narrow cobbled street of a small harbour town at night, old stone houses with lit windows on both sides, iron street lamps in drifting fog</span>
+          <span>the set</span><span class="fld">Street · 7.1 × 30 m · eye level 1.6 m · <span class="warn">72 % seen · 5 faces to fill</span><br><u>Build ▶</u> · <u>Fill what the picture never saw ▶ ≈ 3 min</u></span>
+        </div>
+        <div class="ready"><span class="d">set picture ✓</span><span class="d">set built ✓</span><span class="o">faces filled 72 %</span><span class="end">1 to go</span></div>
+      </div>
+      <div style="padding:8px 12px; border-bottom:1px solid var(--line)"><span class="seg"><span class="on">Make</span><span>Edit</span></span></div>
+      <div class="body">
+        <div class="sec"><h5>Framing</h5><div class="pills"><span>wide</span><span class="on">empty, eye level (the set picture)</span><span>a detail</span></div></div>
+        <div class="sec"><h5>This picture only</h5><div class="fld">&nbsp;</div></div>
+        <div class="sec"><h5>Look</h5><div class="tiles"><div class="tl on"><img src="../img/src/f1.jpg" alt="">★ Harbour noir</div><div class="tl"><img src="../img/src/pier.jpg" alt="">Daylight</div></div></div>
+        <div class="sec"><h5>Model</h5><div class="pills"><span class="on">Klein 9B</span><span>FLUX.2 dev</span><span>…</span></div></div>
+      </div>
+      <div class="foot"><div class="primary">Fill what the picture never saw ▶</div><div class="est">5 faces · ≈ 3 min · each filled with its material from the sheet</div></div>
+    </div>
+    <div class="center">
+      <div class="strip"><span class="path">bin/world/place/Town street/v1</span><span style="flex:1"></span><span class="pills"><span class="on">all 6</span><span>set picture</span><span>faces</span><span>candidates</span></span></div>
+      <div style="padding:12px; display:grid; grid-template-columns: 1.4fr 1fr; gap:12px">
+        <div class="tile sel" style="position:relative"><img src="../img/src/town.jpg" alt="" style="aspect-ratio:16/9"><span class="role h">set picture</span>
+          <svg viewBox="0 0 160 90" style="position:absolute;inset:0;width:100%;height:100%"><polygon points="60,30 100,30 100,58 60,58" fill="none" stroke="#f0a030" stroke-width=".8"/><line x1="60" y1="58" x2="10" y2="90" stroke="#f0a030" stroke-width=".8"/><line x1="100" y1="58" x2="150" y2="90" stroke="#f0a030" stroke-width=".8"/><line x1="60" y1="30" x2="0" y2="0" stroke="#f0a030" stroke-width=".8"/><line x1="100" y1="30" x2="160" y2="0" stroke="#f0a030" stroke-width=".8"/></svg></div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; align-content:start">
+          <div class="tile"><img src="../img/src/town.jpg" alt="" style="object-position:0 50%"><span class="role">left fronts · 77 % to fill</span></div>
+          <div class="tile"><img src="../img/src/town.jpg" alt="" style="object-position:100% 50%"><span class="role">right fronts · 77 %</span></div>
+          <div class="tile"><img src="../img/src/town.jpg" alt="" style="object-position:50% 100%"><span class="role">road · 81 %</span></div>
+          <div class="tile"><img src="../img/src/town.jpg" alt="" style="object-position:50% 40%"><span class="role">far end · seen</span></div>
+          <div class="tile"><img src="../img/src/f5.jpg" alt=""><span class="role">candidate</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="insp">
+      <h4>Town street · v1</h4>
+      <div class="hint">nothing selected: the place</div>
+      <div class="kv"><span>used in</span><span>3 · Stay (scene Town street)</span><span>versions</span><span>v1</span></div>
+      <div class="verbs"><span>See in clay ▶</span><span>New version (copy)</span><span>Delete…</span></div>
+    </div>
+  </div>
+  <div class="status">Idle · queue 0 · <span style="color:var(--acc)">Bin ▸</span></div>
+</section>
+
+<!-- ============================== 3 · Shots · Flow ============================== -->
+<section class="s" id="flow">
+  <div class="top"><span>☰</span><span class="proj">Project <b>The Last Ferry</b> ▾</span><span class="tab">World<kbd>Ctrl+1</kbd></span><span class="tab on">Shots<kbd>Ctrl+2</kbd></span><span class="tab">Episode<kbd>Ctrl+3</kbd></span><span class="tab">Bin<kbd>Ctrl+4</kbd></span><span class="sp"></span><span class="chip"><i></i>engine idle</span><span class="chip">0 running · 0 queued</span></div>
+  <div class="board new">
+    <div class="card"><img src="../img/src/f1.jpg" alt=""><div class="t">1 Arrival<span class="dots"><b class="d"></b><b class="d"></b><b></b></span></div></div>
+    <div class="card"><img src="../img/src/f2.jpg" alt=""><div class="t">2 The ferryman<span class="dots"><b class="d"></b><b class="d"></b><b class="d"></b></span></div></div>
+    <div class="card on"><img src="../img/src/f3.jpg" alt=""><div class="t">3 The seal 🎙<span class="dots"><b class="d"></b><b class="s"></b><b></b></span></div></div>
+    <div class="fork">⑂ Board the ferry? · <b>Board ▾</b></div>
+    <div class="card"><img src="../img/src/f4.jpg" alt=""><div class="t">4 Departure<span class="dots"><b class="d"></b><b class="d"></b><b class="d"></b></span></div></div>
+    <div class="plus">＋</div>
+  </div>
+  <div class="main shots">
+    <div class="rail"><div class="r on"><b>⑂</b>Flow</div><div class="div"></div><div class="r"><b>◇</b>Clay</div><div class="r"><b>◈</b>Perfor­mance</div><div class="r"><b>◆</b>Final</div></div>
+    <div class="col">
+      <div class="hdr new">
+        <div class="ent"><b>3 · The seal</b><span class="v">Shot</span><span class="v">v1 ▾</span></div>
+        <div class="kv"><span>description</span><span class="fld">Ines shows the letter; Tomas recognises the wax seal and offers her passage.</span>
+          <span>lines</span><span><div class="lines"><div><span class="who">Ines ▾</span><span class="fld">Do you know whose seal this is?…</span><span class="ok2">✓ 4.1 s</span></div><div><span class="who">Tomas ▾</span><span class="fld">A heron. I have not seen that crest…</span><span class="ok2">✓ 6.1 s</span></div><div><span class="hint">＋ line</span></div></div></span>
+          <span>scene</span><span class="fld">Pier ▾ · camera A ▾ · 0–120 · 5.0 s</span>
+          <span>cast</span><span>Ines · Tomas · The letter <span class="hint">(from the stage)</span></span></div>
+        <div class="warnbox">The lines run 10.2 s, the shot 5.0 s · <u>Extend to the lines</u></div>
+      </div>
+      <div class="body">
+        <div class="sec"><h5>Variables</h5><div class="kv"><span>took_ferry</span><span>bool · false</span></div><div class="hint" style="margin-top:4px">＋ variable</div></div>
+        <div class="sec"><h5>Validate</h5><div class="hint">0 problems · 5 notes (not final yet) ▸</div></div>
+      </div>
+      <div class="foot"><div class="primary">Open The seal in Clay ▸</div></div>
+    </div>
+    <div class="center">
+      <div class="strip"><b>Flow</b><span>＋ Shot · ＋ Choice · ＋ Condition · ＋ Action · ＋ Hub · ＋ Jump · ＋ Note</span><span style="flex:1"></span><span>Play ▶ · Fit</span></div>
+      <div class="graph">
+        <svg class="edges" viewBox="0 0 900 560" preserveAspectRatio="none"><path d="M120,250 C150,250 150,250 175,250"/><path d="M343,250 C360,250 360,250 380,250"/><path d="M548,250 C560,250 560,250 585,250"/><path d="M725,240 C760,160 760,150 790,140"/><path d="M725,262 C760,360 760,380 790,390"/></svg>
+        <div class="node logic" style="left:20px;top:232px"><span class="ty">START</span><br>Start</div>
+        <div class="node" style="left:180px;top:198px"><img src="../img/src/f1.jpg" alt=""><div class="nt"><b>1 Arrival</b><span class="dots"><b class="d"></b><b class="d"></b><b></b></span></div></div>
+        <div class="node" style="left:385px;top:198px"><img src="../img/src/f2.jpg" alt=""><div class="nt"><b>2 The ferryman</b><span class="dots"><b class="d"></b><b class="d"></b><b class="d"></b></span></div></div>
+        <div class="node on" style="left:590px;top:198px"><img src="../img/src/f3.jpg" alt=""><div class="nt"><b>3 The seal</b> 🎙<span class="dots"><b class="d"></b><b class="s"></b><b></b></span></div></div>
+        <div class="node logic" style="left:600px;top:340px"><span class="ty">CHOICE</span><br>Board the ferry?<br><span class="hint">Board · Stay</span></div>
+        <div class="node" style="left:800px;top:90px; width:150px"><img src="../img/src/f4.jpg" alt=""><div class="nt"><b>4 Departure</b></div></div>
+        <div class="node" style="left:800px;top:340px; width:150px"><img src="../img/src/f5.jpg" alt=""><div class="nt"><b>5 Stay</b></div></div>
+        <div class="pill" style="left:18px;bottom:14px">one node type for every shot · 🎙 = it has lines</div>
+      </div>
+    </div>
+    <div class="insp"><h4>The seal · shot</h4><div class="hint">scene Pier · shared with: 1 Arrival, 2 The ferryman (cameras B, C)</div><div class="verbs"><span>Open in Clay ▸</span><span>＋ Shot in this scene (coverage)</span><span>＋ Shot after (new scene)</span><span>Duplicate</span><span>Delete…</span></div></div>
+  </div>
+  <div class="status">Idle · queue 0</div>
+</section>
+
+<!-- ============================== 4 · Shots · Clay ============================== -->
+<section class="s" id="clay">
+  <div class="top"><span>☰</span><span class="proj">Project <b>The Last Ferry</b> ▾</span><span class="tab">World<kbd>Ctrl+1</kbd></span><span class="tab on">Shots<kbd>Ctrl+2</kbd></span><span class="tab">Episode<kbd>Ctrl+3</kbd></span><span class="tab">Bin<kbd>Ctrl+4</kbd></span><span class="sp"></span><span class="chip"><i></i>engine idle</span><span class="chip">0 running · 0 queued</span></div>
+  <div class="board">
+    <div class="card"><img src="../img/src/f1.jpg" alt=""><div class="t">1 Arrival<span class="dots"><b class="d"></b><b class="d"></b><b></b></span></div></div>
+    <div class="card"><img src="../img/src/f2.jpg" alt=""><div class="t">2 The ferryman<span class="dots"><b class="d"></b><b class="d"></b><b class="d"></b></span></div></div>
+    <div class="card"><img src="../img/src/f3.jpg" alt=""><div class="t">3 The seal 🎙<span class="dots"><b class="d"></b><b class="s"></b><b></b></span></div></div>
+    <div class="fork">⑂ Board the ferry? · <b>Stay ▾</b></div>
+    <div class="card on"><img src="../img/src/f5.jpg" alt=""><div class="t">5 Stay<span class="dots"><b class="d"></b><b></b><b></b></span></div></div>
+    <div class="plus">＋</div>
+  </div>
+  <div class="main shots">
+    <div class="rail"><div class="r"><b>⑂</b>Flow</div><div class="div"></div><div class="r on"><b>◇</b>Clay</div><div class="r"><b>◈</b>Perfor­mance</div><div class="r"><b>◆</b>Final</div></div>
+    <div class="col">
+      <div class="hdr">
+        <div class="ent"><b>5 · Stay</b><span class="v">v1 ▾</span></div>
+        <div class="kv"><span>description</span><span class="fld">Ines walks back into town under the street lamps, the letter in her pocket.</span>
+          <span>lines</span><span class="hint">none · ＋ line</span>
+          <span>scene</span><span class="fld">Town street ▾ · camera A ▾ · 0–96 · 4.0 s</span>
+          <span>cast</span><span>Ines <span class="warn">· body not fitted ▸ World</span></span></div>
+      </div>
+      <div class="body">
+        <div class="sec"><h5>Scene</h5><div class="kv"><span>set</span><span>Town street · built ✓</span><span>figures</span><span>Ines ✓ · ＋</span><span>props</span><span>＋</span><span>lights</span><span>Lamp (warm, left) · Moon (cool, behind) · ＋</span><span>cameras</span><span>A · 35 mm · this shot</span></div></div>
+        <div class="sec"><h5>Scene words <span class="hint">for its pictures</span></h5><div class="fld">night, drifting fog, wet cobbles</div></div>
+        <div class="sec"><h5>Camera</h5><div class="pills"><span>24</span><span class="on">35</span><span>50</span><span>85</span><span>mm</span><span>Set from view</span></div></div>
+      </div>
+      <div class="foot"><div class="primary">Render the passes ▶</div><div class="est">then To Performance ▸</div></div>
+    </div>
+    <div class="center">
+      <div class="view"><img class="full" src="../img/src/clay-town.jpg" alt=""><span class="pill" style="right:12px;top:10px">Camera A · 35 mm ▾ · Free view</span><span class="pill" style="left:46%;top:10px">Pose Ines</span></div>
+      <div class="tl2 new">
+        <div class="tbar">▶ ⏸ ⏮ ⏭<span>frame 48 / 96 · 2.0 s</span><span style="color:var(--acc)">▭ this shot 0–96</span><span class="sp"></span><span class="btn2">Library ▸</span><span class="btn2">Save as animation…</span></div>
+        <div class="tracks" style="margin-right:230px">
+          <div class="rng" style="left:110px; width:62%"></div>
+          <div class="trk"><div class="nm">Camera A</div><div class="lane"><span class="key" style="left:2%"></span><span class="key" style="left:58%"></span><span class="hint" style="position:absolute;left:12%;top:9px">dolly in · 35 → 50 mm</span></div></div>
+          <div class="trk"><div class="nm">Ines</div><div class="lane"><span class="blk clip" style="left:1%;width:44%">Walk_Loop ×3 · along her path · foot lock</span><span class="blk tpl" style="left:46%;width:18%">Look back (mine)</span><span class="key" style="left:50%;top:2px"></span><span class="ph" style="left:31%"></span></div></div>
+          <div class="trk"><div class="nm">The letter</div><div class="lane"><span class="hint" style="position:absolute;left:2%;top:9px">in Ines's pocket (contact)</span></div></div>
+          <div class="trk"><div class="nm">Lamp</div><div class="lane"><span class="key" style="left:2%"></span><span class="hint" style="position:absolute;left:5%;top:9px">flicker · warm 2700 K</span></div></div>
+          <div class="trk"><div class="nm">Lines</div><div class="lane"><span class="hint" style="position:absolute;left:2%;top:9px">no lines in this shot</span></div></div>
+        </div>
+        <div class="drawer" style="top:32px"><b>Library</b><div class="fld">walk</div><div class="pills"><span>CC0</span><span>Local</span><span class="on">all</span><span>Mine</span></div><div class="cl on"><span>Walk_Loop</span><span>1.3 s</span></div><div class="cl"><span>Walk_Formal_Loop</span><span>1.3 s</span></div><div class="cl"><span>Look back · mine</span><span>1.2 s</span></div><div class="cl"><span>Walk_Carry_Loop</span><span>2.0 s</span></div><div class="hint">Import… · drag onto a track</div></div>
+      </div>
+    </div>
+    <div class="insp"><h4>Clip block · Walk_Loop</h4><div class="kv"><span>figure</span><span>Ines</span><span>source</span><span>CC0 · UAL1</span><span>loops</span><span>×3 (3.9 s)</span><span>speed</span><span>×1.00</span><span>blend</span><span>in 6 · out 8 frames</span><span>path</span><span>4 points · 6.2 m</span></div><div class="pills"><span class="on">foot lock</span><span>in place</span><span>mirror</span></div><div class="verbs"><span>Save as animation…</span><span>Bake to keys</span><span>Remove</span></div><div class="warnbox">Ines faces away from camera A from 0.4 s · her back view exists ✓</div></div>
+  </div>
+  <div class="status">Idle · queue 0</div>
+</section>
+
+<!-- ============================== 5 · Shots · Performance ============================== -->
+<section class="s" id="performance">
+  <div class="top"><span>☰</span><span class="proj">Project <b>The Last Ferry</b> ▾</span><span class="tab">World<kbd>Ctrl+1</kbd></span><span class="tab on">Shots<kbd>Ctrl+2</kbd></span><span class="tab">Episode<kbd>Ctrl+3</kbd></span><span class="tab">Bin<kbd>Ctrl+4</kbd></span><span class="sp"></span><span class="chip" style="border-color:var(--acc);color:var(--acc)"><i style="background:var(--acc)"></i>engine busy 40 %</span><span class="chip">1 running · 0 queued</span></div>
+  <div class="board">
+    <div class="card"><img src="../img/src/f1.jpg" alt=""><div class="t">1 Arrival<span class="dots"><b class="d"></b><b class="d"></b><b></b></span></div></div>
+    <div class="card"><img src="../img/src/f2.jpg" alt=""><div class="t">2 The ferryman<span class="dots"><b class="d"></b><b class="d"></b><b class="d"></b></span></div></div>
+    <div class="card"><img src="../img/src/f3.jpg" alt=""><div class="t">3 The seal 🎙<span class="dots"><b class="d"></b><b class="s"></b><b></b></span></div></div>
+    <div class="fork">⑂ Board the ferry? · <b>Stay ▾</b></div>
+    <div class="card on"><img src="../img/src/f5.jpg" alt=""><div class="t">5 Stay<span class="dots"><b class="d"></b><b class="r"></b><b></b></span></div></div>
+  </div>
+  <div class="main shots">
+    <div class="rail"><div class="r"><b>⑂</b>Flow</div><div class="div"></div><div class="r"><b>◇</b>Clay</div><div class="r on"><b>◈</b>Perfor­mance</div><div class="r"><b>◆</b>Final</div></div>
+    <div class="col">
+      <div class="hdr"><div class="ent"><b>5 · Stay</b><span class="v">v1 ▾</span></div><div class="kv"><span>scene</span><span>Town street · camera A · 0–96 · 4.0 s</span></div></div>
+      <div class="body">
+        <div class="sec"><h5>Method</h5><div class="pills"><span class="on">Layered</span><span>One pass</span><span>From the start still</span><span>Speaking close-up (exp.)</span></div></div>
+        <div class="sec new"><h5>Layers</h5>
+          <div style="display:grid; gap:6px">
+            <div class="layer"><div class="h"><b>Plate · Town street</b><span class="ok">✓</span></div><div class="hint">the built set · 97 frames</div><div class="warnbox">5 faces never filled: black seams on the road · <u>Fill ▸ World</u></div></div>
+            <div class="layer"><div class="h"><b>Ines</b><span style="color:var(--run)">◐ take 2</span></div><div class="takes"><span>take 1 · FaceSim <span class="warn">0.41</span></span><span class="on">take 2 · running</span></div><div class="hint">Wan Animate on her pose · 65 frames · back view used</div></div>
+            <div class="layer"><div class="h"><b>Shadows</b><span class="ok">✓</span></div><div class="hint">from the stage</div></div>
+          </div></div>
+      </div>
+      <div class="foot"><div class="primary">To Final ▸</div><div class="est">all layers have a take · ≈ 0 min owed</div></div>
+    </div>
+    <div class="center">
+      <div class="view"><div style="position:absolute;inset:0;display:grid;grid-template-columns:1fr 1fr"><img class="full" src="../img/src/clay-town.jpg" alt="" style="object-position:30% 50%"><img class="full" src="../img/src/final-mid.jpg" alt="" style="object-position:70% 50%"></div><div style="position:absolute;left:50%;top:0;bottom:0;width:2px;background:var(--acc)"></div><span class="pill" style="left:12px;top:10px">Clay</span><span class="pill" style="right:12px;top:10px">AI · take 1</span><span class="pill" style="left:44%;bottom:12px">wipe · side by side · onion</span></div>
+      <div class="tl2" style="height:170px">
+        <div class="tbar">▶ ⏸<span>frame 48 / 96</span><span class="sp"></span><span>takes in use are bright</span></div>
+        <div class="tracks">
+          <div class="trk"><div class="nm">Plate</div><div class="lane"><span class="blk lay" style="left:1%;width:96%">the built set ✓</span></div></div>
+          <div class="trk"><div class="nm">Ines</div><div class="lane"><span class="blk take" style="left:1%;width:96%;opacity:.45">take 1</span></div></div>
+          <div class="trk"><div class="nm">Ines · take 2</div><div class="lane"><span class="blk take" style="left:1%;width:40%">take 2 · rendering 40 %</span></div></div>
+          <div class="trk"><div class="nm">Shadows</div><div class="lane"><span class="blk lay" style="left:1%;width:96%">✓</span></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="insp"><h4>Ines · take 1</h4><img class="pv" src="../img/src/take-mid.jpg" alt=""><div class="kv"><span>identity</span><span class="warn">0.41 (same person ≈ 0.45–0.7)</span><span>made</span><span>152 s · seed 1857…</span><span>from</span><span>Clay revision 12</span></div><div class="verbs"><span>Use this take</span><span>Re-take ▶ (a new seed)</span><span>Edit a frame ▸</span></div></div>
+  </div>
+  <div class="status">Running: Ines · take 2 · step 2/4 · 40 %</div>
+</section>
+
+<!-- ============================== 6 · Shots · Final ============================== -->
+<section class="s" id="final">
+  <div class="top"><span>☰</span><span class="proj">Project <b>The Last Ferry</b> ▾</span><span class="tab">World<kbd>Ctrl+1</kbd></span><span class="tab on">Shots<kbd>Ctrl+2</kbd></span><span class="tab">Episode<kbd>Ctrl+3</kbd></span><span class="tab">Bin<kbd>Ctrl+4</kbd></span><span class="sp"></span><span class="chip"><i></i>engine idle</span><span class="chip">0 running · 0 queued</span></div>
+  <div class="board">
+    <div class="card"><img src="../img/src/f1.jpg" alt=""><div class="t">1 Arrival<span class="dots"><b class="d"></b><b class="d"></b><b></b></span></div></div>
+    <div class="card"><img src="../img/src/f2.jpg" alt=""><div class="t">2 The ferryman<span class="dots"><b class="d"></b><b class="d"></b><b class="d"></b></span></div></div>
+    <div class="card on"><img src="../img/src/f3.jpg" alt=""><div class="t">3 The seal 🎙<span class="dots"><b class="d"></b><b class="d"></b><b></b></span></div></div>
+    <div class="fork">⑂ Board the ferry? · <b>Board ▾</b></div>
+    <div class="card"><img src="../img/src/f4.jpg" alt=""><div class="t">4 Departure<span class="dots"><b class="d"></b><b class="d"></b><b class="d"></b></span></div></div>
+  </div>
+  <div class="main shots">
+    <div class="rail"><div class="r"><b>⑂</b>Flow</div><div class="div"></div><div class="r"><b>◇</b>Clay</div><div class="r"><b>◈</b>Perfor­mance</div><div class="r on"><b>◆</b>Final</div></div>
+    <div class="col">
+      <div class="hdr"><div class="ent"><b>3 · The seal</b><span class="v">v1 ▾</span></div><div class="kv"><span>scene</span><span>Pier · camera A · 0–245 · 10.2 s</span></div></div>
+      <div class="body">
+        <div class="sec"><h5>Layers</h5><div class="kv"><span>Tomas</span><span>Normal · matte ✓</span><span>Ines</span><span>Normal · matte ✓</span><span>Shadows</span><span>Multiply</span><span>Plate</span><span>the Pier set</span></div></div>
+        <div class="sec new"><h5>Voice and lip-sync</h5><div class="lines"><div><span class="who">Ines</span><span class="fld">Do you know whose seal…</span><span class="ok2">lip ●</span></div><div><span class="who">Tomas</span><span class="fld">A heron. I have not seen…</span><span class="ok2">lip ●</span></div></div><div class="hint" style="margin-top:4px">lip-sync: a pass over each speaker's layer</div></div>
+        <div class="sec"><h5>Effects</h5><div class="pills"><span>Film grain</span><span>Fog glow</span><span>＋</span><span>Save as a preset…</span></div></div>
+        <div class="sec"><h5>Output</h5><div class="hint">1920×1080 · 24 fps · PNG master + ProRes 4444</div></div>
+      </div>
+      <div class="foot"><div class="primary">Render the final ▶</div><div class="est">then Mark the shot final ✓ · on the CPU, ≈ 10 s</div></div>
+    </div>
+    <div class="center">
+      <div class="view"><img class="full" src="../img/src/f3.jpg" alt=""><span class="pill" style="right:12px;top:10px">composition · revision 3</span></div>
+      <div class="tl2" style="height:200px">
+        <div class="tbar">▶ ⏸<span>frame 120 / 245 · 5.0 s</span><span class="sp"></span></div>
+        <div class="tracks">
+          <div class="trk"><div class="nm">Tomas</div><div class="lane"><span class="blk lay" style="left:1%;width:96%">Tomas · take 1 · lip-sync</span></div></div>
+          <div class="trk"><div class="nm">Ines</div><div class="lane"><span class="blk lay" style="left:1%;width:96%">Ines · take 2 · lip-sync</span></div></div>
+          <div class="trk"><div class="nm">Plate</div><div class="lane"><span class="blk lay" style="left:1%;width:96%">the Pier set</span></div></div>
+          <div class="trk new"><div class="nm">Voice · Ines</div><div class="lane"><span class="blk line" style="left:2%;width:38%">"Do you know whose seal this is?…" 4.1 s</span></div></div>
+          <div class="trk new"><div class="nm">Voice · Tomas</div><div class="lane"><span class="blk line" style="left:41%;width:57%">"A heron. I have not seen that crest…" 6.1 s</span></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="insp"><h4>Lip-sync · Tomas</h4><div class="kv"><span>layer</span><span>Tomas · take 1</span><span>line</span><span>2 · 6.1 s</span><span>method</span><span>the Final's Lip-sync pass</span></div><div class="verbs"><span>Run the pass ▶</span><span>Off for Tomas</span></div></div>
+  </div>
+  <div class="status">Idle · queue 0</div>
+</section>
+
+<!-- ============================== 7 · Episode ============================== -->
+<section class="s" id="episode">
+  <div class="top"><span>☰</span><span class="proj">Project <b>The Last Ferry</b> ▾</span><span class="tab">World<kbd>Ctrl+1</kbd></span><span class="tab">Shots<kbd>Ctrl+2</kbd></span><span class="tab on">Episode<kbd>Ctrl+3</kbd></span><span class="tab">Bin<kbd>Ctrl+4</kbd></span><span class="sp"></span><span class="chip"><i></i>engine idle</span></div>
+  <div class="main">
+    <div class="rail"><div class="r on"><b>🎞</b>Cut</div><div class="r"><b>🎚</b>Sound</div><div class="r"><b>🎨</b>Colour</div><div class="r"><b>⇪</b>Deliver</div></div>
+    <div class="col">
+      <div class="body">
+        <div class="sec"><h5>Cuts</h5><div class="verbs"><span class="on">Episode 1 · Board the ferry · 4 shots</span><span>Episode 1 · Stay · 4 shots</span></div><div class="hint" style="margin-top:4px">Assemble from the Flow…</div></div>
+        <div class="sec new"><h5>Finals · route order</h5><div class="kv"><span>1 Arrival</span><span class="ok">final ✓ marked</span><span>2 The ferryman</span><span class="ok">final ✓</span><span>3 The seal</span><span class="warn">! stale since its render</span><span>4 Departure</span><span class="ok">final ✓</span></div></div>
+        <div class="sec"><h5>Sound</h5><div class="hint">imports · drag onto A2 / A3</div></div>
+      </div>
+      <div class="foot"><div class="primary">Export for Resolve ▶</div><div class="est">FCPXML · EDL · SRT · markers · clips named after their shots</div></div>
+    </div>
+    <div class="center">
+      <div class="view" style="flex:1"><img class="full" src="../img/src/f1.jpg" alt=""></div>
+      <div class="tl2" style="height:250px">
+        <div class="tbar">▶ ⏸ ◀ ▶<span>00:00:02:10 / 00:00:25:12</span><span class="sp"></span><span>select · ripple · roll · slip · slide · razor</span></div>
+        <div class="tracks">
+          <div class="trk"><div class="nm">V2 inserts</div><div class="lane"></div></div>
+          <div class="trk"><div class="nm">V1 shots</div><div class="lane"><span class="blk lay" style="left:1%;width:19%">1 Arrival</span><span class="blk lay" style="left:20.5%;width:19%">2 The ferryman</span><span class="blk lay new" style="left:40%;width:38%">3 The seal · held for its lines</span><span class="blk lay" style="left:78.5%;width:19%">4 Departure</span></div></div>
+          <div class="trk"><div class="nm">A1 dialogue</div><div class="lane"><span class="blk line" style="left:41%;width:15%">Ines 4.1 s</span><span class="blk line" style="left:56.5%;width:21%">Tomas 6.1 s</span></div></div>
+          <div class="trk"><div class="nm">A2 music</div><div class="lane"></div></div>
+          <div class="trk"><div class="nm">A3 effects</div><div class="lane"></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="insp"><h4>Checklist</h4><div class="kv"><span>3 The seal</span><span class="warn">its final is stale: Clay changed after the render</span><span>format</span><span>all finals at 1920×1080</span></div><div class="verbs"><span>Update every changed shot</span><span>Render the movie (H.264)</span></div></div>
+  </div>
+  <div class="status">Idle · queue 0</div>
+</section>
+
+<!-- ============================== 8 · Bin ============================== -->
+<section class="s" id="bin">
+  <div class="top"><span>☰</span><span class="proj">Project <b>The Last Ferry</b> ▾</span><span class="tab">World<kbd>Ctrl+1</kbd></span><span class="tab">Shots<kbd>Ctrl+2</kbd></span><span class="tab">Episode<kbd>Ctrl+3</kbd></span><span class="tab on">Bin<kbd>Ctrl+4</kbd></span><span class="sp"></span><span class="chip"><i></i>engine idle</span></div>
+  <div class="main" style="grid-template-columns: 0 380px 1fr 320px">
+    <div></div>
+    <div class="col"><div class="body"><div class="fld">search: prompt, name, tag, seed</div>
+      <div class="tree">
+        <div>▾ world</div><div style="padding-left:14px">▾ character</div><div style="padding-left:28px">▾ Ines</div><div class="on" style="padding-left:42px">v1 · rain gear <span class="n">11</span></div>
+        <div style="padding-left:28px">▸ Tomas <span class="n">7</span></div><div style="padding-left:14px">▸ prop <span class="n">4</span></div><div style="padding-left:14px">▸ place <span class="n">12</span></div><div style="padding-left:14px">▸ look <span class="n">1</span></div><div style="padding-left:14px">▸ sketches <span class="n">3</span></div>
+        <div>▾ shots</div><div style="padding-left:14px">▸ 01 Arrival <span class="n">4</span></div><div style="padding-left:14px">▸ 02 The ferryman <span class="n">3</span></div><div style="padding-left:14px">▸ 03 The seal <span class="n">6</span></div><div style="padding-left:14px">▸ 04 Departure <span class="n">3</span></div><div style="padding-left:14px">▸ 05 Stay <span class="n">21</span></div>
+        <div>▸ episode <span class="n">2</span></div><div>▸ imports <span class="n">0</span></div><div>▸ trash <span class="n">0</span></div>
+      </div></div></div>
+    <div class="center">
+      <div class="strip"><span class="path">bin/world/character/Ines/v1</span><span style="flex:1"></span><span class="pills"><span class="on">all</span><span>pictures</span><span>clips</span><span>audio</span><span>models</span></span></div>
+      <div class="grid">
+        <div class="tile"><img src="../img/src/ines-hero.jpg" alt=""><span class="role h">★ hero</span></div><div class="tile"><img src="../img/src/ines-ref1.jpg" alt=""><span class="role r">ref</span></div><div class="tile"><img src="../img/src/ines-ref2.jpg" alt=""><span class="role r">ref</span></div><div class="tile"><img src="../img/src/ines-ref3.jpg" alt=""><span class="role r">ref</span></div><div class="tile sel"><img src="../img/src/ines-c1.jpg" alt=""><span class="role a">A-pose front</span></div>
+        <div class="tile"><img src="../img/src/ines-c3.jpg" alt=""><span class="role a">A-pose back</span></div><div class="tile"><img src="../img/src/ines-c2.jpg" alt=""></div><div class="tile"><img src="../img/src/ines-c4.jpg" alt=""></div>
+      </div>
+    </div>
+    <div class="insp"><h4>A-pose front</h4><img class="pv" src="../img/src/ines-c1.jpg" alt=""><div class="kv"><span>home</span><span class="mono">world/character/Ines/v1</span><span>roles</span><span>A-pose front</span><span>made</span><span>Klein 9B · 46 s · seed 2181…</span><span>same run</span><span>2 pictures</span></div><div class="verbs"><span>Open where it belongs ▸</span><span>Move to…</span><span>Tag…</span><span>Trash</span></div></div>
+  </div>
+  <div class="status">Idle · queue 0</div>
+</section>
+
+<script>
+  const s = new URLSearchParams(location.search).get('s') || 'character'
+  document.getElementById(s)?.classList.add('on')
+</script>
+</body>
+</html>

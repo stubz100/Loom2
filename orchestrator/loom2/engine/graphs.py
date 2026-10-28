@@ -112,6 +112,11 @@ def i2v_family(model_id: str) -> str:
 
 
 
+# D156 (E41): the recipe's camera moves as the core's WanCameraEmbedding names them
+CAMERA_POSES = {"static": "Static", "pan_left": "Pan Left", "pan_right": "Pan Right", "pan_up": "Pan Up", "pan_down": "Pan Down", "zoom_in": "Zoom In",
+                "zoom_out": "Zoom Out", "roll_cw": "ClockWise (CW)", "roll_ccw": "Anti Clockwise (ACW)"}
+
+
 def i2v_params(recipe: I2V) -> dict[str, Any]:
     """What will actually run: sizes snapped to the model's multiple, frames to 4n+1 / 8n+1, preset values with overrides."""
     spec = video_spec(recipe.model_id)
@@ -143,6 +148,8 @@ def i2v_params(recipe: I2V) -> dict[str, Any]:
     else:
         steps = recipe.steps or p.steps
         out |= {"steps": steps, "shift": recipe.shift, "label": f"{spec.label.split(' · ')[0]} · {steps} steps"}
+    if recipe.camera:                                                  # D156: the move rides into the plan and the clip's record
+        out["camera"] = {"move": recipe.camera.move, "speed": float(recipe.camera.speed)}
     return out
 
 
@@ -274,7 +281,15 @@ def build_i2v(recipe: I2V, roster: Roster, seed: int, out_prefix: str, start_nam
         g["6"] = {"class_type": "CLIPTextEncode", "inputs": {"text": recipe.negative if recipe.negative is not None else video.negative, "clip": ["2", 0]}}
         cond: dict[str, Any] = {"positive": ["5", 0], "negative": ["6", 0], "vae": ["3", 0], "width": w, "height": h, "length": frames, "batch_size": 1,
                                 "start_image": load_scaled("100", start_name)}
-        if end_name:
+        if recipe.camera:                                              # D156 (E41): the Fun-Camera model's two nodes; the plain model has no camera to move
+            if not spec.recipes.camera:
+                raise CompileError(f"{spec.label} takes no camera move — pick the camera model")
+            if end_name:
+                raise CompileError("a camera move and an end frame do not go together")
+            g["13"] = {"class_type": "WanCameraEmbedding", "inputs": {"camera_pose": CAMERA_POSES[recipe.camera.move], "width": w, "height": h, "length": frames, "speed": float(recipe.camera.speed)}}
+            cond["camera_conditions"] = ["13", 0]
+            g["7"] = {"class_type": "WanCameraImageToVideo", "inputs": cond}
+        elif end_name:
             cond["end_image"] = load_scaled("101", end_name)
             g["7"] = {"class_type": "WanFirstLastFrameToVideo", "inputs": cond}
         else:

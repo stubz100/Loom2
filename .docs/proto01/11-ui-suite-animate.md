@@ -38,6 +38,8 @@ Rail: [Inputs] [Model] [Length & Size] [Presets]
   Shows size and aspect; auto-fit to the clip size with letterbox/crop choice.
 - **End frame** slot (optional): enables first-last-frame mode; **swap** button; a warning when the two frames
   differ strongly in pose/composition ("large gap → expect morphing on Wan; try LTX beats or shorter clips").
+- **Camera** (D156, 2026-10-28): on the camera model (Wan 2.2 Fun-Camera) a *camera* control under the preset — the move (static, pan
+  left / right / up / down, zoom in / out, roll) and its speed; the recipe's `camera {move, speed}`; the plain model shows none and moves nothing (E4b).
 - **Prompt**: text (motion, camera, mood); **motion chips** insert phrases (slow push-in, orbit left, handheld,
   wind in hair, turns to camera, walks left→right). Negative prompt only where the model uses it (Wan with
   CFG > 1; hidden otherwise with a reason).

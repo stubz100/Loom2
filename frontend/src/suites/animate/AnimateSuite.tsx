@@ -24,7 +24,7 @@ import { type SuiteDef } from '../../frame/suiteRegistry'
 import { byOrder, shortName } from '../../store/modelCaps'
 import { useSession } from '../../store/session'
 import { clipMenu, playerMenu } from './animateCommands'
-import { fmtTime, modelRules, MOTION_CHIPS, useAnimate, visibleClips, type AnimPanel } from './animateStore'
+import { CAMERA_MOVES, DEFAULT_CAMERA, fmtTime, modelRules, MOTION_CHIPS, useAnimate, visibleClips, type AnimPanel, type CameraMove } from './animateStore'
 import { ClipFoot, StageClipCard, useStageLoad } from '../stage/StageParts'
 import { ShotHead } from '../stage/ShotStepper'
 import { FinalSection, FinalShotFoot } from '../stage/FinalPanel'
@@ -135,6 +135,17 @@ function ModelTab() {
       <label>preset</label>
       <div className="segmented">{(['draft', 'motion', 'quality'] as const).map((k) => <button key={k} className={p.preset === k ? 'active' : ''} onClick={() => an().set({ preset: k, steps: null, cfg: null })} title={presetLabel(k)}>{k}</button>)}</div>
       <span className="hint">{presetLabel(p.preset)}</span>
+      {cur?.recipes?.camera && <>
+        <label>camera</label>
+        <div className="row camera-move">
+          <select aria-label="camera move" value={p.camera?.move ?? DEFAULT_CAMERA.move} onChange={(e) => an().set({ camera: { move: e.target.value as CameraMove, speed: p.camera?.speed ?? DEFAULT_CAMERA.speed } })}>
+            {CAMERA_MOVES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+          </select>
+          <input type="number" aria-label="camera speed" min={0.1} max={3} step={0.1} value={p.camera?.speed ?? DEFAULT_CAMERA.speed} onChange={(e) => an().set({ camera: { move: p.camera?.move ?? DEFAULT_CAMERA.move, speed: Math.min(3, Math.max(0.1, Number(e.target.value) || 1)) } })} />
+          <span>× speed</span>
+          <Help text={"This model moves the camera as told (D156): a pan, a tilt, a zoom or a roll at a speed — the prompt alone does not move it. Static holds the camera. The clip's tone is matched to the start image on the way out."} />
+        </div>
+      </>}
       <h4 className="full sect">advanced</h4>
       <label>steps</label>
       <div className="row"><input type="number" min={1} max={60} placeholder="preset" value={p.steps ?? ''} onChange={(e) => an().set({ steps: e.target.value === '' ? null : Number(e.target.value) })} /><span className="hint" style={{ margin: 0 }}>empty = the preset's steps{pp?.split != null ? ' (split high / low in the same ratio)' : ''}</span></div>

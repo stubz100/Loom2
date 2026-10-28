@@ -5301,6 +5301,24 @@ export interface components {
             /** Ids */
             ids: string[];
         };
+        /**
+         * Camera
+         * @description D156 (E41): the move the clip's camera makes — Wan 2.2 Fun-Camera's path (the core's WanCameraEmbedding: a pan, a tilt, a zoom or a roll at a
+         *     speed; `static` holds it). Only a spec with `recipes.camera` takes one; the plain model moves nothing (E4b).
+         */
+        Camera: {
+            /**
+             * Move
+             * @default static
+             * @enum {string}
+             */
+            move?: "static" | "pan_left" | "pan_right" | "pan_up" | "pan_down" | "zoom_in" | "zoom_out" | "roll_cw" | "roll_ccw";
+            /**
+             * Speed
+             * @default 1
+             */
+            speed?: number;
+        };
         /** Cancelled */
         Cancelled: {
             /** Cancelled */
@@ -8301,6 +8319,8 @@ export interface components {
             audio?: components["schemas"]["AudioRef"] | null;
             /** Beats */
             beats?: components["schemas"]["Beat"][];
+            /** @default null */
+            camera?: components["schemas"]["Camera"] | null;
             /**
              * Cfg
              * @default null
@@ -11237,6 +11257,11 @@ export interface components {
              * @default false
              */
             beats?: boolean;
+            /**
+             * Camera
+             * @default false
+             */
+            camera?: boolean;
             /**
              * Default For
              * @default []

@@ -224,7 +224,10 @@ composition" instruction. Tiled refine (Ultimate-SD-Upscale pattern) with Klein 
   the LoRA at CFG 3.5 for steps 0–4, low expert with the LoRA at CFG 1 for 4–8** ("motion" recipe, 495 s)
   gives real character action (the captain unfolds his arms and leans in to point) with identity intact.
   Presets for M6: **Draft = Lightning 2 + 2 (≈ 315 s)**, **Motion = undistilled high + distilled low (≈ 495 s)**;
-  camera moves need a dedicated control (Wan camera LoRAs / VACE) post-MVP, no recipe fixed them.
+  camera moves need a dedicated control (Wan camera LoRAs / VACE) post-MVP, no recipe fixed them. **Built (E41 → D156, 2026-10-28):**
+  Wan 2.2 Fun-Camera (Apache-2.0, Comfy-Org's fp8 experts) on the core's `WanCameraEmbedding` + `WanCameraImageToVideo` moves the camera as told —
+  Pan Left +8.6 % of the width, Pan Right −19 %, Zoom In ×1.32, Zoom Out ×0.72, Static still — in 105–168 s a Draft clip at 9.4 GB; the prompt
+  alone still moves nothing; the clip's tone is matched to the start image by the finisher (it starts ~15 levels brighter).
 - **Secondary engine: LTX-2.3 distilled** — **fp8 transformer** (Kijai `transformer_only_fp8_scaled`, 23.5 GB,
   streamed from RAM by the engine's dynamic VRAM loader) + Gemma-3-12B fp8 + text projection + video **and
   audio** VAE (core 0.38 requires the audio VAE even for silent clips), `LTXVAddGuide` at frame 0 / −1 (+

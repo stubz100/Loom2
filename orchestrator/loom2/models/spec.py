@@ -73,6 +73,7 @@ class Recipes(Strict):
     upscale_factor: int | None = None
     segment: list[str] = []                        # AI Select modes (subject · text · points · box)
     i2v: bool = False
+    camera: bool = False                           # D156 (E41): takes I2V.camera — a move the clip's camera makes (Wan 2.2 Fun-Camera)
     flf: bool = False                              # first + last frame
     beats: bool = False                            # keyframes in between
     reangle: str | None = None                     # P14 (D82): the angles method this model implements — angles_lora | klein_prompt

@@ -14,6 +14,8 @@ const CAPS = {
         geometry: { tiers: { draft: [832, 480], hd: [1280, 720], portrait: [480, 832], square: [624, 624] } }, recipes: {} },
       'vid-fam': { order: 2, short: 'Fam', family: 'fam', fps: 24, frames: 97, frame_step: 8, size_mult: 32, size: [768, 512],
         recipes: { beats: true } },
+      'vid-cam': { order: 3, short: 'Camera', family: 'geo', fps: 16, frames: 81, frame_step: 4, size_mult: 16, size: [832, 480],
+        geometry: { tiers: { draft: [832, 480] } }, recipes: { camera: true } },
     },
     tiers: { draft: { fam: [768, 448] }, hd: { fam: [1216, 704] } },
     portrait: { fam: [448, 768] },
@@ -98,5 +100,16 @@ describe('visibleClips (D90 02 §9, A16)', () => {
     expect(ids(visibleClips(clips, { ast_a: true, ast_c: true }, { q: '' }))).toEqual(['a', 'c', 'd'])     // b is in the Trash
     expect(ids(visibleClips(clips, null, { q: 'the GATE' }))).toEqual(['a', 'b'])
     expect(ids(visibleClips(clips, null, { q: 'seed 7 dog' }))).toEqual(['c'])
+  })
+})
+
+describe('the camera move (D156)', () => {
+  it('rides the recipe on the camera model only — static by default there, never on a plain model', () => {
+    const base = { ...DEFAULT_PANEL, start: 'a' } as AnimPanel & { start: string }
+    expect(modelRules('vid-cam').camera).toBe(true)
+    expect(modelRules('vid-geo').camera).toBe(false)
+    expect(recipeFor({ ...base, model_id: 'vid-cam' }).camera).toEqual({ move: 'static', speed: 1 })
+    expect(recipeFor({ ...base, model_id: 'vid-cam', camera: { move: 'pan_left', speed: 1.5 } }).camera).toEqual({ move: 'pan_left', speed: 1.5 })
+    expect(recipeFor({ ...base, model_id: 'vid-geo', camera: { move: 'pan_left', speed: 1.5 } }).camera).toBeNull()
   })
 })

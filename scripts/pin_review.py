@@ -24,7 +24,7 @@ sys.path.insert(0, str(REPO / "orchestrator" / "tests"))
 
 from loom2.engine import graphs  # noqa: E402
 from loom2.engine.contract import check_graph  # noqa: E402
-from loom2.recipes import (AnimateChain, AudioRef, Beat, ExtendFrom, Guide, I2I, I2V, ImageToMesh, ImageToSet, Inpaint, Instruct, Keypoints, MatteSequence,  # noqa: E402
+from loom2.recipes import (AnimateChain, AudioRef, Camera, Beat, ExtendFrom, Guide, I2I, I2V, ImageToMesh, ImageToSet, Inpaint, Instruct, Keypoints, MatteSequence,  # noqa: E402
                            Reangle, RefImage, Segment, StageShot, T2I, Upscale)
 from loom2.roster import ROSTER_BY_ID, Roster  # noqa: E402
 
@@ -98,6 +98,7 @@ def recipes() -> list[tuple[str, object, dict]]:
         ("i2v wan animate, batch 2 (carry)", I2V(model_id="wan22-animate-fp8", start_asset="a", frames=77, guide=Guide(asset_id="g", kind="pose"), chain=AnimateChain(clip_id="c", carry=5, offset=72)),
          {"start": png, "guide": "pose.mp4", "carry": [png] * 5}),
         ("i2v wan s2v (a line)", I2V(model_id="wan22-s2v-fp8", start_asset="a", frames=77, audio=AudioRef(asset_id="x")), {"start": png, "audio": "line.wav"}),
+        ("i2v wan camera pan left", I2V(model_id="wan22-fun-camera-high-fp8", start_asset="a", camera=Camera(move="pan_left", speed=1.0)), {"start": png}),   # D156
         ("i2v ltx guided (depth)", I2V(model_id="ltx23-distilled-fp8", start_asset="a", frames=121, fps=24, width=1024, height=576, guide=Guide(asset_id="g", kind="depth")), {"start": png, "guide": "depth.mp4"}),
         ("i2v ltx extend (9 lead frames)", I2V(model_id="ltx23-distilled-fp8", start_asset="a", frames=121, fps=24, width=1024, height=576, extend_from=ExtendFrom(clip_id="c", lead=9)), {"start": png, "lead": "lead.mp4"}),
         ("i2v wan extend (the last frame)", I2V(start_asset="a", extend_from=ExtendFrom(clip_id="c", lead=1)), {"start": png}),

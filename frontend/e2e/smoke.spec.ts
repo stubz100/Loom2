@@ -389,6 +389,21 @@ test('the detachable loupe (D155): Detach opens a second window that follows the
   await popup.close()
 })
 
+test('the camera move (D156): the camera model shows a camera control under the preset; the plain model shows none', async ({ page }) => {
+  await openApp(page, { suite: 'animate' })
+  await perfCard(page, 'Image to video')                                                               // the model cards sit in the Performance section
+  const cam = page.locator('.model-card').filter({ has: page.locator('b', { hasText: /^Camera/ }) })
+  await expect(cam).toBeVisible()
+  await cam.click()
+  const move = page.locator('select[aria-label="camera move"]')
+  await expect(move).toBeVisible()
+  await move.selectOption('pan_left')
+  await expect(page.locator('input[aria-label="camera speed"]')).toHaveValue('1')
+  await page.screenshot({ path: 'node_modules/.e2e/d156-camera.png' })
+  await page.locator('.model-card').filter({ has: page.locator('b', { hasText: /^Wan\b/ }) }).first().click()
+  await expect(page.locator('select[aria-label="camera move"]')).toHaveCount(0)
+})
+
 test('remappable keys (D72): Pin for compare to G is refused (Cycle grouping has it); to J — menu, tooltip and help show J, J pins, C does not, it survives a reload', async ({ page }) => {
   await openApp(page, { suite: 'catalogue' })
   const openKeys = async () => {

@@ -53,7 +53,7 @@ def test_c3_open_variant_rejects_full_only_weights_and_filters_capabilities(tmp_
         client.post("/queue/pause", headers=H)
         caps = client.get("/capabilities").json()
         assert caps["variant"] == "open" and "flux2-dev-fp8mixed" not in caps["models"] and "klein-4b" in caps["models"]
-        assert set(caps["i2v"]["models"]) == {"wan22-i2v-high-fp8"}                                     # LTX-2.3 is community-licensed
+        assert set(caps["i2v"]["models"]) == {"wan22-i2v-high-fp8", "wan22-fun-camera-high-fp8"}        # LTX-2.3 is community-licensed; D156: the Apache camera model is open too
 
         def post(recipe: dict):
             return client.post("/jobs", json={"recipe": recipe, "stage": True}, headers=H)

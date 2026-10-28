@@ -11180,3 +11180,68 @@ smallest design that keeps every rule — the same bundle in a second window, no
   (Detach opens a second page, its image is the loupe's; *Next image* in the main window moves it; *Following* pressed → held, the next
   press leaves it; a screenshot `d155-detached.png`). The shell's path (the `WebviewWindow`) is the author's click-through — the e2e
   runs in Edge where a popup stands in for it. Vitest 596 + 3 skipped, typecheck, build and lint clean, e2e 78/78 (alone), cargo check clean, agents_check clean; no orchestrator code changed (the offline suite stands at 686).
+
+## 2026-10-28 16:49 — E41 planned: camera control for Wan 2.2 clips (post-MVP item 6, 04 §5 E4b's open end)
+
+The last of the three items the author's order was open on. E4b (2026-10-05) found that a dolly push asked for in the prompt barely
+moves on Wan 2.2 I2V at any sampler setting — "camera moves are a control problem (VACE / camera LoRAs), not a sampler setting". The
+question now: **does a camera control fit this card and move the camera as told, with the subject kept?**
+
+- **The candidates.** (A) **Wan 2.2 Fun-Camera** (Alibaba PAI, Apache-2.0; Comfy-Org's fp8-scaled repack, 15.3 GB an expert, two experts
+  like the I2V model): the pinned ComfyUI's own nodes `WanCameraEmbedding` (Static, Pan Up / Down / Left / Right, Zoom In / Out and their
+  pairs, `speed`, Plücker rays from a camera path) and `WanCameraImageToVideo` (the I2V conditioning with `camera_conditions`) — the I2V
+  graph with two nodes swapped, the I2V Lightning LoRAs on top (the tutorial's own recipe); no custom node (rule 2). (B) **camera LoRAs**
+  on the plain I2V model: the Wan 2.2 A14B ones found carry no clear licence (ostris' orbit, community rotation / drone), Remade's are
+  Wan 2.1 and unlicensed — not fetched (D17). (C) the prompt alone on the plain I2V Draft — E4b's baseline, run again for the measure.
+- **The spike** (`engine/spikes/e41_camera.py`; the engine started as the orchestrator starts it, the graphs straight to it): the bench's
+  alley board (960×544 → 832×480) × 81 frames, Draft-class sampling (Lightning 2 + 2, cfg 1, shift 5): Fun-Camera at Pan Left, Pan Right,
+  Zoom In, Zoom Out and Static (speed 1), against the plain I2V with the same move in the prompt (Pan Left, Zoom In). Measured: the camera
+  motion read off the frames — a global translation per frame pair by phase correlation (the pan: its sign, size and consistency across
+  the clip) and the zoom as the scale that best maps the first frame onto the last (a scan of 0.6–1.6 on the centre) — the first frame's
+  distance from the start image, the seconds and the peak VRAM; sheets of first / middle / last frames and the clips for the author.
+- **Bars, set before the run:** every clip done; peak ≤ 15.5 GB; a Draft-class clip warm ≤ 240 s (the I2V Draft is 125 s); the pans move
+  the right way by ≥ 5 % of the width with ≥ 70 % of the frame pairs agreeing, the zooms reach ≥ 1.15 (in) / ≤ 0.87 (out), Static stays
+  within 1 % and 3 px; the first frame within MAE 12 of the start image (the subject kept). Kill: a move that does not come or an
+  out-of-memory → the control stays out (the prompt baseline is what Animate keeps). The decision after the numbers: D156 if adopted —
+  a `camera` on the I2V recipe (the move and its speed), the Fun-Camera spec as Animate's camera model, the Image-to-video card's camera
+  control. The weights are spike downloads under the standing note (2026-10-11); the loser is deleted (D30).
+
+## 2026-10-28 18:07 — E41 measured → D156: camera control on Wan 2.2 clips, built and checked through the app
+
+`engine/spikes/e41_camera.py` as planned at 16:49 (the engine started by the script, the graphs straight to it; the alley board at
+832×480 × 81; the moves read off the frames by phase correlation and a zoom scan, validated first on synthetic frames — a pan of 8 px
+reads 8, a zoom of 1.3 reads 1.30). Two experts fetched (Comfy-Org's fp8 repack, 15.3 GB each, Apache-2.0).
+
+  | run (Draft-class: Lightning 2 + 2, cfg 1, shift 5) | exec | peak | the move read off the frames | first frame vs the start image |
+  | --- | --- | --- | --- | --- |
+  | prompt only · "the camera pans slowly to the left" (plain I2V) | 193.7 s (cold) | 8.7 GB | pan 0.0 %, no pair moves | MAE 9.3 |
+  | prompt only · "a slow dolly push-in" (plain I2V) | 121.9 s | 9.4 GB | zoom ×1.00 | MAE 9.3 |
+  | Fun-Camera · Pan Left | 167.6 s (the experts' first read) | 9.0 GB | +8.6 % of the width, 100 % of the pairs agree | MAE 17.4 |
+  | Fun-Camera · Pan Right | 166.6 s | 8.8 GB | −19.2 % of the width, 100 % agree | 16.8 |
+  | Fun-Camera · Zoom In | 166.4 s | 8.8 GB | ×1.32 first → last | 17.4 |
+  | Fun-Camera · Zoom Out | 105.3 s | 7.8 GB | ×0.72 | 17.8 |
+  | Fun-Camera · Static | 165.7 s | 8.2 GB | pan 0.0 %, tilt 0.0 %, zoom ×1.00 | 17.5 |
+  | Fun-Camera · Pan Left, no LoRA (Quality: 10 + 10 at cfg 3.5) | 806.6 s | 9.1 GB | +6.2 % of the width, 100 % agree | MAE 14.9 (the lift +10.6 / +10.4 / +12.7: mostly the model's, a third the LoRAs') |
+
+  The bars: every clip ✓, peak ≤ 15.5 GB ✓, a warm clip ≤ 240 s ✓, every move as told ✓ (the prompt alone: none, as E4b found) — and the
+  first frame's MAE ✗ at 17 against 12. Read closer: no spatial shift (the phase correlation of frame 0 against the start image is 0 px),
+  the subject kept (her region differs by the same amount as the rest), a **global colour lift** — the channel means +15 / +12 / +16 over
+  the start image. A per-channel affine fitted by least squares on the first frame (gains 0.93–1.0, offsets −10 … −16) and applied to the
+  clip takes the first frame back to MAE 9.5, the plain model's distance (9.3), on every move. The sheets and clips: `engine/spikes/out/e41/`.
+
+**Reading → D156.** The control works and fits: a camera move the storyboard asks for and gets, in a Draft clip's time at under 10 GB,
+on the engine's own nodes, under Apache. Adopted with the tone match on the way out; the plain model stays the default and moves nothing.
+
+- **Built**: `recipes.Camera {move, speed}` on `I2V.camera` (the moves as the core node names them, `graphs.CAMERA_POSES`), `Recipes.camera`
+  on the spec, the Fun-Camera spec `wan22-fun-camera-high-fp8` in `wan22.toml` (graph `wan22`, the low expert and the I2V Lightning LoRAs as
+  extras, `order` 1, the Draft preset at 166 s) and the roster's two experts (`open` too); `build_i2v` swaps `WanImageToVideo` for
+  `WanCameraEmbedding` + `WanCameraImageToVideo` when a move is set, refuses a move on a model without the flag and with an end frame;
+  `i2v_params` carries the move into the plan and the clip's record; `engine/tone.py` — `match_frames_to` (the fit on the first frame
+  against the start image scaled and centre-cropped as the graph scaled it, applied to every frame in place, recorded in the clip's
+  `compiled.tone_match`) — called by `ClipFinisher` when the recipe has a camera; the fixture re-captured with the two classes
+  (`make_object_info_fixture.py` lists them); `pin_review.py` + 1 (47), the parity snapshot gains the graph. The frontend: `AnimPanel.camera`,
+  `modelRules().camera`, `recipeFor` sends a move on the camera model (static by default) and never on a plain one; the Image-to-video
+  card's *camera* row under the preset (a select of the moves, the speed, a ?) for a model with the flag; the API contract regenerated.
+- **Tests**: `test_camera_d156.py` 6 (the spec in both variants, the graph node for node and the pose names, the plain graph without a
+  move, the refusals, the plan's parameters, the tone match on a lifted synthetic clip), `animateStore.test.ts` + 1, an e2e scenario (the
+  camera model's control, none on the plain model; `d156-camera.png`); 7/7 — the camera model offered with its weights verified, the plain model the default; the Pan Left clip done in 132.7 s at a peak of 9.0 GB, the pan read at +7.7 % of the width with every pair agreeing, the finisher's tone match applied (gains 1.01 / 1.04 / 1.03, offsets −14 / −14 / −18; the first frame's MAE 14.5 → 5.6 by its own measure, 9.5 against the bench board), the sheet under engine/spikes/out/camera/. Offline 692 passed (the open-variant test now expects the Apache camera model too), Vitest 597 + 3 skipped, typecheck, build and lint clean, e2e 79/79 (alone), model_literals_check, settings_audit (319, 0) and agents_check clean.

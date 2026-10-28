@@ -152,6 +152,14 @@ ROSTER: list[RosterEntry] = [
     RosterEntry(id="wan22-lightning-low", name="Wan2.2-I2V-A14B-Lightning-4steps-low.safetensors", folder="loras", family="wan22", role="lora",
                 repo="lightx2v/Wan2.2-Lightning", file="Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/low_noise_model.safetensors", license="apache-2.0", variants=["full", "open"], approx_gb=1.1,
                 base="wan22", preset="lightning"),
+    # E41 → D156 (2026-10-28): Wan 2.2 Fun-Camera (Alibaba PAI, Apache-2.0; Comfy-Org's fp8-scaled experts) — the camera model: the I2V graph with the core's
+    #      camera nodes when a move is set. Two experts like the I2V model; the I2V Lightning LoRAs, the text encoder and the VAE are shared.
+    RosterEntry(id="wan22-fun-camera-high-fp8", name="wan2.2_fun_camera_high_noise_14B_fp8_scaled.safetensors", folder="diffusion_models", family="wan22", role="transformer",
+                repo="Comfy-Org/Wan_2.2_ComfyUI_Repackaged", file="split_files/diffusion_models/wan2.2_fun_camera_high_noise_14B_fp8_scaled.safetensors", license="apache-2.0",
+                variants=["full", "open"], approx_gb=15.3, note="Wan 2.2 Fun-Camera high-noise expert: the camera moves as told (E41: pan, zoom, static read off the frames)"),
+    RosterEntry(id="wan22-fun-camera-low-fp8", name="wan2.2_fun_camera_low_noise_14B_fp8_scaled.safetensors", folder="diffusion_models", family="wan22", role="transformer",
+                repo="Comfy-Org/Wan_2.2_ComfyUI_Repackaged", file="split_files/diffusion_models/wan2.2_fun_camera_low_noise_14B_fp8_scaled.safetensors", license="apache-2.0",
+                variants=["full", "open"], approx_gb=15.3, note="Wan 2.2 Fun-Camera low-noise expert"),
     # ---- LTX-2.3 distilled (secondary i2v, D9, fp8 only after E5b) ----
     RosterEntry(id="ltx23-distilled-fp8", name="ltx-2.3-22b-distilled-1.1_transformer_only_fp8_scaled.safetensors", folder="diffusion_models", family="ltx23", role="transformer",
                 repo="Kijai/LTX2.3_comfy", file="diffusion_models/ltx-2.3-22b-distilled-1.1_transformer_only_fp8_scaled.safetensors", license="ltx-2.x community", approx_gb=23.5),

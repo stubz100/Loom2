@@ -55,6 +55,8 @@ CLASSES = [
     "MoGePointMapToMesh", "MoGeRender", "SaveGLB", "SplitSigmasDenoise", "JoinImageWithAlpha",
     # D153 (E40): SeedVR2 — the Upscale tool's "add real detail" model on the core nodes
     "ImageScaleBy", "VAEEncodeTiled", "SeedVR2Preprocess", "SeedVR2Conditioning", "SeedVR2PostProcessing",
+    # D156 (E41): Wan 2.2 Fun-Camera — the camera move on the I2V graph
+    "WanCameraEmbedding", "WanCameraImageToVideo",
 ]
 
 

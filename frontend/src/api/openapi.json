@@ -1856,6 +1856,36 @@
         "title": "BulkPatch",
         "type": "object"
       },
+      "Camera": {
+        "description": "D156 (E41): the move the clip's camera makes — Wan 2.2 Fun-Camera's path (the core's WanCameraEmbedding: a pan, a tilt, a zoom or a roll at a\nspeed; `static` holds it). Only a spec with `recipes.camera` takes one; the plain model moves nothing (E4b).",
+        "properties": {
+          "move": {
+            "default": "static",
+            "enum": [
+              "static",
+              "pan_left",
+              "pan_right",
+              "pan_up",
+              "pan_down",
+              "zoom_in",
+              "zoom_out",
+              "roll_cw",
+              "roll_ccw"
+            ],
+            "title": "Move",
+            "type": "string"
+          },
+          "speed": {
+            "default": 1.0,
+            "maximum": 3.0,
+            "minimum": 0.1,
+            "title": "Speed",
+            "type": "number"
+          }
+        },
+        "title": "Camera",
+        "type": "object"
+      },
       "Cancelled": {
         "properties": {
           "cancelled": {
@@ -9411,6 +9441,17 @@
             "title": "Beats",
             "type": "array"
           },
+          "camera": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Camera"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
           "cfg": {
             "anyOf": [
               {
@@ -16764,6 +16805,11 @@
           "beats": {
             "default": false,
             "title": "Beats",
+            "type": "boolean"
+          },
+          "camera": {
+            "default": false,
+            "title": "Camera",
             "type": "boolean"
           },
           "default_for": {

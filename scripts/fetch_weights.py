@@ -134,6 +134,10 @@ MANIFEST = [
     # ---- open variant: Klein 4B text encoder (transformer already present) ----
     dict(spike="klein4b", repo="Comfy-Org/flux2-klein-4B", file="split_files/text_encoders/qwen_3_4b.safetensors",
          dest="text_encoders", license="apache-2.0"),
+    # ---- E41 (2026-10-28, post-MVP item 6): camera control — Wan 2.2 Fun-Camera (Alibaba PAI, Apache-2.0; Comfy-Org's fp8 repack) on the pinned core's
+    #      WanCameraEmbedding + WanCameraImageToVideo, the I2V Lightning LoRAs on top. Two experts like the I2V model. The loser is deleted (D30).
+    dict(spike="e41", repo="Comfy-Org/Wan_2.2_ComfyUI_Repackaged", file="split_files/diffusion_models/wan2.2_fun_camera_high_noise_14B_fp8_scaled.safetensors", dest="diffusion_models", license="apache-2.0"),
+    dict(spike="e41", repo="Comfy-Org/Wan_2.2_ComfyUI_Repackaged", file="split_files/diffusion_models/wan2.2_fun_camera_low_noise_14B_fp8_scaled.safetensors", dest="diffusion_models", license="apache-2.0"),
     # ---- E40 (2026-10-28, post-MVP item 5): SeedVR2 as the "add real detail" upscaler — ComfyUI core nodes at the pin (nodes_seedvr), Apache-2.0
     #      (ByteDance-Seed; Comfy-Org's repack). The 3B in the template's int8 convrot and in fp8 (04 §4 named fp8); the shared VAE. The loser is deleted (D30).
     dict(spike="e40", repo="Comfy-Org/SeedVR2", file="vae/seedvr2_ema_vae_fp16.safetensors", dest="vae", license="apache-2.0"),

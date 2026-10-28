@@ -241,6 +241,17 @@ class AudioRef(BaseModel):
     asset_id: str
 
 
+CAMERA_MOVES = ("static", "pan_left", "pan_right", "pan_up", "pan_down", "zoom_in", "zoom_out", "roll_cw", "roll_ccw")
+CameraMove = Literal["static", "pan_left", "pan_right", "pan_up", "pan_down", "zoom_in", "zoom_out", "roll_cw", "roll_ccw"]
+
+
+class Camera(BaseModel):
+    """D156 (E41): the move the clip's camera makes — Wan 2.2 Fun-Camera's path (the core's WanCameraEmbedding: a pan, a tilt, a zoom or a roll at a
+    speed; `static` holds it). Only a spec with `recipes.camera` takes one; the plain model moves nothing (E4b)."""
+    move: CameraMove = "static"
+    speed: float = Field(1.0, ge=0.1, le=3.0)
+
+
 class Guide(BaseModel):
     """P13 ST4 (D76, 16 §8): a pass sequence (a video asset the Stage rendered — depth by default, pose as the weaker second) that LTX-2.3's
     IC-LoRA Union conditions the whole clip on, from frame 0. The start frame is a Stage shot; the clip keeps lineage to both."""
@@ -281,6 +292,7 @@ class I2V(BaseModel):
     extend_from: ExtendFrom | None = None                     # D88 XE (experimental): continue that clip
     audio: AudioRef | None = None                             # D88 XL (experimental): the line a lip-sync model follows (S2V)
     chain: AnimateChain | None = None                         # D111 (PS5c): Wan Animate in batches (pose-driven models only)
+    camera: Camera | None = None                              # D156 (E41): the camera's move (the camera model only)
     seeds: list[int] = Field(default_factory=lambda: [0])
     loras: list[LoraRef] = Field(default_factory=list)
 

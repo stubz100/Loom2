@@ -42,6 +42,7 @@ from ..timelines import TimelineStore, at, duration, starts
 from ..tools import facesim
 from ..tools.upright import figure_box, set_scene_extras, stand_upright
 from .pipeline import AnyRecipe, Submission
+from . import tone
 
 
 def _parents(recipe: Any) -> list[str]:
@@ -292,8 +293,16 @@ class ClipFinisher:
         paths = [p for p in (output_path(q, f) for f in sorted(files, key=lambda x: x["filename"])) if p.is_file()]
         if not paths:
             raise ValueError("the engine produced no frames")
+        tone_match = None
+        if recipe.camera:                                             # D156 (E41): Fun-Camera starts ~15 levels brighter than the start image — matched back
+            start = q.catalogue.get(recipe.start_asset)
+            if start is not None:
+                q.progress(job, "matching the tone to the start image")
+                tone_match = await asyncio.to_thread(tone.match_frames_to, paths, q.catalogue.abs_path(start))
+                job.log_tail.append(f"tone matched to the start image: gains {tone_match.get('gains')}, offsets {tone_match.get('offsets')}, "
+                                    f"the first frame's MAE {tone_match.get('mae_before')} → {tone_match.get('mae_after')}")
         clips = ClipStore(q.ws)
-        ep = compiled.summary
+        ep = compiled.summary | ({"tone_match": tone_match} if tone_match else {})
         q.progress(job, "writing the master")
         rec = await asyncio.to_thread(clips.create, paths, job_id=job.id, batch_id=job.batch_id, model_id=recipe.model_id, preset=recipe.preset, prompt=recipe.prompt_text,
                                       seed=job.seed, fps=int(ep.get("fps", recipe.fps)), start_asset_id=recipe.start_asset, end_asset_id=recipe.end_asset,

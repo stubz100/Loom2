@@ -12,6 +12,12 @@ import { DEV_HOOKS } from '../../devHooks'
 import { registerTransport } from './transport'
 
 export type AnimPreset = 'draft' | 'motion' | 'quality'
+/** D156 (E41): the camera's move on the camera model — the core's WanCameraEmbedding paths; `static` holds it. */
+export type CameraMove = 'static' | 'pan_left' | 'pan_right' | 'pan_up' | 'pan_down' | 'zoom_in' | 'zoom_out' | 'roll_cw' | 'roll_ccw'
+export interface CameraMoveSpec { move: CameraMove; speed: number }
+export const CAMERA_MOVES: [CameraMove, string][] = [['static', 'Static (held)'], ['pan_left', 'Pan left'], ['pan_right', 'Pan right'], ['pan_up', 'Pan up'], ['pan_down', 'Pan down'],
+  ['zoom_in', 'Zoom in'], ['zoom_out', 'Zoom out'], ['roll_cw', 'Roll clockwise'], ['roll_ccw', 'Roll counter-clockwise']]
+export const DEFAULT_CAMERA: CameraMoveSpec = { move: 'static', speed: 1 }
 export interface Beat { frame: number; asset_id: string; strength: number }
 export interface AnimPanel {
   start: string | null; end: string | null; prompt: string; negative: string; use_negative: boolean
@@ -19,22 +25,23 @@ export interface AnimPanel {
   tier: 'draft' | 'hd' | 'custom'; orientation: 'landscape' | 'portrait' | 'square'; width: number; height: number; frames: number; fps: number
   seed_mode: 'random' | 'fixed' | 'increment'; seed: number; count: number
   beats: Beat[]
+  camera: CameraMoveSpec | null                      // D156: the camera model's move; null = the panel never set one (static on that model)
 }
 export type AnimPreview = I2VPreview                       // D38: the server's i2v preview reply
 export interface AnimPresetSaved { name: string; panel: AnimPanel; saved_at: string }
 export type AnimView = 'player' | 'compare'                            // D99 (UX0 #14): the filmstrip is a track of the timeline (`filmTrack`), not a view
 
 /** 04 §9a / 11 §3c: native fps, Draft frame count, tier sizes, the frame rule and keyframe beats of a video model (the server snaps anyway). */
-export interface ModelRules { fps: number; frames: number; step: number; mult: number; draft: [number, number]; hd: [number, number]; portrait: [number, number]; square: [number, number]; short: string; beats: boolean }
+export interface ModelRules { fps: number; frames: number; step: number; mult: number; draft: [number, number]; hd: [number, number]; portrait: [number, number]; square: [number, number]; short: string; beats: boolean; camera: boolean }
 export const MOTION_CHIPS = ['slow push-in', 'orbit left', 'handheld camera', 'wind in hair', 'turns to camera', 'walks left to right', 'camera holds still', 'rain keeps falling', 'looks down, then back up', 'subtle breathing']
 export const DEFAULT_PANEL: AnimPanel = {
   start: null, end: null, prompt: '', negative: '', use_negative: false,
   model_id: '', preset: 'draft', steps: null, cfg: null, shift: null,
-  tier: 'draft', orientation: 'landscape', width: 832, height: 480, frames: 81, fps: 16, seed_mode: 'random', seed: 1, count: 1, beats: [],
+  tier: 'draft', orientation: 'landscape', width: 832, height: 480, frames: 81, fps: 16, seed_mode: 'random', seed: 1, count: 1, beats: [], camera: null,
 }
 
 /** Before the capabilities arrive: the panel's own defaults, no beats (the server snaps and checks anyway). */
-const NEUTRAL: ModelRules = { fps: 16, frames: 81, step: 4, mult: 16, draft: [832, 480], hd: [1280, 720], portrait: [480, 832], square: [640, 640], short: '', beats: false }
+const NEUTRAL: ModelRules = { fps: 16, frames: 81, step: 4, mult: 16, draft: [832, 480], hd: [1280, 720], portrait: [480, 832], square: [640, 640], short: '', beats: false, camera: false }
 
 /** C25 / D65: a video model's rules from `/capabilities.i2v.models[id]` (its spec's geometry); a neutral fallback before they load. */
 export function modelRules(id: string): ModelRules {
@@ -44,7 +51,7 @@ export function modelRules(id: string): ModelRules {
   const t = m.geometry?.tiers ?? {}
   const pair = (v: number[] | undefined, fallback: [number, number]): [number, number] => (v && v.length === 2 ? [v[0], v[1]] : fallback)
   const draft = pair(t.draft ?? caps?.tiers.draft?.[m.family] ?? m.size, NEUTRAL.draft)
-  return { fps: m.fps, frames: m.frames, step: m.frame_step, mult: m.size_mult, short: m.short, beats: !!(m.recipes?.beats ?? m.beats), draft,
+  return { fps: m.fps, frames: m.frames, step: m.frame_step, mult: m.size_mult, short: m.short, beats: !!(m.recipes?.beats ?? m.beats), camera: !!m.recipes?.camera, draft,
     hd: pair(t.hd ?? caps?.tiers.hd?.[m.family], draft), portrait: pair(t.portrait ?? caps?.portrait?.[m.family], [draft[1], draft[0]]), square: pair(t.square ?? caps?.square?.[m.family], NEUTRAL.square) }
 }
 
@@ -73,6 +80,7 @@ export function recipeFor(p: AnimPanel & { start: string }, seeds?: number[]): I
     kind: 'i2v', model_id, start_asset: p.start, end_asset: p.end || null, prompt_text: p.prompt, negative: p.use_negative ? p.negative : null,
     frames: p.frames, fps: p.fps, width: p.width, height: p.height, preset: p.preset, steps: p.steps, cfg: p.cfg, shift: p.shift,
     beats: modelRules(model_id).beats ? p.beats : [], seeds: s,
+    camera: modelRules(model_id).camera ? (p.camera ?? DEFAULT_CAMERA) : null,      // D156: the camera model always runs a move (static by default); the plain one never
   }
 }
 

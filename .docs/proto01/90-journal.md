@@ -10694,3 +10694,56 @@ CN4's padded reference stands at every aspect, no code changes (the docstring of
 proposed cut to the clip's aspect would have been a rule for a picture the app does not make. The rig script keeps
 `--ref-mode pad,place --runs N` as the instrument for the next question of this kind, and a rig reference is what the app sends — the
 CA0 reference, not the bench hero.
+
+## 2026-10-28 07:14 — The swatch-pack rig was done on 2026-10-17 (the review's table corrected); Q18 measured: the Wan VAE's share today, tiled decodes and MIOpen
+
+**The swatch pack first, a correction.** The review's schedule table (2026-10-27 08:21) listed D90's swatch-pack rig as "never recorded
+as done" and I repeated it twice since. It was done and recorded: 2026-10-17 08:50 (`scripts/swatch_pack.py`, 61 / 61 look entries on
+Klein 4B in 205 s, peak 12.01 GB, the three lead-text swatches remade, the pack installed into `.loom2_state/preset_icons`), 17:57 (the
+eight moods remade on the face scene) and the 18th (the copies set aside named by their model). The app's state today holds 67 swatches,
+61 of them Klein 4B's, the index last written 2026-10-17 17:57. Nothing to run; what D90 still owes is the author's look at the pack
+and the click-through of the layout.
+
+**Q18.** Open since 2026-10-05 (E4: the Wan 2.2 VAE's decode 131–134 s and the start image's encode 36–40 s, 54 % of a 315 s clip; M6
+on 2026-10-07: 96–102 s, 38–40 %). `scripts/q18_vae_rig.py` measures it as the app runs a clip today and tries the two things the
+question proposed, the bench task 02 (walk toward camera, the fish-market frame) as one Wan 2.2 Draft i2v job — 832×480 × 81 frames,
+Lightning 2 + 2 — through the queue on the real engine:
+
+| run · MIOpen | wall | the start image's encode | the samplers (high + low) | the decode | the decode's share | VRAM free after |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 · off (the first job of the session) | 130.9 s | 7.27 s | 47.07 + 45.96 s | 10.89 s | 8 % | 15.0 GB |
+| 2 · on (the first time: MIOpen's kernel search) | 128.0 s | 19.15 s | 41.59 + 39.74 s | 8.41 s | 7 % | 13.73 GB |
+| 3 · on, a second seed (the encode served from the cache) | 90.0 s | cached | 39.71 + 39.74 s | 6.78 s | 8 % | 10.44 GB |
+| A/B 1 · off | 121.6 s | 7.36 s | 40.85 + 39.61 s | 14.09 s | 12 % | 15.0 GB |
+| A/B 2 · on | 119.0 s | 11.83 s | 41.03 + 39.67 s | 6.79 s | 6 % | 10.51 GB |
+| A/B 3 · off | 118.9 s | 7.3 s | 41.0 + 39.69 s | 11.64 s | 10 % | 15.0 GB |
+| A/B 4 · on | 119.2 s | 11.66 s | 41.15 + 39.73 s | 6.81 s | 6 % | 10.51 GB |
+
+Then the job's own graph went straight to the engine with the decode node swapped for `VAEDecodeTiled`, the engine's node cache
+serving everything else (the rig's state keeps the cache after a job: `free_after_jobs_gb` 0), so each run's execution time is the
+decode and the PNGs alone (the engine listed the samplers among the cached nodes in every run marked so):
+
+| the decode node | tiles (size / overlap) | chunks (frames / overlap) | execution (the decode and the 81 PNGs) | peak VRAM | |
+| --- | --- | --- | --- | --- | --- |
+| control-one-tile-one-chunk | one | one | 12.5 s | 4.03 GB | the plain decode's path, warm (the job's own took 10.9 s cold) |
+| spatial-512 | 512 / 64 | one | 13.6 s | 3.09 GB |  |
+| temporal-32 | one | 32 / 8 | 14.3 s | 3.7 GB |  |
+| temporal-16 | one | 16 / 8 | 17.6 s | 2.51 GB |  |
+| spatial-512-temporal-32 | 512 / 64 | 32 / 8 | 15.3 s | 2.81 GB |  |
+| control-one-tile-one-chunk | one | one | 88.2 s | 8.94 GB | MIOpen on; re-sampled (the cache held the second job's seed) — minus the samplers' 79.4 s ≈ 7 s, the job's own 6.8 |
+
+**Reading.** The premise is gone: the decode is 11–14 s of a 119–131 s Draft clip today (8–12 %), the start image's encode 7 s —
+E4's 131 s and 54 % were the GGUF pair on the stack of 2026-10-05, M6's 96–102 s the fp8 experts two days later, and nothing in the
+journal names the change since (the torch pin moved with D16, the engine's to v0.39.0); the number is what matters. **Tiling buys
+memory, not time:** one tile and one chunk through the tiled node costs the same as the plain decode, spatial tiles 1.1 s more for 0.9 GB
+less peak, chunks of 32 frames 1.8 s for 0.3 GB, of 16 frames 5.1 s for 1.5 GB — at Draft the plain decode peaks at 4 GB with 15 GB free,
+so there is nothing to buy; the HD tier, where LTX left 2.7 GB (M6), would be the place to look if it ever stalls. **MIOpen on takes 5–7 s
+off the decode (6.8 against 11.6–14.1) and puts 4.4 s on the encode** (11.7–11.8 against 7.3; 19.2 the first time ever, the kernel
+search, which MIOpen keeps on disk), the samplers the same to the tenth of a second in four alternated runs (40.9–41.2 + 39.6–39.7 s),
+the wall the same within two seconds — and the engine holds 4.5 GB more after the job (10.5 GB free against 15.0). D13's MIOpen-off
+stands for the video models too. The first job of the session sampled slower (47.1 + 46.0 s against 40.9–41.2 + 39.6–39.7 in the six
+after it, the same seed and graph) — Q15's pattern once more, so I did not read the first on / off pair as MIOpen's doing until the
+alternation said so; Q15 stays open, `--phases a,a,a --jobs 1 --no-variants` a cheap instrument for it. A preview VAE would serve
+progress, not the clock — not measured. **Q18 resolved → D147**: the clip's decode stays plain and MIOpen off; 04 §5's runtime-flags
+table says what Wan measured; no code changed. Rig lesson, in the script's docstring: phase b's tiled variants re-sampled because they
+resubmitted the first job's graph while the cache held the second job's seed — the last job's graph is the one to resubmit.

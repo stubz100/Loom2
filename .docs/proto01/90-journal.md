@@ -11114,3 +11114,45 @@ it; one GPU job at a time): three boards at ×2 and ×4 through SeedVR2 3B int8 
     thing to try if the eight seconds ever matter), peak 8.6 GB, the asset 1920×1088; Real-ESRGAN ×2 3.9 s; SeedVR2 ×2 + the tiled refine (Klein base, four
     1024² tiles at 40–51 s each) 204.5 s, peak 9.5 GB. The sheet: `engine/spikes/out/seedvr2/sheet.jpg`.
   Offline 684 passed, Vitest 576 + 3 skipped, e2e 76/76 (alone), model_literals_check, settings_audit (316 fields, 0 problems) and agents_check clean; the API contract unchanged.
+
+## 2026-10-28 16:27 — D154: text layers in Edit — the text tool (post-MVP item 7), built and checked in a real window
+
+The fourth post-MVP item, the first of the three the author's order was open on (the text tool, the detachable Loupe, camera control):
+storyboard captions and titles on the board itself. **D154** recorded first; the design keeps the compositor rule (D31) without touching
+compose.py: a text layer is a raster layer that *also* carries its `text` block, and its pixels are the editor's own rasterisation.
+
+- **The record** (`documents.RasterLayer.text: TextBlock | None` — `content`, `font`, `size`, `colour`, `align`, `leading`, `tracking`,
+  `weight`, `italic`, `outline`, `box`; the bounds validated): PUT / GET round-trip, the ORA's `loom2.json` keeps it, the flatten reads the
+  pixels only, a bad block is a 422; the OpenAPI and `schema.d.ts` carry `TextBlock`.
+- **The fonts**: five OFL 1.1 families under `frontend/public/fonts/` with their licence texts (Inter and Lora as variable TTFs with an italic
+  face, Oswald and Caveat variable, Courier Prime's four statics; 3.0 MB), `@font-face` rules in `edit/fonts.css` (`font-display: block`), plus
+  any family the WebView can name — "a system font…" in the picker, the name carried to the PSD. OFL read against EU terms (D17): bundling
+  and embedding free, the fonts unmodified (renamed files only).
+- **The rasteriser** `edit/textRaster.ts`: `layoutText` is pure (a measure function in: point text sized to its widest line, paragraph text
+  wrapped to the box — words, then characters for a word wider than the box; the pad = half the outline + 8 % of the size, the baseline
+  0.8 em down each line); `rasterizeText` draws it on a 2D canvas at 1:1 with `letterSpacing`, the outline (a round-joined stroke centred on
+  the edge) under the fill. `textFonts.ts`: `fontString`, `psdFontName`, `ensureFont` (`document.fonts.load`); a block drawn before its face
+  arrived is drawn again when it does (`refreshText`, no history).
+- **The store**: `addTextLayer(at, box?, text?)` (the Text tool's options as the defaults), `setText(id, patch, gesture?, label?)` — a
+  `start` / `move` / `end` run is one gesture: the first touch keeps the stack and the canvas, every move re-rasterises and swaps the canvas,
+  `end` pushes one history row whose `swap` holds the old canvas (undo brings the block, the size and the pixels back together); a one-shot
+  change is its own row; an `end` with nothing changed adds none; the auto name follows the words until the layer is renamed.
+  `beginTextEdit` / `endTextEdit(apply)` (cancel reverts the gesture; a layer with nothing written is dropped), `rasterizeTextLayer` (the
+  block goes, the pixels stay).
+- **The tool** `T` in the toolbox (D32: a button, the key an accelerator): a click places point text, a drag a box; a click on a text layer or
+  a double-click with the Move tool edits it; the inline editor (`TextEditOverlay`: a textarea at the layer's place, scaled by the view, in
+  the layer's font, colour, leading, tracking and outline — the layer hidden under it meanwhile) with ✓ / ✕ buttons (Ctrl+Enter / Esc);
+  the tool's options (font, size, colour, B / I, outline) and the Properties tab's Text section (text, font, size, colour, B / I, align,
+  leading, tracking, outline, the box → point text, Rasterize); *Edit text…* and *Rasterize text* on the layer's right-click (`layerMenu`);
+  the layers panel shows `T ·` before the size, Properties says "Text layer".
+- **The PSD** (`psdExport.psdTextData`): a type layer beside the rendered pixels — the face name, the size, the fill, leading, tracking in
+  thousandths of an em, the alignment, the stroke — so Photoshop re-edits it; the pixels are what any reader without the type engine sees.
+- **The keys**: Esc and Ctrl+Enter shared with the polygon lasso and the transform are listed in `keymap.SHARED_KEYS` with the reasons (the
+  textarea takes them first; the `when`s guard). Out of scope, as D154 says: text on a path, per-character styles, warp, vertical text.
+- **Tests**: `textRaster.test.ts` 8 (the layout: lines, tracking and the pad, alignment, wrapping, the empty block; the font strings and
+  names), `textLayers.test.ts` 6 (the store: add, the gesture and its one row with undo / redo, one-shot and empty ends, the auto name,
+  the inline editor's apply / cancel / drop, Rasterize), `psdText.test.ts` 2; `test_text_layers_d154.py` 2; the tool-list and the chord
+  audit updated; an e2e scenario (the tool from the rail, a click, typing, Apply, the T row, the Properties section, Rasterize); the headed
+  check gained `text` (a real WebGPU window: the editor opens on a click, `Input.insertText`, Apply keeps the words on the layer whose
+  pixels carry 4 817 inked of 27 390 at 415×66, the Inter face loaded, a size change to 96 with an outline re-rasterises to 834 px wide,
+  one undo takes it back, Rasterize keeps the pixels — 11/11, screenshots under `.loom2_state/headed/text-*.png`). Offline 686 passed, Vitest 592 + 3 skipped, typecheck, build and lint clean, e2e 76/76 in the full run (alone), then the D154 scenario's locators fixed (the toolbox button by its name, the Layers tab back before the last look) and the scenario passed alone — 77 scenarios; agents_check and settings_audit clean.

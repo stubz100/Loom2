@@ -11059,6 +11059,7 @@ export interface components {
             recipe: {
                 [key: string]: unknown;
             } | null;
+            text: components["schemas"]["TextBlock"] | null;
             /**
              * Visible
              * @default true
@@ -13251,6 +13252,76 @@ export interface components {
             x?: number | null;
             /** Y */
             y?: number | null;
+        };
+        /**
+         * TextBlock
+         * @description D154: a text layer's source. The editor rasterises it into the layer's pixels (the bundled fonts, canvas 2D at 1:1); the compositor and
+         *     every export see pixels — the block is what makes the layer re-editable and what the PSD's type layer is written from.
+         */
+        TextBlock: {
+            /**
+             * Align
+             * @default left
+             * @enum {string}
+             */
+            align: "left" | "center" | "right";
+            /** Box */
+            box: number[] | null;
+            /**
+             * Colour
+             * @default #ffffff
+             */
+            colour: string;
+            /**
+             * Content
+             * @default
+             */
+            content: string;
+            /**
+             * Font
+             * @default Inter
+             */
+            font: string;
+            /**
+             * Italic
+             * @default false
+             */
+            italic: boolean;
+            /**
+             * Leading
+             * @default 1.2
+             */
+            leading: number;
+            outline: components["schemas"]["TextOutline"] | null;
+            /**
+             * Size
+             * @default 48
+             */
+            size: number;
+            /**
+             * Tracking
+             * @default 0
+             */
+            tracking: number;
+            /**
+             * Weight
+             * @default normal
+             * @enum {string}
+             */
+            weight: "normal" | "bold";
+        };
+        /** TextOutline */
+        TextOutline: {
+            /**
+             * Colour
+             * @default #000000
+             */
+            colour: string;
+            /**
+             * Width
+             * @default 2
+             */
+            width: number;
         };
         /** ThingFindBody */
         ThingFindBody: {

@@ -191,3 +191,13 @@
 .cb-row .vfield { width: 72px; min-width: 0; }   /* the colour balance number fits its column */
 /* D71: Catalogue tiles carried over the layers list (they become layers at the row) */
 .layers.drop-over { outline: 1px dashed var(--accent); outline-offset: -2px; }
+
+/* D154: text layers — the inline editor over the canvas (doc pixels, scaled by the view) and the Text options */
+.text-edit { position: absolute; z-index: 5; }
+.text-edit textarea { display: block; width: 100%; height: 100%; box-sizing: border-box; margin: 0; background: transparent; border: 1px dashed rgba(255, 255, 255, 0.7); outline: none; resize: none; overflow: hidden; white-space: pre; }
+.text-edit.box textarea { white-space: pre-wrap; overflow-wrap: break-word; }
+.text-edit textarea::placeholder { color: rgba(255, 255, 255, 0.45); }
+.text-edit-bar { position: absolute; left: 0; top: 100%; margin-top: 4px; display: flex; gap: 4px; align-items: center; padding: 2px; border-radius: 4px; background: var(--bg2, #222); white-space: nowrap; }
+.text-opts .row { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.text-opts .font-name { width: 110px; }
+.text-opts .text-content { grid-column: 2; width: 100%; box-sizing: border-box; font: inherit; resize: vertical; }

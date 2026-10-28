@@ -76,6 +76,29 @@ class NodeBase(BaseModel):
     mask: Mask | None = None
 
 
+class TextOutline(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    width: float = Field(2.0, ge=0.0, le=64.0)       # px, centred on the glyph edge
+    colour: str = "#000000"
+
+
+class TextBlock(BaseModel):
+    """D154: a text layer's source. The editor rasterises it into the layer's pixels (the bundled fonts, canvas 2D at 1:1); the compositor and
+    every export see pixels — the block is what makes the layer re-editable and what the PSD's type layer is written from."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    content: str = ""
+    font: str = "Inter"                              # a bundled family or one the WebView can name
+    size: float = Field(48.0, gt=0.0, le=4000.0)      # px
+    colour: str = "#ffffff"
+    align: Literal["left", "center", "right"] = "left"
+    leading: float = Field(1.2, ge=0.5, le=4.0)       # line height as a multiple of the size
+    tracking: float = Field(0.0, ge=-50.0, le=200.0)  # px between glyphs
+    weight: Literal["normal", "bold"] = "normal"
+    italic: bool = False
+    outline: TextOutline | None = None
+    box: list[int] | None = None                      # [w, h]: paragraph text wrapped in a box; None: point text, the layer sized to the lines
+
+
 class RasterLayer(NodeBase):
     kind: Literal["raster"] = "raster"
     x: int = 0
@@ -86,6 +109,7 @@ class RasterLayer(NodeBase):
     lock_alpha: bool = False              # D50: painting keeps the layer's transparency (editor only; PSD: transparency lock)
     recipe: dict | None = None            # origin recipe for AI layers (10 §3)
     lineage_asset_id: str | None = None
+    text: TextBlock | None = None          # D154: a text layer (the pixels are its rasterisation)
 
 
 class GroupLayer(NodeBase):

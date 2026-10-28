@@ -82,6 +82,7 @@ and dissolve.
 | --- | --- | --- | --- |
 | `V` | Move / Transform (free transform with handles, `Ctrl+T`) | snap, constrain, interpolation | M4 |
 | `M` | Marquee rectangle / ellipse (flyout) | mode replace/add/subtract/intersect (Shift / Alt / Shift+Alt while dragging), feather, style normal / fixed ratio / fixed size (D44) | M4, PE2 |
+| `T` | **Text** (D154, 2026-10-28): a click places point text, a drag a box that wraps; typed in place (a textarea at the layer's place and zoom, ✓ / ✕, Ctrl+Enter / Esc); a text layer is a raster layer carrying its `text` block — the pixels are the editor's rasterisation with the bundled OFL fonts (Inter, Lora, Oswald, Courier Prime, Caveat) or a system family, re-rasterised on every edit as one undo step; the Properties tab's Text section edits every field; *Edit text…* / *Rasterize text* on the layer's right-click; the PSD gets a type layer over the pixels | font, size, colour, bold / italic, outline (width, colour); in Properties also align, leading, tracking, the box | D154 |
 | `L` | Lasso: freehand or polygonal (click corners; first corner, double-click, ✓ or Enter closes; ⊘ / Esc cancels) | mode, feather; anti-aliased edges (D44) | M4, PE2 |
 | `W` | Magic wand | tolerance per channel incl. alpha (transparent pixels match each other), contiguous, sample active layer / all layers, anti-alias (D44) | M4, PE2 |
 | `A` | **AI Select** (SAM 3): click / box / text prompt; **Subject** (BiRefNet matte) — click adds an include point, Alt-click an exclude point, drag a box; the mask joins the selection (replace / add / subtract / intersect) with expand and feather | **find** (D63: type what to select — SAM 3 text; empty = the main subject; Enter runs), model, SAM prompt mode, threshold, combine, expand, feather | M5 ✓ (2026-10-06); find D63 |
@@ -375,5 +376,5 @@ transfers run at loopback speed (52 MB of layers in < 1 s in the M4 acceptance).
 ## 15. Open questions
 - 16-bit working mode in the compositor (post-MVP; needs `rgba16float` render textures).
 - Colour management (ICC) — MVP is sRGB only.
-- Clone/heal and text tools timing; whether warp/liquify is ever in scope.
+- ~~Clone/heal and text tools timing~~ (clone / heal D62, text D154 — 2026-10-28); whether warp/liquify is ever in scope.
 - ~~Whether adjustment layers export to PSD as true adjustment layers (ag-psd supports some) or rasterised.~~ True adjustment layers (D41, 2026-10-10).

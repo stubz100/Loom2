@@ -1,0 +1,11 @@
+/* D154: the bundled text-layer fonts (OFL 1.1; the licence texts sit beside the files under public/fonts/). */
+@font-face { font-family: 'Inter'; src: url('/fonts/inter/Inter-VF.ttf') format('truetype'); font-weight: 100 900; font-style: normal; font-display: block; }
+@font-face { font-family: 'Inter'; src: url('/fonts/inter/Inter-Italic-VF.ttf') format('truetype'); font-weight: 100 900; font-style: italic; font-display: block; }
+@font-face { font-family: 'Lora'; src: url('/fonts/lora/Lora-VF.ttf') format('truetype'); font-weight: 400 700; font-style: normal; font-display: block; }
+@font-face { font-family: 'Lora'; src: url('/fonts/lora/Lora-Italic-VF.ttf') format('truetype'); font-weight: 400 700; font-style: italic; font-display: block; }
+@font-face { font-family: 'Oswald'; src: url('/fonts/oswald/Oswald-VF.ttf') format('truetype'); font-weight: 200 700; font-style: normal; font-display: block; }
+@font-face { font-family: 'Courier Prime'; src: url('/fonts/courierprime/CourierPrime-Regular.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: block; }
+@font-face { font-family: 'Courier Prime'; src: url('/fonts/courierprime/CourierPrime-Bold.ttf') format('truetype'); font-weight: 700; font-style: normal; font-display: block; }
+@font-face { font-family: 'Courier Prime'; src: url('/fonts/courierprime/CourierPrime-Italic.ttf') format('truetype'); font-weight: 400; font-style: italic; font-display: block; }
+@font-face { font-family: 'Courier Prime'; src: url('/fonts/courierprime/CourierPrime-BoldItalic.ttf') format('truetype'); font-weight: 700; font-style: italic; font-display: block; }
+@font-face { font-family: 'Caveat'; src: url('/fonts/caveat/Caveat-VF.ttf') format('truetype'); font-weight: 400 700; font-style: normal; font-display: block; }

@@ -11,6 +11,9 @@ import { loadOverrides, saveOverrides, type Overrides } from './keyStore'
 export const SHARED_KEYS: { scope: Scope; chord: string; ids: [string, string]; why: string; byDispatch?: boolean }[] = [
   { scope: 'edit', chord: 'enter', ids: ['edit.sel.polyClose', 'edit.transform.apply'], why: 'Enter closes an open polygon / magnetic border, else applies an open transform; both are `when`-guarded and the first enabled one runs (F3)' },
   { scope: 'edit', chord: 'escape', ids: ['edit.sel.polyCancel', 'edit.transform.cancel'], why: 'useEditKeys resolves Esc itself (lasso first, then transform) before the registry; the registry entries carry the accelerator for menus' },
+  { scope: 'edit', chord: 'escape', ids: ['edit.sel.polyCancel', 'edit.text.cancel'], why: 'D154: the inline text editor takes Esc in its own textarea while it has the focus; a polygon lasso is never drawn while a text edit is open (the text tool owns the pointer), and both `when`s guard' },
+  { scope: 'edit', chord: 'escape', ids: ['edit.text.cancel', 'edit.transform.cancel'], why: 'D154: a transform owns the pointer, so the text tool cannot open its editor under one; its textarea takes Esc first; both `when`s guard' },
+  { scope: 'edit', chord: 'ctrl+enter', ids: ['edit.text.apply', 'edit.transform.apply'], why: 'D154: Ctrl+Enter applies whichever is open — the text editor (its textarea takes the key first) or the free transform; both `when`s guard and never hold together' },
   { scope: 'edit', chord: 'delete', ids: ['edit.sel.clear', 'edit.sel.magBack'], why: 'useEditKeys sends Delete to the magnetic lasso while it is active (D59) before handleKeyFor; otherwise only Clear is enabled' },
   { scope: 'edit', chord: 'backspace', ids: ['edit.sel.clear', 'edit.sel.magBack'], why: 'as Delete: the magnetic lasso takes Backspace first while it is active (D59)' },
   // byDispatch: settled by which handler sees the key first, not by `when`

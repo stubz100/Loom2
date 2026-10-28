@@ -16251,6 +16251,16 @@
             ],
             "title": "Recipe"
           },
+          "text": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TextBlock"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "visible": {
             "default": true,
             "title": "Visible",
@@ -16289,7 +16299,8 @@
           "fill",
           "lock_alpha",
           "recipe",
-          "lineage_asset_id"
+          "lineage_asset_id",
+          "text"
         ],
         "title": "RasterLayer",
         "type": "object"
@@ -21741,6 +21752,132 @@
           }
         },
         "title": "TemplateUse",
+        "type": "object"
+      },
+      "TextBlock": {
+        "description": "D154: a text layer's source. The editor rasterises it into the layer's pixels (the bundled fonts, canvas 2D at 1:1); the compositor and\nevery export see pixels — the block is what makes the layer re-editable and what the PSD's type layer is written from.",
+        "properties": {
+          "align": {
+            "default": "left",
+            "enum": [
+              "left",
+              "center",
+              "right"
+            ],
+            "title": "Align",
+            "type": "string"
+          },
+          "box": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Box"
+          },
+          "colour": {
+            "default": "#ffffff",
+            "title": "Colour",
+            "type": "string"
+          },
+          "content": {
+            "default": "",
+            "title": "Content",
+            "type": "string"
+          },
+          "font": {
+            "default": "Inter",
+            "title": "Font",
+            "type": "string"
+          },
+          "italic": {
+            "default": false,
+            "title": "Italic",
+            "type": "boolean"
+          },
+          "leading": {
+            "default": 1.2,
+            "maximum": 4.0,
+            "minimum": 0.5,
+            "title": "Leading",
+            "type": "number"
+          },
+          "outline": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TextOutline"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "size": {
+            "default": 48.0,
+            "exclusiveMinimum": 0.0,
+            "maximum": 4000.0,
+            "title": "Size",
+            "type": "number"
+          },
+          "tracking": {
+            "default": 0.0,
+            "maximum": 200.0,
+            "minimum": -50.0,
+            "title": "Tracking",
+            "type": "number"
+          },
+          "weight": {
+            "default": "normal",
+            "enum": [
+              "normal",
+              "bold"
+            ],
+            "title": "Weight",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content",
+          "font",
+          "size",
+          "colour",
+          "align",
+          "leading",
+          "tracking",
+          "weight",
+          "italic",
+          "outline",
+          "box"
+        ],
+        "title": "TextBlock",
+        "type": "object"
+      },
+      "TextOutline": {
+        "properties": {
+          "colour": {
+            "default": "#000000",
+            "title": "Colour",
+            "type": "string"
+          },
+          "width": {
+            "default": 2.0,
+            "maximum": 64.0,
+            "minimum": 0.0,
+            "title": "Width",
+            "type": "number"
+          }
+        },
+        "required": [
+          "width",
+          "colour"
+        ],
+        "title": "TextOutline",
         "type": "object"
       },
       "ThingFindBody": {

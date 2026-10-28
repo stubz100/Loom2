@@ -13,7 +13,7 @@ import { showMenu } from '../../frame/ContextMenu'
 import { ensureAdjustment } from './adjustFilters'
 import { blendName, OPAQUE_BLEND } from './blendModes'
 import { canvasMenu } from './editCommands'
-import { findNode, transformPreview, useEditor, viewDoc, type MaskRef, type Node, setInteracting } from './editorStore'
+import { findNode, transformPreview, useEditor, viewDoc, walk, type EditorState, type MaskRef, type Node, setInteracting } from './editorStore'
 import { derivedMask, maskParamsActive, outsideValue } from './maskDerived'
 import { useAiPanel } from './aiPanelStore'
 import { lumaOf, selectionAlphaCanvas, setPartialUpload, type LayerPixels } from './layerPixels'
@@ -434,7 +434,7 @@ export function EditorCanvas() {
     const isolated = (nodes: Node[]): Target => ({ nodes, underlay: null, background: null })
     let register = true                                                   // false while building a backdrop copy (no sprite lookups)
     const reg = (id: string, obj: Container) => { if (register) spritesRef.current.set(id, obj) }
-    const hidden = (n: Node) => !n.visible || (before && n.id === st.activeId)   // "before": hide the active layer
+    const hidden = (n: Node) => !n.visible || (before && n.id === st.activeId) || n.id === st.editingText   // "before": hide the active layer; D154: the inline editor shows the text
     const contains = (n: Node, g: Node): boolean => n.kind === 'group' && (n.children ?? []).some((c) => c === g || contains(c, g))
     /** The part of a target's tree drawn before `g` (a pass-through group inside it): the nodes below it, and its ancestors
      * reduced to their children below it. */
@@ -648,7 +648,7 @@ export function EditorCanvas() {
       const st = useEditor.getState()
       return { x: (e.clientX - r.left - st.pan.x) / st.zoom, y: (e.clientY - r.top - st.pan.y) / st.zoom }
     }
-    type Drag = { kind: 'pan' | 'paint' | 'move' | 'marquee' | 'crop' | 'lasso' | 'quick' | 'heal' | 'xform' | 'aibox' | 'gradient'; start: Pt; last: Pt; startPan?: Pt; nodeStart?: Pt; pts?: Pt[]; target?: LayerPixels; hit?: Hit; quad0?: Quad; pivot0?: Pt; alt?: boolean
+    type Drag = { kind: 'pan' | 'paint' | 'move' | 'marquee' | 'crop' | 'lasso' | 'quick' | 'heal' | 'xform' | 'aibox' | 'gradient' | 'textbox'; start: Pt; last: Pt; startPan?: Pt; nodeStart?: Pt; pts?: Pt[]; target?: LayerPixels; hit?: Hit; quad0?: Quad; pivot0?: Pt; alt?: boolean
       // D50 / D51 painting: the stroke, its smoother and dab walker (layer coordinates), straight-line mode, the pointer's last move time
       stroke?: Stroke; smoother?: Smoother; walker?: PathWalker; brushAt?: Pt; offset?: Pt; line?: boolean; movedAt?: number; targetId?: string; targetKind?: 'image' | 'mask' }
     let drag: Drag | null = null
@@ -774,6 +774,12 @@ export function EditorCanvas() {
         return
       }
       if (tool === 'marquee') { drag = { kind: 'marquee', start: p, last: p }; return }
+      if (tool === 'text') {                                               // D154: a click on a text layer edits it; elsewhere a click places point text, a drag a box
+        if (st.editingText) st.endTextEdit(true)
+        const hit = textLayerAt(st, p)
+        if (hit) { st.setActive(hit.id, false); st.beginTextEdit(hit.id); return }
+        drag = { kind: 'textbox', start: p, last: p }; return
+      }
       if (tool === 'crop') { drag = { kind: 'crop', start: p, last: p }; return }                     // D90 (B9): drag a crop rectangle
       if (tool === 'quick') { drag = { kind: 'quick', start: p, last: p, pts: [p], alt: m.altKey }; drawTrail([p]); return }   // D59
       if (tool === 'heal') { drag = { kind: 'heal', start: p, last: p, pts: [p] }; drawTrail([p], st.healSize); return }      // D62
@@ -847,6 +853,7 @@ export function EditorCanvas() {
       }
       if (drag.kind === 'marquee') { drag.last = p; previewMarquee(drag.start, p); return }
       if (drag.kind === 'crop') { drag.last = p; const r = cropRect(drag.start, p); drawPreview((g) => { g.rect(r.x, r.y, r.w, r.h) }); return }
+      if (drag.kind === 'textbox') { drag.last = p; const r = cropRect(drag.start, p); drawPreview((g) => { g.rect(r.x, r.y, r.w, r.h) }); return }
       if (drag.kind === 'lasso') { drag.pts!.push(p); drag.last = p; previewLasso(drag.pts!); return }
       if (drag.kind === 'aibox') { drag.last = p; drawAiPrompt({ start: drag.start, last: p }); return }
       if (drag.kind === 'gradient') { drag.last = p; drawGuide(drag.start, p); return }
@@ -870,6 +877,13 @@ export function EditorCanvas() {
       if (drag.kind === 'move') { const n = findNode(st.doc, st.activeId); if (n && (drag.last.x !== drag.nodeStart!.x || drag.last.y !== drag.nodeStart!.y)) st.updateNode(n.id, { x: drag.last.x, y: drag.last.y }, 'move layer') }
       if (drag.kind === 'marquee') commitMarquee(drag.start, drag.last, modeFor(mods(e), st.selectionMode))
       if (drag.kind === 'crop') commitCrop(drag.start, drag.last)
+      if (drag.kind === 'textbox') {
+        clearPreview()
+        const moved = Math.hypot(drag.last.x - drag.start.x, drag.last.y - drag.start.y) * st.zoom
+        const r = cropRect(drag.start, drag.last)
+        const node = moved < 6 || r.w < 8 || r.h < 8 ? st.addTextLayer({ x: drag.start.x, y: drag.start.y }) : st.addTextLayer({ x: r.x, y: r.y }, [r.w, r.h])
+        if (node) st.beginTextEdit(node.id)
+      }
       if (drag.kind === 'lasso') commitLasso(drag.pts!, modeFor(mods(e), st.selectionMode))
       if (drag.kind === 'aibox') {
         const moved = Math.hypot(drag.last.x - drag.start.x, drag.last.y - drag.start.y) * st.zoom
@@ -892,6 +906,7 @@ export function EditorCanvas() {
       else if (st.tool === 'lasso' && st.lassoKind === 'magnetic') void magnetic.close(mods(e).altKey)
       else if (st.tool === 'lasso' && st.lassoPoly) { clearPreview(); st.closeLassoPoly(modeFor(mods(e), st.selectionMode)) }
       else if (st.tool === 'crop' && st.selection && insideSelection(toDoc(e))) st.cropToSelection()   // D90 (B9): double-click inside applies the crop
+      else if (st.tool === 'move') { const hit = textLayerAt(st, toDoc(e)); if (hit) { st.setActive(hit.id, false); st.beginTextEdit(hit.id) } }   // D154: double-click a text layer to edit it
     }
     const zoomAt = (e: { clientX: number; clientY: number }, k: number) => {
       const st = useEditor.getState()
@@ -1096,6 +1111,12 @@ export function EditorCanvas() {
     }
     /** D90 (B9): the Crop tool's rectangle — whole pixels inside the canvas; it is the selection (marching ants), so Enter / double-click
      * crop to it (`edit.crop.apply`, `cropToSelection`) and Esc deselects. A click keeps it: the first click of a double-click lands inside. */
+    /** D154: the topmost visible text layer under a document point (the stack is top-first). */
+    const textLayerAt = (st: EditorState, p: Pt): Node | null => {
+      let hit: Node | null = null
+      walk(st.doc?.layers ?? [], (n) => { if (!hit && n.kind === 'raster' && n.text && n.visible && p.x >= (n.x ?? 0) && p.y >= (n.y ?? 0) && p.x < (n.x ?? 0) + (n.w ?? 0) && p.y < (n.y ?? 0) + (n.h ?? 0)) hit = n })
+      return hit
+    }
     const cropRect = (a: Pt, b: Pt) => {
       const doc = useEditor.getState().doc!
       const x0 = Math.max(0, Math.round(Math.min(a.x, b.x))), y0 = Math.max(0, Math.round(Math.min(a.y, b.y)))

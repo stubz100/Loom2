@@ -340,6 +340,33 @@ test("the reference deck (D152): Inpaint and Refine show the model's slots in th
   await expect(page.locator('.ref-slots.ai-refs')).toHaveCount(1)
 })
 
+test('text layers (D154): the Text tool places text typed in place; the layer is marked and editable in Properties; Rasterize text drops the block', async ({ page }) => {
+  await openApp(page, { suite: 'catalogue' })
+  await tiles(page).nth(8).click()
+  await page.locator('.insp .quick-card', { hasText: 'Select subject' }).click()                         // Edit with a document (D71)
+  await expect.poll(() => editorTool(page), { timeout: 30_000 }).toMatchObject({ doc: true, tool: 'ai' })
+  await page.locator('nav.rail button[title^="Tool options"]').click()                                   // the toolbox lives in the Tool options tab
+  await page.getByRole('button', { name: 'T Text', exact: true }).click()                                   // the toolbox button (its key and label)
+  await expect.poll(() => editorTool(page)).toMatchObject({ tool: 'text' })
+  const box = (await page.locator('.edit-canvas').boundingBox())!
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)                                 // a click: point text, the inline editor opens
+  const ta = page.locator('.text-edit textarea')
+  await expect(ta).toBeVisible()
+  await ta.fill('Scene 1')
+  await page.locator('.text-edit-bar button[title^="Apply text"]').click()
+  await expect(page.locator('.text-edit')).toHaveCount(0)
+  const row = page.locator('.layer-row', { hasText: 'Scene 1' })
+  await expect(row).toBeVisible()
+  await expect(row.locator('.kind')).toContainText('T ·')
+  await page.locator('.tabs2 button', { hasText: 'properties' }).click()
+  await expect(page.locator('.props .text-content')).toHaveValue('Scene 1')
+  await page.screenshot({ path: 'node_modules/.e2e/d154-text.png' })
+  await page.getByRole('button', { name: 'Rasterize text' }).click()
+  await expect(page.locator('.props .text-content')).toHaveCount(0)
+  await page.locator('.tabs2 button', { hasText: 'layers' }).click()
+  await expect(row.locator('.kind')).not.toContainText('T ·')
+})
+
 test('remappable keys (D72): Pin for compare to G is refused (Cycle grouping has it); to J — menu, tooltip and help show J, J pins, C does not, it survives a reload', async ({ page }) => {
   await openApp(page, { suite: 'catalogue' })
   const openKeys = async () => {

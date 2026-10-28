@@ -143,7 +143,7 @@ describe('edit.ai.* commands mirror the AI tab (D32, D90)', () => {
 
 describe('the first screen and the developer items (D90 02 §10, 01 §11.6)', () => {
   it('Magic wand, Spot healing and Eyedropper sit behind More tools; every tool stays in Tool ▸ with its key', () => {
-    expect(TOOLS.filter(([t]) => !MORE_TOOLS.includes(t)).map(([, l]) => l)).toEqual(['Move', 'Marquee', 'Lasso', 'Quick selection', 'AI select', 'Brush', 'Eraser', 'Fill / gradient', 'Crop / canvas', 'Hand', 'Zoom'])
+    expect(TOOLS.filter(([t]) => !MORE_TOOLS.includes(t)).map(([, l]) => l)).toEqual(['Move', 'Marquee', 'Lasso', 'Quick selection', 'AI select', 'Brush', 'Eraser', 'Fill / gradient', 'Text', 'Crop / canvas', 'Hand', 'Zoom'])
     useEditor.setState({ doc: stack([raster('a')]), activeId: 'a' })
     const tool = canvasMenu().find((x) => 'items' in x && x.label === 'Tool') as { items: MenuItem[] }
     expect(cmds(tool.items)).toHaveLength(TOOLS.length)

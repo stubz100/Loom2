@@ -3,7 +3,7 @@
 import { Ellipsis, Eye, EyeOff, Link2, Lock, LockOpen, SlidersHorizontal, Sparkles, Trash2, Unlink2, X } from 'lucide-react'
 import { Help } from '../../frame/Help'
 import { PresetPanel } from '../../frame/PresetPanel'
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { api, http, unwrap } from '../../api/client'
 import { isDocumentPreview, type DocumentPreview, type DocumentRecipe } from '../../api/types'
@@ -31,6 +31,9 @@ import { ADJUSTMENT_DEFAULTS, BLEND_MODES, countRasters, ensureEditorAutosave, F
 import { useAiPanel, type AiOp, type AiPanelState } from './aiPanelStore'
 import { planSize } from './planSize'
 import './edit.css'
+import './fonts.css'
+import { fontFamilies, fontString } from './textFonts'
+import { padOf, type TextBlock } from './textRaster'
 import { onlyAssets, useDropTarget } from '../../frame/drag'
 import { editOpenDrop, layerDrop, refDrop } from '../../frame/dropRules'
 
@@ -97,6 +100,80 @@ function HealOptions() {
       <ValueField label="size" value={size} min={1} max={1000} unit="px" title="brush diameter — [ and ] change it" onChange={(v) => ed().setView({ healSize: Math.max(1, Math.round(v)) })} />
       <label /><label className="chk" title="heal what you see (all visible layers); off: only the active layer"><input type="checkbox" checked={all} onChange={(e) => ed().setView({ healSampleAll: e.target.checked })} /> sample all layers</label>
       {ok ? <Help className="full" text={"Paint over a blemish: on release it is rebuilt from its surroundings (PatchMatch, then a Poisson blend) onto a \"Spot healing\" layer above — non-destructive, one undo step per stroke. CPU, no GPU."} /> : <span className="hint full">needs the native extension: uv sync --project orchestrator --extra native, then restart the orchestrator</span>}
+    </div>
+  )
+}
+/** D154: the Text tool's options — the look of the next text layer. */
+function TextToolOptions() {
+  const d = useEditor((s) => s.textDefaults)
+  const set = (p: Partial<typeof d>) => ed().setTextDefaults(p)
+  return (
+    <div className="tool-opts text-opts">
+      <label>font</label><FontSelect value={d.font} onChange={(font) => set({ font })} />
+      <ValueField label="size" value={d.size} min={4} max={1000} unit="px" onChange={(v) => set({ size: Math.max(4, Math.round(v)) })} />
+      <label>colour</label><div className="row"><input type="color" value={d.colour} onChange={(e) => set({ colour: e.target.value })} /><LatchButton on={d.weight === 'bold'} label={<b>B</b>} title="bold" onToggle={() => set({ weight: d.weight === 'bold' ? 'normal' : 'bold' })} /><LatchButton on={d.italic} label={<i>I</i>} title="italic" onToggle={() => set({ italic: !d.italic })} /></div>
+      <label>outline</label><div className="row"><input type="checkbox" checked={!!d.outline} title="a stroke around the glyphs" onChange={(e) => set({ outline: e.target.checked ? { width: 2, colour: '#000000' } : null })} />{d.outline && <input type="color" value={d.outline.colour} onChange={(e) => set({ outline: { ...d.outline!, colour: e.target.value } })} />}</div>
+      {d.outline && <ValueField label="outline px" value={d.outline.width} min={0} max={64} unit="px" onChange={(v) => set({ outline: { ...d.outline!, width: v } })} />}
+      <Help className="full" text={"Click the canvas to place text, drag to draw a box that wraps. Type in place; ✓ or Ctrl+Enter keeps it, ✕ or Esc drops the change. Later: double-click the layer with the Move tool, or Edit text… on its right-click; the Properties tab edits every field. The pixels are the text as drawn — exports and the compositor see them; Rasterize text keeps the pixels and drops the editing."} />
+    </div>
+  )
+}
+/** D154: the font picker — the bundled families, or any family the system knows by name. */
+function FontSelect({ value, onChange }: { value: string; onChange: (family: string) => void }) {
+  const families = fontFamilies()
+  const other = !families.includes(value)
+  const [custom, setCustom] = useState(other ? value : '')
+  return (
+    <div className="row">
+      <select value={other ? '__other' : value} onChange={(e) => { if (e.target.value === '__other') { const f = custom.trim() || 'Arial'; setCustom(f); onChange(f) } else onChange(e.target.value) }}>
+        {families.map((f) => <option key={f} value={f} style={{ fontFamily: f }}>{f}</option>)}<option value="__other">a system font…</option>
+      </select>
+      {other && <input className="font-name" value={custom} placeholder="family name" title="a font installed on this computer, by its family name" onChange={(e) => setCustom(e.target.value)} onBlur={() => { if (custom.trim()) onChange(custom.trim()) }} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); e.stopPropagation() }} />}
+    </div>
+  )
+}
+/** D154: a text layer's block in Properties — every field re-rasterises live; a scrub is one undo step. */
+function TextSection({ n }: { n: Node }) {
+  const t = n.text!
+  const g = (gesture: 'start' | 'move' | 'end' | undefined, patch: Partial<TextBlock>, label?: string) => ed().setText(n.id, patch, gesture, label)
+  return (
+    <Section id="text" title="Text" extra={<CommandButton id="edit.text.edit" text />}>
+      <div className="tool-opts text-opts">
+        <label>text</label><textarea className="text-content" rows={3} value={t.content} spellCheck={false} onChange={(e) => g('move', { content: e.target.value })} onBlur={() => g('end', {}, 'edit text')} onKeyDown={(e) => e.stopPropagation()} />
+        <label>font</label><FontSelect value={t.font} onChange={(font) => g(undefined, { font }, 'text font')} />
+        <ValueField label="size" value={t.size} min={4} max={1000} unit="px" onStart={() => g('start', {})} onChange={(v) => g('move', { size: Math.max(4, Math.round(v)) })} onCommit={() => g('end', {}, 'text size')} />
+        <label>colour</label><div className="row"><input type="color" value={t.colour} onFocus={() => g('start', {})} onChange={(e) => g('move', { colour: e.target.value })} onBlur={() => g('end', {}, 'text colour')} /><LatchButton on={t.weight === 'bold'} label={<b>B</b>} title="bold" onToggle={() => g(undefined, { weight: t.weight === 'bold' ? 'normal' : 'bold' }, 'text weight')} /><LatchButton on={t.italic} label={<i>I</i>} title="italic" onToggle={() => g(undefined, { italic: !t.italic }, 'text italic')} /></div>
+        <label>align</label><div className="segmented">{(['left', 'center', 'right'] as const).map((a) => <button key={a} className={t.align === a ? 'active' : ''} onClick={() => g(undefined, { align: a }, 'text align')}>{a}</button>)}</div>
+        <ValueField label="leading" value={t.leading} min={0.5} max={4} step={0.05} unit="×" onStart={() => g('start', {})} onChange={(v) => g('move', { leading: Math.round(v * 100) / 100 })} onCommit={() => g('end', {}, 'text leading')} />
+        <ValueField label="tracking" value={t.tracking} min={-50} max={200} unit="px" onStart={() => g('start', {})} onChange={(v) => g('move', { tracking: Math.round(v) })} onCommit={() => g('end', {}, 'text tracking')} />
+        <label>outline</label><div className="row"><input type="checkbox" checked={!!t.outline} onChange={(e) => g(undefined, { outline: e.target.checked ? { width: 2, colour: '#000000' } : null }, 'text outline')} />{t.outline && <input type="color" value={t.outline.colour} onFocus={() => g('start', {})} onChange={(e) => g('move', { outline: { ...t.outline!, colour: e.target.value } })} onBlur={() => g('end', {}, 'outline colour')} />}</div>
+        {t.outline && <ValueField label="outline px" value={t.outline.width} min={0} max={64} unit="px" onStart={() => g('start', {})} onChange={(v) => g('move', { outline: { ...t.outline!, width: v } })} onCommit={() => g('end', {}, 'outline width')} />}
+        {t.box && <><label>box</label><span>{t.box[0]}×{t.box[1]} px <button className="quiet" title="the text takes the size of its lines instead" onClick={() => g(undefined, { box: null }, 'point text')}>→ point text</button></span></>}
+        <label /><div className="row"><CommandButton id="edit.text.rasterize" text /></div>
+      </div>
+    </Section>
+  )
+}
+/** D154: the inline editor — a textarea at the layer's place and zoom in the layer's own font; the layer hides under it while it is open. */
+function TextEditOverlay() {
+  const id = useEditor((s) => s.editingText)
+  const doc = useEditor((s) => s.doc)
+  const zoom = useEditor((s) => s.zoom), pan = useEditor((s) => s.pan)
+  useEditor((s) => s.revision)
+  const ref = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => { if (id) { const el = ref.current; el?.focus(); el?.select() } }, [id])
+  const n = id ? findNode(doc, id) : null
+  if (!id || !n?.text) return null
+  const t = n.text
+  const pad = padOf(t)
+  const style: CSSProperties = { left: pan.x + (n.x ?? 0) * zoom, top: pan.y + (n.y ?? 0) * zoom, width: n.w ?? 1, height: n.h ?? 1, transform: `scale(${zoom})`, transformOrigin: '0 0' }
+  const ta: CSSProperties = { font: fontString(t.font, t.size, t.weight, t.italic), color: t.colour, lineHeight: `${Math.max(1, Math.round(t.size * t.leading))}px`, letterSpacing: `${t.tracking}px`, textAlign: t.align, padding: pad,
+    ...(t.outline && t.outline.width > 0 ? { WebkitTextStroke: `${t.outline.width}px ${t.outline.colour}`, paintOrder: 'stroke fill' } : {}) }
+  return (
+    <div className={`text-edit${t.box ? ' box' : ''}`} style={style} onPointerDown={(e) => e.stopPropagation()}>
+      <textarea ref={ref} value={t.content} style={ta} spellCheck={false} placeholder="type…" onChange={(e) => ed().setText(id, { content: e.target.value }, 'move')}
+        onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); ed().endTextEdit(true) } else if (e.key === 'Escape') { e.preventDefault(); ed().endTextEdit(false) } e.stopPropagation() }} />
+      <div className="text-edit-bar" style={{ transform: `scale(${1 / zoom})`, transformOrigin: '0 0' }}><CommandButton id="edit.text.apply" /><CommandButton id="edit.text.cancel" /><Help text={"✓ or Ctrl+Enter keeps the text; ✕ or Esc drops the change. The font, size, colour and outline live in the Properties tab; a new text layer takes the Text tool's options."} /></div>
     </div>
   )
 }
@@ -172,6 +249,7 @@ function ToolOptions() {
         <Help className="full" text={`${sv.lassoKind === 'polygon' ? 'click to add corners; click the first corner, double-click or ✓ to close' : sv.lassoKind === 'magnetic' ? 'click on an edge, then move along it — the border snaps to the edge and drops points as it goes; click to place a point, Alt-click a straight segment (Alt-drag: freehand), Backspace removes a point; click the first point, double-click or ✓ to close' : 'drag a freehand outline'}; Shift adds, Alt subtracts, Shift+Alt intersects`} /></div>}
       {tool === 'quick' && <QuickOptions />}
       {tool === 'heal' && <HealOptions />}
+      {tool === 'text' && <TextToolOptions />}
       {tool === 'wand' && <div className="tool-opts"><label>mode</label>{modeSeg}<Slider label="tolerance" value={tolerance} min={0} max={255} step={1} onChange={(v) => ed().setView({ tolerance: v })} />
         <label /><label className="chk" title="look at every visible layer instead of the active one"><input type="checkbox" checked={sv.wandMerged} onChange={(e) => ed().setView({ wandMerged: e.target.checked })} /> sample all layers</label>
         <label /><span><label className="chk"><input type="checkbox" checked={sv.wandContiguous} onChange={(e) => ed().setView({ wandContiguous: e.target.checked })} /> contiguous</label> <label className="chk"><input type="checkbox" checked={sv.wandAA} onChange={(e) => ed().setView({ wandAA: e.target.checked })} /> anti-alias</label></span>
@@ -762,7 +840,7 @@ function Stage() {
       {error && <p style={{ color: 'var(--error)' }}>{error}</p>}
     </div></EmptyDrop>
   )
-  return <><EditorCanvas key={epoch} /><CandidateStrip /></>
+  return <><EditorCanvas key={epoch} /><TextEditOverlay /><CandidateStrip /></>
 }
 
 // ------------------------------------------------------------------ Inspector
@@ -883,7 +961,7 @@ function LayersTab() {
         <button className={`lock${n.locked ? ' on' : ''}`} title={multi && selectedIds.includes(n.id) ? `${n.locked ? 'unlock' : 'lock'} the ${ed().targetIds().length} selected layers` : 'lock'}
           onClick={(e) => { e.stopPropagation(); const ids = multi && selectedIds.includes(n.id) ? ed().targetIds() : [n.id]; ed().setPropsFor(ids, { locked: !n.locked }, n.locked ? 'unlock layers' : 'lock layers') }}>{n.locked ? <Lock size={12} /> : <LockOpen size={12} />}</button>
         {n.kind === 'raster' ? <img className={`thumb${n.mask && n.id === activeId && !editingMask ? ' target' : ''}`} src={thumbs.get(n.id)} alt="" title={n.mask ? 'click: paint the pixels · Ctrl-click: select layer transparency' : 'Ctrl-click: select layer transparency'} onClick={(e) => { e.stopPropagation(); if (lm(e).ctrl) ed().selectLayerAlpha(n.id); else { ed().setActive(n.id, false); ed().setView({ maskView: 'off' }) } }} /> : <span className="thumb kind-box">{n.kind === 'group' ? '▣' : n.kind === 'adjustment' ? '◐' : 'fx'}</span>}
-        <span className="name">{n.name}<br /><span className="kind">{n.kind === 'raster' ? `${n.w}×${n.h}` : n.kind === 'group' ? `${n.children?.length ?? 0} · ${n.passthrough ? 'pass-through' : 'isolated'}` : typeLabel(n.type)}{n.clip ? ' · clip' : ''}{n.blend !== 'normal' ? ` · ${blendLabel(n.blend)}` : ''}{n.opacity < 1 ? ` · ${Math.round(n.opacity * 100)} %` : ''}</span></span>
+        <span className="name">{n.name}<br /><span className="kind">{n.kind === 'raster' ? `${n.text ? 'T · ' : ''}${n.w}×${n.h}` : n.kind === 'group' ? `${n.children?.length ?? 0} · ${n.passthrough ? 'pass-through' : 'isolated'}` : typeLabel(n.type)}{n.clip ? ' · clip' : ''}{n.blend !== 'normal' ? ` · ${blendLabel(n.blend)}` : ''}{n.opacity < 1 ? ` · ${Math.round(n.opacity * 100)} %` : ''}</span></span>
         {n.mask && <button className={`mask-link${n.mask.linked ? ' on' : ''}`} title={n.mask.linked ? 'linked: the mask moves and transforms with the layer · click to unlink' : 'unlinked: the mask stays put · click to link'} onClick={(e) => { e.stopPropagation(); ed().toggleMaskLink(n.id) }}>{n.mask.linked ? <Link2 size={11} /> : <Unlink2 size={11} />}</button>}
         {n.mask
           ? <span className={`mask-wrap${n.mask.enabled ? '' : ' off'}`}><img className={`thumb mask-thumb${editingMask && n.id === activeId ? ' editing' : ''}`} src={thumbs.get('m:' + n.id)} alt="" title="mask · click: paint the mask · Alt-click: show it alone · Ctrl-click: load as selection · Shift-click: disable"
@@ -982,7 +1060,7 @@ function PropertiesTab() {
   const defaults = n.kind === 'adjustment' ? ADJUSTMENT_DEFAULTS[n.type ?? ''] : n.kind === 'filter' ? FILTER_DEFAULTS[n.type ?? ''] : undefined
   return (
     <div className="props">
-      <div className="props-title"><b>{n.name}</b><span className="kind">{KIND_LABEL[n.kind]}{n.type ? ` · ${typeLabel(n.type)}` : ''}</span></div>
+      <div className="props-title"><b>{n.name}</b><span className="kind">{n.text ? 'Text layer' : KIND_LABEL[n.kind]}{n.type ? ` · ${typeLabel(n.type)}` : ''}</span></div>
       {n.kind === 'raster' && (
         <Section id="layer" title="Layer">
           <div className="tool-opts">
@@ -993,6 +1071,7 @@ function PropertiesTab() {
           </div>
         </Section>
       )}
+      {n.kind === 'raster' && n.text && <TextSection n={n} />}
       {n.kind === 'group' && (
         <Section id="group" title="Group">
           <div className="tool-opts">

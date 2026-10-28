@@ -1,6 +1,6 @@
 // Edit commands (10 §4/§6/§10, 07 §3c): one definition each for the strip icons, the Layers toolbar, the
 // canvas and layer right-click menus, the keys and the help overlay.
-import { ArrowDown, ArrowUp, Bandage, Check, Circle, CircleDashed, Clapperboard, ClipboardCopy, Orbit, ClipboardPaste, Copy, Crop, Dices, Expand, Eraser, Eye, EyeOff, FileDown, FileImage, FlipHorizontal, FlipVertical, FolderPlus, Group, Hand, Hourglass, ImageUpscale, Lasso, Layers, Layers2, Link, Lock, LockOpen, Maximize, Merge, Minus, MousePointer2, Paintbrush, PaintBucket, Pencil, Pipette, Plus, Redo2, RotateCcw, RotateCw, Save, Scan, ScanFace, Scissors, Shuffle, SlidersHorizontal, Sparkles, Square, SquareCheck, SquareDashed, SquareX, Trash, Undo2, Wand2, WandSparkles, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { Type, ArrowDown, ArrowUp, Bandage, Check, Circle, CircleDashed, Clapperboard, ClipboardCopy, Orbit, ClipboardPaste, Copy, Crop, Dices, Expand, Eraser, Eye, EyeOff, FileDown, FileImage, FlipHorizontal, FlipVertical, FolderPlus, Group, Hand, Hourglass, ImageUpscale, Lasso, Layers, Layers2, Link, Lock, LockOpen, Maximize, Merge, Minus, MousePointer2, Paintbrush, PaintBucket, Pencil, Pipette, Plus, Redo2, RotateCcw, RotateCw, Save, Scan, ScanFace, Scissors, Shuffle, SlidersHorizontal, Sparkles, Square, SquareCheck, SquareDashed, SquareX, Trash, Undo2, Wand2, WandSparkles, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { registerCommands, sep, type MenuItem } from '../../frame/commands'
 import { askConfirm, askText, useSession } from '../../store/session'
 import { useMakeFor } from '../../store/origin'
@@ -15,6 +15,7 @@ import { aiReason, aiRecipe, opCandidates, rerunRecipe, subjectPlan, type AiCtx 
 const ed = () => useEditor.getState()
 const hasDoc = () => !!ed().doc
 const active = (): Node | null => findNode(ed().doc, ed().activeId)
+const textNode = (): Node | null => { const n = active(); return n && n.kind === 'raster' && n.text ? n : null }   // D154
 const activeRaster = () => { const n = active(); return !!n && n.kind === 'raster' }
 const hasSel = () => !!ed().selection
 const setTool = (t: Tool) => () => ed().setTool(t)
@@ -48,7 +49,7 @@ export const MORE_TOOLS: Tool[] = ['wand', 'heal', 'eyedropper']
 /** The tools: id, label, accelerator, icon — the toolbox (EditSuite) and the canvas menu's Tool submenu both read this. */
 export const TOOLS: [Tool, string, string, typeof Hand][] = [
   ['move', 'Move', 'V', MousePointer2], ['marquee', 'Marquee', 'M', Square], ['lasso', 'Lasso', 'L', Lasso], ['wand', 'Magic wand', 'W', Wand2], ['quick', 'Quick selection', '', WandSparkles], ['heal', 'Spot healing', 'J', Bandage], ['ai', 'AI select', 'A', Sparkles],
-  ['brush', 'Brush', 'B', Paintbrush], ['eraser', 'Eraser', 'E', Eraser], ['fill', 'Fill / gradient', 'G', PaintBucket], ['eyedropper', 'Eyedropper', 'I', Pipette], ['crop', 'Crop / canvas', 'C', Crop], ['hand', 'Hand', 'H', Hand], ['zoom', 'Zoom', 'Z', ZoomIn],
+  ['brush', 'Brush', 'B', Paintbrush], ['eraser', 'Eraser', 'E', Eraser], ['fill', 'Fill / gradient', 'G', PaintBucket], ['text', 'Text', 'T', Type], ['eyedropper', 'Eyedropper', 'I', Pipette], ['crop', 'Crop / canvas', 'C', Crop], ['hand', 'Hand', 'H', Hand], ['zoom', 'Zoom', 'Z', ZoomIn],
 ]
 
 const OPACITY_DIGITS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0] as const
@@ -166,6 +167,11 @@ registerCommands([
   })),
   { id: 'edit.transform.apply', scope: 'edit', label: 'Apply transform', icon: Check, keys: 'Enter', alt: ['Ctrl+Enter'], placement: ['strip', 'context'], when: () => !!ed().transform, hint: 'or double-click inside the box', run: () => ed().applyTransform() },
   { id: 'edit.transform.cancel', scope: 'edit', label: 'Cancel transform', icon: X, keys: 'Escape', placement: ['strip', 'context'], when: () => !!ed().transform, run: () => ed().cancelTransform() },
+  // D154: text layers — edit in place, apply / cancel the inline editor, drop the block
+  { id: 'edit.text.edit', scope: 'edit', label: 'Edit text…', icon: Type, placement: ['panel', 'context'], when: () => !!textNode() && !ed().editingText, hint: 'or double-click the layer with the Move tool', run: () => { const n = textNode(); if (n) ed().beginTextEdit(n.id) } },
+  { id: 'edit.text.apply', scope: 'edit', label: 'Apply text', icon: Check, keys: 'Ctrl+Enter', placement: ['toolbar'], when: () => !!ed().editingText, run: () => ed().endTextEdit(true) },
+  { id: 'edit.text.cancel', scope: 'edit', label: 'Cancel text', icon: X, keys: 'Escape', placement: ['toolbar'], when: () => !!ed().editingText, run: () => ed().endTextEdit(false) },
+  { id: 'edit.text.rasterize', scope: 'edit', label: 'Rasterize text', icon: Type, placement: ['panel', 'context'], when: () => !!textNode() && !ed().editingText, hint: 'the pixels stay; the text is no longer editable', run: () => { const n = textNode(); if (n) ed().rasterizeTextLayer(n.id) } },
   { id: 'edit.layer.flipH', scope: 'edit', label: 'Flip horizontal', icon: FlipHorizontal, placement: ['panel', 'context'], when: () => !ed().transform && (activeRaster)(), run: () => ed().flipLayer('h') },
   { id: 'edit.layer.flipV', scope: 'edit', label: 'Flip vertical', icon: FlipVertical, placement: ['panel', 'context'], when: () => !ed().transform && (activeRaster)(), run: () => ed().flipLayer('v') },
   { id: 'edit.layer.rot90', scope: 'edit', label: 'Rotate 90° clockwise', icon: RotateCw, placement: ['panel', 'context'], when: () => !ed().transform && (activeRaster)(), run: () => ed().rotateLayer(90) },
@@ -229,6 +235,7 @@ export function layerMenu(): MenuItem[] {
   return [
     { cmd: 'edit.layer.rename' }, sep,
     { cmd: 'edit.layer.visibility', label: many ? (n.visible ? 'Hide layers' : 'Show layers') : visLabel() }, { cmd: 'edit.layer.solo' }, { cmd: 'edit.layer.lock', label: many ? (n.locked ? 'Unlock layers' : 'Lock layers') : lockLabel() }, sep,
+    ...(n.kind === 'raster' && n.text && !many ? [{ cmd: 'edit.text.edit' }, { cmd: 'edit.text.rasterize' }, sep] : []),   // D154
     { cmd: 'edit.layer.duplicate', label: many ? 'Duplicate layers' : undefined }, { cmd: 'edit.layer.mergeDown', label: many ? 'Merge layers' : undefined }, { cmd: 'edit.layer.mergeVisible' }, { cmd: 'edit.layer.flatten' }, { cmd: 'edit.layer.group', label: many ? 'Group layers' : 'Group the layer' }, ...(n.kind === 'group' && !many ? [{ cmd: 'edit.layer.ungroup' }] : []), { cmd: 'edit.layer.up' }, { cmd: 'edit.layer.down' }, sep,
     { cmd: 'edit.sel.fromLayer' }, { cmd: 'edit.layer.inkFromWhite' }, { cmd: 'edit.layer.lockAlpha', label: active()?.lock_alpha ? 'Unlock transparency' : 'Lock transparency' },
     { label: 'Transform', icon: Scan, items: transformItems() },

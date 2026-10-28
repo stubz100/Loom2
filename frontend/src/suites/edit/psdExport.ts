@@ -4,8 +4,10 @@
 // Brightness/Contrast (legacy) and Black & White keep their settings, but Photoshop's maths for them differ from compose.py's, so
 // those look slightly different there (the export reports them). Filter layers have no Photoshop equivalent and are skipped with
 // a warning (10 §15); the merged image still contains them.
-import { writePsd, type AdjustmentLayer, type Layer, type Psd } from 'ag-psd'
+import { writePsd, type AdjustmentLayer, type Layer, type LayerTextData, type Psd } from 'ag-psd'
 import type { DocumentStack, Node } from './editorStore'
+import { psdFontName } from './textFonts'
+import { padOf } from './textRaster'
 import type { LayerPixels } from './layerPixels'
 
 const PSD_BLEND: Record<string, NonNullable<Layer['blendMode']>> = {
@@ -75,6 +77,21 @@ export function psdAdjustment(type: string, p: Record<string, unknown>): Adjustm
   }
 }
 
+const hexRgb = (h: string) => ({ r: parseInt(h.slice(1, 3), 16) || 0, g: parseInt(h.slice(3, 5), 16) || 0, b: parseInt(h.slice(5, 7), 16) || 0 })
+
+/** D154: the PSD type layer a text layer carries beside its rendered pixels — Photoshop re-renders it on edit; the transform puts the first
+ * baseline where the rasteriser drew it; tracking is in thousandths of an em, as Photoshop counts it. */
+export function psdTextData(n: Node): LayerTextData {
+  const t = n.text!
+  const pad = padOf(t)
+  return {
+    text: t.content, transform: [1, 0, 0, 1, (n.x ?? 0) + pad, (n.y ?? 0) + pad + t.size * 0.8],
+    style: { font: { name: psdFontName(t.font, t.weight, t.italic) }, fontSize: t.size, fillColor: hexRgb(t.colour), autoLeading: false, leading: t.size * t.leading,
+      tracking: Math.round((t.tracking / t.size) * 1000), ...(t.outline && t.outline.width > 0 ? { strokeFlag: true, strokeColor: hexRgb(t.outline.colour), outlineWidth: t.outline.width } : {}) },
+    paragraphStyle: { justification: t.align },
+  }
+}
+
 export function buildPsd(doc: DocumentStack, pixels: Map<string, LayerPixels>, masks: Map<string, LayerPixels>, merged?: HTMLCanvasElement): { bytes: ArrayBuffer; skipped: string[]; approximate: string[] } {
   const skipped: string[] = []
   const approximate: string[] = []
@@ -96,7 +113,7 @@ export function buildPsd(doc: DocumentStack, pixels: Map<string, LayerPixels>, m
       if (n.kind === 'raster') {
         const lp = pixels.get(n.id)
         if (!lp) continue
-        out.push({ ...base, fillOpacity: n.fill ?? 1, left: n.x ?? 0, top: n.y ?? 0, right: (n.x ?? 0) + lp.width, bottom: (n.y ?? 0) + lp.height, canvas: lp.canvas })
+        out.push({ ...base, fillOpacity: n.fill ?? 1, left: n.x ?? 0, top: n.y ?? 0, right: (n.x ?? 0) + lp.width, bottom: (n.y ?? 0) + lp.height, canvas: lp.canvas, ...(n.text ? { text: psdTextData(n) } : {}) })   // D154: a type layer over its pixels
       } else if (n.kind === 'group') {
         // compose.py's rule: pass-through when flagged and Normal / Pass Through and not clipped; otherwise isolated in its mode
         const passthrough = (n.passthrough ?? true) && (n.blend === 'normal' || n.blend === 'pass-through') && !n.clip

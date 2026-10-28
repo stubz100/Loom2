@@ -24,6 +24,7 @@ export interface Node {
   lock_alpha?: boolean            // D50: painting keeps the layer's transparency
   passthrough?: boolean; children?: Node[]
   type?: string; params?: Record<string, unknown>
+  text?: TextBlock | null         // D154: a text layer — the pixels are the block's rasterisation
 }
 export interface DocumentStack {
   schema_version: number; id: string; name: string; w: number; h: number; background: string; source_asset_id: string | null
@@ -35,6 +36,9 @@ export type DocSummary = ApiDocSummary
 const asStack = (d: ApiDocument): DocumentStack => d as unknown as DocumentStack
 const asBody = (s: DocumentStack): { [key: string]: unknown } => s as unknown as { [key: string]: unknown }
 import type { Tool } from './tools'
+import { rasterizeText, TEXT_DEFAULTS, textLayerName, type TextBlock } from './textRaster'
+import { ensureFont, fontString } from './textFonts'
+export type { TextBlock, TextOutline } from './textRaster'
 export type { Tool } from './tools'
 export const BLEND_MODES = ['normal', 'dissolve', 'darken', 'multiply', 'color-burn', 'linear-burn', 'lighten', 'screen', 'color-dodge', 'linear-dodge', 'overlay', 'soft-light', 'hard-light',
   'vivid-light', 'linear-light', 'pin-light', 'hard-mix', 'difference', 'exclusion', 'subtract', 'divide', 'hue', 'saturation', 'color', 'luminosity']
@@ -222,6 +226,17 @@ export interface EditorState {
   pasteFromEvent: (files: File[]) => Promise<void>
   layerVia: (cut: boolean) => void
   addImageLayer: (img: CanvasImageSource & { width: number; height: number }, name: string, at?: { x: number; y: number }, lineage?: string) => string | null
+  // D154: text layers — the block on a raster node, rasterised by the editor; the inline editor's state; the next layer's look
+  editingText: string | null; textDefaults: Pick<TextBlock, 'font' | 'size' | 'colour' | 'weight' | 'italic' | 'outline'>
+  addTextLayer: (at: { x: number; y: number }, box?: [number, number] | null, text?: Partial<TextBlock>) => Node | null
+  /** A field change: a `start` / `move` run is one gesture (one undo row at `end`); no gesture = a one-shot change with its own row. */
+  setText: (id: string, patch: Partial<TextBlock>, gesture?: 'start' | 'move' | 'end', label?: string) => void
+  refreshText: (id: string) => void
+  cancelTextGesture: (id: string) => void
+  rasterizeTextLayer: (id: string) => void
+  beginTextEdit: (id: string | null) => void
+  endTextEdit: (apply: boolean) => void
+  setTextDefaults: (p: Partial<EditorState['textDefaults']>) => void
   dropFiles: (paths: string[]) => Promise<void>
   /** D49: Colour to Alpha with white on the active raster layer, destructively (one undo step) — line art becomes ink. */
   inkFromWhite: () => void
@@ -323,6 +338,15 @@ export function viewDoc(doc: DocumentStack | null, blendPreview: EditorState['bl
 }
 const clone = <T,>(x: T): T => JSON.parse(JSON.stringify(x))
 const newId = (p: string) => `${p}_${Math.random().toString(16).slice(2, 10)}`
+/** D154: the open text gesture — the stack and the canvas before its first touch, kept until `end` pushes one history row. */
+let textGesture: { id: string; before: DocumentStack; lp0: LayerPixels | null } | null = null
+/** D154: the block's face loaded (the bundled TTFs load on first use); `then` runs only when it was not ready at the draw. */
+const fontReady = async (t: TextBlock, then: () => void): Promise<void> => {
+  const fonts = (globalThis as { document?: { fonts?: FontFaceSet } }).document?.fonts
+  if (!fonts || fonts.check(fontString(t.font, 32, t.weight, t.italic))) return
+  await ensureFont(t.font, t.weight, t.italic)
+  then()
+}
 // 10 §6: entering mask editing from a tool that cannot paint or select (Move, Crop, Zoom, Hand, Eyedropper) switches to the
 // brush, so the first click paints the mask instead of dragging the layer; a one-time toast explains white/black.
 const PAINTS_MASK: Tool[] = ['brush', 'eraser', 'fill', 'marquee', 'lasso', 'wand', 'quick', 'ai']
@@ -580,7 +604,7 @@ export const useEditor = create<EditorState>()(
         otherColours: { color: '#000000', background: '#ffffff' }, maskPairActive: false, maskView: 'off',
         latched: { shift: false, ctrl: false, alt: false }, blendPreview: null, selectedIds: [], anchorId: null,
         tool: 'brush', brush: DEFAULT_BRUSH, marqueeShape: 'rect', selectionMode: 'replace', tolerance: 32, fillMode: 'solid',
-        marqueeFeather: 0, marqueeStyle: 'normal', marqueeW: 16, marqueeH: 9, lassoKind: 'freehand', lassoPoly: null, quickSize: 30, quickSampleAll: false, magWidth: 10, magContrast: 10, magFrequency: 57, healSize: 40, healSampleAll: true, wandContiguous: true, wandMerged: false, wandAA: true, selModifyPx: 4, refineEdge: {}, clipboard: null, brushLine: false, pickOnce: false,
+        marqueeFeather: 0, marqueeStyle: 'normal', marqueeW: 16, marqueeH: 9, lassoKind: 'freehand', lassoPoly: null, quickSize: 30, quickSampleAll: false, magWidth: 10, magContrast: 10, magFrequency: 57, healSize: 40, healSampleAll: true, wandContiguous: true, wandMerged: false, wandAA: true, selModifyPx: 4, refineEdge: {}, clipboard: null, brushLine: false, pickOnce: false, editingText: null, textDefaults: { font: 'Inter', size: 48, colour: '#ffffff', weight: 'normal', italic: false, outline: null },
         zoom: 1, pan: { x: 0, y: 0 }, fitRequested: 0, overlay: true, before: false, pixelGrid: false, quickMask: false,
         history: [], future: [], renderer: '', rendererPref: 'auto', rendererEpoch: 0, cursor: null, pixels: new Map(), masks: new Map(), selection: null, revision: 0, extractor: null, lastCompare: null,
         transform: null,
@@ -1606,6 +1630,85 @@ export const useEditor = create<EditorState>()(
           set({ revision: get().revision + 1 })
           return node.id
         },
+        // ---- D154: text layers — a raster node with a `text` block, its pixels the block's rasterisation ---------------------------
+        addTextLayer: (at, box = null, text = {}) => {
+          const doc = get().doc
+          if (!doc) return null
+          const block: TextBlock = { ...TEXT_DEFAULTS, ...get().textDefaults, ...text, box }
+          const r = rasterizeText(block)
+          const node = get().addLayer('raster', { name: textLayerName(block.content), x: Math.round(at.x), y: Math.round(at.y), w: r.w, h: r.h, text: block })
+          if (!node) return null
+          const lp = new LayerPixels(r.w, r.h)
+          lp.ctx.drawImage(r.canvas, 0, 0); lp.refresh(); lp.dirty = true
+          get().pixels.get(node.id)?.destroy(); get().pixels.set(node.id, lp)
+          set({ revision: get().revision + 1 })
+          void fontReady(block, () => get().refreshText(node.id))
+          return node
+        },
+        setText: (id, patch, gesture, label = 'edit text') => {
+          const doc = get().doc
+          const n = findNode(doc, id)
+          if (!doc || !n || n.kind !== 'raster' || !n.text) return
+          if (gesture === 'end' && (!textGesture || textGesture.id !== id) && !Object.keys(patch).length) return   // nothing changed: no row
+          const cur = get().pixels.get(id) ?? null
+          if (textGesture && textGesture.id !== id) get().cancelTextGesture(textGesture.id)
+          if (!textGesture) textGesture = { id, before: clone(doc), lp0: cur }                 // the first touch keeps the before-state
+          const g = textGesture
+          const block: TextBlock = { ...n.text, ...patch }
+          const r = rasterizeText(block)
+          const lp = new LayerPixels(r.w, r.h)
+          lp.ctx.drawImage(r.canvas, 0, 0); lp.refresh(); lp.dirty = true
+          if (cur && cur !== g.lp0) cur.destroy()                                               // an intermediate canvas of this gesture
+          get().pixels.set(id, lp)
+          const next = clone(doc)
+          const m = findNode(next, id)!
+          if (m.name === textLayerName(n.text.content)) m.name = textLayerName(block.content)   // the auto name follows the words; a given name stays
+          m.text = block; m.w = r.w; m.h = r.h
+          set({ doc: next, docDirty: true, revision: get().revision + 1 })
+          void fontReady(block, () => get().refreshText(id))
+          if (gesture === 'start' || gesture === 'move') return
+          get().pushHistory({ label, layerId: id, kind: 'image', tiles: [], stack: g.before, at: Date.now(), ...(g.lp0 ? { swap: { layerId: id, lp: g.lp0, mask: null } } : {}) })
+          textGesture = null
+        },
+        refreshText: (id) => {                                                                  // the same block drawn again (the font arrived): no history
+          const n = findNode(get().doc, id)
+          if (!n?.text) return
+          const cur = get().pixels.get(id) ?? null
+          const r = rasterizeText(n.text)
+          const lp = new LayerPixels(r.w, r.h)
+          lp.ctx.drawImage(r.canvas, 0, 0); lp.refresh(); lp.dirty = true
+          if (cur && cur !== textGesture?.lp0 && !get().history.some((e) => e.swap?.lp === cur || e.more?.some((m) => m.lp === cur))) cur.destroy()
+          get().pixels.set(id, lp)
+          set({ revision: get().revision + 1 })
+        },
+        cancelTextGesture: (id) => {
+          const g = textGesture
+          if (!g || g.id !== id) return
+          textGesture = null
+          const cur = get().pixels.get(id) ?? null
+          if (g.lp0) { get().pixels.set(id, g.lp0); g.lp0.dirty = true }
+          if (cur && cur !== g.lp0) cur.destroy()
+          set({ doc: keepServerState(g.before, get().doc), docDirty: true, revision: get().revision + 1 })
+        },
+        rasterizeTextLayer: (id) => {
+          const doc = get().doc
+          const n = findNode(doc, id)
+          if (!doc || !n?.text) return
+          const before = clone(doc)
+          const next = clone(doc)
+          findNode(next, id)!.text = null
+          commit(next, before, 'rasterize text', id)
+        },
+        beginTextEdit: (id) => set({ editingText: id, revision: get().revision + 1 }),
+        endTextEdit: (apply) => {
+          const id = get().editingText
+          if (!id) return
+          if (apply) get().setText(id, {}, 'end', 'edit text'); else get().cancelTextGesture(id)
+          set({ editingText: null, revision: get().revision + 1 })
+          const n = findNode(get().doc, id)
+          if (n?.text && !n.text.content.trim()) get().deleteNode(id)                           // nothing written: the layer goes
+        },
+        setTextDefaults: (p) => set({ textDefaults: { ...get().textDefaults, ...p } }),
         pasteClipboard: async (inPlace = false) => {
           const s = useSession.getState()
           if (!get().doc) return

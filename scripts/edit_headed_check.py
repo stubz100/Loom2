@@ -51,7 +51,7 @@ Needs the orchestrator venv (PIL, websockets) and the frontend dev server on 142
 `npx vite --host 127.0.0.1 --port 1420 --strictPort`). Starts its own orchestrator (port 8769, temp state) and closes
 everything afterwards. Env: EXTRA="&renderer=webgl" (or "&probe=0") appends dev deep-link flags; OUT= output folder.
 
-    orchestrator/.venv/Scripts/python.exe scripts/edit_headed_check.py [render|paint|kit|layers|props|transform|smartsel|heal|masks|tour|cmpdiag|grid|brush|selection|psd|animate|perf|pip]
+    orchestrator/.venv/Scripts/python.exe scripts/edit_headed_check.py [render|paint|kit|layers|props|transform|smartsel|heal|masks|tour|cmpdiag|grid|brush|selection|psd|animate|perf|pip|text]
 """
 from __future__ import annotations
 
@@ -2160,6 +2160,44 @@ def main() -> int:
             while time.time() - t < 60 and js("return s.doc.layers.some((n) => n.kind === 'group' && n.name.startsWith('AI quick remove'))") is not True: time.sleep(0.25)
             g = json.loads(js("const g = s.doc.layers.find((n) => n.kind === 'group' && n.name.startsWith('AI quick remove')); return JSON.stringify(g ? { n: g.children.length, name: g.children[0].name, mask: !!g.children[0].mask } : null)"))
             check(g is not None and g["n"] == 1 and g["mask"], f"Quick remove runs without the GPU and lands as a candidate layer with a mask ({g}, {time.time() - t:.1f} s)")
+            errs = cdp.page_errors()
+            check(not errs, "no page errors" + "".join("\n       " + x for x in errs))
+        elif mode == "text":
+            # D154: the Text tool end to end in a real canvas — type in place, the layer's pixels carry the glyphs in the bundled face, a field
+            # change re-rasterises as one undo step, Rasterize text keeps the pixels
+            S, C = STORE, "window.__loom2Commands"
+            js = lambda body: cdp.eval(f"(() => {{ const s = {S}; {body} }})()")  # noqa: E731
+            run = lambda cid: cdp.eval(f"{C}.runCommand('{cid}')")  # noqa: E731
+            geo = json.loads(cdp.eval(f"JSON.stringify((() => {{ const r = document.querySelector('.edit-canvas').getBoundingClientRect(); const s = {S}; return {{ x: r.left, y: r.top, zoom: s.zoom, px: s.pan.x, py: s.pan.y }} }})())"))
+            scr = lambda x, y: (geo["x"] + geo["px"] + x * geo["zoom"], geo["y"] + geo["py"] + y * geo["zoom"])  # noqa: E731
+            node_of = lambda tid: f"const TID = '{tid}'; const n = NODE;".replace("NODE", "(function w(xs) { for (const x of xs) { if (x.id === TID) return x; if (x.children) { const r = w(x.children); if (r) return r } } return null })(s.doc.layers)")  # noqa: E731
+            run("edit.tool.text"); time.sleep(0.2)
+            check(cdp.eval(f"{S}.tool") == "text", "the Text tool (T) is picked")
+            sx, sy = scr(120, 100)
+            cdp.call("Input.dispatchMouseEvent", type="mouseMoved", x=sx, y=sy, button="none")
+            cdp.call("Input.dispatchMouseEvent", type="mousePressed", x=sx, y=sy, button="left", buttons=1, clickCount=1)
+            cdp.call("Input.dispatchMouseEvent", type="mouseReleased", x=sx, y=sy, button="left", buttons=0, clickCount=1)
+            time.sleep(0.5)
+            tid = js("return s.editingText")
+            check(bool(tid) and bool(cdp.eval("!!document.querySelector('.text-edit textarea')")), "a click opens the inline editor on a new text layer")
+            cdp.call("Input.insertText", text="Scene 1 — the alley"); time.sleep(0.6)
+            run("edit.text.apply"); time.sleep(0.6)
+            info = json.loads(js(node_of(tid) + " const lp = s.pixels.get(TID); const d = lp.ctx.getImageData(0, 0, lp.width, lp.height).data; let ink = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) ink++; "
+                                "return JSON.stringify({ text: n && n.text, w: n && n.w, h: n && n.h, name: n && n.name, ink, px: lp.width * lp.height, editing: s.editingText, font: document.fonts.check('48px Inter'), rows: s.history.map((e) => e.label) })"))
+            check(bool(info["text"]) and info["text"]["content"] == "Scene 1 — the alley" and info["editing"] is None, f"Apply keeps the text on the layer and closes the editor ({info['name']!r}, {info['w']}×{info['h']}, rows {info['rows'][-2:]})")
+            check(500 < info["ink"] < info["px"] * 0.6, f"the layer's pixels carry the glyphs ({info['ink']} inked of {info['px']})")
+            check(info["font"] is True, "the bundled Inter face is loaded for the canvas")
+            cdp.shot(OUT / f"{mode}{tag}-1.png")
+            w0 = info["w"]
+            js(f"s.setText('{tid}', {{ size: 96, outline: {{ width: 4, colour: '#000000' }} }}, undefined, 'text size'); return 1"); time.sleep(0.5)
+            w1 = js(node_of(tid) + " return n.w")
+            check(w1 > w0 * 1.5, f"a size change re-rasterises the layer ({w0} → {w1} px wide)")
+            cdp.shot(OUT / f"{mode}{tag}-2.png")
+            run("edit.undo"); time.sleep(0.4)
+            check(js(node_of(tid) + " return n.w") == w0 and js(node_of(tid) + " return n.text.size") == 48, "one undo takes the size and the outline back")
+            run("edit.text.rasterize"); time.sleep(0.4)
+            after = json.loads(js(node_of(tid) + " const lp = s.pixels.get(TID); return JSON.stringify({ text: n.text, w: lp.width })"))
+            check(after["text"] is None and after["w"] == w0, "Rasterize text drops the block and keeps the pixels")
             errs = cdp.page_errors()
             check(not errs, "no page errors" + "".join("\n       " + x for x in errs))
         elif mode == "keepalive":

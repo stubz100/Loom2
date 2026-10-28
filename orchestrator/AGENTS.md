@@ -107,5 +107,6 @@ must answer cleanly when it is absent; `/capabilities.content_aware.available` t
   handler goes through `asyncio.to_thread` (as `blob_put` does since review R8).
 - `.gitattributes` wants LF for the source (`*.ps1` CRLF): a script that rewrites a file passes `newline="\n"` to `write_text`, or the
   working copy turns CRLF (2026-10-27). Never convert line endings across the tree.
-- The engine's `free(unload_models=False, free_memory=True)` unloads every model on the pinned ComfyUI (`follow.free_cache`, V13): a rig
-  measurement before changing what the document, clip and refcontrol finishers free.
+- The engine's `free(unload_models=False, free_memory=True)` unloads every model on the pinned ComfyUI (`follow.free_cache`, V13): the
+  next Klein job reloads them (≈ 9.5 s from the page cache, 47 s more from disk — the rig, 2026-10-27), so the cache is dropped only
+  under `Settings.engine.free_after_jobs_gb` of free VRAM, or when a finisher insists (`free_force`, the refcontrol shot).

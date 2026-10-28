@@ -44,6 +44,9 @@ class EngineSettings(BaseModel):
     reserve_vram_gb: float = 1.5         # ComfyUI --reserve-vram: headroom for the desktop and the editor's WebGPU canvas on the same card
     vram_headroom_gb: float = 5.0        # ComfyUI --vram-headroom: DynamicVRAM keeps this much more free for the job's activations; without it the
                                          # driver spills them to shared memory and FLUX.2 dev with 4–6 references ran 4× slower (2026-10-18 rig)
+    free_after_jobs_gb: float = 4.0      # V13: after a document / clip job the engine's cache is dropped only when its free VRAM is under this —
+                                         # on the pinned ComfyUI `/free` unloads every model too, so a drop costs the next job its load (the rig,
+                                         # 2026-10-27); 0 = never, 99 = after every such job (the behaviour before V13)
     health_timeout_s: float = 120.0
 
 

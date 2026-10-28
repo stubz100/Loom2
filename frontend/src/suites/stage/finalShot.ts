@@ -272,10 +272,19 @@ async function storePlate(f: Final, blobs: Blob[]): Promise<Final> {
   return unwrap(http.PUT('/finals/{fid}/layers/{lid}/frames', { params: { path: { fid: f.id, lid: 'plate' } }, body: { frames: shas } }))
 }
 
-/** The layers' size: the pose-driven model's (Draft first, D18), else the clip size. */
+/** The layers' size: the pose-driven model's short side on the model's grid at the project's aspect (Draft first, D18), else the clip
+ *  size. V81: it was the model's own 832×480 whatever the project — a 9:16 project's final came out landscape, and 16:9 showed ≈ 2.5 %
+ *  more picture than the viewport, the Stage shot and the guide (which follow the project); 848×480 ran on the CN rig (2026-10-15),
+ *  480×848 on the V81 rig (2026-10-27). */
 export function finalSize(): [number, number] {
   const a = useSession.getState().capabilities?.stage?.animate
-  return (a?.size?.length ? a.size : st().guideSize()) as [number, number]
+  if (!a?.size?.length) return st().guideSize() as [number, number]
+  const [mw, mh] = a.size as [number, number]
+  const cur = st().current
+  const aspect = cur ? cur.size.w / Math.max(1, cur.size.h) : mw / mh
+  const short = Math.min(mw, mh)
+  const snap = (v: number) => Math.max(16, Math.round(v / 16) * 16)
+  return aspect >= 1 ? [snap(short * aspect), short] : [short, snap(short / aspect)]
 }
 
 // ---- the finals of the open stage -------------------------------------------------------------------------------------------------

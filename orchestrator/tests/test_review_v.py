@@ -1121,3 +1121,32 @@ def test_v97_a_request_the_session_died_under_is_replayed_once(tmp_path: Path):
     with pytest.raises(McpSessionError, match="the session ended"):
         s.call("render_frame", {}, replay=True)                             # once, not for ever
     assert s.replays == 1 and s.script == ["fine"]
+
+
+# ---- V13 (the rig measurement of 2026-10-27): the cache dropped under pressure, or when the finisher insists -------------------------
+
+
+async def test_v13_the_cache_is_dropped_under_pressure_or_when_the_finisher_insists():
+    """`free_cache`: on the pinned engine a drop unloads every model, so it happens only when the free VRAM is under
+    `engine.free_after_jobs_gb` (0: never), or with `force` (the refcontrol shot); what it did comes back for the job's log."""
+    from loom2.engine.follow import EngineFollower
+    calls: list[tuple] = []
+    free_gb = {"v": 9.0}
+
+    class Client:
+        async def system_stats(self):
+            return {"devices": [{"vram_free": free_gb["v"] * 2**30}]}
+
+        async def free(self, unload_models=True, free_memory=True):
+            calls.append((unload_models, free_memory))
+    settings = SimpleNamespace(engine=SimpleNamespace(free_after_jobs_gb=4.0))
+    f = EngineFollower(SimpleNamespace(client=Client()), SimpleNamespace(broadcast=lambda *a, **k: None), lambda: settings, lambda: None)
+    assert (await f.free_cache()).startswith("cache kept (9.0 GB free") and calls == []
+    free_gb["v"] = 2.5
+    assert (await f.free_cache()).startswith("cache dropped, the models unloaded (2.5 GB free") and calls == [(False, True)]
+    settings.engine.free_after_jobs_gb = 0
+    assert (await f.free_cache()) == "cache kept (free_after_jobs_gb 0)" and len(calls) == 1
+    assert (await f.free_cache(force=True)).startswith("cache dropped, the models unloaded (the finisher insists)") and len(calls) == 2
+    from loom2.engine.finishers import finisher_for
+    from loom2.recipes import parse_recipe
+    assert finisher_for(parse_recipe({"kind": "inpaint", "mode": "fill", "document_id": "d", "prompt_text": "x", "seeds": [1]})).free_force is False

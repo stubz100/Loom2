@@ -83,13 +83,30 @@ class EngineFollower:
         except asyncio.TimeoutError:
             return True
 
-    async def free_cache(self) -> None:
-        """After a document job: drop ComfyUI's cached outputs but keep the weights resident. Consecutive Klein jobs
-        with alternating graphs (LanPaint / ICM) otherwise accumulate VRAM until the model streams from RAM."""
+    async def free_cache(self, force: bool = False) -> str:
+        """After a document or clip job: ComfyUI's `/free`. V13: on the pinned engine `free_memory` unloads every model as well
+        (`main.py`: `flags.get("unload_models", free_memory)` — a `False` flag is never stored), so a drop costs the next job its model
+        load. The cache is dropped only when the engine's free VRAM is under `Settings.engine.free_after_jobs_gb` (0: never; consecutive
+        Klein jobs with alternating graphs accumulate cached outputs, which the threshold catches), or when the finisher insists (`force`:
+        the refcontrol shot, whose measured gain *is* the drop — ST3). Returns what it did, for the job's log."""
+        limit = float(getattr(self.settings().engine, "free_after_jobs_gb", 0.0) or 0.0)
+        free = None
+        if not force:
+            if limit <= 0:
+                return "cache kept (free_after_jobs_gb 0)"
+            try:
+                stats = await asyncio.wait_for(self.engine.client.system_stats(), 5.0)
+                free = float((stats.get("devices") or [{}])[0].get("vram_free", 0)) / 2**30
+            except Exception as e:  # noqa: BLE001
+                return f"cache kept (no VRAM reading: {e})"
+            if free >= limit:
+                return f"cache kept ({free:.1f} GB free, the limit {limit:g})"
         try:
             await asyncio.wait_for(self.engine.client.free(unload_models=False, free_memory=True), 30.0)
         except Exception as e:  # noqa: BLE001
             log.warning("free_memory after job failed: %s", e)
+            return f"cache not dropped: {e}"
+        return "cache dropped, the models unloaded (the finisher insists)" if force else f"cache dropped, the models unloaded ({free:.1f} GB free, under {limit:g})"
 
     async def follow(self, job: JobRecord, idle_timeout_s: float | None = None) -> bool:
         """Consume engine events for this prompt until success / error / interrupt; poll history as a fallback.

@@ -820,7 +820,7 @@ class JobQueue:
             fin = finisher_for(recipe)
             await fin.finish(job, recipe, files, sub, self)
             if fin.frees_cache:
-                await self.follower.free_cache()
+                job.log_tail.append(await self.follower.free_cache(force=getattr(fin, "free_force", False)))   # V13: dropped under pressure, or when the finisher insists
             self._complete(job)
         except JobCancelled:
             self._finish_cancelled(job)

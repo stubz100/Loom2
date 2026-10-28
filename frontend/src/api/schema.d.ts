@@ -6699,6 +6699,11 @@ export interface components {
             /** Flags */
             flags: string[];
             /**
+             * Free After Jobs Gb
+             * @default 4
+             */
+            free_after_jobs_gb: number;
+            /**
              * Health Timeout S
              * @default 120
              */

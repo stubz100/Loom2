@@ -5445,6 +5445,11 @@
             "title": "Flags",
             "type": "array"
           },
+          "free_after_jobs_gb": {
+            "default": 4.0,
+            "title": "Free After Jobs Gb",
+            "type": "number"
+          },
           "health_timeout_s": {
             "default": 120.0,
             "title": "Health Timeout S",
@@ -5502,6 +5507,7 @@
           "stall_timeout_s",
           "reserve_vram_gb",
           "vram_headroom_gb",
+          "free_after_jobs_gb",
           "health_timeout_s"
         ],
         "title": "EngineSettings",

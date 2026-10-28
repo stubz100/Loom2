@@ -71,12 +71,14 @@ def output_path(q: JobQueue, f: dict) -> Path:
 
 class Finisher(Protocol):
     frees_cache: bool                    # drop ComfyUI's cached outputs after this job (document and video jobs)
+    free_force: bool                     # V13: drop the cache whatever the free VRAM (the refcontrol shot's measured gain)
 
     async def finish(self, job: JobRecord, recipe: Any, files: list[dict], sub: Submission, q: JobQueue) -> None: ...
 
 
 class AssetFinisher:
     frees_cache = False
+    free_force = False                   # V13: drop the cache whatever the free VRAM (the refcontrol shot's measured gain)
 
     async def finish(self, job: JobRecord, recipe: Any, files: list[dict], sub: Submission, q: JobQueue) -> None:
         compiled = sub.compiled
@@ -143,6 +145,7 @@ class AssetFinisher:
 
 class SelectionFinisher:
     frees_cache = True
+    free_force = False
 
     async def finish(self, job: JobRecord, recipe: Segment, files: list[dict], sub: Submission, q: JobQueue) -> None:
         """The mask image → a document-sized selection, joined with the current one per `op`; saved so the ORA keeps it."""
@@ -171,6 +174,7 @@ class SelectionFinisher:
 
 class DocumentFinisher:
     frees_cache = True
+    free_force = False
 
     async def finish(self, job: JobRecord, recipe: Inpaint | I2I | Upscale, files: list[dict], sub: Submission, q: JobQueue) -> None:
         """Paste the engine result back as a new layer (or a Catalogue asset for upscale)."""
@@ -276,6 +280,7 @@ async def add_result_layer(q: Any, job: Any, od: Any, recipe: Inpaint | I2I | Up
 
 class ClipFinisher:
     frees_cache = True
+    free_force = False
 
     async def finish(self, job: JobRecord, recipe: I2V, files: list[dict], sub: Submission, q: JobQueue) -> None:
         """The decoded frames become `clips/<id>/master`, the proxy is encoded, and the proxy is the Catalogue asset."""
@@ -730,6 +735,7 @@ class MeshFinisher:
     """P18 (D84): the GLB becomes a Catalogue asset of kind `mesh` (lineage `image-to-mesh` ← the source, the weights' licences in its params);
     the RenderMesh view saved beside it makes the thumbnail."""
     frees_cache = True
+    free_force = False
 
     async def finish(self, job: JobRecord, recipe: ImageToMesh, files: list[dict], sub: Submission, q: JobQueue) -> None:
         from .graphs import recipe_weights
@@ -782,6 +788,7 @@ class SetFinisher:
     depth range read back from its vertices in `params.relief`; MoGe's depth render its thumbnail) and, when the recipe names a stage, that
     stage gets the set standing on its floor and the picture's camera as the active one."""
     frees_cache = True
+    free_force = False
 
     async def finish(self, job: JobRecord, recipe: ImageToSet, files: list[dict], sub: Submission, q: JobQueue) -> None:
         from ..relief import lens_of_glb
@@ -864,6 +871,7 @@ class KeypointsFinisher:
     """CA1b (D104): the people SDPose found go on the job's result (largest first); a `body_fit` job fits its Cast version's body to the
     largest one. Nothing enters the Catalogue."""
     frees_cache = False
+    free_force = False
 
     async def finish(self, job: JobRecord, recipe: Keypoints, files: list[dict], sub: Submission, q: JobQueue) -> None:
         import json
@@ -913,6 +921,7 @@ def _body_fit_result(q: JobQueue, job: JobRecord, recipe: Keypoints, people: lis
 class MatteFinisher:
     """D111 (PS5d): SAM 3's masks become the character layer's `matte/` (one per frame, at the final's size); the layer is done."""
     frees_cache = True
+    free_force = False
 
     async def finish(self, job: JobRecord, recipe: MatteSequence, files: list[dict], sub: Submission, q: JobQueue) -> None:
         from ..finals import FinalStore
@@ -948,6 +957,7 @@ class LayerPassFinisher:
     """D118 (AE4a): the pass's frames become a take of the layer (`passes/<take>/`, cropped back from the model's padding, at the final's
     size), and the layer takes it as its source; the composition follows when the Final level syncs (routes: …/composition/sync)."""
     frees_cache = True
+    free_force = False
 
     async def finish(self, job: JobRecord, recipe: LayerPass, files: list[dict], sub: Submission, q: JobQueue) -> None:
         from ..finals import FinalStore
@@ -1134,6 +1144,7 @@ def finisher_for(recipe: AnyRecipe) -> Finisher:
         # 6.8 GB encoder stays resident and the LoRA-patched base 9B streams from RAM — 15.7 s/it instead of 3.3 (474 s against 108).
         # Dropping the cache after the job costs a ~10 s reload from the page cache and keeps the next shot at its measured time.
         fin.frees_cache = True
+        fin.free_force = True                                           # V13: the drop is the point here, not a pressure matter
     return fin
 
 

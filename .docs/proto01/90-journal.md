@@ -10575,3 +10575,59 @@ against the code and brought to e66a779:
 
 `scripts/agents_check.py`: 9 docs, 0 problems. Nothing in the code changed. What the review leaves: V13 and V81, each a rig measurement
 under the one-GPU-job rule, and the decision whether the installers should bundle the orchestrator (V46).
+
+## 2026-10-27 21:08 — V13 measured on the rig: what dropping the engine's cache after a document job costs (the cache dropped under pressure now)
+
+The register's V13: `follow.free_cache()` believed `free(unload_models=False, free_memory=True)` keeps the weights resident; on the pinned
+ComfyUI (`main.py:398`, `flags.get("unload_models", free_memory)` — `server.py` stores the flag only when it is true) it unloads every
+model, after every document, clip and refcontrol job. Measured with `scripts/v13_free_cache_rig.py`: six Klein 9B fills of one 1024×768
+document (a 300×240 selection, the GGUF encoder, seed 7), the real engine, nothing else on the GPU:
+
+| run | after the job | wall s | the loaders (nodes 5 + 2) | the sampler (13) | engine free VRAM after |
+| --- | --- | --- | --- | --- | --- |
+| a1 | dropped (as before V13) | 94.4 | 10.5 + 5.7 — cold from disk | 48.3 | 15.44 GB |
+| a2 | dropped | 47.5 | 3.1 + 5.2 — from the page cache | 37.1 | 15.44 GB |
+| a3 | dropped | 47.4 | 3.1 + 5.1 | 37.1 | 15.44 GB |
+| b1 | kept | 47.8 | 3.1 + 5.1 (a3 had dropped them) | 37.2 | 14.26 GB |
+| b2 | kept | 38.7 | — (resident) | 36.4 | 13.61 GB |
+| b3 | kept | 38.0 | — | 35.5 | 14.39 GB |
+
+The drop costs the next job its model load — ≈ 9.5 s of 47 (20 %) when the weights are in the page cache, 47 s more when they are
+not (a1). Kept, the models hold 1–2 GB of the card (DynamicVRAM streams the 9B from RAM) and the free VRAM does not shrink across
+jobs (14.3 → 13.6 → 14.4 GB): the docstring's reason — cached outputs accumulating — did not show in three jobs on one graph.
+
+**Built:** `free_cache(force)` reads the engine's free VRAM and drops the cache only under `Settings.engine.free_after_jobs_gb`
+(default 4.0 — a job here leaves ≥ 13 GB; 0 never, 99 the old behaviour), or when the finisher insists (`Finisher.free_force`: the
+refcontrol shot, whose measured gain *is* the drop — ST3, 2026-10-13: the 6.8 GB encoder otherwise stays and the 9B streams at
+15.7 s/it); what it did is the job's log line (*cache kept (13.6 GB free, the limit 4)*). The queue passes the finisher's flag.
+`test_review_v.py::test_v13_…` holds the rule; `settings_audit` sees the field reach `follow.py`. The engine doc's `follow.py` row
+and footgun say so. The proper fix — `/free` honouring `unload_models: false` — is a one-line patch to the pinned engine's `server.py`
+(a decision: the engine's patches are pinned in `engine/nodes.lock`), left to the log.
+
+## 2026-10-28 05:37 — V81 measured on the rig: the final's layers at the project's aspect (480×848 runs; the size rule built)
+
+The register's V81: `finalShot.ts finalSize()` rendered the final's frames at the pose-driven model's own 832×480 whatever the project —
+a 9:16 project's final came out landscape, and a 16:9 project showed ≈ 2.5 % more picture than the viewport, the Stage shot and the
+guide, which snap to the project's aspect. The landscape case was already on the rig: the CN wave ran Wan Animate at 848×480
+(2026-10-15, `cn_acceptance.py --parts animate`, 41/41, PCK@0.1 ≥ 0.8). The portrait case was not: `scripts/v81_final_size_rig.py` —
+E11's walk_dolly pose guide (77 frames, landscape) uploaded on a stage, the hero (bench/angles/07.jpg, landscape) as the character, one
+`i2v` Wan Animate job at 480×848 through the queue, the real engine, nothing else on the GPU. Two runs of the same job:
+
+| | run 1 (2026-10-27, 21:1x) | run 2 (2026-10-28, beside the offline suite) |
+| --- | --- | --- |
+| the job | done, 148.7 s wall (the sampler 96.8 s; the loaders 13.3 + 10.6 + 5.9 s) | done, 173.8 s wall (the sampler 96.5 s — the CPU was busy, the GPU time the same) |
+| the clip | 77 frames at 480×848, a 0.4 MiB proxy | 77 frames at 480×848, a 0.8 MiB proxy |
+| what it shows | the hero and the guide in a band across the portrait frame, bars above and below; the figure barely moves | the character walking towards the camera full-height, the room around her; no bars |
+| engine free VRAM after | 15.1 GB (the cache kept — V13's rule) | 15.4 GB |
+
+So the size runs on the card at the same cost per frame as landscape (`engine/spikes/out/v81/`: both clips, the second's sheet). What the
+two runs disagree on is the layout: with a landscape reference and a landscape guide in a portrait clip the model is left the choice —
+`pad_reference` fits the reference inside (never cropped, CN4 / E19) and Wan Animate is not deterministic at a fixed seed (E30a) — and
+once it kept the band, once it filled the frame. A 9:16 project's own passes and plate are portrait and leave no such choice; the check
+that measures the pose at 480×848 wants a portrait guide (a 9:16 stage), which is owed — my instrument scored each run against the
+guide mapped the other way (0.0 twice: a band fitted into a full frame, a full frame into a band), so the portrait pose score is not
+measured here. The CN rig's ≥ 0.8 at 848×480 stands as the fidelity number.
+
+**Built:** `finalSize()` takes the model's short side on its 16-grid at the project's aspect — 848×480 for 16:9, 480×848 for 9:16,
+640×480 for 4:3, 480×480 for 1:1 — else, without a pose-driven model, the clip size as before (`finalSize.test.ts` 2). The server's side
+(`plan_batches`, `character_recipe`, the plate's frames) already reads the final's own `size`, so nothing else changes.

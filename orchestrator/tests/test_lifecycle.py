@@ -213,7 +213,7 @@ async def test_inpaint_candidates_are_alternatives_not_a_chain(tmp_path: Path, o
         assert [c.visible for c in group.children] == [True, False]
         assert [c.recipe["seed"] for c in group.children] == [jobs[0].seed, jobs[1].seed]
         assert all(c.id in od.pixels for c in group.children) and od.path.is_file() and not od.dirty
-        assert rig.fake.frees and all(f["unload_models"] is False for f in rig.fake.frees)      # cache freed, weights resident
+        assert rig.fake.frees == []                                                              # V13: the cache is kept while the engine has VRAM to spare (the fake reports plenty); a drop unloads the models
         assert not list((rig.state / "engine_out" / "loom2").glob("*"))                       # B6: results are not left behind
         assert not (rig.ws.temp_dir / "ai").exists() or not any((rig.ws.temp_dir / "ai").iterdir())
         # the graphs really asked for the uploaded crop and mask

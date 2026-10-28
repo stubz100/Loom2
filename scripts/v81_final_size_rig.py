@@ -78,6 +78,8 @@ def guide_frames(tmp: Path, n: int) -> list[bytes]:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--size", default="480x848", help="WxH of the clip (the portrait case by default)")
+    ap.add_argument("--portrait-guide", action="store_true", help="the guide made portrait first: E11's frames scaled to the clip's height and cropped to its "
+                    "width (cover), the keypoints moved the same way — a 9:16 stage's own pose pass, in effect; the PCK is then measured 1:1")
     a = ap.parse_args()
     W, H = (int(x) for x in a.size.lower().split("x"))
     from m1_acceptance import port_busy
@@ -110,10 +112,29 @@ def main() -> int:
         cam = st["cameras"][0]["id"]
         kp = json.loads((E11 / "keypoints.json").read_text(encoding="utf-8"))
         n = min(int(caps["frames_max"] or 77), len(kp["frames"]))
-        shas = [put_blob(b) for b in guide_frames(tmp, n)]
+        frames_b = guide_frames(tmp, n)
         gw, gh = kp["size"]
+        keypoints = kp["frames"][:n]
+        results["guide"] = "landscape"
+        if a.portrait_guide:                                                   # the guide as a 9:16 stage would render it: scaled to the clip's height, the sides cropped
+            import io
+            s = H / gh
+            ox = (gw * s - W) / 2
+
+            def portrait(b: bytes) -> bytes:
+                with Image.open(io.BytesIO(b)) as im:
+                    im = im.convert("RGB").resize((round(gw * s), H), Image.LANCZOS).crop((round(ox), 0, round(ox) + W, H))
+                    buf = io.BytesIO()
+                    im.save(buf, "PNG")
+                    return buf.getvalue()
+            frames_b = [portrait(b) for b in frames_b]
+            keypoints = [[[[x_ * s - ox, y_ * s, (v if 0 <= x_ * s - ox < W else 0)] for x_, y_, v in fig] for fig in fr] for fr in keypoints]
+            gw, gh = W, H
+            results["guide"] = "portrait (E11 scaled to the height, cropped to the width)"
+        shas = [put_blob(b) for b in frames_b]
         doc = api("POST", f"/stages/{st['id']}/guide", {"camera_id": cam, "revision": st["revision"], "kind": "pose", "fps": int(kp.get("fps") or 24), "size": {"w": gw, "h": gh},
-                                                         "range": {"start": 0, "end": n - 1}, "frames": shas, "keypoints": kp["frames"][:n]})
+                                                         "range": {"start": 0, "end": n - 1}, "frames": shas, "keypoints": keypoints})
+        kp = {**kp, "size": [gw, gh], "frames": keypoints}
         entry = next(x for x in doc["passes"] if x["camera_id"] == cam)
         guide = entry["guides"]["pose"]
         recipe = {"kind": "i2v", "model_id": caps["model_id"], "start_asset": hero, "prompt_text": "the character walks towards the camera through a bright empty room, steady camera",

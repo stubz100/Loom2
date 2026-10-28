@@ -10631,3 +10631,32 @@ measured here. The CN rig's ≥ 0.8 at 848×480 stands as the fidelity number.
 **Built:** `finalSize()` takes the model's short side on its 16-grid at the project's aspect — 848×480 for 16:9, 480×848 for 9:16,
 640×480 for 4:3, 480×480 for 1:1 — else, without a pose-driven model, the clip size as before (`finalSize.test.ts` 2). The server's side
 (`plan_batches`, `character_recipe`, the plate's frames) already reads the final's own `size`, so nothing else changes.
+
+## 2026-10-28 05:52 — D144, D145 recorded; the portrait pose scored (V81's owed check): 0.965 when the model follows the guide, and a finding
+
+The author took the review's three recommendations as the answers (2026-10-28): **D144** — the installers stay the shell's, the
+orchestrator, its venv and the engine from a checkout beside them, bundling deferred until a second machine needs it; **D145** — the
+engine's cache after a document or clip job is dropped by the pressure rule (`engine.free_after_jobs_gb`), no patch to the pinned
+ComfyUI; and the portrait pose check done now rather than waiting for a 9:16 stage.
+
+**The run.** `scripts/v81_final_size_rig.py --portrait-guide`: E11's walk_dolly guide made portrait first — each of its 77 frames
+(1024×576) scaled to the clip's height (× 1.472) and cropped to its width, the keypoints moved the same way — which is what a 9:16
+stage's own pose pass would be; uploaded at 480×848 and the job run at 480×848, the hero as before. Done in 134.7 s (the sampler
+90.5 s), 77 frames, 15.3 GB free after. Its sheet: the hero padded into a band across the frame, the figure barely moving — the layout
+of run 1 again, not run 2's full-height walk.
+
+**The score, after the fact.** `scripts/v81_score.py` runs SDPose on every tenth frame of a saved clip and scores it against the guide
+mapped cover-style (scaled to the height, cropped to the width — the mapping the pipeline gives a guide, as the 0.965 below shows):
+
+| clip | what it shows | PCK@0.1 | mean distance to the guide's joints |
+| --- | --- | --- | --- |
+| run 1 (clp_0bcba08b, landscape guide) | the band, the figure barely moving | 0.0 | ≈ 145–154 px (the face in the band) |
+| run 2 (clp_41bde298, landscape guide) | the character walking full-height | **0.965** | 7.5–9.8 px |
+| run 3 (clp_c16e1edc, portrait guide) | the band again | 0.0 | ≈ 144–150 px |
+
+So at 480×848 the model follows a pose as well as it does at 848×480 (the CN rig's bar ≥ 0.8) — V81's size rule stands. What the
+three runs say besides: with a **landscape reference** padded into a portrait clip (`pad_reference`, never cropped — CN4 / E19), Wan
+Animate kept the reference's band and ignored the pose in two runs of three, the guide's own aspect making no difference (run 3). A
+9:16 final's character layer therefore wants a portrait reference — the figure cut to the clip's aspect before the padding, or a
+portrait hero — which is a change to CN4's rule and needs its own rig run: **Q31** in the decision log, with that as the proposed
+default. The sheets of all three runs are under `engine/spikes/out/v81/`, the scores in `pck.json`.

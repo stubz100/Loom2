@@ -1,6 +1,7 @@
 // U8 (D157, proto01_UI2 05 §2.2): the Bin's verbs on the thing selected (rule 3: commands with a mouse home — the Inspector and a tile's
 // right-click). The Bin makes nothing: it opens a thing where it belongs, moves it to another home, tags it, trashes or restores it.
-import { ArrowUpRight, FolderInput, RotateCcw, Tag, Trash2 } from 'lucide-react'
+import { ArrowUpRight, ExternalLink, FolderInput, Maximize2, RotateCcw, Tag, Trash2 } from 'lucide-react'
+import { openDetached } from '../../frame/loupeLink'
 import { http, unwrap } from '../../api/client'
 import type { BinThing, BinNode } from '../../api/types'
 import { showMenu } from '../../frame/ContextMenu'
@@ -54,6 +55,10 @@ registerCommands([
   { id: 'bin.item.open', scope: 'catalogue', label: 'Open where it belongs ▸', icon: ArrowUpRight, placement: ['inspector', 'context'],
     hint: "the thing's entity version in World, its shot, or its cut", when: () => { const it = selectedItem(); return !!it && !inTrash() && !!belongs(it.path) },
     run: () => { const it = selectedItem(); if (it) belongs(it.path)?.open() } },
+  { id: 'bin.item.view', scope: 'catalogue', label: 'See it large', icon: Maximize2, placement: ['inspector', 'context'], when: () => !!selectedItem(),
+    hint: 'over the grid (Esc, or a click, closes it); a double-click on a tile too', run: () => b().view(true) },
+  { id: 'bin.item.detach', scope: 'catalogue', label: 'Detach ↗', icon: ExternalLink, placement: ['inspector'], when: () => !!selectedItem(),
+    hint: 'a second window that follows what the Bin selects — for another monitor (D155)', run: () => { void openDetached(b().selected) } },
   { id: 'bin.item.move', scope: 'catalogue', label: 'Move to…', icon: FolderInput, placement: ['inspector'], when: () => !!selectedItem() && !inTrash(),
     hint: 'another home: what it was made for (a tile\'s right-click has the homes as a submenu)',
     run: () => { const it = selectedItem(); if (it) showMenu({ clientX: window.innerWidth / 2, clientY: window.innerHeight / 3 }, moveTargets(b().homes, it.home_id ?? null)) } },

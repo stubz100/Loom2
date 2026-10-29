@@ -54,11 +54,12 @@ const badgeOf = (it: BinThing): string | undefined => it.roles.map((r) => ROLE_L
 
 function Tile({ it }: { it: BinThing }) {
   const sel = useBin((s) => s.selected === it.asset.id)
-  const menu = (): MenuItem[] => [{ cmd: 'bin.item.open' }, { label: 'Move to', items: moveTargets(useBin.getState().homes, it.home_id ?? null) }, { cmd: 'bin.item.tag' }, { sep: true }, { cmd: 'bin.item.restore' }, { cmd: 'bin.item.trash' }]
+  const menu = (): MenuItem[] => [{ cmd: 'bin.item.open' }, { cmd: 'bin.item.view' }, { label: 'Move to', items: moveTargets(useBin.getState().homes, it.home_id ?? null) }, { cmd: 'bin.item.tag' }, { sep: true }, { cmd: 'bin.item.restore' }, { cmd: 'bin.item.trash' }]
   const badge = badgeOf(it)
   return (
     <button className={`w-tile${sel ? ' selected' : ''}`} data-id={it.asset.id} title={it.asset.prompt_text ?? it.path}
       onClick={() => useBin.getState().select(it.asset.id)}
+      onDoubleClick={() => { useBin.getState().select(it.asset.id); useBin.getState().view(true) }}
       onContextMenu={(e) => { e.preventDefault(); useBin.getState().select(it.asset.id); showMenu(e, menu()) }}
       onPointerDown={(e) => beginDrag(e, () => (useBin.getState().open === TRASH ? null : { items: [{ kind: 'asset', id: it.asset.id, media: mediaOf(it.asset.kind) }], thumb: api.thumbUrl(it.asset.id, 256), from: 'bin' }))}>
       {it.asset.kind === 'audio' ? <span className="b-audio">♪ {it.asset.prompt_text || 'sound'}</span> : <img src={api.thumbUrl(it.asset.id, 256)} alt="" draggable={false} />}
@@ -84,8 +85,30 @@ function Grid() {
         </div>
         {shown.length ? <div className="w-grid">{shown.map((it) => <Tile key={it.asset.id} it={it} />)}</div>
           : <div className="w-empty">{loading ? 'Reading the Bin…' : query ? 'Nothing found' : 'Nothing here'}</div>}
+        <Loupe />
       </div>
     </section>
+  )
+}
+
+/** U8b (05 §2.2): the selected thing seen large over the grid — the picture at its size, the clip or the sound playing; Esc or a click closes. */
+function Loupe() {
+  const viewing = useBin((s) => s.viewing)
+  const it = useBin((s) => s.items.find((x) => x.asset.id === s.selected))
+  useEffect(() => {
+    if (!viewing) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); useBin.getState().view(false) } }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [viewing])
+  if (!viewing || !it) return null
+  const url = api.fileUrl(`/assets/${it.asset.id}/file`)
+  return (
+    <div className="b-loupe" data-testid="bin-loupe" onClick={() => useBin.getState().view(false)} title="Esc or a click closes it">
+      {it.asset.kind === 'video' ? <video src={url} controls autoPlay loop onClick={(e) => e.stopPropagation()} />
+        : it.asset.kind === 'audio' ? <audio src={url} controls autoPlay onClick={(e) => e.stopPropagation()} />
+        : <img src={url} alt="" />}
+    </div>
   )
 }
 
@@ -123,6 +146,8 @@ function Inspector() {
       {a.prompt_text && <div className="w-prompt-block"><span>prompt</span><p className="w-prompt" title={a.prompt_text}>{a.prompt_text}</p></div>}
       <div className="w-verbs">
         <CommandButton id="bin.item.open" text label={where ? `Open ${where.label} ▸` : undefined} />
+        <CommandButton id="bin.item.view" text />
+        <CommandButton id="bin.item.detach" text />
         <CommandButton id="bin.item.move" text />
         <CommandButton id="bin.item.tag" text />
         <CommandButton id="bin.item.restore" text />

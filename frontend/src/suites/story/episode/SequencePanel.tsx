@@ -3,7 +3,9 @@
 // (SequenceStage) is the drop target. Y57: the Shots bin offers a shot's final version (episode/bin.ts).
 import { Plus } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { api } from '../../../api/client'
+import { api, http, unwrap } from '../../../api/client'
+import type { Asset } from '../../../api/types'
+import { onRecords } from '../../../store/records'
 import { CommandButton, CommandRow } from '../../../frame/CommandButton'
 import { beginDrag } from '../../../frame/drag'
 import { Help } from '../../../frame/Help'
@@ -64,6 +66,7 @@ export function SequencePanel() {
           ))
         })()}
       </div>
+      <SoundBin />
       <div className="seq-bin">
         <div className="seq-list-head"><b>Clips</b><span className="hint">{current ? 'drag onto the lane, or +' : 'open a cut first'}</span></div>
         {!clips.length && <span className="hint">No clips in this project yet — Animate makes them.</span>}
@@ -76,6 +79,36 @@ export function SequencePanel() {
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+/** U8b (D157, proto01_UI2 05 §1): Sound — the project's sounds (its audio, not a line's voice: those come with their shots), each placed
+ *  on Music at the playhead by its +, or dragged onto a track. Read again when a sound lands or goes. */
+function SoundBin() {
+  const current = useSequence((s) => s.current)
+  const project = useSession((s) => s.project)
+  const [sounds, setSounds] = useState<Asset[]>([])
+  useEffect(() => {
+    if (!project?.open) return
+    const load = () => void unwrap(http.GET('/assets', { params: { query: { kind: 'audio', limit: 200 } } })).then((r) => setSounds(r.items.filter((a) => a.origin?.surface !== 'voice'))).catch(() => undefined)
+    load()
+    return onRecords('episode.sounds', ['asset.created', 'asset.deleted', 'asset.updated'], (f) => { if ((f.data as { kind?: string }).kind === 'audio' || f.type === 'asset.deleted') load() })
+  }, [project?.path])                                                                                // eslint-disable-line react-hooks/exhaustive-deps
+  if (!UI2) return null                                                                              // the old shell's sounds come by the Catalogue
+  return (
+    <div className="seq-bin" data-testid="episode-sounds">
+      <div className="seq-list-head"><b>Sound</b><span className="hint">{current?.file ? 'drag onto a track, or +' : 'open a cut first'}</span></div>
+      {!sounds.length && <span className="hint">No sounds yet — bring one in from the Bin's imports.</span>}
+      {sounds.map((a) => (
+        <div key={a.id} className="seq-clip-card sound" title={`${a.prompt_text || a.path.split('/').pop()} · ${a.duration_s ? `${a.duration_s.toFixed(1)} s` : ''}`}
+          onPointerDown={(e) => beginDrag(e, () => ({ items: [{ kind: 'asset', id: a.id }], from: 'sound-bin', label: a.prompt_text || 'sound' }))}>
+          <span className="ph">♪</span>
+          <span className="t">{a.prompt_text || a.path.split('/').pop()}<br /><small>{a.duration_s ? `${a.duration_s.toFixed(1)} s` : 'sound'}</small></span>
+          <button className="quiet" disabled={!current?.file} title={current?.file ? 'Place on Music (A2) at the playhead' : 'open a cut first'} aria-label={`place sound ${a.id}`}
+            onClick={() => { binItem.sound = { id: a.id }; runCommand('story.episode.addSound'); binItem.sound = undefined }}><Plus size={14} /></button>
+        </div>
+      ))}
     </div>
   )
 }

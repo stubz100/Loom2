@@ -1,6 +1,9 @@
 // End-to-end smoke (D68, ArtCraft P6 §3): each scenario drives the real UI with the mouse in headless Edge against the e2e build, a real
 // orchestrator and the fake engine, and checks the outcome on the page and through the API. Scenarios are independent: each opens a
 // fresh page and picks its own assets; they share one project (global-setup.ts), so none relies on another's leftovers.
+import { writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { api, appUrl, centre, contextChoose, env, expect, openApp, openCatalogue, test, thumbsLoaded, tiles } from './fixtures'
 
 interface AssetLite { id: string; job_id: string | null }
@@ -4679,6 +4682,10 @@ test('the Bin (U8, D157 · proto01_UI2 05 §2): a take made for a shot is in its
   const tile = page.locator(`[data-testid="bin-grid"] .w-tile[data-id="${take}"]`)
   await expect(tile).toHaveCount(1)
   await expect(page.locator('[data-testid="bin-grid"] .w-path')).toHaveText(`bin/shots/Quay ${tag}`)
+  await tile.dblclick()                                                                                       // U8b: seen large, Esc closes it
+  await expect(page.locator('[data-testid="bin-loupe"]')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('[data-testid="bin-loupe"]')).toHaveCount(0)
   await tile.click()
   const insp = page.locator('[data-testid="bin-inspector"]')
   await expect(insp).toContainText(`shots/Quay ${tag}/v1`)                                                   // its home, by its names
@@ -4697,4 +4704,31 @@ test('the Bin (U8, D157 · proto01_UI2 05 §2): a take made for a shot is in its
   await expect(homes).toContainText('Shots')
   await homes.locator(`.b-node[data-path="shots/${a.shot_id}"] .b-open`).click()
   await expect(page.locator(`.dock .bin-grid [data-id="${take}"]`)).toHaveCount(1)
+})
+
+/** Half a second of silence as a 16-bit mono WAV at 24 kHz (a sound to bring in). */
+function silentWav(seconds: number): Buffer {
+  const rate = 24000, n = Math.round(rate * seconds), data = n * 2
+  const b = Buffer.alloc(44 + data)
+  b.write('RIFF', 0); b.writeUInt32LE(36 + data, 4); b.write('WAVE', 8); b.write('fmt ', 12); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22)
+  b.writeUInt32LE(rate, 24); b.writeUInt32LE(rate * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(data, 40)
+  return b
+}
+
+test("Episode's Sound (U8b, D157 · proto01_UI2 05 §1): a sound brought in is in Episode's Sound — a line's voice is not — and its + places it on Music at the playhead", async ({ page }) => {
+  test.setTimeout(60_000)
+  const tag = Date.now().toString(36)
+  const wav = join(tmpdir(), `loom2-e2e-sound-${tag}.wav`)
+  writeFileSync(wav, silentWav(0.5))
+  const sound = (await api<{ items: { id: string; kind: string }[] }>('POST', '/assets/import', { paths: [wav] })).items[0]
+  expect(sound.kind).toBe('audio')
+  const name = `Sound cut ${tag}`
+  const tl = await api<{ id: string }>('POST', '/timelines', { name })
+  await page.goto(`${appUrl({ ui: '2' })}#episode`)
+  await page.locator('.seq-row', { hasText: name }).click()
+  const place = page.locator(`[data-testid="episode-sounds"] button[aria-label="place sound ${sound.id}"]`)
+  await expect(place).toBeEnabled()
+  await place.click()
+  type Tracks = { audio: { items: { asset_id: string | null }[] }[] }
+  await expect.poll(async () => (await api<Tracks>('GET', `/timelines/${tl.id}/tracks`)).audio[1].items.map((i) => i.asset_id), { timeout: 10_000 }).toEqual([sound.id])   // A2, Music
 })

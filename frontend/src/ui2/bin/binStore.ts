@@ -4,6 +4,7 @@
 import { create } from 'zustand'
 import { http, unwrap } from '../../api/client'
 import type { BinThing, BinNode } from '../../api/types'
+import { onLoupe, postLoupe } from '../../frame/loupeLink'
 import { onRecords } from '../../store/records'
 
 export type KindFilter = 'all' | 'pictures' | 'clips' | 'audio' | 'models'
@@ -37,6 +38,8 @@ interface BinState {
   open: string | null                       // a home's id, `trash`, or null (a search)
   items: BinThing[]; path: string; query: string; filter: KindFilter; selected: string | null; loading: boolean
   expanded: Record<string, boolean>
+  viewing: boolean                          // U8b: the selected thing seen large over the grid (Esc or a click closes it)
+  view: (on: boolean) => void
   loadTree: () => Promise<void>
   openHome: (id: string) => Promise<void>
   search: (q: string) => Promise<void>
@@ -48,7 +51,8 @@ interface BinState {
 
 let seq = 0
 export const useBin = create<BinState>()((set, get) => ({
-  homes: [], trash: 0, open: null, items: [], path: '', query: '', filter: 'all', selected: null, loading: false, expanded: { },
+  homes: [], trash: 0, open: null, items: [], path: '', query: '', filter: 'all', selected: null, loading: false, expanded: { }, viewing: false,
+  view: (viewing) => set({ viewing: viewing && !!get().selected }),
   loadTree: async () => {
     const t = await unwrap(http.GET('/bin/tree'))
     const first = !get().homes.length
@@ -82,7 +86,7 @@ export const useBin = create<BinState>()((set, get) => ({
     if (query) await get().search(query); else if (open) await get().openHome(open)
   },
   setFilter: (filter) => set({ filter }),
-  select: (selected) => set({ selected }),
+  select: (selected) => { set({ selected, ...(selected ? {} : { viewing: false }) }); postLoupe({ type: 'show', assetId: selected }) },   // D155: the detached loupe follows
   toggle: (id) => set({ expanded: { ...get().expanded, [id]: !get().expanded[id] } }),
 }))
 
@@ -94,5 +98,6 @@ export function startBin(): () => void {
     if (soon !== null) window.clearTimeout(soon)
     soon = window.setTimeout(() => { soon = null; void useBin.getState().reload() }, 300)
   })
-  return () => { off(); if (soon !== null) window.clearTimeout(soon) }
+  const offLoupe = onLoupe((m) => { if (m.type === 'hello') postLoupe({ type: 'show', assetId: useBin.getState().selected }) })   // a window opened: what it shows
+  return () => { off(); offLoupe(); if (soon !== null) window.clearTimeout(soon) }
 }

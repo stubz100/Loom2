@@ -12755,3 +12755,31 @@ and the album. `/assets?home_id=` lists a home and everything under it through t
 - a scenario per old one where the new shell has none (the parity), then the author's click-through.
 
 The new UI as the default and the old shell's removal wait for that click-through.
+
+## 2026-10-29 11:06 — U8b: Episode's Sound, the Bin's large view and its detached loupe, and the author's click-through of the new UI (D157; proto01_UI2 05 §1–2, 10)
+
+**Episode's Sound** (05 §1, the left column's third part): the project's sounds — its audio that is not a line's voice, since those come
+with their shots. Each is placed on Music at the playhead by its + (`story.episode.addSound`, a FilmCraft cut) or dragged. It is read again
+when a sound lands or goes. The old shell's sounds stay in the Catalogue.
+
+**The Bin** (05 §2.2, D155):
+
+- *See it large*: the selected thing over the grid, the picture at its size or the clip or sound playing. A double-click on a tile opens
+  it; Esc or a click closes it.
+- *Detach ↗*: D155's second window, following what the Bin selects (the loupe link's `show`, answered on its `hello`).
+- Compare is not in the Bin; the Catalogue keeps it until the old shell goes.
+
+**The author's click-through:** `proto01_UI2/10-trying-the-new-ui.md`, listed in the README. About 30 minutes over World, Shots (Flow to
+Final), Episode and the Bin: what to try, the checks, and what is not there yet. The author's notes decide what changes before the new UI
+becomes the default, and before the old shell is removed (U8's last two steps).
+
+**Tests:**
+
+- the Bin's e2e scenario now opens the large view and closes it with Esc;
+- an e2e scenario for Episode's Sound: a WAV brought in is listed, and its + places it on A2.
+
+**Checks:** Vitest 644 + 3 skipped; typecheck, build and lint clean (no new warning); e2e: the UI2 scenarios 13/13 alone, then the full
+suite 92/92 alone; `agents_check` clean.
+
+**Owed to the author:** the click-through (10), and the ones before it (animate 27, UIcomp 05, D90). Then the new UI as the default and the
+old shell's removal.

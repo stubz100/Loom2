@@ -37,7 +37,7 @@ const selTrack = () => { const t = sq().tracks, id = sq().selTrack; return t && 
 const an = () => useAnimate.getState()
 type BinClip = Parameters<ReturnType<typeof useSequence.getState>['addClip']>[0]
 /** D90 (01 §11.2): the bin entry the + was pressed on (commands take no arguments; the button sets this first, a run clears it). */
-export const binItem: { shot?: { clip: BinClip; ref: { id: string; version: string; node: string | null } }; clip?: BinClip } = {}
+export const binItem: { shot?: { clip: BinClip; ref: { id: string; version: string; node: string | null } }; clip?: BinClip; sound?: { id: string } } = {}
 
 /** 17 §3e: what on the lane is not a final shot version — a plain clip, a draft version, a stale one (advisory, 02 §7). */
 export function laneChecklist(): { i: number; what: string }[] {
@@ -154,6 +154,8 @@ registerCommands([
     run: () => { const b = binItem.shot; binItem.shot = undefined; if (b) sq().addShot(b.clip, b.ref) } },
   { id: 'story.episode.addClip', scope: 'story', label: 'Add the clip to the cut', icon: Plus, placement: ['panel'], hint: 'at the end (or drag it onto the lane)', when: () => hasSeq() && !!binItem.clip,
     run: () => { const c = binItem.clip; binItem.clip = undefined; if (c) sq().addClip(c) } },
+  { id: 'story.episode.addSound', scope: 'story', label: 'Place on Music at the playhead', icon: Music, placement: ['panel'], hint: 'the sound on A2 where the playhead stands (or drag it onto a track)',
+    when: () => isCut() && !!binItem.sound, run: () => { const a = binItem.sound; binItem.sound = undefined; if (a) void sq().cutPlace({ asset_id: a.id, track: 'A2', frame: sq().playhead }) } },
   { id: 'story.episode.removeClip', scope: 'story', label: 'Remove from the cut', icon: Trash2, placement: ['inspector', 'context'], when: hasSel, run: () => sq().removeClip(sq().selected!) },
   { id: 'story.episode.moveLeft', scope: 'story', label: 'Move clip earlier', icon: ArrowLeft, placement: ['inspector', 'context'], when: () => hasSel() && sq().selected! > 0, run: () => sq().moveClip(sq().selected!, sq().selected! - 1) },
   { id: 'story.episode.moveRight', scope: 'story', label: 'Move clip later', icon: ArrowRight, placement: ['inspector', 'context'], when: () => hasSel() && sq().selected! < (sq().lane?.clips.length ?? 0) - 1, run: () => sq().moveClip(sq().selected!, sq().selected! + 1) },

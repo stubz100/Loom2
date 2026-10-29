@@ -40,6 +40,7 @@ The author, 2026-10-28, after the walkthrough:
 | 07 | [The plan](07-plan.md) | built beside the old UI; the waves U0–U8 and spike E42; the risks; **the decisions Q1–Q13**; D157 as it would be recorded |
 | 08 | [The registers](08-register.md) | the walkthrough's findings F1–F44 and its timings; the code review's FE, BE and RC findings |
 | 09 | [The answers](09-answers.md) | **the author's answers (D157)** and what they change: no Expand and no LoRA; lights with templates and an editor; the synopsis as a note |
+| 10 | [Trying the new UI](10-trying-the-new-ui.md) | **the author's click-through** of the built UI (U0–U8): what to try in each layer, the checks, what is not there yet |
 
 `img/ui-*.jpg` are wireframes, rendered from `mock/ui2-mock.html` by `mock/render.cjs` (a static mock, not the app). Their pictures are the walkthrough's
 own (`img/src/`); their numbers (scores, times, counts) are examples. **Dashed orange marks what is new.**

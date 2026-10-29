@@ -1,7 +1,7 @@
 # 11 · Retiring the Catalogue, and a Bin that holds up
 
-Status: **study, 2026-10-29**, at `5914638`, for the author's answers (§6). They become a D-number before any work (rule: the decision is
-recorded first).
+Status: **study, 2026-10-29**, at `5914638`; **answered the same day → D159** (§6). The old shell goes too, so the waves are re-ordered
+(§5).
 
 The author, 2026-10-29: *"We need to get rid of the catalogue and make the bin more robust."*
 
@@ -80,13 +80,15 @@ The server holds up. The page does not: every tile is drawn, and a reload comes 
 
 ## 5. The plan
 
+D159 re-orders the waves: the old shell goes with the Catalogue, before the two moves of records.
+
 | Wave | What | Size |
 | --- | --- | --- |
 | **B0 · a Bin that holds up** | R1–R6, R8 (detail below) | M |
 | **B1 · one Bin, every verb** | R7, R9, R10 and §3's *keep* rows (detail below) | L |
-| **B2 · pages in homes** | every album page placed in a home once (detail below) | S |
-| **B3 · Unprocessed retired** | every thing without an owner lands in a home (detail below) | S |
-| **B4 · the Catalogue removed** | the Catalogue's code and its last users (detail below) | M |
+| **B2 · the old shell and the Catalogue removed** | the new UI the only one; the Catalogue's code and its last users (detail below) | L |
+| **B3 · pages in homes** | every album page placed in a home once (detail below) | S |
+| **B4 · Unprocessed retired** | every thing without an owner lands in a home (detail below) | S |
 
 **B0 · a Bin that holds up:**
 
@@ -113,13 +115,23 @@ The server holds up. The page does not: every tile is drawn, and a reload comes 
 - ***Import…*** **and a file dropped from the OS** land in the open home (R9).
 - **The rest:** duplicate, reveal, *Delete permanently…*, *Empty trash…* (R10), tile size.
 
-**B2 · pages in homes:**
+**B2 · the old shell and the Catalogue removed (D159):**
+
+- The new UI is the only one: `?ui=2` is no longer needed, and ☰'s *Try the new UI* and *Back to the current UI* go.
+- These go: the old frame, its tabs and rail, the suites' wrappers the layers do not use, the Catalogue tab, `CatalogueSuite`, Places,
+  `PageView`, the panes, the strip, D95's drawer, and the per-pane stores.
+- These move: the loupe's parts to `frame/loupe/`; `albumStore` to `store/album.ts`.
+- The events and *Go to origin* point at the Bin. The Bin's commands take the scope `bin`.
+- Every old-shell e2e scenario moves onto the new shell where its feature lives, or is dropped with the feature D157 dropped. Each
+  old-shell feature the new shell does not reach is listed in the journal.
+
+**B3 · pages in homes:**
 
 - Each album page goes into a home once: a stage's page into its shot's home; a page that is nobody's into Sketches.
 - Pages are folders inside a home: *New page…*, *Rename…*, *Delete* (its things go to the home).
 - The album root goes.
 
-**B3 · Unprocessed retired:**
+**B4 · Unprocessed retired:**
 
 - Every thing without an owner lands in a home:
   - Image's free work → Sketches;
@@ -128,23 +140,17 @@ The server holds up. The page does not: every tile is drawn, and a reload comes 
 - The unplaced things are moved once.
 - `folder=unprocessed` and the Library leave the UI.
 
-**B4 · the Catalogue removed:**
-
-- These go: the tab, `CatalogueSuite`, Places, `PageView`, the panes, the strip, D95's drawer, and the per-pane stores.
-- These move: the loupe's parts to `frame/loupe/`; `albumStore` to `store/album.ts`.
-- The events and *Go to origin* point at the Bin.
-- The 27 e2e scenarios are rewritten onto the Bin.
-- This happens with the old shell's removal (U8), or before it (Q1).
-
-B0 and B1 can start as soon as the answers are in. B2 and B3 each move records once: a migration with a mark, as U2's `bins.json`.
+B3 and B4 each move records once: a migration with a mark, as U2's `bins.json`.
 
 ## 6. Questions for the author
 
-| # | Question | Proposed |
-| --- | --- | --- |
-| Q1 | When does the Catalogue go? With the old shell, after the click-through of [10](10-trying-the-new-ui.md)? Or now? Now means the old shell loses its Catalogue tab, and Image's results grid in the old shell is rebuilt on the Bin's grid. | with the old shell; B0–B3 now |
-| Q2 | Album pages that sit in no home: fold each into a home as a named page inside it, or keep a top-level *Pages*? | into homes |
-| Q3 | Which of the Catalogue's go? Grouping modes, two panes, the date, aspect and size chips, and the free page layout. | drop all four; keep compare, lineage, tile size |
-| Q4 | A thing with no owner: Image's free work → Sketches; an import → the home it is dropped on, else Imports? | yes |
-| Q5 | Moving a thing that holds a role (hero, reference, A-pose) out of its home: ask, refuse, or let it carry the role? | ask, naming the role it loses |
-| Q6 | Keep "Bin" as the place's name, and "catalogue" only inside the code for the asset index? | yes |
+The author's answers (2026-10-29), recorded as D159, are in the last column.
+
+| # | Question | Proposed | Answered |
+| --- | --- | --- | --- |
+| Q1 | When does the Catalogue go? With the old shell, after the click-through of [10](10-trying-the-new-ui.md)? Or now? Now means the old shell loses its Catalogue tab, and Image's results grid in the old shell is rebuilt on the Bin's grid. | with the old shell; B0–B3 now | now, from both shells, and the old shell with it |
+| Q2 | Album pages that sit in no home: fold each into a home as a named page inside it, or keep a top-level *Pages*? | into homes | as proposed |
+| Q3 | Which of the Catalogue's go? Grouping modes, two panes, the date, aspect and size chips, and the free page layout. | drop all four; keep compare, lineage, tile size | as proposed |
+| Q4 | A thing with no owner: Image's free work → Sketches; an import → the home it is dropped on, else Imports? | yes | as proposed (Sketches) |
+| Q5 | Moving a thing that holds a role (hero, reference, A-pose) out of its home: ask, refuse, or let it carry the role? | ask, naming the role it loses | as proposed |
+| Q6 | Keep "Bin" as the place's name, and "catalogue" only inside the code for the asset index? | yes | Bin; the frontend's Catalogue code deleted |

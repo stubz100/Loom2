@@ -12805,3 +12805,24 @@ The author asked to get rid of the Catalogue and to make the Bin more robust. `p
 draws every tile, and it reloads on every asset event.
 
 Nothing is built yet. The answers become a D-number first.
+
+## 2026-10-29 12:50 — D159: the Catalogue goes from both shells, and the old shell with it (proto01_UI2 11 answered)
+
+The author answered 11's Q1–Q6:
+
+> I have no use for the old shell, we can actually delete it now if it gets in the way. Q1: The catalogue was an unrefined idea, that
+> has never really got finished - it can actually go from both the new and the old shell, if it makes things easier. Q2: your
+> suggestion · Q3: your suggestion · Q4: Sketches is good · Q5: your suggestion · Q6: As above, delete catalogue if it is more convenient
+
+**Recorded as D159:**
+
+- The new UI becomes the only one, ahead of the click-through of proto01_UI2/10. That click-through stays the author's check of the new
+  UI.
+- Q2–Q5 as proposed: pages folded into homes; the grouping, the panes, the date / aspect / size chips and the free layout dropped; free
+  work in Sketches; *Move to…* asks and names the role.
+- Q6: the place is the Bin. The frontend's Catalogue code goes; the asset index keeps `catalogue.py`.
+
+**The waves, re-ordered** (11 §5): B0 a Bin that holds up · B1 one Bin, every verb · B2 the old shell and the Catalogue removed · B3 pages
+in homes · B4 Unprocessed retired. The old shell goes before the two moves of records, so they need not keep it working.
+
+Next: B0.

@@ -633,10 +633,12 @@ const cmds: Command[] = [
   { id: 'story.flow.recipe', scope: 'story', label: 'Open its recipe', icon: Workflow, hint: "the shot's recipe as a graph, here in place of the canvas — what it is made of, what is stale",
     placement: ['inspector', 'context'], when: () => !!node()?.shot_id && !sy().play, run: () => { const n = node(); if (n) sy().setFlowRecipe(n.id) } },
   { id: 'story.flow.recipeClose', scope: 'story', label: 'The Flow', icon: ArrowLeft, hint: 'back to the canvas', placement: ['strip'], when: () => !!sy().flowRecipe, run: () => sy().setFlowRecipe(null) },
-  { id: 'story.shot.graphInAnimate', scope: 'story', label: 'Open the graph in Animate', icon: Workflow, hint: "Animate's Graph on this shot (its For chip set): a node opens where it is made",
+  { id: 'story.shot.graphInAnimate', scope: 'story', label: UI2 ? 'Open its graph' : 'Open the graph in Animate', icon: Workflow, hint: "the Graph on this shot's level (its recipe): a node opens where it is made",
     placement: ['strip', 'inspector', 'context'], when: () => !!shot() && !!shotVersion(),
     run: () => { const s = shot(); const v = shotVersion(); if (!s || !v) return
-      useMakeFor.getState().set('animate', forShot(s, v)); useSession.getState().setUi({ graph: true }); navigate({ suite: 'animate' }) } },
+      useSession.getState().setUi({ graph: true })
+      if (UI2) { void import('../../ui2/shots/shotsStore').then((m) => m.useShots.getState().open(s.id, 'performance')); return }   // B2a: the shot at Performance in Shots, the Graph over it
+      useMakeFor.getState().set('animate', forShot(s, v)); navigate({ suite: 'animate' }) } },
   { id: 'story.flow.openShot', scope: 'story', label: 'Open the shot', icon: Link, placement: ['inspector', 'context'], when: () => !!node()?.shot_id,
     run: () => { const n = node(); if (!n?.shot_id) return; const sid = n.shot_id, v = n.shot_version; setRailTab('story', 'shots'); sy().selectShot(sid, v) } },
   // D90 (02 §4.2, §5): a node's board (an album group) and Make ▸ for its shot (the board's images as Generate's references)

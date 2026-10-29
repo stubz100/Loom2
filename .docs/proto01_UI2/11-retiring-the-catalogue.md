@@ -186,3 +186,7 @@ the new UI first (B2a), moves the scenarios onto it, then removes the old shell 
 The scenarios split as: about 55 move onto the new shell, about 15 are covered by new-shell ones already, and about 12 go with what D157
 and D159 dropped (the tabs as drop targets, the For chip, the album's pages, Expand, LoRA training, the ideas store, the Catalogue's loupe
 hub and grouping).
+
+**B2a done (2026-10-29):** all 19 are in the new UI, and every scenario of `e2e/smoke.spec.ts` runs on the new shell. The Bin's wave
+moved 17 and dropped 4, World's moved 19 and dropped 4, and Shots' moved 36 and dropped 3. Only `e2e/perf.spec.ts` still opens the
+Catalogue; it moves with B2b.

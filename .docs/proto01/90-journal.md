@@ -13131,3 +13131,47 @@ The moved scenarios:
 Next: the last 13 old-shell scenarios — a sequence, the pose editor's bench, a 3D prop, a prop, a shot from the camera, the Flow, an episode,
 the extension and lip-sync, speakers and places, the Shots board, the cut from the Flow, the two recipe graphs. Then three are dropped: the
 three Animate modes (the Shots U4 and U6 scenarios cover the levels), the round trip (the For chip), *Make the Flow from the spine*.
+
+## 2026-10-29 17:24 — B2a, Shots' wave (part 2): the Flow's nodes to add, a shot's recipe in the List view, the graph on any shot; the last 13 old-shell scenarios moved, 3 dropped — B2a done (D159; proto01_UI2 11 §7)
+
+**The Flow level** (`ui2/shots/ShotsFlow.tsx`):
+
+- The strip adds the nodes: Start, Shot, Choice, Condition, Action, Hub, Jump and Comment. It shows them on the canvas only, not while
+  the Flow plays or a recipe is open.
+- In the List view, the picked shot's Recipe section sits under the board, as on Story's shot page.
+
+**The recipe graph:**
+
+- A shot with no scene yet still shows its graph, because the recipe needs no stage.
+- *Open its graph* (`story.shot.graphInAnimate`, the shot's strip, Inspector and right-click) opens the shot at Performance in Shots with the
+  Graph on. The old shell's *Open the graph in Animate* is unchanged.
+
+**Scenarios moved onto the new shell (13):**
+
+- Episode: a sequence, an episode, the cut from the Flow.
+- World: the pose editor's bench, a 3D prop, a prop.
+- Shots: a shot from the camera, the Flow, the extension and lip-sync, a shot's place, the Shots board (the Flow's List view).
+- The recipe graph: both scenarios, RC1b and RC1c.
+
+**Dropped (3):**
+
+- The three Animate modes: the Shots U4 and U6 scenarios cover the levels.
+- The round trip: it needed the For chip.
+- *Make the Flow from the spine*: D157 retired the spine (proto01_UI2 01 §2).
+
+From D93 C6–C7, only the place is kept. *Make frame ▸ in Image*, with its cards per speaker and its prop, went with the For context.
+
+**Found while moving them:**
+
+- A still made in Sketches *From a stage* lands as the frame of the shot open in Shots, not on another shot through the same camera. The
+  scenario checks that.
+- Assemble takes finals only, so the episode scenarios set their shot's method first.
+- Play's button says *Stop playing* while the Flow plays.
+
+**Now every scenario of `e2e/smoke.spec.ts` runs on the new shell.** The old helpers that opened it (`openApp`, `openCatalogue`,
+`openImage`, `openAnimate`, `openSection`, `fromStage`) are no longer used there. `e2e/perf.spec.ts` still opens the Catalogue; it moves
+with B2b.
+
+**Checks:** Vitest 646 + 3 skipped; typecheck, build and lint clean (92 warnings, as before); e2e 83/83 (alone, 6.3 min).
+
+Next: B2b — the old shell and the Catalogue go.

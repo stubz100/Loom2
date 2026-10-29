@@ -89,7 +89,7 @@ function Centre() {
   if (level === 'clay') return v?.stage_id
     ? <Suspense fallback={<div className="w-empty">Loading Clay…</div>}><div className="strip s-clay-strip"><ClayStrip /></div><div className="s-clay"><ClayStage />{graph && <AnimateGraph />}</div></Suspense>
     : <div className="w-empty">No scene yet <CommandButton id="shots.scene.new" text /></div>
-  if (!v?.stage_id) return <div className="w-empty">No scene yet <CommandButton id="shots.scene.new" text /></div>
+  if (!v?.stage_id) return <div className="s-clay"><div className="w-empty">No scene yet <CommandButton id="shots.scene.new" text /></div>{graph && <Suspense fallback={null}><AnimateGraph /></Suspense>}</div>   // the recipe needs no scene
   const [Strip, Stage] = level === 'performance' ? [PerfStrip, PerfStage] : [FinalStrip, FinalStage]
   return <Suspense fallback={<div className="w-empty">Loading {level === 'performance' ? 'Performance' : 'Final'}…</div>}>
     <div className="strip s-clay-strip" data-testid={`shots-${level}-strip`}><Strip /></div><div className="s-clay" data-testid={`shots-${level}`}><Stage />{graph && <AnimateGraph />}</div>

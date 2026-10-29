@@ -159,7 +159,7 @@ The author's answers (2026-10-29), recorded as D159, are in the last column.
 
 Mapping the 79 old-shell e2e scenarios onto the new shell found these features, built in the old shell, that nothing in the new one
 opens. D157 dropped none of them (it keeps the Flow's List view, Q11). Deleting the old shell now would lose them, so B2 builds them into
-the new UI first (B2a), moves the scenarios onto it, then removes the old shell (B2b). The author may drop any of them instead.
+the new UI first (B2a), moves the scenarios onto it, then removes the old shell (B2b). **The author, 2026-10-29: build all three groups (World's tools, Shots' views, the Bin's quick starts) before the old shell goes.**
 
 | Where | What | The old part | Size |
 | --- | --- | --- | --- |

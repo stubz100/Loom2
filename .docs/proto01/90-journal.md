@@ -12948,3 +12948,25 @@ skipped; typecheck, build and lint clean (92 warnings, as before); e2e 94/94 (al
 agents_check, model_literals_check and settings_audit (321, 0) clean.
 
 Next: B2, the old shell and the Catalogue removed.
+
+## 2026-10-29 14:48 — B2 planned: 19 old-shell features the new UI does not reach, built first (D159; proto01_UI2 11 §7)
+
+Two read-only passes mapped the 79 old-shell e2e scenarios onto the new shell:
+
+- about 55 move onto it;
+- about 15 are covered by new-shell scenarios already;
+- about 12 go with what D157 and D159 dropped.
+
+They also found **19 features that only the old shell opens**: the body editor, bound colours, a prop's height, the skeleton bench, the test
+animation, *Use as the A-pose*, the place set builder, the Line-up, a prop's 3D view, Edit's foot, the Flow's List view, Play, the recipe
+graph, a still from the stage, Clay's Prototype, New angle, the quick starts, *Add to ‹entity›*, and a load-failure boundary. D157 dropped
+none of them. The list is in 11 §7.
+
+**Asked whether to build them or drop them with the old shell. The author: build all three groups** (World's tools, Shots' views, the Bin's
+quick starts). Recorded in D159.
+
+**B2 is now two parts:**
+
+- **B2a** builds them into the new UI and moves the scenarios onto it, in three waves: the Bin, World, Shots. Each is green with the old shell
+  still there.
+- **B2b** removes the old shell and the Catalogue.

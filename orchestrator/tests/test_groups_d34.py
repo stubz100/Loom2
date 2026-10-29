@@ -190,7 +190,7 @@ def test_groups_api(tmp_path: Path):
     with TestClient(app) as client:
         client.post("/project", json={"path": str(tmp_path / "proj"), "name": "G", "size_cap_gb": 10}, headers=H)
         a = client.post("/assets/import", json={"paths": [str(_png(tmp_path / "a.png"))]}, headers=H).json()["items"][0]
-        assert client.get("/assets/counts").json()["unprocessed"] == 1
+        assert client.get("/assets/counts").json()["unprocessed"] == 0                  # B4 (D159): an import lands in Imports
         g = client.post("/groups", json={"name": "Act 1"}, headers=H).json()
         assert client.post("/groups/move", json={"items": [{"kind": "asset", "id": a["id"]}], "to": g["id"]}, headers=H).status_code == 200
         page = client.get(f"/groups/{g['id']}").json()

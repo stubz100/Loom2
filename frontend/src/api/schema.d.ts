@@ -3564,8 +3564,8 @@ export interface paths {
         /**
          * Profile Add
          * @description D93 (A2) "Add to character ▸": images from anywhere into a version — as the hero (onto the reference set as its cover), into the
-         *     reference set, or as candidates. From Unprocessed or the version's candidates page they move; from any other page they are copied
-         *     (the reply says which). A final version answers 423 with the reason.
+         *     reference set, or as candidates. From the Sketches or Imports (B4: Unprocessed's homes) or the version's candidates page they move;
+         *     from any other home they are copied (the reply says which). A final version answers 423 with the reason.
          */
         post: operations["profile_add_story_profiles__pid__versions__vid__add_post"];
         delete?: never;

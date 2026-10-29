@@ -127,14 +127,18 @@ async def assets_import(svc: Svc, body: ImportRequest):
         rec = await asyncio.to_thread(_ingest_import, cat, src, body.suite)
         svc.hub.broadcast("asset.created", rec.model_dump())
         out.append(rec.model_dump())
-    if body.to and out:                                              # B1: an entity's or a shot's current version; a heading: Imports
-        from ..bins import settle
+    if out:                                                          # B1: an entity's or a shot's current version; B3: a page; B4 (D159): else Imports
+        from ..bins import home, home_of, settle
         ws, _, _ = svc.require_project()
         groups = svc.require_groups()
-        dest = await asyncio.to_thread(settle, groups, ws, body.to) if body.to in groups.groups else None
-        if dest is not None:
-            changed = await asyncio.to_thread(groups.move, [("asset", r["id"]) for r in out], dest.id)
-            svc.group_changed(changed)
+        to = groups.groups.get(body.to or "")
+        if to is not None and to.kind == "album" and home_of(groups, to.id) is not None:
+            dest = to
+        else:
+            dest = await asyncio.to_thread(settle, groups, ws, body.to) if to is not None else None
+        dest = dest or await asyncio.to_thread(home, groups, "imports")
+        changed = await asyncio.to_thread(groups.move, [("asset", r["id"]) for r in out], dest.id)
+        svc.group_changed(changed)
     return {"items": out}
 
 

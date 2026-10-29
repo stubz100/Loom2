@@ -1,5 +1,6 @@
 // U3d (D157, proto01_UI2 03 §7): the Sketches home's pictures, its selection, and the verbs on them — make free sketches into the home,
-// prototype a draft entity from one (the picture becomes its hero), trash one.
+// prototype a draft entity from one (the picture becomes its hero), trash one. B4 (D159): every free thing lives here now (Image's old
+// free work among them), so the home is read as the Bin reads one — newest first, a page at a time — and reloaded when it changes.
 import { create } from 'zustand'
 import { http, unwrap } from '../../api/client'
 import type { Asset } from '../../api/types'
@@ -10,25 +11,46 @@ import { useGenerate } from '../../suites/generate/generateStore'
 import { useStory, type ProfileClass } from '../../suites/story/storyStore'
 import { useWorld } from './worldStore'
 
-interface SketchState { home: string | null; items: Asset[]; selected: string | null; loading: boolean; ideas: number; load: () => Promise<void>; select: (id: string | null) => void }
+interface SketchState {
+  home: string | null; items: Asset[]; next: string | null; selected: string | null; loading: boolean; ideas: number
+  load: () => Promise<void>; more: () => Promise<void>; select: (id: string | null) => void
+}
+const PAGE = 200
+/** The home's pictures (World's Sketches are pictures; the free clips, models and sounds that live in the home too are the Bin's to show). */
+const readPage = (gid: string, cursor: string | null) => unwrap(http.GET('/bin/homes/{gid}/items', { params: { path: { gid }, query: { limit: PAGE, kinds: ['image'], ...(cursor ? { cursor } : {}) } } }))
 
 export const useSketches = create<SketchState>()((set, get) => ({
-  home: null, items: [], selected: null, loading: false, ideas: 0,
+  home: null, items: [], next: null, selected: null, loading: false, ideas: 0,
   load: async () => {
     if (!useSession.getState().project?.open) return
     set({ loading: true })
     try {
       const home = get().home ?? (await unwrap(http.POST('/bin/homes', { body: { path: 'world/sketches' } }))).id
-      const page = await unwrap(http.GET('/groups/{gid}', { params: { path: { gid: home } } }))
-      const items = page.group.items.filter((it) => it.kind === 'asset').map((it) => page.assets[it.id]).filter((a): a is Asset => !!a && !a.trashed_at)
+      const page = await readPage(home, null)
       const ideas = (await unwrap(http.GET('/story/ideas'))).items.filter((i) => !i.kept.length && i.variants.length).length   // U3e (G4): the old ideas still to bring in
-      set({ home, ideas, items: items.sort((x, y) => (x.created_at < y.created_at ? 1 : -1)) })
+      set({ home, ideas, items: page.items.map((x) => x.asset), next: page.next_cursor ?? null })
     } catch (e) { useSession.getState().toast(`Sketches: ${(e as { detail?: string }).detail ?? e}`, 'error') }
+    finally { set({ loading: false }) }
+  },
+  more: async () => {
+    const { home, next, loading } = get()
+    if (!home || !next || loading) return
+    set({ loading: true })
+    try {
+      const page = await readPage(home, next)
+      const have = new Set(get().items.map((a) => a.id))
+      set({ items: [...get().items, ...page.items.map((x) => x.asset).filter((a) => !have.has(a.id))], next: page.next_cursor ?? null })
+    } catch { /* the next scroll asks again */ }
     finally { set({ loading: false }) }
   },
   select: (selected) => set({ selected }),
 }))
-onRecords('ui2.world.sketches', ['group.changed', 'asset.deleted'], () => { if (useSketches.getState().home) void useSketches.getState().load() })
+onRecords('ui2.world.sketches', ['group.changed', 'asset.deleted'], (f) => {   // its own home's change only (B4: every free thing's home is busy)
+  const home = useSketches.getState().home
+  if (!home) return
+  const ids = (f.data as { ids?: string[] } | null)?.ids
+  if (f.type === 'asset.deleted' ? useSketches.getState().items.some((a) => a.id === (f.data as { id?: string } | null)?.id) : !ids || ids.includes(home)) void useSketches.getState().load()
+})
 
 /** A sketch's name for its prototype: the prompt's first words (a JSON prompt's scene), else the class. */
 export function nameFrom(prompt: string | null | undefined, fallback: string): string {

@@ -60,7 +60,8 @@ def test_the_migration_moves_todays_pages_once(tmp_path: Path):
     st.patch_node(c.id, {"board_group_id": shared.id})
     notes = migrate_bins(ws, groups)
     assert notes == ["U2: the Bin — 2 version pages, 1 style sample group, 1 board moved into their homes (World › …, Shots › …)",
-                     "B3: 1 album page moved into its home (the Bin: pages are folders of a home)"]                # B3 (D159): the shared board
+                     "B3: 1 album page moved into its home (the Bin: pages are folders of a home)",                # B3 (D159): the shared board
+                     "B4: 3 things on no page went to a home (world/sketches 3)"]                                  # B4: the fixture's loose ones
     assert _chain(groups, v.group_id) == ["World", "Characters", "Mara", "v1", "Mara · v1"] and groups.groups[cand.id].role == "candidates"
     assert _chain(groups, ink.id) == ["World", "Look", "Ink wash samples"] and _chain(groups, one.id) == ["Shots", "Gate", "Gate board"]
     assert _chain(groups, shared.id)[0] == "Shots" and _chain(groups, shared.id)[1] in ("Quay", "Pier")   # B3: a board two Shots use, to its first's

@@ -9,7 +9,10 @@ and gains a role. The album stays as it is around them.
 `migrate_bins` runs once per project at open: each version's pages under its home, each style's samples under `world/look`, a Flow board
 used by one Shot under its shot's home; then (U2e, bins schema 2) the Unprocessed assets whose origin names an owner go to its home; then
 (B3 of D159, bins schema 3) every album page still in no home goes to the home of what uses it, else the Sketches. A page is a folder of
-its home from then on (the tree lists it, it opens on its own things), and a new page is made in a home (`page_parent`).
+its home from then on (the tree lists it, it opens on its own things), and a new page is made in a home (`page_parent`). B4 (bins schema
+4): no thing stays on no page — a job's things no owner takes, an import, a thing a route made go to `free_home` (Image's free work to the
+Sketches, a stage's to its shot, a quick start beside its picture, an import to Imports); the unplaced things are moved once, and any
+stray at each open (`home_loose`).
 Every finished job's assets land in their owner's home (`land`, from the queue's completion tail). An asset without an owner stays
 unplaced until B4 (D159) retires Unprocessed.
 """
@@ -22,7 +25,7 @@ from .fsio import atomic_write_json, read_json_or, unlink, utc_now
 from .catalogue import AssetQuery
 from .groups import ROOT_ID, GroupRecord, GroupStore
 
-BINS_SCHEMA_VERSION = 3                            # U2e: 2 — the Unprocessed assets sorted by their origin; B3: 3 — every page in a home
+BINS_SCHEMA_VERSION = 4                            # U2e: 2 — the Unprocessed assets sorted by their origin; B3: 3 — every page in a home; B4: 4 — every thing
 CLASS_HOME = {"character": "Characters", "prop": "Props", "place": "Places"}
 NAMED = {"world": "World", "world/look": "Look", "world/sketches": "Sketches", "shots": "Shots", "episode": "Episode", "imports": "Imports",
          **{f"world/{c}": n for c, n in CLASS_HOME.items()}}
@@ -156,13 +159,17 @@ def owner_home(groups: GroupStore, ws: Any, origin: Any) -> GroupRecord | None:
     return home(groups, f"shots/{s.id}/{vid}", {f"shots/{s.id}": s.name, f"shots/{s.id}/{vid}": vid})
 
 
-def land(groups: GroupStore, ws: Any, origin: Any, asset_ids: list[str]) -> GroupRecord | None:
+def land(groups: GroupStore, ws: Any, origin: Any, asset_ids: list[str], *, free: bool = True) -> GroupRecord | None:
     """U2e (G1): a finished job's assets that no page took yet go to their owner's home (a page a finisher chose — Expand's candidates,
-    a style's group — keeps them). The home, or None."""
+    a style's group — keeps them); B4 (D159): with no owner, to where a free thing lives (`free_home`; `free=False`: they stay). The home,
+    or None."""
     loose = [a for a in asset_ids if ("asset", a) not in groups.parent and groups.cat.get(a) is not None]
     if not loose:
         return None
     h = owner_home(groups, ws, origin)
+    if h is None and free:
+        rec = groups.cat.get(loose[0])
+        h = free_home(groups, ws, origin, rec)
     if h is not None:
         groups.move([("asset", a) for a in loose], h.id)
     return h
@@ -668,12 +675,17 @@ def migrate_bins(ws: Any, groups: GroupStore) -> list[str]:
     marker = _marker(ws, groups)
     done = read_json_or(marker, None)
     if isinstance(done, dict) and int(done.get("schema_version", 1)) >= BINS_SCHEMA_VERSION:
-        return []
-    if isinstance(done, dict):                                              # U2d's pages are in; then the Unprocessed (2), the pages (3)
-        notes = _sort_unprocessed(ws, groups) if int(done.get("schema_version", 1)) < 2 else []
-        moved, more = _pages_into_homes(ws, groups)
+        strays = home_loose(groups, ws)                                     # B4: a thing a route left on no page since the last open
+        return [_homed_note(strays)] if strays else []
+    if isinstance(done, dict):                                              # U2d's pages are in; then the Unprocessed (2), the pages (3), the things (4)
+        was = int(done.get("schema_version", 1))
+        notes = _sort_unprocessed(ws, groups) if was < 2 else []
+        moved, more = _pages_into_homes(ws, groups) if was < 3 else (done.get("pages_homed", 0), [])
+        homed = home_loose(groups, ws)
+        if homed:
+            more.append(_homed_note(homed))
         atomic_write_json(marker, {**done, "schema_version": BINS_SCHEMA_VERSION, "sorted_at": done.get("sorted_at") or utc_now(),
-                                   "paged_at": utc_now(), "pages_homed": moved})
+                                   "paged_at": done.get("paged_at") or utc_now(), "pages_homed": moved, "homed_at": utc_now(), "things_homed": sum(homed.values())})
         return [*notes, *more]
     from .story import StoryStore
     st = StoryStore(ws)
@@ -701,8 +713,11 @@ def migrate_bins(ws: Any, groups: GroupStore) -> list[str]:
     sorted_notes = _sort_unprocessed(ws, groups)
     homed, paged_notes = _pages_into_homes(ws, groups)
     sorted_notes += paged_notes
+    things = home_loose(groups, ws)
+    if things:
+        sorted_notes.append(_homed_note(things))
     atomic_write_json(marker, {"schema_version": BINS_SCHEMA_VERSION, "migrated_at": utc_now(), "pages": pages, "styles": styles, "boards": boards,
-                               "pages_homed": homed})
+                               "pages_homed": homed, "things_homed": sum(things.values())})
     if not (pages or styles or boards):
         return sorted_notes
     parts = [f"{pages} version page{'s' if pages != 1 else ''}" if pages else "", f"{styles} style sample group{'s' if styles != 1 else ''}" if styles else "",
@@ -717,7 +732,7 @@ def _sort_unprocessed(ws: Any, groups: GroupStore) -> list[str]:
     while True:
         page = groups.cat.list(AssetQuery(folder="unprocessed", limit=500, cursor=cursor))
         for a in page.items:
-            if a.origin is not None and land(groups, ws, a.origin, [a.id]) is not None:
+            if a.origin is not None and land(groups, ws, a.origin, [a.id], free=False) is not None:   # owners only; B4 homes the rest
                 moved += 1
         cursor = page.next_cursor
         if not cursor or not page.items:
@@ -805,3 +820,91 @@ def _pages_into_homes(ws: Any, groups: GroupStore) -> tuple[int, list[str]]:
     if kept:
         notes.append(f"B3: {len(kept)} locked page{'s' if len(kept) != 1 else ''} stayed on the album ({', '.join(kept[:4])})")
     return moved, notes
+
+
+# ---- B4 (D159): no thing on no page ---------------------------------------------------------------------------------------------------
+def _set_face_home(groups: GroupStore, ws: Any, aid: str) -> GroupRecord | None:
+    """The place version whose built set names a bake or its coverage (the set builder's faces)."""
+    from .story import StoryStore
+    for p in StoryStore(ws).profiles():
+        if p.cls != "place":
+            continue
+        for v in p.versions:
+            ps = getattr(v, "place_set", None)
+            if ps is not None and any(aid in (f.texture_asset_id, f.baked_asset_id, f.coverage_asset_id) for f in ps.faces):
+                return version_home(groups, p, v.id)
+    return None
+
+
+def free_home(groups: GroupStore, ws: Any, origin: Any, rec: Any = None) -> GroupRecord:
+    """B4 (D159 Q4): where a thing no owner took lives — never on no page. A stage's (its passes, a final's layer, a thing's mask, named by
+    its origin or its params) with the shot first made through the stage; a look-preset swatch in the Look; a set builder's bake with its
+    place's version; a thing made from a picture (the Bin's quick starts) beside that picture; an import in Imports; Image's free work, an
+    Edit result, a render whose record is gone in the Sketches."""
+    from .finals import FinalStore
+    from .stages import StageStore
+    o = (origin if isinstance(origin, dict) else origin.model_dump()) if origin is not None else {}
+    suite, surface, ref = o.get("suite") or "", o.get("surface") or "", o.get("ref") or ""
+    params = (getattr(rec, "params", None) or {}) if rec is not None else {}
+    stage_id = ref if ref.startswith("stg_") else params.get("stage_id") if isinstance(params.get("stage_id"), str) else None
+    if ref.startswith("fin_") and not stage_id:
+        f = FinalStore(ws).get(ref)
+        stage_id = f.stage_id if f is not None else None
+    if stage_id:
+        stage = StageStore(ws).get(stage_id)
+        if stage is not None:
+            return stage_home(groups, ws, stage)
+    if suite == "generate" and surface == "swatch":
+        return home(groups, "world/look")
+    if rec is not None and getattr(rec, "lineage_kind", None) in ("set-bake", "set-coverage"):
+        h = _set_face_home(groups, ws, rec.id)
+        if h is not None:
+            return h
+    if ref.startswith("ast_"):
+        src = home_of(groups, groups.parent.get(("asset", ref)))
+        if src is not None and (src.path or "") not in HEADINGS:
+            return src
+    if suite == "import" or (rec is not None and getattr(rec, "suite", None) == "import"):
+        return home(groups, "imports")
+    return home(groups, "world/sketches")
+
+
+def home_loose(groups: GroupStore, ws: Any) -> dict[str, int]:
+    """B4: every thing on no page to its home (`owner_home`, else `free_home`) — once at the migration, and any stray at each open. The
+    count moved per home path (one whose record cannot be read stays where it was, counted as left in Imports)."""
+    out: dict[str, int] = {}
+    cursor = None
+    while True:
+        page = groups.cat.list(AssetQuery(folder="unprocessed", limit=500, cursor=cursor))
+        for a in page.items:
+            if ("asset", a.id) in groups.parent:
+                continue
+            try:
+                h = owner_home(groups, ws, a.origin) or free_home(groups, ws, a.origin, a)
+                groups.move([("asset", a.id)], h.id)
+            except Exception:  # noqa: BLE001 — a record that cannot be read (a cut's file gone): the thing stays in Imports, as before
+                out["(left in Imports)"] = out.get("(left in Imports)", 0) + 1
+                continue
+            out[h.path or ""] = out.get(h.path or "", 0) + 1
+        cursor = page.next_cursor
+        if not cursor or not page.items:
+            break
+    return out
+
+
+def _homed_note(homed: dict[str, int]) -> str:
+    n = sum(homed.values())
+    top = sorted(homed.items(), key=lambda kv: -kv[1])[:3]
+    return f"B4: {n} thing{'s' if n != 1 else ''} on no page went to a home ({', '.join(f'{k} {v}' for k, v in top)}{' …' if len(homed) > 3 else ''})"
+
+
+FREE_HOMES = {"world/sketches", "imports"}            # B4: the homes of nobody's things — what Unprocessed held
+
+
+def is_free(groups: GroupStore, gid: str | None) -> bool:
+    """B4: a thing on no page, or in the Sketches or Imports (their pages too), is nobody's — an entity that takes it moves it, as it took
+    an Unprocessed thing; from any other home it is copied, so its owner keeps it."""
+    if gid is None:
+        return True
+    h = home_of(groups, gid)
+    return h is not None and (h.path or "") in FREE_HOMES

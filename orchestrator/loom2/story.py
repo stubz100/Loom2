@@ -2592,12 +2592,13 @@ class StoryStore(_ShotMixin, _FlowMixin):
         else:
             target = v.group_id
         own = {v.candidates_group_id} - {None, target}
+        from .bins import is_free
         out, moved, copied, already = [], [], {}, []
         for aid in dict.fromkeys(ids):
             where = groups.parent.get(("asset", aid))
             if where == target:
                 already.append(aid); out.append(aid)
-            elif where is None or where in own:
+            elif where in own or is_free(groups, where):                     # B4 (D159): from the Sketches or Imports, as from Unprocessed
                 groups.move([("asset", aid)], target)
                 moved.append(aid); out.append(aid)
             else:

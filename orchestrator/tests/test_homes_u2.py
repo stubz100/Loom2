@@ -32,7 +32,8 @@ def test_assets_land_in_their_owners_home(tmp_path: Path):
     groups.move([("asset", ids[1])], page.id)
     assert land(groups, ws, for_shot, [ids[0], ids[1]]).id == h.id
     assert groups.parent[("asset", ids[0])] == h.id and groups.parent[("asset", ids[1])] == page.id
-    assert land(groups, ws, {"suite": "generate", "surface": "panel"}, [ids[2]]) is None and ("asset", ids[2]) not in groups.parent
+    assert land(groups, ws, {"suite": "generate", "surface": "panel"}, [ids[2]], free=False) is None and ("asset", ids[2]) not in groups.parent
+    assert land(groups, ws, {"suite": "generate", "surface": "panel"}, [ids[2]]).path == "world/sketches"        # B4 (D159): Image's free work
 
 
 def test_unprocessed_is_sorted_once(tmp_path: Path):
@@ -42,7 +43,9 @@ def test_unprocessed_is_sorted_once(tmp_path: Path):
     made = cat.ingest_file(_png(tmp_path / "take.png"), origin={"suite": "generate", "surface": FOR_SHOT, "ref": None, "payload": {"shot_id": gate.shot_id, "version": "v1"}})
     free = cat.ingest_file(_png(tmp_path / "free.png"), origin={"suite": "generate", "surface": "panel", "ref": None, "payload": {}})
     atomic_write_json(groups.dir / "bins.json.corrupt-20261029-021718", {"schema_version": 1, "migrated_at": "2026-10-29T00:00:00Z", "pages": 0, "styles": 0, "boards": 0})   # U2d's run (moved aside by the album, U4)
-    assert migrate_bins(ws, groups) == ["U2: 1 unprocessed asset went to the home of what it was made for"]
-    assert groups.groups[groups.parent[("asset", made.id)]].path == f"shots/{gate.shot_id}/v1" and ("asset", free.id) not in groups.parent
-    assert read_json(ws.path / "bins.json")["schema_version"] == 3 and migrate_bins(ws, groups) == []                 # B3: 3 — the pages in homes too
+    notes = migrate_bins(ws, groups)
+    assert notes[0] == "U2: 1 unprocessed asset went to the home of what it was made for" and notes[-1].startswith("B4: ")   # B4: the rest
+    assert groups.groups[groups.parent[("asset", made.id)]].path == f"shots/{gate.shot_id}/v1"
+    assert groups.groups[groups.parent[("asset", free.id)]].path == "world/sketches"                          # B4: Image's free work
+    assert read_json(ws.path / "bins.json")["schema_version"] == 4 and migrate_bins(ws, groups) == []                 # B4: 4 — every thing in a home
     assert not list(groups.dir.glob("bins.json*"))                                          # the misfiled marks are gone from the album

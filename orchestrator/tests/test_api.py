@@ -130,8 +130,10 @@ def test_empty_trash_purges_everything_with_one_event(tmp_path: Path):
             ws.receive_json()                                                       # hello
             r = client.post("/assets/purge", json={"ids": None}, headers=H).json()
             assert r["purged"] == 55 and r["ids"] == []
-            frame = ws.receive_json()
-            assert frame["type"] == "catalogue.changed" and frame["data"]["purged"] == 55
+            frames = [ws.receive_json()]
+            while frames[-1]["type"] != "catalogue.changed":                         # B4 (D159): the things were in Imports — its group.changed first
+                frames.append(ws.receive_json())
+            assert frames[-1]["data"]["purged"] == 55 and len(frames) <= 2 and not any(f["type"] == "asset.deleted" for f in frames)
         assert client.get("/assets", params={"folder": "trash"}).json()["total"] == 0
         assert client.get("/assets").json()["total"] == 5
         for aid in ids[:55]:

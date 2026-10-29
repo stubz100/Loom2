@@ -305,8 +305,8 @@ async def profile_candidates(svc: Svc, pid: str, body: CandidatesBody):
 @router.post("/story/profiles/{pid}/versions/{vid}/add", response_model=ProfileAdded)
 async def profile_add(svc: Svc, pid: str, vid: str, body: AddBody):
     """D93 (A2) "Add to character ▸": images from anywhere into a version — as the hero (onto the reference set as its cover), into the
-    reference set, or as candidates. From Unprocessed or the version's candidates page they move; from any other page they are copied
-    (the reply says which). A final version answers 423 with the reason."""
+    reference set, or as candidates. From the Sketches or Imports (B4: Unprocessed's homes) or the version's candidates page they move;
+    from any other home they are copied (the reply says which). A final version answers 423 with the reason."""
     ws, cat, _ = svc.require_project()
     groups = svc.require_groups()
     store = StoryStore(ws)

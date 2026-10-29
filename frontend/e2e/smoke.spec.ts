@@ -12,7 +12,7 @@ interface Group { id: string; name: string; items: { kind: string; id: string }[
 test('open the project: the Bin shows tiles and their thumbnails load; the Project menu, the layer tabs, Models & engine in ☰ (B2a, D159)', async ({ page }) => {
   expect((await api<{ variant: string }>('GET', '/health')).variant).toBe(env().variant)          // LOOM2_VARIANT reached the orchestrator
   await openShell(page, 'bin')
-  await openHome(page, 'imports')
+  await openHome(page, 'world/sketches')
   await expect(binTiles(page).first()).toBeVisible()
   expect(await thumbsLoaded(page, 12)).toBeGreaterThanOrEqual(Math.min(12, env().assets))
   // the Project menu leads the tabs: the open project's name, New / Open / Close and the recents
@@ -37,7 +37,7 @@ test('open the project: the Bin shows tiles and their thumbnails load; the Proje
 
 test('no keep / reject and no ratings (D122): not in the Bin\'s tile menu, its Inspector or the asset (B2a)', async ({ page }) => {
   await openShell(page, 'bin')
-  await openHome(page, 'imports')
+  await openHome(page, 'world/sketches')
   const tile = binTiles(page).nth(3)
   const id = (await tile.getAttribute('data-id'))!
   await tile.click({ button: 'right' })
@@ -58,12 +58,12 @@ test('no keep / reject and no ratings (D122): not in the Bin\'s tile menu, its I
 })
 
 test('drag a tile onto a home in the Bin\'s tree with the mouse: it moves into that home; a heading takes none (B2a, D159)', async ({ page }) => {
-  await api('POST', '/bin/homes', { path: 'world/sketches' })
+  await api('POST', '/bin/homes', { path: 'world/look' })
   await openShell(page, 'bin')
-  await openHome(page, 'imports')
+  await openHome(page, 'world/sketches')                                                                   // B4: the free pictures' home
   const tile = binTiles(page).nth(1)
   const id = (await tile.getAttribute('data-id'))!
-  const row = page.locator('[data-testid="bin-tree"] .b-node[data-path="world/sketches"]')
+  const row = page.locator('[data-testid="bin-tree"] .b-node[data-path="world/look"]')
   const heading = page.locator('[data-testid="bin-tree"] .b-node[data-path="world"]')
   // a real pointer drag (frame/drag.ts: pointer events, never HTML5 drag and drop): press, pass the 5 px threshold, carry, release
   const from = await centre(tile), to = await centre(row), over = await centre(heading)
@@ -77,8 +77,8 @@ test('drag a tile onto a home in the Bin\'s tree with the mouse: it moves into t
   await expect(row).toHaveClass(/drop-over/)
   await page.mouse.up()
   await expect(page.locator('.drag-ghost')).toHaveCount(0)
-  await expect.poll(async () => (await api<{ path: string }>('GET', `/bin/things/${id}`)).path, { timeout: 10_000 }).toBe('world/sketches')
-  await expect(page.locator(`[data-testid="bin-grid"] .w-tile[data-id="${id}"]`)).toHaveCount(0)        // it left Imports
+  await expect.poll(async () => (await api<{ path: string }>('GET', `/bin/things/${id}`)).path, { timeout: 10_000 }).toBe('world/look')
+  await expect(page.locator(`[data-testid="bin-grid"] .w-tile[data-id="${id}"]`)).toHaveCount(0)        // it left the Sketches
 })
 
 test('Make with Klein 4B in Sketches: the fake engine answers, the job runs the model picked in the column and the picture lands in Sketches (B2a)', async ({ page }) => {
@@ -115,7 +115,7 @@ test('Make with Klein 4B in Sketches: the fake engine answers, the job runs the 
 
 test('Edit opens from a Bin tile on WebGL2 (B2a): a mouse stroke dirties the document, its foot says so, and Save beside it puts the new version in the picture\'s home', async ({ page }) => {
   await openShell(page, 'bin', { renderer: 'webgl' })
-  await openHome(page, 'imports')
+  await openHome(page, 'world/sketches')
   const tile = binTiles(page).nth(5)
   const src = (await tile.getAttribute('data-id'))!
   await contextChoose(page, tile, 'Open in Edit')
@@ -151,8 +151,7 @@ test('Performance: the drawer\'s right-click fills the start and the end slots o
   await page.locator('.perf-cards button', { hasText: 'Image to video' }).click()
   await expect(page.locator('.perf-cards button.active')).toHaveText('Image to video')
   await page.locator('.dock .dock-tabs button', { hasText: 'Bin' }).click()
-  const homes = page.locator('[data-testid="bin-drawer-homes"]')
-  await homes.locator('.b-node[data-path="imports"] .b-open').click()
+  await drawerHome(page, 'world/sketches')
   await page.locator('.dock .bin-bar .segmented button', { hasText: 'pictures' }).click()
   const grid = page.locator('.dock .bin-grid')
   const [ta, tb] = [grid.locator('.w-tile').nth(2), grid.locator('.w-tile').nth(3)]
@@ -167,6 +166,25 @@ test('Performance: the drawer\'s right-click fills the start and the end slots o
     expect(await slots.nth(k).locator('img').getAttribute('src')).toContain(`/thumbs/${id}/`)
   }
 })
+
+/** B4 (D159): the newest pictures in World › Sketches, where the free ones live (the newest Unprocessed ones before), newest first. */
+async function sketchPics(n: number): Promise<AssetLite[]> {
+  type N = { id: string; path: string; children: N[] }
+  const find = (ns: N[]): N | undefined => { for (const x of ns) { if (x.path === 'world/sketches') return x; const k = find(x.children); if (k) return k } return undefined }
+  const s = find((await api<{ homes: N[] }>('GET', '/bin/tree')).homes)!
+  return (await api<{ items: { asset: AssetLite & { kind: string } }[] }>('GET', `/bin/homes/${s.id}/items?limit=${Math.max(n * 3, 20)}`)).items.map((x) => x.asset).filter((a) => a.kind === 'image').slice(0, n)
+}
+
+/** B4: a home of the Dock's drawer opened, its parents unfolded (`world/sketches`). */
+async function drawerHome(page: import('@playwright/test').Page, path: string): Promise<void> {
+  const homes = page.locator('[data-testid="bin-drawer-homes"]')
+  const parts = path.split('/')
+  for (let i = 1; i < parts.length; i++) {
+    const chev = homes.locator(`.b-node[data-path="${parts.slice(0, i).join('/')}"] > .b-chev[aria-label="Unfold"]`)
+    if (await chev.count()) await chev.click()
+  }
+  await homes.locator(`.b-node[data-path="${path}"] .b-open`).click()
+}
 
 /** D119 (SC2): the Library's presets sit behind each group's + — open the group's panel and click the tile by its name; the panel closes
  *  with the next click elsewhere. `group`: figures | sets | standins | templates (the Scene section), poses (the Motion section). */
@@ -242,7 +260,7 @@ const editorTool = (page: import('@playwright/test').Page) => page.evaluate(() =
 
 test('quick starts (D71, B2a): "Select subject…" on a Bin picture reaches World\'s Edit with AI Select · Subject in one click; the deep link does too', async ({ page }) => {
   await openShell(page, 'bin')
-  await openHome(page, 'imports', 'pictures')
+  await openHome(page, 'world/sketches', 'pictures')
   await binTiles(page).nth(8).click()
   await page.locator('[data-testid="bin-inspector"] button', { hasText: 'Start from it' }).click()
   await page.locator('.ctx-menu button.item', { hasText: 'Select subject…' }).click()
@@ -257,7 +275,7 @@ test('quick starts (D71, B2a): "Select subject…" on a Bin picture reaches Worl
 
 test("Instruct (D151): the AI tab's edit by instruction — the deep link opens it, it refuses without an instruction and runs with one; the canvas menu shows it (in World's Edit, B2a)", async ({ page }) => {
   await openShell(page, 'bin')
-  await openHome(page, 'imports', 'pictures')
+  await openHome(page, 'world/sketches', 'pictures')
   await binTiles(page).nth(8).click({ button: 'right' })
   await page.locator('.ctx-menu button.item', { hasText: /^Select subject…/ }).click()                    // World's Edit with a document (D71)
   await expect.poll(() => editorTool(page), { timeout: 30_000 }).toMatchObject({ doc: true, tool: 'ai' })
@@ -277,7 +295,7 @@ test("Instruct (D151): the AI tab's edit by instruction — the deep link opens 
 
 test("the reference deck (D152): Inpaint and Refine show the model's slots in the AI tab, Remove shows none; the deck keeps its shape across operations (in World's Edit, B2a)", async ({ page }) => {
   await openShell(page, 'bin')
-  await openHome(page, 'imports', 'pictures')
+  await openHome(page, 'world/sketches', 'pictures')
   await binTiles(page).nth(8).click({ button: 'right' })
   await page.locator('.ctx-menu button.item', { hasText: /^Select subject…/ }).click()                    // World's Edit with a document (D71)
   await expect.poll(() => editorTool(page), { timeout: 30_000 }).toMatchObject({ doc: true, tool: 'ai' })
@@ -298,7 +316,7 @@ test("the reference deck (D152): Inpaint and Refine show the model's slots in th
 
 test('text layers (D154): the Text tool places text typed in place; the layer is marked and editable in Properties; Rasterize text drops the block (in World’s Edit, B2a)', async ({ page }) => {
   await openShell(page, 'bin')
-  await openHome(page, 'imports', 'pictures')
+  await openHome(page, 'world/sketches', 'pictures')
   await binTiles(page).nth(8).click({ button: 'right' })
   await page.locator('.ctx-menu button.item', { hasText: /^Select subject…/ }).click()                    // World's Edit with a document (D71)
   await expect.poll(() => editorTool(page), { timeout: 30_000 }).toMatchObject({ doc: true, tool: 'ai' })
@@ -326,7 +344,7 @@ test('text layers (D154): the Text tool places text typed in place; the layer is
 
 test('the detachable loupe (D155, B2a): Detach ↗ in the Bin\'s large view opens a second window that follows the Bin until it is held', async ({ page, context }) => {
   await openShell(page, 'bin')
-  await openHome(page, 'imports')
+  await openHome(page, 'world/sketches')
   await binTiles(page).nth(7).dblclick()
   const loupe = page.locator('[data-testid="bin-loupe"]')
   await expect(loupe).toBeVisible()
@@ -365,7 +383,7 @@ test('the camera move (D156): the camera model shows a camera control under the 
 
 test('remappable keys (D72, B2a): the Bin\'s Pin for compare to T is refused (Tag… has it); to J — menu, tooltip and help show J, J pins, C does not, it survives a reload', async ({ page }) => {
   await openShell(page, 'bin')
-  await openHome(page, 'imports')
+  await openHome(page, 'world/sketches')
   const openKeys = async () => {
     await page.locator('button[aria-label="app menu"]').click()
     await page.locator('.menu button', { hasText: /^Settings…/ }).click()
@@ -417,7 +435,7 @@ test('@mentions (D73, in Sketches since B2a): "@hero walks into @tavern" — bot
   const tag = Date.now().toString(36)
   const [heroName, tavernName] = [`hero ${tag}`, `tavern ${tag}`]                   // names with a space, as people write them
   const hero = await api<Group>('POST', '/groups', { name: heroName }), tavern = await api<Group>('POST', '/groups', { name: tavernName })
-  const free = (await api<{ items: (AssetLite & { kind: string })[] }>('GET', '/assets?folder=unprocessed&limit=40')).items.filter((a) => a.kind === 'image')
+  const free = (await sketchPics(40))
   await api('POST', '/groups/move', { items: free.slice(0, 3).map((a) => ({ kind: 'asset', id: a.id })), to: hero.id })
   await api('POST', '/groups/move', { items: free.slice(3, 5).map((a) => ({ kind: 'asset', id: a.id })), to: tavern.id })
   await openShell(page, 'world/sketches')
@@ -464,7 +482,7 @@ test('a part whose code fails to load says so and recovers (no blank window, B2a
   const refused = /(EditSuite|WorldEdit)-[\w-]+\.js$/
   await page.route(refused, (r) => r.abort('failed'))                                  // the network refuses Edit's code (the idle preload hits it too)
   await openShell(page, 'bin')
-  await openHome(page, 'imports', 'pictures')
+  await openHome(page, 'world/sketches', 'pictures')
   await contextChoose(page, binTiles(page).nth(2), 'Open in Edit')
   await expect(page.locator('.w-centre .render-error')).toContainText("Edit's code could not be loaded")
   await expect(page.locator('.render-error')).toHaveCount(1)                          // one explanation, in the middle; the column says one line
@@ -475,14 +493,14 @@ test('a part whose code fails to load says so and recovers (no blank window, B2a
   await page.locator('.w-centre .render-error').getByRole('button', { name: 'Reload the app' }).click()   // the browser keeps a failed module: reload
   await expect(page.locator('.frame.ui2')).toBeVisible()
   await openShell(page, 'bin')
-  await openHome(page, 'imports', 'pictures')
+  await openHome(page, 'world/sketches', 'pictures')
   await contextChoose(page, binTiles(page).nth(2), 'Open in Edit')
   await expect(page.locator('[data-testid="world-edit"] .edit-canvas')).toBeVisible({ timeout: 90_000 })   // the code loads this time
 })
 
 test('a new angle (P14, D82; B2a): "New angle…" on a Bin picture opens the sheet with the source, the pad picks the move, the job lands with reangle lineage', async ({ page }) => {
   await openShell(page, 'bin')
-  await openHome(page, 'imports', 'pictures')
+  await openHome(page, 'world/sketches', 'pictures')
   const srcId = (await binTiles(page).nth(8).getAttribute('data-id'))!   // pinned by id
   await page.locator(`[data-testid="bin-grid"] .w-tile[data-id="${srcId}"]`).click()
   await page.locator('[data-testid="bin-inspector"] button', { hasText: 'Start from it' }).click()
@@ -1099,9 +1117,9 @@ test("a pose-driven shot (19 / CN4, D87): the Render tab's Animate method takes 
 })
 
 test('a 3D prop (P18, D84): "Make a 3D prop…" on a tile says its cost, the fake engine answers with a GLB, the mesh asset lands with lineage and a thumbnail, and the Stage library places it (the Bin and Shots, B2a)', async ({ page }) => {
-  const srcId = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=unprocessed&kind=image&sort=created_desc&limit=6')).items.at(-1)!.id   // a plain picture in Imports
+  const srcId = (await sketchPics(6)).at(-1)!.id   // a plain picture in the Sketches (B4)
   await openShell(page, 'bin')
-  await openHome(page, 'imports', 'pictures')
+  await openHome(page, 'world/sketches', 'pictures')
   await page.locator(`[data-testid="bin-grid"] .w-tile[data-id="${srcId}"]`).click()
   const starts = async () => { await page.locator('[data-testid="bin-inspector"] button', { hasText: 'Start from it' }).click() }
   if (JSON.parse(process.env.LOOM2_E2E ?? '{}').variant === 'open') {                                       // D17 / D26: DINOv3 keeps Pixal3D full-only
@@ -1127,7 +1145,7 @@ test('a 3D prop (P18, D84): "Make a 3D prop…" on a tile says its cost, the fak
   const m = await meshOf()
   expect(m.kind).toBe('mesh'); expect(m.lineage_kind).toBe('image-to-mesh'); expect(m.parents).toEqual([srcId]); expect(m.params.format).toBe('glb')
   expect(Object.keys(m.params.licences)).toContain('dinov3-l')                                              // the weights' licences in the manifest
-  expect((await api<{ path: string }>('GET', `/bin/things/${m.id}`)).path).toBe('imports')                 // the model lands in Imports
+  expect((await api<{ path: string }>('GET', `/bin/things/${m.id}`)).path).toBe('world/sketches')          // B4: the model lands beside its picture
   // the Stage library lists it; one click places it; the viewport loads the GLB
   await clayShot(page, `Props ${Date.now().toString(36)}`)
   await expect(page.locator('canvas.stage-canvas')).toBeVisible()
@@ -1535,7 +1553,7 @@ test('a character from a picture (SY1, B2a): "Make a character…" on a Bin pict
   const [heroId, candId] = (await api<{ ids: string[] }>('POST', '/assets/duplicate', { ids: [src, src] })).ids
   await api('POST', '/groups/move', { items: [heroId, candId].map((id) => ({ kind: 'asset', id })), to: null })   // both on no page: Imports
   await openShell(page, 'bin')
-  await openHome(page, 'imports')
+  await openHome(page, 'imports')                                                                                // on no page: Imports shows them (B4: a stray until the next open)
   await page.locator(`[data-testid="bin-grid"] .w-tile[data-id="${heroId}"]`).click({ button: 'right' })
   await page.locator('.ctx-menu .item.sub', { hasText: 'Make an entity from it' }).hover()
   await page.locator('.ctx-menu .ctx-menu button.item', { hasText: 'Make a character…' }).click()
@@ -1790,7 +1808,7 @@ test("an episode (17 / SY4, D85): the Shots bin lists a final shot and adds it s
   test.setTimeout(120_000)
   // a final shot: a clip at the project format (the fake engine), a Dialogue node bound to it
   const fmt = (await api<{ format: { width: number; height: number } }>('GET', '/project')).format
-  const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=unprocessed&kind=image&sort=created_desc&limit=1')).items[0].id
+  const img = (await sketchPics(1))[0].id
   const caps = await api<{ defaults: { i2v: string } }>('GET', '/capabilities')
   type JobLite = { id: string; status: string; result: { clip_id?: string } }
   const job = (await api<{ jobs: { id: string }[] }>('POST', '/jobs', { recipe: { kind: 'i2v', model_id: caps.defaults.i2v, start_asset: img, width: fmt.width, height: fmt.height, frames: 9, fps: 16, prompt_text: 'episode clip' }, stage: false, origin: { suite: 'animate', surface: 'clip' } })).jobs[0]
@@ -2050,7 +2068,7 @@ test('Add to World ▸ (D93 · A2, B2a): a character without a look takes a Bin 
   const pic = (await api<{ ids: string[] }>('POST', '/assets/duplicate', { ids: [img] })).ids[0]        // a copy, on no page: Imports
   await api('POST', '/groups/move', { items: [{ kind: 'asset', id: pic }], to: null })
   await openShell(page, 'bin')
-  await openHome(page, 'imports')
+  await openHome(page, 'imports')                                                                                // on no page: Imports shows them (B4: a stray until the next open)
   const tile = page.locator(`[data-testid="bin-grid"] .w-tile[data-id="${pic}"]`)
   await tile.click({ button: 'right' })
   await page.locator('.ctx-menu .item.sub', { hasText: 'Add to World' }).hover()
@@ -2220,8 +2238,8 @@ test('Flatten image (D90 · UI6): the canvas menu\'s Layer ▸ folds a group, a 
     return Buffer.from(await r.arrayBuffer())
   }
   await openShell(page, 'bin', { renderer: 'webgl' })
-  await openHome(page, 'imports', 'pictures')
-  const photo = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=unprocessed&kind=image&sort=created_desc&limit=8')).items.at(-1)!.id   // a plain photo (a saved document has layers)
+  await openHome(page, 'world/sketches', 'pictures')
+  const photo = (await sketchPics(8)).at(-1)!.id   // a plain photo (a saved document has layers)
   await contextChoose(page, page.locator(`[data-testid="bin-grid"] .w-tile[data-id="${photo}"]`), 'Open in Edit')
   const docId = await page.waitForFunction(() => (window as unknown as { __loom2Editor?: Ed }).__loom2Editor?.getState().doc?.id ?? null).then((h) => h.jsonValue() as Promise<string>)
   // arrange (dev hook): a copy of the photo in a group at screen, an invert adjustment on top at 40 %
@@ -2283,7 +2301,7 @@ test('the drawer (D95 · AN1, B2a): the Dock\'s Bin in World\'s Sketches and Sho
   await openShell(page, 'world/sketches')
   await page.locator('.dock .dock-tabs button', { hasText: 'Bin' }).click()
   const grid = page.locator('.dock .bin-grid')
-  await page.locator('[data-testid="bin-drawer-homes"] .b-node[data-path="imports"] .b-open').click()
+  await drawerHome(page, 'world/sketches')
   await page.locator('.dock .bin-bar .segmented button', { hasText: 'pictures' }).click()
   const tile = grid.locator('.w-tile').first()
   await expect(tile).toBeVisible()
@@ -2313,7 +2331,7 @@ test('the drawer (D95 · AN1, B2a): the Dock\'s Bin in World\'s Sketches and Sho
 
 test("the Bin's Trash (B2a): a tile's right-click moves it to the trash, which counts it; there Restore puts it back and Delete permanently… removes it (asked first); the drawer's double-click restores", async ({ page }) => {
   await openShell(page, 'bin')
-  await openHome(page, 'imports')
+  await openHome(page, 'world/sketches')
   await page.locator('[data-testid="bin-grid"] .w-chips button', { hasText: 'pictures' }).click()
   await expect(page.locator('[data-testid="bin-count"]')).toBeVisible()
   const id = (await binTiles(page).last().getAttribute('data-id'))!
@@ -2360,7 +2378,7 @@ test('AN1 step 5 (D95): the Clay level adds an image plane from the Bin, renames
   await page.locator('.lib-row[data-group="planes"] button', { hasText: /^Add image plane/ }).click()                           // #18: opens the Bin
   const bin = page.locator('.dock .bin')
   await expect(bin).toBeVisible()
-  await bin.locator('[data-testid="bin-drawer-homes"] .b-node[data-path="imports"] .b-open').click()
+  await drawerHome(page, 'world/sketches')
   await bin.locator('.bin-bar .segmented button', { hasText: 'pictures' }).click()
   await bin.locator('.bin-grid .w-tile').first().dblclick()                                                    // the Clay level's verb: an image plane
   const row = page.locator('.outl-row', { has: page.locator('.kind', { hasText: 'plane' }) })
@@ -2931,7 +2949,7 @@ test('a set from an image (D120, SC3): a Bin picture becomes a relief set on the
   await page.locator('.lib-row[data-group="sets"] button', { hasText: /^From an image/ }).click()                          // opens the Bin with the hint
   const bin = page.locator('.dock .bin')
   await expect(bin).toBeVisible()
-  await bin.locator('[data-testid="bin-drawer-homes"] .b-node[data-path="imports"] .b-open').click()
+  await drawerHome(page, 'world/sketches')
   await bin.locator('.bin-bar .segmented button', { hasText: 'pictures' }).click()
   const picking = bin.locator('.bin-bar .picking')
   await expect(picking).toContainText('picking for: Add to the stage (a set from this image)')                               // the pick started from the panel
@@ -3047,7 +3065,7 @@ test('the things of a picture set (D123, SC3c): picked on the picture, kept by n
   const jobs = async () => (await api<{ items: JobL[] }>('GET', '/jobs')).items
   const name = `Things ${Date.now().toString(36)}`
   const stg = await api<{ id: string }>('POST', '/stages', { name })
-  const img = (await api<{ items: { id: string; kind: string }[] }>('GET', '/assets?folder=unprocessed&limit=40')).items.find((a) => a.kind === 'image')!
+  const img = (await sketchPics(40))[0]
   const made = await api<{ job_id: string }>('POST', `/stages/${stg.id}/image-set`, { asset_id: img.id, lens_deg: 70 })
   await expect.poll(async () => (await jobs()).find((j) => j.id === made.job_id)?.status, { timeout: 30_000 }).toBe('done')
   type SetDoc = { objects: { id: string; kind: string; preset: string | null; plate_asset_id?: string | null; asset_id: string | null; things?: { id: string; name: string; mesh_asset_id: string | null }[] }[] }
@@ -3488,7 +3506,7 @@ test('a prop held in a hand (D129 · HP1): a prop goes into a figure\'s right ha
 
 test('World in the new shell (U3a, D157 · proto01_UI2 03): a character\'s header, readiness and one bin with its roles; a reference made the hero from the Inspector', async ({ page }) => {
   const tag = Date.now().toString(36)
-  const imgs = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=unprocessed&kind=image&sort=created_desc&limit=2')).items
+  const imgs = (await sketchPics(2))
   const name = `Wren ${tag}`
   type ProfileLite = { id: string; versions: { id: string; hero_asset_id: string | null }[] }
   const prof = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', hero_asset_id: imgs[0].id })
@@ -3546,7 +3564,7 @@ test('World\'s Make (U3b, D157 · proto01_UI2 03 §3): the panel is the entity\'
 test('World\'s Edit (U3c, D157 · proto01_UI2 03 §4): the selected creation opens in the editor inside World; Save as a reference puts the edited picture into the bin', async ({ page }) => {
   test.setTimeout(120_000)
   const tag = Date.now().toString(36)
-  const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=unprocessed&kind=image&sort=created_desc&limit=1')).items[0]
+  const img = (await sketchPics(1))[0]
   type ProfileLite = { id: string }
   type BinLite = { items: { asset: { id: string }; roles: string[] }[] }
   const prof = await api<ProfileLite>('POST', '/story/profiles', { name: `Pell ${tag}`, cls: 'character', hero_asset_id: img.id })

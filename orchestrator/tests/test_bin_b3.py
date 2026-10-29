@@ -59,11 +59,11 @@ def test_the_pages_in_no_home_go_to_their_owners_once(tmp_path: Path):
     groups.move([("asset", ids[3])], inner.id)
     atomic_write_json(ws.path / "bins.json", {"schema_version": 2, "migrated_at": "2026-10-28T10:00:00Z"})   # U2's pages done
     notes = migrate_bins(ws, groups)
-    assert any("3 album pages moved" in n for n in notes), notes
+    assert any("3 album pages moved" in n for n in notes), notes                      # (and B4 homes the things on no page)
     assert _home_of(groups, page.id) == f"shots/{gate.shot_id}"                         # the shot first made through it
     assert _home_of(groups, board.id) == f"shots/{quay.shot_id}"
     assert _home_of(groups, mine.id) == "world/sketches" and groups.parent[("group", inner.id)] == mine.id   # with the page inside it
-    assert read_json_or(ws.path / "bins.json", {})["schema_version"] == BINS_SCHEMA_VERSION == 3
+    assert read_json_or(ws.path / "bins.json", {})["schema_version"] == BINS_SCHEMA_VERSION >= 3                    # B4 is 4
     root = groups.groups[ROOT_ID]
     assert all(groups.groups[it.id].kind == "bin" for it in root.items if it.kind == "group")   # the root holds the homes only
     assert migrate_bins(ws, groups) == []                                               # once

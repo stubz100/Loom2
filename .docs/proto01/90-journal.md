@@ -13385,3 +13385,62 @@ On a copy of *The Last Ferry*'s records (without the media), R1's *Stage · Stay
 **Checks:** offline 741 passed; Vitest 598 + 3 skipped; typecheck, build and lint clean (61 warnings, as before); e2e 84/84 (alone, 5.8 min).
 
 Next: B4, Unprocessed retired.
+
+## 2026-10-29 21:18 — B4: Unprocessed retired — no thing stays on no page (D159 Q4; proto01_UI2 11 §5)
+
+**Where a free thing lives** (`free_home` in `bins.py`, for what no owner takes):
+
+| The thing | Its home |
+| --- | --- |
+| a stage's (its stills, a final's layer, a thing's mask or cut-out), named by its origin or its params | the shot first made through the stage (B3's `stage_home`) |
+| a look-preset swatch | World › Look |
+| a set builder's bake or coverage | its place's version (the set's faces name it) |
+| a thing made from a picture (the Bin's quick starts: Make a 3D prop, Upscale, Select subject) | beside that picture |
+| an import | Imports |
+| Image's free work, an Edit result, a render whose record is gone | World › Sketches |
+
+**Where it applies:**
+
+- **A job's things** go to their owner's home, else `free_home` (`land`). U2's one-time sort keeps to owners.
+- **An import** lands in the home it was asked into, or the page (B3), else Imports.
+- **The unplaced things are moved once** (bins schema 4). At each open, a stray a route left on no page is homed too (`home_loose`), and
+  the startup notes say how many and where.
+- **A record that cannot be read** (a cut whose file is gone) leaves its thing where it was, counted, instead of failing the project's
+  open.
+
+On a copy of *The Last Ferry*'s records, 31 things were on no page, and none is left:
+
+- 24 set bakes and coverage maps; 12 of them, the ones the set names, went to their place's version;
+- 4 passes of a deleted final went to the Sketches;
+- the cut's movie went to its Episode home;
+- the swatch went to the Look;
+- the Edit result went to the Sketches.
+
+**Taking a thing from the Sketches or Imports moves it**, as taking an Unprocessed thing did (`is_free`): a hero, a reference or a candidate
+added to an entity. From any other home it is copied, so its owner keeps it. Without this, every sketch made a hero would have been
+copied.
+
+**World's Sketches** holds every free thing now (Image's old free work among them), so it reads its home as the Bin does: newest first, a
+page at a time. It draws its tiles in the windowed grid, and it reloads only when its own home changes. It lists the home's pictures
+only; the free clips, models and sounds that live there too are the Bin's to show (a model at the top had been offered as a hero). Before, it read the whole page in
+one request and drew every tile; with 200 synthetic pictures the first tile never held still for a click.
+
+**The UI** had no Unprocessed or Library left after B2b: nothing reads `folder=unprocessed` or `library`.
+
+The e2e's synthetic pictures are free work, so they live in the Sketches now. The scenarios pick their pictures there:
+
+- the layer's tree and the drawer (`drawerHome` unfolds World);
+- the newest pictures through the Bin's own listing (`sketchPics`);
+- a 3D prop made from a picture lands beside it.
+
+**Tests:**
+
+- `test_bin_b4.py` (2): the free homes; the migration once, and a stray at the next open.
+- U2's, D34's and the trash's tests follow:
+  - an import is in Imports;
+  - U2's note counts owners only;
+  - the purge's `catalogue.changed` comes after Imports' `group.changed`.
+
+**Checks:** offline 744 passed (the API contract re-exported: the add route's words); Vitest 598 + 3 skipped; typecheck, build and lint clean (61 warnings, as before); e2e 84/84 (alone, 5.9 min).
+
+D159's waves B0–B4 are done.

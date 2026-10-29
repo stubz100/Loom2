@@ -8,8 +8,11 @@ import { showMenu } from '../../frame/ContextMenu'
 import type { MenuItem } from '../../frame/commands'
 import { makeContext, useGenerate } from '../../suites/generate/generateStore'
 import { GenerateColumn } from '../../suites/generate/GenerateColumn'
+import { BinGrid } from '../bin/BinGrid'
 import { useSketches } from './sketches'
+import type { Asset } from '../../api/types'
 import '../../suites/generate/generate.css'
+import '../bin/bin.css'
 
 const MENU: MenuItem[] = [{ cmd: 'world.sketch.character' }, { cmd: 'world.sketch.prop' }, { cmd: 'world.sketch.place' }, { sep: true }, { cmd: 'world.sketch.trash' }]
 
@@ -31,6 +34,9 @@ export function SketchColumn() {
   )
 }
 
+const keyOf = (a: Asset) => a.id
+const more = () => void useSketches.getState().more()
+
 export function SketchCentre() {
   const items = useSketches((s) => s.items)
   const selected = useSketches((s) => s.selected)
@@ -39,11 +45,11 @@ export function SketchCentre() {
   return (
     <div className="w-bin">
       <div className="w-bin-head"><span className="w-path">bin/world/sketches</span><span className="spacer" /><CommandButton id="world.ideas.fold" text /></div>
-      {items.length ? <div className="w-grid">{items.map((a) => (
-        <button key={a.id} className={`w-tile${selected === a.id ? ' selected' : ''}`} data-id={a.id} title={a.prompt_text ?? ''} onClick={() => useSketches.getState().select(a.id)}
+      {items.length ? <BinGrid items={items} keyOf={keyOf} onEnd={more} render={(a) => (   /* B4: windowed, a page at a time — every free thing lives here */
+        <button className={`w-tile${selected === a.id ? ' selected' : ''}`} data-id={a.id} title={a.prompt_text ?? ''} onClick={() => useSketches.getState().select(a.id)}
           onContextMenu={(e) => { useSketches.getState().select(a.id); showMenu(e, MENU) }}>
           <img src={api.thumbUrl(a.id, 256)} alt="" draggable={false} />
-        </button>))}</div>
+        </button>)} />
         : <div className="w-empty">{loading ? 'Reading the sketches…' : 'No sketches yet'}</div>}
     </div>
   )

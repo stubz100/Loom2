@@ -6,7 +6,6 @@ import { api } from '../../api/client'
 import { CommandButton, MenuButton } from '../../frame/CommandButton'
 import { showMenu } from '../../frame/ContextMenu'
 import { command, isEnabled, runCommand, type MenuItem } from '../../frame/commands'
-import { Help } from '../../frame/Help'
 import { useSession } from '../../store/session'
 import { useStory } from '../../suites/story/storyStore'
 import { DOT } from './route'
@@ -24,6 +23,15 @@ const ClayColumn = lazy(() => import('../../suites/stage/StageParts').then((m) =
 const ClayStrip = lazy(() => import('../../suites/stage/StageParts').then((m) => ({ default: m.Strip })))
 const ClayStage = lazy(() => import('../../suites/stage/StageParts').then((m) => ({ default: m.Stage })))
 const ClayFoot = lazy(() => import('../../suites/stage/StageParts').then((m) => ({ default: m.ClayFoot })))
+// U6b (04 §4–5): Performance and Final — Animate's two other modes, mounted as they are on the open shot (the For chip its version)
+const PerfColumn = lazy(() => import('../../suites/animate/AnimateSuite').then((m) => ({ default: () => <m.AnimateSuite.Panel tab="performance" /> })))
+const PerfStrip = lazy(() => import('../../suites/animate/AnimateSuite').then((m) => ({ default: m.AnimateSuite.Strip })))
+const PerfStage = lazy(() => import('../../suites/animate/AnimateSuite').then((m) => ({ default: m.AnimateSuite.Stage })))
+const PerfFoot = lazy(() => import('../../suites/animate/AnimateSuite').then((m) => ({ default: m.AnimateSuite.PrimaryAction! })))
+const FinalColumn = lazy(() => import('../../suites/animate/FinalSuite').then((m) => ({ default: () => <m.FinalSuite.Panel tab="layers" /> })))
+const FinalStrip = lazy(() => import('../../suites/animate/FinalSuite').then((m) => ({ default: m.FinalSuite.Strip })))
+const FinalStage = lazy(() => import('../../suites/animate/FinalSuite').then((m) => ({ default: m.FinalSuite.Stage })))
+const FinalFoot = lazy(() => import('../../suites/animate/FinalSuite').then((m) => ({ default: m.FinalSuite.PrimaryAction! })))
 
 const NEW_SHOT: MenuItem[] = [{ cmd: 'shots.new.scene' }, { cmd: 'shots.new.same' }]
 
@@ -67,25 +75,36 @@ function Centre() {
   if (level === 'clay') return v?.stage_id
     ? <Suspense fallback={<div className="w-empty">Loading Clay…</div>}><div className="strip s-clay-strip"><ClayStrip /></div><div className="s-clay"><ClayStage /></div></Suspense>
     : <div className="w-empty">No scene yet <CommandButton id="shots.scene.new" text /></div>
-  return <div className="w-empty">{level === 'performance' ? 'Performance' : 'Final'} — not built yet <Help text="U6 (proto01_UI2 04 §4–5): the clay made into footage, then the shot assembled with its voice and processing." /></div>
+  if (!v?.stage_id) return <div className="w-empty">No scene yet <CommandButton id="shots.scene.new" text /></div>
+  const [Strip, Stage] = level === 'performance' ? [PerfStrip, PerfStage] : [FinalStrip, FinalStage]
+  return <Suspense fallback={<div className="w-empty">Loading {level === 'performance' ? 'Performance' : 'Final'}…</div>}>
+    <div className="strip s-clay-strip" data-testid={`shots-${level}-strip`}><Strip /></div><div className="s-clay" data-testid={`shots-${level}`}><Stage /></div>
+  </Suspense>
+}
+
+/** The level's column and foot under the header (Clay's, Performance's or Final's), the way on to the next level beside the foot's verb. */
+function LevelColumn() {
+  const level = useShots((s) => s.level)
+  const staged = useStory((st) => !!st.shotVersion()?.stage_id)
+  if (!staged || level === 'flow') return <div className="w-panel" />
+  const [Col, Foot, next] = level === 'clay' ? [ClayColumn, ClayFoot, 'shots.toPerformance'] : level === 'performance' ? [PerfColumn, PerfFoot, 'shots.toFinal'] : [FinalColumn, FinalFoot, 'story.shot.finalize']
+  return <>
+    <div className="w-panel"><Suspense fallback={null}><Col /></Suspense></div>
+    <div className="s-foot"><Suspense fallback={null}><Foot /></Suspense><CommandButton id={next} text label={level === 'final' ? 'Mark the shot final ✓' : undefined} /></div>
+  </>
 }
 
 export function ShotsLayer() {
   const project = useSession((s) => s.project)
   const level = useShots((s) => s.level)
-  const staged = useStory((st) => !!st.shotVersion()?.stage_id)
   useEffect(() => startShots(), [])
   if (!project?.open) return <div className="w-layer"><nav className="w-rail" /><section className="w-centre wide"><div className="w-empty">Open or create a project</div></section></div>
-  const clay = level === 'clay' && staged
   return (
     <div className="s-layer" data-testid="shots-layer" data-level={level}>
       <Storyboard />
       <div className={`w-layer s-body${level === 'flow' ? '' : ' no-insp'}`}>
         <Rail />
-        <section className="w-left"><ShotHeader />
-          <div className="w-panel">{clay ? <Suspense fallback={null}><ClayColumn /></Suspense> : null}</div>
-          {clay && <div className="s-foot"><Suspense fallback={null}><ClayFoot /></Suspense><CommandButton id="shots.toPerformance" text /></div>}
-        </section>
+        <section className="w-left"><ShotHeader /><LevelColumn /></section>
         <section className="w-centre"><Centre /></section>
         {level === 'flow' && <aside className="w-insp s-insp"><Suspense fallback={null}><StoryInspector /></Suspense></aside>}
       </div>

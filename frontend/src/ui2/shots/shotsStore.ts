@@ -48,6 +48,35 @@ interface ShotsState {
   setWordsFor: (w: WordsFor) => void
 }
 
+/** U6b (04 §4): the method each shot is performed by this session — a Performance card (`final` Layered, the default; `clip` One pass;
+ *  `i2v` From the start still). */
+const methods: Record<string, 'final' | 'clip' | 'i2v'> = {}
+
+/** U6b: Performance and Final act on this shot (F41) — Animate's For chip is the open shot version, its method's card is open, and the
+ *  card picked is kept as the shot's method. */
+async function enterPerformance(): Promise<void> {
+  const s = useStory.getState().shot(), v = useStory.getState().shotVersion()
+  if (!s || !v) return
+  const [{ useMakeFor }, { forShot }, { useAnimRoute }] = await Promise.all([import('../../store/origin'), import('../../suites/story/makeFor'), import('../../suites/animate/routeStore')])
+  useMakeFor.getState().set('animate', forShot(s, v))
+  useAnimRoute.getState().set(methods[s.id] ?? 'final')
+  unfollow?.()
+  unfollow = useAnimRoute.subscribe((r) => { const id = useStory.getState().shotId; if (id && useShots.getState().level !== 'flow') methods[id] = r.route as 'final' | 'clip' | 'i2v' })
+}
+let unfollow: (() => void) | null = null
+
+/** U6b (04 §5): Final opens on this shot's final — the newest final made for the shot version that has its composition — not a final of
+ *  whatever stage was open last (F41). None yet: Final says so, and Performance makes one. */
+async function openShotFinal(): Promise<void> {
+  const s = useStory.getState().shot(), v = useStory.getState().shotVersion()
+  if (!s || !v) return
+  const [{ useFinals }, { useComposition }] = await Promise.all([import('../../suites/stage/finalShot'), import('../../suites/animate/compositionStore')])
+  await useFinals.getState().load()
+  const { finals, compositions } = useFinals.getState()
+  const mine = finals.filter((f) => f.shot_id === s.id && (!f.shot_version || f.shot_version === v.id) && compositions[f.id]).sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0]
+  if (mine && useComposition.getState().finalId !== mine.id) await useComposition.getState().open(mine.id)
+}
+
 /** Clay on the shot's scene, through its camera (U4: the stage the version points at, its camera active). */
 async function openClay(): Promise<void> {
   const v = useStory.getState().shotVersion()
@@ -73,7 +102,7 @@ export const useShots = create<ShotsState>()((set, get) => ({
     set({ level })
     navigate(suiteOf(level))
     writeHash(useStory.getState().shotId, level)
-    if (level === 'clay') void openClay()
+    if (level !== 'flow') void openClay().then(() => (level === 'performance' || level === 'final' ? enterPerformance() : undefined)).then(() => (level === 'final' ? openShotFinal() : undefined))   // U6b: every level of a shot is on its stage
   },
   open: (shotId, level) => {
     const st = useStory.getState()
@@ -82,7 +111,7 @@ export const useShots = create<ShotsState>()((set, get) => ({
     if (s?.owner_node) useStory.getState().selectNode(s.owner_node)
     get().setLevel(level ?? get().level)                                // 04 §2: a card opens the shot at the level last used
   },
-  reopen: () => { if (get().level === 'clay') void openClay() },
+  reopen: () => { const l = get().level; if (l !== 'flow') void openClay().then(() => (l === 'performance' || l === 'final' ? enterPerformance() : undefined)) },
   wordsOpen: false, wordsFor: 'still',
   toggleWords: () => set({ wordsOpen: !get().wordsOpen }),
   setWordsFor: (wordsFor) => set({ wordsFor }),

@@ -12410,3 +12410,45 @@ U6's rig check owes a turning figure.
 figure that turns during a batch.
 
 Next: U6b — Performance and Final inside Shots.
+
+## 2026-10-29 08:43 — U6b: Performance and Final inside Shots, on the open shot; a character take's identity on its row (D157; proto01_UI2 04 §4–5; F41)
+
+**The levels** (`ui2/shots/`): Shots' Performance and Final are Animate's two other modes, mounted as Clay is — the column, the strip,
+the viewer and the foot of the `animate` and `final` suites.
+
+- **On the open shot:** every level of a shot opens its stage at its camera. Performance and Final set Animate's For chip to the shot
+  version, so the clips and finals made there are this shot's (F41: the final shot's foot acted on the stage's oldest final).
+- **The method** (04 §4) is Performance's card:
+  - *Final shot* is Layered, and the default;
+  - *Stage clip* is One pass;
+  - *Image to video* is From the start still.
+
+  The card picked is kept as the shot's method for the session.
+- **Final** opens on the shot's own final: the newest made for the shot version that has its composition. With none, it says so and
+  Performance makes one.
+- **The foot:** *To Final ▸* under Performance's verb, and *Mark the shot final ✓* under Final's render. Animate's mode pills are hidden on
+  the strips: the rail is the levels.
+
+**A character take's identity** (Performance's Final shot card, `FinalPanel.LayerIdentity`, 04 §4): each character layer's row shows
+FaceSim across its batches' clips against its reference, the mean, with *low* under the "same person" band (0.45). *no face* means a
+figure seen from behind (D158).
+
+On the copy of The Last Ferry, Stay's Ines layer (both finals, made before D158, facing the camera) reads *identity 0.11 · low* and
+*0.08 · low*. Before this, the score was a clip's fact only: Departure's 0.31 showed nowhere on the shot.
+
+**Looked at** on the copy: Stay in Performance with *For: Stay · v1*, the Final shot card and its two finals; in Final, Final 2's
+composition (Ines, her matte, the shadows, Town street), its lanes, *Render again ▶* and *Mark the shot final ✓*.
+
+**Owed to U6:**
+
+- the shot's lines laid on Final's audio rows by themselves (today *Attach a line…* per line);
+- lip-sync per speaking character as Final's pass (it is a pass today, chosen per layer);
+- *Perform the owed layers ▶* as one verb;
+- the method kept on the shot's record (it is the session's).
+
+**Tests:** an e2e scenario: a shot opened at Performance with the For chip on its version and the Final shot card; *Image to video*
+picked, kept across a trip to Clay; *To Final ▸* to Final with *Mark the shot final ✓*.
+
+**Checks:** offline 723 passed (no backend change); Vitest 635 + 3 skipped; typecheck, build and lint clean; e2e 88/88 (alone).
+
+Next: the GPU checks the author asked for — a performance through the app's route on Stay (D158's wiring), and a turning figure.

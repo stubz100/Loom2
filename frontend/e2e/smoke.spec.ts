@@ -4571,3 +4571,22 @@ test('World\'s owed parts (U3f, D157 · proto01_UI2 03 §2, §5, §8): a charact
   await page.locator('.w-mode button', { hasText: 'Make' }).click()
   await expect(page.locator('[data-testid="world-make"]')).toBeVisible()
 })
+
+test('Performance and Final in Shots (U6b, D157 · proto01_UI2 04 §4–5): the open shot\'s levels — the For chip its version, the Layered method by default and kept per shot, To Final ▸', async ({ page }) => {
+  test.setTimeout(90_000)
+  const tag = Date.now().toString(36)
+  const a = await api<{ id: string; shot_id: string }>('POST', '/story/flow/shots', { title: `Lantern ${tag}`, scene: 'new' })
+  await page.goto(`${appUrl({ ui: '2' })}#shots/${a.shot_id}/performance`)
+  await expect(page.locator('[data-testid="shots-layer"]')).toHaveAttribute('data-level', 'performance')
+  await expect(page.locator('.for-chip').first()).toContainText(`Lantern ${tag} · v1`)                          // this shot's takes (F41)
+  await expect(page.locator('.perf-cards button[aria-pressed="true"]')).toHaveText('Final shot')                 // Layered, the default
+  await page.locator('.perf-cards button', { hasText: 'Image to video' }).click()
+  await page.locator('.w-rail-btn[data-level="clay"]').click()
+  await page.locator('.w-rail-btn[data-level="performance"]').click()
+  await expect(page.locator('.perf-cards button[aria-pressed="true"]')).toHaveText('Image to video')             // the shot's method, kept
+  await page.locator('.s-foot button', { hasText: 'To Final ▸' }).click()
+  await expect(page.locator('[data-testid="shots-layer"]')).toHaveAttribute('data-level', 'final')
+  await expect(page.locator('[data-testid="shots-final"]')).toBeVisible()
+  await expect(page.locator('.s-foot button', { hasText: 'Mark the shot final ✓' })).toBeVisible()
+  expect(new URL(page.url()).hash).toBe(`#shots/${a.shot_id}/final`)
+})

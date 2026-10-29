@@ -1,10 +1,10 @@
 // D111 (PS5): the final shot in Animate's Shot section — *Make the final shot…* splits the finished scene into layers (their passes rendered
 // here and stored with the final); the stage's finals listed with their layers. PS5b: the plate's still (*Make the plate*) and its
 // projection along the camera path, which runs here when the still lands. PS5c–f add the characters, mattes, assembly and re-takes.
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Help } from '../../frame/Help'
-import { api } from '../../api/client'
-import type { Final, FinalLayer } from '../../api/types'
+import { api, http, unwrap } from '../../api/client'
+import type { Clip, Final, FinalLayer } from '../../api/types'
 import { CommandButton } from '../../frame/CommandButton'
 import { markUsed, runCommand } from '../../frame/commands'
 import { useSession } from '../../store/session'
@@ -61,6 +61,32 @@ function Batches({ f, l }: { f: Final; l: FinalLayer }) {
   )
 }
 
+/** U6b (04 §4): a character layer's identity — FaceSim across its batches' clips against its reference (each clip's own, after its proxy):
+ *  the mean, under the "same person" band (0.45) marked; no face found (a figure seen from behind, D158) said so. Departure's take showed
+ *  0.31 on its clip and nothing on the shot did. */
+function LayerIdentity({ l }: { l: FinalLayer }) {
+  const ids = l.batches.map((b) => b.clip_id).filter((x): x is string => !!x)
+  const [got, setGot] = useState<Record<string, Clip['identity']>>({})
+  const key = ids.join(',')
+  useEffect(() => {
+    if (!ids.length) return
+    let live = true
+    void Promise.all(ids.map((id) => unwrap(http.GET('/clips/{clip_id}', { params: { path: { clip_id: id } } })).then((c) => [id, c.identity] as const).catch(() => [id, null] as const)))
+      .then((xs) => { if (live) setGot(Object.fromEntries(xs)) })
+    return () => { live = false }
+  }, [key, l.status])   // eslint-disable-line react-hooks/exhaustive-deps
+  if (!ids.length || l.status === 'queued' || l.status === 'running') return null
+  const ok = ids.map((id) => got[id]).filter((x) => x?.status === 'ok' && typeof x.mean === 'number')
+  const faces = ok.reduce((n, x) => n + (x?.with_face ?? 0), 0)
+  if (ids.some((id) => !(id in got)) || (!ok.length && ids.some((id) => !got[id]))) return <span className="chip identity" data-identity="pending" title="FaceSim measures each batch after its proxy">identity…</span>
+  if (!ok.length || !faces) return <span className="chip identity" data-identity="none" title="No face found in its frames — a figure seen from behind has none (D158)">no face</span>
+  const mean = ok.reduce((a, x) => a + (x!.mean as number), 0) / ok.length
+  const low = mean < 0.45
+  return <span className={`chip identity${low ? ' low' : ''}`} data-identity={mean.toFixed(2)}
+    title={`FaceSim against its reference, the mean over ${ok.length} batch${ok.length === 1 ? '' : 'es'} (${faces} frames with a face) — the same person reads 0.45–0.7${low ? '; this take reads as someone else: re-take it' : ''}`}>
+    identity {mean.toFixed(2)}{low ? ' · low' : ''}</span>
+}
+
 function LayerRow({ f, l }: { f: Final; l: FinalLayer }) {
   const projecting = useFinals((s) => s.projecting === f.id)
   const filling = useFinals((s) => (s.filling?.id === f.id ? s.filling.what : null))
@@ -103,6 +129,7 @@ function LayerRow({ f, l }: { f: Final; l: FinalLayer }) {
       <span className="name">{plate && l.still_asset_id ? <img className="still" src={api.thumbUrl(l.still_asset_id, 256)} alt="" /> : null}{l.name}</span>
       <span className={`status s-${l.status}`}>{statusText(l, projecting, f.frames, filling)}</span>
       {l.kind === 'figure' && <Batches f={f} l={l} />}
+      {l.kind === 'figure' && <LayerIdentity l={l} />}
       {change && <button className="chip skeleton-changed" data-from={change.frame} onClick={(e) => { e.stopPropagation(); showMenu(e, skeleton) }}
         title={`The skeleton changed from frame ${change.frame} (batch ${change.batch + 1}): Cast's body is not the one this layer was drawn with. Nothing is done by itself — click to re-render it, or to apply the new skeleton from a frame`}>
         the skeleton changed ▾</button>}

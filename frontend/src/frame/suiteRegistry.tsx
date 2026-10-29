@@ -11,7 +11,7 @@ import { GenerateSuite } from '../suites/generate/GenerateSuite'
 import { ImageModeSwitch } from './ImageModeSwitch'
 import { lazySuite, preloadSuite } from './lazySuite'
 import { DEFAULT_RAIL, STORY_RAIL, type GroupRailTab, type RailTab } from './railTabs'
-import { navigate, setRailTab, useRailState } from './router'
+import { navigate, setRailTab, UI2, useRailState } from './router'
 
 export interface SuiteDef {
   id: string
@@ -63,7 +63,7 @@ export { setRailTab }
     void import('../suites/story/storyStore').then((m) => m.useStory.getState().setCastFilter('prop'))
   }
   // D71: ?suite=edit&tool=ai&ai=select[&sel=subject][&asset=<id>] — Edit with that tool / AI operation chosen (frame/openWith.ts)
-  if (q.get('tool') || q.get('ai')) void import('./openWith').then((m) => { const d = m.deepLinkOf(q); if (d) void m.openWith(d.assetId, d.o) })
+  if (!UI2 && (q.get('tool') || q.get('ai'))) void import('./openWith').then((m) => { const d = m.deepLinkOf(q); if (d) void m.openWith(d.assetId, d.o) })   // B2a: the new shell follows it itself (ui2/deepLinks.ts)
 }
 
 export function useSuiteRail() {

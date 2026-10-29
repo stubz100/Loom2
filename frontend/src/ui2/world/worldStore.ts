@@ -2,7 +2,7 @@
 // the role filter. The entity and its version are the Story store's selection (the records layer of today: profiles, their sheets, the
 // add and hero routes), so World and the old Cast act on the same records. The place is kept in the hash: #world/<class>/<profile>/<version>.
 import { create } from 'zustand'
-import { navigate } from '../../frame/router'
+import { navigate, onNavigate } from '../../frame/router'
 import { http, unwrap } from '../../api/client'
 import type { components } from '../../api/schema'
 import { onRecords } from '../../store/records'
@@ -41,6 +41,7 @@ interface WorldState {
   rail: WorldRail; bin: VersionBin | null; binFor: string | null; loading: boolean; selected: string | null; filter: RoleFilter
   mode: 'make' | 'edit' | 'clay'                                           // U3c: the left column's Make or the editor on a creation; U3f: the bench
   setMode: (mode: 'make' | 'edit' | 'clay') => void
+  free: { id: string; home: string | null; name: string } | null        // B2a (D159): an edit of a picture that is no entity's (a sketch, a take, an import): it saves beside it
   setRail: (rail: WorldRail) => void
   pick: (entity: string | null, version?: string | null) => void
   loadBin: () => Promise<void>
@@ -49,10 +50,10 @@ interface WorldState {
 }
 
 export const useWorld = create<WorldState>()((set, get) => ({
-  rail: placeOfHash(location.hash)?.rail ?? 'character', bin: null, binFor: null, loading: false, selected: null, filter: 'all', mode: 'make',
-  setMode: (mode) => set({ mode }),
+  rail: placeOfHash(location.hash)?.rail ?? 'character', bin: null, binFor: null, loading: false, selected: null, filter: 'all', mode: 'make', free: null,
+  setMode: (mode) => set({ mode, ...(mode === 'edit' ? {} : { free: null }) }),
   setRail: (rail) => {
-    set({ rail, selected: null, filter: 'all' })
+    set({ rail, selected: null, filter: 'all', ...(get().free ? { mode: 'make', free: null } : {}) })   // B2a: another rail ends a free edit
     const st = useStory.getState()
     const keep = st.profile()
     if (rail === 'look' || rail === 'sketches') { writeHash(rail, null, null); return }
@@ -111,9 +112,15 @@ export function startWorld(): () => void {
     else if (!at.entity && at.rail !== useWorld.getState().rail) useWorld.getState().setRail(at.rail)
   }
   window.addEventListener('hashchange', onHash)
+  const offNav = onNavigate((p) => {                                       // B2a: the editor opened from anywhere shows in World
+    const w = useWorld.getState()
+    if (p.suite !== 'edit' || w.mode === 'edit') return
+    if (w.rail === 'look' || w.rail === 'sketches') useWorld.setState({ mode: 'edit', free: w.free ?? { id: '', home: null, name: 'imports' } })   // no entity: saved to Imports
+    else w.setMode('edit')
+  })
   const offRecords = onRecords('ui2.world.bin', ['group.changed', 'asset.deleted', 'asset.updated'], () => void useWorld.getState().loadBin())   // U1's bus: a creation landed or moved
   const offStory = useStory.subscribe((s, prev) => {                     // the version's pages changed (a hero, a reference, a new version)
     if (s.profiles !== prev.profiles || s.versionId !== prev.versionId || s.refPage !== prev.refPage || s.candPage !== prev.candPage) void useWorld.getState().loadBin()
   })
-  return () => { offSession(); offStory(); offRecords(); window.removeEventListener('hashchange', onHash) }
+  return () => { offSession(); offStory(); offRecords(); offNav(); window.removeEventListener('hashchange', onHash) }
 }

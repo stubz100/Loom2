@@ -6,6 +6,7 @@ import { handleKeyFor, sep, type MenuItem } from '../../frame/commands'
 import { listenFileDrop } from '../../shell/tauri'
 import { importInto, moveTargets } from './binCommands'
 import { selectedThings, TRASH, useBin } from './binStore'
+import { useSession } from '../../store/session'
 import { worldItems } from './verbs'
 
 /** The Bin's own verbs on the selection, as a menu (the drawer puts the verbs of where you are before them). */
@@ -15,9 +16,13 @@ export function binMenu(it: BinThing): MenuItem[] {
   const many = selectedThings().length > 1
   const made = !!it.asset.params?.recipe
   const world = many ? [] : worldItems(it.asset)
+  const pic = it.asset.kind === 'image' && !many
+  const starts: MenuItem[] = pic ? [sep, { cmd: 'bin.item.edit' }, { cmd: 'bin.item.selectSubject' }, { cmd: 'bin.item.upscale' }, { cmd: 'bin.item.angle' },
+    ...(useSession.getState().capabilities?.mesh?.model_id ? [{ cmd: 'bin.item.mesh' }] : [])] : []
   return [{ cmd: 'bin.item.open' }, { cmd: 'bin.item.view' }, { label: 'Move to', items: moveTargets(s.homes, it.home_id ?? null) }, { cmd: 'bin.item.tag' },
     { cmd: 'bin.item.duplicate' }, { cmd: 'bin.item.pin', label: s.pins.some((a) => a.id === it.asset.id) ? 'Unpin' : undefined },
     ...(s.pins.length >= 2 ? [{ cmd: 'bin.compare' }] : []),
+    ...starts,
     ...(world.length ? [sep, ...world] : []),
     ...(made && !many ? [sep, { cmd: 'bin.item.rerun' }, { cmd: 'bin.item.variations' }] : []),
     sep, { cmd: 'bin.item.reveal' }, { cmd: 'bin.selectAll' }, sep, { cmd: 'bin.item.trash' }]

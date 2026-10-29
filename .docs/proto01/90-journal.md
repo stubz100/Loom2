@@ -12970,3 +12970,57 @@ quick starts). Recorded in D159.
 - **B2a** builds them into the new UI and moves the scenarios onto it, in three waves: the Bin, World, Shots. Each is green with the old shell
   still there.
 - **B2b** removes the old shell and the Catalogue.
+
+## 2026-10-29 15:18 — B2a, the Bin's wave: the quick starts, Edit on any picture, Add to World, a load-failure boundary; 17 scenarios moved (D159; proto01_UI2 11 §7)
+
+**The quick starts on a picture** (the scope `bin`; the Inspector's *Start from it ▾* and a tile's right-click):
+
+- *Open in Edit*, *Select subject…*, *Upscale in Edit…*, *New angle…*, *Make a 3D prop…* (its cost asked first; the model lands in
+  Imports).
+- The New angle sheet is mounted in the new shell.
+- *Add to World ▸* runs the Bin's own `bin.addTo.*` (the hero, the reference set, a candidate), no longer the Catalogue's.
+
+**Edit on any picture:**
+
+- A picture in an entity's version opens in that version's Edit, as before.
+- Any other (a sketch, a look's sample, a shot's take, an import) opens as a free edit over the Sketches. Its foot says *Save beside it*: the
+  new version goes into that picture's own home.
+- World follows the editor wherever it is opened (the drawer, a deep link).
+- Edit's own foot came along: the *•* mark for unsaved changes, Export PNG / PSD, Close.
+- `?suite=edit&tool=…&ai=…&asset=…` opens World's Edit on that picture (`ui2/deepLinks.ts`).
+
+**A part that fails to load says so** (`ui2/Part.tsx`): a boundary per layer and around Edit's three parts, as the old registry had. A
+refused Edit chunk shows the explanation in the middle, one line in the column, and the shell stays up.
+
+**The Bin:**
+
+- A home in the tree takes tiles dropped on it. A heading or a deleted record's home refuses, and says why on the drag's ghost.
+- In the drawer's Trash, a double-click restores (D95).
+- The Bin layer's keys, help and palette reach the `bin` scope.
+
+**Scenarios moved onto the new shell (17):**
+
+- the project's first open;
+- no keep / reject;
+- dragging onto a home;
+- Klein 4B in Sketches;
+- Edit with a stroke and Save beside it;
+- the start and end slots from the drawer;
+- the quick starts and the deep link;
+- Instruct, the reference deck and text layers in World's Edit;
+- the detached loupe from the Bin's large view;
+- remappable keys on `bin.item.pin` (T is Tag…'s);
+- @mentions in Sketches;
+- a refused Edit chunk;
+- New angle from the Bin;
+- the drawer in Sketches and Performance (with a drag onto a reference slot);
+- the Bin's Trash.
+
+**Dropped with the old shell's chrome (4):** send-to by drag onto the Image tab, the spring-loaded tabs, the Catalogue loupe's hub, a group's
+*used by* (B1's *used by* is per thing).
+
+**Checks:** Vitest 646 + 3 skipped; typecheck, build and lint clean (92 warnings, as before); e2e 90/90 (alone). Offline unchanged (no
+server change).
+
+Next: B2a's World wave (the Sheet: the body, the skeleton bench, the animation reference and its test, a prop's model and height, the set
+builder, the Line-up, *Use as the A-pose*), then Shots'.

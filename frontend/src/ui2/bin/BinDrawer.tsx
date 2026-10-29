@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Asset, BinThing } from '../../api/types'
 import { CommandButton } from '../../frame/CommandButton'
-import { command, sep, type MenuItem } from '../../frame/commands'
+import { command, runCommand, sep, type MenuItem } from '../../frame/commands'
 import { Help } from '../../frame/Help'
 import { useSession } from '../../store/session'
 import { BinGrid } from './BinGrid'
@@ -54,7 +54,10 @@ export default function BinDrawer() {
   const shown = query ? items.filter((x) => passes(x, filter)) : items
   const picked = (a: Asset): Verb | undefined => (pick ? verbsHere(a, suite).find((v) => v.id === pick.verb) : undefined)
   const PickIcon = pick ? command(pick.cmd)?.icon : undefined
-  const double = (it: BinThing) => { const pv = picked(it.asset); if (pv) { pv.run(); endPick() } else verbsHere(it.asset, suite)[0]?.run() }
+  const double = (it: BinThing) => {
+    if (it.asset.trashed_at) { useBin.getState().select(it.asset.id); runCommand('bin.item.restore'); return }   // D95: in the Trash, a double-click restores
+    const pv = picked(it.asset); if (pv) { pv.run(); endPick() } else verbsHere(it.asset, suite)[0]?.run()
+  }
   const corner = (it: BinThing) => { const pv = picked(it.asset); return pv ? { icon: PickIcon ? <PickIcon size={13} /> : undefined, label: pv.label, run: () => { pv.run(); endPick() } } : undefined }
   const menu = drawerMenu(suite)
   return (

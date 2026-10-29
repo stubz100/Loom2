@@ -15,7 +15,7 @@ import { profilesForMentions } from '../../suites/story/storyStore'
 /** A verb of where you are: a menu entry that is also the double-click; a pick names one by `id` (session.ui.pick). */
 export interface Verb { id: string; label: string; run: () => void }
 
-const openInEdit = (id: string) => void import('../../suites/edit/editorStore').then((m) => m.useEditor.getState().openFromAsset(id))
+const openInEdit = (id: string) => void import('../world/editAnywhere').then((m) => m.editAnywhere(id))   // B2a: in World's Edit, saved beside it when it is no entity's
 const addLayer = (id: string) => void import('../../suites/edit/editorStore').then((m) => m.useEditor.getState().addLayerFromAsset(id))
 const asReference = (id: string) => void import('../../suites/generate/generateStore').then((m) => m.useGenerate.getState().addRef(id))
 const asStart = (id: string) => void import('../../suites/animate/animateStore').then((m) => m.useAnimate.getState().setStart(id, true))
@@ -69,6 +69,6 @@ export function worldItems(a: Asset): MenuItem[] {
   if (a.trashed_at) return []
   if (a.kind === 'mesh') return [castPropMenu(a)]
   if (a.kind !== 'image') return []
-  return [prototypeMenu([a.id], madeForIdea(a)), addToCastMenu(profilesForMentions(), madeFor(a), [a.id]),
+  return [prototypeMenu([a.id], madeForIdea(a)), addToCastMenu(profilesForMentions(), madeFor(a), [a.id], 'bin'),
     { label: 'Make an entity from it', items: (['character', 'place', 'prop'] as const).map((cls): MenuItem => ({ label: `Make a ${cls}…`, run: () => makeEntity(cls, a.id) })) }]
 }

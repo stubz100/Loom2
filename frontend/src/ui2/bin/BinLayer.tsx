@@ -7,28 +7,34 @@
 // B1 (D159, 11 §3): the selection is many (a click, Ctrl, Shift, Select all; the arrows with Shift), the keys run the Bin's commands
 // (Enter opens where it belongs, Space shows it large, Delete trashes, C pins, [ ] the tile size), compare, the tile size, Import… and a
 // file dropped from Windows into the open home, and the Inspector's lineage (made from, made into) and what uses the thing.
-import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Trash2, Wand2 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, http, unwrap } from '../../api/client'
 import type { BinNode, BinThing } from '../../api/types'
-import { CommandButton } from '../../frame/CommandButton'
+import { CommandButton, MenuButton } from '../../frame/CommandButton'
+import { assetIds, onlyAssets, useDropTarget } from '../../frame/drag'
 import { Help } from '../../frame/Help'
 import { useSession } from '../../store/session'
-import { belongs, homeOf } from './binCommands'
+import { belongs, homeOf, moveThings } from './binCommands'
 import { BinGrid } from './BinGrid'
 import { BinCompare, BinLoupe } from './BinLoupe'
 import { BinTile } from './BinTile'
 import { binMenu, gridKeys, useFileDrop } from './binMenus'
-import { FILTERS, passes, pathLabel, ROLE_LABEL, ROLE_WORDS, selectedThings, startBin, TRASH, useBin } from './binStore'
+import { FILTERS, HEADINGS, passes, pathLabel, ROLE_LABEL, ROLE_WORDS, selectedThings, startBin, TRASH, useBin } from './binStore'
 import '../world/world.css'
 import './bin.css'
 
+/** B2 (D159): a home of the tree takes the tiles dropped on it (moved there, a role asked about first); a heading or a deleted record's
+ *  home takes none. */
 function Node({ n, depth }: { n: BinNode; depth: number }) {
   const open = useBin((s) => s.open === n.id && !s.query)
   const expanded = useBin((s) => !!s.expanded[n.id])
+  const takes = !HEADINGS.has(n.path) && !n.gone
+  const { ref: dropRef, over: dropOver } = useDropTarget((p) => takes && onlyAssets(p) && p.from === 'bin', (p) => void moveThings(assetIds(p), n),
+    (p) => (takes ? { ok: true, label: `Move ${p.items.length === 1 ? 'it' : p.items.length} to ${n.name}` } : { ok: false, reason: n.gone ? 'its record was deleted' : 'a heading holds no things' }))
   return (
     <>
-      <div className={`b-node${open ? ' active' : ''}${n.gone ? ' gone' : ''}`} style={{ paddingLeft: 4 + depth * 14 }} data-path={n.path}>
+      <div ref={dropRef} className={`b-node${open ? ' active' : ''}${n.gone ? ' gone' : ''}${dropOver && takes ? ' drop-over' : ''}`} style={{ paddingLeft: 4 + depth * 14 }} data-path={n.path}>
         {n.children.length ? <button className="b-chev" aria-label={expanded ? 'Fold' : 'Unfold'} onClick={() => useBin.getState().toggle(n.id)}>{expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</button> : <span className="b-chev" />}
         <button className="b-open" title={n.gone ? `${n.path} — deleted` : n.path} onClick={() => void useBin.getState().openHome(n.id)}><span>{n.name}{n.gone ? ' · deleted' : ''}</span><span className="n">{n.total}</span></button>
       </div>
@@ -201,6 +207,7 @@ function Inspector() {
           <CommandButton id="bin.item.tag" text />
           <CommandButton id="bin.item.duplicate" text />
           <CommandButton id="bin.item.pin" text label={pinned ? 'Unpin' : undefined} />
+          {a.kind === 'image' && <MenuButton label="Start from it" icon={Wand2} text items={() => [{ cmd: 'bin.item.edit' }, { cmd: 'bin.item.selectSubject' }, { cmd: 'bin.item.upscale' }, { cmd: 'bin.item.angle' }, { cmd: 'bin.item.mesh' }]} />}
           {a.params?.recipe ? <><CommandButton id="bin.item.rerun" text /><CommandButton id="bin.item.variations" text /></> : null}
           <CommandButton id="bin.item.reveal" text />
           <CommandButton id="bin.item.trash" text />

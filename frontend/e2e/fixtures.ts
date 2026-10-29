@@ -74,12 +74,37 @@ export async function openCatalogue(page: Page): Promise<void> {
   await expect(places).toBeVisible()
   await expect(page.locator('.cat-grid, .page-world').first()).toBeVisible()
 }
-export async function thumbsLoaded(page: Page, n: number): Promise<number> {
-  const handle = await page.waitForFunction((want) => {
-    const imgs = [...document.querySelectorAll<HTMLImageElement>('.cat-grid .tile img')].slice(0, want)
+export async function thumbsLoaded(page: Page, n: number, sel = '.cat-grid .tile img'): Promise<number> {
+  const handle = await page.waitForFunction(([want, q]) => {
+    const imgs = [...document.querySelectorAll<HTMLImageElement>(q)].slice(0, want)
     return imgs.length >= Math.min(want, 1) && imgs.every((i) => i.complete && i.naturalWidth > 0) ? imgs.length : 0
-  }, n)
+  }, [n, sel] as const)
   return (await handle.jsonValue()) as number
+}
+
+/** B2a (D159): the new shell at a place — `bin`, `world/…`, `shots/…`, `episode` — once the project is open. */
+export async function openShell(page: Page, place = 'world', params: Record<string, string> = {}): Promise<void> {
+  try {
+    await page.goto(`${appUrl({ ui: '2', ...params })}#${place}`)
+    await expect(page.locator('.frame.ui2')).toBeVisible()
+    await page.waitForFunction(() => !!(window as unknown as { __loom2Session?: { getState: () => { project?: { open?: boolean } } } }).__loom2Session?.getState().project?.open)
+  } catch (e) {
+    const body = (await page.locator('body').innerText({ timeout: 2000 }).catch(() => '(no body)')).slice(0, 600)
+    throw new Error(`${(e as Error).message}\n--- page diagnostics ---\n${diagnostics(page).join('\n') || '(none)'}\n--- page text ---\n${body}`)
+  }
+}
+/** The tiles of the Bin layer's grid. */
+export const binTiles = (page: Page) => page.locator('[data-testid="bin-grid"] .w-tile')
+/** A home of the Bin's tree opened, its parents unfolded (`imports`, `world/sketches`, `world/character/<id>/v1` …). */
+export async function openHome(page: Page, path: string): Promise<void> {
+  const parts = path.split('/')
+  for (let i = 1; i < parts.length; i++) {
+    const chev = page.locator(`[data-testid="bin-tree"] .b-node[data-path="${parts.slice(0, i).join('/')}"] > .b-chev[aria-label="Unfold"]`)
+    if (await chev.count()) await chev.click()
+  }
+  await page.locator(`[data-testid="bin-tree"] .b-node[data-path="${path}"] .b-open`).click()
+  await expect(page.locator('[data-testid="bin-grid"] .w-path')).not.toHaveText('bin/')
+  await expect(page.locator('[data-testid="bin-count"]')).toBeVisible()
 }
 
 export const test = base.extend<{ page: Page }>({

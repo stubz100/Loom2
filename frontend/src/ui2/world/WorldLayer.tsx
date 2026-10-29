@@ -11,6 +11,7 @@ import { useSession } from '../../store/session'
 import type { Profile } from '../../api/types'
 import { navigate } from '../../frame/router'
 import { useStory, voiceLabel, type ProfileClass } from '../../suites/story/storyStore'
+import { Part } from '../Part'
 import { readiness } from './readiness'
 import { WorldMake } from './WorldMake'
 import { CLASSES, CLASS_LABEL, ONE, passes, startWorld, useWorld, type BinItem, type RoleFilter, type WorldRail } from './worldStore'
@@ -192,14 +193,19 @@ export function WorldLayer() {
   useEffect(() => startWorld(), [])
   if (!project?.open) return <div className="w-layer"><Rail /><section className="w-centre wide"><div className="w-empty">Open or create a project</div></section></div>   // nothing reads before there is one
   const classRail = rail !== 'look' && rail !== 'sketches'
+  const freeEdit = !classRail && mode === 'edit'                                    // B2a: a picture that is no entity's, in the editor
   return (
     <div className="w-layer" data-testid="world-layer">
       <Rail />
       {classRail ? <>
-        <section className="w-left"><Header /><ModeSwitch /><div className="w-panel">{mode === 'edit' ? <Suspense fallback={null}><EditColumn /></Suspense> : mode === 'clay' ? <Suspense fallback={null}><BenchColumn /></Suspense> : <WorldMake />}</div></section>
-        <section className="w-centre">{mode === 'edit' ? <Suspense fallback={<div className="w-empty">Loading the editor…</div>}><EditCentre /></Suspense>
+        <section className="w-left"><Header /><ModeSwitch /><div className="w-panel">{mode === 'edit' ? <Part label="Edit" quiet="line"><EditColumn /></Part> : mode === 'clay' ? <Suspense fallback={null}><BenchColumn /></Suspense> : <WorldMake />}</div></section>
+        <section className="w-centre">{mode === 'edit' ? <Part label="Edit" fallback={<div className="w-empty">Loading the editor…</div>}><EditCentre /></Part>
           : mode === 'clay' ? <Suspense fallback={<div className="w-empty">Loading Clay…</div>}><div className="strip w-edit-strip"><BenchStrip /></div><div className="w-edit-stage" data-testid="world-clay"><BenchStage /></div></Suspense> : <Bin />}</section>
-        {mode === 'edit' ? <Suspense fallback={<aside className="w-insp" />}><EditInspector /></Suspense> : <Inspector />}
+        {mode === 'edit' ? <Part label="Edit" quiet="hide" fallback={<aside className="w-insp" />}><EditInspector /></Part> : <Inspector />}
+      </> : freeEdit ? <>
+        <section className="w-left"><div className="w-panel"><Part label="Edit" quiet="line"><EditColumn /></Part></div></section>
+        <section className="w-centre"><Part label="Edit" fallback={<div className="w-empty">Loading the editor…</div>}><EditCentre /></Part></section>
+        <Part label="Edit" quiet="hide" fallback={<aside className="w-insp" />}><EditInspector /></Part>
       </> : <Suspense fallback={<section className="w-centre wide"><div className="w-empty">Loading…</div></section>}>
         {rail === 'look' ? <><section className="w-left"><div className="w-panel"><LookColumn /></div></section><section className="w-centre"><LookCentre /></section><LookInspector /></>
           : <><section className="w-left"><SketchColumn /></section><section className="w-centre"><SketchCentre /></section><SketchInspector /></>}

@@ -4,18 +4,18 @@
 import { writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { api, appUrl, centre, contextChoose, env, expect, openApp, openCatalogue, test, thumbsLoaded, tiles } from './fixtures'
+import { api, appUrl, binTiles, centre, contextChoose, env, expect, openApp, openCatalogue, openHome, openShell, test, thumbsLoaded, tiles } from './fixtures'
 
 interface AssetLite { id: string; job_id: string | null }
 interface Group { id: string; name: string; items: { kind: string; id: string }[] }
 
-test('open the project: the Catalogue grid shows tiles and their thumbnails load', async ({ page }) => {
+test('open the project: the Bin shows tiles and their thumbnails load; the Project menu, the layer tabs, Models & engine in ☰ (B2a, D159)', async ({ page }) => {
   expect((await api<{ variant: string }>('GET', '/health')).variant).toBe(env().variant)          // LOOM2_VARIANT reached the orchestrator
-  await openApp(page, { suite: 'catalogue' })
-  await expect(tiles(page).first()).toBeVisible()
-  expect(await thumbsLoaded(page, 12)).toBeGreaterThanOrEqual(Math.min(12, env().assets))
-  await expect(page.locator('.place-row', { hasText: 'Library' }).locator('.n')).toHaveText(/^\d+$/)
-  // the Project menu leads the suite tabs: the open project's name, New / Open / Close and the recents
+  await openShell(page, 'bin')
+  await openHome(page, 'imports')
+  await expect(binTiles(page).first()).toBeVisible()
+  expect(await thumbsLoaded(page, 12, '[data-testid="bin-grid"] .w-tile img')).toBeGreaterThanOrEqual(Math.min(12, env().assets))
+  // the Project menu leads the tabs: the open project's name, New / Open / Close and the recents
   const projectTab = page.locator('nav.tabs button.project-tab')
   await expect(page.locator('nav.tabs > button').first()).toHaveClass(/project-tab/)
   await expect(projectTab.locator('.project-name')).not.toHaveText('none open')
@@ -25,15 +25,9 @@ test('open the project: the Catalogue grid shows tiles and their thumbnails load
   await page.screenshot({ path: 'node_modules/.e2e/project-menu.png', clip: { x: 0, y: 0, width: 1100, height: 260 } })
   await projectTab.click()
   await expect(page.locator('.menu.project-menu')).toHaveCount(0)
-  // D90 (02 §3) → D125: Story leads the tabs, the Catalogue is the fourth; Models & engine is a sheet in ☰
-  await expect(page.locator('nav.tabs button.tab:not(.project-tab)')).toHaveText([/^Story/, /^Image/, /^Animate/, /^Catalogue/])
-  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Catalogue/)
-  await expect(page.locator('nav.rail button[aria-label="Places"]')).toHaveClass(/active/)
-  await page.locator('nav.tabs button.tab', { hasText: 'Story' }).click()                                 // D125: Story's rail is the order of the work
-  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Story/)
-  expect(await page.locator('nav.rail button[aria-label]').evaluateAll((bs) => bs.map((b) => b.getAttribute('aria-label')).filter((l) => ['World', 'Cast', 'Flow', 'Shots', 'Episode', 'Props', 'Catalogue', 'Places'].includes(l ?? ''))))
-    .toEqual(['World', 'Cast', 'Flow', 'Shots', 'Episode'])
-  await page.locator('nav.tabs button.tab', { hasText: 'Catalogue' }).click()
+  // D157: the layers in the work's order; Models & engine is a sheet in ☰
+  await expect(page.locator('nav.tabs button.tab:not(.project-tab)')).toHaveText([/^World/, /^Shots/, /^Episode/, /^Bin/])
+  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Bin/)
   await page.locator('button[aria-label="app menu"]').click()
   await page.locator('.menu button', { hasText: 'Models & engine' }).click()
   await expect(page.locator('.modal.models-sheet table.grid tbody tr').first()).toBeVisible()
@@ -41,85 +35,96 @@ test('open the project: the Catalogue grid shows tiles and their thumbnails load
   await expect(page.locator('.modal.models-sheet')).toHaveCount(0)
 })
 
-test('no keep / reject and no ratings (D122): not in the tile menu, the Inspector, the filters, the sort or the asset', async ({ page }) => {
-  await openApp(page, { suite: 'catalogue' })
-  const tile = tiles(page).nth(3)
+test('no keep / reject and no ratings (D122): not in the Bin\'s tile menu, its Inspector or the asset (B2a)', async ({ page }) => {
+  await openShell(page, 'bin')
+  await openHome(page, 'imports')
+  const tile = binTiles(page).nth(3)
   const id = (await tile.getAttribute('data-id'))!
   await tile.click({ button: 'right' })
   const items = page.locator('.ctx-menu button.item')
   await expect(items.filter({ hasText: /^Tag…/ })).toHaveCount(1)
   for (const gone of [/^Keep/, /^Reject/, /^Clear keep/, /^Rate/]) await expect(items.filter({ hasText: gone })).toHaveCount(0)
   await page.keyboard.press('Escape')
-  await tile.click()
-  await expect(page.locator('.insp')).toBeVisible()
-  await expect(page.locator('.insp .judge, .insp .stars-edit')).toHaveCount(0)
-  await expect(page.locator('.tile .stars, .tile .badge-dot.keep, .tile .badge-dot.reject, .tile.reject')).toHaveCount(0)
-  await page.keyboard.press('k')                                                         // K and X are free keys in the Catalogue now
+  await page.locator(`[data-testid="bin-grid"] .w-tile[data-id="${id}"]`).click()
+  const insp = page.locator('[data-testid="bin-inspector"]')
+  await expect(insp).toContainText('home')
+  await expect(insp.locator('.judge, .stars-edit')).toHaveCount(0)
+  for (const gone of ['Keep', 'Reject', 'Rate']) await expect(insp.getByRole('button', { name: gone, exact: true })).toHaveCount(0)
+  await page.keyboard.press('k')                                                         // K and X are no keys in the Bin
   await page.keyboard.press('x')
   const a = await api<Record<string, unknown>>('GET', `/assets/${id}`)
   expect('state' in a || 'rating' in a).toBe(false)
   await expect(api('GET', '/assets?sort=rating_desc')).rejects.toThrow(/422/)
 })
 
-test('drag a tile onto a group in Places with the mouse: it moves onto that page', async ({ page }) => {
-  const name = `drop ${Date.now().toString(36)}`
-  const g = await api<Group>('POST', '/groups', { name })
-  await openApp(page, { suite: 'catalogue' })
-  const tile = tiles(page).nth(1)
+test('drag a tile onto a home in the Bin\'s tree with the mouse: it moves into that home; a heading takes none (B2a, D159)', async ({ page }) => {
+  await api('POST', '/bin/homes', { path: 'world/sketches' })
+  await openShell(page, 'bin')
+  await openHome(page, 'imports')
+  const tile = binTiles(page).nth(1)
   const id = (await tile.getAttribute('data-id'))!
-  const row = page.locator('.place-row', { hasText: name })
-  await expect(row).toBeVisible()
+  const row = page.locator('[data-testid="bin-tree"] .b-node[data-path="world/sketches"]')
+  const heading = page.locator('[data-testid="bin-tree"] .b-node[data-path="world"]')
   // a real pointer drag (frame/drag.ts: pointer events, never HTML5 drag and drop): press, pass the 5 px threshold, carry, release
-  const from = await centre(tile), to = await centre(row)
+  const from = await centre(tile), to = await centre(row), over = await centre(heading)
   await page.mouse.move(from.x, from.y)
   await page.mouse.down()
   await page.mouse.move(from.x + 12, from.y + 8, { steps: 3 })
   await expect(page.locator('.drag-ghost')).toBeVisible()
-  await page.mouse.move(to.x, to.y, { steps: 12 })
+  await page.mouse.move(over.x, over.y, { steps: 8 })
+  await expect(page.locator('.drag-ghost')).toContainText('a heading holds no things')
+  await page.mouse.move(to.x, to.y, { steps: 8 })
   await expect(row).toHaveClass(/drop-over/)
   await page.mouse.up()
   await expect(page.locator('.drag-ghost')).toHaveCount(0)
-  await expect(row.locator('.n')).toHaveText('1')
-  await expect.poll(async () => (await api<{ group: Group }>('GET', `/groups/${g.id}`)).group.items.map((i) => i.id)).toEqual([id])
-  await expect(page.locator(`.cat-grid .tile[data-id="${id}"]`)).toHaveCount(0)        // it left Unprocessed
+  await expect.poll(async () => (await api<{ path: string }>('GET', `/bin/things/${id}`)).path, { timeout: 10_000 }).toBe('world/sketches')
+  await expect(page.locator(`[data-testid="bin-grid"] .w-tile[data-id="${id}"]`)).toHaveCount(0)        // it left Imports
 })
 
-test('Generate with Klein 4B: the fake engine answers and the new asset lands in Unprocessed', async ({ page }) => {
-  const before = (await api<Record<string, number>>('GET', '/assets/counts')).unprocessed ?? 0
-  await openApp(page, { suite: 'generate', tab: 'model' })
-  await page.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()
-  await expect(page.locator('.model-card.active span').first()).toHaveText('Klein 4B')
-  await page.locator('nav.rail button[title^="Prompt"]').click()
-  await page.locator('.segmented button', { hasText: /^Text$/ }).click()
-  await page.locator('.panel textarea').fill('a lighthouse on a cliff at dusk, storm clouds, wide shot')
-  const go = page.locator('.panel .foot button.primary', { hasText: /^Generate/ })
+test('Make with Klein 4B in Sketches: the fake engine answers, the job runs the model picked in the column and the picture lands in Sketches (B2a)', async ({ page }) => {
+  await openShell(page, 'world/sketches')
+  const col = page.locator('[data-testid="world-sketches"]')
+  await expect(col).toBeVisible()
+  await col.locator('#gen-sec-model').scrollIntoViewIfNeeded()
+  await col.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()
+  await expect(col.locator('.model-card.active span').first()).toHaveText('Klein 4B')
+  await col.locator('#gen-sec-prompt').scrollIntoViewIfNeeded()
+  await col.locator('#gen-sec-prompt .segmented button', { hasText: /^Text$/ }).click()
+  await col.locator('.text-prompt textarea').fill('a lighthouse on a cliff at dusk, storm clouds, wide shot')
+  const go = col.locator('button', { hasText: /^Make \d+ sketch/ })
   await expect(go).toBeEnabled()
-  const count = Number((await go.textContent())!.match(/Generate (\d+)/)![1])
+  const count = Number((await go.textContent())!.match(/Make (\d+)/)![1])
+  const before = new Set((await api<{ items: { id: string }[] }>('GET', '/jobs')).items.map((j) => j.id))
   await go.click()
-  await expect.poll(async () => (await api<Record<string, number>>('GET', '/assets/counts')).unprocessed ?? 0, { timeout: 45_000 }).toBe(before + count)
-  const newest = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=unprocessed&sort=created_desc&limit=1')).items[0]
   // the job ran the model chosen in the UI (its id comes from /capabilities, D65 — no model id in the test)
   const caps = await api<{ models: Record<string, { label: string }> }>('GET', '/capabilities')
   const klein4b = Object.entries(caps.models).find(([, m]) => m.label === 'Klein 4B')![0]
-  const jobOf = async () => (await api<{ items: { id: string; status: string; recipe: { model_id?: string } }[] }>('GET', '/jobs')).items.find((j) => j.id === newest.job_id)
-  await expect.poll(async () => (await jobOf())?.status, { timeout: 10_000 }).toBe('done')                // the asset lands a beat before the job's status flips (CI, full runner)
-  expect((await jobOf())?.recipe.model_id).toBe(klein4b)
-  await openCatalogue(page)
-  await page.locator('.place-row', { hasText: 'Unprocessed' }).locator('button.place-open').click()
-  await expect(page.locator('.place-row', { hasText: 'Unprocessed' }).locator('.n')).toHaveText(String(before + count))
-  const tile = page.locator(`.cat-grid .tile[data-id="${newest.id}"]`)
+  type JobLite = { id: string; status: string; recipe: { model_id?: string }; origin: { surface?: string } | null; result: { asset_ids?: string[] } | null }
+  const jobOf = async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => !before.has(j.id) && j.origin?.surface === 'sketch')
+  await expect.poll(async () => (await jobOf())?.status, { timeout: 45_000 }).toBe('done')
+  const job = (await jobOf())!
+  expect(job.recipe.model_id).toBe(klein4b)
+  expect(count).toBeGreaterThanOrEqual(1)
+  expect(job.result?.asset_ids?.length).toBeGreaterThanOrEqual(1)                                       // a sketch is a job each
+  const newest = job.result!.asset_ids![0]
+  await expect.poll(async () => (await api<{ path: string }>('GET', `/bin/things/${newest}`)).path, { timeout: 10_000 }).toBe('world/sketches')
+  const tile = page.locator(`.w-tile[data-id="${newest}"]`)
   await expect(tile).toBeVisible()
   await expect.poll(() => tile.locator('img').evaluate((i: HTMLImageElement) => i.complete && i.naturalWidth > 0)).toBe(true)
 })
 
-test('Edit opens from an asset on WebGL2, a mouse stroke dirties the document and Save stores it', async ({ page }) => {
-  await openApp(page, { suite: 'catalogue', renderer: 'webgl' })
-  const tile = tiles(page).nth(5)
+test('Edit opens from a Bin tile on WebGL2 (B2a): a mouse stroke dirties the document, its foot says so, and Save beside it puts the new version in the picture\'s home', async ({ page }) => {
+  await openShell(page, 'bin', { renderer: 'webgl' })
+  await openHome(page, 'imports')
+  const tile = binTiles(page).nth(5)
+  const src = (await tile.getAttribute('data-id'))!
   await contextChoose(page, tile, 'Open in Edit')
+  await expect(page.locator('[data-testid="world-edit"]')).toBeVisible()                                  // World's Edit, a free edit over the Sketches
   await expect(page.locator('.badge-renderer')).toHaveText(/WebGL2/)
   const canvas = page.locator('.edit-canvas canvas')
   await expect(canvas).toBeVisible()
-  const docId = await page.waitForFunction(() => (window as unknown as { __loom2Editor: { getState: () => { doc: { id: string } | null } } }).__loom2Editor.getState().doc?.id ?? null).then((h) => h.jsonValue() as Promise<string>)
+  await page.waitForFunction(() => !!(window as unknown as { __loom2Editor: { getState: () => { doc: { id: string } | null } } }).__loom2Editor.getState().doc?.id)
+  await page.locator('#edit-sec-tools').scrollIntoViewIfNeeded()
   await page.locator('button[title^="Brush"]').first().click()
   const box = (await canvas.boundingBox())!
   const [cx, cy] = [box.x + box.width / 2, box.y + box.height / 2]
@@ -127,65 +132,40 @@ test('Edit opens from an asset on WebGL2, a mouse stroke dirties the document an
   await page.mouse.down()
   for (let i = 1; i <= 24; i++) await page.mouse.move(cx - 120 + i * 10, cy - 20 + Math.sin(i / 3) * 30)
   await page.mouse.up()
-  const save = page.locator('.panel .foot button.primary')
-  await expect(save).toHaveText('Save •')
+  const save = page.locator('.w-edit-foot button.primary')
+  await expect(save).toHaveText('Save beside it •')
   await save.click()
-  await expect(save).toHaveText('Save')
-  await expect.poll(async () => (await api<{ saved_at: string | null }>('GET', `/documents/${docId}`)).saved_at).not.toBeNull()
+  await expect(save).toHaveText('Save beside it')
+  const home = (await api<{ path: string }>('GET', `/bin/things/${src}`)).path
+  await expect.poll(async () => {
+    const kids = (await api<{ children: { to_id: string }[] }>('GET', `/lineage/${src}`)).children
+    return kids.length ? (await api<{ path: string }>('GET', `/bin/things/${kids[kids.length - 1].to_id}`)).path : null
+  }, { timeout: 15_000 }).toBe(home)
+  await expect(page.locator('.w-edit-foot').getByRole('button', { name: /Export PNG/ })).toBeVisible()  // Edit's own foot
 })
 
-test('Animate: the tile menu fills the start and the end slots', async ({ page }) => {
-  await openApp(page, { suite: 'catalogue' })
-  const [a, b] = [tiles(page).nth(6), tiles(page).nth(7)]
-  const [idA, idB] = [await a.getAttribute('data-id'), await b.getAttribute('data-id')]
-  await contextChoose(page, a, 'Animate from this frame')
+test('Performance: the drawer\'s right-click fills the start and the end slots of Image to video (B2a)', async ({ page }) => {
+  const tag = Date.now().toString(36)
+  const a = await api<{ shot_id: string }>('POST', '/story/flow/shots', { title: `Slots ${tag}`, scene: 'new' })
+  await openShell(page, `shots/${a.shot_id}/performance`)
+  await page.locator('.perf-cards button', { hasText: 'Image to video' }).click()
+  await expect(page.locator('.perf-cards button.active')).toHaveText('Image to video')
+  await page.locator('.dock .dock-tabs button', { hasText: 'Bin' }).click()
+  const homes = page.locator('[data-testid="bin-drawer-homes"]')
+  await homes.locator('.b-node[data-path="imports"] .b-open').click()
+  await page.locator('.dock .bin-bar .segmented button', { hasText: 'pictures' }).click()
+  const grid = page.locator('.dock .bin-grid')
+  const [ta, tb] = [grid.locator('.w-tile').nth(2), grid.locator('.w-tile').nth(3)]
+  const [idA, idB] = [await ta.getAttribute('data-id'), await tb.getAttribute('data-id')]
+  await contextChoose(page, ta, 'Set as the start frame (Performance)')
   const slots = page.locator('.slots .slot')
   await expect(slots.nth(0).locator('img')).toBeVisible()
-  await openCatalogue(page)
-  await contextChoose(page, page.locator(`.cat-grid .tile[data-id="${idB}"]`), 'Use as the end frame')
+  await contextChoose(page, grid.locator(`.w-tile[data-id="${idB}"]`), 'Use as the end frame (Performance)')
   await expect(slots.nth(1).locator('img')).toBeVisible()
   for (const [k, id] of [[0, idA], [1, idB]] as const) {
     await expect.poll(() => slots.nth(k).locator('img').evaluate((i: HTMLImageElement) => i.complete && i.naturalWidth > 0)).toBe(true)
     expect(await slots.nth(k).locator('img').getAttribute('src')).toContain(`/thumbs/${id}/`)
   }
-})
-
-test('send-to by drag (D71): a tile held on the Image tab opens it (Make), the ghost says what a drop adds, a slot takes it, a repeat is refused', async ({ page }) => {
-  await openApp(page, { suite: 'catalogue' })
-  const tile = tiles(page).nth(3)
-  const id = (await tile.getAttribute('data-id'))!
-  const tab = page.locator('nav.tabs button.tab', { hasText: 'Image' })
-  const hint = page.locator('.drag-ghost .drop-hint')
-  const from = await centre(tile), onTab = await centre(tab)
-  await page.mouse.move(from.x, from.y)
-  await page.mouse.down()
-  await page.mouse.move(from.x + 12, from.y + 8, { steps: 3 })
-  await page.mouse.move(onTab.x, onTab.y, { steps: 10 })
-  await expect(hint).toHaveText(/^✓ Add as reference 1 of \d+ — or hold to open Image$/)
-  // resting on the tab for 600 ms opens Generate; the drag carries on to a particular slot
-  await expect(page.locator('.ref-slots')).toBeVisible()
-  await expect(page.locator('.drag-ghost')).toBeVisible()
-  const slot = await centre(page.locator('.ref-slots .ref-slot').nth(1))
-  await page.mouse.move(slot.x, slot.y, { steps: 8 })
-  await expect(hint).toHaveText(/^✓ Add as reference 1 of \d+$/)
-  await page.mouse.up()
-  await expect(page.locator('.drag-ghost')).toHaveCount(0)
-  await expect(page.locator('.ref-slots .ref-slot img')).toHaveCount(1)
-  await expect(page.locator('.ref-slots .ref-slot img').first()).toHaveAttribute('src', new RegExp(id))
-  // the same tile again, onto the tab: refused, and the ghost says why; nothing changes
-  await openCatalogue(page)
-  const again = await centre(page.locator(`.cat-grid .tile[data-id="${id}"]`))
-  await page.mouse.move(again.x, again.y)
-  await page.mouse.down()
-  await page.mouse.move(again.x + 12, again.y + 8, { steps: 3 })
-  await page.mouse.move(onTab.x, onTab.y, { steps: 10 })
-  await expect(hint).toHaveText('✕ Already a reference')
-  await expect(page.locator('.drag-ghost')).toHaveClass(/refused/)
-  await page.waitForTimeout(800)                                          // a refused tab does not spring open
-  await expect(tab).not.toHaveClass(/active/)
-  await page.mouse.up()
-  await tab.click()
-  await expect(page.locator('.ref-slots .ref-slot img')).toHaveCount(1)
 })
 
 /** D95 (IM1): Image's modes — the Image tab, then the panel head's Make | Edit switch. */
@@ -234,81 +214,30 @@ async function perfCard(page: import('@playwright/test').Page, card: 'Image to v
   await expect(page.locator('.perf-cards button.active')).toHaveText(card)
 }
 
-/** Press on `from`, carry the tile to `tab` and rest there until its suite is up (D71 spring-loaded tabs); the pointer stays down. */
-async function carryAndHold(page: import('@playwright/test').Page, from: { x: number; y: number }, tab: string, up: string): Promise<void> {
-  const onTab = await centre(page.locator('nav.tabs button.tab', { hasText: tab }))
-  await page.mouse.move(from.x, from.y)
-  await page.mouse.down()
-  await page.mouse.move(from.x + 12, from.y + 8, { steps: 3 })
-  await page.mouse.move(onTab.x, onTab.y, { steps: 10 })
-  await expect(page.locator(up)).toBeVisible()
-  await expect(page.locator('.drag-ghost')).toBeVisible()
-}
-
-test('spring-loaded tabs (D71) in Animate and Edit: hold, then drop on the end slot / the empty stage', async ({ page }) => {
-  await openApp(page, { suite: 'catalogue' })
-  const tile = tiles(page).nth(5)
-  const id = (await tile.getAttribute('data-id'))!
-  await carryAndHold(page, await centre(tile), 'Animate', '.slots.full')
-  const end = page.locator('.slots .slot').nth(1)
-  const onEnd = await centre(end)
-  await page.mouse.move(onEnd.x, onEnd.y, { steps: 8 })
-  await expect(page.locator('.drag-ghost .drop-hint')).toHaveText('✓ Set the end frame')
-  await page.mouse.up()
-  await expect(end.locator('img')).toHaveAttribute('src', new RegExp(id))
-  await expect(page.locator('.slots .slot').nth(0).locator('img')).toHaveCount(0)        // the end slot only
-
-  await openImage(page, 'Edit')                                                          // D95: the Image tab springs open on its last mode
-  await openCatalogue(page)
-  await carryAndHold(page, await centre(tiles(page).nth(6)), 'Image', '.edit-empty')
-  const stage = await centre(page.locator('.edit-empty'))
-  await page.mouse.move(stage.x, stage.y, { steps: 8 })
-  await expect(page.locator('.drag-ghost .drop-hint')).toHaveText('✓ Open in Edit')
-  await page.mouse.up()
-  await page.waitForFunction(() => !!(window as unknown as { __loom2Editor?: { getState: () => { doc?: unknown } } }).__loom2Editor?.getState().doc, null, { timeout: 30_000 })
-})
-
-test('the loupe is the send-to hub (D71): every verb on its bar; narrow, the secondary ones fold into More', async ({ page }) => {
-  await openApp(page, { suite: 'catalogue' })
-  await tiles(page).nth(7).dblclick()
-  const hub = page.locator('.loupe .hub')
-  await expect(hub).toBeVisible()
-  for (const label of ['Edit', 'Reference', 'Animate', 'Re-run (same seed)', 'Variations (new seeds)', 'Duplicate', 'Move to group', 'Show lineage', 'Reveal in folder', 'More'])
-    await expect(hub.getByRole('button', { name: label, exact: true })).toBeVisible()
-  for (const gone of ['Keep', 'Reject', 'Rate']) await expect(hub.getByRole('button', { name: gone, exact: true })).toHaveCount(0)   // D122
-  await hub.getByRole('button', { name: 'Animate', exact: true }).click()               // a press menu: click opens it
-  await expect(page.locator('.ctx-menu button.item', { hasText: 'Use as the end frame' })).toBeVisible()
-  await hub.getByRole('button', { name: 'Animate', exact: true }).click()               // a second press on the button closes it (Esc would close the loupe too)
-  await expect(page.locator('.ctx-menu')).toHaveCount(0)
-  await page.setViewportSize({ width: 900, height: 800 })
-  await expect(hub.getByRole('button', { name: 'Duplicate', exact: true })).toBeHidden()
-  await expect(hub.getByRole('button', { name: 'More', exact: true })).toBeVisible()
-  await hub.getByRole('button', { name: 'Reference', exact: true }).click()
-  await expect(page.locator('.ref-slots .ref-slot img')).toHaveCount(1)                  // Reference sends it to Generate
-})
-
 type EdWin = { __loom2Editor?: { getState: () => { doc?: { id: string }; tool: string } }; __loom2AiPanel?: { getState: () => { op: string; selMode: string } } }
 const editorTool = (page: import('@playwright/test').Page) => page.evaluate(() => { const w = window as unknown as EdWin; const ed = w.__loom2Editor?.getState(); const ai = w.__loom2AiPanel?.getState()
   return ed ? { doc: !!ed.doc, tool: ed.tool, op: ai?.op, sel: ai?.selMode } : null })
 
-test('quick actions (D71): "Select subject" in the Inspector reaches Edit with AI Select · Subject in one click; the deep link does too', async ({ page }) => {
-  await openApp(page, { suite: 'catalogue' })
-  await tiles(page).nth(8).click()
-  const card = page.locator('.insp .quick-card', { hasText: 'Select subject' })
-  await expect(card).toBeEnabled()
-  await card.click()
+test('quick starts (D71, B2a): "Select subject…" on a Bin picture reaches World\'s Edit with AI Select · Subject in one click; the deep link does too', async ({ page }) => {
+  await openShell(page, 'bin')
+  await openHome(page, 'imports')
+  await page.locator('[data-testid="bin-grid"] .w-tile', { has: page.locator('img') }).nth(8).click()
+  await page.locator('[data-testid="bin-inspector"] button', { hasText: 'Start from it' }).click()
+  await page.locator('.ctx-menu button.item', { hasText: 'Select subject…' }).click()
   await expect.poll(() => editorTool(page), { timeout: 30_000 }).toEqual({ doc: true, tool: 'ai', op: 'select', sel: 'subject' })
-  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Image/)
-  await expect(page.locator('nav.rail button.active[title^="AI"]')).toBeVisible()
-
-  await openApp(page, { suite: 'edit', tool: 'ai', ai: 'upscale' })
-  await expect.poll(() => editorTool(page), { timeout: 30_000 }).toMatchObject({ tool: 'ai', op: 'upscale' })
+  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^World/)
+  await expect(page.locator('[data-testid="world-edit"]')).toBeVisible()
+  const pic = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
+  await openShell(page, 'world', { suite: 'edit', tool: 'ai', ai: 'upscale', asset: pic })
+  await expect.poll(() => editorTool(page), { timeout: 30_000 }).toMatchObject({ doc: true, tool: 'ai', op: 'upscale' })
+  await expect(page.locator('[data-testid="world-edit"]')).toBeVisible()
 })
 
-test("Instruct (D151): the AI tab's edit by instruction — the deep link opens it, it refuses without an instruction and runs with one; the canvas menu shows it", async ({ page }) => {
-  await openApp(page, { suite: 'catalogue' })
-  await tiles(page).nth(8).click()
-  await page.locator('.insp .quick-card', { hasText: 'Select subject' }).click()                         // Edit with a document (D71)
+test("Instruct (D151): the AI tab's edit by instruction — the deep link opens it, it refuses without an instruction and runs with one; the canvas menu shows it (in World's Edit, B2a)", async ({ page }) => {
+  await openShell(page, 'bin')
+  await openHome(page, 'imports')
+  await page.locator('[data-testid="bin-grid"] .w-tile', { has: page.locator('img') }).nth(8).click({ button: 'right' })
+  await page.locator('.ctx-menu button.item', { hasText: /^Select subject…/ }).click()                    // World's Edit with a document (D71)
   await expect.poll(() => editorTool(page), { timeout: 30_000 }).toMatchObject({ doc: true, tool: 'ai' })
   await page.getByRole('button', { name: 'Instruct', exact: true }).click()
   await expect.poll(() => editorTool(page), { timeout: 10_000 }).toMatchObject({ op: 'instruct' })
@@ -319,14 +248,16 @@ test("Instruct (D151): the AI tab's edit by instruction — the deep link opens 
   await expect(run).toBeEnabled()
   await expect(run).toHaveText(/×2$/)                                                                     // two candidates by default (≈ 32 s each)
   await page.screenshot({ path: 'node_modules/.e2e/d151-instruct.png' })
-  await openApp(page, { suite: 'edit', tool: 'ai', ai: 'instruct' })
+  const pic = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
+  await openShell(page, 'world', { suite: 'edit', tool: 'ai', ai: 'instruct', asset: pic })
   await expect.poll(() => editorTool(page), { timeout: 30_000 }).toMatchObject({ tool: 'ai', op: 'instruct' })
 })
 
-test("the reference deck (D152): Inpaint and Refine show the model's slots in the AI tab, Remove shows none; the deck keeps its shape across operations", async ({ page }) => {
-  await openApp(page, { suite: 'catalogue' })
-  await tiles(page).nth(8).click()
-  await page.locator('.insp .quick-card', { hasText: 'Select subject' }).click()                         // Edit with a document (D71)
+test("the reference deck (D152): Inpaint and Refine show the model's slots in the AI tab, Remove shows none; the deck keeps its shape across operations (in World's Edit, B2a)", async ({ page }) => {
+  await openShell(page, 'bin')
+  await openHome(page, 'imports')
+  await page.locator('[data-testid="bin-grid"] .w-tile', { has: page.locator('img') }).nth(8).click({ button: 'right' })
+  await page.locator('.ctx-menu button.item', { hasText: /^Select subject…/ }).click()                    // World's Edit with a document (D71)
   await expect.poll(() => editorTool(page), { timeout: 30_000 }).toMatchObject({ doc: true, tool: 'ai' })
   await page.getByRole('button', { name: 'Inpaint', exact: true }).click()
   const slots = page.locator('.ref-slots.ai-refs')
@@ -343,12 +274,13 @@ test("the reference deck (D152): Inpaint and Refine show the model's slots in th
   await expect(page.locator('.ref-slots.ai-refs')).toHaveCount(1)
 })
 
-test('text layers (D154): the Text tool places text typed in place; the layer is marked and editable in Properties; Rasterize text drops the block', async ({ page }) => {
-  await openApp(page, { suite: 'catalogue' })
-  await tiles(page).nth(8).click()
-  await page.locator('.insp .quick-card', { hasText: 'Select subject' }).click()                         // Edit with a document (D71)
+test('text layers (D154): the Text tool places text typed in place; the layer is marked and editable in Properties; Rasterize text drops the block (in World’s Edit, B2a)', async ({ page }) => {
+  await openShell(page, 'bin')
+  await openHome(page, 'imports')
+  await page.locator('[data-testid="bin-grid"] .w-tile', { has: page.locator('img') }).nth(8).click({ button: 'right' })
+  await page.locator('.ctx-menu button.item', { hasText: /^Select subject…/ }).click()                    // World's Edit with a document (D71)
   await expect.poll(() => editorTool(page), { timeout: 30_000 }).toMatchObject({ doc: true, tool: 'ai' })
-  await page.locator('nav.rail button[title^="Tool options"]').click()                                   // the toolbox lives in the Tool options tab
+  await page.locator('#edit-sec-tools').scrollIntoViewIfNeeded()                                       // the toolbox, in the column (no rail)
   await page.getByRole('button', { name: 'T Text', exact: true }).click()                                   // the toolbox button (its key and label)
   await expect.poll(() => editorTool(page)).toMatchObject({ tool: 'text' })
   const box = (await page.locator('.edit-canvas').boundingBox())!
@@ -370,21 +302,23 @@ test('text layers (D154): the Text tool places text typed in place; the layer is
   await expect(row.locator('.kind')).not.toContainText('T ·')
 })
 
-test('the detachable loupe (D155): Detach opens a second window that follows the loupe until it is held', async ({ page, context }) => {
-  await openApp(page, { suite: 'catalogue' })
-  await tiles(page).nth(7).dblclick()
-  await expect(page.locator('.loupe')).toBeVisible()
-  const [popup] = await Promise.all([context.waitForEvent('page'), page.locator('.loupe .facts').getByRole('button', { name: /^Detach/ }).click()])
+test('the detachable loupe (D155, B2a): Detach ↗ in the Bin\'s large view opens a second window that follows the Bin until it is held', async ({ page, context }) => {
+  await openShell(page, 'bin')
+  await openHome(page, 'imports')
+  await binTiles(page).nth(7).dblclick()
+  const loupe = page.locator('[data-testid="bin-loupe"]')
+  await expect(loupe).toBeVisible()
+  const [popup] = await Promise.all([context.waitForEvent('page'), loupe.locator('.facts').getByRole('button', { name: /^Detach/ }).click()])
   await popup.waitForLoadState()
   const img = popup.locator('.detached-loupe .view img')
   await expect(img).toBeVisible({ timeout: 30_000 })
   const src0 = (await img.getAttribute('src'))!
   expect(src0).toContain('/assets/')
-  await page.locator('.loupe .facts').getByRole('button', { name: 'Next image' }).click()           // the main window moves on: the second follows
+  await loupe.locator('.facts').getByRole('button', { name: 'Next', exact: true }).click()          // the main window moves on: the second follows
   await expect.poll(() => img.getAttribute('src')).not.toBe(src0)
   await popup.getByRole('button', { name: /^Following/ }).click()                                  // held: it stays
   const held = await img.getAttribute('src')
-  await page.locator('.loupe .facts').getByRole('button', { name: 'Next image' }).click()
+  await loupe.locator('.facts').getByRole('button', { name: 'Next', exact: true }).click()
   await page.waitForTimeout(600)
   expect(await img.getAttribute('src')).toBe(held)
   await expect(popup.locator('.detached-loupe')).toHaveAttribute('data-following', 'held')
@@ -407,11 +341,13 @@ test('the camera move (D156): the camera model shows a camera control under the 
   await expect(page.locator('select[aria-label="camera move"]')).toHaveCount(0)
 })
 
-test('remappable keys (D72): Pin for compare to G is refused (Cycle grouping has it); to J — menu, tooltip and help show J, J pins, C does not, it survives a reload', async ({ page }) => {
-  await openApp(page, { suite: 'catalogue' })
+test('remappable keys (D72, B2a): the Bin\'s Pin for compare to T is refused (Tag… has it); to J — menu, tooltip and help show J, J pins, C does not, it survives a reload', async ({ page }) => {
+  await openShell(page, 'bin')
+  await openHome(page, 'imports')
   const openKeys = async () => {
-    await page.locator('nav.rail').getByRole('button', { name: 'Settings…', exact: true }).click()
-    const row = page.locator('.keys-row[data-cmd="cat.pin"]')
+    await page.locator('button[aria-label="app menu"]').click()
+    await page.locator('.menu button', { hasText: /^Settings…/ }).click()
+    const row = page.locator('.keys-row[data-cmd="bin.item.pin"]')
     await row.scrollIntoViewIfNeeded()
     return row
   }
@@ -420,8 +356,8 @@ test('remappable keys (D72): Pin for compare to G is refused (Cycle grouping has
   await expect(row.locator('.keys-chord')).toHaveText('C')
   await row.locator('.keys-chord').click()
   await expect(row.locator('.keys-chord')).toHaveText('press a key…')
-  await page.keyboard.press('g')                                                         // the plan's example: G is Cycle grouping's — refused, with its name
-  await expect(row.locator('.keys-note.error')).toContainText('“Cycle grouping”')
+  await page.keyboard.press('t')                                                         // T is Tag…'s — refused, with its name
+  await expect(row.locator('.keys-note.error')).toContainText('“Tag…”')
   await expect(row.locator('.keys-chord')).toHaveText('C')
   await row.locator('.keys-chord').click()
   await page.keyboard.press('j')
@@ -429,28 +365,25 @@ test('remappable keys (D72): Pin for compare to G is refused (Cycle grouping has
   await expect(row.locator('.keys-note')).toHaveText('now J')
   await closeSettings()
 
-  const [a, b] = [tiles(page).nth(10), tiles(page).nth(11)]
+  const [a, b] = [binTiles(page).nth(10), binTiles(page).nth(11)]
   await a.click({ button: 'right' })                                                     // the tile menu shows J
   await expect(page.locator('.ctx-menu button.item', { hasText: /^Pin for compare/ }).locator('kbd')).toHaveText('J')
-  await a.click()                                                                         // closes the menu and selects the tile (Esc would clear it)
-  await expect(page.locator('.ctx-menu')).toHaveCount(0)
-  await a.dblclick()                                                                      // the loupe hub's Pin button: its tooltip says J
-  await expect(page.locator('.loupe .hub button[aria-label="Pin for compare"]')).toHaveAttribute('title', 'Pin for compare (J)')
-  await page.keyboard.press('j')                                                          // J pins
-  await expect(page.locator('.loupe .hub button[aria-label="Unpin"]')).toBeVisible()
   await page.keyboard.press('Escape')
-  await expect(page.locator('.loupe')).toHaveCount(0)
-  await expect(a.locator('.pin')).toHaveText('C1')
+  await expect(page.locator('.ctx-menu')).toHaveCount(0)
+  await a.click()
+  await expect(page.locator('[data-testid="bin-inspector"] button[aria-label="Pin for compare"]')).toHaveAttribute('title', /\(J\)/)
+  await page.keyboard.press('j')                                                          // J pins
+  await expect(a.locator('.b-pin')).toHaveText('A')
   await b.click()
   await page.keyboard.press('c')                                                          // C does nothing now
   await page.waitForTimeout(500)
-  await expect(b.locator('.pin')).toHaveCount(0)
+  await expect(b.locator('.b-pin')).toHaveCount(0)
   await page.keyboard.press('?')                                                          // help lists Pin for compare with J
   await expect(page.locator('.cmd-help .row', { hasText: /^Pin for compare/ }).first().locator('kbd')).toHaveText('J')
   await page.keyboard.press('Escape')
 
   await page.reload()                                                                     // a restart keeps it
-  await expect(page.locator('.frame')).toBeVisible()
+  await expect(page.locator('.frame.ui2')).toBeVisible()
   row = await openKeys()
   await expect(row.locator('.keys-chord')).toHaveText('J')
   await expect(row).toHaveClass(/changed/)
@@ -458,17 +391,19 @@ test('remappable keys (D72): Pin for compare to G is refused (Cycle grouping has
   await expect(row.locator('.keys-chord')).toHaveText('C')
 })
 
-test('@mentions (D73): "@hero walks into @tavern" — both groups give references in the preview, and the job records both at their revisions', async ({ page }) => {
+test('@mentions (D73, in Sketches since B2a): "@hero walks into @tavern" — both groups give references in the preview, and the job records both at their revisions', async ({ page }) => {
   const tag = Date.now().toString(36)
   const [heroName, tavernName] = [`hero ${tag}`, `tavern ${tag}`]                   // names with a space, as people write them
   const hero = await api<Group>('POST', '/groups', { name: heroName }), tavern = await api<Group>('POST', '/groups', { name: tavernName })
   const free = (await api<{ items: (AssetLite & { kind: string })[] }>('GET', '/assets?folder=unprocessed&limit=40')).items.filter((a) => a.kind === 'image')
   await api('POST', '/groups/move', { items: free.slice(0, 3).map((a) => ({ kind: 'asset', id: a.id })), to: hero.id })
   await api('POST', '/groups/move', { items: free.slice(3, 5).map((a) => ({ kind: 'asset', id: a.id })), to: tavern.id })
-  await openApp(page, { suite: 'generate', tab: 'model' })
-  await page.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()   // takes 4 references
-  await page.locator('nav.rail button[title^="Prompt"]').click()
-  await page.locator('.segmented button', { hasText: /^Text$/ }).click()
+  await openShell(page, 'world/sketches')
+  const col = page.locator('[data-testid="world-sketches"]')
+  await col.locator('#gen-sec-model').scrollIntoViewIfNeeded()
+  await col.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()   // takes 4 references
+  await col.locator('#gen-sec-prompt').scrollIntoViewIfNeeded()
+  await col.locator('#gen-sec-prompt .segmented button', { hasText: /^Text$/ }).click()
   const ta = page.locator('.text-prompt textarea')
   await ta.fill('')
   await ta.click()
@@ -486,7 +421,7 @@ test('@mentions (D73): "@hero walks into @tavern" — both groups give reference
   await expect(page.locator('.mchip', { hasText: heroName })).toContainText('2 images')
   // D93 (A3): then each group's images together — hero 1–2, tavern 3–4
   await expect(page.locator('.preview-box')).toContainText(`${heroName} walks into ${tavernName}. Image 1 shows ${heroName}. Image 2 shows ${heroName}. Image 3 shows ${tavernName}.`)
-  const go = page.locator('.panel .foot button.primary', { hasText: /^Generate/ })
+  const go = col.locator('button', { hasText: /^Make \d+ sketch/ })
   await go.click()
   const job = await expect.poll(async () => (await api<{ items: { status: string; recipe: { mentions?: { group_id: string; revision: number; asset_ids: string[] }[] } }[] }>('GET', '/jobs')).items
     .find((j) => j.recipe.mentions?.some((m) => m.group_id === hero.id))?.status, { timeout: 45_000 }).toBe('done')
@@ -502,34 +437,37 @@ test('@mentions (D73): "@hero walks into @tavern" — both groups give reference
   await expect(page.locator('.mention-chips .mchip')).toHaveCount(1)
 })
 
-test('a suite whose code fails to load says so and recovers (no blank window): the Edit chunk refused, then a reload', async ({ page }) => {
+test('a part whose code fails to load says so and recovers (no blank window, B2a): World\'s Edit refused, then a reload', async ({ page }) => {
   test.setTimeout(150_000)                                                             // the reload + WebGL boot takes long on the CI runners
-  await page.route(/EditSuite-[\w-]+\.js$/, (r) => r.abort('failed'))               // the network refuses Edit's code (the idle preload hits it too)
-  await openApp(page, { suite: 'catalogue' })
-  await openImage(page, 'Edit')
-  await expect(page.locator('.stage .render-error')).toContainText("Edit's code could not be loaded")
-  await expect(page.locator('.render-error')).toHaveCount(1)                          // one explanation, in the middle; the panel says one line
+  const refused = /(EditSuite|WorldEdit)-[\w-]+\.js$/
+  await page.route(refused, (r) => r.abort('failed'))                                  // the network refuses Edit's code (the idle preload hits it too)
+  await openShell(page, 'bin')
+  await openHome(page, 'imports')
+  await contextChoose(page, page.locator('[data-testid="bin-grid"] .w-tile', { has: page.locator('img') }).nth(2), 'Open in Edit')
+  await expect(page.locator('.w-centre .render-error')).toContainText("Edit's code could not be loaded")
+  await expect(page.locator('.render-error')).toHaveCount(1)                          // one explanation, in the middle; the column says one line
   await expect(page.locator('.render-error-line')).toContainText('Edit is not available')
-  await expect(page.locator('.frame')).toBeVisible()                                  // the rest of the app stays
-  await openCatalogue(page)
-  await expect(tiles(page).first()).toBeVisible()
-  await page.unroute(/EditSuite-[\w-]+\.js$/)
-  await openImage(page, 'Edit')
-  await page.locator('.stage .render-error').getByRole('button', { name: 'Reload the app' }).click()   // the browser keeps a failed module: reload
-  await expect(page.locator('.frame')).toBeVisible()
-  await openImage(page, 'Edit')
-  await expect(page.locator('.edit-empty')).toBeVisible({ timeout: 90_000 })         // the code loads this time (the CI runner takes long over the reload + WebGL boot; 45 s failed once on the open runner, 2026-10-13)
+  await expect(page.locator('.frame.ui2 nav.tabs')).toBeVisible()                    // the rest of the app stays
+  await expect(page.locator('.dock')).toBeVisible()
+  await page.unroute(refused)
+  await page.locator('.w-centre .render-error').getByRole('button', { name: 'Reload the app' }).click()   // the browser keeps a failed module: reload
+  await expect(page.locator('.frame.ui2')).toBeVisible()
+  await openShell(page, 'bin')
+  await openHome(page, 'imports')
+  await contextChoose(page, page.locator('[data-testid="bin-grid"] .w-tile', { has: page.locator('img') }).nth(2), 'Open in Edit')
+  await expect(page.locator('[data-testid="world-edit"] .edit-canvas')).toBeVisible({ timeout: 90_000 })   // the code loads this time
 })
 
-test('a new angle (P14, D82; a sheet since D90): "New angle" on a tile opens the sheet with the source, the pad picks the move, the job lands with reangle lineage', async ({ page }) => {
-  const before = (await api<Record<string, number>>('GET', '/assets/counts')).unprocessed ?? 0
-  await openApp(page, { suite: 'catalogue' })
-  const srcId = await tiles(page).nth(8).getAttribute('data-id')                                     // pinned by id: a late asset can reorder the grid between two reads
-  await page.locator(`.tile[data-id="${srcId}"]`).click()
-  await page.locator('.insp .quick-card', { hasText: 'New angle' }).click()
-  const sheet = page.locator('.modal.angle-sheet')                                                    // D90: a sheet over the Catalogue, no suite switch
+test('a new angle (P14, D82; B2a): "New angle…" on a Bin picture opens the sheet with the source, the pad picks the move, the job lands with reangle lineage', async ({ page }) => {
+  await openShell(page, 'bin')
+  await openHome(page, 'imports')
+  const srcId = (await page.locator('[data-testid="bin-grid"] .w-tile', { has: page.locator('img') }).nth(8).getAttribute('data-id'))!   // pinned by id
+  await page.locator(`[data-testid="bin-grid"] .w-tile[data-id="${srcId}"]`).click()
+  await page.locator('[data-testid="bin-inspector"] button', { hasText: 'Start from it' }).click()
+  await page.locator('.ctx-menu button.item', { hasText: 'New angle…' }).click()
+  const sheet = page.locator('.modal.angle-sheet')                                                    // a sheet over the Bin, no layer switch
   await expect(sheet).toBeVisible()
-  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Catalogue/)                // D125: the Catalogue is a tab of its own
+  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Bin/)
   await expect(sheet.locator('.angle-tab .ref-slot.source img')).toBeVisible()
   await sheet.locator('.angle-pad button[aria-label="Wide"]').click()                             // D90: the moves are icons
   const go = sheet.locator('.foot button.primary', { hasText: /^New angle/ })
@@ -537,8 +475,6 @@ test('a new angle (P14, D82; a sheet since D90): "New angle" on a tile opens the
   await expect(sheet.locator('.foot .estimate')).toContainText(/Klein/)                        // auto: a framing move runs Klein (D77)
   await go.click()
   await expect(sheet).toHaveCount(0)                                                                  // queueing closes the sheet
-  // the result is found through its job, not as "the newest asset": on a slow runner an earlier scenario's job (the @mentions one, four
-  // parents) can land in Unprocessed between the click and the poll (CI on bb1f90a, open variant)
   type JobLite = { id: string; status: string; recipe: { kind: string; move?: string }; result: { asset_ids?: string[] } | null }
   const jobOf = async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.recipe?.kind === 'reangle')
   await expect.poll(async () => (await jobOf())?.status, { timeout: 45_000 }).toBe('done')
@@ -547,8 +483,7 @@ test('a new angle (P14, D82; a sheet since D90): "New angle" on a tile opens the
   expect(job.result?.asset_ids).toHaveLength(1)
   const newest = await api<AssetLite & { parents: string[]; lineage_kind: string | null }>('GET', `/assets/${job.result!.asset_ids![0]}`)
   expect(newest.parents).toEqual([srcId])                                                               // lineage: the source …
-  expect(newest.lineage_kind).toBe('reangle')                                                           // … it landed in Unprocessed
-  await expect.poll(async () => (await api<Record<string, number>>('GET', '/assets/counts')).unprocessed ?? 0, { timeout: 10_000 }).toBeGreaterThanOrEqual(before + 1)
+  expect(newest.lineage_kind).toBe('reangle')
   const edges = await api<{ parents: { from_id: string; kind: string }[] }>('GET', `/lineage/${newest.id}`)
   expect(edges.parents.map((p) => [p.from_id, p.kind])).toEqual([[srcId, 'reangle']])                   // … and the edge kind
 })
@@ -2724,101 +2659,74 @@ test('an album trains a LoRA (D122): its card\'s right-click opens the sheet wit
   await api('POST', `/jobs/${(await job())!.id}/cancel`)                                                 // the queue left as it was
 })
 
-test('a group\'s "used by" (D92 §4.2): a Cast version\'s reference set says so on its page and in the card\'s Inspector, the link opens Cast, and Delete group… warns', async ({ page }) => {
-  const name = `Ines ${Date.now().toString(36)}`
-  type ProfileLite = { id: string; versions: { id: string; group_id: string }[] }
-  const prof = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character' })
-  const gid = prof.versions[0].group_id
-  const users = await api<Record<string, { kind: string; name: string; extra: string }[]>>('GET', `/groups/used-by?ids=${gid}`)
-  expect(users[gid]).toEqual([expect.objectContaining({ kind: 'profile_ref', name, extra: 'v1' })])
-  await openApp(page, { suite: 'catalogue' })
-  // U2 (D157, G1): the reference set lives in the version's home in the Bin — World › Characters › <name> › v1 › "<name> · v1"
-  const rowOf = (label: string, scope = page.locator('.places')) => scope.locator('.place-row').filter({ has: page.getByText(label, { exact: true }) })
-  const expand = async (r: ReturnType<typeof rowOf>) => {                                       // the tree loads after the page: wait for the chevron
-    const chev = r.locator('button.chev'); await expect(chev).toBeVisible()
-    if ((await chev.getAttribute('aria-label'))?.startsWith('Expand')) await chev.click()
-  }
-  await expand(rowOf('World')); await expand(rowOf('Characters'))
-  const who = rowOf(name); await expand(who)
-  const v1 = rowOf('v1', who.locator('xpath=..')); await expand(v1)
-  const row = rowOf(`${name} · v1`)
-  await expect(row).toBeVisible()
-  await row.locator('button.place-open').click()
-  const line = page.locator('.page-head .used-by')                                                     // the page's header
-  await expect(line).toContainText(`used by:${name} v1 · references`)
-  // the card on its home's page: its Inspector says so too
-  await v1.locator('button.place-open').click()
-  const card = page.locator('.pcard', { hasText: name })
-  await expect(card).toBeVisible()
-  await card.click()
-  const used = page.locator('.insp .used-by')
-  await expect(used).toContainText(`${name} v1 · references`)
-  // Delete group… warns (and Cancel keeps it)
-  await card.click({ button: 'right' })
-  await page.locator('.ctx-menu button.item', { hasText: 'Delete group…' }).click()
-  const dialog = page.locator('.modal.ask')
-  await expect(dialog).toContainText(`It is used by ${name} v1 · references`)
-  await page.keyboard.press('Escape')
-  await expect(dialog).toHaveCount(0)
-  expect((await api<{ group: { id: string } }>('GET', `/groups/${gid}`)).group.id).toBe(gid)
-  // the link opens the user: Story · Cast at that version
-  await used.locator('button.link', { hasText: `${name} v1 · references` }).click()
-  await expect(page.locator('.cast-page h2')).toContainText(name)
-})
-
-test('the Bin (D95 · AN1, 04 C1): the Dock\'s Bin tab shows the Catalogue in Image and Animate; a double-click adds a reference in Make and sets the start frame in Animate', async ({ page }) => {
-  await openApp(page, { suite: 'generate' })
-  await expect(page.locator('.dock .dock-tabs')).toBeVisible()
+test('the drawer (D95 · AN1, B2a): the Dock\'s Bin in World\'s Sketches and Shots\' Performance — a double-click adds a reference in Make and sets the start frame in Performance; a tile dragged onto a reference slot takes it', async ({ page }) => {
+  const tag = Date.now().toString(36)
+  const a = await api<{ shot_id: string }>('POST', '/story/flow/shots', { title: `Drawer ${tag}`, scene: 'new' })
+  await openShell(page, 'world/sketches')
   await page.locator('.dock .dock-tabs button', { hasText: 'Bin' }).click()
-  const bin = page.locator('.dock .bin')
-  await expect(bin).toBeVisible()
-  await bin.locator('.bin-bar .segmented button', { hasText: 'Images' }).click()
-  const tile = bin.locator('.bin-grid .tile').first()
+  const grid = page.locator('.dock .bin-grid')
+  await page.locator('[data-testid="bin-drawer-homes"] .b-node[data-path="imports"] .b-open').click()
+  await page.locator('.dock .bin-bar .segmented button', { hasText: 'pictures' }).click()
+  const tile = grid.locator('.w-tile').first()
   await expect(tile).toBeVisible()
   const id = (await tile.getAttribute('data-id'))!
+  await page.locator('[data-testid="world-sketches"] #gen-sec-refs').scrollIntoViewIfNeeded()
   await tile.dblclick()                                                                                      // Make: a reference
   await expect(page.locator('.ref-slots .ref-slot img').first()).toHaveAttribute('src', new RegExp(id))
-  await openAnimate(page, 'Performance')
-  await expect(page.locator('.dock .bin')).toBeVisible()                                                    // the Bin stays open across Image and Animate
-  await page.locator('.dock .bin .bin-grid .tile').nth(1).dblclick()                                        // Animate: the start frame
+  // a tile dragged onto an empty reference slot takes it (frame/drag.ts)
+  const second = grid.locator('.w-tile').nth(1)
+  const id2 = (await second.getAttribute('data-id'))!
+  const slot = page.locator('.ref-slots .ref-slot:not(:has(img))').first()
+  const from = await centre(second), to = await centre(slot)
+  await page.mouse.move(from.x, from.y); await page.mouse.down()
+  await page.mouse.move(from.x + 12, from.y - 8, { steps: 3 })
+  await page.mouse.move(to.x, to.y, { steps: 12 })
+  await page.mouse.up()
+  await expect(page.locator(`.ref-slots .ref-slot img[src*="${id2}"]`)).toHaveCount(1)
+  await page.goto(`${appUrl({ ui: '2' })}#shots/${a.shot_id}/performance`)
+  await page.locator('.perf-cards button', { hasText: 'Image to video' }).click()
+  await expect(page.locator('.perf-cards button.active')).toHaveText('Image to video')
+  await expect(page.locator('.dock .bin')).toBeVisible()                                                    // the drawer stays open across the layers
+  await page.locator('.dock .bin-grid .w-tile').nth(1).dblclick()                                           // Performance: the start frame
   await expect(page.locator('.slots .slot').first().locator('img')).toBeVisible()
-  await openCatalogue(page)
-  await expect(page.locator('.dock .dock-tabs')).toHaveCount(0)                                             // Story has the Catalogue itself
+  await page.locator('nav.tabs button.tab', { hasText: 'Bin' }).click()
+  await expect(page.locator('.dock .dock-tabs button', { hasText: 'Bin' })).toHaveCount(0)                  // the Bin layer is the Bin itself
 })
 
-test("the Bin's Trash: a tile's right-click moves it to the trash, which counts it; there its double-click restores it and its right-click deletes it permanently (asked first)", async ({ page }) => {
-  await openApp(page, { suite: 'generate' })
-  await page.locator('.dock .dock-tabs button', { hasText: 'Bin' }).click()
-  const bin = page.locator('.dock .bin')
-  await bin.locator('.bin-places button', { hasText: /^Library/ }).click()
-  await bin.locator('.bin-bar .segmented button', { hasText: 'Images' }).click()
-  await expect(bin.locator('.bin-bar .meta').first()).not.toHaveText('loading…')                    // the filter's load settled: the tiles stay put
-  const id = (await bin.locator('.bin-grid .tile').last().getAttribute('data-id'))!
-  const tile = bin.locator(`.bin-grid .tile[data-id="${id}"]`)                                       // by its id: a landing asset moves the others
+test("the Bin's Trash (B2a): a tile's right-click moves it to the trash, which counts it; there Restore puts it back and Delete permanently… removes it (asked first); the drawer's double-click restores", async ({ page }) => {
+  await openShell(page, 'bin')
+  await openHome(page, 'imports')
+  await page.locator('[data-testid="bin-grid"] .w-chips button', { hasText: 'pictures' }).click()
+  await expect(page.locator('[data-testid="bin-count"]')).toBeVisible()
+  const id = (await binTiles(page).last().getAttribute('data-id'))!
+  const tile = page.locator(`[data-testid="bin-grid"] .w-tile[data-id="${id}"]`)                     // by its id: a landing asset moves the others
   const trashedAt = async () => (await api<{ trashed_at: string | null }>('GET', `/assets/${id}`)).trashed_at
-  await tile.click({ button: 'right' })
-  await page.locator('.ctx-menu button.item', { hasText: /^Move to trash/ }).click()
+  await contextChoose(page, tile, 'Trash')
   await expect.poll(trashedAt, { timeout: 10_000 }).toBeTruthy()
-  await expect(bin.locator(`.bin-grid .tile[data-id="${id}"]`)).toHaveCount(0)                    // gone from the Library
-  const trash = bin.locator('.bin-places .bin-trash')
-  await expect(trash.locator('small')).toHaveText(/^[1-9]\d*$/)
-  await trash.click()
+  await expect(tile).toHaveCount(0)                                                                  // gone from Imports
+  const trash = page.locator('[data-testid="bin-tree"] .b-node[data-path="trash"]')
+  await expect(trash.locator('.n')).toHaveText(/^[1-9]\d*$/)
+  await trash.locator('.b-open').click()
   await expect(trash).toHaveClass(/active/)
-  const there = bin.locator(`.bin-grid .tile[data-id="${id}"]`)
+  const there = page.locator(`[data-testid="bin-grid"] .w-tile[data-id="${id}"]`)
   await expect(there).toBeVisible()
-  await expect(bin.locator('.bin-bar button', { hasText: /Empty trash/ })).toBeEnabled()
+  await expect(page.locator('[data-testid="bin-grid"] .w-bin-head button', { hasText: /Empty trash/ })).toBeEnabled()
   await page.screenshot({ path: 'node_modules/.e2e/bin-trash.png' })
-  await there.dblclick()                                                                         // Restore
+  await contextChoose(page, there, 'Restore')
   await expect.poll(trashedAt, { timeout: 10_000 }).toBeNull()
   await expect(there).toHaveCount(0)
+  // trashed again; the drawer's double-click restores it (D95)
+  await api('POST', '/assets/trash', { ids: [id] })
+  await page.locator('nav.tabs button.tab', { hasText: 'World' }).click()
+  await page.locator('.dock .dock-tabs button', { hasText: 'Bin' }).click()
+  await page.locator('[data-testid="bin-drawer-homes"] .b-node[data-path="trash"] .b-open').click()
+  await page.locator(`.dock .bin-grid .w-tile[data-id="${id}"]`).dblclick()
+  await expect.poll(trashedAt, { timeout: 10_000 }).toBeNull()
   // trashed again, then deleted permanently from its right-click
-  await bin.locator('.bin-places button', { hasText: /^Library/ }).click()
-  await bin.locator(`.bin-grid .tile[data-id="${id}"]`).click({ button: 'right' })
-  await page.locator('.ctx-menu button.item', { hasText: /^Move to trash/ }).click()
-  await expect.poll(trashedAt, { timeout: 10_000 }).toBeTruthy()
-  await trash.click()
-  await there.click({ button: 'right' })
-  await page.locator('.ctx-menu button.item', { hasText: /^Delete permanently/ }).click()
+  await api('POST', '/assets/trash', { ids: [id] })
+  await page.locator('nav.tabs button.tab', { hasText: 'Bin' }).click()
+  await page.locator('[data-testid="bin-tree"] .b-node[data-path="trash"] .b-open').click()
+  await contextChoose(page, there, 'Delete permanently…')
   const dialog = page.locator('.modal.ask')
   await expect(dialog).toContainText('cannot be undone')
   await dialog.locator('button', { hasText: /^Delete permanently$/ }).click()

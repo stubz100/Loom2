@@ -9,6 +9,7 @@ import { CommandPalette } from '../frame/CommandPalette'
 import { runCommand } from '../frame/commands'
 import { ContextMenuHost } from '../frame/ContextMenu'
 import { Dock } from '../frame/Dock'
+import { ErrorBoundary } from '../frame/ErrorBoundary'
 import { HelpOverlay } from '../frame/HelpOverlay'
 import { ModelsSheet } from '../frame/ModelsSheet'
 import { ProjectDialog } from '../frame/ProjectDialog'
@@ -23,6 +24,7 @@ import { BinLayer } from './bin/BinLayer'
 import { ShotsLayer } from './shots/ShotsLayer'
 import { WorldLayer } from './world/WorldLayer'
 import { KeyHosts } from '../frame/keyHosts'
+import { AngleSheet } from '../suites/generate/AngleTab'
 import '../frame/frame.css'
 import './shell.css'
 
@@ -50,6 +52,7 @@ export function Shell() {
   useKeyboardMap()
   useEffect(() => { void init() }, [init])
   useEffect(() => followNavigation(), [])
+  useEffect(() => { void import('./deepLinks').then((m) => m.followDeepLink()) }, [])   // B2a: ?suite=edit&tool=…&ai=…&asset=… opens World's Edit
   useEffect(() => { document.body.classList.toggle('density-compact', ui.density === 'compact') }, [ui.density])
   useEffect(() => { applyTheme(ui.theme) }, [ui.theme])
   const name = NAME[layer]
@@ -58,7 +61,7 @@ export function Shell() {
       <TopBar tabs={<LayerTabs />} />
       <Banner />
       <main className="ui2-layer filled" aria-label={name}>
-        {layer === 'world' ? <WorldLayer /> : layer === 'shots' ? <ShotsLayer /> : layer === 'episode' ? <EpisodeLayer /> : <BinLayer />}
+        <ErrorBoundary key={layer} label={name}>{layer === 'world' ? <WorldLayer /> : layer === 'shots' ? <ShotsLayer /> : layer === 'episode' ? <EpisodeLayer /> : <BinLayer />}</ErrorBoundary>{/* B2a: a layer that fails says so; the shell stays */}
       </main>
       <Dock />
       <Toasts />
@@ -68,6 +71,7 @@ export function Shell() {
       {projectDialog && <ProjectDialog mode={projectDialog} />}
       {helpOpen && <HelpOverlay />}
       <ModelsSheet />
+      <AngleSheet />{/* B2a (D82): New angle… from the Bin */}
       <AskDialog />
       <KeyHosts />
     </div>

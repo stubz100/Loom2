@@ -4,17 +4,21 @@
 // to the Sketches. B1 (D159, 11 §3): the scope `bin`, every verb on the selection (one thing or many): duplicate, reveal, Delete
 // permanently…, Empty trash…, Select all, compare (two to four pinned), the tile size, Import… into the open home, the large view's Fit,
 // 1:1, previous and next, Re-run and Variations landing beside the thing, a picture made into a World entity. The grid's key hook answers
-// the keys shown (handleKeyFor('bin')).
-import { ArrowLeftRight, ArrowUpRight, ChevronLeft, ChevronRight, Columns2, Copy, ExternalLink, FolderInput, FolderOpen, FolderOutput, Maximize2, Pin, PinOff,
-  RotateCcw, Shuffle, SquareCheck, SquareX, Tag, Trash, Trash2, Undo, Upload, ZoomIn, ZoomOut } from 'lucide-react'
+// the keys shown (handleKeyFor('bin')). B2a (D159, 11 §7): the quick starts on a picture — Open in Edit, Select subject…, Upscale…, New
+// angle…, Make a 3D prop… — and Add to World ▸ (the things named go into an entity's version as the hero, a reference or a candidate).
+import { ArrowLeftRight, ArrowUpRight, Box, ChevronLeft, ChevronRight, Columns2, Copy, Eraser, ExternalLink, FolderInput, FolderOpen, FolderOutput, ImagePlus, ImageUp,
+  ImageUpscale, Inbox, Maximize2, Orbit, Pencil, Pin, PinOff, RotateCcw, Shuffle, SquareCheck, SquareX, Tag, Trash, Trash2, Undo, Upload, ZoomIn, ZoomOut } from 'lucide-react'
 import { http, unwrap } from '../../api/client'
 import type { BinNode, BinThing } from '../../api/types'
 import { showMenu } from '../../frame/ContextMenu'
-import { registerCommands, type MenuItem } from '../../frame/commands'
+import { registerCommands, setReach, type MenuItem } from '../../frame/commands'
 import { openDetached } from '../../frame/loupeLink'
-import { navigate } from '../../frame/router'
+import { navigate, UI2 } from '../../frame/router'
 import { isTauri, pickFiles, revealPath } from '../../shell/tauri'
 import { askConfirm, askText, useSession } from '../../store/session'
+import { castTarget } from '../../suites/story/addToCast'
+import { useStory } from '../../suites/story/storyStore'
+import type { OpenWith } from '../../frame/openWith'
 import { HEADINGS, homesById, pathLabel, ROLE_WORDS, selectedThings, TILE, TRASH, useBin } from './binStore'
 
 const b = () => useBin.getState()
@@ -138,6 +142,34 @@ async function again(kind: 'rerun' | 'variations'): Promise<void> {
 }
 
 const inTrash = () => b().open === TRASH
+const picture = () => { const it = selectedItem(); return it && !it.asset.trashed_at && it.asset.kind === 'image' ? it : null }
+const editWith = (o?: OpenWith) => { const it = picture(); if (it) void import('../world/editAnywhere').then((m) => m.editAnywhere(it.asset.id, o)) }
+
+/** P18 (D84): a 3D prop from the picture — the mesh job, its cost said first; the GLB lands in Imports (World's prop takes it as its model). */
+async function makeMesh(): Promise<void> {
+  const it = picture(); const mc = useSession.getState().capabilities?.mesh
+  if (!it || !mc?.model_id) return
+  const mins = (s: number | null | undefined) => (s ? `${Math.round(s / 60)} min` : '?')
+  if (!await askConfirm({ title: 'Make a 3D prop from this picture?', okLabel: 'Queue it',
+    text: `${mc.label} cuts the object out and builds a textured GLB (${mc.resolutions[0]}, ${Math.round(mc.faces / 1000)}k faces). About ${mins(mc.seconds)} with the model loaded, ${mins(mc.cold_seconds)} from cold, on this card${mc.health === 'missing' ? ' — its weights are missing (Models › Fetch)' : ''}. It runs in the background; the model lands in Imports.` })) return
+  try {
+    await unwrap(http.POST('/jobs', { body: { recipe: { kind: 'image_to_mesh', asset_id: it.asset.id } as never, stage: false, origin: { suite: 'catalogue', surface: 'mesh', ref: it.asset.id } } }))
+    useSession.getState().toast(`Queued a 3D prop (${mins(mc.seconds)})`, 'success')
+  } catch (e) { useSession.getState().toast(`Make a 3D prop failed: ${(e as { detail?: string }).detail ?? e}`, 'error') }
+}
+
+/** Add to World ▸ (D93 A2): the entry names the entity, its version and the things (castTarget); the server moves or copies them in. */
+const addable = (role: 'hero' | 'reference' | 'candidate') => () => {
+  const p = castTarget.pid ? useStory.getState().profiles.find((x) => x.id === castTarget.pid) : undefined
+  const list = castTarget.ids ?? []
+  return !!p && p.versions.find((v) => v.id === (castTarget.vid ?? p.current))?.state === 'open' && list.length > 0 && (role !== 'hero' || list.length === 1)
+}
+const addTo = (role: 'hero' | 'reference' | 'candidate') => async () => {
+  const { pid, vid, ids: list } = castTarget
+  if (!pid || !list?.length) return
+  await useStory.getState().addToProfile(pid, list, role, vid)
+  await b().refresh({ tree: true, home: true })
+}
 const openNode = () => homeOf(b().open)
 const live = () => n() > 0 && !inTrash()
 const order = () => b().items.map((x) => x.asset.id)
@@ -165,6 +197,19 @@ registerCommands([
     when: () => !inTrash() && !!selectedItem()?.asset.params?.recipe, run: () => again('rerun') },
   { id: 'bin.item.variations', scope: 'bin', label: 'Variations (new seeds)', icon: Shuffle, keys: 'V', placement: ['inspector', 'context'], hint: 'four more with new seeds, beside it',
     when: () => !inTrash() && !!selectedItem()?.asset.params?.recipe, run: () => again('variations') },
+  { id: 'bin.item.edit', scope: 'bin', label: 'Open in Edit', icon: Pencil, keys: 'E', placement: ['inspector', 'context'], when: () => !!picture(),
+    hint: "in World's Edit: in its version when it is an entity's, else saved beside it", run: () => editWith() },
+  { id: 'bin.item.selectSubject', scope: 'bin', label: 'Select subject…', icon: Eraser, placement: ['inspector', 'context'], when: () => !!picture(),
+    hint: 'Edit with AI Select · Subject (it selects; Inpaint or a mask does the rest)', run: () => editWith({ suite: 'edit', aiOp: 'select', selMode: 'subject' }) },
+  { id: 'bin.item.upscale', scope: 'bin', label: 'Upscale in Edit…', icon: ImageUpscale, placement: ['inspector', 'context'], when: () => !!picture(),
+    run: () => editWith({ suite: 'edit', aiOp: 'upscale' }) },
+  { id: 'bin.item.angle', scope: 'bin', label: 'New angle…', icon: Orbit, placement: ['inspector', 'context'], when: () => !!picture(), hint: 'a new viewpoint of the picture (P14)',
+    run: () => { const it = picture(); if (it) void import('../../frame/openWith').then((m) => m.openWith(it.asset.id, { suite: 'generate', slot: 'angle' })) } },
+  { id: 'bin.item.mesh', scope: 'bin', label: 'Make a 3D prop…', icon: Box, placement: ['inspector', 'context'], when: () => !!picture() && !!useSession.getState().capabilities?.mesh?.model_id,
+    run: makeMesh },
+  { id: 'bin.addTo.hero', scope: 'bin', label: 'Add to World as the hero', icon: ImageUp, placement: ['context'], hint: 'it joins the reference set as its cover', when: addable('hero'), run: addTo('hero') },
+  { id: 'bin.addTo.reference', scope: 'bin', label: 'Add to World into the reference set', icon: ImagePlus, placement: ['context'], when: addable('reference'), run: addTo('reference') },
+  { id: 'bin.addTo.candidate', scope: 'bin', label: 'Add to World as a candidate', icon: Inbox, placement: ['context'], when: addable('candidate'), run: addTo('candidate') },
   { id: 'bin.item.pin', scope: 'bin', label: 'Pin for compare', icon: Pin, keys: 'C', placement: ['inspector', 'context'], when: () => !!selectedItem() && !inTrash(),
     hint: 'two to four pinned things side by side (zoom and pan together)', run: () => { const it = selectedItem(); if (it) b().pin(it.asset) } },
   { id: 'bin.compare', scope: 'bin', label: 'Compare', icon: Columns2, keys: 'Shift+C', placement: ['panel', 'context'], when: () => b().pins.length >= 2, run: () => b().compare(true) },
@@ -199,6 +244,9 @@ registerCommands([
       const r = await unwrap(http.POST('/assets/purge', { body: { ids: null } }))
       useSession.getState().toast(`Trash emptied: ${plural(r.purged, 'thing')} deleted permanently`, 'success'); b().select(null); await b().reload() } },
 ])
+
+// B2a: the Bin layer is the `catalogue` suite; its keys, help and palette reach the Bin's scope first (the old Catalogue's after it, until B2b)
+if (UI2) setReach('catalogue', [{ scope: 'bin' }, { scope: 'catalogue' }])
 
 /** A home of the tree by its id (a role page maps to its home). */
 export const homeOf = (id: string | null | undefined): BinNode | undefined => (id && id !== TRASH ? homesById(b().homes).get(id) : undefined)

@@ -244,8 +244,9 @@
 .lib-picture .glyph { width: 72px; height: 72px; }
 
 /* D93 (B4, B5): the version page's character sheet — label, appearance, outfit, bound colours, marks — and the clause it composes to */
-.cast-sheet { display: grid; grid-template-columns: 84px 1fr; gap: 6px 10px; align-items: start; font-size: 12px; color: var(--fg2); margin-top: 4px; }
+.cast-sheet { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 6px 10px; align-items: start; font-size: 12px; color: var(--fg2); margin-top: 4px; }
 .cast-sheet > label { padding-top: 5px; }
+.cast-sheet > * { min-width: 0; }
 .cast-sheet textarea, .cast-sheet > input { width: 100%; box-sizing: border-box; font: inherit; color: var(--fg); }
 .cast-sheet textarea { resize: vertical; }
 .cast-sheet .sheet-label { display: flex; align-items: center; gap: 8px; }
@@ -260,7 +261,10 @@
 .cast-body { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
 .cast-body.empty { flex-direction: column; gap: 4px; }
 .cast-body .body-fields { display: grid; gap: 4px; flex: 1 1 220px; min-width: 0; }
-.cast-body .body-row { display: grid; grid-template-columns: 92px 1fr auto; gap: 6px; align-items: center; }
+.cast-body .body-row { display: grid; grid-template-columns: 92px minmax(0, 1fr) auto; gap: 6px; align-items: center; }
+.cast-body .body-row > * { min-width: 0; }
+.cast-body .body-row input[type=range] { width: 100%; min-width: 0; }
+.cast-body .body-row > .segmented { grid-column: 2 / -1; justify-self: start; max-width: 100%; flex-wrap: wrap; }   /* the build's four: the row's free column too */
 .cast-body .body-row input[type=number] { width: 70px; }
 .cast-body .body-row.attachments { align-items: start; }
 .cast-body .body-att { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; margin-bottom: 3px; }

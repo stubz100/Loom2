@@ -31,7 +31,11 @@ export function enterMake(cls: ProfileClass, pid: string, vid: string): void {
   const fresh = makeContext.saved(key) === undefined && makeContext.key !== key
   makeContext.enter(key)
   if (!fresh) return
-  const g = useGenerate.getState()
-  g.applyFrame(cls === 'place' ? { text: null, subjects: [], place: pid } : { text: null, subjects: [{ profile_id: pid, version: vid }], place: null })
-  g.set({ count: Math.min(g.panel.count, 4) })
+  linkEntity(cls, pid, vid)
+  useGenerate.getState().set({ count: Math.min(useGenerate.getState().panel.count, 4) })
+}
+
+/** The entity as the panel's subject (a place: its scene) — on entering, and again back in Tree from JSON, which keeps no links (D93 B4). */
+export function linkEntity(cls: ProfileClass, pid: string, vid: string): void {
+  useGenerate.getState().applyFrame(cls === 'place' ? { text: null, subjects: [], place: pid } : { text: null, subjects: [{ profile_id: pid, version: vid }], place: null })
 }

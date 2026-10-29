@@ -13293,3 +13293,47 @@ The Models table's empty LoRA line no longer offers the training D157 dropped.
 
 **Checks:** Vitest 598 + 3 skipped (three tests read the new words); typecheck, build and lint clean (61 warnings, as before); e2e 83/83
 (alone, 5.8 min).
+
+## 2026-10-29 20:04 — D160: World's Make keeps Image's settings; an entity's description is the Sheet's; the Sheet fits its column
+
+The author, after B2b: World's Make had lost every setting but the model (FLUX.2 dev's JSON prompt among them); the Sheet repeated the
+header's description fields; and the Sheet ran past the column's right edge. Recorded as D160.
+
+**World's Make** (`ui2/world/WorldMake.tsx`) holds the Generate column's own sections, exported from `GenerateColumn.tsx` (one
+implementation, as in Sketches):
+
+- **Prompt**, with its three modes:
+  - **Tree** is World's own part: the words for this picture and a framing, with the entity as the subject.
+  - **Text** is as written.
+  - **JSON** writes the linked sheet's words in. JSON keeps no links (D93 B4), so back in Tree the entity is linked again
+    (`linkEntity` in `make.ts`).
+- **References.**
+- **Look** and **Camera.**
+- **Model**, with its sampling, LoRAs and Advanced (the encoder, shift, weights, tiled VAE).
+- **Size** and count.
+- **Preview**: the prompt as sent ("JSON in the Mistral template" for FLUX.2).
+
+The foot stays pinned under the sections. The casting run needs Tree; in Text or JSON, *Give ‹entity› a look* sends the prompt as written,
+and the pictures still land as the version's candidates.
+
+**The header** is the entity, its version, *See in clay ▶* and New, and the readiness line:
+
+- appearance, outfit, body, the prop's 3D model and the place's set are the Sheet's;
+- the voice is the Inspector's, which already had it.
+
+**The Sheet fits World's column.**
+
+- Its grid's field column was `1fr`, which could not shrink below its content, so the body's sliders held it 33 px wider than the column.
+  It is `minmax(0, 1fr)`, and its children may shrink.
+- The build switch takes the row's free column.
+- In World the Sheet has no page padding of its own.
+- Measured at 1600 × 1000: nothing past the column's edge for a character with a body, a prop or a place.
+
+**Scenarios:**
+
+- World's Make picks its model in the Model section and its count in the Size section, and goes to JSON and back.
+- U3f reads the voice in the Inspector; the header has no fields.
+
+**Checks:** Vitest 598 + 3 skipped; typecheck, build and lint clean (61 warnings, as before); e2e 83/83 (alone, 5.6 min).
+
+Next: B3, the pages in homes, as planned (D159).

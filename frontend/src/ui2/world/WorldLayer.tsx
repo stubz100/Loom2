@@ -1,5 +1,6 @@
 // U3 (D157, proto01_UI2 03): World — the entities, made and readied for Clay. The rail picks the class (or Look, Sketches), the header the
-// entity and its version, the centre is the version's bin (one grid, roles as badges and filters), the Inspector the selected creation.
+// entity and its version (and what it still owes; the author, 2026-10-29: its description is the Sheet's, its voice the Inspector's), the
+// centre is the version's bin (one grid, roles as badges and filters), the Inspector the selected creation.
 // U3a: the frame, the header, the bin and the Inspector; Make and Edit come into the left column in U3b.
 import { Box, MapPin, Palette, PenLine, User } from 'lucide-react'
 import { lazy, Suspense, useEffect } from 'react'
@@ -10,7 +11,7 @@ import { showMenu } from '../../frame/ContextMenu'
 import { useSession } from '../../store/session'
 import type { Profile } from '../../api/types'
 import { navigate } from '../../frame/router'
-import { useStory, voiceLabel, type ProfileClass } from '../../suites/story/storyStore'
+import { useStory, type ProfileClass } from '../../suites/story/storyStore'
 import { Part } from '../Part'
 import { readiness } from './readiness'
 import { WorldMake } from './WorldMake'
@@ -24,8 +25,6 @@ const BenchColumn = lazy(() => import('../../suites/stage/StageParts').then((m) 
 const BenchStrip = lazy(() => import('../../suites/stage/StageParts').then((m) => ({ default: m.Strip })))
 const BenchStage = lazy(() => import('../../suites/stage/StageParts').then((m) => ({ default: m.Stage })))
 const Voices = lazy(() => import('../../suites/story/VoicesBlock').then((m) => ({ default: m.VoicesBlock })))
-/** A built set's sizes in metres (width × depth × height, as the set builder gives them). */
-const setSizes = (z: Record<string, number> | undefined): string => { const d = ['w', 'd', 'h'].map((k) => z?.[k]).filter((x): x is number => typeof x === 'number'); return d.length ? ` · ${d.map((x) => x.toFixed(1)).join(' × ')} m` : '' }
 
 const EditColumn = lazy(() => import('./WorldEdit').then((m) => ({ default: m.WorldEditColumn })))
 const EditCentre = lazy(() => import('./WorldEdit').then((m) => ({ default: m.WorldEditCentre })))
@@ -63,7 +62,6 @@ function Header() {
   const p = useStory((s) => s.profiles.find((x) => x.id === s.profileId))
   const vid = useStory((s) => s.versionId)
   const bin = useWorld((s) => s.bin)
-  const voices = useStory((s) => s.voices)
   const cls = rail as ProfileClass
   const mine = profiles.filter((x) => x.cls === cls)
   const entities = (): MenuItem[] => [...mine.map((x) => ({ label: x.name, checked: x.id === p?.id, run: () => useWorld.getState().pick(x.id) })), { sep: true }, { cmd: 'world.entity.new', label: `New ${ONE[cls]}…` }]
@@ -77,8 +75,6 @@ function Header() {
     { sep: true }, { cmd: 'world.version.new' }, { cmd: 'world.version.final' }]
   const refs = bin?.items.filter((x) => x.roles.includes('reference') || x.roles.includes('hero')).length ?? 0
   const r = readiness(p, v, refs)
-  const open = v.state === 'open'
-  const sheet = useStory.getState().setSheet
   return (
     <div className="w-head" data-testid="world-header">
       <div className="w-head-row">
@@ -86,15 +82,6 @@ function Header() {
         <MenuButton label={`${v.id}${v.label && v.label !== v.id ? ` · ${v.label}` : ''}${v.state === 'final' ? ' · final' : ''}`} items={versions} text />
         <span className="spacer" /><CommandButton id="world.mode.clay" text /><CommandButton id="world.entity.new" />
       </div>
-      <label className="w-field"><span>appearance</span><textarea rows={2} value={v.appearance} disabled={!open} aria-label="appearance" placeholder="face, hair, build — the words every picture of it carries" onChange={(e) => sheet({ appearance: e.target.value })} /></label>
-      {p.cls === 'character' && <label className="w-field"><span>outfit</span><textarea rows={1} value={v.outfit} disabled={!open} aria-label="outfit" onChange={(e) => sheet({ outfit: e.target.value })} /></label>}
-      {p.cls === 'character' && <div className="w-field"><span>body</span><span className="w-val">{(v.body?.height_m ?? 1.75).toFixed(2)} m · {v.body_fit_from ? 'fitted ✓' : 'not fitted'}</span></div>}
-      {p.cls === 'character' && <div className="w-field"><span>voice</span><span className="w-val w-voice">
-        <select aria-label="speaks with" value={p.voice_id ?? ''} onChange={(e) => void useStory.getState().patchProfile({ voice_id: e.target.value || null })}>
-          <option value="">(no voice)</option>{voices.map((x) => <option key={x.id} value={x.id}>{voiceLabel(x)}</option>)}
-        </select><CommandButton id="story.cast.newVoice" text /></span></div>}
-      {p.cls === 'prop' && <div className="w-field"><span>3D model</span><span className="w-val">{v.model_asset_id ? `made${v.height_m ? ` · ${v.height_m} m` : ''}` : 'not made yet'} <CommandButton id="story.cast.importModel" text label="Import GLB…" /></span></div>}
-      {p.cls === 'place' && <div className="w-field"><span>the set</span><span className="w-val">{v.place_set ? `${v.place_set.kind}${setSizes(v.place_set.sizes)} · ${v.place_set.faces.length} faces` : 'not built yet'}</span></div>}
       <div className="w-ready" data-testid="world-readiness">
         {r.items.map((x) => {
           const verb = READY_VERB[x.id], c = verb ? command(verb) : undefined

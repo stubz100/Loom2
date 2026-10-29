@@ -7,7 +7,7 @@
 // sheet is the scene, live; a "this shot" line after it), and a subject card can hold a Cast prop ("holds ▸").
 import { CaseSensitive, Hand, ImagePlus, Minus, Plus, X } from 'lucide-react'
 import { PosesSection } from './Poses'
-import { lazy, Suspense, useEffect, useRef } from 'react'
+import { lazy, Suspense, useEffect, useRef, type ReactNode } from 'react'
 import './generateCommands'
 import { api } from '../../api/client'
 import { CommandButton } from '../../frame/CommandButton'
@@ -268,7 +268,9 @@ const negativeField = (g: ReturnType<typeof useGenerate.getState>, cap: ModelCap
   ? <div className="gen-form"><Field section="prompt" field="negative" value={g.panel.negative} onChange={(v) => g.set({ negative: v })} placeholder="what to keep out of the image" /></div>
   : null)
 
-function PromptSection() {
+/** The Prompt section: Tree, Text or JSON. `tree` stands in for the Tree mode's cards where the subject is given (World's Make: the entity
+ *  is the subject, its words the Sheet's; what is left is this picture's). */
+export function PromptSection({ tree }: { tree?: ReactNode } = {}) {
   const g = useGenerate()
   const p = g.panel
   const t = p.tree
@@ -281,14 +283,14 @@ function PromptSection() {
       <div className="segmented" style={{ marginBottom: 8 }}>
         {(['tree', 'text', 'json'] as const).map((m) => <button key={m} className={p.prompt_mode === m ? 'active' : ''} onClick={() => { if (m === 'json' && p.prompt_mode === 'tree') g.treeToJson(); else if (m === 'tree' && p.prompt_mode === 'json') { if (!g.jsonToTree()) return } else g.set({ prompt_mode: m }) }}>{m === 'tree' ? 'Tree' : m === 'json' ? 'JSON' : 'Text'}</button>)}
       </div>
-      {p.prompt_mode === 'tree' && (
+      {p.prompt_mode === 'tree' && (tree ?? (
         <div className="gen-form gen-tree">
           <SceneField />
           {(t.subjects ?? []).map((s, i) => <SubjectCard key={i} i={i} s={s} />)}
           <div className="full"><button onClick={g.addSubject} title="Add a subject card: a Cast character or prop, or free words — where, doing what"><Plus size={12} /> subject</button></div>
           <Field section="prompt" label="lead text" field="text" value={p.text} onChange={(v) => g.set({ text: v })} placeholder="optional sentence before the tree — the same text as Text mode" />
         </div>
-      )}
+      ))}
       {p.prompt_mode === 'json' && (
         <div>
           <textarea value={p.json_text} onChange={(e) => g.set({ json_text: e.target.value })} rows={14} style={{ width: '100%', font: 'var(--mono)' }} spellCheck={false} aria-label="prompt JSON" />
@@ -348,7 +350,7 @@ function RefSlots() {
   )
 }
 
-function RefsSection() {
+export function RefsSection() {
   const p = useGenerate((g) => g.panel)
   const cap = useSession((s) => s.capabilities?.models[p.model_id])
   const max = cap?.max_refs ?? 4
@@ -364,7 +366,7 @@ function RefsSection() {
 // ------------------------------------------------------------------ look and camera (Tree-mode fields; the Story style in every mode)
 const treeOnly = (mode: string) => mode !== 'tree' && <p className="disabled-why">These are fields of the Tree prompt — switch the prompt to Tree to use them.</p>
 
-function LookSection() {
+export function LookSection() {
   const g = useGenerate()
   const t = g.panel.tree
   const tree = g.panel.prompt_mode === 'tree'
@@ -401,7 +403,7 @@ function LookSection() {
   )
 }
 
-function CameraSection() {
+export function CameraSection() {
   const g = useGenerate()
   const c = g.panel.tree.camera
   const cam = (patch: Partial<NonNullable<typeof c>>) => g.setCamera(patch)
@@ -422,7 +424,7 @@ function CameraSection() {
 }
 
 // ------------------------------------------------------------------ model
-function ModelSection() {
+export function ModelSection() {
   const g = useGenerate()
   const p = g.panel
   const caps = useSession((s) => s.capabilities)
@@ -504,7 +506,7 @@ function ModelSection() {
 }
 
 // ------------------------------------------------------------------ size and count
-function SizeSection() {
+export function SizeSection() {
   const g = useGenerate()
   const p = g.panel
   const caps = useSession((s) => s.capabilities)
@@ -564,7 +566,7 @@ function SavedSection() {
   )
 }
 
-function PreviewSection() {
+export function PreviewSection() {
   const pv = useGenerate((g) => g.preview)
   const previewing = useGenerate((g) => g.previewing)
   const profiles = useStory((x) => x.profiles)

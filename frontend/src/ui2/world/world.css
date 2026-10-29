@@ -41,6 +41,8 @@
 .w-verbs { display: flex; flex-direction: column; gap: 4px; align-items: stretch; }
 button.w-ready-item { background: transparent; border: 1px dashed var(--line2); border-radius: 999px; padding: 0 6px; font-size: 11px; cursor: pointer; }
 .w-make { display: flex; flex-direction: column; gap: 8px; }
+.w-make-tree { display: flex; flex-direction: column; gap: 8px; }
+.w-make > .w-foot { position: sticky; bottom: -12px; margin: 0 -12px -12px; padding: 8px 12px; background: var(--bg1); border-top: 1px solid var(--line); z-index: 1; }   /* the author, 2026-10-29: the column's sections above it */
 .w-chips.left { margin-left: 0; flex-wrap: wrap; }
 .w-foot { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
 .w-foot .primary { flex: 1; }
@@ -60,6 +62,7 @@ button.w-ready-item { background: transparent; border: 1px dashed var(--line2); 
 .w-sketch-col { display: flex; flex-direction: column; min-height: 0; height: 100%; }
 .w-sketch-gen { flex: 1; min-height: 0; overflow: auto; padding: 0 12px; }
 .w-sketch-col > .w-foot { padding: 8px 12px; border-top: 1px solid var(--line); margin: 0; }
+.w-sheet.cast-page { padding: 0; overflow: visible; height: auto; background: transparent; }   /* in World's column, which scrolls */
 .w-voice { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }   /* U3f */
 .w-facts { display: flex; flex-direction: column; gap: 2px; }
 .w-facts > span:first-child { color: var(--fg3); }

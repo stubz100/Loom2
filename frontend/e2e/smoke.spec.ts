@@ -3520,12 +3520,18 @@ test('World\'s Make (U3b, D157 · proto01_UI2 03 §3): the panel is the entity\'
   await page.goto(`${appUrl()}#world/character/${prof.id}/v1`)
   const make = page.locator('[data-testid="world-make"]')
   await expect(make).toBeVisible()
-  const caps = await api<{ models: Record<string, { recipes?: { t2i?: unknown } }> }>('GET', '/capabilities')
+  const caps = await api<{ models: Record<string, { label: string; recipes?: { t2i?: unknown } }> }>('GET', '/capabilities')
   const present = (await api<{ items: { id: string; health: string }[] }>('GET', '/models')).items.find((m) => m.health !== 'missing' && caps.models[m.id]?.recipes?.t2i)!
-  await make.locator('select[aria-label="model"]').selectOption(present.id)                               // a model the fixture has weights for
+  const label = caps.models[present.id].label
+  await make.locator('#gen-sec-model .model-card').filter({ has: page.locator('span', { hasText: new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`) }) }).click()   // a model the fixture has weights for (the column's Model section, 2026-10-29)
+  await expect(make.locator('#gen-sec-model summary', { hasText: 'Sampling' })).toBeVisible()             // its sampling, LoRAs and advanced settings
+  // the Prompt's JSON (FLUX.2's JSON prompt): the entity's sheet written in; back in Tree the entity is the subject again
+  await make.locator('#gen-sec-prompt .segmented button', { hasText: 'JSON' }).click()
+  await expect(make.locator('textarea[aria-label="prompt JSON"]')).toHaveValue(/silver hair in a bun/)
+  await make.locator('#gen-sec-prompt .segmented button', { hasText: 'Tree' }).click()
   await make.locator('button', { hasText: 'full body' }).click()
   await make.locator('textarea[aria-label="this picture only"]').fill('a grey wool coat, wind in her hair')
-  while ((await make.locator('.w-val b').innerText()) !== '1') await make.locator('button[aria-label="fewer"]').click()
+  while ((await make.locator('#gen-sec-size b[aria-label="count"]').innerText()) !== '1') await make.locator('#gen-sec-size button[aria-label="fewer"]').click()
   const before = (await api<{ items: unknown[] }>('GET', '/jobs')).items.length
   await make.locator('.w-foot button.primary', { hasText: `Give ${name} a look` }).click()
   await expect.poll(async () => (await api<{ items: { status: string; origin: { surface: string; ref: string } | null }[] }>('GET', '/jobs')).items.filter((j) => j.origin?.surface === 'cast' && j.origin.ref === prof.id && j.status === 'done').length, { timeout: 60_000 }).toBe(1)
@@ -3734,7 +3740,8 @@ test('World\'s owed parts (U3f, D157 · proto01_UI2 03 §2, §5, §8): a charact
   const prof = await api<ProfileLite>('POST', '/story/profiles', { name: `Maren ${tag}`, cls: 'character', appearance: 'a lighthouse keeper in a yellow oilskin' })
   await page.goto(`${appUrl()}#world/character/${prof.id}/v1`)
   const head = page.locator('[data-testid="world-header"]')
-  await expect(head.locator('select[aria-label="speaks with"]')).toBeVisible()
+  await expect(head.locator('select')).toHaveCount(0)                                                        // the header: the entity and its version (2026-10-29)
+  await expect(page.locator('[data-testid="world-inspector"] select[aria-label="profile voice"]')).toBeVisible()   // the voice, in the Inspector
   const insp = page.locator('[data-testid="world-inspector"]')
   await expect(insp.locator('[data-testid="world-uses"]')).toContainText('none yet')
   await expect(insp).toContainText('v1')

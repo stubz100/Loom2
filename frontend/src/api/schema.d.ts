@@ -3585,6 +3585,8 @@ export interface paths {
         /**
          * Profile Anim Ref Pick
          * @description CA0: the author's pick — an image in the Catalogue becomes the version's animation reference (or back view); None clears it.
+         *     D161: the only way a slot is filled (a make's pictures are candidates); the front of a character whose body was never touched is
+         *     fitted at once (a keypoints job, as the first result used to be).
          */
         put: operations["profile_anim_ref_pick_story_profiles__pid__versions__vid__anim_ref_put"];
         /**

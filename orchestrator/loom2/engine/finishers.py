@@ -33,9 +33,8 @@ from ..origin import JobOrigin
 from ..recipes import I2I, I2V, TTS, AssembleFinal, CompRender, ImageToMesh, ImageToSet, Inpaint, Instruct, Keypoints, LayerPass, MatteSequence, Reangle, Render, Segment, StageShot, TrainLora, Upscale, stage_model_id
 from ..roster import ROSTER_BY_ID
 from ..fsio import utc_now
-from ..body import Body
 from ..finals import FINAL_LAYER_SURFACE, FINAL_PLATE_KEY_SURFACE, FINAL_PLATE_PATH_SURFACE, FINAL_PLATE_SURFACE
-from ..story import BODY_FIT_SURFACE, FOR_SHOT, PROP_MODEL_SURFACE, SHELL_SURFACE, body_fit_origin
+from ..story import BODY_FIT_SURFACE, FOR_SHOT, PROP_MODEL_SURFACE, SHELL_SURFACE
 from .. import ideas, place_sets
 from ..ideas import FOR_IDEA, IDEA_CLAY_SURFACE
 from ..timelines import TimelineStore, at, duration, starts
@@ -128,13 +127,7 @@ class AssetFinisher:
             await ideas.start_next(q, job, await asyncio.to_thread(ideas.clay_aref_landed, q, job, assets[0].id))   # V22: submitted on the loop
         if assets and job.origin and FOR_IDEA in (job.origin.payload or {}):                 # CW2: made while Image's For chip named an idea
             await asyncio.to_thread(ideas.made_for_landed, q, job, [a.id for a in assets])
-        if assets and job.origin and job.origin.surface == "anim_ref":                        # CA0: the first result is the reference while there is none
-            fit = await asyncio.to_thread(_anim_ref_result, q, job.origin.ref, job.origin.payload or {}, assets[0].id)
-            if fit:
-                try:
-                    q.submit({"kind": "keypoints", "asset_id": assets[0].id}, origin=body_fit_origin(*fit))
-                except Exception as e:  # noqa: BLE001 — the reference stands; the fit is offered by hand (Cast's button)
-                    job.log_tail.append(f"body fit not queued: {e}")
+        # D161: an A-pose make's pictures land as the version's candidates only — the author picks the front and the back from them
         place = (job.origin.payload or {}).get("group_id") if job.origin else None          # 17 §3b: an Expand's candidates land on the version's page
         if assets and isinstance(place, str) and q.groups is not None and place in q.groups.groups:
             try:
@@ -664,22 +657,6 @@ def _final_plate_path(q: JobQueue, job: JobRecord, clip_id: str) -> None:
             q.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
         except Exception:  # noqa: BLE001
             pass
-
-
-def _anim_ref_result(q: JobQueue, pid: str | None, payload: dict, asset_id: str) -> tuple[str, str] | None:
-    """CA0: an animation-reference job's first result becomes the version's reference (or back view) while it has none; every result stays
-    on the candidates page for the author's pick. Never the job's failure."""
-    from ..story import StoryStore
-    try:
-        p = StoryStore(q.ws).set_anim_ref(str(pid or ""), str(payload.get("version") or ""), str(payload.get("side") or "front"), asset_id, only_if_empty=True)
-        if p is not None:
-            q.hub.broadcast("story.changed", {"kind": "profile", "id": p.id, "revision": p.revision})
-            v = p.version(str(payload.get("version") or ""))
-            if (payload.get("side") or "front") == "front" and p.cls == "character" and v.body_fit_from is None and (v.body is None or v.body == Body()):
-                return p.id, v.id                                      # CA1b: an untouched body is fitted at once (queued by the caller, on the loop)
-    except Exception as e:  # noqa: BLE001
-        q.hub.broadcast("story.changed", {"kind": "profile", "id": pid, "revision": 0, "error": f"animation reference not set: {e}"})
-    return None
 
 
 def _anim_test_result(q: JobQueue, pid: str, payload: dict, clip_id: str) -> None:

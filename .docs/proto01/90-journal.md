@@ -13444,3 +13444,63 @@ The e2e's synthetic pictures are free work, so they live in the Sketches now. Th
 **Checks:** offline 744 passed (the API contract re-exported: the add route's words); Vitest 598 + 3 skipped; typecheck, build and lint clean (61 warnings, as before); e2e 84/84 (alone, 5.9 min).
 
 D159's waves B0–B4 are done.
+
+## 2026-10-29 22:17 — D161: World's Make and Build; the animation reference picked by hand
+
+**The author asked three things:**
+
+- why the Sheet and Make were on different tabs;
+- why some buttons queue jobs at once while others do not;
+- for the animation reference images to be chosen by hand, with a way to discard them.
+
+**What was found:**
+
+- The Sheet was a B2a mode holding the old Cast page's parts, and D160 put the description there only. So the words were written on one
+  tab and used on another.
+- In Make's framing row, *portrait / waist-up / full body* only frame the next run. *A-pose front / back* (and a place's *the set
+  picture*) are a different recipe that queued two jobs at once. So did the header's readiness items.
+- The finisher made an A-pose make's first result the reference while the slot was empty, and fitted an untouched body to it. Clearing a
+  slot was in its right-click only.
+
+Asked, the author chose *Make + Build* (D161).
+
+**Make** opens with the sheet: the version's label, appearance, outfit, colours, marks, and the line as sent. Then come the picture settings
+(D160) and *Give ‹entity› a look ▶*. Its framing row only frames; its `?` says so.
+
+**Build** (the Sheet mode renamed, `WorldBuild.tsx`) holds what Clay needs:
+
+- the animation reference;
+- the body with its fit, skeleton and shell;
+- a prop's 3D model;
+- a place's set-picture candidates and its set builder;
+- the line-up.
+
+**What queues says so:**
+
+- The makes are run buttons: *Make reference candidates ▶*, *Make back-view candidates ▶*, *Make set-picture candidates ▶*.
+- The header's readiness items open Build instead of queueing.
+
+**The animation reference is the author's pick:**
+
+- A make's pictures land as the version's candidates and fill no slot; the finisher's first-result rule is gone.
+- Build lists them under the slots, to pick from:
+  - *Front*, *Back* (a prop: *Use*; a place: *Use as the set picture*, `world.creation.setPicture`);
+  - *Discard* (✕, to the Trash);
+  - the same verbs in a candidate's right-click.
+- A filled slot has its ✕: cleared, the picture is a candidate again.
+- Picking the front of a character whose body was never touched fits the body at once, as the first result did (`fit_if_untouched`, on
+  `PUT …/anim-ref`).
+
+**Tests:**
+
+- CA0's test: a make fills no slot.
+- CA1b's: the picked front fits an untouched body.
+- The e2e:
+  - *an animation reference picked by hand*: two candidates, nothing picked, Front, Back from the right-click, the ✕, Discard;
+  - the Sheet's scenarios open Build, or Make for the sheet's colours;
+  - the body-fit scenario waits for the pick's own fit and the hand fit before it edits the body. A body edited while a fit lands is
+    reloaded, as before;
+  - the skeleton-changed scenario sets its body before it picks, so nothing fits by itself.
+
+**Checks:** offline 744 passed (the API contract re-exported: the pick route's words); Vitest 598 + 3 skipped; typecheck, build and lint
+clean (61 warnings, as before); e2e 84/84 (alone, 6.1 min).

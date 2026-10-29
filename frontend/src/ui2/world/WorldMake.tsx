@@ -8,11 +8,12 @@ import { useEffect } from 'react'
 import { castOrigin } from '../../suites/generate/subjectCast'
 import { useGenerate } from '../../suites/generate/generateStore'
 import { CameraSection, LookSection, ModelSection, PreviewSection, PromptSection, RefsSection, SizeSection } from '../../suites/generate/GenerateColumn'
-import { CommandButton } from '../../frame/CommandButton'
 import { Help } from '../../frame/Help'
 import { useStory } from '../../suites/story/storyStore'
+import { CastSheet } from '../../suites/story/CastSheet'
 import { enterMake, FRAMINGS, linkEntity } from './make'
 import '../../suites/generate/generate.css'
+import '../../suites/story/story.css'
 
 export function WorldMake() {
   const p = useStory((s) => s.profiles.find((x) => x.id === s.profileId))
@@ -37,18 +38,18 @@ export function WorldMake() {
   const secs = pv?.estimate.seconds ? Math.round(pv.estimate.seconds * panel.count) : null
   const tree = (
     <div className="w-make-tree">
-      <label className="w-field"><span>this picture <Help text="Words for this run only, after the sheet (soaked, hood up). The sheet itself is the Sheet's." /></span>
+      <label className="w-field"><span>this picture <Help text="Words for this run only, after the sheet above (soaked, hood up)." /></span>
         <textarea rows={2} value={note} aria-label="this picture only" placeholder="soaked, hood up" onChange={(e) => setNote(e.target.value)} /></label>
-      <div className="w-field"><span>framing</span><div className="w-chips left">
+      <div className="w-field"><span>framing <Help text="Frames the next Give ‹entity› a look ▶ — nothing is queued here. The animation reference and a place's set picture are made in Build." /></span><div className="w-chips left">
         {FRAMINGS[p.cls].map((f) => <button key={f.id} onClick={() => g.setTree({ ...f.tree, camera: { ...panel.tree.camera, ...(f.tree.camera ?? {}) } })}>{f.label}</button>)}
-        {p.cls === 'character' && <><CommandButton id="story.cast.makeAnimRef" text label="A-pose front" /><CommandButton id="story.cast.makeAnimRefBack" text label="A-pose back" /></>}
-        {p.cls === 'place' && <CommandButton id="cast.place.picture" text label="the set picture" />}
       </div></div>
     </div>
   )
   return (
     <div className="w-make" data-testid="world-make">
       <div className="w-make-body gen-column">
+        {v && <section className="gen-sec w-make-sheet" id="gen-sec-sheet" data-testid="world-sheet"><h4 className="gen-sec-head"><span>Sheet</span><span className="spacer" /><Help text="The words every picture of it carries — a @mention and every linked subject carry them too. The body, the animation reference and the rest are Build's." /></h4>
+          <CastSheet p={p} v={v} /></section>}{/* D161: the words and the pictures made from them, one tab */}
         <PromptSection tree={tree} />
         <RefsSection />
         <LookSection />

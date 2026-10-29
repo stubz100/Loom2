@@ -49,7 +49,7 @@ def test_the_plan(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_the_first_result_becomes_the_reference(tmp_path: Path, object_info: dict):
+async def test_a_make_lands_candidates_and_fills_no_slot(tmp_path: Path, object_info: dict):
     rig = Rig(tmp_path, object_info)
     try:
         groups = rig.queue.groups = GroupStore(rig.ws, rig.catalogue)
@@ -68,7 +68,7 @@ async def test_the_first_result_becomes_the_reference(tmp_path: Path, object_inf
             assert done.status == "done", done.error
             made.append(done.result["asset_ids"][0])
         v = st.profile(p.id).version("v1")
-        assert v.anim_ref_asset_id == made[0] and v.anim_ref_back_asset_id is None                     # the first; the second does not replace it
+        assert v.anim_ref_asset_id is None and v.anim_ref_back_asset_id is None                         # D161: the author picks, nothing is filled
         assert all(groups.parent[("asset", a)] == gid for a in made)                                  # every result on the candidates page
         assert hero in rig.catalogue.get(made[0]).parents                                              # lineage: the version's references
         # the author's pick replaces it, a final version too; None clears it

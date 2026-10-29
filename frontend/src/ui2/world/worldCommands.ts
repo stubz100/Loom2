@@ -1,6 +1,6 @@
 // U3 (D157, proto01_UI2 03 §8): World's commands (rule 3: every action a command with a mouse home; keys are accelerators). They act on the
 // entity and version the header shows (the Story store's selection) and on the creation selected in the bin.
-import { Box, CopyPlus, FileText, ImagePlus, Lock, Pencil, PersonStanding, Plus, Sparkles, Star, Trash2, UserRoundPlus, Users } from 'lucide-react'
+import { Box, CopyPlus, Hammer, ImagePlus, Lock, Pencil, PersonStanding, Plus, Sparkles, Star, Trash2, UserRoundPlus, Users } from 'lucide-react'
 import { http, unwrap } from '../../api/client'
 import { registerCommands } from '../../frame/commands'
 import { navigate } from '../../frame/router'
@@ -31,14 +31,17 @@ registerCommands([
       void import('../../suites/stage/stageStore').then(async (m) => { if (await m.st().openBench(p.id, v.id, 'world')) w().setMode('clay') }) } },
   // B2a (D159, 11 §7): the Sheet — the version's whole card (the sheet, the body and its skeleton, the animation reference and its test, a
   // prop's model, a place's set builder, the Line-up)
-  { id: 'world.mode.sheet', scope: 'world', label: 'Sheet', icon: FileText, placement: ['panel'], hint: "the version's whole card: its sheet, body, animation reference, 3D model or set",
-    when: () => !!sy().profile(), run: () => { w().setMode('sheet'); navigate({ suite: 'generate' }) } },
+  { id: 'world.mode.build', scope: 'world', label: 'Build', icon: Hammer, placement: ['panel'], hint: "what Clay needs: the animation reference, the body, the skeleton, the test animation, a prop's 3D model, a place's set, the line-up",
+    when: () => !!sy().profile(), run: () => { w().setMode('build'); navigate({ suite: 'generate' }) } },   // D161: the Sheet's words went to Make
   { id: 'world.lineup', scope: 'world', label: 'Line-up ▶', icon: Users, placement: ['panel'], hint: "this class's characters or props side by side at their sizes in Clay (twelve at most)",
     when: () => lineup().length > 0,
     run: () => { const items = lineup().map((p) => ({ profile_id: p.id }))
       void import('../../suites/stage/stageStore').then(async (m) => { if (await m.st().openLineup(items, () => w().setMode('make'), 'world')) w().setMode('clay') }) } },
   { id: 'world.creation.aposeFront', scope: 'world', label: 'Use as the A-pose front', icon: PersonStanding, placement: ['inspector', 'context'],
     hint: 'the animation reference: full body, A-pose, 16:9, plain ground', when: () => !!selected() && open() && (sy().profile()?.cls === 'character' || sy().profile()?.cls === 'prop'),
+    run: () => { const s = selected(); if (s) void sy().setAnimRef('front', s.asset.id) } },
+  { id: 'world.creation.setPicture', scope: 'world', label: 'Use as the set picture', icon: ImagePlus, placement: ['inspector', 'context'],   // D161: picked, not the first result
+    hint: "the place's set picture: what Build the set ▶ fits a room, a corridor or a street to", when: () => !!selected() && open() && sy().profile()?.cls === 'place',
     run: () => { const s = selected(); if (s) void sy().setAnimRef('front', s.asset.id) } },
   { id: 'world.creation.aposeBack', scope: 'world', label: 'Use as the A-pose back', icon: PersonStanding, placement: ['inspector', 'context'],
     hint: 'its optional back view (a shot that starts turned away)', when: () => !!selected() && sy().profile()?.cls === 'character',

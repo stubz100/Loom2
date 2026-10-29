@@ -1,6 +1,6 @@
 // The Cast sheet's own sections, shared by Story's Cast page and World's Sheet (B2a, D159; proto01_UI2 11 §7): a prop's 3D model and its
 // height (D110 PS2, CW4), a version's animation reference — front, back, and its test animation (CA0).
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import { api, http, unwrap } from '../../api/client'
 import type { Profile } from '../../api/types'
 import { CommandButton } from '../../frame/CommandButton'
@@ -47,18 +47,20 @@ export function PropModel({ p, v }: { p: Profile; v: Profile['versions'][number]
   )
 }
 
-export function AnimRef({ p, v }: { p: Profile; v: Profile['versions'][number] }) {
+/** CA0 → D161: the version's animation reference slots, the makes (runs: their pictures are candidates, `children` lists them to pick from)
+ *  and a filled slot's ✕ (the picture stays a candidate). */
+export function AnimRef({ p, v, children }: { p: Profile; v: Profile['versions'][number]; children?: ReactNode }) {
   const slot = (side: 'front' | 'back', id: string | null | undefined, label: string) => (
     <div className={`anim-ref-slot${id ? '' : ' empty'}`} data-side={side}
       onContextMenu={(e) => showMenu(e, side === 'back' ? [{ cmd: 'story.cast.makeAnimRefBack' }, { cmd: 'story.cast.clearAnimRefBack' }] : [{ cmd: 'story.cast.makeAnimRef' }, { cmd: 'story.cast.fitBody' }, { cmd: 'story.cast.clearAnimRef' }])}>
       {id ? <img src={api.thumbUrl(id, 512)} alt={label} /> : <span className="hint">{label}: none yet</span>}
       <span className="cell">{label}</span>
+      {id && <span className="slot-clear"><CommandButton id={side === 'back' ? 'story.cast.clearAnimRefBack' : 'story.cast.clearAnimRef'} className="quiet" size={12} /></span>}
       {side === 'front' && id && v.anim_ref_note === 'arms_close' && <button type="button" className="link ref-note" data-note="arms_close"
         title="The body is fitted and the shell made only on an A-pose — the arms clear of the body, the fingers straight and spread (D139, D140): draw the reference again, then fit the body"
         onClick={(e) => { e.stopPropagation(); runCommand('story.cast.makeAnimRef') }}>The arms touch the body — draw it again?</button>}   {/* proto01_UIcast S8 */}
     </div>
   )
-  markUsed('story.cast.clearAnimRef'); markUsed('story.cast.clearAnimRefBack')
   return (
     <section className="anim-ref">
       <h3>Animation reference <Help text={p.cls === 'prop' ? 'The prop alone, a three-quarter view, 16:9.' : 'Full body, A-pose, 16:9, plain ground — what Wan Animate is given.'} /></h3>
@@ -72,6 +74,7 @@ export function AnimRef({ p, v }: { p: Profile; v: Profile['versions'][number] }
           {p.cls === 'character' && <CommandButton id="story.cast.testAnimRef" text />}
         </div>
       </div>
+      {children}
     </section>
   )
 }

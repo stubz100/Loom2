@@ -36,14 +36,14 @@ const LookInspector = lazy(() => import('./WorldLook').then((m) => ({ default: m
 const SketchColumn = lazy(() => import('./WorldSketches').then((m) => ({ default: m.SketchColumn })))
 const SketchCentre = lazy(() => import('./WorldSketches').then((m) => ({ default: m.SketchCentre })))
 const SketchInspector = lazy(() => import('./WorldSketches').then((m) => ({ default: m.SketchInspector })))
-const Sheet = lazy(() => import('./WorldSheet').then((m) => ({ default: m.WorldSheet })))   // B2a: the version's whole card
+const Build = lazy(() => import('./WorldBuild').then((m) => ({ default: m.WorldBuild })))   // D161: what Clay needs of the version
 const SkeletonBench = lazy(() => import('../../suites/stage/SkeletonBench'))              // B2a (CS2): the skeleton bench in World's centre
 const SkeletonParts = lazy(() => import('../../suites/stage/SkeletonBench').then((m) => ({ default: m.SkeletonParts })))
 
 const RAIL_ICON: Record<WorldRail, typeof User> = { character: User, prop: Box, place: MapPin, look: Palette, sketches: PenLine }
 /** 03 §2: an item is its verb — the Cast command that makes it (they act on the entity the header shows: the Story store's selection). */
-const READY_VERB: Record<string, string> = { a_pose_front: 'story.cast.makeAnimRef', a_pose_back: 'story.cast.makeAnimRefBack', body: 'story.cast.fitBody', model: 'story.cast.makeModel',
-  set_picture: 'cast.place.picture', set: 'cast.place.build', faces: 'cast.place.fill' }
+// D161: an item opens Build, where it is made (a click here queues nothing)
+const READY_VERB: Record<string, string> = Object.fromEntries(['a_pose_front', 'a_pose_back', 'body', 'model', 'set_picture', 'set', 'faces'].map((k) => [k, 'world.mode.build']))
 const BADGE: Record<string, string> = { hero: '★', reference: 'ref', a_pose_front: 'A·F', a_pose_back: 'A·B', set_picture: 'set', model: '3D' }
 const FILTERS: [RoleFilter, string][] = [['all', 'all'], ['hero', 'hero'], ['reference', 'references'], ['a_pose', 'A-pose'], ['set_picture', 'set'], ['model', 'model'], ['candidate', 'candidates']]
 
@@ -86,7 +86,7 @@ function Header() {
         {r.items.map((x) => {
           const verb = READY_VERB[x.id], c = verb ? command(verb) : undefined
           const text = <>{x.state === 'done' ? '✓' : x.state === 'owed' ? '○' : '–'} {x.label}{x.detail ? ` ${x.detail}` : ''}</>
-          return c && x.state !== 'done' ? <button key={x.id} className={`w-ready-item ${x.state}`} disabled={!isEnabled(c)} title={c.label} onClick={() => runCommand(verb!)}>{text}</button>
+          return c && x.state !== 'done' ? <button key={x.id} className={`w-ready-item ${x.state}`} disabled={!isEnabled(c)} title={`${x.label}: in Build`} onClick={() => runCommand(verb!)}>{text}</button>
             : <span key={x.id} className={`w-ready-item ${x.state}`} title={x.state === 'done' ? 'done' : x.state === 'owed' ? 'owed' : 'optional'}>{text}</span>
         })}
         <b className={`w-ready-line${r.owed ? '' : ' ok'}`}>{r.line}</b>
@@ -99,7 +99,7 @@ function Tile({ it }: { it: BinItem }) {
   const sel = useWorld((s) => s.selected === it.asset.id)
   const badge = it.roles.map((r) => BADGE[r]).find(Boolean)
   const menu = (): MenuItem[] => [{ cmd: 'world.mode.edit' }, { sep: true }, { cmd: 'world.creation.hero' }, { cmd: 'world.creation.reference' }, { cmd: 'world.creation.candidate' },
-    { cmd: 'world.creation.aposeFront' }, { cmd: 'world.creation.aposeBack' }, { sep: true }, { cmd: 'world.creation.trash' }]
+    { cmd: 'world.creation.aposeFront' }, { cmd: 'world.creation.aposeBack' }, { cmd: 'world.creation.setPicture' }, { sep: true }, { cmd: 'world.creation.trash' }]
   return (
     <button className={`w-tile${sel ? ' selected' : ''}`} data-id={it.asset.id} title={it.asset.prompt_text ?? ''} onClick={() => useWorld.getState().select(it.asset.id)}
       onContextMenu={(e) => { useWorld.getState().select(it.asset.id); showMenu(e, menu()) }}>
@@ -174,7 +174,7 @@ function ModeSwitch() {
     <button className={mode === 'make' ? 'active' : ''} onClick={() => runCommand('world.mode.make')}>Make</button>
     <button className={mode === 'edit' ? 'active' : ''} disabled={mode !== 'edit' && !isEnabled(command('world.mode.edit')!)} title="Edit the selected creation" onClick={() => runCommand('world.mode.edit')}>Edit</button>
     <button className={mode === 'clay' ? 'active' : ''} disabled={mode !== 'clay' && !isEnabled(command('world.mode.clay')!)} title={command('world.mode.clay')?.hint} onClick={() => runCommand('world.mode.clay')}>Clay</button>
-    <button className={mode === 'sheet' ? 'active' : ''} title={command('world.mode.sheet')?.hint} onClick={() => runCommand('world.mode.sheet')}>Sheet</button>
+    <button className={mode === 'build' ? 'active' : ''} title={command('world.mode.build')?.hint} onClick={() => runCommand('world.mode.build')}>Build</button>
   </div>
 }
 
@@ -193,7 +193,7 @@ export function WorldLayer() {
       <Rail />
       {classRail ? <>
         <section className="w-left"><Header /><ModeSwitch /><div className="w-panel">{mode === 'edit' ? <Part label="Edit" quiet="line"><EditColumn /></Part> : mode === 'clay' ? <Suspense fallback={null}><BenchColumn /></Suspense>
-          : mode === 'sheet' ? <Part label="The sheet" quiet="line"><Sheet /></Part> : <WorldMake />}</div></section>
+          : mode === 'build' ? <Part label="Build" quiet="line"><Build /></Part> : <WorldMake />}</div></section>
         <section className="w-centre">{mode === 'edit' ? <Part label="Edit" fallback={<div className="w-empty">Loading the editor…</div>}><EditCentre /></Part>
           : mode === 'clay' ? <Suspense fallback={<div className="w-empty">Loading Clay…</div>}><div className="strip w-edit-strip"><BenchStrip /></div><div className="w-edit-stage" data-testid="world-clay"><BenchStage /></div></Suspense>
           : bench ? <Part label="The skeleton bench" fallback={<div className="w-empty">Loading the bench…</div>}><div className="w-skeleton" data-testid="world-skeleton"><SkeletonBench /></div></Part> : <Bin />}</section>

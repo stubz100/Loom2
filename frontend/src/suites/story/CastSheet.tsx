@@ -8,7 +8,6 @@ import { Plus, X } from 'lucide-react'
 import type { Profile, ProfileVersion } from '../../api/types'
 import { composeSheet } from '../generate/sheet'
 import { useStory } from './storyStore'
-import { CastBody } from './CastBody'
 
 const MAX_COLOURS = 12
 const NEW_COLOUR = '#C0392B'
@@ -48,7 +47,6 @@ export function CastSheet({ p, v }: { p: Profile; v: ProfileVersion }) {
       <label htmlFor="cast-marks">marks</label>
       <input id="cast-marks" type="text" value={v.marks} readOnly={!open} aria-label="marks" onChange={(e) => setSheet({ marks: e.target.value })}
         placeholder="distinguishing features — a scar over the left eyebrow, round glasses" />
-      <CastBody p={p} v={v} />{/* CA0: the body shapes the Stage dummy; it is not sent in the prompt */}
       <p className="sheet-sent" aria-label="as sent"><span>a @mention and every linked subject carry</span> {sent || <i>nothing yet — the model would see only the name</i>}</p>
     </div>
   )

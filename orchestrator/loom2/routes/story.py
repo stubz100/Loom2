@@ -23,7 +23,7 @@ from ..stages import PlaceSet, Pose, SetFace, StageStore, encode_guide
 from ..shot_recipe import TEMPLATES, StampReader, Template, recipe_state, rerun_recipe, stale_plan, used_run
 from ..shot_graph import ShotGraph, clay_rows, final_for, shot_graph
 from ..shot_prompt import ShotPrompt, shot_prompt
-from ..story import FOR_SHOT, NODE_TYPES, VISUAL_TYPES, has_lines, node_type, StaleScenes, CastUse, cast_uses, body_fit_origin, model_source, prop_model_origin, shell_origin, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
+from ..story import FOR_SHOT, NODE_TYPES, VISUAL_TYPES, has_lines, node_type, StaleScenes, CastUse, cast_uses, body_fit_origin, fit_if_untouched, model_source, prop_model_origin, shell_origin, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
 from ..voices import VoiceRecord, VoiceStore, check_voice
 from .deps import Svc
 
@@ -963,7 +963,9 @@ async def profile_anim_test(svc: Svc, pid: str, vid: str, body: AnimTestUpload):
 
 @router.put("/story/profiles/{pid}/versions/{vid}/anim-ref", response_model=Profile)
 async def profile_anim_ref_pick(svc: Svc, pid: str, vid: str, body: AnimRefPick):
-    """CA0: the author's pick — an image in the Catalogue becomes the version's animation reference (or back view); None clears it."""
+    """CA0: the author's pick — an image in the Catalogue becomes the version's animation reference (or back view); None clears it.
+    D161: the only way a slot is filled (a make's pictures are candidates); the front of a character whose body was never touched is
+    fitted at once (a keypoints job, as the first result used to be)."""
     ws, cat, _ = svc.require_project()
     if body.asset_id:
         rec = await asyncio.to_thread(cat.get, body.asset_id)
@@ -975,6 +977,12 @@ async def profile_anim_ref_pick(svc: Svc, pid: str, vid: str, body: AnimRefPick)
         raise HTTPException(404, str(e.args[0]))
     except ValueError as e:
         raise HTTPException(422, str(e))
+    assert p is not None
+    if body.asset_id and body.side == "front":
+        try:
+            await asyncio.to_thread(fit_if_untouched, svc.queue, p, vid, body.asset_id)
+        except Exception:  # noqa: BLE001 — the reference stands; the fit is offered by hand (Build's Fit the body)
+            pass
     _changed(svc, p)
     return p.model_dump()
 

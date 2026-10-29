@@ -177,10 +177,10 @@ def test_the_fit_route(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_the_first_reference_fits_an_untouched_body(tmp_path: Path, object_info: dict):
+async def test_the_picked_front_fits_an_untouched_body(tmp_path: Path, object_info: dict):
     from loom2.models import registry
     from loom2.origin import JobOrigin
-    from loom2.story import plan_anim_ref
+    from loom2.story import fit_if_untouched, plan_anim_ref
     rig = Rig(tmp_path, object_info)
     try:
         groups = rig.queue.groups = GroupStore(rig.ws, rig.catalogue)
@@ -193,6 +193,10 @@ async def test_the_first_reference_fits_an_untouched_body(tmp_path: Path, object
         r, o = plan_anim_ref(p, p.version(), "front", "full", width=64, height=64, count=1, group_id=gid)[0]
         done = await rig.wait(rig.queue.submit({**r, "model_id": mid}, origin=JobOrigin.model_validate(o))[0].id)
         assert done.status == "done", done.error
+        assert not any(j.origin and j.origin.surface == "body_fit" for j in rig.queue.jobs.values())   # D161: a make picks nothing, fits nothing
+        pick = done.result["asset_ids"][0]
+        p = st.set_anim_ref(p.id, "v1", "front", pick)                                              # the author's pick (PUT …/anim-ref)
+        assert fit_if_untouched(rig.queue, p, "v1", pick)
         fit = next(j for j in rig.queue.jobs.values() if j.origin and j.origin.surface == "body_fit")
         assert (await rig.wait(fit.id)).status == "done"
         v = st.profile(p.id).version("v1")

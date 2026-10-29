@@ -604,7 +604,7 @@ export const useStory = create<StoryState>()((set, get) => {
       const p = get().profile(); const v = get().version(); if (!p || !v) return
       try {
         const r = await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/anim-ref', { params: { path: { pid: p.id, vid: v.id } }, body: { side, count: 2 } }))
-        useSession.getState().toast(`${r.job_ids.length} ${side === 'back' ? 'back views' : p.cls === 'place' ? 'set pictures' : 'animation references'} queued for ${p.name} — they land on the candidates page; the first becomes the ${p.cls === 'place' ? 'set picture' : 'reference'} while there is none`, 'info')
+        useSession.getState().toast(`${r.job_ids.length} ${side === 'back' ? 'back views' : p.cls === 'place' ? 'set pictures' : 'animation references'} queued for ${p.name} — they land among its candidates; pick the ${side === 'back' ? 'back' : p.cls === 'place' ? 'set picture' : 'front'} from them in Build`, 'info')   // D161: nothing is picked for the author
         if (!v.candidates_group_id) await get().loadProfiles()
       } catch (e) { toast(`Animation reference: ${detail(e)}`) }
     },

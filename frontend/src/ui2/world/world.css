@@ -68,3 +68,14 @@ button.w-ready-item { background: transparent; border: 1px dashed var(--line2); 
 .w-facts > span:first-child { color: var(--fg3); }
 .w-facts ul { margin: 0; padding-left: 14px; display: flex; flex-direction: column; gap: 2px; }
 .w-facts .link.active { font-weight: 600; }
+/* D161: Build's animation reference — a filled slot's ✕, the candidates to pick from or discard */
+.anim-ref-slot .slot-clear { position: absolute; top: 4px; right: 4px; }
+.anim-ref-slot .slot-clear .cmd-btn { background: color-mix(in srgb, var(--bg1) 80%, transparent); }
+.anim-ref-cands { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; margin-top: 8px; }
+.anim-ref-cands > .hint { flex-basis: 100%; display: inline-flex; gap: 4px; align-items: center; }
+.anim-ref-cand { position: relative; width: 160px; aspect-ratio: 16 / 9; border: 1px solid var(--line2); border-radius: var(--radius); overflow: hidden; background: var(--bg2); }
+.anim-ref-cand img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.anim-ref-cand-verbs { position: absolute; left: 4px; right: 4px; bottom: 4px; display: flex; gap: 4px; justify-content: flex-end; }
+.anim-ref-cand-verbs button { min-height: 0; padding: 1px 6px; font-size: 11px; background: color-mix(in srgb, var(--bg1) 85%, transparent); }
+.w-build-body { margin-top: 12px; }
+.w-make-sheet { margin-bottom: 4px; }

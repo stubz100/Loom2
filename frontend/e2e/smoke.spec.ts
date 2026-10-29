@@ -247,11 +247,17 @@ async function perfCardOf(page: import('@playwright/test').Page, card: 'Image to
 }
 
 /** B2a (D159): an entity version's Sheet in World — its whole card (the sheet, the body, the animation reference, the model or the set). */
-async function openSheet(page: import('@playwright/test').Page, cls: 'character' | 'prop' | 'place', id: string, version = 'v1'): Promise<void> {
+async function openBuild(page: import('@playwright/test').Page, cls: 'character' | 'prop' | 'place', id: string, version = 'v1'): Promise<void> {
   await openShell(page, `world/${cls}/${id}/${version}`)
   await expect(page.locator('[data-testid="world-header"]')).toBeVisible()
-  await page.locator('.w-mode button', { hasText: 'Sheet' }).click()
-  await expect(page.locator('[data-testid="world-sheet"]')).toBeVisible()
+  await page.locator('.w-mode button', { hasText: 'Build' }).click()                                      // D161: what Clay needs
+  await expect(page.locator('[data-testid="world-build"]')).toBeVisible()
+}
+
+/** D161: World's Make — the sheet's words at its top, then the picture settings. */
+async function openMake(page: import('@playwright/test').Page, cls: 'character' | 'prop' | 'place', id: string, version = 'v1'): Promise<void> {
+  await openShell(page, `world/${cls}/${id}/${version}`)
+  await expect(page.locator('[data-testid="world-sheet"] .cast-sheet')).toBeVisible()
 }
 
 type EdWin = { __loom2Editor?: { getState: () => { doc?: { id: string }; tool: string } }; __loom2AiPanel?: { getState: () => { op: string; selMode: string } } }
@@ -973,7 +979,7 @@ test("the pose editor (AP1b, D141): a crouch stands on the character's feet, the
   expect(Object.keys((await figure())!.pins).sort()).toEqual(['l_foot', 'r_foot', 'r_hand'])
   expect((await figure())!.contacts.r_hand.object_id).toBe('self')
   // the skeleton bench (World's Sheet) lists the character's poses
-  await openSheet(page, 'character', p.id)
+  await openBuild(page, 'character', p.id)
   await page.locator('.cast-body button', { hasText: 'body' }).click()                                    // a body of its own (the default adult's)
   await page.locator('.cast-body button', { hasText: /^Skeleton…/ }).click()
   await expect(page.locator('.skel-parts [data-group="poses"] [data-pose="crouch"]')).toContainText('its starter pose · 3 pinned')
@@ -1174,10 +1180,10 @@ test('a prop (D110 PS1–PS2, D125): Cast\'s props class lists the props (the ol
   const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
   const name = `Crate ${Date.now().toString(36)}`
   const prop = await api<{ id: string; current: string }>('POST', '/story/profiles', { name, cls: 'prop', hero_asset_id: img, appearance: 'an old wooden slatted crate' })
-  await openSheet(page, 'prop', prop.id)                                                                    // D157: World's Props, the prop's Sheet
+  await openBuild(page, 'prop', prop.id)                                                                    // D157: World's Props, the prop's Sheet
   await expect(page.locator('.w-rail-btn[aria-label="Props"]')).toHaveClass(/active/)
   await expect(page.locator('[data-testid="world-header"]')).toContainText(name)
-  const section = page.locator('[data-testid="world-sheet"] .prop-model')
+  const section = page.locator('[data-testid="world-build"] .prop-model')
   await expect(section).toBeVisible()
   await expect(section.locator('.model-view.empty')).toBeVisible()
   const make = section.locator('button', { hasText: 'Make the 3D model' })
@@ -2095,7 +2101,7 @@ test('a live character sheet (D93 · B4, B5): an outfit edited in Cast shows on 
   await api('PATCH', `/story/profiles/${p1.id}`, { revision: p2.revision, versions: [{ id: 'v2', label: 'winter' }] })
   const [v1, v2] = p2.versions
   // Cast: v2's outfit and a bound colour, typed on the version page (saved after a pause)
-  await openSheet(page, 'character', p1.id, 'v2')
+  await openMake(page, 'character', p1.id, 'v2')                                                         // D161: the sheet's words are Make's
   await expect(page.locator('[data-testid="world-header"]')).toContainText('v2 · winter')
   await page.locator('#cast-outfit').fill('a yellow oilskin')
   await page.locator('.cast-sheet button', { hasText: 'colour' }).click()
@@ -2403,7 +2409,7 @@ test("the bench and a prop's height (D142, CW4): Bench ▶ opens Clay for the ch
   type StageLite = { id: string; name: string; purpose: string; bound: { profile_id: string; version: string } | null; objects: { id: string; kind: string; profile_id: string | null; height_m: number | null; body: { height_m: number } | null }[] }
   const mara = await api<ProfileLite>('POST', '/story/profiles', { name: `Mara ${tag}`, cls: 'character', appearance: 'a fisher' })
   await api('PATCH', `/story/profiles/${mara.id}`, { revision: 0, versions: [{ id: 'v1', body: { height_m: 1.62 } }] })
-  await openSheet(page, 'character', mara.id)
+  await openBuild(page, 'character', mara.id)
   await page.locator('.cast-body button', { hasText: /^Bench/ }).first().click()
   await expect(page.locator('[data-testid="world-clay"] canvas').first()).toBeVisible({ timeout: 20_000 })   // the bench, inside World
   await expect(page.locator('.w-mode button.active')).toHaveText('Clay')
@@ -2414,14 +2420,14 @@ test("the bench and a prop's height (D142, CW4): Bench ▶ opens Clay for the ch
   expect(bench.objects[0].body?.height_m).toBe(1.62)
   expect((await api<{ items: StageLite[] }>('GET', '/stages')).items.map((s) => s.id)).not.toContain(bench.id)          // out of the stage list
   await page.screenshot({ path: 'node_modules/.e2e/cw3-bench.png' })
-  await page.locator('.w-mode button', { hasText: 'Sheet' }).click()
-  await expect(page.locator('[data-testid="world-sheet"]')).toBeVisible()
+  await page.locator('.w-mode button', { hasText: 'Build' }).click()
+  await expect(page.locator('[data-testid="world-build"]')).toBeVisible()
   // CW4: a prop's height — read from its name, edited in Cast; its bench stands the model at it
   const cup = await api<ProfileLite>('POST', '/story/profiles', { name: `Grandma cup ${tag}`, cls: 'prop' })
   expect(cup.versions[0].height_m).toBe(0.1)
   const glb = `${process.cwd().replace(/\\/g, '/')}/../orchestrator/tests/fixtures/motion/test_rig.glb`      // a GLB import (D128): both builds, no job
   await api('POST', `/story/profiles/${cup.id}/versions/v1/model/import`, { path: glb })
-  await openSheet(page, 'prop', cup.id)
+  await openBuild(page, 'prop', cup.id)
   const h = page.locator('.prop-height input')
   await expect(h).toHaveValue('0.1')
   await h.fill('0.12'); await h.press('Enter')
@@ -2448,7 +2454,7 @@ test("a place's set (CW6, D143): Build the set ▶ queues MoGe on the set pictur
   await api('PUT', `/story/profiles/${place.id}/versions/v1/anim-ref`, { side: 'front', asset_id: img })                 // the set picture
   const prof = async () => api<ProfileLite>('GET', `/story/profiles/${place.id}`)
   const ps = async () => (await prof()).versions[0].place_set
-  await openSheet(page, 'place', place.id)
+  await openBuild(page, 'place', place.id)
   const sec = page.locator('section.place-set')
   await expect(sec.locator('[data-status]')).toHaveText('no set yet')
   // Build the set ▶: MoGe on the set picture; the fake engine's relief is a bare triangle — the fit says so, and nothing is set
@@ -2600,8 +2606,8 @@ test("Cast in Clay and the line-up (CW3, CW5): a Cast character's card adds its 
   expect(free.body?.height_m).toBe(1.58)
   expect(free.name).toBe(`Ines ${tag} (free)`)
   // CW5: Line-up ▶ in World's Sheet — the class's characters side by side before 0.5 m marks, the one open first; Send to a stage ▸ copies them
-  await openSheet(page, 'character', ines.id)
-  await page.locator('[data-testid="world-sheet"] button', { hasText: /^Line-up/ }).click()
+  await openBuild(page, 'character', ines.id)
+  await page.locator('[data-testid="world-build"] button', { hasText: /^Line-up/ }).click()
   const chip = page.locator('[data-testid="bench-chip"]')
   await expect(chip).toContainText('Line-up ·')
   await expect(page.locator('.w-mode button.active')).toHaveText('Clay')                                    // inside World
@@ -2626,7 +2632,7 @@ test('a body on the Cast sheet (CA0, 01 §9): height, build and an attachment sa
   type ProfileLite = { id: string; versions: { id: string; body: Body | null }[] }
   const p = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', hero_asset_id: hero, appearance: `${name}, a hulking ogre` })
   expect(p.versions[0].body).toBeNull()
-  await openSheet(page, 'character', p.id)
+  await openBuild(page, 'character', p.id)
   await page.locator('.cast-body button', { hasText: 'body' }).click()
   await page.locator('.cast-body input[aria-label="height in metres"]').fill('2.4')
   await page.locator('.cast-body .segmented button', { hasText: 'heavy' }).click()
@@ -2651,27 +2657,38 @@ test('a body on the Cast sheet (CA0, 01 §9): height, build and an attachment sa
   await page.screenshot({ path: 'node_modules/.e2e/ca0-body-stage.png' })                  // a look for the journal: the ogre beside nothing, 2.4 m
 })
 
-test('an animation reference in Cast (CA0, 01 step 2): Make an animation reference queues two candidates, the first fills the front slot; a candidate\'s right-click makes it the back view (World’s Sheet, B2a)', async ({ page }) => {
+test('an animation reference picked by hand (CA0 → D161): Make reference candidates ▶ queues two and fills no slot; the author picks the front and the back from the candidates, a slot\'s ✕ clears it (the picture stays a candidate), Discard trashes one (World\'s Build)', async ({ page }) => {
   test.setTimeout(90_000)
   const name = `Ines ${Date.now().toString(36)}`
   const src = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0]
   const hero = (await api<{ ids: string[] }>('POST', '/assets/duplicate', { ids: [src.id] })).ids[0]
   type ProfileLite = { id: string; versions: { id: string; anim_ref_asset_id: string | null; anim_ref_back_asset_id: string | null }[] }
   const p = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', hero_asset_id: hero, appearance: `${name}, a dancer in a red dress` })
-  await openSheet(page, 'character', p.id)
+  await openBuild(page, 'character', p.id)
   await expect(page.locator('.anim-ref-slot[data-side="front"]')).toContainText('none yet')
-  await page.locator('.anim-ref button', { hasText: /^Make an animation reference/ }).click()
-  await expect.poll(async () => (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0].anim_ref_asset_id, { timeout: 60_000 }).toBeTruthy()
-  const front = (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0].anim_ref_asset_id!
-  await expect(page.locator('.anim-ref-slot[data-side="front"] img')).toHaveAttribute('src', new RegExp(front))
-  const bin = page.locator('[data-testid="world-bin"]')
-  await expect(bin.locator('.w-tile')).toHaveCount(3, { timeout: 30_000 })                                         // the hero and both candidates, in the version's bin
-  const other = bin.locator(`.w-tile:not([data-id="${front}"]):not([data-id="${hero}"])`).first()
-  const otherId = (await other.getAttribute('data-id'))!
-  await other.click({ button: 'right' })
+  await page.locator('.anim-ref button', { hasText: /^Make reference candidates/ }).click()
+  const cands = page.locator('[data-testid="anim-ref-candidates"] .anim-ref-cand')
+  await expect(cands).toHaveCount(2, { timeout: 60_000 })                                                  // both land as candidates
+  const ver = async () => (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0]
+  expect((await ver()).anim_ref_asset_id).toBeNull()                                                       // nothing is picked for the author
+  await expect(page.locator('.anim-ref-slot[data-side="front"]')).toContainText('none yet')
+  const [a, b] = [(await cands.nth(0).getAttribute('data-id'))!, (await cands.nth(1).getAttribute('data-id'))!]
+  await cands.nth(0).locator('button', { hasText: 'Front' }).click()
+  await expect.poll(async () => (await ver()).anim_ref_asset_id).toBe(a)
+  await expect(page.locator('.anim-ref-slot[data-side="front"] img')).toHaveAttribute('src', new RegExp(a))
+  await expect(cands).toHaveCount(1)                                                                       // a picked one leaves the strip
+  await page.locator(`[data-testid="anim-ref-candidates"] .anim-ref-cand[data-id="${b}"]`).click({ button: 'right' })
   await page.locator('.ctx-menu button.item', { hasText: /^Use as the A-pose back/ }).click()
-  await expect.poll(async () => (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0].anim_ref_back_asset_id).toBe(otherId)
-  await expect(page.locator('.anim-ref-slot[data-side="back"] img')).toHaveAttribute('src', new RegExp(otherId))
+  await expect.poll(async () => (await ver()).anim_ref_back_asset_id).toBe(b)
+  await expect(page.locator('.anim-ref-slot[data-side="back"] img')).toHaveAttribute('src', new RegExp(b))
+  // ✕ on the back slot clears it: the picture is a candidate again
+  await page.locator('.anim-ref-slot[data-side="back"] .slot-clear button').click()
+  await expect.poll(async () => (await ver()).anim_ref_back_asset_id).toBeNull()
+  await expect(page.locator(`[data-testid="anim-ref-candidates"] .anim-ref-cand[data-id="${b}"]`)).toBeVisible()
+  // Discard: the candidate goes to the Trash
+  await page.locator(`[data-testid="anim-ref-candidates"] .anim-ref-cand[data-id="${b}"] button[aria-label="Discard"]`).click()
+  await expect(page.locator(`[data-testid="anim-ref-candidates"] .anim-ref-cand[data-id="${b}"]`)).toHaveCount(0)
+  await expect.poll(async () => (await api<{ trashed_at: string | null }>('GET', `/assets/${b}`)).trashed_at).toBeTruthy()
 })
 
 test('the body fitted to the animation reference (CA1b, D104): Fit the body measures the reference and the proportions follow, the height stays (World’s Sheet, B2a)', async ({ page }) => {
@@ -2682,10 +2699,13 @@ test('the body fitted to the animation reference (CA1b, D104): Fit the body meas
   type ProfileLite = { id: string; versions: { id: string; body_fit_from: string | null; body_points: { pose: number[][] } | null; anim_ref_note: string | null
     body: { height_m: number; neck: number; shoulders: number; hips: number; elbow: number; figure: string; hand_rest: { preset: string } } | null }[] }
   const p = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', appearance: `${name}, a mechanic` })
-  await api('PUT', `/story/profiles/${p.id}/versions/v1/anim-ref`, { side: 'front', asset_id: ref })           // set by hand: no fit by itself
-  await openSheet(page, 'character', p.id)
-  await page.locator('.cast-body button', { hasText: /^Fit the body to the animation reference/ }).click()
+  await api('PUT', `/story/profiles/${p.id}/versions/v1/anim-ref`, { side: 'front', asset_id: ref })           // the author's pick (D161: an untouched body is fitted at once)
+  await openBuild(page, 'character', p.id)
   await expect.poll(async () => (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0].body_fit_from, { timeout: 60_000 }).toBe(ref)
+  type JobLite = { status: string; origin: { surface: string; ref: string } | null }
+  const fits = async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.filter((j) => j.origin?.surface === 'body_fit' && j.origin.ref === p.id)
+  await page.locator('.cast-body button', { hasText: /^Fit the body to the animation reference/ }).click()   // and by hand, again
+  await expect.poll(async () => (await fits()).map((j) => j.status).join(','), { timeout: 60_000 }).toBe('done,done')
   const body = (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0].body!
   expect(body.height_m).toBe(1.75)                                                                    // the author's: unchanged
   expect(body.neck).toBeGreaterThan(1.3)                                                              // the fake reference's long neck (0.16 of the height; ×1 an adult's, S3)
@@ -2709,7 +2729,7 @@ test('the skeleton bench (proto01_UIcast CS2): Skeleton… opens the reference w
   type ProfileLite = { id: string; versions: { id: string; body_fit_from: string | null; body: Body | null; body_points: { pose: number[][]; sdpose?: { pose: number[][] } } | null }[] }
   const p = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', appearance: `${name}, a baker` })
   await api('PUT', `/story/profiles/${p.id}/versions/v1/anim-ref`, { side: 'front', asset_id: ref })
-  await openSheet(page, 'character', p.id)
+  await openBuild(page, 'character', p.id)
   await page.locator('.cast-body button', { hasText: /^Fit the body to the animation reference/ }).click()
   const prof = async () => (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0]
   await expect.poll(async () => (await prof()).body_points?.pose.length ?? 0, { timeout: 60_000 }).toBe(18)
@@ -2754,7 +2774,7 @@ test('the skeleton bench (proto01_UIcast CS2): Skeleton… opens the reference w
   await expect(bench.locator('.skel-guide img.pose')).toHaveCount(1, { timeout: 20_000 })
   await page.screenshot({ path: 'node_modules/.e2e/cs2-bench.png' })
   await bench.locator('.skel-strip button', { hasText: /^Back to the sheet/ }).click()
-  await expect(page.locator('[data-testid="world-sheet"]')).toBeVisible()
+  await expect(page.locator('[data-testid="world-build"]')).toBeVisible()
   await expect(page.locator('[data-testid="world-bin"]')).toBeVisible()                                       // the bin back in the centre
 })
 
@@ -2767,12 +2787,12 @@ test("the skeleton changed (proto01_UIcast CS3, D136 U19): a final's character l
   const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
   type Prof = { id: string; name: string; revision: number; versions: { id: string; body: Record<string, unknown> | null }[] }
   const who = await api<Prof>('POST', '/story/profiles', { name: `Skel ${Date.now().toString(36)}`, cls: 'character', hero_asset_id: img, appearance: 'a courier' })
-  await api('PUT', `/story/profiles/${who.id}/versions/v1/anim-ref`, { side: 'front', asset_id: img })
   const setNeck = async (neck: number) => {
     const p = await api<Prof>('GET', `/story/profiles/${who.id}`)
     await api('PATCH', `/story/profiles/${who.id}`, { revision: p.revision, versions: [{ id: 'v1', body: { ...(p.versions[0].body ?? { height_m: 1.7 }), neck } }] })
   }
-  await setNeck(1.0)
+  await setNeck(1.0)                                                                                        // the body first: a touched body is not fitted to the pick (D161)
+  await api('PUT', `/story/profiles/${who.id}/versions/v1/anim-ref`, { side: 'front', asset_id: img })
   await libAdd(page, 'sets', 'room')
   await libAdd(page, 'figures', 'Adult')
   await page.locator(`.w-panel [aria-label="the figure's character"] button[aria-label="${who.name}"]`).click()
@@ -2838,7 +2858,7 @@ test('a test animation in Cast (CA0, 01 step 2): Test it draws a turn on the spo
   const p = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', appearance: `${name}, an old captain` })
   await api('PATCH', `/story/profiles/${p.id}`, { revision: p.revision, versions: [{ id: 'v1', body: { height_m: 1.9, build: 'broad', head: 1, torso: 1, shoulders: 1, arms: 1, legs: 1, attachments: [] } }] })
   await api('PUT', `/story/profiles/${p.id}/versions/v1/anim-ref`, { side: 'front', asset_id: ref })
-  await openSheet(page, 'character', p.id)
+  await openBuild(page, 'character', p.id)
   await expect(page.locator('.anim-ref-slot[data-side="test"]')).toContainText('none yet')
   await page.locator('.anim-ref button', { hasText: /^Test it/ }).click()
   const dialog = page.locator('.modal.ask')

@@ -31,6 +31,7 @@ import { useLibrary } from './libraryStore'
 import { useGenerate } from '../generate/generateStore'
 import { versionName } from '../generate/sheet'
 import { CastSheet } from './CastSheet'
+import { CastBody } from './CastBody'
 import { AnimRef, PropModel } from './CastParts'
 import { askExpand, castCells, castNext, ITEM_NEXT, itemCommand, makeClipItems, makeFrameItems, NEXT_LABEL, onStoryItem, profileMenu, rowMenu, runOnItem, selectedNext, stageUsers } from './storyCommands'
 import { BoardPanel, LinkStageSheet, ShotsBoard, VoiceAllButton } from './ShotsBoard'
@@ -592,6 +593,7 @@ function CastPage() {
         <div className="cast-fields">
           <h2>{p.name} <span className="muted">— {CLASS_LABEL[p.cls]} — {versionName(v)} ({open ? 'open' : 'final'})</span></h2>
           <CastSheet p={p} v={v} />{/* D93 (B4): the character sheet (was the one prompt stub) */}
+          <CastBody p={p} v={v} />{/* CA0: the body shapes the Stage dummy (D161: no longer inside the sheet) */}
           <div className="counts"><span>reference set · <b>{refs.length}</b></span><span>candidates · <b>{cands.length}</b></span>{v.candidates_group_id === null && <span className="hint">(none expanded yet)</span>}</div>
         </div>
       </div>

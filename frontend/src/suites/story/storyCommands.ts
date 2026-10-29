@@ -389,7 +389,7 @@ const cmds: Command[] = [
   { id: 'story.cast.setHero', scope: 'story', label: 'Make it the hero', icon: ImageUp, placement: ['context', 'inspector'], when: () => openVersion() && picked().length === 1,
     run: () => void sy().setHero(picked()[0]) },
   // CA0 (01 step 2, §10): the animation reference — characters (front, back) and props (front, a three-quarter view); a final version takes one too
-  { id: 'story.cast.makeAnimRef', scope: 'story', label: 'Make an animation reference', icon: PersonStanding, hint: 'full body, A-pose, 16:9, plain ground — two candidates from the sheet and references',
+  { id: 'story.cast.makeAnimRef', scope: 'story', label: 'Make reference candidates ▶', icon: PersonStanding, hint: 'queues two pictures from the sheet and references (a character: full body, A-pose, 16:9, plain ground) — pick the front from them (D161)',
     placement: ['panel', 'inspector', 'context'], when: () => animRefable() && !!useSession.getState().capabilities?.story?.model_id, run: () => void sy().makeAnimRef('front') },
   { id: 'story.cast.fitBody', scope: 'story', label: 'Fit the body to the animation reference', icon: Ruler,
     hint: "the reference's proportions measured (neck, shoulders, torso, limbs, hands) so the stage figure moves with the character's build; the height and build stay",
@@ -411,7 +411,7 @@ const cmds: Command[] = [
     hint: "the 3D model of the animation reference in the A-pose (Pixal3D, about four minutes in the background): the clay the character's figures are drawn in — the reference fitted first; arms held against the body would be made part of it (D139)",
     placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character' && !shellBlocked(version()) && !!useSession.getState().capabilities?.mesh?.model_id,
     run: () => void sy().makeShell() },
-  { id: 'story.cast.makeAnimRefBack', scope: 'story', label: 'Make a back view', icon: PersonStanding, hint: 'the same A-pose from behind — for a shot that starts with the character turned away',
+  { id: 'story.cast.makeAnimRefBack', scope: 'story', label: 'Make back-view candidates ▶', icon: PersonStanding, hint: 'queues two of the same A-pose from behind — pick the back from them, for a shot that starts turned away',
     placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character' && !!useSession.getState().capabilities?.story?.model_id, run: () => void sy().makeAnimRef('back') },
   { id: 'story.cast.useAsAnimRef', scope: 'story', label: 'Use as the animation reference', icon: PersonStanding, placement: ['context', 'inspector'], when: () => animRefable() && picked().length === 1,
     run: () => void sy().setAnimRef('front', picked()[0]) },
@@ -437,7 +437,7 @@ const cmds: Command[] = [
   { id: 'story.cast.clearModel', scope: 'story', label: 'Clear the 3D model', icon: X, placement: ['inspector', 'context'], when: () => !!version()?.model_asset_id,
     run: () => void sy().setModel(null) },
   // CW6 (proto01_UIcast 04 §3–6; D143): a place's set — its picture (the place empty), the fit, the bake, the Fill
-  { id: 'cast.place.picture', scope: 'story', label: 'Make the set picture ▶', icon: ImagePlus, hint: 'the place empty, from eye level, its floor and walls in view — two candidates from the sheet and references',
+  { id: 'cast.place.picture', scope: 'story', label: 'Make set-picture candidates ▶', icon: ImagePlus, hint: 'the place empty, from eye level, its floor and walls in view — two candidates from the sheet and references',
     placement: ['panel', 'inspector', 'context'], when: () => isPlace() && !!useSession.getState().capabilities?.story?.model_id, run: () => void sy().makeAnimRef('front') },
   { id: 'cast.place.usePicture', scope: 'story', label: 'Use as the set picture', icon: ImagePlus, placement: ['context', 'inspector'], when: () => isPlace() && picked().length === 1,
     run: () => void sy().setAnimRef('front', picked()[0]) },

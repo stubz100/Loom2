@@ -813,6 +813,16 @@ def body_fit_origin(pid: str, vid: str) -> JobOrigin:
     return JobOrigin(suite="story", surface=BODY_FIT_SURFACE, ref=pid, payload={"version": vid})
 
 
+def fit_if_untouched(queue: Any, p: Any, vid: str, asset_id: str) -> bool:
+    """D161: the front the author picked for a character whose body was never touched is fitted at once (a keypoints job) — what a make's
+    first result did before the pick was the author's. True when queued."""
+    v = p.version(vid)
+    if p.cls != "character" or v.body_fit_from is not None or (v.body is not None and v.body != Body()):
+        return False
+    queue.submit({"kind": "keypoints", "asset_id": asset_id}, origin=body_fit_origin(p.id, v.id))
+    return True
+
+
 PROP_MODEL_SURFACE = "prop_model"              # D110 (PS2): origin.surface of an image → mesh job made for a prop version; payload {version, from}
 
 

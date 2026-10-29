@@ -74,7 +74,7 @@ interface SequenceState {
   cutPlace: (body: { clip_id?: string; asset_id?: string; shot_id?: string | null; shot_version?: string | null; node_id?: string | null; track: string | number; frame: number }) => Promise<boolean>
   cutReplace: (clip: number, take: { clip_id: string; shot_id?: string | null; shot_version?: string | null; node_id?: string | null }) => Promise<boolean>
   /** U7b (D157): Assemble from the Flow on the server — the route's shots at their finals, only what changed placed (one undo step). */
-  cutAssemble: (route: Record<string, string>, shots: { shot_id: string; node_id: string }[]) => Promise<AssembleReport | null>
+  cutAssemble: (route: Record<string, string>, shots: { shot_id: string; node_id: string }[]) => Promise<{ report: AssembleReport; conforming: string[] } | null>
   cutUndo: (redo?: boolean) => Promise<void>
   /** D127: an audio track's strip (what changes; the rest stays) and its role (Settings › Audio's strip for it). */
   cutStrip: (track: number, change: Partial<TrackStrip>) => Promise<boolean>
@@ -104,6 +104,14 @@ interface SequenceState {
   setTool: (tool: CutTool) => void
   selectClip: (id: number | null) => void
   selectTrack: (id: number | null) => void
+}
+
+/** U7c (06 §3): a cut changed by a job (the conform, a line brought onto A1 by an export or the movie) — the open one is read again when
+ *  its revision moved past what the page holds, unless a change of the page's own is on its way (its reply brings the new revision). */
+export function onTimelineUpdated(e: { id: string; revision: number }): void {
+  const s = useSequence.getState()
+  if (!s.current || s.current.id !== e.id || e.revision <= s.current.revision || s.cutBusy || s.saving) return
+  void s.open(e.id)
 }
 
 /** CE2: the open cut is a FilmCraft project (edited by commands, its tracks read from it). */
@@ -273,13 +281,13 @@ export const useSequence = create<SequenceState>()((set, get) => ({
   cutPlace: (body) => cutCall(get, set, (id, revision) => unwrap(http.POST('/timelines/{tl_id}/place', { params: { path: { tl_id: id } }, body: { revision, insert: false, ...body } }))),
   cutReplace: (clip, take) => cutCall(get, set, (id, revision) => unwrap(http.POST('/timelines/{tl_id}/replace', { params: { path: { tl_id: id } }, body: { revision, clip, ...take } }))),
   cutAssemble: async (route, shots) => {
-    let report: AssembleReport | null = null
+    let out: { report: AssembleReport; conforming: string[] } | null = null
     const ok = await cutCall(get, set, async (id, revision) => {
       const r = await unwrap(http.POST('/timelines/{tl_id}/assemble', { params: { path: { tl_id: id } }, body: { revision, route, shots } }))
-      report = r.report
+      out = { report: r.report, conforming: r.conforming ?? [] }
       return r
     })
-    return ok ? report : null
+    return ok ? out : null
   },
   cutUndo: async (redo = false) => {
     await cutCall(get, set, (id, revision) => unwrap(redo ? http.POST('/timelines/{tl_id}/redo', { params: { path: { tl_id: id } }, body: { revision } })

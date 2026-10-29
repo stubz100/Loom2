@@ -4641,10 +4641,13 @@ test('Assemble in Episode (U7b, D157 · proto01_UI2 05 §1, F33, F40): each shot
   await sheet.locator('input#assemble-name').fill(name)
   await sheet.locator('button.primary', { hasText: /^Assemble$/ }).click()
   await expect(page.locator('.e-stage .cut-clip.k-take')).toHaveCount(2)
-  type Tracks = { video: { items: { id: number; name: string; speed: number; start: number }[] }[] }
+  type Tracks = { video: { items: { id: number; name: string; speed: number; start: number; media_path: string | null }[] }[] }
   const tl = async () => (await api<{ items: { id: string; name: string; revision: number }[] }>('GET', '/timelines')).items.find((t) => t.name === name)!
   const v1 = async () => (await api<Tracks>('GET', `/timelines/${(await tl()).id}/tracks`)).video[0].items
   expect((await v1()).map((i) => i.name)).toEqual([`Gate ${tag}`, `Road ${tag}`])                                         // F40
+  const conform = !!(await api<{ cut?: { conform: boolean } }>('GET', '/capabilities')).cut?.conform                     // U7c: RIFE here (not in CI)
+  const conformed = async (n: number) => { if (conform) await expect.poll(async () => (await v1()).filter((i) => (i.media_path ?? '').includes('conform24')).length, { timeout: 60_000 }).toBe(n) }
+  await conformed(2)                                                                                                        // the 16 fps takes conformed as they land
   // the author slows the gate; the pier's final lands; Assemble again keeps the gate's speed and places the pier after the road
   const gate = (await v1())[0].id
   await api('POST', `/timelines/${(await tl()).id}/edit`, { revision: (await tl()).revision, steps: [{ id: 'clip.speedDuration', params: { clips: [gate], speed: 50 } }] })
@@ -4654,5 +4657,6 @@ test('Assemble in Episode (U7b, D157 · proto01_UI2 05 §1, F33, F40): each shot
   await expect(sheet.locator('[data-testid="assemble-what"]')).toHaveText('3 shots on this route')
   await sheet.locator('button.primary', { hasText: /^Assemble again$/ }).click()
   await expect.poll(async () => (await v1()).map((i) => i.name), { timeout: 15_000 }).toEqual([`Gate ${tag}`, `Road ${tag}`, `Pier ${tag}`])
+  await conformed(3)
   expect((await v1())[0]).toMatchObject({ id: gate, speed: 0.5 })                                                         // the author's edit kept
 })

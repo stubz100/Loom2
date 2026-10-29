@@ -539,8 +539,8 @@ class TimelineStore:
                 (d / "markers.txt").replace(folder / "markers.txt")
                 names.append("markers.txt")
             return folder, "\n".join(names)
-        if self.cuts is not None and self.cuts.available():
-            self.cuts.sync_lines(tl)                                    # a line voiced since the cut was made reaches A1 first
+        if self.cuts is not None and self.cuts.available() and self.cuts.sync_lines(tl):   # a line voiced since the cut was made reaches A1 first
+            self.touch(tl.id)                                           # U7c: one change of the cut — its revision moves on
         cut = tracks(read(d / tl.file))                                # type: ignore[operator]
         out = d / f"{slug}.{fmt}"
         if fmt in ("edl", "fcpxml"):

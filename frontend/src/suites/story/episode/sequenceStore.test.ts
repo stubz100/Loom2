@@ -1,8 +1,8 @@
 // P17 (D83): the document ↔ lane conversions and the clip-bin drop rule.
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { Clip, Job, Timeline } from '../../../api/types'
 import { laneDrop } from '../../../frame/dropRules'
-import { clipsOf, laneClipFrom, laneOf, lastMovie } from './sequenceStore'
+import { clipsOf, laneClipFrom, laneOf, lastMovie, onTimelineUpdated, useSequence } from './sequenceStore'
 
 const tl = { id: 'tl_1', name: 'S', fps: 24, w: 1920, h: 1080, revision: 2, schema_version: 1, created_at: '', updated_at: '',
   clips: [{ id: 'a', clip_id: 'clp_a', in: 0, out: 120, fps: 24 }, { id: 'b', clip_id: 'clp_b', in: 5, out: 81, fps: 16 }], overlaps: [0, 12] } as unknown as Timeline
@@ -49,5 +49,19 @@ describe("the cut's movie (RC3)", () => {
     expect(lastMovie({ job_1: done, job_4: running }, 'tl_1')).toMatchObject({ status: 'running', progress: 0.4, path: null })
     expect(lastMovie({ job_2: draft, job_3: other }, 'tl_1')).toBeNull()
     expect(lastMovie({ job_5: job('job_5', '2026-10-24T11:00:00Z', 'cancelled', { movie: true }) }, 'tl_1')).toBeNull()
+  })
+})
+
+describe("U7c (06 §3): a cut changed by a job is read again", () => {
+  it("re-opens the open cut when its revision moved past the page's, not during the page's own change, not another cut", () => {
+    const open = vi.fn(async () => undefined)
+    useSequence.setState({ current: tl, cutBusy: false, saving: false, open } as never)
+    onTimelineUpdated({ id: 'tl_1', revision: 2 })                                  // the page's own revision: nothing to read
+    onTimelineUpdated({ id: 'tl_2', revision: 9 })                                  // another cut
+    useSequence.setState({ cutBusy: true }); onTimelineUpdated({ id: 'tl_1', revision: 3 })   // the page's own change: its reply brings it
+    expect(open).not.toHaveBeenCalled()
+    useSequence.setState({ cutBusy: false }); onTimelineUpdated({ id: 'tl_1', revision: 3 })  // a conform job's swap
+    expect(open).toHaveBeenCalledWith('tl_1')
+    useSequence.setState({ current: null })
   })
 })

@@ -174,7 +174,12 @@ export const gradeLabel = (g: { matched: boolean } | null | undefined): string =
 export const TRACK_ROLES: TrackRole[] = ['dialogue', 'music', 'effects']
 export const ROLE_NAMES: Record<TrackRole, string> = { dialogue: 'Dialogue', music: 'Music', effects: 'Effects' }
 /** The strip's ranges, as the server's config.TrackStrip brings values inside them (−96 dB is FilmCraft's silent fader floor: −∞). */
-export const STRIP: Record<keyof TrackStrip, readonly [number, number]> = { gain_db: [-36, 36], volume_db: [-96, 18], pan: [-100, 100], width: [0, 200] }
+export const STRIP: Record<keyof TrackStrip, [number, number]> = { gain_db: [-36, 36], volume_db: [-96, 18], pan: [-100, 100], width: [0, 200] }
+/** U7c (06 §3, rule 5): the strip's and the grade's ranges are the server's (`/capabilities.cut`); the values above stand until it answers. */
+export function applyCutRanges(strip: Record<string, [number, number]>, grade: Record<string, [number, number]>): void {
+  for (const k of Object.keys(STRIP) as (keyof TrackStrip)[]) if (strip[k]) STRIP[k] = [strip[k][0], strip[k][1]]
+  for (const s of GRADE_SLIDERS) if (grade[s.key]) s.range = [grade[s.key][0], grade[s.key][1]]
+}
 export const volumeLabel = (v: number): string => (v <= STRIP.volume_db[0] ? '−∞ dB' : db(v))
 /** Pan as the author reads it: 100 % L … 50 % L · 50 % R … 100 % R. */
 export function panLabel(p: number): string {

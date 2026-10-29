@@ -367,6 +367,16 @@ class SampleModelCaps(Open):
     seconds: float | None = None                   # the spec's Draft estimate (the rig's warm figure once measured)
 
 
+class CutCaps(Open):
+    """U7c (06 §3, rule 5): the cut editor's facts — FilmCraft and loom2's VST3 host built, RIFE there to conform a 16 fps take as it
+    lands, the channel strip's and the grade's ranges."""
+    available: bool
+    vst: bool
+    conform: bool
+    strip: dict[str, tuple[float, float]]
+    grade: dict[str, tuple[float, float]]
+
+
 class Capabilities(Open):
     recipes: list[str]
     i2v: I2vCaps
@@ -394,6 +404,7 @@ class Capabilities(Open):
     train: TrainCaps | None = None                # 18 (D86): the LoRA trainer's bases and ranges
     voice: VoiceCaps | None = None                # 19 (D87) CN2: the TTS tiers, their voices and languages
     experimental: ExperimentalCaps | None = None  # D88: extend and lip-sync, marked experimental
+    cut: CutCaps | None = None                    # U7c (06 §3): the cut editor's facts and ranges
 
 
 class MissingWeight(Open):
@@ -1391,6 +1402,16 @@ class ClipUpdatedEvent(_Frame):
     data: ClipUpdated
 
 
+class TimelineUpdated(Open):
+    id: str                                        # U7c: a cut changed (the editor's change, an Assemble, a conform job, a line an export brought)
+    revision: int                                  # its revision now — the page reads the open cut again when it moved past what it holds
+
+
+class TimelineUpdatedEvent(_Frame):
+    type: Literal["timeline.updated"]
+    data: TimelineUpdated
+
+
 class ModelFetchEvent(_Frame):
     type: Literal["model.fetch"]
     data: FetchState
@@ -1413,5 +1434,5 @@ class HelloEvent(_Frame):
 
 EVENT_FRAMES = (JobEvent, JobProgressEvent, JobDeletedEvent, QueueStateEvent, EngineStateEvent, AssetEvent, AssetDeletedEvent,
                 CatalogueChangedEvent, GroupChangedEvent, DocumentChangedEvent, StoryChangedEvent, LoraChangedEvent, ClipReadyEvent, ClipUpdatedEvent, ModelFetchEvent,
-                ProjectOpenedEvent, ProjectClosedEvent, HelloEvent, VramPressureEvent, PresetIconsChangedEvent)
+                TimelineUpdatedEvent, ProjectOpenedEvent, ProjectClosedEvent, HelloEvent, VramPressureEvent, PresetIconsChangedEvent)
 EVENT_TYPES = sorted({t for frame in EVENT_FRAMES for t in frame.model_fields["type"].annotation.__args__})

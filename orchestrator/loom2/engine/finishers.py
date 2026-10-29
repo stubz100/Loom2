@@ -1352,6 +1352,8 @@ async def run_render(job: JobRecord, recipe: Render, q: JobQueue) -> bool:
     frames blended through a dissolve, frames mapped by nearest frame where a clip's rate differs from the lane's (D27: no conform
     here), at the first clip's size and the lane's fps; then the clip pipeline as for an i2v job (master, proxy, asset, lineage to
     every source clip's asset, `clip.ready`)."""
+    if recipe.conform:
+        return await run_conform(job, recipe, q)
     if recipe.movie:
         return await run_movie(job, recipe, q)
     store, clips = TimelineStore(q.ws), ClipStore(q.ws)
@@ -1654,22 +1656,76 @@ async def run_movie(job: JobRecord, recipe: Render, q: JobQueue) -> bool:
     return True
 
 
+def _cut_moved(q: JobQueue, tl_id: str) -> Any:
+    """U7c (06 §3): a job changed the cut's project — its revision moves on and the clients hear it (before, the live cut changed under
+    them without either)."""
+    t2 = TimelineStore(q.ws).touch(tl_id)
+    q.hub.broadcast("timeline.updated", {"id": t2.id, "revision": t2.revision})
+    return t2
+
+
+async def _conform_cut(job: JobRecord, q: JobQueue, tl: Any, recs: dict, cuts: Any) -> list[str]:
+    """U7c (05 §1 fix 2): each 16 fps take on a 24 fps FilmCraft cut conformed once by RIFE v4.6 (D27; FilmCraft repeats frames), cached
+    beside its master (`clips/<id>/conform24/`), and swapped in for its proxy as one undoable change of the cut (`Cuts.conform`)."""
+    from ..cuts import read
+    from ..final_assembly import conform_24, rife_binary
+    if tl.fps != 24 or rife_binary() is None:
+        return []
+    clips = ClipStore(q.ws)
+    doc = await asyncio.to_thread(read, TimelineStore(q.ws).export_dir(tl.id) / tl.file)
+    ready: dict[str, list[Path]] = {}
+    for cid in sorted({cid for cid, _, _ in cuts.to_conform(doc) if cid in recs}):
+        rec, dst = recs[cid], q.ws.path / "clips" / cid / "conform24"
+        got = sorted(dst.glob("*.png"))
+        if len(got) != round((rec.frames - 1) * 24 / 16) + 1:
+            q.progress(job, f"conforming {cid} to 24 fps (RIFE)")
+            got = await asyncio.to_thread(conform_24, clips.frame_path(cid, 0).parent, dst, rec.frames, lambda: job.id in q._cancel_requested) or []
+            q.check_cancel(job)                                                                         # V35: RIFE killed on a cancel
+        if got:
+            ready[cid] = got
+    done = await asyncio.to_thread(cuts.conform, tl, ready) if ready else []
+    if done:
+        await asyncio.to_thread(_cut_moved, q, tl.id)
+    return done
+
+
+async def run_conform(job: JobRecord, recipe: Render, q: JobQueue) -> bool:
+    """U7c (05 §1 fix 2): a FilmCraft cut's 16 fps takes conformed to its 24 fps by RIFE as they land (*Assemble* queues it), one undoable
+    change — before, only the movie conformed them. A CPU job (RIFE on its own, one job at a time, D97)."""
+    from ..cuts import Cuts
+    from ..timelines import story_lookup
+    tl = await asyncio.to_thread(TimelineStore(q.ws).get, recipe.timeline_id)
+    if tl is None:
+        raise ValueError(f"sequence {recipe.timeline_id} is not in the project")
+    fc = getattr(q, "filmcraft", None)
+    if not tl.file or fc is None or not fc.available():
+        raise ValueError("the conform needs a FilmCraft cut and FilmCraft built (scripts/build_filmcraft.py)")
+    recs = {c.id: c for c in await asyncio.to_thread(ClipStore(q.ws).list)}
+    name_of, _, audio_of = await asyncio.to_thread(story_lookup, q.ws, q.catalogue)
+    done = await _conform_cut(job, q, tl, recs, Cuts(q.ws, fc, audio_of, name_of, host=getattr(q, "vsthost", None)))
+    job.result["timeline_id"] = tl.id
+    job.result["conformed"] = done
+    job.log_tail.append(f"conform: {len(done)} take(s) conformed to 24 fps by RIFE and swapped in (one undo step)" if done
+                        else "conform: nothing to conform (no 16 fps take on the cut, or no RIFE)")
+    return True
+
+
 async def run_movie_filmcraft(job: JobRecord, recipe: Render, q: JobQueue, tl: Any, recs: dict) -> bool:
     """CE1 (proto01_animate 30 §10, D126 #5): the movie of a cut whose file is a FilmCraft project — FilmCraft's own export, run by loom2.
     First each 16 fps take on a 24 fps cut is conformed once by RIFE v4.6 (D27; FilmCraft repeats frames), cached beside its master
-    (`clips/<id>/conform24/`), and swapped into the project for its proxy through the session (`clip.replaceFromBin`, the source in kept);
+    (`clips/<id>/conform24/`), and swapped into the project for its proxy as one undoable change (`_conform_cut`, U7c: before, the live
+    cut changed without an undo step or a revision bump);
     then `filmcraft-cli run` exports the saved project in a process of its own (software decoding, D97) to H.264 + AAC; the file goes to the
     cut's folder and a copy to the Catalogue with lineage to every clip, as RC3's movie."""
     from ..cuts import lines as cut_lines
     from ..cuts import read
-    from ..filmcraft import export_argv, export_script, prefs
-    from ..final_assembly import conform_24, rife_binary
+    from ..filmcraft import export_argv, export_script
     from ..fsio import slugify, utc_now
     from ..trainer import _kill
     from .supervisor import _assign_to_job
     from ..cuts import Cuts
     from ..timelines import story_lookup
-    fc, store, clips = q.filmcraft, TimelineStore(q.ws), ClipStore(q.ws)
+    fc, store = q.filmcraft, TimelineStore(q.ws)
     project = store.export_dir(tl.id) / tl.file
     t0 = time.time()
     name_of, _, audio_of = await asyncio.to_thread(story_lookup, q.ws, q.catalogue)
@@ -1677,42 +1733,13 @@ async def run_movie_filmcraft(job: JobRecord, recipe: Render, q: JobQueue, tl: A
     synced = await asyncio.to_thread(cuts.sync_lines, tl)                              # a line voiced since the cut was made is in the movie
     if synced:
         job.log_tail.append(f"movie (FilmCraft): {synced} spoken line(s) brought onto A1")
+        await asyncio.to_thread(_cut_moved, q, tl.id)                                    # U7c: the clients hear the cut moved
     printed = await asyncio.to_thread(cuts.sync_prints, tl)                            # AU4 (D127): a track with effects is heard through its print
     if printed:
         job.log_tail.append(f"movie (FilmCraft): {printed} track(s) printed through their effects")
-    conformed: list[str] = []
-    if tl.fps == 24 and rife_binary() is not None:
-        await asyncio.to_thread(fc.open, project)
-        doc = await asyncio.to_thread(read, project)
-        its = doc["project"]["items"]
-        seq = next(it["kind"]["Sequence"] for it in its.values() if "Sequence" in it["kind"])
-        v1 = seq["video_tracks"][0]["items"] if seq["video_tracks"] else []
-        for k, it in list(its.items()):
-            meta = it.get("metadata", {})
-            cid = meta.get("loom2.clip")
-            if meta.get("loom2.media") != "proxy" or meta.get("loom2.fps") != "16" or cid not in recs:
-                continue
-            rec, dst = recs[cid], q.ws.path / "clips" / cid / "conform24"
-            got = sorted(dst.glob("*.png"))
-            if len(got) != round((rec.frames - 1) * 24 / 16) + 1:
-                q.progress(job, f"conforming {cid} to 24 fps (RIFE)")
-                got = await asyncio.to_thread(conform_24, clips.frame_path(cid, 0).parent, dst, rec.frames, lambda: job.id in q._cancel_requested) or []
-                q.check_cancel(job)                                                                     # V35: RIFE killed on a cancel
-                if not got:
-                    continue
-            q.check_cancel(job)
-            r = await asyncio.to_thread(fc.batch, [{"id": "prefs.set", "params": {"values": prefs(24)}},                    # RIFE numbers from 1: the first it wrote
-                                                   {"id": "file.import", "params": {"paths": [str(got[0])], "imageSequence": True}}])
-            new = int(r[1]["items"][0])
-            uses = [ti["id"] for ti in v1 if ti["item"] == int(k)]
-            steps = [{"id": "metadata.set", "params": {"item": new, "fields": {**meta, "loom2.media": "conform24"}}}]
-            if uses:
-                steps.append({"id": "clip.replaceFromBin", "params": {"clips": uses, "item": new, "keepSourceIn": True}})
-            steps.append({"id": "project.delete", "params": {"items": [int(k)]}})
-            await asyncio.to_thread(fc.batch, steps)
-            conformed.append(cid)
-        if conformed:
-            await asyncio.to_thread(fc.save)
+    conformed = await _conform_cut(job, q, tl, recs, cuts)                              # U7c: one undoable change, the revision moved on
+    if conformed or synced:
+        tl = await asyncio.to_thread(store.get, tl.id) or tl                              # the movie is made from the cut as it stands now
     job.log_tail.append(f"movie (FilmCraft): {len(conformed)} take(s) conformed to 24 fps by RIFE and swapped in" if conformed
                         else "movie (FilmCraft): nothing to conform (no 16 fps proxy on the cut, or no RIFE)")
     tmp = q.ws.temp_dir / f"movie-{job.id}"

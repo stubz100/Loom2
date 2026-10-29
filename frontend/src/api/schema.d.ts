@@ -5756,6 +5756,7 @@ export interface components {
         Capabilities: {
             advanced: components["schemas"]["AdvancedCaps"];
             content_aware: components["schemas"]["ContentAwareCaps"];
+            cut?: components["schemas"]["CutCaps"] | null;
             /** Defaults */
             defaults: {
                 [key: string]: string;
@@ -6346,11 +6347,42 @@ export interface components {
         };
         /** CutAssembled */
         CutAssembled: {
+            /** Conforming */
+            conforming?: string[];
             report: components["schemas"]["AssembleReport"];
             /** Results */
             results?: unknown[];
             timeline: components["schemas"]["Timeline"];
             tracks: components["schemas"]["CutTracks"];
+        };
+        /**
+         * CutCaps
+         * @description U7c (06 §3, rule 5): the cut editor's facts — FilmCraft and loom2's VST3 host built, RIFE there to conform a 16 fps take as it
+         *     lands, the channel strip's and the grade's ranges.
+         */
+        CutCaps: {
+            /** Available */
+            available: boolean;
+            /** Conform */
+            conform: boolean;
+            /** Grade */
+            grade: {
+                [key: string]: [
+                    number,
+                    number
+                ];
+            };
+            /** Strip */
+            strip: {
+                [key: string]: [
+                    number,
+                    number
+                ];
+            };
+            /** Vst */
+            vst: boolean;
+        } & {
+            [key: string]: unknown;
         };
         /**
          * CutCaption
@@ -7318,7 +7350,7 @@ export interface components {
             [key: string]: unknown;
         };
         /** EventFrame */
-        EventFrame: components["schemas"]["JobEvent"] | components["schemas"]["JobProgressEvent"] | components["schemas"]["JobDeletedEvent"] | components["schemas"]["QueueStateEvent"] | components["schemas"]["EngineStateEvent"] | components["schemas"]["AssetEvent"] | components["schemas"]["AssetDeletedEvent"] | components["schemas"]["CatalogueChangedEvent"] | components["schemas"]["GroupChangedEvent"] | components["schemas"]["DocumentChangedEvent"] | components["schemas"]["StoryChangedEvent"] | components["schemas"]["LoraChangedEvent"] | components["schemas"]["ClipReadyEvent"] | components["schemas"]["ClipUpdatedEvent"] | components["schemas"]["ModelFetchEvent"] | components["schemas"]["ProjectOpenedEvent"] | components["schemas"]["ProjectClosedEvent"] | components["schemas"]["HelloEvent"] | components["schemas"]["VramPressureEvent"] | components["schemas"]["PresetIconsChangedEvent"];
+        EventFrame: components["schemas"]["JobEvent"] | components["schemas"]["JobProgressEvent"] | components["schemas"]["JobDeletedEvent"] | components["schemas"]["QueueStateEvent"] | components["schemas"]["EngineStateEvent"] | components["schemas"]["AssetEvent"] | components["schemas"]["AssetDeletedEvent"] | components["schemas"]["CatalogueChangedEvent"] | components["schemas"]["GroupChangedEvent"] | components["schemas"]["DocumentChangedEvent"] | components["schemas"]["StoryChangedEvent"] | components["schemas"]["LoraChangedEvent"] | components["schemas"]["ClipReadyEvent"] | components["schemas"]["ClipUpdatedEvent"] | components["schemas"]["ModelFetchEvent"] | components["schemas"]["TimelineUpdatedEvent"] | components["schemas"]["ProjectOpenedEvent"] | components["schemas"]["ProjectClosedEvent"] | components["schemas"]["HelloEvent"] | components["schemas"]["VramPressureEvent"] | components["schemas"]["PresetIconsChangedEvent"];
         /** ExpandBody */
         ExpandBody: {
             /**
@@ -14227,6 +14259,11 @@ export interface components {
             /** Captions File */
             captions_file?: ("srt" | "vtt") | null;
             /**
+             * Conform
+             * @default false
+             */
+            conform?: boolean;
+            /**
              * Delivery
              * @default h264
              * @enum {string}
@@ -14237,6 +14274,31 @@ export interface components {
              * @default false
              */
             movie?: boolean;
+        };
+        /** TimelineUpdated */
+        TimelineUpdated: {
+            /** Id */
+            id: string;
+            /** Revision */
+            revision: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** TimelineUpdatedEvent */
+        TimelineUpdatedEvent: {
+            data: components["schemas"]["TimelineUpdated"];
+            /** Seq */
+            seq: number;
+            /**
+             * T
+             * @default 0
+             */
+            t: number;
+            /**
+             * Type
+             * @constant
+             */
+            type: "timeline.updated";
         };
         /**
          * ToolCaps

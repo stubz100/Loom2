@@ -100,8 +100,9 @@ export async function assembleCut(picks: Record<string, string>, name: string | 
   const cur = sq().current
   if (!cur) return
   if (UI2 && isCut()) {                                                       // U7b (D157, 05 §1): the server lays each shot's final, keeping V1's edits
-    const report = await sq().cutAssemble(routePicks(walk.choices), walk.nodes.flatMap((n) => (n.shot_id ? [{ shot_id: n.shot_id, node_id: n.id }] : [])))
-    if (report) useSession.getState().toast(assembledText(cur.name, report), report.missing.length || report.short.length ? 'info' : 'success')
+    const r = await sq().cutAssemble(routePicks(walk.choices), walk.nodes.flatMap((n) => (n.shot_id ? [{ shot_id: n.shot_id, node_id: n.id }] : [])))
+    if (r) useSession.getState().toast(`${assembledText(cur.name, r.report)}${r.conforming.length ? ' · its 16 fps takes conforming to 24 fps (RIFE, one undo step)' : ''}`,
+      r.report.missing.length || r.report.short.length ? 'info' : 'success')
     return
   }
   const { lane, missing } = assembleLane(walk.nodes, st.shots, new Map(clipList().map((c) => [c.id, c])), cur.fps, name === null ? sq().lane : null)

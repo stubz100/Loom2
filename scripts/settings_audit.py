@@ -55,6 +55,7 @@ CAPABILITIES: dict[str, list[str] | None] = {
     "sample_models": ["settings:samples", "recipe:T2I.model_id", "recipe:T2I.width", "recipe:T2I.height"],   # D91: Settings › Samples › Sample model, its sample sizes
     "refine_edge": ["recipe:RefineEdge.radius"],
     "content_aware": ["recipe:Inpaint.mode", "recipe:Inpaint.prefill"],     # D62: Quick Remove, the Remove pre-fill
+    "cut": ["recipe:Render.conform", "settings:audio"],   # U7c: FilmCraft, the VST3 host and RIFE there; the strip's ranges (Settings › Audio's strips) and the grade's
 }
 
 # fields that are not read by the job code on purpose — each with its reason

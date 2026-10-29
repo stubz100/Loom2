@@ -437,6 +437,7 @@ class Render(BaseModel):
     delivery: Literal["h264", "prores"] = "h264"   # CE5 (a FilmCraft cut's movie): H.264 to watch (.mp4) or ProRes 422 HQ to finish (.mov)
     burn_captions: bool = False                    # CE5: the caption track burned into the picture
     captions_file: Literal["srt", "vtt"] | None = None   # CE5: the captions written beside the movie
+    conform: bool = False                          # U7c: a FilmCraft cut's 16 fps takes conformed to its 24 fps by RIFE and swapped in (one undo step), no render
 
 
 class TrainLora(BaseModel):

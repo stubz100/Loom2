@@ -48,6 +48,8 @@
 
 **U6 is built** (2026-10-29 08:05 – 2026-10-29 09:26): D158 in the pipeline (U6a, its rig met: Stay 0/65 faces away, a turning figure 12/12 toward and 2/53 away); Performance and Final inside Shots on the open shot with a take's identity (U6b); the shot's lines on Final's lanes by themselves, lip-sync per speaking character, *Perform the owed layers ▶*, the method on the shot's record (U6c). Owed: Final's lip-sync pass on the rig in the new shell; the speaking close-up's own card. Next: U7, Episode.
 
+**U7 is built** (2026-10-29 09:41 – 2026-10-29 10:22): Episode as its own layer, the FilmCraft cut editor with the route's Finals beside it (U7a); Assemble on the server — each shot at its final (marked, else the latest, a one-pass version's clip), only what changed placed with the author's edits kept, a shot held for its lines or listed, clips named after their shots, the sheet counting the route (U7b, G14, F33, F39, F40); a 16 fps take conformed by RIFE as it lands in one undo step, the cut's changes by jobs heard, a change holding the FilmCraft session whole, the cut editor's ranges in `/capabilities` (U7c). Owed: Sound in Episode's column (with the Bin), Q8's closed lists, a bed across a shot being taken off blocks the Assemble. Next: U8, the Bin and parity.
+
 **The order.** U0 can start at once. U1 and U2 are the foundation. After them, U3 and U4 can run in either order: World first follows the work's order;
 Shots first answers the author's biggest change sooner. U5 and U6 follow U4. Most of U7 can run once U6 has the shot's final.
 

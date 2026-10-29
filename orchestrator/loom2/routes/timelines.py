@@ -98,6 +98,7 @@ class TimelineRender(BaseModel):
     delivery: Literal["h264", "prores"] = "h264"   # CE5 (a FilmCraft cut): H.264 to watch or ProRes 422 HQ to finish
     burn_captions: bool = False                    # CE5: the caption track burned in
     captions_file: Literal["srt", "vtt"] | None = None   # CE5: the captions beside the movie
+    conform: bool = False                          # U7c: the cut's 16 fps takes conformed to its 24 fps by RIFE (one undo step), no render
 
 
 @router.post("/timelines/{tl_id}/render", response_model=JobsSubmitted)
@@ -117,7 +118,8 @@ async def timeline_render(svc: Svc, tl_id: str, body: TimelineRender | None = No
         raise HTTPException(422, f"clips missing from the project: {', '.join(missing)}")
     try:
         delivery = body.model_dump(include={"delivery", "burn_captions", "captions_file"}) if body and body.movie else {}
-        jobs = queue.submit({"kind": "render", "timeline_id": tl_id, "movie": bool(body and body.movie), **delivery},
+        conform = {"conform": True} if body and body.conform and not body.movie else {}
+        jobs = queue.submit({"kind": "render", "timeline_id": tl_id, "movie": bool(body and body.movie), **delivery, **conform},
                             origin=JobOrigin(suite="animate", surface="sequence", ref=tl_id))
     except ValueError as e:
         raise HTTPException(422, str(e))
@@ -140,6 +142,9 @@ async def timeline_export(svc: Svc, tl_id: str, body: TimelineExport):
         path, text = await asyncio.to_thread(store.export, tl, body.format, recs, names, lines, audio)
     except ValueError as e:
         raise HTTPException(422, str(e))
+    after = await asyncio.to_thread(store.get, tl_id)
+    if after is not None and after.revision != tl.revision:              # U7c: the export brought a voiced line onto A1 — the clients hear it
+        svc.hub.broadcast("timeline.updated", {"id": after.id, "revision": after.revision})
     if tl.file:                                                     # CE2: a FilmCraft cut's spoken lines are A1's clips
         from ..cuts import lines as cut_lines
         from ..cuts import read
@@ -306,6 +311,21 @@ class CutAssemble(BaseModel):
 
 class CutAssembled(CutEdited):
     report: AssembleReport
+    conforming: list[str] = Field(default_factory=list)   # U7c: the conform job queued for the cut's 16 fps takes (RIFE to 24, one undo step)
+
+
+def _queue_conform(svc, ws, queue, tl_id: str) -> list[str]:
+    """U7c (05 §1 fix 2): a 16 fps take on a 24 fps cut is conformed by RIFE as it lands — a job of its own (one GPU job at a time, D97),
+    queued when the cut has one and RIFE is there."""
+    from ..cuts import Cuts, read
+    from ..final_assembly import rife_binary
+    tl = TimelineStore(ws).get(tl_id)
+    if tl is None or not tl.file or tl.fps != 24 or rife_binary() is None:
+        return []
+    if not Cuts.to_conform(read(ws.timelines_dir / tl.id / tl.file)):
+        return []
+    jobs = queue.submit({"kind": "render", "timeline_id": tl_id, "conform": True}, origin=JobOrigin(suite="animate", surface="sequence", ref=tl_id))
+    return [j.id for j in jobs]
 
 
 @router.post("/timelines/{tl_id}/assemble", response_model=CutAssembled, response_model_by_alias=True)
@@ -334,7 +354,12 @@ async def timeline_assemble(svc: Svc, tl_id: str, body: CutAssemble):
                                      name=name_of(probe) or sh.name, lines_s=lines_s))
         return [store.cuts.assemble(tl, want, recs, body.route)]
     r = await _cut_call(svc, tl_id, body.revision, run)
-    return {**r, "report": r["results"][0].model_dump(), "results": []}
+    ws, _, queue = svc.require_project()
+    try:
+        conforming = await asyncio.to_thread(_queue_conform, svc, ws, queue, tl_id)
+    except ValueError:
+        conforming = []
+    return {**r, "report": r["results"][0].model_dump(), "results": [], "conforming": conforming}
 
 
 @router.post("/timelines/{tl_id}/strip", response_model=CutEdited, response_model_by_alias=True)

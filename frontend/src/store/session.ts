@@ -8,6 +8,7 @@ import type { Theme } from '../frame/theme'
 import { discoverBackend } from '../shell/tauri'
 import { DEV_HOOKS } from '../devHooks'
 import { publish } from './records'
+import { applyCutRanges } from '../suites/story/episode/cut'
 
 /** A toast's one button (Undo, Play, …); a bare function passed to `toast()` is an Undo. */
 export interface ToastAction { label: string; run: () => void }
@@ -140,6 +141,7 @@ export const useSession = create<SessionState>()(
           unwrap(http.GET('/models')),
         ])
         set({ health, project, recents: projects.recents, engine, settings, capabilities, models: models.items, fetches: models.fetches })
+        if (capabilities.cut) applyCutRanges(capabilities.cut.strip as Record<string, [number, number]>, capabilities.cut.grade as Record<string, [number, number]>)   // U7c
         if (project.open) {
           const [queue, jobs] = await Promise.all([unwrap(http.GET('/queue')), unwrap(http.GET('/jobs'))])
           set({ queue, jobs: Object.fromEntries(jobs.items.map((j) => [j.id, j])) })

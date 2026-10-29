@@ -43,7 +43,9 @@ live beside loom2's chapter markers: the chapters are rebuilt after every change
 """
 from __future__ import annotations
 
+import functools
 import json
+import threading
 from pathlib import Path
 from typing import Any, Callable, Literal
 
@@ -81,6 +83,18 @@ PRINT_BUS = "loom2 · printed sources"              # the muted submix a printed
 def mix_name(revision: int, loudness: float | None) -> str:
     """V39: the cut's mix file, by revision and loudness target (`12-auto.wav`, `12-m16.wav` for −16 LUFS)."""
     return f"{revision}-{'auto' if loudness is None else format(loudness, 'g').replace('-', 'm').replace('.', '_')}.wav"
+
+
+CUT_LOCK = threading.RLock()                       # U7c (06 §3): the FilmCraft session holds one project at a time — a change (its project
+                                                   # opened, the commands, the save) holds it whole, so two requests never interleave in it
+
+
+def _held(fn: Callable[..., Any]) -> Callable[..., Any]:
+    @functools.wraps(fn)
+    def run(*a: Any, **k: Any) -> Any:
+        with CUT_LOCK:
+            return fn(*a, **k)
+    return run
 
 
 class CutError(ValueError):
@@ -582,10 +596,12 @@ class Cuts:
     def path(self, tl_id: str) -> Path:
         return self.ws.timelines_dir / plain_name(tl_id) / CUT_FILE
 
+    @_held
     def forget(self, tl_id: str) -> None:
         """The session closes the cut's project (it is being deleted)."""
         self.fc.close(self.path(tl_id))
 
+    @_held
     def create(self, tl: Timeline) -> Path:
         """A new cut's project, empty, at the cut's format; A1–A3 are the dialogue, music and effects tracks with Settings › Audio's strips."""
         p = self.path(tl.id)
@@ -601,6 +617,7 @@ class Cuts:
         self.fc.save()
         return p
 
+    @_held
     def write(self, tl: Timeline, clips: dict[str, ClipRecord]) -> None:
         """Rebuild V1 and A1's lines from `tl`'s lane (making the project first when the cut has none), set the route, save."""
         p = self.path(tl.id)
@@ -675,6 +692,7 @@ class Cuts:
             have[-1].unlink()
         self.fc.open(p, reload=True)
 
+    @_held
     def changing(self, tl: Timeline, fn: Callable[[Path], Any]) -> Any:
         """Run a change on the cut's project (snapshotted first); FilmCraft's refusal rolls it back."""
         p = self._open(tl)
@@ -689,6 +707,7 @@ class Cuts:
         p = self.path(tl.id)
         return len(self._stack(p, "undo")), len(self._stack(p, "redo"))
 
+    @_held
     def undo(self, tl: Timeline, redo: bool = False) -> dict:
         """The cut's project as it was before its last change (`redo`: after the change undone last); the session reopens it."""
         p = self.path(tl.id)
@@ -956,6 +975,7 @@ class Cuts:
             return {"track": track, "fx": fx, "state": rel}
         return self.changing(tl, run)
 
+    @_held
     def sync_prints(self, tl: Timeline) -> int:
         """Print every audio track with an effect on whose print is not current; take away the prints of tracks with none (or gone), their
         source back to the Mix; keep each companion's width, volume, pan and mute the source's. Returns the tracks printed. Not a change of
@@ -1203,6 +1223,7 @@ class Cuts:
             return {"track": track, "captions": len(cues)}
         return self.changing(tl, run)
 
+    @_held
     def frame(self, tl: Timeline, seconds: float, side: int) -> bytes:
         self._open(tl, change=False)
         return self.fc.frame(seconds, side)
@@ -1218,6 +1239,7 @@ class Cuts:
         except subprocess.TimeoutExpired:
             raise CutError(f"FilmCraft did not {what} within {self.fc.settings.timeout_s} s — the export was stopped")
 
+    @_held
     def mix(self, tl: Timeline, loudness: float | None) -> Path:
         """CE3: the cut's sound as FilmCraft mixes it — a WAV of every audio track (gain, fades, ducking, the tracks' volume), at the movie's
         loudness — kept per revision and loudness in `timelines/<id>/mix/` (the older ones go): what the page plays with the picture.
@@ -1236,6 +1258,7 @@ class Cuts:
                 old.unlink(missing_ok=True)
         return out
 
+    @_held
     def interchange(self, tl: Timeline, fmt: str, out: Path) -> str:
         """FilmCraft's own FCPXML or EDL of the cut (everything the project holds), written to `out`. AU4: the prints stand for their
         sources — a process of its own deletes the printed sources before it exports (the project untouched)."""
@@ -1325,6 +1348,7 @@ class Cuts:
                                                                                   "loom2.line": str(cue.get("line", 0))}}}])
         return item
 
+    @_held
     def sync_lines(self, tl: Timeline) -> int:
         """Before an export or the movie: a voiced line not on A1 yet is placed where the exports lay it (its shot's lines evenly across the
         shot's run on V1, pushed past a clip already there); a line voiced anew plays its new audio in place; a line the author moved stays.
@@ -1384,6 +1408,42 @@ class Cuts:
         known = sorted(gone | {f"{c.get('node')}:{c.get('line')}" for _, c in missing})
         steps.append({"id": "metadata.set", "params": {"item": seq_id, "fields": {"loom2.lines": json.dumps(known)}}})
         return steps
+
+    @staticmethod
+    def to_conform(doc: dict) -> list[tuple[str, int, dict]]:
+        """U7c: the cut's 16 fps takes that play their proxies — (clip, project item, its links)."""
+        return [(it["metadata"]["loom2.clip"], int(k), it["metadata"]) for k, it in items(doc).items()
+                if it.get("metadata", {}).get("loom2.media") == "proxy" and it["metadata"].get("loom2.fps") == "16" and it["metadata"].get("loom2.clip")]
+
+    def conform(self, tl: Timeline, ready: dict[str, list[Path]]) -> list[str]:
+        """U7c (05 §1 fix 2): each 16 fps take whose RIFE frames at 24 are `ready` plays them in place of its proxy — the frames imported
+        once (an image sequence at 24 with the take's links), its uses swapped (`clip.replaceFromBin`, the source in kept), the proxy's
+        item gone — as one change (one undo step). Returns the clips swapped."""
+        if not any(cid in ready for cid, _, _ in self.to_conform(read(self.path(tl.id)))):
+            return []
+
+        def run(p: Path) -> list[str]:
+            doc = read(p)
+            _, _, seq = sequence(doc)
+            v1 = seq["video_tracks"][0]["items"] if seq["video_tracks"] else []
+            done: list[str] = []
+            for cid, k, meta in self.to_conform(doc):
+                if cid not in ready:
+                    continue
+                r = self.fc.batch([{"id": "prefs.set", "params": {"values": prefs(24)}},              # RIFE numbers from 1: the first it wrote
+                                   {"id": "file.import", "params": {"paths": [str(ready[cid][0])], "imageSequence": True}}])
+                new = int(r[1]["items"][0])
+                uses = [ti for ti in v1 if ti["item"] == k]
+                steps = [{"id": "metadata.set", "params": {"item": new, "fields": {**meta, "loom2.media": "conform24"}}}]
+                if uses:
+                    steps.append({"id": "clip.replaceFromBin", "params": {"clips": [ti["id"] for ti in uses], "item": new, "keepSourceIn": True}})
+                    steps += [{"id": "clip.rename", "params": {"clip": ti["id"], "name": ti["name"]}} for ti in uses if ti.get("name")]   # F40: still its shot's
+                steps.append({"id": "project.delete", "params": {"items": [k]}})
+                self.fc.batch(steps)
+                done.append(cid)
+            self._markers(p)
+            return done
+        return self.changing(tl, run)
 
     # ---- U7b (D157, proto01_UI2 05 §1, 06 §3; G14): Assemble from the Flow, placing only what changed ---------------------------
     def assemble(self, tl: Timeline, want: list[AssembleShot], records: dict[str, ClipRecord], route: dict[str, str] | None) -> AssembleReport:
@@ -1466,7 +1526,7 @@ class Cuts:
                     at = max((x.start + x.duration for x in (cur.video[0].items if cur.video else [])), default=0.0)
                 rec = records[w.clip_id]
                 item = self._media_item(doc_now(), tl, (w.clip_id, w.shot_id, w.version, w.node_id or ""), rec)
-                length = max(1, round(rec.frames * fps / rec.fps))
+                length = max(1, rec.frames * fps // rec.fps)                       # never past its source's end (17 at 16 fps: 25 at 24)
                 placed = self.fc.batch([{"id": "timeline.place", "params": {"item": item, "track": "V1", "time": ticks(at, fps), "insert": True, "audio": False,
                                                                           "sourceIn": 0, "duration": ticks(length, fps)}}])
                 firsts[i] = int(placed[0]["clips"][0])

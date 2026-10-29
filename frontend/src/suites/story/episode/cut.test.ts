@@ -1,7 +1,7 @@
 // CE2 (D126): a gesture on the tracks as the FilmCraft command it asks for.
 import { describe, expect, it } from 'vitest'
 import type { CutItem, CutTrack, CutTracks } from '../../../api/types'
-import { clampTrim, dragStep, gripAt, itemAt, razorStep, TICK, trackRef, transitionStep, underSceneGrade } from './cut'
+import { applyCutRanges, clampTrim, dragStep, GRADE_SLIDERS, gripAt, itemAt, razorStep, STRIP, TICK, trackRef, transitionStep, underSceneGrade } from './cut'
 
 const item = (id: number, start: number, duration: number, kind: CutItem['kind'] = 'take'): CutItem =>
   ({ id, item: id + 100, name: `c${id}.png`, kind, start, duration, source_in: 0, speed: 1, reverse: false, enabled: true, hold: false } as unknown as CutItem)
@@ -101,5 +101,19 @@ describe('a scene grade over a take (RC2f)', () => {
     expect(underSceneGrade(t, { start: 150, duration: 50 })).toBe(true)
     expect(underSceneGrade(t, { start: 300, duration: 50 })).toBe(false)                     // after it
     expect(underSceneGrade({ ...t, video: [t.video[0], { ...t.video[1], name: 'V2' }] } as CutTracks, { start: 150, duration: 50 })).toBe(false)   // not the Grade track
+  })
+})
+
+describe('U7c (06 §3, rule 5): the cut editor reads its ranges from /capabilities', () => {
+  it("takes the server's strip and grade ranges, keeping its own where the server names none", () => {
+    const was = { strip: { ...STRIP }, grade: GRADE_SLIDERS.map((g) => [...g.range] as [number, number]) }
+    try {
+      applyCutRanges({ gain_db: [-24, 24], width: [0, 150] }, { exposure: [-3, 3] })
+      expect([STRIP.gain_db, STRIP.width, STRIP.pan]).toEqual([[-24, 24], [0, 150], [-100, 100]])
+      expect(GRADE_SLIDERS.find((g) => g.key === 'exposure')!.range).toEqual([-3, 3])
+      expect(GRADE_SLIDERS.find((g) => g.key === 'tint')!.range).toEqual([-100, 100])
+    } finally {
+      Object.assign(STRIP, was.strip); GRADE_SLIDERS.forEach((g, i) => { g.range = was.grade[i] })
+    }
   })
 })

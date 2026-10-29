@@ -74,7 +74,7 @@ def capabilities(svc: Services) -> dict:
             "reangle": _reangle(svc, variant),                                 # P14 (D82): the Angle tab's moves and methods
             "instruct": _instruct(svc, variant),                               # D151: the AI tab's edit by instruction
             "stage": _stage(svc, variant),                                     # P13 ST3 (D78): the Shot tab's methods and passes
-            "mesh": _mesh(svc, variant), "story": _story(svc, variant), "train": _train(svc, variant), "voice": _voice(svc, variant), "experimental": _experimental(svc, variant)}   # LT2 (D86): the LoRA trainer                                       # P18 (D84): image → mesh props
+            "mesh": _mesh(svc, variant), "story": _story(svc, variant), "train": _train(svc, variant), "voice": _voice(svc, variant), "experimental": _experimental(svc, variant), "cut": _cut(svc)}   # LT2 (D86): the LoRA trainer                                       # P18 (D84): image → mesh props
 
 
 def _sample_models(svc: Services, variant: str) -> list[dict]:
@@ -213,6 +213,16 @@ EXTEND_CAVEAT = ("experimental (E17): the join is seamless on LTX, but the chara
                  "of the frame; Wan continues from the last frame (a visible seam is possible)")
 LIPSYNC_CAVEAT = ("experimental (E18): English lines only, up to 4.8 s; the lips follow most English lines (sync 0.5–0.7) but not every one; "
                   "≈ 16 min a line at Draft, ≈ 9 min at Fast — staged by default")
+
+
+def _cut(svc: Services) -> dict:
+    """U7c (06 §3, rule 5): the cut editor's facts and ranges — the editor kept its own copies of the strip's and the grade's."""
+    from .config import STRIP_GAIN_DB, STRIP_PAN, STRIP_VOLUME_DB, STRIP_WIDTH
+    from .cuts import GRADE_PARAMS
+    from .final_assembly import rife_binary
+    fc, host = getattr(svc, "filmcraft", None), getattr(svc, "vsthost", None)
+    return {"available": bool(fc is not None and fc.available()), "vst": bool(host is not None and host.available()), "conform": rife_binary() is not None,
+            "strip": {"gain_db": STRIP_GAIN_DB, "volume_db": STRIP_VOLUME_DB, "pan": STRIP_PAN, "width": STRIP_WIDTH}, "grade": dict(GRADE_PARAMS)}
 
 
 def _experimental(svc: Services, variant: str) -> dict:

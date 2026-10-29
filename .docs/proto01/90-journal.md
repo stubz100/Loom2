@@ -12640,3 +12640,62 @@ Next is U7c:
 - the cut's capabilities in `/capabilities`;
 - `sync_lines` bumping the revision;
 - a per-cut lock.
+
+## 2026-10-29 10:22 — U7c: U7 closed — a 16 fps take conformed by RIFE as it lands (one undo step), the cut's changes by jobs heard, a change holding the FilmCraft session whole, the cut editor's ranges in /capabilities (D157; proto01_UI2 05 §1, 06 §3; G14)
+
+**The conform as the take lands** (05 §1 fix 2):
+
+- *Assemble* queues a conform job when the cut is at 24 fps, has a 16 fps take playing its proxy, and RIFE is there. The job is a render
+  recipe with `conform` (CPU, one job at a time, D97), and the reply's `conforming` names it.
+- The job conforms each such take once by RIFE v4.6, cached beside its master (`clips/<id>/conform24/`). It swaps the frames in for the
+  proxy as one change of the cut (`Cuts.conform`):
+  - the take keeps its place, length, source in and name;
+  - the cut's revision moves on, and the page hears it;
+  - the cut's undo takes it back.
+- The movie uses the same step. Before, it was the only place a take was conformed, and it changed the live cut without an undo step or a
+  revision bump.
+- A placed take's length is rounded down now, so it never runs past its source: 17 frames at 16 fps is 25 at 24, not 26.
+
+**The cut's changes heard** (06 §3):
+
+- A job that changes a cut moves its revision on and broadcasts `timeline.updated`. This covers the conform, and a line the movie brings
+  onto A1.
+- An export that brings a voiced line onto A1 does the same (`sync_lines` bumps the revision).
+- The event is in the contract now (`TimelineUpdatedEvent`). The page reads the open cut again when its revision moved past the page's,
+  except during its own change (whose reply brings the revision).
+
+**A change holds the FilmCraft session whole** (06 §3: the session switches projects between requests). `cuts.CUT_LOCK` is a re-entrant lock
+held across every change: the project opened, the commands, the save. It also covers the undo, the syncs, the mix, the interchange exports
+and the viewer's frame. Two requests no longer interleave in the one session. The effect editor's window is not held, only its change.
+
+**The cut editor's facts in `/capabilities`** (rule 5): `cut` names whether FilmCraft, the VST3 host and RIFE are there, the channel strip's
+ranges and the grade's. The editor takes its ranges from it (`applyCutRanges`); before, it kept its own copies (`cut.ts`).
+
+**On the real FilmCraft** (the built CLI), `test_cuts_u7b.py` and `test_cuts_u7c.py` pass as they stand: the swap, the names kept, the
+undo.
+
+**Tests:**
+
+- `test_cuts_u7c.py`, 3 tests:
+  - the conform job queued by the Assemble, the swap in place, one undo step, the revision moved, nothing to conform the next time;
+  - the export moving the revision, and the lock;
+  - the capabilities.
+- `cut.test.ts` + 1 (the ranges), `sequenceStore.test.ts` + 1 (the cut read again).
+- The U7b e2e scenario waits for the conform where RIFE is installed (it is here, not in CI).
+
+**Checks:** offline 730 passed; Vitest 641 + 3 skipped; typecheck, build and lint clean; e2e 90/90 alone (the Assemble scenario through the real RIFE conform); `agents_check`,
+`model_literals_check` and `settings_audit` (321, 0; `cut` mapped) clean; the API contract regenerated.
+
+**U7 is built:**
+
+- Episode as its own layer with the route's Finals (U7a);
+- the server's Assemble: finals only, the author's edits kept, held or listed, named (U7b);
+- the conform on landing, the changes heard, the lock, the capabilities (U7c).
+
+**Owed:**
+
+- Sound, the project's audio imports in Episode's left column — goes with the Bin (U8);
+- Q8: the closed lists (a duration field, FilmCraft's other transitions), not opened;
+- a bed across a shot being taken off blocks the Assemble (FilmCraft's sync rule).
+
+Next is U8: the Bin and parity.

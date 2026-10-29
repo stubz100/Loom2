@@ -57,6 +57,7 @@ function route(f: RecordFrame): void {
         void import('../suites/stage/stageStore').then((m) => m.useStage.getState().onAssetDeleted(String((f.data as { id?: string } | null)?.id ?? '')))
       return
     case 'clip.updated': void import('../suites/animate/animateStore').then((m) => m.useAnimate.getState().onClipUpdated(f.data)); return
+    case 'timeline.updated': void import('../suites/story/episode/sequenceStore').then((m) => m.onTimelineUpdated(f.data)); return
     case 'clip.ready': void import('../suites/animate/animateStore').then((m) => m.useAnimate.getState().onClipReady(f.data)); return
     case 'document.changed': void import('../suites/edit/editorStore').then((m) => m.useEditor.getState().onDocumentChanged(f.data)); return
     case 'story.changed': {                                       // 17 (D85): the world (later profiles, shots, the flow) moved on the server

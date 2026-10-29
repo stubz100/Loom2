@@ -12452,3 +12452,48 @@ picked, kept across a trip to Clay; *To Final ▸* to Final with *Mark the shot 
 **Checks:** offline 723 passed (no backend change); Vitest 635 + 3 skipped; typecheck, build and lint clean; e2e 88/88 (alone).
 
 Next: the GPU checks the author asked for — a performance through the app's route on Stay (D158's wiring), and a turning figure.
+
+## 2026-10-29 08:46 — D158's rig set up: a turned figure through the app's own route, and a turning figure — the bars before the run (D158; proto01_UI2 04 §4)
+
+The author: U6b first, then the GPU runs. `scripts/d158_rig.py` (with `d158_make_final.cjs`) runs alone on the GPU against the copy of The Last
+Ferry: the orchestrator and the preview server started by it, the finals made in the new shell in headless Edge (so their pose passes are
+today's), each figure layer performed by `POST /finals/{fid}/layers/{lid}/run`.
+
+- **A — Stay:** a new final, Ines's layer performed. Bars: the take done; the reply *from behind* with *the back view*; no nose on the
+  guide's first frame; a face on ≤ 20 % of the away frames.
+- **B — a turning figure:** Stay's stage copied with Ines standing and turning from the camera to away over frames 0–36, then holding,
+  as a shot of its own. Bars: the take done; performed from behind (mostly away); a face on ≤ 20 % of its away frames and on ≥ 50 % of the
+  frames facing the camera — the guide keeps the face there while the batch's reference is the back view.
+
+## 2026-10-29 08:54 — D158's rig measured: a turned figure through the app's own route, and a turning figure — every bar met (D158; proto01_UI2 04 §4)
+
+`scripts/d158_rig.py` ran alone on the GPU against the copy of The Last Ferry. The orchestrator, the preview server and the engine were
+started and stopped by it, and the finals were made in the new shell in headless Edge, so their passes are today's. Results:
+`engine/spikes/out/d158/` (results_A.json, results.json, sheet.jpg).
+
+**A — Stay** (fin_7d79fc6b, Ines's layer, 65 frames, all facing away):
+
+- the take done in 212 s;
+- the reply *from behind* with *the back view* (the back A-pose placed where she starts);
+- the guide's first frame black at the nose;
+- a frontal face on **0 of 65** away frames.
+
+The sheet shows her back the whole way, the hood and the satchel's strap: the walkthrough's fault (F42) is gone through the app itself.
+
+**B — a turning figure** (fin_c539ec68, Stay's stage copied, Ines standing and turning from the camera to away over frames 0–36, then
+holding; a shot of its own):
+
+- the take done in 196 s;
+- performed from behind (53 of 65 frames face away), from the back view;
+- a face on **12 of 12** frames facing the camera and on **2 of 53** away frames (the turn itself).
+
+The sheet: her face and the coat's front at frame 0, her profile mid-turn, her back after. The guide keeps the face where she faces the
+camera, even with the back view as the batch's reference.
+
+One flaw seen: a small red blot by her feet on a mid-turn frame (the model's, not the guide's).
+
+**Against the bars:** all met (A: done, from behind with the back view, no nose, 0 % ≤ 20 %; B: done, from behind, 3.8 % ≤ 20 %, 100 % ≥
+50 %).
+
+D158 is confirmed on the rig. The first run of the rig stopped after A's checks on printing a ≤ to the Windows console (A's results were
+already saved); the script writes UTF-8 now and B ran alone after it.

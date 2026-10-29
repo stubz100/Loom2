@@ -17836,6 +17836,17 @@
             "title": "Node Ids",
             "type": "array"
           },
+          "stage_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Id"
+          },
           "updated_at": {
             "title": "Updated At",
             "type": "string"
@@ -17846,6 +17857,7 @@
           "name",
           "colour",
           "cast_versions",
+          "stage_id",
           "created_at",
           "updated_at",
           "node_ids"
@@ -19175,6 +19187,52 @@
         "title": "ShotList",
         "type": "object"
       },
+      "ShotNodeCreate": {
+        "description": "U2 (D157, G12): a new Shot with its scene, stage and camera.",
+        "properties": {
+          "after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the node it follows: placed beside it and connected after it",
+            "title": "After"
+          },
+          "place_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "a new scene from this World place's set; else the shot before's place",
+            "title": "Place Id"
+          },
+          "scene": {
+            "default": "new",
+            "description": "a new scene (and stage), or the same scene as the shot before (a new camera)",
+            "enum": [
+              "new",
+              "same"
+            ],
+            "title": "Scene",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "title": "ShotNodeCreate",
+        "type": "object"
+      },
       "ShotRecipe": {
         "properties": {
           "steps": {
@@ -19399,6 +19457,20 @@
             "title": "Id",
             "type": "string"
           },
+          "range": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Range"
+          },
           "recipe": {
             "anyOf": [
               {
@@ -19460,7 +19532,8 @@
           "derived_from",
           "created_at",
           "finalized_at",
-          "recipe"
+          "recipe",
+          "range"
         ],
         "title": "ShotVersion",
         "type": "object"
@@ -32712,6 +32785,48 @@
           }
         },
         "summary": "Node Voice",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/flow/shots": {
+      "post": {
+        "description": "U2 (D157, G12; proto01_UI2 04 §7): *New shot* — the node, its scene, the scene's stage and a camera of its own in one call.",
+        "operationId": "flow_shot_create_story_flow_shots_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShotNodeCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlowNode"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Flow Shot Create",
         "tags": [
           "story"
         ]

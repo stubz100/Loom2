@@ -781,6 +781,7 @@ class SceneOut(Out):
     name: str
     colour: str | None
     cast_versions: dict[str, str]
+    stage_id: str | None = None                     # U2 (D157, G6): the scene's stage
     created_at: str
     updated_at: str
     node_ids: list[str]

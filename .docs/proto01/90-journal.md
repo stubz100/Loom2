@@ -11488,3 +11488,46 @@ homes and roles, and the Look as a record.
 
 **Looked at** in headless Edge on the production preview: a node posted as `dialogue` comes back a Shot. Its card shows the line and the
 action, the Inspector has the action and the Lines, its pills owe voice, and the strip offers no Dialogue.
+
+## 2026-10-29 01:28 — U2b (G6 + G12): a scene owns its stage, a shot is a camera of its own over a range, and *New shot* in one call (D157 Q2, proto01_UI2 04 §1, 06 §2.3)
+
+**A camera serves one shot.**
+
+- `StoryStore._own_camera`: `set_source` (*Link a stage camera*, *Use this camera for …*) and `create_shot` (*New shot from this camera*)
+  give a shot a copy of a camera that another shot already looks through ("Camera 1 2", its keys with it), instead of sharing it.
+- A stage that is gone keeps the link as given (nothing to copy).
+- `copy_camera` is the copy *New Shot from this Shot* already made, now shared.
+
+**A scene owns its stage.**
+
+- `Scene.stage_id` (scenes.json schema 2; `SceneOut` carries it).
+- A shot linked to a stage claims it for a scene that has none; *New Shot from this Shot* keeps it.
+- `migrate_u2_scenes`, once at open on a book of schema 1: a scene whose Shots look at one stage owns it ("U2: N scenes own their stage
+  now").
+- **Not migrated in U2, on purpose:** shots that already share a camera, and shots without a stage. Splitting a shared camera adds a
+  camera to an existing stage, which bumps its revision and marks every frame on it stale in the current UI. Giving a stageless shot a stage
+  moves today's image-to-video shots onto the stage route. Both come with U4's single `clay` recipe template (G7), when Run stale re-plans
+  the clay steps.
+
+**A shot's range:** `ShotVersion.range {start, end}` on its scene's timeline (`null` is the stage's range), checked by `check_shot` and
+patchable on an open version.
+
+**G12, `POST /story/flow/shots`** (`StoryStore.make_shot`): the Shot node, its scene, the scene's stage and its camera in one call, placed
+beside `after` and put between it and the node it led to.
+
+- `scene: "same"` (coverage) adds a new camera on the scene of the shot before.
+- `scene: "new"` makes a stage from a World place's built set, seen from its picture's camera (`StageStore.scene_stage`); the place is
+  `place_id`, else the shot before's. Without a place it is an empty stage.
+- A logic node before it is not connected. Refused: an unknown node (404), a shot before without a stage for `same`, a profile that is not a
+  place (422).
+
+**Tests:**
+
+- `test_scene_shot_u2.py` (3): the camera rule through `set_source` and `create_shot`, the range, the scene's stage and its one-time
+  migration, and the route in both modes with its edges and refusals;
+- the D37 route snapshot gains the route.
+
+**Checks:** offline 701 passed; Vitest 611 + 3 skipped (a fixture with the range); typecheck, build and lint clean; e2e 79/79 (alone);
+`agents_check`, `model_literals_check` and `settings_audit` (319, 0) clean; the API contract regenerated.
+
+No visible change in the current UI: a second link to a taken camera now gets a camera of its own.

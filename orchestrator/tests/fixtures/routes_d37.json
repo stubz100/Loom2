@@ -200,6 +200,7 @@
  "POST /story/flow/nodes/{nid}/sibling",
  "POST /story/flow/nodes/{nid}/unbind",
  "POST /story/flow/nodes/{nid}/voice",
+ "POST /story/flow/shots",
  "POST /story/flow/validate",
  "POST /story/flow/voice",
  "POST /story/ideas",

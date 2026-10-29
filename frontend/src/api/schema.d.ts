@@ -2843,6 +2843,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/flow/shots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Flow Shot Create
+         * @description U2 (D157, G12; proto01_UI2 04 §7): *New shot* — the node, its scene, the scene's stage and a camera of its own in one call.
+         */
+        post: operations["flow_shot_create_story_flow_shots_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/flow/validate": {
         parameters: {
             query?: never;
@@ -11718,6 +11738,8 @@ export interface components {
             name: string;
             /** Node Ids */
             node_ids: string[];
+            /** Stage Id */
+            stage_id: string | null;
             /** Updated At */
             updated_at: string;
         };
@@ -12234,6 +12256,34 @@ export interface components {
             /** Items */
             items: components["schemas"]["Shot"][];
         };
+        /**
+         * ShotNodeCreate
+         * @description U2 (D157, G12): a new Shot with its scene, stage and camera.
+         */
+        ShotNodeCreate: {
+            /**
+             * After
+             * @description the node it follows: placed beside it and connected after it
+             */
+            after?: string | null;
+            /**
+             * Place Id
+             * @description a new scene from this World place's set; else the shot before's place
+             */
+            place_id?: string | null;
+            /**
+             * Scene
+             * @description a new scene (and stage), or the same scene as the shot before (a new camera)
+             * @default new
+             * @enum {string}
+             */
+            scene?: "new" | "same";
+            /**
+             * Title
+             * @default
+             */
+            title?: string;
+        };
         /** ShotRecipe */
         ShotRecipe: {
             /** Steps */
@@ -12319,6 +12369,10 @@ export interface components {
             frame_asset_id: string | null;
             /** Id */
             id: string;
+            /** Range */
+            range: {
+                [key: string]: number;
+            } | null;
             recipe: components["schemas"]["ShotRecipe"] | null;
             /** Stage Id */
             stage_id: string | null;
@@ -19747,6 +19801,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TtsQueued"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    flow_shot_create_story_flow_shots_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShotNodeCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FlowNode"];
                 };
             };
             /** @description Validation Error */

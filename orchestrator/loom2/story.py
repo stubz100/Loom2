@@ -319,6 +319,7 @@ class ShotVersion(BaseModel):
     created_at: str = Field(default_factory=utc_now)
     finalized_at: str | None = None
     recipe: ShotRecipe | None = None              # RC0 (D96, 05 §4): the steps that made the frame and the clip, their runs and stamps (shot_recipe.py)
+    range: dict[str, int] | None = None           # U2 (D157, G6): the frames of its scene's timeline it covers {start, end}; None: the stage's range
 
 
 class Shot(BaseModel):
@@ -352,6 +353,31 @@ def check_shot(s: Shot) -> None:
     for v in s.versions:
         if (v.stage_id is None) != (v.camera_id is None):
             raise ValueError(f"version {v.id}: a stage source names both the stage and the camera")
+        if v.range is not None and not (0 <= int(v.range.get("start", -1)) <= int(v.range.get("end", -2))):
+            raise ValueError(f"version {v.id}: a range is {{start, end}} with 0 ≤ start ≤ end")
+
+
+def copy_camera(ws: Any, stage_id: str, camera_id: str) -> tuple[Any, Any]:
+    """A camera of the stage copied as a new one ("Camera 1 2"), its keys with it — a shot's own camera (U2, G6: a camera serves one shot).
+    (the stage as saved, the copy)."""
+    from .stages import StageStore
+    stages = StageStore(ws)
+    st = stages.get(stage_id)
+    cam = next((c for c in st.cameras if c.id == camera_id), None) if st is not None else None
+    if st is None or cam is None:
+        raise ValueError(f"the stage or its camera {camera_id} does not exist")
+    names = {c.name for c in st.cameras}
+    k = 2
+    while f"{cam.name} {k}" in names:
+        k += 1
+    copy = cam.model_copy(update={"id": new_id("cam"), "name": f"{cam.name} {k}"})
+    keys = dict(st.keyframes or {})
+    camkeys = dict(keys.get("camera") or {})
+    if camera_id in camkeys:
+        camkeys[copy.id] = [dict(x) if isinstance(x, dict) else x for x in camkeys[camera_id]]
+    keys["camera"] = camkeys
+    st = stages.put(st.id, {"revision": st.revision, "cameras": [*[c.model_dump() for c in st.cameras], copy.model_dump()], "keyframes": keys})
+    return st, copy
 
 
 FORMAT_GRID = 32                                  # the video models' size grids (Wan ×16, LTX ×32, 11 §3c): a Full clip is 1920×1088 or 1920×1056
@@ -535,7 +561,7 @@ class NodeRecord(FlowNode):
 
 
 # ---- scene groups (RC2c, proto01_animate 31 §3b) ----------------------------------------------------------------------------------------
-SCENES_SCHEMA_VERSION = 1
+SCENES_SCHEMA_VERSION = 2                          # U2 (D157, G6): 2 — a scene owns its stage (`Scene.stage_id`)
 
 
 class Scene(BaseModel):
@@ -546,6 +572,7 @@ class Scene(BaseModel):
     name: str
     colour: str | None = None
     cast_versions: dict[str, str] = Field(default_factory=dict)   # RC2f: the versions its Shots wear (linked); a node with `own` cast keeps its own
+    stage_id: str | None = None                   # U2 (D157, G6): the scene's stage — its shots are cameras on it
     created_at: str = Field(default_factory=utc_now)
     updated_at: str = Field(default_factory=utc_now)
 
@@ -959,6 +986,9 @@ class _ShotMixin:
         takes = [ShotTake(kind="image", id=frame_asset_id)] if frame_asset_id else []
         if clip_id:
             takes.append(ShotTake(kind="clip", id=clip_id))
+        if stage_id and camera_id:
+            camera_id, rev = self._own_camera(stage_id, camera_id, None)
+            stage_revision = rev if rev is not None else stage_revision
         v = ShotVersion(id="v1", stage_id=stage_id, camera_id=camera_id, stage_revision=stage_revision if stage_id else None, frame_asset_id=frame_asset_id, clip_id=clip_id, takes=takes)
         part = ShotPart(versions=[v])
         check_shot(Shot(id=part.id, name=name, current="v1", versions=[v]))
@@ -995,9 +1025,9 @@ class _ShotMixin:
                 v = next((x for x in part.versions if x.id == patch.get("id")), None)
                 if v is None:
                     raise ValueError(f"no version {patch.get('id')!r}")
-                if v.state != "open" and any(k in patch for k in ("frame_asset_id", "clip_id", "stage_id", "camera_id")):
+                if v.state != "open" and any(k in patch for k in ("frame_asset_id", "clip_id", "stage_id", "camera_id", "range")):
                     raise ValueError(f"version {v.id} is final — its frame and clip are fixed; make a new version")
-                for k in ("frame_asset_id", "clip_id", "stage_id", "camera_id", "stage_revision"):
+                for k in ("frame_asset_id", "clip_id", "stage_id", "camera_id", "stage_revision", "range"):
                     if k in patch:
                         setattr(v, k, patch[k])
             part = part.model_copy(update={"current": data.get("current", part.current), "revision": part.revision + 1, "updated_at": utc_now()})
@@ -1012,14 +1042,36 @@ class _ShotMixin:
         follows the source (RC0: `stage` for a stage camera's shot) unless one was chosen."""
         if (stage_id is None) != (camera_id is None):
             raise ValueError("a stage source names both the stage and the camera")
+        with _LOCK:
+            if stage_id and camera_id:                                        # U2 (G6): a camera serves one shot — another's is copied for this one
+                camera_id, rev = self._own_camera(stage_id, camera_id, sid)
+                stage_revision = rev if rev is not None else stage_revision
 
-        def apply(part: ShotPart, r: NodeRecord) -> ShotPart:
-            v = part.version(vid)
-            if v.state != "open":
-                raise ValueError(f"{r.as_shot().name} {vid} is final — make a new version to change its source")
-            upd = {"stage_id": stage_id, "camera_id": camera_id, "stage_revision": stage_revision if stage_id else None}
-            return part.model_copy(update={"versions": [x.model_copy(update=upd) if x.id == vid else x for x in part.versions]})
-        return self._change_part(sid, apply)
+            def apply(part: ShotPart, r: NodeRecord) -> ShotPart:
+                v = part.version(vid)
+                if v.state != "open":
+                    raise ValueError(f"{r.as_shot().name} {vid} is final — make a new version to change its source")
+                upd = {"stage_id": stage_id, "camera_id": camera_id, "stage_revision": stage_revision if stage_id else None}
+                return part.model_copy(update={"versions": [x.model_copy(update=upd) if x.id == vid else x for x in part.versions]})
+            s = self._change_part(sid, apply)
+            holder = self._holder(sid)                                        # type: ignore[attr-defined]
+            if stage_id and holder is not None and holder.scene_id:
+                self._scene_stage(holder.scene_id, stage_id, only_if_none=True)   # type: ignore[attr-defined]
+            return s
+
+    def _camera_users(self, stage_id: str, camera_id: str) -> set[str]:
+        """U2 (G6): the shots any version of which looks through this stage camera."""
+        return {r.shot.id for r in self._records().values()                        # type: ignore[attr-defined]
+                if r.shot is not None and any(v.stage_id == stage_id and v.camera_id == camera_id for v in r.shot.versions)}
+
+    def _own_camera(self, stage_id: str, camera_id: str, sid: str | None) -> tuple[str, int | None]:
+        """U2 (G6): the camera a shot may look through — this one when no other shot does, else a copy made for it (coverage: a new camera
+        where the other stood). (the camera, the stage's new revision when a copy was made)."""
+        from .stages import StageStore
+        if not (self._camera_users(stage_id, camera_id) - ({sid} if sid else set())) or StageStore(self.ws).get(stage_id) is None:   # type: ignore[attr-defined]
+            return camera_id, None                                            # free, or a stage that is gone (nothing to copy; the link is advisory)
+        st, copy = copy_camera(self.ws, stage_id, camera_id)               # type: ignore[attr-defined]
+        return copy.id, st.revision
 
     def new_shot_version(self, sid: str) -> Shot:
         """A copy of the current version's pointers (the source, the frame and the clip — no files, no takes), open, now the current one."""
@@ -1621,6 +1673,87 @@ class _FlowMixin:
         if len(keep) != len(b.scenes):
             self._save_book(b.model_copy(update={"scenes": keep, "revision": b.revision + 1}))
 
+    def _scene_stage(self, scene_id: str, stage_id: str | None, *, only_if_none: bool = False) -> None:
+        """U2 (G6): the scene's stage (a shot linked to a stage claims it for a scene that has none)."""
+        with _LOCK:
+            b = self.scene_book()
+            hit = next((s for s in b.scenes if s.id == scene_id), None)
+            if hit is None or hit.stage_id == stage_id or (only_if_none and hit.stage_id):
+                return
+            scenes = [s.model_copy(update={"stage_id": stage_id, "updated_at": utc_now()}) if s.id == scene_id else s for s in b.scenes]
+            self._save_book(b.model_copy(update={"scenes": scenes, "revision": b.revision + 1}))
+
+    def migrate_u2_scenes(self) -> list[str]:
+        """U2 (D157, G6), once — a book of schema 1: each scene whose Shots look at one stage owns it now. Shots that share a camera and the
+        shots without a stage are brought into the model with the clay template (U4); nothing else is touched."""
+        raw = read_json_or(self.flow_dir / "scenes.json", None)
+        if not isinstance(raw, dict) or int(raw.get("schema_version", 1)) >= SCENES_SCHEMA_VERSION:
+            return []
+        with _LOCK:
+            b = SceneBook.model_validate(raw)
+            recs = self._records()
+            owned = 0
+            scenes = []
+            for s in b.scenes:
+                stages = {r.shot.version().stage_id for r in recs.values() if r.scene_id == s.id and r.shot is not None} - {None}
+                if s.stage_id is None and len(stages) == 1:
+                    s = s.model_copy(update={"stage_id": next(iter(stages))})
+                    owned += 1
+                scenes.append(s)
+            self._save_book(b.model_copy(update={"scenes": scenes}))
+            return [f"U2: {owned} scene owns its stage now" if owned == 1 else f"U2: {owned} scenes own their stage now"] if owned else []
+
+    def make_shot(self, title: str = "", *, after: str | None = None, scene: str = "new", place_id: str | None = None) -> FlowNode:
+        """U2 (D157, G12; 04 §7 *New shot*): a Shot node with its scene, the scene's stage and a camera of its own, in one call, placed and
+        connected after `after` (between it and the node it led to). `scene="same"`: coverage — a new camera on the scene of the shot
+        before, its camera copied with its keys. `"new"`: a new scene and stage — the World place's set (`place_id`, else the shot before's
+        place) seen from its picture's camera, else an empty stage."""
+        from .stages import StageStore
+        if scene not in ("new", "same"):
+            raise ValueError("a new shot is in a new scene or the same scene as the shot before")
+        with _LOCK:
+            prev = self._record(after) if after else None
+            if after and prev is None:
+                raise KeyError(after)
+            g = self.flow_graph()
+            at = next((p for p in g.nodes if prev is not None and p.id == prev.id), None)
+            x, y = (at.x + 340.0, at.y) if at is not None else (40.0, 40.0)
+            while any(abs(p.x - x) < 120 and abs(p.y - y) < 120 for p in g.nodes):
+                y += 240.0
+            stages = StageStore(self.ws)                                      # type: ignore[attr-defined]
+            if scene == "same":
+                pv = prev.shot.version() if prev is not None and prev.shot is not None else None
+                if pv is None or not pv.stage_id or not pv.camera_id:
+                    raise ValueError("the shot before has no scene on a stage — make the shot in a new scene")
+                st, cam = copy_camera(self.ws, pv.stage_id, pv.camera_id)   # type: ignore[attr-defined]
+                place, scene_id = prev.place_id, prev.scene_id               # type: ignore[union-attr]
+            else:
+                place = place_id or (prev.place_id if prev is not None else None)
+                prof = self.profile(place) if place else None                # type: ignore[attr-defined]
+                if place and (prof is None or prof.cls != "place"):
+                    raise ValueError(f"{place} is not a World place")
+                st = stages.scene_stage(title.strip() or (prof.name if prof is not None else "Scene"), prof)
+                cam, scene_id = st.cameras[0], None
+            n = self.create_node("shot", title, x, y)
+            if place:
+                n = self.patch_node(n.id, {"place_id": place})
+            if scene_id is None or not any(s.id == scene_id for s in self.scene_book().scenes):
+                scene_id = self.create_scene(title.strip() or (self.profile(place).name if place else "Scene"), [n.id] if scene == "new" or prev is None else [prev.id, n.id]).id   # type: ignore[attr-defined]
+            else:
+                self._join([n.id], scene_id)
+            self._scene_stage(scene_id, st.id, only_if_none=True)
+            self.set_source(n.shot_id, "v1", st.id, cam.id, st.revision)    # type: ignore[attr-defined, arg-type]
+            if prev is not None and prev.type in ("start", "hub", "shot", "action"):
+                g = self.flow_graph()
+                nxt = [e for e in g.edges if e.from_ == prev.id and e.port == "out"]
+                keep = [e for e in g.edges if e not in nxt]
+                edges = [*keep, FlowEdge.model_validate({"from": prev.id, "port": "out", "to": n.id}),
+                         *[FlowEdge.model_validate({"from": n.id, "port": "out", "to": e.to}) for e in nxt]]
+                self.put_graph({"revision": g.revision, "edges": [e.model_dump(by_alias=True) for e in edges]})
+            out = self.flow_node(n.id)
+            assert out is not None
+            return out
+
     def create_scene(self, name: str, node_ids: list[str]) -> Scene:
         """A scene around the nodes (they leave the scene they were in)."""
         name = name.strip()
@@ -1690,21 +1823,9 @@ class _FlowMixin:
             stage_id = camera_id = None
             stage_revision = None
             if v.stage_id and v.camera_id:
-                stages = StageStore(self.ws)                     # type: ignore[attr-defined]
-                st = stages.get(v.stage_id)
-                cam = next((c for c in st.cameras if c.id == v.camera_id), None) if st is not None else None
-                if st is not None and cam is not None:
-                    names = {c.name for c in st.cameras}
-                    k = 2
-                    while f"{cam.name} {k}" in names:
-                        k += 1
-                    copy = cam.model_copy(update={"id": new_id("cam"), "name": f"{cam.name} {k}"})
-                    keys = dict(st.keyframes or {})
-                    camkeys = dict(keys.get("camera") or {})
-                    if v.camera_id in camkeys:
-                        camkeys[copy.id] = [dict(x) if isinstance(x, dict) else x for x in camkeys[v.camera_id]]
-                    keys["camera"] = camkeys
-                    st = stages.put(st.id, {"revision": st.revision, "cameras": [*[c.model_dump() for c in st.cameras], copy.model_dump()], "keyframes": keys})
+                st = StageStore(self.ws).get(v.stage_id)          # type: ignore[attr-defined]
+                if st is not None and any(c.id == v.camera_id for c in st.cameras):
+                    st, copy = copy_camera(self.ws, v.stage_id, v.camera_id)   # type: ignore[attr-defined]
                     stage_id, camera_id, stage_revision = st.id, copy.id, st.revision
             titles = {r.title for r in self._records().values()}
             base = re.sub(r" · \d+$", "", src.title.strip()) or VISUAL_LABEL[src.type]
@@ -1717,6 +1838,8 @@ class _FlowMixin:
             if scene_id is None or not any(s.id == scene_id for s in self.scene_book().scenes):
                 place = self.profile(src.place_id) if src.place_id else None     # type: ignore[attr-defined]
                 scene_id = self.create_scene(place.name if place is not None else base, [src.id]).id
+            if stage_id:
+                self._scene_stage(scene_id, stage_id, only_if_none=True)     # U2 (G6): the scene owns the stage its shots look at
             g = self.flow_graph()
             at = next((p for p in g.nodes if p.id == nid), None)
             x, y = (at.x, at.y + 240.0) if at is not None else (40.0, 40.0)
@@ -1902,6 +2025,7 @@ class StoryStore(_ShotMixin, _FlowMixin):
         self.dir.mkdir(parents=True, exist_ok=True)
         self.profiles_dir = self.dir / "profiles"
         self.migrated: list[str] = self.migrate_rc2() if (self.dir / "shots").is_dir() else []   # RC2a: once, at the first open after it
+        self.migrated += self.migrate_u2_scenes()                                                # U2 (G6): once, a book of schema 1
 
     # -- world --
     @property

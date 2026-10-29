@@ -1583,6 +1583,14 @@ async def shot_finalize(svc: Svc, sid: str, vid: str):
 
 
 # ---- the flow (SY3, 17 §3d) ---------------------------------------------------------------------------------------------------------
+class ShotNodeCreate(BaseModel):
+    """U2 (D157, G12): a new Shot with its scene, stage and camera."""
+    title: str = ""
+    after: str | None = Field(None, description="the node it follows: placed beside it and connected after it")
+    scene: Literal["new", "same"] = Field("new", description="a new scene (and stage), or the same scene as the shot before (a new camera)")
+    place_id: str | None = Field(None, description="a new scene from this World place's set; else the shot before's place")
+
+
 class NodeCreate(BaseModel):
     type: str = "shot"
     title: str = ""
@@ -1848,6 +1856,22 @@ async def flow_get(svc: Svc):
     nodes = await asyncio.to_thread(store.flow_nodes)
     g = await asyncio.to_thread(store.flow_graph, nodes)
     return {"graph": g.model_dump(by_alias=True), "nodes": [n.model_dump() for n in nodes.values()]}
+
+
+@router.post("/story/flow/shots", response_model=FlowNode)
+async def flow_shot_create(svc: Svc, body: ShotNodeCreate):
+    """U2 (D157, G12; proto01_UI2 04 §7): *New shot* — the node, its scene, the scene's stage and a camera of its own in one call."""
+    ws, _, _ = svc.require_project()
+    try:
+        n = await asyncio.to_thread(StoryStore(ws).make_shot, body.title, after=body.after, scene=body.scene, place_id=body.place_id)
+    except KeyError as e:
+        raise HTTPException(404, f"node {e.args[0]} not found")
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    if n.shot_id:
+        svc.hub.broadcast("story.changed", {"kind": "shot", "id": n.shot_id, "revision": 0})
+    svc.hub.broadcast("story.changed", {"kind": "flow", "id": n.id, "revision": 0})
+    return n.model_dump()
 
 
 @router.post("/story/flow/nodes", response_model=FlowNode)

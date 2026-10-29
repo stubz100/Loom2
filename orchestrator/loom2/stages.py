@@ -416,6 +416,23 @@ class StageStore:
         self.save(st)
         return st, True
 
+    def scene_stage(self, name: str, place: Any = None, size: dict[str, int] | None = None) -> Stage:
+        """U2 (D157, G12): a new scene's stage — the World place's built set (its current version's) seen from the camera its picture was
+        taken from (CW6), else an empty stage with one camera at eye level."""
+        v = place.version(place.current) if place is not None else None
+        if v is None or v.place_set is None:
+            return self.create(name)
+        objects, _ = bench_objects(place, v)
+        ps = v.place_set
+        cam = StageCamera(id=new_id("cam"), name="Camera 1")
+        if ps.sources:
+            c = ps.sources[0].camera
+            cam = StageCamera(id=new_id("cam"), name="Camera 1", pos=list(c.pos), target=list(c.target), roll=c.roll, focal_mm=c.focal_mm, sensor_mm=c.sensor_mm)
+        st = Stage(id=new_id("stg"), name=name.strip() or "Stage", size=size or {"w": 1920, "h": 1080, "fps": 24}, objects=objects, cameras=[cam], active_camera=cam.id)
+        check(st)
+        self.save(st)
+        return st
+
     def lineup(self, entries: list[dict[str, Any]], size: dict[str, int] | None = None) -> Stage:
         """CW5 (02 §7): the line-up — the characters and props picked side by side on a neutral floor before a wall with 0.5 m marks,
         one camera framing them; the project's one line-up stage, made again each time (*Send to a stage ▸* keeps what should stay).

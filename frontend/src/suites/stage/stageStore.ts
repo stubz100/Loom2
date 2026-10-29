@@ -323,7 +323,7 @@ interface StageState {
   /** D142: Clay opened for a Cast version — its bench stage (made once, kept); `back` is where *← Back* goes (Cast on the version). */
   openBench: (profileId: string, version?: string | null, layer?: Layer) => Promise<boolean>
   /** CW5: Clay opened on the line-up of these Cast versions and ideas (made again each time); `back` returns to the board it came from. */
-  openLineup: (items: { profile_id?: string; version?: string | null; idea_id?: string }[], back?: () => void) => Promise<boolean>
+  openLineup: (items: { profile_id?: string; version?: string | null; idea_id?: string }[], back?: () => void, layer?: Layer) => Promise<boolean>
   /** D142: *← Back* from a bench or the line-up. */
   backFromBench: () => void
   /** CW5: the line-up's things copied into a stage (`null`: a new one, named by the author) and that stage opened. */
@@ -1033,12 +1033,12 @@ export const useStage = create<StageState>()((set, get) => ({
       return true
     } catch (e) { useSession.getState().toast(`The bench: ${(e as ApiError).detail ?? e}`, 'error'); return false }
   },
-  openLineup: async (items, back) => {
+  openLineup: async (items, back, layer) => {
     try {
       const st = await unwrap(http.POST('/stages/lineup', { body: { items: items.map((x) => ({ profile_id: x.profile_id ?? null, version: x.version ?? null, idea_id: x.idea_id ?? null, variant_id: null })) } }))
       await get().open(st.id)
       benchBack = back ?? null
-      navigate({ suite: 'stage' })
+      navigate({ suite: 'stage', ...(layer ? { layer } : {}) })                     // B2a: World's Line-up stays on the World layer
       const left = items.length - st.objects.filter((o) => o.kind !== 'set').length
       if (left > 0) useSession.getState().toast(`${left} left out: an idea needs its clay (Make the clay ▶), a prop its 3D model; places come with their sets`, 'info')
       return true

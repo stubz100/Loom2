@@ -13024,3 +13024,51 @@ server change).
 
 Next: B2a's World wave (the Sheet: the body, the skeleton bench, the animation reference and its test, a prop's model and height, the set
 builder, the Line-up, *Use as the A-pose*), then Shots'.
+
+## 2026-10-29 16:15 — B2a, World's wave: the Sheet — the body, the skeleton bench, the animation reference and its test, a prop's model and height, the set builder, the Line-up; 19 scenarios moved (D159; proto01_UI2 11 §7)
+
+**World's fourth mode, Sheet** (Make · Edit · Clay · Sheet): the entity version's whole card, as Story's Cast page had it, in the left
+column beside its bin. It mounts the Cast page's own parts, so nothing is rebuilt:
+
+- the sheet: the look, the outfit, bound colours, marks, the label, and a character's body (height, build, attachments, the figure's sliders,
+  ♀ / ♂, hands at rest, *Fit the body*);
+- the animation reference: front, back and the test animation (*Test it: a turn on the spot…*). Its slot plays the clip in the Bin's large
+  view;
+- a prop's 3D model, turning, with its height;
+- a place's set builder: the overlay, the handles, the kind, the face materials, *Bake again*, *Fill*.
+
+The animation reference and the prop's model moved from `StoryParts` into `suites/story/CastParts.tsx`, shared by both shells.
+
+**The skeleton bench** (*Skeleton…* in the body): it takes World's centre in place of the bin, its parts in the Inspector. *Back to the
+sheet* brings the bin back.
+
+**The bench in World:** *Bench ▶* in the body, the prop's model or the set opens World's Clay (`story.cast.bench` runs `world.mode.clay` in
+the new shell), no longer Shots.
+
+**The Line-up ▶** (the Sheet): the rail's characters or props (a prop with its 3D model), the open one first, twelve at most, side by side
+in World's Clay. *Send to a new stage…* is in its chip, as before.
+
+**A creation's right-click:** *Use as the A-pose front* and *Use as the A-pose back*.
+
+**Scenarios moved onto the new shell (19):**
+
+- in the Sheet: the body (its figure takes it on a shot's stage in Shots' Clay), the animation reference with the back view from a creation's
+  right-click, *Fit the body*, the skeleton bench, the test animation, the bench and a prop's height, a place's set;
+- a world's look (a style, its sample, Sketches' Style picker), a character from a Bin picture (*Make an entity from it*, a reference, *Mark
+  final*, the mention), *Add to World ▸ as the hero*;
+- in Sketches: a subject that is a character, the live sheet and the version chip;
+- the voice (World's Inspector) and its lines (Shots' Flow Inspector), Flatten in World's Edit, the Line-up after Clay's figures, readiness
+  and *used in shots* in World.
+
+**Dropped with what D157 dropped (4):** an album trains a LoRA; the ideas store's Prototype / Keep (folded into Sketches, covered by U3d,
+U3e); Story › World's library (its words are the Look's, U3e); *Make frame ▸ in Image* with the For chip.
+
+**Found while moving them:**
+
+- The Bin did not read the World's entities before World had, so *Add to World ▸* said "nothing in World yet". It reads them when it starts.
+- Sketches' column keeps the entity World's Make was seeded with. Two scenarios start from an empty subject list.
+- The new shell has no "this shot only" words on a subject card (the For context is gone), so the live-sheet scenario no longer types them.
+
+**Checks:** Vitest 646 + 3 skipped; typecheck, build and lint clean (92 warnings, as before); e2e 86/86 (alone). Three full runs before it each failed one scenario on an order effect that passing alone hid: the voice scenario's node among many on the Flow (it now selects the node through the story hook), Flatten opening a document an earlier scenario saved (it now opens a plain photo found through the API), the cut's tracks under load (it passed alone and in the next run).
+
+Next: B2a's Shots wave — the Flow's List view, Play, the recipe graph, a still from the stage, Clay's Prototype — and its scenarios.

@@ -214,14 +214,22 @@ async function perfCard(page: import('@playwright/test').Page, card: 'Image to v
   await expect(page.locator('.perf-cards button.active')).toHaveText(card)
 }
 
+/** B2a (D159): an entity version's Sheet in World — its whole card (the sheet, the body, the animation reference, the model or the set). */
+async function openSheet(page: import('@playwright/test').Page, cls: 'character' | 'prop' | 'place', id: string, version = 'v1'): Promise<void> {
+  await openShell(page, `world/${cls}/${id}/${version}`)
+  await expect(page.locator('[data-testid="world-header"]')).toBeVisible()
+  await page.locator('.w-mode button', { hasText: 'Sheet' }).click()
+  await expect(page.locator('[data-testid="world-sheet"]')).toBeVisible()
+}
+
 type EdWin = { __loom2Editor?: { getState: () => { doc?: { id: string }; tool: string } }; __loom2AiPanel?: { getState: () => { op: string; selMode: string } } }
 const editorTool = (page: import('@playwright/test').Page) => page.evaluate(() => { const w = window as unknown as EdWin; const ed = w.__loom2Editor?.getState(); const ai = w.__loom2AiPanel?.getState()
   return ed ? { doc: !!ed.doc, tool: ed.tool, op: ai?.op, sel: ai?.selMode } : null })
 
 test('quick starts (D71, B2a): "Select subject…" on a Bin picture reaches World\'s Edit with AI Select · Subject in one click; the deep link does too', async ({ page }) => {
   await openShell(page, 'bin')
-  await openHome(page, 'imports')
-  await page.locator('[data-testid="bin-grid"] .w-tile', { has: page.locator('img') }).nth(8).click()
+  await openHome(page, 'imports', 'pictures')
+  await binTiles(page).nth(8).click()
   await page.locator('[data-testid="bin-inspector"] button', { hasText: 'Start from it' }).click()
   await page.locator('.ctx-menu button.item', { hasText: 'Select subject…' }).click()
   await expect.poll(() => editorTool(page), { timeout: 30_000 }).toEqual({ doc: true, tool: 'ai', op: 'select', sel: 'subject' })
@@ -235,8 +243,8 @@ test('quick starts (D71, B2a): "Select subject…" on a Bin picture reaches Worl
 
 test("Instruct (D151): the AI tab's edit by instruction — the deep link opens it, it refuses without an instruction and runs with one; the canvas menu shows it (in World's Edit, B2a)", async ({ page }) => {
   await openShell(page, 'bin')
-  await openHome(page, 'imports')
-  await page.locator('[data-testid="bin-grid"] .w-tile', { has: page.locator('img') }).nth(8).click({ button: 'right' })
+  await openHome(page, 'imports', 'pictures')
+  await binTiles(page).nth(8).click({ button: 'right' })
   await page.locator('.ctx-menu button.item', { hasText: /^Select subject…/ }).click()                    // World's Edit with a document (D71)
   await expect.poll(() => editorTool(page), { timeout: 30_000 }).toMatchObject({ doc: true, tool: 'ai' })
   await page.getByRole('button', { name: 'Instruct', exact: true }).click()
@@ -255,8 +263,8 @@ test("Instruct (D151): the AI tab's edit by instruction — the deep link opens 
 
 test("the reference deck (D152): Inpaint and Refine show the model's slots in the AI tab, Remove shows none; the deck keeps its shape across operations (in World's Edit, B2a)", async ({ page }) => {
   await openShell(page, 'bin')
-  await openHome(page, 'imports')
-  await page.locator('[data-testid="bin-grid"] .w-tile', { has: page.locator('img') }).nth(8).click({ button: 'right' })
+  await openHome(page, 'imports', 'pictures')
+  await binTiles(page).nth(8).click({ button: 'right' })
   await page.locator('.ctx-menu button.item', { hasText: /^Select subject…/ }).click()                    // World's Edit with a document (D71)
   await expect.poll(() => editorTool(page), { timeout: 30_000 }).toMatchObject({ doc: true, tool: 'ai' })
   await page.getByRole('button', { name: 'Inpaint', exact: true }).click()
@@ -276,8 +284,8 @@ test("the reference deck (D152): Inpaint and Refine show the model's slots in th
 
 test('text layers (D154): the Text tool places text typed in place; the layer is marked and editable in Properties; Rasterize text drops the block (in World’s Edit, B2a)', async ({ page }) => {
   await openShell(page, 'bin')
-  await openHome(page, 'imports')
-  await page.locator('[data-testid="bin-grid"] .w-tile', { has: page.locator('img') }).nth(8).click({ button: 'right' })
+  await openHome(page, 'imports', 'pictures')
+  await binTiles(page).nth(8).click({ button: 'right' })
   await page.locator('.ctx-menu button.item', { hasText: /^Select subject…/ }).click()                    // World's Edit with a document (D71)
   await expect.poll(() => editorTool(page), { timeout: 30_000 }).toMatchObject({ doc: true, tool: 'ai' })
   await page.locator('#edit-sec-tools').scrollIntoViewIfNeeded()                                       // the toolbox, in the column (no rail)
@@ -442,8 +450,8 @@ test('a part whose code fails to load says so and recovers (no blank window, B2a
   const refused = /(EditSuite|WorldEdit)-[\w-]+\.js$/
   await page.route(refused, (r) => r.abort('failed'))                                  // the network refuses Edit's code (the idle preload hits it too)
   await openShell(page, 'bin')
-  await openHome(page, 'imports')
-  await contextChoose(page, page.locator('[data-testid="bin-grid"] .w-tile', { has: page.locator('img') }).nth(2), 'Open in Edit')
+  await openHome(page, 'imports', 'pictures')
+  await contextChoose(page, binTiles(page).nth(2), 'Open in Edit')
   await expect(page.locator('.w-centre .render-error')).toContainText("Edit's code could not be loaded")
   await expect(page.locator('.render-error')).toHaveCount(1)                          // one explanation, in the middle; the column says one line
   await expect(page.locator('.render-error-line')).toContainText('Edit is not available')
@@ -453,15 +461,15 @@ test('a part whose code fails to load says so and recovers (no blank window, B2a
   await page.locator('.w-centre .render-error').getByRole('button', { name: 'Reload the app' }).click()   // the browser keeps a failed module: reload
   await expect(page.locator('.frame.ui2')).toBeVisible()
   await openShell(page, 'bin')
-  await openHome(page, 'imports')
-  await contextChoose(page, page.locator('[data-testid="bin-grid"] .w-tile', { has: page.locator('img') }).nth(2), 'Open in Edit')
+  await openHome(page, 'imports', 'pictures')
+  await contextChoose(page, binTiles(page).nth(2), 'Open in Edit')
   await expect(page.locator('[data-testid="world-edit"] .edit-canvas')).toBeVisible({ timeout: 90_000 })   // the code loads this time
 })
 
 test('a new angle (P14, D82; B2a): "New angle…" on a Bin picture opens the sheet with the source, the pad picks the move, the job lands with reangle lineage', async ({ page }) => {
   await openShell(page, 'bin')
-  await openHome(page, 'imports')
-  const srcId = (await page.locator('[data-testid="bin-grid"] .w-tile', { has: page.locator('img') }).nth(8).getAttribute('data-id'))!   // pinned by id
+  await openHome(page, 'imports', 'pictures')
+  const srcId = (await binTiles(page).nth(8).getAttribute('data-id'))!   // pinned by id
   await page.locator(`[data-testid="bin-grid"] .w-tile[data-id="${srcId}"]`).click()
   await page.locator('[data-testid="bin-inspector"] button', { hasText: 'Start from it' }).click()
   await page.locator('.ctx-menu button.item', { hasText: 'New angle…' }).click()
@@ -1503,199 +1511,92 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   await expect(page.locator('#anim-sec-output [data-render-state]')).toHaveText(/rendered at revision \d+/, { timeout: 15_000 })   // the revision the render saw (the edits above moved it)
 })
 
-test('a world (17 / SY0, D85): the Story suite\'s World tab adds a style and a logline that save with their revision; Generate\'s Style picker appends the fragment, which the job records', async ({ page }) => {
-  await openApp(page, { suite: 'story' })
-  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Story/)
-  await expect(page.locator('.world-editor')).toBeVisible()
-  await page.locator('.world-editor textarea[aria-label="logline"]').fill('A courier must cross the city before dawn.')
-  await page.locator('.story-panel button', { hasText: 'Add style' }).click()                                 // the panel's verb (D32)
-  await expect(page.locator('.world-editor .style-tile.active')).toBeVisible()                               // D90 (02 §4.1): a tile, selected; written in the Inspector only
-  await page.locator('.inspector input[aria-label="selected style name"]').fill('Ink wash')
-  await page.locator('.inspector textarea[aria-label="selected style fragment"]').fill('ink and wash storyboard, loose brush')   // folded open while empty
-  await expect(page.locator('.inspector .story-insp h4', { hasText: 'Style' })).toContainText('Ink wash')     // the new style is selected
-  await expect(page.locator('.world-editor .style-tile.active .name')).toHaveText('Ink wash')
-  type WorldLite = { revision: number; logline: string; default_style: string | null; styles: { id: string; name: string; fragment: string; group_id: string | null }[] }
-  await expect.poll(async () => (await api<WorldLite>('GET', '/story/world')).styles.find((s) => s.name === 'Ink wash')?.fragment, { timeout: 10_000 }).toBe('ink and wash storyboard, loose brush')
+test('a world\'s look (SY0, B2a): the Look adds a style written in its Inspector; Make a sample image gives it its face; Sketches\' Style picker appends the fragment, which the job records', async ({ page }) => {
+  const tag = Date.now().toString(36)
+  const sname = `Ink wash ${tag}`
+  await openShell(page, 'world/look')
+  await page.locator('[data-testid="world-look"] button', { hasText: 'Add style' }).click()                 // the column's verb (D32)
+  await expect(page.locator('.style-grid .style-tile.active')).toBeVisible()                                // a tile, selected; written in the Inspector
+  const insp = page.locator('[data-testid="world-look-inspector"]')
+  await insp.locator('input[aria-label="selected style name"]').fill(sname)
+  await insp.locator('textarea[aria-label="selected style fragment"]').fill('ink and wash storyboard, loose brush')
+  await expect(page.locator('.style-grid .style-tile.active .name')).toHaveText(sname)
+  type WorldLite = { revision: number; styles: { id: string; name: string; fragment: string; group_id: string | null }[] }
+  await expect.poll(async () => (await api<WorldLite>('GET', '/story/world')).styles.find((x) => x.name === sname)?.fragment, { timeout: 10_000 }).toBe('ink and wash storyboard, loose brush')
   // D90 (02 §4.1): Make a sample image — one job on the swatch model into the style's own group, whose cover becomes the style's face
-  await page.locator('.inspector button', { hasText: 'Make a sample image' }).click()
-  await expect(page.locator('.world-editor .style-tile.active .face img')).toBeVisible({ timeout: 45_000 })
-  await expect(page.locator('.inspector .style-sample img')).toBeVisible()
-  const w = await api<WorldLite>('GET', '/story/world')
-  expect(w.logline).toBe('A courier must cross the city before dawn.')
-  expect(w.revision).toBeGreaterThanOrEqual(1)
-  const style = w.styles.find((s) => s.name === 'Ink wash')!
+  await insp.locator('button', { hasText: 'Make a sample image' }).click()
+  await expect(page.locator('.style-grid .style-tile.active .face img')).toBeVisible({ timeout: 45_000 })
+  const style = (await api<WorldLite>('GET', '/story/world')).styles.find((x) => x.name === sname)!
   const sample = Object.values((await api<{ assets: Record<string, { params: { style_id?: string | null } }> }>('GET', `/groups/${style.group_id}`)).assets)
   expect(sample.length === 1 && sample[0].params.style_id === style.id).toBe(true)                             // the sample ran under the style, on its group
-  expect(w.default_style).toBe(w.styles[0].id)                                                               // the first style made is the default
-  // Generate: the picker lists it and says what it appends; the job records the style and the text that ran
-  await openImage(page, 'Make')
-  await page.locator('nav.rail button[title^="Model"]').click()                                               // Klein 4B: the one model the e2e tree holds in both variants
-  await page.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()
-  await page.locator('nav.rail button[title^="Prompt"]').click()                                              // switches the tab (a click on the active tab would fold the panel)
-  await page.locator('.segmented button', { hasText: /^Text$/ }).click()
-  await page.locator('.panel .style-pick button[aria-label="Ink wash"]').click()                   // D90: styles are picked by their sample tile
-  await expect(page.locator('.panel .style-pick button[aria-label="Ink wash"]')).toHaveAttribute('aria-pressed', 'true')
-  await expect(page.locator('.panel .style-pick button[aria-label="Ink wash"]')).toHaveAttribute('title', /ink and wash storyboard, loose brush/)
-  await page.locator('.panel textarea').fill('a courier on a rooftop at dawn')
-  const before = (await api<Record<string, number>>('GET', '/assets/counts')).unprocessed ?? 0
-  const go = page.locator('.panel .foot button.primary', { hasText: /^Generate/ })
-  await expect(go).toBeEnabled()
-  const count = Number((await go.textContent())!.match(/Generate (\d+)/)![1])
-  await go.click()
-  await expect.poll(async () => (await api<Record<string, number>>('GET', '/assets/counts')).unprocessed ?? 0, { timeout: 45_000 }).toBe(before + count)
+  // Sketches: the picker lists it and says what it appends; the job records the style and the text that ran
+  await openShell(page, 'world/sketches')
+  const col = page.locator('[data-testid="world-sketches"]')
+  await col.locator('#gen-sec-model').scrollIntoViewIfNeeded()
+  await col.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()
+  await col.locator('#gen-sec-prompt').scrollIntoViewIfNeeded()
+  await col.locator('#gen-sec-prompt .segmented button', { hasText: /^Text$/ }).click()
+  const pick = col.locator(`.style-pick button[aria-label="${sname}"]`)
+  await pick.scrollIntoViewIfNeeded()
+  await pick.click()                                                                                      // D90: styles are picked by their sample tile
+  await expect(pick).toHaveAttribute('aria-pressed', 'true')
+  await expect(pick).toHaveAttribute('title', /ink and wash storyboard, loose brush/)
+  await col.locator('.text-prompt textarea').fill('a courier on a rooftop at dawn')
+  const before = new Set((await api<{ items: { id: string }[] }>('GET', '/jobs')).items.map((j) => j.id))
+  await col.locator('button', { hasText: /^Make \d+ sketch/ }).click()
+  type JobLite = { id: string; status: string; origin: { surface?: string } | null; result: { asset_ids?: string[] } | null }
+  const jobOf = async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => !before.has(j.id) && j.origin?.surface === 'sketch')
+  await expect.poll(async () => (await jobOf())?.status, { timeout: 45_000 }).toBe('done')
   type Made = AssetLite & { prompt_text: string | null; params: { style_id?: string | null; style_text?: string | null } }
-  const newest = (await api<{ items: Made[] }>('GET', '/assets?folder=unprocessed&sort=created_desc&limit=1')).items[0]
-  expect(newest.params.style_id).toBe(style.id)
-  expect(newest.params.style_text).toBe('ink and wash storyboard, loose brush')
-  expect(newest.prompt_text).toContain('a courier on a rooftop at dawn. ink and wash storyboard, loose brush')
+  const made = await api<Made>('GET', `/assets/${(await jobOf())!.result!.asset_ids![0]}`)
+  expect(made.params.style_id).toBe(style.id)
+  expect(made.params.style_text).toBe('ink and wash storyboard, loose brush')
+  expect(made.prompt_text).toContain('a courier on a rooftop at dawn. ink and wash storyboard, loose brush')
 })
 
-test('a cast (17 / SY1, D85): "Make a character…" on a tile opens Story · Cast with the image as the hero; Expand says its cost and queues one fake-engine job per cell onto the candidates page; adding to the reference set fills the coverage grid; Lock makes the album refuse; @name resolves to the version', async ({ page }) => {
-  test.setTimeout(150_000)                                                             // ~18 fake-engine jobs on the CI runners
+test('a character from a picture (SY1, B2a): "Make a character…" on a Bin picture opens it in World with the picture as its hero; a candidate made a reference; Mark final makes the album refuse; @name resolves to the version', async ({ page }) => {
+  test.setTimeout(90_000)
   const name = `Mara ${Date.now().toString(36)}`                                       // unique: the project is reused between runs
-  await openApp(page, { suite: 'catalogue' })
-  const heroId = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=unprocessed&kind=image&sort=created_desc&limit=1')).items[0].id   // the newest image (a clip may sit first)
-  await page.locator('.place-row', { hasText: 'Unprocessed' }).locator('button.place-open').click()
-  const tile = page.locator(`.cat-grid .tile[data-id="${heroId}"]`)
-  await tile.click()
-  await page.locator('.insp .quick-card', { hasText: 'Character' }).click()           // the Inspector's quick card (D32: a mouse home)
+  const src = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
+  const [heroId, candId] = (await api<{ ids: string[] }>('POST', '/assets/duplicate', { ids: [src, src] })).ids
+  await api('POST', '/groups/move', { items: [heroId, candId].map((id) => ({ kind: 'asset', id })), to: null })   // both on no page: Imports
+  await openShell(page, 'bin')
+  await openHome(page, 'imports')
+  await page.locator(`[data-testid="bin-grid"] .w-tile[data-id="${heroId}"]`).click({ button: 'right' })
+  await page.locator('.ctx-menu .item.sub', { hasText: 'Make an entity from it' }).hover()
+  await page.locator('.ctx-menu .ctx-menu button.item', { hasText: 'Make a character…' }).click()
   const dialog = page.locator('.modal.ask')
   await expect(dialog).toContainText(/Make a character/)
   await dialog.locator('input').fill(name)
   await dialog.locator('button.primary').click()
-  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Story/)
-  await expect(page.locator('.cast-page h2')).toContainText(name)
-  await expect(page.locator('.hero-card img')).toBeVisible()
-  type Version = { id: string; state: string; group_id: string; candidates_group_id: string | null; hero_asset_id: string | null }
-  type ProfileLite = { id: string; name: string; current: string; versions: Version[] }
+  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^World/)
+  await expect(page.locator('[data-testid="world-header"]')).toContainText(name)
+  type Version = { id: string; state: string; group_id: string; hero_asset_id: string | null }
+  type ProfileLite = { id: string; name: string; versions: Version[] }
   const profile = (await api<{ items: ProfileLite[] }>('GET', '/story/profiles')).items.find((p) => p.name === name)!
   expect(profile.versions[0].hero_asset_id).toBe(heroId)
   const gid = profile.versions[0].group_id
-  expect((await api<{ group: { cover_id: string | null } }>('GET', `/groups/${gid}`)).group.cover_id).toBe(heroId)   // the hero moved onto the reference page as its cover
-  // D115: Expand… jumps into Image with the character as the subject and Full coverage pre-picked in the Poses section; the scenario keeps
-  // three close-up tiles with two expressions (six cells — the training below wants four references of one shot size) and runs Expand ▶
-  await page.locator('.panel .foot button.primary', { hasText: /^Expand/ }).click()
-  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Image/)
-  await expect(page.locator('.panel .foot .run-switch button[aria-pressed="true"]')).toHaveText('Expand')
-  await expect.poll(() => page.locator('#gen-sec-poses .pose-tile.on').count()).toBeGreaterThanOrEqual(10)   // Full coverage's tiles
-  await page.locator('#gen-sec-poses .gen-sec-head button', { hasText: 'clear' }).click()
-  for (const x of ['serious', 'sad', 'surprised']) await page.locator(`#gen-sec-poses .pose-chips .chip[data-expression="${x}"]`).click()   // neutral and smile stay
-  await expect(page.locator('#gen-sec-poses .pose-chips .chip.on')).toHaveCount(2)
-  for (const a of ['front', 'three-quarter left', 'three-quarter right']) await page.locator(`#gen-sec-poses .pose-tile[data-shot="close-up"][data-angle="${a}"]`).click()
-  await expect(page.locator('#gen-sec-poses .gen-sec-head')).toContainText('6 cells')
-  await expect(page.locator('#gen-sec-poses [data-lands]')).toContainText(`as ${name}'s candidates`)
-  await expect(page.locator('.panel .foot button.primary')).toHaveText(/^Expand \d+ ▶/)
-  const n = Number((await page.locator('.panel .foot button.primary').textContent())!.match(/Expand (\d+)/)![1])   // six cells × the panel's batch count
-  expect(n % 6).toBe(0)
-  await expect.poll(async () => (await page.locator('.panel .foot .estimate').textContent()) ?? '', { timeout: 20_000, message: 'the foot settles (the preview answers)' }).toMatch(/≈/)
-  await page.locator('.panel .foot button.primary').click()
-  if (n > 8) { await expect(dialog).toContainText(new RegExp(`Queue ${n} jobs`)); await dialog.locator('button.primary').click() }   // more than 8 images ask first
-  type JobLite = { id: string; batch_id: string | null; origin?: { suite: string; surface: string; ref?: string; payload?: { cell?: { shot: string } } } }
-  const castJobs = async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.filter((j) => j.origin?.surface === 'cast' && j.origin.ref === profile.id)
-  await expect.poll(async () => (await castJobs()).length, { timeout: 30_000 }).toBe(n)     // one job per cell × count, queued by the batch route
-  const after = (await api<{ items: ProfileLite[] }>('GET', '/story/profiles')).items.find((p) => p.id === profile.id)!
-  const r = { cells: n, group_id: after.versions[0].candidates_group_id! }
-  const mine = await castJobs()
-  expect(new Set(mine.map((j) => j.batch_id)).size).toBe(1)                            // one batch
-  expect(mine.every((j) => j.origin?.suite === 'generate' && j.origin.payload?.cell?.shot === 'close-up')).toBe(true)
-  type Page = { assets: Record<string, { id: string; state: string; suite: string; params: { coverage_cell?: { shot: string; angle: string } } }> }
-  await expect.poll(async () => Object.keys((await api<Page>('GET', `/groups/${r.group_id}`)).assets).length, { timeout: 120_000 }).toBe(r.cells)
-  const cands = Object.values((await api<Page>('GET', `/groups/${r.group_id}`)).assets)
-  expect(cands.every((a) => !!a.params.coverage_cell?.shot)).toBe(true)                 // each with its pose recorded (Cast's grid reads it)
-  await page.locator('nav.tabs button.tab', { hasText: /^Story/ }).click()               // back to the character's page
-  await expect(page.locator('.cast-page h2')).toContainText(name)
-  await expect(page.locator('.cand-card')).toHaveCount(r.cells)                       // the page followed the group.changed events
-  // add one with the mouse (the card's ✓), another through its right-click (D122: no Reject there): the grid gains a cell
-  const first = page.locator('.cand-card').first()
-  const keptId = (await first.getAttribute('data-id'))!
-  await first.hover()
-  await first.locator('button[aria-label="add to the reference set"]').click()
-  await expect(page.locator('.cand-card')).toHaveCount(r.cells - 1)
-  await expect(page.locator('.cov-grid td.one, .cov-grid td.full')).toHaveCount(1)
-  expect((await api<{ group: { items: { id: string }[] } }>('GET', `/groups/${gid}`)).group.items.map((i) => i.id)).toContain(keptId)
-  const second = page.locator('.cand-card').first()
-  const secondId = (await second.getAttribute('data-id'))!
-  await second.click({ button: 'right' })
-  await expect(page.locator('.ctx-menu button.item', { hasText: /^Reject/ })).toHaveCount(0)
-  await page.locator('.ctx-menu button.item', { hasText: 'Add to the reference set' }).click()
-  await expect(page.locator('.cand-card')).toHaveCount(r.cells - 2)
-  await expect(page.locator('.cand-card button[aria-label="reject"]')).toHaveCount(0)
-  // LT2: four more references of the same shot size through the API (training needs 4; the Curate step stays open — one row of four)
-  const keptShot = cands.find((a) => a.id === keptId)?.params.coverage_cell?.shot
-  const more = cands.filter((a) => a.id !== keptId && a.id !== secondId).sort((a, b) => Number(b.params.coverage_cell?.shot === keptShot) - Number(a.params.coverage_cell?.shot === keptShot)).slice(0, 4)
-  await api('POST', `/story/profiles/${profile.id}/versions/v1/add`, { asset_ids: more.map((a) => a.id), role: 'reference' })
-  await expect(page.locator('.cand-card')).toHaveCount(r.cells - 6)
-  // the readiness row (D125 S5: it replaced the bootstrap strip) and the Inspector show the state; Lock through the strip → the album refuses a move on the reference page
-  const ready = (item: string) => page.locator(`.cast-ready .ready-item[data-item="${item}"]`)
-  await expect(ready('hero')).toHaveClass(/done/)
-  await expect(ready('refs')).toHaveClass(/done/)
-  await expect(ready('refs')).toContainText(/\d/)
-  await expect(ready('final')).not.toHaveClass(/done/)
-  await page.locator('.story-strip button[title^="Mark final"]').click()
-  await expect(dialog).toContainText(/Mark .* final/)
-  await dialog.locator('button.primary').click()
-  await expect(page.locator('.story-strip .lock-badge')).toBeVisible()
-  await expect.poll(async () => (await api<{ items: ProfileLite[] }>('GET', '/story/profiles')).items.find((p) => p.id === profile.id)?.versions[0].state).toBe('final')
-  await expect(api('POST', '/groups/move', { items: [{ kind: 'asset', id: keptId }], to: null })).rejects.toThrow(/423/)
-  await expect(page.locator('.panel .foot .estimate')).toContainText(/is final/)
-  // LT2 (18 §3c): Train from the Inspector — the readiness line, 100 steps on the fake trainer, staged → Release → the version holds the LoRA
-  const training = page.locator('.inspector .training')
-  await expect(training.locator('.readiness')).toContainText(/\d+ · (thin|good|strong)/)
-  await training.locator('input[aria-label="train steps"]').fill('100')
-  await training.locator('input[aria-label="train setting"]').fill('plain studio background')
-  await page.locator('.inspector button[title^="Train a LoRA"]').click()
-  await expect(dialog).toContainText(/Train .* v1\?/)
-  await expect(dialog).toContainText(/100 steps at 512²/)
-  await dialog.locator('button.primary').click()
-  await expect(training.locator('.train-job .badge')).toHaveText('staged')
-  type JobLite2 = { id: string; kind: string; status: string; result: { lora_id?: string; trigger?: string } | null }
-  const trainJob = async () => (await api<{ items: JobLite2[] }>('GET', '/jobs')).items.filter((j) => j.kind === 'train_lora').sort((a, b) => (a.id < b.id ? 1 : -1))[0]
-  expect((await trainJob()).status).toBe('staged')
-  await page.locator('.inspector .train-job button[title^="Run now"]').click()
-  await expect.poll(async () => (await trainJob()).status, { timeout: 60_000 }).toBe('done')
-  const lora = (await trainJob()).result!
-  expect(lora.lora_id).toMatch(/^lora_/)
-  await expect(training).toContainText(`${name} v1 · 100 steps`)
-  await expect(training.locator('.mono').first()).toHaveText(lora.trigger!)
-  const rec = (await api<{ items: { id: string; name: string; base: string; steps: number; dataset: { count: number; setting: string } }[] }>('GET', '/story/loras')).items.find((l) => l.id === lora.lora_id)!
-  expect(rec.steps).toBe(100)
-  expect(rec.dataset.setting).toBe('plain studio background')
-  await expect(ready('lora')).toHaveClass(/done/)
-  await expect(ready('final')).toHaveClass(/done/)
-  // the mention: Generate's @ picker lists the profile first; the preview resolves it to v1's reference set with the hero first
-  await openImage(page, 'Make')
-  await page.locator('#gen-sec-model').scrollIntoViewIfNeeded()                      // not the rail: a click on the tab the column already sits on folds the panel
-  await page.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()
-  await expect(page.locator('.panel select[aria-label="LoRA slot 1"] option', { hasText: `${name} v1 · Klein 4B · 100 steps` })).toHaveCount(1)   // LT2: the trained LoRA fits the 4B base
-  await page.locator('nav.rail button[title^="Prompt"]').click()
-  await page.locator('.segmented button', { hasText: /^Text$/ }).click()
-  await page.locator('.panel textarea').fill('at the gate')
-  await page.locator('.text-prompt button[aria-label^="Mention a group"]').click()
-  await page.locator('.ctx-menu button.item').filter({ hasText: `${name} · character` }).click()   // the profile's entry (its groups are named after it too)
-  await expect(page.locator('.panel .mention-chips .mchip.profile')).toContainText(`@${name}`)
-  await expect(page.locator('.panel .mention-chips .mchip.profile .lora-toggle.on')).toHaveText('+ LoRA')             // LT3: the version's LoRA rides along
-  await expect(page.locator('.panel textarea')).toHaveValue(new RegExp(`@${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`))
-  type Preview = { mentions: { profile_id: string | null; version: string | null; group_id: string; asset_ids: string[] }[]; ref_list: { asset_id: string | null; note: string | null }[] }
+  expect((await api<{ group: { cover_id: string | null } }>('GET', `/groups/${gid}`)).group.cover_id).toBe(heroId)   // the hero on the reference page as its cover
+  await expect(page.locator(`[data-testid="world-bin"] .w-tile[data-id="${heroId}"] .w-badge`)).toHaveText('★')
+  // a candidate in its bin, made a reference by its right-click
+  await api('POST', `/story/profiles/${profile.id}/versions/v1/add`, { asset_ids: [candId], role: 'candidate' })
+  const cand = page.locator(`[data-testid="world-bin"] .w-tile[data-id="${candId}"]`)
+  await expect(cand).toBeVisible({ timeout: 10_000 })
+  await contextChoose(page, cand, 'Use as a reference')
+  await expect.poll(async () => (await api<{ group: { items: { id: string }[] } }>('GET', `/groups/${gid}`)).group.items.map((i) => i.id), { timeout: 10_000 }).toContain(candId)
+  await expect(page.locator('[data-testid="world-readiness"]')).toContainText('✓ hero')
+  // Mark final from the version menu: the album refuses a move on the reference page
+  await page.locator('[data-testid="world-header"] button', { hasText: /^v1/ }).click()
+  await page.locator('.ctx-menu button.item', { hasText: /^Mark final/ }).click()
+  if (await dialog.count()) await dialog.locator('button.primary').click()
+  await expect.poll(async () => (await api<{ items: ProfileLite[] }>('GET', '/story/profiles')).items.find((p) => p.id === profile.id)?.versions[0].state, { timeout: 10_000 }).toBe('final')
+  await expect(api('POST', '/groups/move', { items: [{ kind: 'asset', id: candId }], to: null })).rejects.toThrow(/423/)
+  // the mention: the preview resolves @name to v1's reference set with the hero first
+  type Preview = { mentions: { profile_id: string | null; version: string | null; group_id: string }[]; ref_list: { asset_id: string | null }[] }
   const klein4bId = Object.entries((await api<{ models: Record<string, { label: string }> }>('GET', '/capabilities')).models).find(([, m]) => m.label === 'Klein 4B')![0]
-  await expect.poll(async () => {
-    const pv = await api<Preview>('POST', '/recipes/preview', { recipe: { kind: 't2i', model_id: klein4bId, prompt_mode: 'text', prompt_text: `@${name} at the gate`, mentions: [{ profile_id: profile.id, name }] } })
-    return `${pv.mentions[0]?.profile_id}/${pv.mentions[0]?.version}/${pv.mentions[0]?.group_id}/${pv.ref_list[0]?.asset_id}`
-  }).toBe(`${profile.id}/v1/${gid}/${heroId}`)
-  type Preview2 = { mentions: { lora: string | null; lora_available: string | null }[]; loras: { model_id: string; strength: number; lora_name: string | null }[]; serialized_prompt: string }
-  const pv2 = await api<Preview2>('POST', '/recipes/preview', { recipe: { kind: 't2i', model_id: klein4bId, prompt_mode: 'text', prompt_text: `@${name} at the gate`, mentions: [{ profile_id: profile.id, name }] } })
-  expect(pv2.mentions[0].lora).toBe(lora.lora_id)                                                                   // LT3: added to the slots …
-  expect(pv2.loras[0].model_id).toBe(lora.lora_id)
-  expect(pv2.serialized_prompt).toContain(lora.trigger!)                                                            // … with the trigger in the prompt
-  const off = await api<Preview2>('POST', '/recipes/preview', { recipe: { kind: 't2i', model_id: klein4bId, prompt_mode: 'text', prompt_text: `@${name} at the gate`, auto_lora: false, mentions: [{ profile_id: profile.id, name }] } })
-  expect(off.loras).toEqual([])
-  expect(off.mentions[0].lora_available).toBe(lora.lora_id)
-  // the identity check: eight fake-engine images with / without, the record says the FaceSim weights are absent here
-  const chk = await api<{ job_ids: string[]; model_id: string }>('POST', `/story/loras/${lora.lora_id}/check`)
-  expect(chk.job_ids).toHaveLength(8)
-  await expect.poll(async () => (await api<{ identity: { done?: number } | null }>('GET', `/story/loras/${lora.lora_id}`)).identity?.done ?? 0, { timeout: 90_000 }).toBe(8)
-  const ident = (await api<{ identity: { status: string; with: unknown[]; without: unknown[] } }>('GET', `/story/loras/${lora.lora_id}`)).identity
-  expect(ident.with).toHaveLength(4)
-  expect(ident.status).toMatch(/weights missing/)
+  const pv = await api<Preview>('POST', '/recipes/preview', { recipe: { kind: 't2i', model_id: klein4bId, prompt_mode: 'text', prompt_text: `@${name} at the gate`, mentions: [{ profile_id: profile.id, name }] } })
+  expect(`${pv.mentions[0]?.profile_id}/${pv.mentions[0]?.version}/${pv.mentions[0]?.group_id}/${pv.ref_list[0]?.asset_id}`).toBe(`${profile.id}/v1/${gid}/${heroId}`)
+  await api('POST', '/assets/duplicate', { ids: [src] })                          // the scenarios after take "the newest image": one on no page, not locked in Mara's final set
 })
 
 test('a shot (17 / SY2, D85): "New shot from this camera" in Stage makes a Story shot whose frame arrives from the camera\'s generate; "Make a shot from this clip" in Animate makes another; Mark final is offered at a draft size (D125) and marks the version at the format', async ({ page }) => {
@@ -2056,7 +1957,7 @@ test("an episode (17 / SY4, D85): the Shots bin lists a final shot and adds it s
   await expect(page.locator('nav.rail button[title^="Sequence"]')).toHaveCount(0)
 })
 
-test('a voice (19 / CN2, D87): a draft voice from the Cast Inspector\'s form speaks for the character; the Flow Inspector voices a line on the fake runner — the line gets its ▶, an audio asset with a waveform thumbnail lands, "Voice all lines" takes the fallback voice for the speakerless line', async ({ page }) => {
+test('a voice (19 / CN2, D87): a draft voice from the Cast Inspector\'s form speaks for the character; the Flow Inspector voices a line on the fake runner — the line gets its ▶, an audio asset with a waveform thumbnail lands, "Voice all lines" takes the fallback voice for the speakerless line (World and Shots, B2a)', async ({ page }) => {
   test.setTimeout(120_000)
   // a character with a hero and a Dialogue node with two lines (through the API; the Cast and Flow scenarios cover those mouse paths)
   const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
@@ -2064,11 +1965,10 @@ test('a voice (19 / CN2, D87): a draft voice from the Cast Inspector\'s form spe
   const prof = await api<{ id: string; revision: number }>('POST', '/story/profiles', { name, cls: 'character', hero_asset_id: img, appearance: 'a courier' })
   const node = await api<{ id: string; revision: number }>('POST', '/story/flow/nodes', { type: 'dialogue', title: `${name} says`, x: 1200, y: 900 })
   await api('PATCH', `/story/flow/nodes/${node.id}`, { revision: node.revision, lines: [{ speaker: prof.id, text: 'Hi there, come in.' }, { speaker: null, text: 'Thank you.' }] })
-  await openApp(page, { suite: 'story', tab: 'cast' })
-  await page.locator(`.story-row.profile-row[data-id="${prof.id}"]`).click()
-  const voices = page.locator('.inspector .voices')
+  await openShell(page, `world/character/${prof.id}/v1`)
+  const voices = page.locator('[data-testid="world-inspector"] .voices')
   await expect(voices.locator('select[aria-label="profile voice"]')).toHaveValue('')
-  await page.locator('.inspector button[title^="New voice"]').click()                                   // the form (D32: a button)
+  await page.locator('[data-testid="world-inspector"] button[title^="New voice"]').click()             // the form (D32: a button)
   const form = voices.locator('[aria-label="new voice"]')
   await form.locator('input[aria-label="voice name"]').fill(`Narrator ${name}`)
   await expect(form.locator('select[aria-label="kokoro voice"] option')).not.toHaveCount(0)
@@ -2077,13 +1977,17 @@ test('a voice (19 / CN2, D87): a draft voice from the Cast Inspector\'s form spe
   await expect(form).toHaveCount(0)
   await expect(voices.locator('select[aria-label="profile voice"] option:checked')).toContainText(`Narrator ${name} · draft`)   // the character speaks with its first voice
   await expect(voices).toContainText('am_adam')
-  // the Flow Inspector: 🎙 on line 1 → the fake runner speaks it → ▶ and the audio asset
-  await openApp(page, { suite: 'story', tab: 'flow' })
-  await page.locator(`.story-row.node-row[data-id="${node.id}"]`).click()
-  await expect(page.locator('.inspector input[aria-label="line 1"]')).toHaveValue('Hi there, come in.')
-  await expect(page.locator('.inspector button[aria-label="play line 1"]')).toHaveCount(0)
-  await page.locator('.inspector button[aria-label="voice line 1"]').click()
-  await expect(page.locator('.inspector button[aria-label="play line 1"]')).toBeVisible({ timeout: 60_000 })
+  // Shots' Flow: the node's Inspector — 🎙 on line 1 → the fake runner speaks it → ▶ and the audio asset
+  const shotOf = (await api<{ nodes: { id: string; shot_id: string | null }[] }>('GET', '/story/flow')).nodes.find((n) => n.id === node.id)!.shot_id!
+  await openShell(page, `shots/${shotOf}/clay`)                                                         // its shot open: the Flow comes up on it
+  await page.locator('.w-rail-btn[data-level="flow"]').click()
+  await expect(page.locator('[data-testid="flow-canvas"]')).toBeVisible()
+  await page.waitForFunction(() => !!(window as unknown as { __loom2Story?: unknown }).__loom2Story)                  // the Flow's Inspector loaded Story's parts
+  await page.evaluate((id) => (window as unknown as { __loom2Story: { selectNode: (id: string) => void } }).__loom2Story.selectNode(id), node.id)   // the node selected (the canvas holds many)
+  await expect(page.locator('.s-insp input[aria-label="line 1"]')).toHaveValue('Hi there, come in.')
+  await expect(page.locator('.s-insp button[aria-label="play line 1"]')).toHaveCount(0)
+  await page.locator('.s-insp button[aria-label="voice line 1"]').click()
+  await expect(page.locator('.s-insp button[aria-label="play line 1"]')).toBeVisible({ timeout: 60_000 })
   type Line = { text: string; audio_asset_id: string | null; audio_text: string | null }
   const lines = async () => (await api<{ nodes: { id: string; lines: Line[] }[] }>('GET', '/story/flow')).nodes.find((n) => n.id === node.id)!.lines
   expect((await lines())[0]).toMatchObject({ text: 'Hi there, come in.', audio_text: 'Hi there, come in.' })
@@ -2093,10 +1997,10 @@ test('a voice (19 / CN2, D87): a draft voice from the Cast Inspector\'s form spe
   expect(asset.duration_s).toBeGreaterThan(0.5)
   expect(asset.thumb_status).toBe('done')
   // line 2 has no speaker: "Voice all lines" is refused until a fallback voice is picked, then both lines are covered (line 1 again by its speaker's voice)
-  const sel = page.locator('.inspector select[aria-label="fallback voice"]')
+  const sel = page.locator('.s-insp select[aria-label="fallback voice"]')
   await sel.selectOption({ label: `Narrator ${name} · draft` })
-  await page.locator('.inspector button[title^="Voice all lines"]').click()
-  await expect(page.locator('.inspector button[aria-label="play line 2"]')).toBeVisible({ timeout: 60_000 })
+  await page.locator('.s-insp button[title^="Voice all lines"]').click()
+  await expect(page.locator('.s-insp button[aria-label="play line 2"]')).toBeVisible({ timeout: 60_000 })
   await expect.poll(async () => (await lines())[1].audio_asset_id).toBeTruthy()
   // the Catalogue lists it under Type · Audio with its badge
   const audio = await api<{ items: { id: string }[] }>('GET', '/assets?kind=audio&limit=10')
@@ -2198,107 +2102,21 @@ test('lora slots (18 / LT1, D25): the Model tab lists the loras folder\'s file f
   await expect(page.locator('.panel input[aria-label="LoRA strength 1"]')).toHaveCount(0)
 })
 
-test('makers in context (D90 · UI4): "Make frame ▸ in Image" on a Story shot opens Image with the For chip, the node\'s line and the board\'s image as a reference; the fake engine\'s images land as the version\'s takes, and Back returns to the shot', async ({ page }) => {
-  test.setTimeout(120_000)
-  const name = `For ${Date.now().toString(36)}`
-  type ShotLite = { id: string; name: string; versions: { id: string; frame_asset_id: string | null; takes: { kind: string; id: string }[] }[] }
-  // a Shot node with a line, its shot spawned by the node, a board (a group holding a copy of an image) on the node — all through the API
-  const node = await api<{ id: string; revision: number }>('POST', '/story/flow/nodes', { type: 'shot', title: name, x: 1600, y: 1300 })
-  await api('POST', `/story/flow/nodes/${node.id}/shot`, { name })
-  const shot = (await api<{ items: ShotLite[] }>('GET', '/story/shots')).items.find((s) => s.name === name)!
-  const src = (await api<{ items: (AssetLite & { kind: string })[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0]
-  const copy = (await api<{ ids: string[] }>('POST', '/assets/duplicate', { ids: [src.id] })).ids[0]
-  const board = await api<Group>('POST', '/groups', { name: `${name} board` })
-  await api('POST', '/groups/move', { items: [{ kind: 'asset', id: copy }], to: board.id })
-  const rev = (await api<{ nodes: { id: string; revision: number }[] }>('GET', '/story/flow')).nodes.find((n) => n.id === node.id)!.revision   // the spawn moved it on
-  await api('PATCH', `/story/flow/nodes/${node.id}`, { revision: rev, text: 'a gatehouse at dawn, wide shot', board_group_id: board.id })
-  // Generate on Klein 4B first (it takes references), then Story · Shots → the shot → Make frame ▸ in Generate (a press menu: click, then the entry)
-  await openApp(page, { suite: 'generate', tab: 'model' })
-  await page.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()
-  await expect(page.locator('.panel [data-testid="for-chip"]')).toHaveCount(0)                                // opened from its tab: no chip
-  await openApp(page, { suite: 'story', tab: 'shots' })                                                       // the panel keeps Klein 4B (persisted)
-  await page.locator(`.shots-board tr.row[data-id="${shot.id}"] td.name`).click()                            // D125 (SP3): the board's row
-  await page.locator('.shot-board .make-row button[aria-label="Make frame"]').click()
-  await page.locator('.ctx-menu button.item', { hasText: 'in Image' }).click()
-  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Image/)
-  const chip = page.locator('.panel [data-testid="for-chip"]')
-  await expect(chip).toContainText(`For: ${name} · v1`)
-  await page.locator('nav.rail button[title^="Prompt"]').click()
-  await page.locator('.segmented button', { hasText: /^Text$/ }).click()
-  await expect(page.locator('.text-prompt textarea')).toHaveValue('a gatehouse at dawn, wide shot')              // the node's line
-  const go = page.locator('.panel .foot button.primary', { hasText: /^Generate/ })
-  await expect(go).toBeEnabled({ timeout: 30_000 })
-  const count = Number((await go.textContent())!.match(/Generate (\d+)/)![1])
-  await go.click()
-  // the takes arrive on v1 (the first fills the empty frame); the jobs carry the for_shot origin and the board's image as reference 1
-  await expect.poll(async () => (await api<ShotLite>('GET', `/story/shots/${shot.id}`)).versions[0].takes.length, { timeout: 60_000 }).toBe(count)
-  const v1 = (await api<ShotLite>('GET', `/story/shots/${shot.id}`)).versions[0]
-  expect(v1.takes.every((t) => t.kind === 'image')).toBe(true)
-  expect(v1.frame_asset_id).toBe(v1.takes[0].id)
-  type JobLite = { id: string; recipe: { refs?: { asset_id: string }[] }; origin: { surface: string; payload: Record<string, unknown> | null } | null; result: { asset_ids?: string[] } | null }
-  const job = (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.result?.asset_ids?.includes(v1.takes[0].id))!
-  expect(job.origin?.surface).toBe('for_shot')
-  expect(job.origin?.payload).toMatchObject({ shot_id: shot.id, version: 'v1', node_id: node.id })
-  expect(job.recipe.refs?.[0]?.asset_id).toBe(copy)
-  // ← Back: Story · Shots on the shot, its takes on the board — and (D125, I3) the context ends: Image works as from its tab again
-  await chip.locator('button[aria-label^="Back to"]').click()
-  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Story/)
-  await expect(page.locator('.story-strip b')).toHaveText(name)
-  await expect(page.locator('.shot-board .take-card')).toHaveCount(count)
-  await openImage(page, 'Make')
-  await expect(chip).toHaveCount(0)
-})
-
-test('the World library (D92 · UI7): an entry added in Story · World gets its picture by itself and is a tile in Generate; its right-click edits it in World; no tile shows letters', async ({ page }) => {
-  test.setTimeout(90_000)
-  const tag = Date.now().toString(36)
-  const words = `teal shop-sign glow ${tag}`, name = `teal ${tag}`                      // unique: the project is reused between runs
-  await openApp(page, { suite: 'story', tab: 'world' })
-  await page.locator('.story-panel .story-row', { hasText: 'Library' }).click()
-  const field = page.locator('.lib-field[data-field="lighting"]')
-  await expect(field.locator('.preset-icon').first()).toBeVisible()                      // the project's library is seeded with the built-ins
-  await field.locator('button.lib-add').click()
-  const dialog = page.locator('.modal.ask')
-  await dialog.locator('input').fill(words)
-  await dialog.locator('button.primary').click()
-  await expect(page.locator('.inspector textarea[aria-label="selected entry words"]')).toHaveValue(words)   // added and selected: the Inspector writes it
-  await page.locator('.inspector input[aria-label="selected entry name"]').fill(name)
-  type Entry = { id: string; field: string; name: string; text: string }
-  await expect.poll(async () => (await api<{ entries: Entry[] }>('GET', '/story/library')).entries.find((e) => e.text === words)?.name, { timeout: 10_000 }).toBe(name)
-  // its picture is made by itself (one small job on the sample model, run now) and lands on the tile
-  type SwatchJob = { status: string; origin: { surface: string; payload: { field?: string; value?: string } | null } | null }
-  await expect.poll(async () => (await api<{ items: SwatchJob[] }>('GET', '/jobs')).items.some((j) => j.origin?.surface === 'swatch' && j.origin.payload?.value === words), { timeout: 10_000 }).toBe(true)
-  await expect(field.locator(`button[aria-label="${name}"] img`)).toBeVisible({ timeout: 45_000 })
-  expect(await page.locator('.preset-icon .tile').evaluateAll((ts) => ts.filter((t) => !t.querySelector('svg, img')).length)).toBe(0)   // D92: a glyph or a picture, never letters
-  // Generate: the tile in the Look section's lighting row; a click puts the words in the field
-  await openImage(page, 'Make')
-  await page.locator('nav.rail button[title^="Prompt"]').click()
-  await page.locator('.segmented button', { hasText: /^Tree$/ }).click()
-  await page.locator('nav.rail button[title^="Look"]').click()
-  const row = page.locator('#gen-sec-look .field', { has: page.locator('[aria-label="lighting presets"]') })
-  await row.locator('[data-preset-panel-btn]').click()                                                          // D119 (SC2): the presets behind the field's +
-  const tile = page.locator(`[data-preset-panel] [aria-label="lighting presets"] button[aria-label="${name}"]`)
-  await expect(tile.locator('img')).toBeVisible()
-  await tile.click()
-  await expect(row.locator('input[type=text]').first()).toHaveValue(new RegExp(words.replace(/[.*+?^${}()|[\]-]/g, '\\$&')))
-  await expect(tile).toHaveAttribute('aria-pressed', 'true')
-  // the field's + adds the field's words as a new entry; the tile's right-click opens it in Story · World
-  await contextChoose(page, tile, 'Edit in Story · World')
-  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Story/)
-  await expect(page.locator('.inspector input[aria-label="selected entry name"]')).toHaveValue(name)
-})
-
-test('a subject is a Cast character (D92 · UI7): the subject card picks a profile by its hero, shows its sheet (D93 B4: no copy), and the job carries its references through the profile mention', async ({ page }) => {
+test('a subject is a Cast character (D92 · UI7): the subject card picks a profile by its hero, shows its sheet (D93 B4: no copy), and the job carries its references through the profile mention (in Sketches, B2a)', async ({ page }) => {
   test.setTimeout(90_000)
   const name = `Ines ${Date.now().toString(36)}`
   const src = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0]
   const hero = (await api<{ ids: string[] }>('POST', '/assets/duplicate', { ids: [src.id] })).ids[0]            // a copy: no other scenario's image moves
   type ProfileLite = { id: string; name: string; current: string; versions: { id: string; group_id: string }[] }
   const prof = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', hero_asset_id: hero, appearance: `${name}, a lighthouse keeper in a yellow oilskin` })
-  await openApp(page, { suite: 'generate', tab: 'model' })
-  await page.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()   // takes references
-  await page.locator('nav.rail button[title^="Prompt"]').click()
-  await page.locator('.segmented button', { hasText: /^Tree$/ }).click()
+  await openShell(page, 'world/sketches')
+  const col = page.locator('[data-testid="world-sketches"]')
+  await col.locator('#gen-sec-model').scrollIntoViewIfNeeded()
+  await col.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()   // takes references
+  await col.locator('#gen-sec-prompt').scrollIntoViewIfNeeded()
+  await col.locator('#gen-sec-prompt .segmented button', { hasText: /^Tree$/ }).click()
+  type GenHook = { getState: () => { panel: { tree: Record<string, unknown> }; set: (p: Record<string, unknown>) => void } }
+  await page.evaluate(() => { const g = (window as unknown as { __loom2Generate: GenHook }).__loom2Generate.getState(); g.set({ tree: { ...g.panel.tree, subjects: [] }, mentions: [] }) })   // World seeds Make with the entity open: start from none
   await page.locator('.gen-tree .full button', { hasText: 'subject' }).click()
   const card = page.locator('.gen-tree .subject').last()
   const pick = card.locator(`[aria-label^="subject"][aria-label$="from the Cast"] button[aria-label="${name}"]`)
@@ -2309,7 +2127,7 @@ test('a subject is a Cast character (D92 · UI7): the subject card picks a profi
   await expect(card.locator('.linked-to')).toContainText(name)
   await expect(page.locator('.mention-chips .mchip', { hasText: name })).toBeVisible()  // the profile mention, recorded by the link
   await expect(page.locator('.ref-from-mentions .ref-slot').first()).toBeVisible({ timeout: 20_000 })
-  const go = page.locator('.panel .foot button.primary', { hasText: /^Generate/ })
+  const go = col.locator('button', { hasText: /^Make \d+ sketch/ })
   await expect(go).toBeEnabled({ timeout: 30_000 })
   await go.click()
   type JobLite = { status: string; recipe: { refs?: { asset_id: string; mention?: string | null }[]; mentions?: { profile_id?: string | null; subject?: number | null; group_id: string; asset_ids: string[] }[] } }
@@ -2325,70 +2143,32 @@ test('a subject is a Cast character (D92 · UI7): the subject card picks a profi
   await expect(page.locator('.mention-chips .mchip', { hasText: name })).toHaveCount(0)
 })
 
-test('Cast from Generate (D93 · A1, A2): a character without a look gets candidates from Generate, and one becomes its hero via Add to character ▸', async ({ page }) => {
-  test.setTimeout(120_000)
+test('Add to World ▸ (D93 · A2, B2a): a character without a look takes a Bin picture as its hero from the picture\'s right-click; World shows it', async ({ page }) => {
   const name = `Noor ${Date.now().toString(36)}`
-  type Version = { id: string; state: string; group_id: string; candidates_group_id: string | null; hero_asset_id: string | null; appearance: string }
-  type ProfileLite = { id: string; name: string; current: string; versions: Version[] }
+  type Version = { id: string; group_id: string; hero_asset_id: string | null; appearance: string }
+  type ProfileLite = { id: string; versions: Version[] }
   const prof = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character' })              // no hero, no references
   expect(prof.versions[0].appearance).toBe('')                                                            // A9: the sheet starts empty
-  await openApp(page, { suite: 'generate', tab: 'model' })
-  await page.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()
-  await page.locator('nav.rail button[title^="Prompt"]').click()
-  await page.locator('.segmented button', { hasText: /^Tree$/ }).click()
-  await page.locator('.gen-tree .full button', { hasText: 'subject' }).click()
-  const card = page.locator('.gen-tree .subject').last()
-  await card.locator(`[aria-label^="subject"][aria-label$="from the Cast"] button[aria-label="${name}"]`).click()
-  await expect(card.locator('.subject-sheet .sheet-empty')).toBeVisible()                                 // an empty sheet: the name alone …
-  await expect(card.locator('.subject-warn')).toHaveText('the model only sees the name — describe the look in Cast')   // … and the card says so
-  const cast = card.locator('button.subject-cast')
-  await expect(cast).toHaveText(new RegExp(`Give ${name} a look`))
-  await cast.click()                                                                                       // the run asks for the look first
-  await expect(card.locator('.subject-warn.ask')).toContainText(`describe ${name}'s look in Story · Cast first`)
-  await expect(card.locator('.subject-sheet')).toBeFocused()
-  // D93 (B4): the look is written in Cast — the sheet's "edit in Cast" opens the version with the appearance focused
-  await card.locator('.subject-sheet button', { hasText: 'edit in Cast' }).click()
-  await expect(page.locator('.cast-page h2')).toContainText(name)
-  await expect(page.locator('#cast-appearance')).toBeFocused()
-  await page.locator('#cast-appearance').fill(`${name}, a red-haired diver in a yellow wetsuit`)
-  await expect.poll(async () => (await api<ProfileLite>('GET', `/story/profiles/${prof.id}`)).versions[0].appearance).toBe(`${name}, a red-haired diver in a yellow wetsuit`)
-  await openImage(page, 'Make')
-  await expect(card.locator('.subject-sheet')).toContainText('a red-haired diver in a yellow wetsuit')   // the card follows Cast
-  await expect(card.locator('.subject-warn')).toHaveCount(0)
-  await expect(page.locator('.panel .foot button.primary', { hasText: /^Generate/ })).toBeEnabled({ timeout: 30_000 })
-  await cast.click()
-  const toast = page.locator('.toast', { hasText: `as ${name}'s candidates` })
-  await expect(toast).toBeVisible()
-  type JobLite = { id: string; status: string; origin?: { surface: string; ref?: string | null; payload?: { group_id?: string } }; result?: { asset_ids?: string[] } }
-  const mine = async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.filter((j) => j.origin?.surface === 'cast' && j.origin.ref === prof.id)
-  await expect.poll(async () => { const js = await mine(); return js.length > 0 && js.every((j) => j.status === 'done') }, { timeout: 60_000 }).toBe(true)
-  const p1 = await api<ProfileLite>('GET', `/story/profiles/${prof.id}`)
-  const cand = p1.versions[0].candidates_group_id!
-  const made = (await mine()).flatMap((j) => j.result?.asset_ids ?? [])
-  expect((await mine()).every((j) => j.origin?.payload?.group_id === cand)).toBe(true)
-  await expect.poll(async () => Object.keys((await api<{ assets: Record<string, unknown> }>('GET', `/groups/${cand}`)).assets).sort().join()).toBe([...made].sort().join())   // all on the candidates page
-  // Add to Cast ▸ on a result tile: the profile it was made for first, "as the hero"
-  const tile = page.locator(`.cat-grid .tile[data-id="${made[0]}"]`)
-  await expect(tile).toBeVisible({ timeout: 20_000 })
+  const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
+  const pic = (await api<{ ids: string[] }>('POST', '/assets/duplicate', { ids: [img] })).ids[0]        // a copy, on no page: Imports
+  await api('POST', '/groups/move', { items: [{ kind: 'asset', id: pic }], to: null })
+  await openShell(page, 'bin')
+  await openHome(page, 'imports')
+  const tile = page.locator(`[data-testid="bin-grid"] .w-tile[data-id="${pic}"]`)
   await tile.click({ button: 'right' })
-  await page.locator('.ctx-menu .item.sub', { hasText: 'Add to Cast' }).hover()
-  await expect(page.locator('.ctx-menu .heading', { hasText: 'made for' })).toBeVisible()
-  await page.locator('.ctx-menu .ctx-menu > .item.sub', { hasText: `${name} · v1` }).first().hover()    // the profile's own submenu (not its parent's row)
+  await page.locator('.ctx-menu .item.sub', { hasText: 'Add to World' }).hover()
+  await page.locator('.ctx-menu .ctx-menu > .item.sub', { hasText: `${name} · v1` }).first().hover()
   await page.locator('.ctx-menu .ctx-menu .ctx-menu button.item', { hasText: 'as the hero' }).click()
   await expect(page.locator('.toast', { hasText: `is ${name}'s hero` })).toBeVisible()
-  await expect.poll(async () => (await api<ProfileLite>('GET', `/story/profiles/${prof.id}`)).versions[0].hero_asset_id).toBe(made[0])
-  const ref = (await api<{ group: { cover_id: string | null; items: { id: string }[] } }>('GET', `/groups/${p1.versions[0].group_id}`)).group
-  expect(ref.cover_id).toBe(made[0])                                                                       // moved from the candidates onto the reference set
-  expect(ref.items.map((i) => i.id)).toContain(made[0])
-  await expect(cast).toHaveText(new RegExp(`More looks for ${name}`), { timeout: 20_000 })                // the card follows: it has a look now
-  await expect(card.locator('.subject-slots')).toHaveText(/^ref 1$/)                                      // its hero is reference image 1 in the prompt
-  // the toast's way to Cast: the candidates are there
-  await page.locator('.toast button', { hasText: `Open ${name} in Cast` }).first().click()
-  await expect(page.locator('.cast-page h2')).toContainText(name)
-  await expect(page.locator('.cand-card')).toHaveCount(made.length - 1)
+  await expect.poll(async () => (await api<ProfileLite>('GET', `/story/profiles/${prof.id}`)).versions[0].hero_asset_id).toBe(pic)
+  const ref = (await api<{ group: { cover_id: string | null; items: { id: string }[] } }>('GET', `/groups/${prof.versions[0].group_id}`)).group
+  expect(ref.cover_id).toBe(pic)                                                                           // onto the reference set, as its cover
+  await expect(tile).toHaveCount(0)                                                                         // it left Imports
+  await openShell(page, `world/character/${prof.id}/v1`)
+  await expect(page.locator(`[data-testid="world-bin"] .w-tile[data-id="${pic}"] .w-badge`)).toHaveText('★')
 })
 
-test('a live character sheet (D93 · B4, B5): an outfit edited in Cast shows on the linked subject and rides the job; the version chip switches the job to that version\'s references', async ({ page }) => {
+test('a live character sheet (D93 · B4, B5): an outfit edited in Cast shows on the linked subject and rides the job; the version chip switches the job to that version\'s references (the Sheet and Sketches, B2a)', async ({ page }) => {
   test.setTimeout(120_000)
   const name = `Ida ${Date.now().toString(36)}`
   const src = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0]
@@ -2400,9 +2180,8 @@ test('a live character sheet (D93 · B4, B5): an outfit edited in Cast shows on 
   await api('PATCH', `/story/profiles/${p1.id}`, { revision: p2.revision, versions: [{ id: 'v2', label: 'winter' }] })
   const [v1, v2] = p2.versions
   // Cast: v2's outfit and a bound colour, typed on the version page (saved after a pause)
-  await openApp(page, { suite: 'story', tab: 'cast' })
-  await page.locator(`.profile-row[data-id="${p1.id}"]`).click()
-  await expect(page.locator('.cast-page h2')).toContainText('v2 · winter')
+  await openSheet(page, 'character', p1.id, 'v2')
+  await expect(page.locator('[data-testid="world-header"]')).toContainText('v2 · winter')
   await page.locator('#cast-outfit').fill('a yellow oilskin')
   await page.locator('.cast-sheet button', { hasText: 'colour' }).click()
   await page.locator('.cast-sheet input[aria-label="colour 1: what it colours"]').fill('oilskin')
@@ -2410,21 +2189,23 @@ test('a live character sheet (D93 · B4, B5): an outfit edited in Cast shows on 
   await expect.poll(async () => { const v = (await api<ProfileLite>('GET', `/story/profiles/${p1.id}`)).versions[1]; return `${v.outfit}|${v.colours.map((c) => `${c.hex} ${c.object}`).join()}` }).toBe('a yellow oilskin|#C0392B oilskin')
   await page.screenshot({ path: 'node_modules/.e2e/d93b-smoke-cast.png' })
   // Generate: the subject linked to the character shows the edited sheet, the chip says the version
-  await openImage(page, 'Make')
-  await page.locator('nav.rail button[title^="Model"]').click()
-  await page.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()   // takes references
-  await page.locator('nav.rail button[title^="Prompt"]').click()
-  await page.locator('.segmented button', { hasText: /^Tree$/ }).click()
+  await openShell(page, 'world/sketches')
+  const col = page.locator('[data-testid="world-sketches"]')
+  await col.locator('#gen-sec-model').scrollIntoViewIfNeeded()
+  await col.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()   // takes references
+  await col.locator('#gen-sec-prompt').scrollIntoViewIfNeeded()
+  await col.locator('#gen-sec-prompt .segmented button', { hasText: /^Tree$/ }).click()
+  type GenHook = { getState: () => { panel: { tree: Record<string, unknown> }; set: (p: Record<string, unknown>) => void } }
+  await page.evaluate(() => { const g = (window as unknown as { __loom2Generate: GenHook }).__loom2Generate.getState(); g.set({ tree: { ...g.panel.tree, subjects: [] }, mentions: [] }) })   // World seeds Make with the entity open: start from none
   await page.locator('.gen-tree .full button', { hasText: 'subject' }).click()
   const card = page.locator('.gen-tree .subject').last()
   await card.locator(`[aria-label^="subject"][aria-label$="from the Cast"] button[aria-label="${name}"]`).click()
   await expect(card.locator('.subject-sheet')).toContainText('a yellow oilskin')
   await expect(card.locator('.version-chip')).toHaveText(/v2 · winter/)
-  await card.locator('input[aria-label$="this shot only"]').fill('soaked, hood up')
-  await page.locator('#gen-sec-preview summary').click()
-  await expect(page.locator('.preview-composed')).toContainText(`${name}, a tall woman with silver hair, wearing a yellow oilskin, #C0392B oilskin, soaked, hood up`)   // T8: as sent
-  await expect(page.locator('.preview-box')).toContainText('wearing a yellow oilskin, #C0392B oilskin, soaked, hood up')
-  const go = page.locator('.panel .foot button.primary', { hasText: /^Generate/ })
+  await col.locator('#gen-sec-preview summary').click()
+  await expect(page.locator('.preview-composed')).toContainText(`${name}, a tall woman with silver hair, wearing a yellow oilskin, #C0392B oilskin`)   // T8: as sent
+  await expect(page.locator('.preview-box')).toContainText('wearing a yellow oilskin, #C0392B oilskin')
+  const go = col.locator('button', { hasText: /^Make \d+ sketch/ })
   type JobLite = { id: string; status: string; recipe: { prompt_json?: { subjects?: { description?: string }[] }; refs?: { asset_id: string; mention?: string | null }[]; mentions?: { profile_id?: string | null; version?: string | null; group_id: string; asset_ids: string[]; composed?: string | null }[] } }
   const jobsFor = async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.filter((j) => j.recipe.mentions?.some((m) => m.profile_id === p1.id))
   await expect(go).toBeEnabled({ timeout: 30_000 })
@@ -2432,7 +2213,7 @@ test('a live character sheet (D93 · B4, B5): an outfit edited in Cast shows on 
   await expect.poll(async () => { const js = await jobsFor(); return js.length > 0 && js.every((j) => j.status === 'done') }, { timeout: 60_000 }).toBe(true)
   const first = (await jobsFor())[0]
   const m1 = first.recipe.mentions!.find((m) => m.profile_id === p1.id)!
-  expect(first.recipe.prompt_json?.subjects?.[0].description).toContain('wearing a yellow oilskin, #C0392B oilskin, soaked, hood up')   // the job's prompt carries the Cast edit
+  expect(first.recipe.prompt_json?.subjects?.[0].description).toContain('wearing a yellow oilskin, #C0392B oilskin')   // the job's prompt carries the sheet's edit
   expect(m1.version).toBe('v2')
   expect(m1.group_id).toBe(v2.group_id)
   expect(m1.composed).toBe(first.recipe.prompt_json?.subjects?.[0].description)
@@ -2441,7 +2222,7 @@ test('a live character sheet (D93 · B4, B5): an outfit edited in Cast shows on 
   await page.locator('.ctx-menu button.item', { hasText: 'v1 · rain gear' }).click()
   await expect(card.locator('.version-chip')).toHaveText(/v1 · rain gear/)
   await expect(card.locator('.subject-sheet')).toContainText('a grey wool coat')
-  await expect(page.locator('.preview-composed')).toContainText('wearing a grey wool coat, soaked, hood up')
+  await expect(page.locator('.preview-composed')).toContainText('wearing a grey wool coat', { timeout: 20_000 })
   await page.screenshot({ path: 'node_modules/.e2e/d93b-smoke-generate.png' })
   const before = new Set((await jobsFor()).map((j) => j.id))
   await expect(go).toBeEnabled({ timeout: 30_000 })
@@ -2569,7 +2350,7 @@ test('figures bound to characters (D93 · C8): a figure picks a character in the
   expect(job.result?.serialized_prompt).toContain(`From left to right in image 1: figure 1 is ${ana.name} (reference image 2), a short woman in a red raincoat; figure 2 is ${bo.name} (reference image 3), a lanky boy with a green cap.`)
 })
 
-test('Flatten image (D90 · UI6): the canvas menu\'s Layer ▸ folds a group, a blend mode and an adjustment into one layer, exactly as the server flattens; Undo brings the layers back; Save (D95: the document and a Catalogue version) still matches', async ({ page }) => {
+test('Flatten image (D90 · UI6): the canvas menu\'s Layer ▸ folds a group, a blend mode and an adjustment into one layer, exactly as the server flattens; Undo brings the layers back; Save (D95: the document and a Catalogue version) still matches (World’s Edit, B2a)', async ({ page }) => {
   type Ed = { getState: () => { doc: { id: string; layers: { id: string; name: string; kind: string }[] } | null; addLayer: (k: string, extra?: Record<string, unknown>) => unknown; updateNode: (id: string, p: Record<string, unknown>) => void; groupNodes: (ids: string[]) => void; duplicateNodes: (ids: string[]) => void; undo: () => void; save: () => Promise<boolean>; docDirty: boolean } }
   const ed = () => page.evaluate(() => { const s = (window as unknown as { __loom2Editor: Ed }).__loom2Editor.getState(); return { layers: s.doc!.layers.map((n) => ({ id: n.id, name: n.name, kind: n.kind })), dirty: s.docDirty } })
   const raw = async (docId: string): Promise<Buffer> => {
@@ -2578,8 +2359,10 @@ test('Flatten image (D90 · UI6): the canvas menu\'s Layer ▸ folds a group, a 
     expect(r.status).toBe(200)
     return Buffer.from(await r.arrayBuffer())
   }
-  await openApp(page, { suite: 'catalogue', renderer: 'webgl' })
-  await contextChoose(page, tiles(page).nth(7), 'Open in Edit')
+  await openShell(page, 'bin', { renderer: 'webgl' })
+  await openHome(page, 'imports', 'pictures')
+  const photo = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=unprocessed&kind=image&sort=created_desc&limit=8')).items.at(-1)!.id   // a plain photo (a saved document has layers)
+  await contextChoose(page, page.locator(`[data-testid="bin-grid"] .w-tile[data-id="${photo}"]`), 'Open in Edit')
   const docId = await page.waitForFunction(() => (window as unknown as { __loom2Editor: Ed }).__loom2Editor.getState().doc?.id ?? null).then((h) => h.jsonValue() as Promise<string>)
   // arrange (dev hook): a copy of the photo in a group at screen, an invert adjustment on top at 40 %
   await page.evaluate(() => {
@@ -2632,31 +2415,6 @@ test('Flatten image (D90 · UI6): the canvas menu\'s Layer ▸ folds a group, a 
   expect((await ed()).layers.map((n) => n.kind)).toEqual(['adjustment', 'group', 'raster'])
   expect(await page.evaluate(() => (window as unknown as { __loom2Editor: { getState: () => { history: { label: string }[] } } }).__loom2Editor.getState().history.at(-1)?.label)).not.toMatch(/solo|visib/i)
   await page.keyboard.press('Escape')
-})
-
-test('an album trains a LoRA (D122): its card\'s right-click opens the sheet with the image count; Train ▶ queues a staged job on the album, the adapter its own', async ({ page }) => {
-  const name = `Neon ${Date.now().toString(36)}`                                                        // unique: the project is reused between runs
-  const g = await api<Group>('POST', '/groups', { name })
-  const free = (await api<{ items: (AssetLite & { kind: string })[] }>('GET', '/assets?folder=unprocessed&limit=40')).items.filter((a) => a.kind === 'image').slice(0, 4)
-  await api('POST', '/groups/move', { items: free.map((a) => ({ kind: 'asset', id: a.id })), to: g.id })
-  await openApp(page, { suite: 'catalogue' })
-  await page.locator('.place-open.album').click()
-  const card = page.locator('.pcard', { hasText: name })
-  await expect(card).toBeVisible()
-  await card.click({ button: 'right' })
-  await page.locator('.ctx-menu button.item', { hasText: 'Train a LoRA on this album…' }).click()
-  const sheet = page.locator('.modal.train-album')
-  await expect(sheet.locator('.head')).toContainText(`Train a LoRA on ${name}`)
-  await expect(sheet.locator('.foot .estimate')).toHaveText('4 images on the album')
-  await sheet.locator('input[aria-label="train steps"]').fill('100')
-  await sheet.locator('input[aria-label="train staged"]').check()
-  await sheet.getByRole('button', { name: 'Train ▶' }).click()
-  await expect(sheet).toHaveCount(0)
-  type TrainJob = { id: string; kind: string; status: string; recipe: { group_id?: string; profile_id?: string | null; name?: string; steps?: number } }
-  const job = async () => (await api<{ items: TrainJob[] }>('GET', '/jobs')).items.find((j) => j.kind === 'train_lora' && j.recipe.group_id === g.id)
-  await expect.poll(async () => (await job())?.status, { timeout: 10_000 }).toBe('staged')
-  expect((await job())!.recipe).toMatchObject({ group_id: g.id, profile_id: null, name, steps: 100 })   // no Cast version holds the album: its own adapter
-  await api('POST', `/jobs/${(await job())!.id}/cancel`)                                                 // the queue left as it was
 })
 
 test('the drawer (D95 · AN1, B2a): the Dock\'s Bin in World\'s Sketches and Shots\' Performance — a double-click adds a reference in Make and sets the start frame in Performance; a tile dragged onto a reference slot takes it', async ({ page }) => {
@@ -2763,80 +2521,7 @@ test('AN1 step 5 (D95): the Clay level adds an image plane from the Bin, renames
   await expect(page.locator('.from-stage')).toHaveCount(0)
 })
 
-test("ideas (proto01_UIcast CW1–CW2): Prototype ▸ on a tile copies the picture into a new character idea named from its prompt; Make the clay ▶ runs the A-pose picture, the fit and the shell; Explore in Image makes for it — listed, not a variant — and ＋ variant takes it; Keep ▶ makes a Cast character with the drafted sheet and the clay", async ({ page }) => {
-  test.setTimeout(180_000)
-  type Clay = { step: string; anim_ref_asset_id: string | null; body: { height_m: number } | null; shell_asset_id: string | null }
-  type Variant = { id: string; asset_id: string; made_from: { asset_id: string | null; prompt: string }; clay: Clay | null }
-  type IdeaLite = { id: string; name: string; variants: Variant[]; made_for: string[]; kept: { profile_id: string; version_id: string }[] }
-  const known = new Set((await api<{ items: IdeaLite[] }>('GET', '/story/ideas')).items.map((i) => i.id))
-  await openApp(page, { suite: 'catalogue' })
-  let tile = tiles(page).first(), src = ''
-  for (let k = 0; k < 16 && !src; k++) {                                                   // the first picture (not a clip or a model)
-    const t = tiles(page).nth(k), id = (await t.getAttribute('data-id'))!
-    if ((await api<{ kind: string }>('GET', `/assets/${id}`)).kind === 'image') { tile = t; src = id }
-  }
-  await tile.click({ button: 'right' })
-  await page.locator('.ctx-menu .item.sub', { hasText: 'Prototype' }).first().hover()
-  await page.screenshot({ path: 'node_modules/.e2e/cw1-prototype-menu.png' })
-  await page.locator('.ctx-menu .ctx-menu button.item', { hasText: /^New character idea/ }).click()
-  await page.locator('.toast', { hasText: 'New character idea “' }).locator('button', { hasText: 'Open' }).click()   // at once: a toast lasts 6 s, three at most
-  const fresh = async () => (await api<{ items: IdeaLite[] }>('GET', '/story/ideas')).items.find((i) => !known.has(i.id))
-  await expect.poll(async () => !!(await fresh()), { timeout: 10_000 }).toBe(true)
-  const idea = (await fresh())!
-  const get = async () => api<IdeaLite>('GET', `/story/ideas/${idea.id}`)
-  expect(idea.variants[0].made_from.asset_id).toBe(src)
-  expect(idea.variants[0].asset_id).not.toBe(src)                                            // copied (U2): the tile keeps its picture
-  const bench = page.locator(`.idea-bench[data-idea="${idea.id}"]`)
-  await expect(bench).toBeVisible()
-  await expect(page.locator(`.idea-row[data-id="${idea.id}"]`)).toHaveClass(/active/)
-  // Make the clay ▶: the A-pose picture, the fit, then (full) the shell — the fake engine answers each
-  await bench.locator('button', { hasText: /^Make the clay/ }).click()
-  await expect.poll(async () => (await get()).variants[0].clay?.step, { timeout: 120_000 }).toBe('done')
-  const clay = (await get()).variants[0].clay!
-  expect(clay.anim_ref_asset_id && clay.body).toBeTruthy()
-  if (env().variant === 'full') expect(clay.shell_asset_id).toBeTruthy()
-  await expect(bench.locator('.idea-clay')).toContainText('fitted')
-  await page.screenshot({ path: 'node_modules/.e2e/cw1-idea-bench.png' })
-  // CW2: Explore in Image — the chip names the idea; what it makes is listed on it, not a variant
-  await bench.locator('button', { hasText: /^Explore in Image/ }).click()
-  const chip = page.locator('[data-testid="for-chip"]')
-  await expect(chip).toContainText(`For: ${idea.name} · idea`)
-  await page.locator('nav.rail button[title^="Model"]').click()
-  await page.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()
-  const go = page.locator('.panel .foot button.primary', { hasText: /^Generate/ })
-  await expect(go).toBeEnabled()
-  await go.click()
-  await expect.poll(async () => (await get()).made_for.length, { timeout: 60_000 }).toBeGreaterThan(0)
-  expect((await get()).variants).toHaveLength(1)
-  await page.screenshot({ path: 'node_modules/.e2e/cw2-for-idea.png' })
-  await chip.locator('button', { hasText: `Back to ${idea.name}` }).click()
-  await expect(bench).toBeVisible()
-  await expect(chip).toHaveCount(0)
-  const made = (await get()).made_for[0]
-  const card = bench.locator(`.made-card[data-id="${made}"]`)
-  await card.click({ button: 'right' })                                                      // its right-click: the batch's other results may still land and move the hovered card
-  await page.locator('.ctx-menu button.item', { hasText: /^Add as a variant/ }).click()
-  await expect.poll(async () => (await get()).variants.length, { timeout: 10_000 }).toBe(2)
-  expect((await get()).variants[1].made_from.asset_id).toBe(made)
-  // Keep ▶: a Cast character from the variant in focus — the hero a copy, the sheet drafted, the clay carried, from_idea
-  await bench.locator(`.variant-card[data-id="${idea.variants[0].id}"]`).click()
-  await expect(bench.locator(`.variant-card[data-id="${idea.variants[0].id}"]`)).toHaveClass(/picked/)
-  await bench.locator('button', { hasText: /^Keep ▶ as a new character/ }).click()
-  await expect.poll(async () => (await get()).kept.length, { timeout: 10_000 }).toBe(1)
-  const k = (await get()).kept[0]
-  type V = { id: string; hero_asset_id: string | null; anim_ref_asset_id: string | null; body: unknown; shell_asset_id: string | null; from_idea: { idea_id: string; variant_id: string } | null }
-  const prof = await api<{ id: string; name: string; versions: V[] }>('GET', `/story/profiles/${k.profile_id}`)
-  const v = prof.versions[0]
-  expect(prof.name).toBe(idea.name)
-  expect(v.from_idea).toEqual({ idea_id: idea.id, variant_id: idea.variants[0].id })
-  expect(v.hero_asset_id).not.toBe(idea.variants[0].asset_id)
-  expect(v.anim_ref_asset_id && v.body).toBeTruthy()
-  expect(v.shell_asset_id).toBe(clay.shell_asset_id)
-  await expect(page.locator(`.profile-row[data-id="${prof.id}"]`)).toHaveClass(/active/)    // Cast opens on it
-  await page.screenshot({ path: 'node_modules/.e2e/cw1-kept.png' })
-})
-
-test("the bench and a prop's height (D142, CW4): Bench ▶ opens Clay for the character, bound, with its chip and the way back; a prop's height is read from its name, edited in Cast, and its model stands at it on its bench beside a 1.75 m figure", async ({ page }) => {
+test("the bench and a prop's height (D142, CW4): Bench ▶ opens Clay for the character, bound, with its chip and the way back; a prop's height is read from its name, edited in Cast, and its model stands at it on its bench beside a 1.75 m figure (World’s Sheet, B2a)", async ({ page }) => {
   test.setTimeout(120_000)
   const tag = Date.now().toString(36)
   type V = { id: string; height_m: number | null; model_asset_id: string | null }
@@ -2844,34 +2529,31 @@ test("the bench and a prop's height (D142, CW4): Bench ▶ opens Clay for the ch
   type StageLite = { id: string; name: string; purpose: string; bound: { profile_id: string; version: string } | null; objects: { id: string; kind: string; profile_id: string | null; height_m: number | null; body: { height_m: number } | null }[] }
   const mara = await api<ProfileLite>('POST', '/story/profiles', { name: `Mara ${tag}`, cls: 'character', appearance: 'a fisher' })
   await api('PATCH', `/story/profiles/${mara.id}`, { revision: 0, versions: [{ id: 'v1', body: { height_m: 1.62 } }] })
-  await openApp(page, { suite: 'story', tab: 'cast' })
-  await page.locator(`.profile-row[data-id="${mara.id}"]`).click()
+  await openSheet(page, 'character', mara.id)
   await page.locator('.cast-body button', { hasText: /^Bench/ }).first().click()
-  const chip = page.locator('[data-testid="bench-chip"]')
-  await expect(chip).toContainText(`Bench: Mara ${tag} v1`)
+  await expect(page.locator('[data-testid="world-clay"] canvas').first()).toBeVisible({ timeout: 20_000 })   // the bench, inside World
+  await expect(page.locator('.w-mode button.active')).toHaveText('Clay')
   const benches = async () => (await api<{ items: StageLite[] }>('GET', '/stages?purpose=bench')).items
   await expect.poll(async () => (await benches()).some((b) => b.bound?.profile_id === mara.id), { timeout: 10_000 }).toBe(true)
   const bench = (await benches()).find((b) => b.bound?.profile_id === mara.id)!
   expect(bench.objects[0].profile_id).toBe(mara.id)
   expect(bench.objects[0].body?.height_m).toBe(1.62)
   expect((await api<{ items: StageLite[] }>('GET', '/stages')).items.map((s) => s.id)).not.toContain(bench.id)          // out of the stage list
-  await expect(page.locator('.stage-picker select option')).toHaveCount(1 + (await api<{ items: StageLite[] }>('GET', '/stages')).items.length)   // the bench, then the stages
   await page.screenshot({ path: 'node_modules/.e2e/cw3-bench.png' })
-  await chip.locator('button', { hasText: 'Back to Cast' }).click()
-  await expect(page.locator(`.profile-row[data-id="${mara.id}"]`)).toHaveClass(/active/)
+  await page.locator('.w-mode button', { hasText: 'Sheet' }).click()
+  await expect(page.locator('[data-testid="world-sheet"]')).toBeVisible()
   // CW4: a prop's height — read from its name, edited in Cast; its bench stands the model at it
   const cup = await api<ProfileLite>('POST', '/story/profiles', { name: `Grandma cup ${tag}`, cls: 'prop' })
   expect(cup.versions[0].height_m).toBe(0.1)
   const glb = `${process.cwd().replace(/\\/g, '/')}/../orchestrator/tests/fixtures/motion/test_rig.glb`      // a GLB import (D128): both builds, no job
   await api('POST', `/story/profiles/${cup.id}/versions/v1/model/import`, { path: glb })
-  await page.locator('.cast-panel .segmented button', { hasText: /^props$/ }).click()
-  await page.locator(`.profile-row[data-id="${cup.id}"]`).click()
+  await openSheet(page, 'prop', cup.id)
   const h = page.locator('.prop-height input')
   await expect(h).toHaveValue('0.1')
   await h.fill('0.12'); await h.press('Enter')
   await expect.poll(async () => (await api<ProfileLite>('GET', `/story/profiles/${cup.id}`)).versions[0].height_m, { timeout: 10_000 }).toBe(0.12)
   await page.locator('.prop-model button', { hasText: /^Bench/ }).click()
-  await expect(chip).toContainText(`Bench: Grandma cup ${tag} v1`)
+  await expect(page.locator('.w-mode button.active')).toHaveText('Clay')
   const pb = (await benches()).find((b) => b.bound?.profile_id === cup.id)!
   expect(pb.objects.map((o) => o.kind)).toEqual(['mesh', 'mannequin'])
   expect(pb.objects[0].height_m).toBe(0.12)
@@ -2881,7 +2563,7 @@ test("the bench and a prop's height (D142, CW4): Bench ▶ opens Clay for the ch
   await page.screenshot({ path: 'node_modules/.e2e/cw4-prop-bench.png' })
 })
 
-test("a place's set (CW6, D143): Build the set ▶ queues MoGe on the set picture and says when the relief fits nothing; a fitted set is drawn over its picture and baked on its own; a wall's foot dragged deepens the room; the kind is one click; a face's material is named; Fill ▶ paints the faces one after another; Bench ▶ opens Clay on the set from the picture's camera", async ({ page }) => {
+test("a place's set (CW6, D143): Build the set ▶ queues MoGe on the set picture and says when the relief fits nothing; a fitted set is drawn over its picture and baked on its own; a wall's foot dragged deepens the room; the kind is one click; a face's material is named; Fill ▶ paints the faces one after another; Bench ▶ opens Clay on the set from the picture's camera (World’s Sheet, B2a)", async ({ page }) => {
   test.setTimeout(180_000)
   const tag = Date.now().toString(36)
   type Face = { id: string; texture_asset_id: string | null; baked_asset_id: string | null; seen: number | null; bad: number | null; filled: boolean; material: string; fill_job_id: string | null }
@@ -2892,9 +2574,7 @@ test("a place's set (CW6, D143): Build the set ▶ queues MoGe on the set pictur
   await api('PUT', `/story/profiles/${place.id}/versions/v1/anim-ref`, { side: 'front', asset_id: img })                 // the set picture
   const prof = async () => api<ProfileLite>('GET', `/story/profiles/${place.id}`)
   const ps = async () => (await prof()).versions[0].place_set
-  await openApp(page, { suite: 'story', tab: 'cast' })
-  await page.locator('.cast-panel .segmented button', { hasText: /^places$/ }).click()
-  await page.locator(`.profile-row[data-id="${place.id}"]`).click()
+  await openSheet(page, 'place', place.id)
   const sec = page.locator('section.place-set')
   await expect(sec.locator('[data-status]')).toHaveText('no set yet')
   // Build the set ▶: MoGe on the set picture; the fake engine's relief is a bare triangle — the fit says so, and nothing is set
@@ -2950,7 +2630,7 @@ test("a place's set (CW6, D143): Build the set ▶ queues MoGe on the set pictur
   await expect(sec.locator('[data-status]')).toHaveText('baked and filled')
   // Bench ▶: Clay on the set, bound to the place, from the picture's camera
   await sec.locator('button', { hasText: /^Bench/ }).click()
-  await expect(page.locator('[data-testid="bench-chip"]')).toContainText(`Bench: Farm kitchen ${tag} v1`)
+  await expect(page.locator('.w-mode button.active')).toHaveText('Clay')                                    // Clay on the set, inside World
   type StageLite = { bound: { profile_id: string } | null; objects: { kind: string; preset: string | null; profile_id: string | null; place_set: PS | null }[]; cameras: { pos: number[] }[] }
   const bench = (await api<{ items: StageLite[] }>('GET', '/stages?purpose=bench')).items.find((b) => b.bound?.profile_id === place.id)!
   expect(bench.objects[0]).toMatchObject({ kind: 'set', preset: 'built', profile_id: place.id })
@@ -3027,18 +2707,16 @@ test("places in Clay (CW7): Sets' + lists the Cast places that have a set — a 
   expect(fits).toHaveLength(1)
 })
 
-test("Cast in Clay and the line-up (CW3, CW5): a Cast character's card adds its figure bound; Make a free copy frees one with its body; Prototype ▸ makes that copy an idea; Line-up ▶ stands the characters side by side and Send to a stage ▸ copies them into a new stage", async ({ page }) => {
+test("Cast in Clay and the line-up (CW3, CW5): a Cast character's card adds its figure bound; Make a free copy frees one with its body; Line-up ▶ stands the characters side by side and Send to a stage ▸ copies them into a new stage (Shots’ Clay and World, B2a)", async ({ page }) => {
   test.setTimeout(120_000)
   const tag = Date.now().toString(36)
   type StageLite = { id: string; name: string; purpose: string; objects: { id: string; kind: string; name: string; profile_id: string | null; preset: string | null; body: { height_m: number } | null }[] }
-  type IdeaLite = { id: string; name: string; variants: { clay: { body: { height_m: number } | null } | null }[] }
   const ines = await api<{ id: string }>('POST', '/story/profiles', { name: `Ines ${tag}`, cls: 'character' })
   await api('PATCH', `/story/profiles/${ines.id}`, { revision: 0, versions: [{ id: 'v1', body: { height_m: 1.58 } }] })
-  const st = await api<{ id: string } & Record<string, unknown>>('POST', '/stages', { name: `Market ${tag}` })
-  await openApp(page, { suite: 'stage' })
-  await openAnimate(page, 'Clay')
-  await page.locator('#anim-sec-shot .stage-picker select').selectOption({ label: `Market ${tag}` })
-  await openSection(page, 'Scene')
+  const shot = await api<{ shot_id: string }>('POST', '/story/flow/shots', { title: `Market ${tag}`, scene: 'new' })
+  const st = { id: (await api<{ versions: { stage_id: string }[] }>('GET', `/story/shots/${shot.shot_id}`)).versions[0].stage_id }
+  await openShell(page, `shots/${shot.shot_id}/clay`)
+  await page.locator('#anim-sec-scene').scrollIntoViewIfNeeded()
   // CW3: Cast's characters are cards in Figures' +: a click adds the character's figure, bound
   await libAdd(page, 'figures', `Ines ${tag}`)
   await page.keyboard.press('Escape')                                                              // the + panel stays open for more; it would cover the rows
@@ -3051,21 +2729,15 @@ test("Cast in Clay and the line-up (CW3, CW5): a Cast character's card adds its 
   const free = (await doc()).objects.find((o) => o.kind === 'mannequin' && !o.profile_id)!
   expect(free.body?.height_m).toBe(1.58)
   expect(free.name).toBe(`Ines ${tag} (free)`)
-  // Prototype ▸ on the free copy: a new character idea, Clay's view its picture, the body its clay
-  const known = new Set((await api<{ items: IdeaLite[] }>('GET', '/story/ideas')).items.map((i) => i.id))
-  await page.locator('.outl-row[data-row="object"] .name', { hasText: `Ines ${tag} (free)` }).click({ button: 'right' })
-  await page.locator('.ctx-menu button.item', { hasText: 'Prototype ▸ a new idea' }).click()
-  await expect.poll(async () => (await api<{ items: IdeaLite[] }>('GET', '/story/ideas')).items.find((i) => !known.has(i.id))?.variants[0]?.clay?.body?.height_m ?? null, { timeout: 15_000 }).toBe(1.58)
-  // CW5: Line-up ▶ on the Cast board — the characters shown side by side before 0.5 m marks; Send to a stage ▸ copies them
-  await openApp(page, { suite: 'story', tab: 'cast' })
-  await page.locator('.cast-panel .segmented button', { hasText: /^characters$/ }).click()
-  await page.locator('.cast-panel input[type=search]').fill(tag)
-  await page.locator('.cast-panel button', { hasText: /^Line-up/ }).click()
+  // CW5: Line-up ▶ in World's Sheet — the class's characters side by side before 0.5 m marks, the one open first; Send to a stage ▸ copies them
+  await openSheet(page, 'character', ines.id)
+  await page.locator('[data-testid="world-sheet"] button', { hasText: /^Line-up/ }).click()
   const chip = page.locator('[data-testid="bench-chip"]')
-  await expect(chip).toContainText('Line-up · 1')
+  await expect(chip).toContainText('Line-up ·')
+  await expect(page.locator('.w-mode button.active')).toHaveText('Clay')                                    // inside World
   const lineup = (await api<{ items: StageLite[] }>('GET', '/stages?purpose=lineup')).items[0]
-  expect(lineup.objects.map((o) => o.preset ?? o.kind)).toEqual(['lineup', 'adult'])
-  expect(lineup.objects[1].profile_id).toBe(ines.id)
+  expect(lineup.objects[0].preset ?? lineup.objects[0].kind).toBe('lineup')
+  expect(lineup.objects[1].profile_id).toBe(ines.id)                                                       // the one open first
   await page.screenshot({ path: 'node_modules/.e2e/cw5-lineup.png' })
   await chip.locator('button', { hasText: 'Send to a stage' }).click()
   await page.locator('.ctx-menu button.item', { hasText: 'Send to a new stage…' }).click()
@@ -3073,10 +2745,10 @@ test("Cast in Clay and the line-up (CW3, CW5): a Cast character's card adds its 
   await dialog.locator('input').fill(`From the line-up ${tag}`)
   await dialog.locator('button.primary').click()
   await expect(chip).toHaveCount(0)                                                                  // the new stage is a stage, not the line-up
-  await expect.poll(async () => (await api<{ items: StageLite[] }>('GET', '/stages')).items.find((s) => s.name === `From the line-up ${tag}`)?.objects.map((o) => o.profile_id) ?? [], { timeout: 10_000 }).toEqual([ines.id])
+  await expect.poll(async () => (await api<{ items: StageLite[] }>('GET', '/stages')).items.find((s) => s.name === `From the line-up ${tag}`)?.objects.map((o) => o.profile_id) ?? [], { timeout: 10_000 }).toContain(ines.id)
 })
 
-test('a body on the Cast sheet (CA0, 01 §9): height, build and an attachment saved with the sheet; a stage figure bound to the character takes the body when the stage opens', async ({ page }) => {
+test('a body on the Cast sheet (CA0, 01 §9): height, build and an attachment saved with the sheet; a stage figure bound to the character takes the body when the stage opens (World’s Sheet, B2a)', async ({ page }) => {
   const name = `Grak ${Date.now().toString(36)}`
   const src = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0]
   const hero = (await api<{ ids: string[] }>('POST', '/assets/duplicate', { ids: [src.id] })).ids[0]
@@ -3084,8 +2756,7 @@ test('a body on the Cast sheet (CA0, 01 §9): height, build and an attachment sa
   type ProfileLite = { id: string; versions: { id: string; body: Body | null }[] }
   const p = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', hero_asset_id: hero, appearance: `${name}, a hulking ogre` })
   expect(p.versions[0].body).toBeNull()
-  await openApp(page, { suite: 'story', tab: 'cast' })
-  await page.locator(`.profile-row[data-id="${p.id}"]`).click()
+  await openSheet(page, 'character', p.id)
   await page.locator('.cast-body button', { hasText: 'body' }).click()
   await page.locator('.cast-body input[aria-label="height in metres"]').fill('2.4')
   await page.locator('.cast-body .segmented button', { hasText: 'heavy' }).click()
@@ -3093,45 +2764,47 @@ test('a body on the Cast sheet (CA0, 01 §9): height, build and an attachment sa
   await page.locator('.cast-body select[aria-label="attachment 1"]').selectOption('horns')
   await expect(page.locator('svg.body-silhouette')).toHaveAttribute('aria-label', 'silhouette, 2.40 m')
   await expect.poll(async () => { const b = (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0].body; return b ? `${b.height_m}|${b.build}|${b.attachments.map((a) => a.kind).join()}` : null }).toBe('2.4|heavy|horns')
-  // a stage with a figure bound to the character, no body yet: opening it in Animate · Clay gives the figure the sheet's body
-  const st = await api<{ id: string } & Record<string, unknown>>('POST', '/stages', { name: `Cave ${name}` })
+  // a shot's stage with a figure bound to the character, no body yet: opening it in Shots › Clay gives the figure the sheet's body
+  const shot = await api<{ shot_id: string }>('POST', '/story/flow/shots', { title: `Cave ${name}`, scene: 'new' })
+  const sid = (await api<{ versions: { stage_id: string }[] }>('GET', `/story/shots/${shot.shot_id}`)).versions[0].stage_id
+  const st = await api<{ id: string; objects: unknown[] } & Record<string, unknown>>('GET', `/stages/${sid}`)
   const fig = { id: 'obj_grak', kind: 'mannequin', name: 'Grak', preset: 'adult', profile_id: p.id, version: null, body: null }
-  await api('PUT', `/stages/${st.id}`, { ...st, objects: [fig] })
-  await openAnimate(page, 'Clay')
-  await page.locator('#anim-sec-shot .stage-picker select').selectOption({ label: `Cave ${name}` })
-  await expect.poll(async () => (await api<{ objects: { body: Body | null }[] }>('GET', `/stages/${st.id}`)).objects[0].body?.height_m ?? null, { timeout: 10_000 }).toBe(2.4)
-  await openSection(page, 'Scene')
-  await page.locator('.outl-row[data-row="object"]').filter({ has: page.locator('.name', { hasText: 'Grak' }) }).click()
+  await api('PUT', `/stages/${st.id}`, { ...st, objects: [...st.objects, fig] })
+  await openShell(page, `shots/${shot.shot_id}/clay`)
+  const grak = async () => (await api<{ objects: { id: string; body: Body | null }[] }>('GET', `/stages/${st.id}`)).objects.find((o) => o.id === 'obj_grak')
+  await expect.poll(async () => (await grak())?.body?.height_m ?? null, { timeout: 15_000 }).toBe(2.4)
+  await page.locator('#anim-sec-scene').scrollIntoViewIfNeeded()
+  await page.locator('.outl-row[data-row="object"]').filter({ has: page.locator('.name', { hasText: /^Grak$/ }) }).click()
   await expect(page.locator('.outl-row[data-row="object"].active .row-editor')).toContainText('from Cast — 2.40 m · heavy · horns')   // D119 (SC1): the figure's editor under its row
   await page.evaluate(async (id) => { await (window as unknown as { __loom2Stage: { open: (id: string) => Promise<void> } }).__loom2Stage.open(id) }, st.id)   // reopened: the body stays
   await page.waitForTimeout(500)
   await page.screenshot({ path: 'node_modules/.e2e/ca0-body-stage.png' })                  // a look for the journal: the ogre beside nothing, 2.4 m
 })
 
-test('an animation reference in Cast (CA0, 01 step 2): Make an animation reference queues two candidates, the first fills the front slot; a candidate\'s right-click makes it the back view', async ({ page }) => {
+test('an animation reference in Cast (CA0, 01 step 2): Make an animation reference queues two candidates, the first fills the front slot; a candidate\'s right-click makes it the back view (World’s Sheet, B2a)', async ({ page }) => {
   test.setTimeout(90_000)
   const name = `Ines ${Date.now().toString(36)}`
   const src = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0]
   const hero = (await api<{ ids: string[] }>('POST', '/assets/duplicate', { ids: [src.id] })).ids[0]
   type ProfileLite = { id: string; versions: { id: string; anim_ref_asset_id: string | null; anim_ref_back_asset_id: string | null }[] }
   const p = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', hero_asset_id: hero, appearance: `${name}, a dancer in a red dress` })
-  await openApp(page, { suite: 'story', tab: 'cast' })
-  await page.locator(`.profile-row[data-id="${p.id}"]`).click()
+  await openSheet(page, 'character', p.id)
   await expect(page.locator('.anim-ref-slot[data-side="front"]')).toContainText('none yet')
   await page.locator('.anim-ref button', { hasText: /^Make an animation reference/ }).click()
   await expect.poll(async () => (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0].anim_ref_asset_id, { timeout: 60_000 }).toBeTruthy()
   const front = (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0].anim_ref_asset_id!
   await expect(page.locator('.anim-ref-slot[data-side="front"] img')).toHaveAttribute('src', new RegExp(front))
-  await expect(page.locator('.story-cands .cand-card')).toHaveCount(2, { timeout: 30_000 })                         // both on the candidates page
-  const other = page.locator(`.story-cands .cand-card:not([data-id="${front}"])`).first()
+  const bin = page.locator('[data-testid="world-bin"]')
+  await expect(bin.locator('.w-tile')).toHaveCount(3, { timeout: 30_000 })                                         // the hero and both candidates, in the version's bin
+  const other = bin.locator(`.w-tile:not([data-id="${front}"]):not([data-id="${hero}"])`).first()
   const otherId = (await other.getAttribute('data-id'))!
   await other.click({ button: 'right' })
-  await page.locator('.ctx-menu button.item', { hasText: /^Use as the back view/ }).click()
+  await page.locator('.ctx-menu button.item', { hasText: /^Use as the A-pose back/ }).click()
   await expect.poll(async () => (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0].anim_ref_back_asset_id).toBe(otherId)
   await expect(page.locator('.anim-ref-slot[data-side="back"] img')).toHaveAttribute('src', new RegExp(otherId))
 })
 
-test('the body fitted to the animation reference (CA1b, D104): Fit the body measures the reference and the proportions follow, the height stays', async ({ page }) => {
+test('the body fitted to the animation reference (CA1b, D104): Fit the body measures the reference and the proportions follow, the height stays (World’s Sheet, B2a)', async ({ page }) => {
   test.setTimeout(90_000)
   const name = `Ines ${Date.now().toString(36)}`
   const src = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0]
@@ -3140,8 +2813,7 @@ test('the body fitted to the animation reference (CA1b, D104): Fit the body meas
     body: { height_m: number; neck: number; shoulders: number; hips: number; elbow: number; figure: string; hand_rest: { preset: string } } | null }[] }
   const p = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', appearance: `${name}, a mechanic` })
   await api('PUT', `/story/profiles/${p.id}/versions/v1/anim-ref`, { side: 'front', asset_id: ref })           // set by hand: no fit by itself
-  await openApp(page, { suite: 'story', tab: 'cast' })
-  await page.locator(`.profile-row[data-id="${p.id}"]`).click()
+  await openSheet(page, 'character', p.id)
   await page.locator('.cast-body button', { hasText: /^Fit the body to the animation reference/ }).click()
   await expect.poll(async () => (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0].body_fit_from, { timeout: 60_000 }).toBe(ref)
   const body = (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0].body!
@@ -3158,7 +2830,7 @@ test('the body fitted to the animation reference (CA1b, D104): Fit the body meas
   await expect.poll(async () => (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0].body?.hand_rest.preset, { timeout: 10_000 }).toBe('fist')
 })
 
-test('the skeleton bench (proto01_UIcast CS2): Skeleton… opens the reference with SDPose\'s points and the figure\'s, a hip dragged and Fit again refits the body, a part locked stays, the guide follows a motion', async ({ page }) => {
+test('the skeleton bench (proto01_UIcast CS2): Skeleton… opens the reference with SDPose\'s points and the figure\'s, a hip dragged and Fit again refits the body, a part locked stays, the guide follows a motion (World’s Sheet, B2a)', async ({ page }) => {
   test.setTimeout(120_000)
   const name = `Bea ${Date.now().toString(36)}`
   const src = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0]
@@ -3167,8 +2839,7 @@ test('the skeleton bench (proto01_UIcast CS2): Skeleton… opens the reference w
   type ProfileLite = { id: string; versions: { id: string; body_fit_from: string | null; body: Body | null; body_points: { pose: number[][]; sdpose?: { pose: number[][] } } | null }[] }
   const p = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', appearance: `${name}, a baker` })
   await api('PUT', `/story/profiles/${p.id}/versions/v1/anim-ref`, { side: 'front', asset_id: ref })
-  await openApp(page, { suite: 'story', tab: 'cast' })
-  await page.locator(`.profile-row[data-id="${p.id}"]`).click()
+  await openSheet(page, 'character', p.id)
   await page.locator('.cast-body button', { hasText: /^Fit the body to the animation reference/ }).click()
   const prof = async () => (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0]
   await expect.poll(async () => (await prof()).body_points?.pose.length ?? 0, { timeout: 60_000 }).toBe(18)
@@ -3213,7 +2884,8 @@ test('the skeleton bench (proto01_UIcast CS2): Skeleton… opens the reference w
   await expect(bench.locator('.skel-guide img.pose')).toHaveCount(1, { timeout: 20_000 })
   await page.screenshot({ path: 'node_modules/.e2e/cs2-bench.png' })
   await bench.locator('.skel-strip button', { hasText: /^Back to the sheet/ }).click()
-  await expect(page.locator('.cast-page')).toBeVisible()
+  await expect(page.locator('[data-testid="world-sheet"]')).toBeVisible()
+  await expect(page.locator('[data-testid="world-bin"]')).toBeVisible()                                       // the bin back in the centre
 })
 
 test("the skeleton changed (proto01_UIcast CS3, D136 U19): a final's character layer stamps its body per frame; Cast's skeleton changing under it shows on the layer, nothing done by itself — Re-render draws the guide again and performs it; Apply from the playhead keys the skeleton (the frames before it held) and performs again", async ({ page }) => {
@@ -3291,7 +2963,7 @@ test("the skeleton changed (proto01_UIcast CS3, D136 U19): a final's character l
   await page.screenshot({ path: 'node_modules/.e2e/cs3-skeleton-keys.png' })
 })
 
-test('a test animation in Cast (CA0, 01 step 2): Test it draws a turn on the spot from the body here, the pose-driven model performs it with the reference, the clip lands beside the reference', async ({ page }) => {
+test('a test animation in Cast (CA0, 01 step 2): Test it draws a turn on the spot from the body here, the pose-driven model performs it with the reference, the clip lands beside the reference (World’s Sheet, B2a)', async ({ page }) => {
   test.setTimeout(120_000)
   const name = `Bram ${Date.now().toString(36)}`
   const src = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0]
@@ -3300,8 +2972,7 @@ test('a test animation in Cast (CA0, 01 step 2): Test it draws a turn on the spo
   const p = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', appearance: `${name}, an old captain` })
   await api('PATCH', `/story/profiles/${p.id}`, { revision: p.revision, versions: [{ id: 'v1', body: { height_m: 1.9, build: 'broad', head: 1, torso: 1, shoulders: 1, arms: 1, legs: 1, attachments: [] } }] })
   await api('PUT', `/story/profiles/${p.id}/versions/v1/anim-ref`, { side: 'front', asset_id: ref })
-  await openApp(page, { suite: 'story', tab: 'cast' })
-  await page.locator(`.profile-row[data-id="${p.id}"]`).click()
+  await openSheet(page, 'character', p.id)
   await expect(page.locator('.anim-ref-slot[data-side="test"]')).toContainText('none yet')
   await page.locator('.anim-ref button', { hasText: /^Test it/ }).click()
   const dialog = page.locator('.modal.ask')
@@ -3914,8 +3585,8 @@ test('the round trip (D125 SP4): Make frame lands on the For chip (kept in view)
   await expect(page.locator('.panel [data-testid="for-chip"]')).toContainText(`Round ${tag}`)
 })
 
-test('Cast readiness (D125 SP5): a Cast row says what the character owes for its shots; the readiness row under the strip, In N shots with what each shot needs, the foot\'s next owed step; the voice item opens the form and a voice made there is the character\'s — a second one too', async ({ page }) => {
-  test.setTimeout(120_000)
+test('readiness in World (D125 SP5, B2a): the header says what the character owes; the Inspector lists the shots that use it and how, a click opens one in Shots; the voice item makes a voice that is the character\'s — a second one too', async ({ page }) => {
+  test.setTimeout(90_000)
   const tag = Date.now().toString(36)
   type NodeLite = { id: string; shot_id: string }
   type StageLite = { id: string; cameras: { id: string }[]; objects: unknown[] }
@@ -3928,46 +3599,33 @@ test('Cast readiness (D125 SP5): a Cast row says what the character owes for its
   const st = await api<StageLite>('POST', '/stages', { name: `Ready stage ${tag}` })
   await api('PUT', `/stages/${st.id}`, { ...st, objects: [{ id: `obj_${tag}`, kind: 'mannequin', preset: 'adult', name, profile_id: prof.id }] })
   await api('PUT', `/story/shots/${walk.shot_id}/versions/v1/source`, { stage_id: st.id, camera_id: st.cameras[0].id })
-  await api('PUT', `/story/shots/${walk.shot_id}/versions/v1/template`, { template: 'clay1' })
-  await openApp(page, { suite: 'story', tab: 'cast' })
-  const row = page.locator(`.story-row.profile-row[data-id="${prof.id}"]`)
-  await expect(row.locator('.owes')).toHaveText(/^\d+ owed for 2 shots$/)
-  await row.click()
-  const ready = (item: string) => page.locator(`.cast-ready .ready-item[data-item="${item}"]`)
-  await expect(ready('hero')).toHaveClass(/done/)
-  await expect(ready('sheet')).toHaveClass(/done/)
-  await expect(ready('animref')).toHaveClass(/owed/)
-  await expect(ready('body')).toHaveClass(/owed/)
-  await expect(ready('voice')).toHaveClass(/owed/)
-  await expect(ready('lora')).toHaveClass(/open/)
-  await expect(ready('voice')).toHaveAttribute('title', new RegExp(`Talk ${tag} needs it`))
-  const inShots = page.locator('.in-shots')
-  await expect(inShots.locator('h3')).toContainText('In 2 shots')
-  await expect(inShots.locator(`.use-row[data-id="${walk.shot_id}"] .route`)).toHaveText('clay final shot · figure')
-  await expect(inShots.locator(`.use-row[data-id="${walk.shot_id}"] .needs`)).toContainText('animation reference, body')
-  await expect(inShots.locator(`.use-row[data-id="${talk.shot_id}"] .needs`)).toContainText('voice')
-  // the foot: the first owed item (the hero is in its reference set, so the animation reference), for the shot that needs it
-  await expect(ready('refs')).toHaveClass(/done/)
-  await expect(page.locator('.panel .foot button.primary')).toHaveText('Make an animation reference ▶')
-  await expect(page.locator('.panel .foot .estimate')).toHaveText(`for Walk ${tag}`)
-  // the voice item opens the form; the voice made there is the character's, and so is a second one (S5: no second select)
-  const voices = page.locator('.inspector .voices')
+  await openShell(page, `world/character/${prof.id}/v1`)
+  const ready = page.locator('[data-testid="world-readiness"]')
+  await expect(ready).toContainText('✓ hero')
+  await expect(ready.locator('.w-ready-item.owed', { hasText: 'A-pose front' })).toBeVisible()
+  await expect(ready.locator('.w-ready-item', { hasText: 'voice' })).not.toContainText('✓')                     // optional: not made yet
+  const uses = page.locator('[data-testid="world-uses"]')
+  await expect(uses).toContainText(`Walk ${tag}`)
+  await expect(uses.locator('li', { hasText: `Walk ${tag}` })).toContainText('on its stage')
+  await expect(uses.locator('li', { hasText: `Talk ${tag}` })).toContainText('speaks')
+  // the voice: the form in the Inspector; the voice made there is the character's, and so is a second one (S5: no second select)
+  const voices = page.locator('[data-testid="world-inspector"] .voices')
   const form = voices.locator('[aria-label="new voice"]')
   const make = async (vname: string) => {
+    await page.locator('[data-testid="world-inspector"] button[title^="New voice"]').click()
     await form.locator('input[aria-label="voice name"]').fill(vname)
     await form.locator('select[aria-label="kokoro voice"]').selectOption('am_adam')
     await form.locator('button[aria-label="create voice"]').click()
     await expect(form).toHaveCount(0)
     await expect(voices.locator('select[aria-label="profile voice"] option:checked')).toContainText(`${vname} · draft`)
   }
-  await ready('voice').click()
   await make(`First ${tag}`)
-  await expect(ready('voice')).toHaveClass(/done/)
-  await page.locator('.inspector button[title^="New voice"]').click()
+  await expect(ready.locator('.w-ready-item', { hasText: 'voice' })).toContainText('✓')
   await make(`Second ${tag}`)
-  // a use opens its shot on the Shots board
-  await inShots.locator(`.use-row[data-id="${walk.shot_id}"]`).click()
-  await expect(page.locator(`.shots-board tr.row.sel[data-id="${walk.shot_id}"]`)).toBeVisible()
+  // a use opens its shot in Shots
+  await uses.locator('button', { hasText: `Walk ${tag}` }).click()
+  await expect(page.locator('[data-testid="shots-layer"]')).toBeVisible()
+  await expect.poll(() => new URL(page.url()).hash, { timeout: 10_000 }).toContain(`#shots/${walk.shot_id}`)
 })
 
 test('the cut from the Flow (D125 SP6): Assemble from the Flow… asks at the Choice and lays the route\'s shots in order, stamped; a newer take marks a lane clip changed and its badge updates it; Assemble again takes the other route; Export for Resolve writes one folder', async ({ page }) => {

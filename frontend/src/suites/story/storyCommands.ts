@@ -16,7 +16,7 @@ import { findNode, pickSampleModel, sampleJob, sampleRecipe, sampleScene, styleG
 import { useLibrary } from './libraryStore'
 import { FIELD_LABEL, type FieldKey } from '../generate/fieldPresets'
 import { needsPicture, swatchJob, useSwatches } from '../generate/swatches'
-import { navigate, setRailTab } from '../../frame/router'
+import { navigate, setRailTab, UI2 } from '../../frame/router'
 import { hasLines } from './flow/types'
 
 const hasWorld = () => !!sy().world
@@ -341,7 +341,8 @@ const cmds: Command[] = [
   { id: 'story.cast.bench', scope: 'story', label: 'Bench ▶', icon: Hammer, placement: ['panel', 'inspector', 'context'],
     hint: "Clay opened for this version: its figure (a prop: its model at its height beside a 1.75 m figure; a place: its set from the picture's camera) on a scene of its own, with all of Clay's tools",
     when: () => { const p = sy().profile(); const v = sy().version(); return !!p && !!v && (p.cls === 'character' || (p.cls === 'prop' && !!v.model_asset_id) || (p.cls === 'place' && !!v.place_set)) },
-    run: () => { const p = sy().profile(); const v = sy().version(); if (p && v) void import('../stage/stageStore').then((m) => m.st().openBench(p.id, v.id)) } },
+    run: () => { if (UI2) { runCommand('world.mode.clay'); return }                 // B2a: the new shell opens the bench inside World
+      const p = sy().profile(); const v = sy().version(); if (p && v) void import('../stage/stageStore').then((m) => m.st().openBench(p.id, v.id)) } },
   { id: 'story.cast.lineup', scope: 'story', label: 'Line-up ▶', icon: Users, placement: ['panel', 'context'], hint: 'the characters and props shown, side by side at their sizes in Clay (twelve at most)',
     when: () => castLineup().length > 0, run: () => { const items = castLineup().map((p) => ({ profile_id: p.id })); void import('../stage/stageStore').then((m) => m.st().openLineup(items, backToBoard('cast'))) } },
   { id: 'story.idea.lineup', scope: 'story', label: 'Line-up ▶', icon: Users, placement: ['panel', 'context'], hint: 'the ideas picked (Ctrl-click), else those shown, in their clay side by side in Clay',

@@ -96,7 +96,7 @@ export async function openShell(page: Page, place = 'world', params: Record<stri
 /** The tiles of the Bin layer's grid. */
 export const binTiles = (page: Page) => page.locator('[data-testid="bin-grid"] .w-tile')
 /** A home of the Bin's tree opened, its parents unfolded (`imports`, `world/sketches`, `world/character/<id>/v1` …). */
-export async function openHome(page: Page, path: string): Promise<void> {
+export async function openHome(page: Page, path: string, kind?: 'pictures' | 'clips' | 'audio' | 'models'): Promise<void> {
   const parts = path.split('/')
   for (let i = 1; i < parts.length; i++) {
     const chev = page.locator(`[data-testid="bin-tree"] .b-node[data-path="${parts.slice(0, i).join('/')}"] > .b-chev[aria-label="Unfold"]`)
@@ -105,6 +105,11 @@ export async function openHome(page: Page, path: string): Promise<void> {
   await page.locator(`[data-testid="bin-tree"] .b-node[data-path="${path}"] .b-open`).click()
   await expect(page.locator('[data-testid="bin-grid"] .w-path')).not.toHaveText('bin/')
   await expect(page.locator('[data-testid="bin-count"]')).toBeVisible()
+  if (kind) {                                                                         // the kind chips filter on the server: wait for the read
+    await page.locator('[data-testid="bin-grid"] .w-chips button', { hasText: kind }).click()
+    await expect(page.locator('[data-testid="bin-grid"] .w-chips button.active')).toHaveText(kind)
+    await expect(page.locator('[data-testid="bin-count"]')).toBeVisible()
+  }
 }
 
 export const test = base.extend<{ page: Page }>({

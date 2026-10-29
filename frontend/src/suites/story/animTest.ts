@@ -5,7 +5,7 @@
 import { api, http, sha256Hex, unwrap, type ApiError } from '../../api/client'
 import { askConfirm, useSession } from '../../store/session'
 import { useStory } from './storyStore'
-import { navigate } from '../../frame/router'
+import { navigate, UI2 } from '../../frame/router'
 
 const secs = (s: number | null | undefined) => (s == null ? 'unmeasured' : s < 90 ? `≈ ${Math.round(s)} s` : `≈ ${Math.round(s / 60)} min`)
 
@@ -52,6 +52,15 @@ export function playAnimTest(): void {
   const v = useStory.getState().version()
   const clip = v?.anim_test_clip_id
   if (!clip) return
+  if (UI2) {                                                                   // B2a (D159): the new shell plays it in the Bin's large view
+    void unwrap(http.GET('/clips/{clip_id}', { params: { path: { clip_id: clip } } })).then(async (c) => {
+      if (!c.asset_id) return
+      navigate({ suite: 'catalogue' })
+      const { useBin } = await import('../../ui2/bin/binStore')
+      if (await useBin.getState().reveal(c.asset_id)) useBin.getState().view(true)
+    }).catch(() => undefined)
+    return
+  }
   void import('../animate/animateStore').then(async (m) => {
     navigate({ suite: 'animate' })
     const an = m.useAnimate.getState()

@@ -260,6 +260,7 @@ export function startBin(): () => void {
 
 function listen(): () => void {
   void useBin.getState().loadTree()
+  void import('../../suites/story/storyStore').then((m) => { if (!m.useStory.getState().profiles.length) void m.useStory.getState().loadProfiles() })   // B2a: Add to World ▸ lists them
   const off = onRecords('ui2.bin', ['group.changed', 'asset.created', 'asset.deleted', 'asset.updated', 'story.changed', 'timeline.updated'], (f) => {
     const s = useBin.getState()
     if (f.type === 'asset.updated') s.patch(f.data as Asset)

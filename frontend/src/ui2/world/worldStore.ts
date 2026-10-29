@@ -39,8 +39,8 @@ export function passes(it: Pick<BinItem, 'roles'>, f: RoleFilter): boolean {
 
 interface WorldState {
   rail: WorldRail; bin: VersionBin | null; binFor: string | null; loading: boolean; selected: string | null; filter: RoleFilter
-  mode: 'make' | 'edit' | 'clay'                                           // U3c: the left column's Make or the editor on a creation; U3f: the bench
-  setMode: (mode: 'make' | 'edit' | 'clay') => void
+  mode: 'make' | 'edit' | 'clay' | 'sheet'                                 // U3c: the left column's Make or the editor on a creation; U3f: the bench; B2a: the Sheet
+  setMode: (mode: 'make' | 'edit' | 'clay' | 'sheet') => void
   free: { id: string; home: string | null; name: string } | null        // B2a (D159): an edit of a picture that is no entity's (a sketch, a take, an import): it saves beside it
   setRail: (rail: WorldRail) => void
   pick: (entity: string | null, version?: string | null) => void

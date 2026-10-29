@@ -1,6 +1,6 @@
 // U3 (D157, proto01_UI2 03 §8): World's commands (rule 3: every action a command with a mouse home; keys are accelerators). They act on the
 // entity and version the header shows (the Story store's selection) and on the creation selected in the bin.
-import { Box, CopyPlus, ImagePlus, Lock, Pencil, Plus, Sparkles, Star, Trash2, UserRoundPlus } from 'lucide-react'
+import { Box, CopyPlus, FileText, ImagePlus, Lock, Pencil, PersonStanding, Plus, Sparkles, Star, Trash2, UserRoundPlus, Users } from 'lucide-react'
 import { http, unwrap } from '../../api/client'
 import { registerCommands } from '../../frame/commands'
 import { navigate } from '../../frame/router'
@@ -12,6 +12,12 @@ const sy = () => useStory.getState()
 const w = () => useWorld.getState()
 const selected = () => w().bin?.items.find((x) => x.asset.id === w().selected) ?? null
 const open = () => sy().version()?.state === 'open'
+/** B2a: the Line-up — the rail's class (a prop with its 3D model), the one open first, twelve at most. */
+const lineup = () => {
+  const cls = w().rail, here = sy().profileId
+  const all = sy().profiles.filter((p) => p.cls === cls && cls !== 'place' && (p.cls === 'character' || !!p.versions.find((v) => v.id === p.current)?.model_asset_id))
+  return [...all.filter((p) => p.id === here), ...all.filter((p) => p.id !== here)].slice(0, 12)                  // the one open first
+}
 const cls = () => { const r = w().rail; return r === 'look' || r === 'sketches' ? null : r }
 
 registerCommands([
@@ -23,6 +29,20 @@ registerCommands([
     when: () => { const p = sy().profile(); const v = sy().version(); return !!p && !!v && (p.cls === 'character' || (p.cls === 'prop' && !!v.model_asset_id) || (p.cls === 'place' && !!v.place_set)) },
     run: () => { const p = sy().profile(); const v = sy().version(); if (!p || !v) return
       void import('../../suites/stage/stageStore').then(async (m) => { if (await m.st().openBench(p.id, v.id, 'world')) w().setMode('clay') }) } },
+  // B2a (D159, 11 §7): the Sheet — the version's whole card (the sheet, the body and its skeleton, the animation reference and its test, a
+  // prop's model, a place's set builder, the Line-up)
+  { id: 'world.mode.sheet', scope: 'world', label: 'Sheet', icon: FileText, placement: ['panel'], hint: "the version's whole card: its sheet, body, animation reference, 3D model or set",
+    when: () => !!sy().profile(), run: () => { w().setMode('sheet'); navigate({ suite: 'generate' }) } },
+  { id: 'world.lineup', scope: 'world', label: 'Line-up ▶', icon: Users, placement: ['panel'], hint: "this class's characters or props side by side at their sizes in Clay (twelve at most)",
+    when: () => lineup().length > 0,
+    run: () => { const items = lineup().map((p) => ({ profile_id: p.id }))
+      void import('../../suites/stage/stageStore').then(async (m) => { if (await m.st().openLineup(items, () => w().setMode('make'), 'world')) w().setMode('clay') }) } },
+  { id: 'world.creation.aposeFront', scope: 'world', label: 'Use as the A-pose front', icon: PersonStanding, placement: ['inspector', 'context'],
+    hint: 'the animation reference: full body, A-pose, 16:9, plain ground', when: () => !!selected() && open() && (sy().profile()?.cls === 'character' || sy().profile()?.cls === 'prop'),
+    run: () => { const s = selected(); if (s) void sy().setAnimRef('front', s.asset.id) } },
+  { id: 'world.creation.aposeBack', scope: 'world', label: 'Use as the A-pose back', icon: PersonStanding, placement: ['inspector', 'context'],
+    hint: 'its optional back view (a shot that starts turned away)', when: () => !!selected() && sy().profile()?.cls === 'character',
+    run: () => { const s = selected(); if (s) void sy().setAnimRef('back', s.asset.id) } },
   { id: 'world.mode.make', scope: 'world', label: 'Make', icon: Sparkles, placement: ['panel'], when: () => w().mode !== 'make',
     run: () => { w().setMode('make'); navigate({ suite: 'generate' }) } },
   { id: 'world.mode.edit', scope: 'world', label: 'Edit', icon: Pencil, placement: ['panel', 'inspector', 'context'], when: () => !!selected(),

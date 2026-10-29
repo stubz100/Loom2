@@ -19,6 +19,7 @@ import { Toasts } from '../frame/Toasts'
 import { TopBar } from '../frame/TopBar'
 import { useKeyboardMap } from '../frame/useKeyboardMap'
 import { followNavigation, LAYERS, useLayer } from './layers'
+import { EpisodeLayer } from './episode/EpisodeLayer'
 import { ShotsLayer } from './shots/ShotsLayer'
 import { WorldLayer } from './world/WorldLayer'
 import { KeyHosts } from '../frame/keyHosts'
@@ -61,8 +62,8 @@ export function Shell() {
     <div className="frame ui2" data-layer={layer}>
       <TopBar tabs={<LayerTabs />} />
       <Banner />
-      <main className={`ui2-layer${layer === 'world' || layer === 'shots' ? ' filled' : ''}`} aria-label={name}>
-        {layer === 'world' ? <WorldLayer /> : layer === 'shots' ? <ShotsLayer /> : <div className="ui2-pending"><b>{name}</b><span>not built yet <Help text={why} /></span></div>}
+      <main className={`ui2-layer${layer !== 'bin' ? ' filled' : ''}`} aria-label={name}>
+        {layer === 'world' ? <WorldLayer /> : layer === 'shots' ? <ShotsLayer /> : layer === 'episode' ? <EpisodeLayer /> : <div className="ui2-pending"><b>{name}</b><span>not built yet <Help text={why} /></span></div>}
       </main>
       <Dock />
       <Toasts />

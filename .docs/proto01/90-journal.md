@@ -12542,3 +12542,34 @@ Rig: D158's two runs met their bars. Owed: Final's lip-sync pass on the rig in t
 *speaking close-up* method's own card (it is Story's *Lip-sync ▶* today).
 
 Next is U7: Episode.
+
+## 2026-10-29 09:41 — U7a: Episode as its own layer — the FilmCraft cut editor with the route's Finals beside it (D157; proto01_UI2 05 §1)
+
+**Episode** (`ui2/episode/EpisodeLayer.tsx`) holds today's cut editor (D126, CE1–CE5) as it is: Story's Episode tab's panel (the cuts and the
+bins), the tracks under the preview, the Inspector (the cut, the checklist, export) and the foot (*Assemble from the Flow…* /
+*Export for Resolve ▶*). Opening the layer opens that tab, so the cut's keys and reads work.
+
+**Finals** (05 §1, the left column's head): the route's shots in order, from the same rows as the storyboard (`useRouteRows`), each with its
+final:
+
+- ✓ rendered, ○ not yet, ! stale since its render, ◐ rendering;
+- a *final* chip when the shot is marked final;
+- a click opens the shot in Shots at its Final level.
+
+Every shot owes a final now, so a shot whose old route owed none reads ○, not "not on this route".
+
+**Fixes found on the way:**
+
+- The cut stage (`.anim-stage`, absolute) covered the whole window on the look. Its box in the layer is positioned now.
+- The e2e found a race. Shots' mount restores its place from the hash once its loads land, so a shot opened from Finals in the meantime went
+  back to the Flow. A shot opened since the mount now stays.
+
+**Seen on the copy of The Last Ferry:** Finals ○ Arrival, ○ The ferryman, ○ The seal, ○ Departure, ✓ Stay, ○ D158 turn. *Episode 1 · Board
+the ferry* opens with its 4 clips on V1, the two lines on A1 and the checklist "4 of 4 clips not final shots".
+
+**Tests:** an e2e scenario — a new shot is ○ owed in Finals; a cut opened in the layer shows its five tracks inside the layer's stage, not
+over the left column; the shot's row opens Shots at Final (`#shots/<id>/final`).
+
+**Checks:** Vitest 636 + 3 skipped; typecheck, build and lint clean; e2e 88/89 alone (the new scenario failed on the race), then after the fix the ten UI2 scenarios 10/10 alone.
+
+Next is U7b: the backend assemble that keeps V1's edits (G14).

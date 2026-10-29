@@ -4592,3 +4592,22 @@ test('Performance and Final in Shots (U6b–c, D157 · proto01_UI2 04 §4–5): 
   await expect(page.locator('.s-foot button', { hasText: 'Mark the shot final ✓' })).toBeVisible()
   expect(new URL(page.url()).hash).toBe(`#shots/${a.shot_id}/final`)
 })
+
+test('Episode (U7a, D157 · proto01_UI2 05 §1): the cut editor in its own layer, the route\'s finals listed beside it — a shot owes its final, a click opens it in Shots at Final', async ({ page }) => {
+  test.setTimeout(60_000)
+  const tag = Date.now().toString(36)
+  const a = await api<{ id: string; shot_id: string }>('POST', '/story/flow/shots', { title: `Quay ${tag}`, scene: 'new' })
+  const name = `Cut ${tag}`
+  await api('POST', '/timelines', { name })
+  await page.goto(`${appUrl({ ui: '2' })}#episode`)
+  const row = page.locator(`[data-testid="episode-finals"] li[data-id="${a.shot_id}"]`)
+  await expect(row).toHaveAttribute('data-final', 'owed')                                          // no final yet: owed, not "not on this route"
+  await page.locator('.seq-row', { hasText: name }).click()
+  await expect(page.locator('.e-stage .cut-row')).toHaveCount(5)                                   // V2 V1 · A1 A2 A3, inside the layer
+  const stage = (await page.locator('.e-stage').boundingBox())!, cut = (await page.locator('.cut-stage').boundingBox())!
+  expect(cut.x).toBeGreaterThanOrEqual(stage.x - 1)                                                // not over the left column
+  expect(cut.width).toBeLessThanOrEqual(stage.width + 1)
+  await row.locator('button').click()
+  await expect(page.locator('[data-testid="shots-layer"]')).toHaveAttribute('data-level', 'final')
+  expect(new URL(page.url()).hash).toBe(`#shots/${a.shot_id}/final`)
+})

@@ -138,6 +138,7 @@ export async function flushClay(): Promise<void> {
   await useStage.getState().flush()
 }
 
+let opens = 0                                                            // the shots opened: the mount's place from the hash yields to a later one
 export const useShots = create<ShotsState>()((set, get) => ({
   level: placeOfHash(location.hash)?.level ?? 'flow',
   setLevel: (level) => {
@@ -147,6 +148,7 @@ export const useShots = create<ShotsState>()((set, get) => ({
     if (level !== 'flow') void openClay().then(() => (level === 'performance' || level === 'final' ? enterPerformance() : undefined)).then(() => (level === 'final' ? openShotFinal() : undefined))   // U6b: every level of a shot is on its stage
   },
   open: (shotId, level) => {
+    opens++
     const st = useStory.getState()
     st.selectShot(shotId)
     const s = useStory.getState().shot()
@@ -159,7 +161,8 @@ export const useShots = create<ShotsState>()((set, get) => ({
   setWordsFor: (wordsFor) => set({ wordsFor }),
 }))
 
-/** Mounted with the Shots layer: once a project is open, the Flow, the shots and the board's facts, then the place from the hash. */
+/** Mounted with the Shots layer: once a project is open, the Flow, the shots and the board's facts, then the place from the hash — unless a
+ *  shot was opened meanwhile (Episode's Finals open one as they switch to Shots: the hash's place came after it and took it back to the Flow). */
 export function startShots(): () => void {
   let opened: string | null = null
   const go = () => {
@@ -167,10 +170,11 @@ export function startShots(): () => void {
     const path = pj?.open ? (pj as { path?: string }).path ?? 'open' : null
     if (!path || path === opened) return
     opened = path
-    const st = useStory.getState(), from = placeOfHash(location.hash)
+    const st = useStory.getState(), from = placeOfHash(location.hash), n = opens
     void Promise.all([st.loadFlow(), st.loadShots(), st.loadProfiles()]).then(() => {
       void useStory.getState().loadBoard()
       const sh = useShots.getState()
+      if (opens !== n) return
       if (from?.shot && useStory.getState().shots.some((x) => x.id === from.shot)) sh.open(from.shot, from.level)
       else sh.setLevel(from?.level === 'flow' || !useStory.getState().shotId ? 'flow' : from?.level ?? 'flow')
     })

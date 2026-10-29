@@ -12055,8 +12055,18 @@ export interface components {
         };
         /** RunQueued */
         RunQueued: {
+            /**
+             * Back View
+             * @default false
+             */
+            back_view?: boolean;
             /** Batches */
             batches: number;
+            /**
+             * From Behind
+             * @default false
+             */
+            from_behind?: boolean;
             /** Job Id */
             job_id: string;
             /** Placed */

@@ -431,6 +431,8 @@ class RunQueued(BaseModel):
     batches: int
     reference_asset_id: str
     placed: bool                                   # the reference stands where the figure starts (else padded, centred)
+    from_behind: bool = False                      # D158: its frames mostly face away — performed with the words for it
+    back_view: bool = False                        # D158: … and from the version's back A-pose (False: it has none, the front one served)
 
 
 @router.post("/finals/{fid}/layers/{lid}/run", response_model=RunQueued)
@@ -439,7 +441,7 @@ async def final_layer_run(svc: Svc, fid: str, lid: str, body: RunBody):
     starts (E23c: no ghost), Wan Animate Move on the layer's pose sequence in 77-frame batches (E23a W1), each batch queuing the next.
     A run again is a re-take of this layer alone."""
     from ..catalogue import Catalogue  # noqa: F401  (typing)
-    from ..finals import FINAL_LAYER_SURFACE, CHARACTER_TAIL, character_recipe, place_reference, plan_batches
+    from ..finals import BACK_WORDS, FINAL_LAYER_SURFACE, CHARACTER_TAIL, character_recipe, mostly_away, place_reference, plan_batches
     from ..origin import JobOrigin
     from ..story import StoryStore, compose_sheet
     from ..models import registry
@@ -467,14 +469,19 @@ async def final_layer_run(svc: Svc, fid: str, lid: str, body: RunBody):
     spec = next((s for s in registry.animate_specs() if registry.offered(s, svc.app.settings.variant)), None)
     if spec is None:
         raise HTTPException(422, "no pose-driven model in this build")
-    ref = cat.get(v.anim_ref_asset_id)
+    # D158 (E42): a layer whose frames mostly face away is performed from the back A-pose (when the version has one) with the words for it
+    kps = await asyncio.to_thread(store.keypoints, fid, lid)
+    behind = mostly_away(kps)
+    anim_ref = v.anim_ref_back_asset_id if behind and v.anim_ref_back_asset_id else v.anim_ref_asset_id
+    ref = cat.get(anim_ref)
     if ref is None:
         raise HTTPException(422, "the animation reference is missing from the Catalogue")
+    prompt = f"{p.name}, {compose_sheet(v, name=p.name)}, {BACK_WORDS + '. ' if behind else ''}{CHARACTER_TAIL}"
     if body.from_batch:                                                      # CA5: re-take from a batch on, the batches before it kept
-        return await _retake_from(svc, store, f, layer, body, spec.id, f"{p.name}, {compose_sheet(v, name=p.name)}, {CHARACTER_TAIL}", v.anim_ref_asset_id)
+        return await _retake_from(svc, store, f, layer, body, spec.id, prompt, anim_ref)
     w, h = f.size["w"], f.size["h"]
     folder = store.folder(fid) / lid
-    kp = (await asyncio.to_thread(store.keypoints, fid, lid) or [None])[0]
+    kp = (kps or [None])[0]
     placed_png = folder / "reference.png"
     try:
         placed = await asyncio.to_thread(place_reference, cat.abs_path(ref), kp, w, h, placed_png)
@@ -492,7 +499,6 @@ async def final_layer_run(svc: Svc, fid: str, lid: str, body: RunBody):
     seed = layer.seed if body.seed is None else body.seed
     layer.reference_asset_id, layer.guide_asset_id, layer.seed = ref_id, g.id, seed
     plan = plan_batches(f.frames)
-    prompt = f"{p.name}, {compose_sheet(v, name=p.name)}, {CHARACTER_TAIL}"
     try:
         jobs = svc.queue.submit(character_recipe(f, layer, spec.id, prompt, plan[0], None), stage=body.stage,
                                 origin=JobOrigin(suite="stage", surface=FINAL_LAYER_SURFACE, ref=fid, payload={"layer": lid, "batch": 0, "batches": len(plan), "prompt": prompt}))
@@ -502,7 +508,8 @@ async def final_layer_run(svc: Svc, fid: str, lid: str, body: RunBody):
     f = await asyncio.to_thread(store.add_job, fid, lid, jobs[0].id, status="queued", error=None, seed=seed, reference_asset_id=ref_id, guide_asset_id=g.id,
                                 batches=[{"k": 0, "job_id": jobs[0].id, "clip_id": None}], frames_done=0)
     svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
-    return {"job_id": jobs[0].id, "batches": len(plan), "reference_asset_id": ref_id, "placed": placed}
+    return {"job_id": jobs[0].id, "batches": len(plan), "reference_asset_id": ref_id, "placed": placed, "from_behind": behind,
+            "back_view": behind and anim_ref == v.anim_ref_back_asset_id}
 
 
 async def _guide_video(cat, store: FinalStore, f: Final, lid: str):
@@ -554,7 +561,7 @@ async def final_layer_passes(svc: Svc, fid: str, lid: str, body: PassesBody):
 async def _retake_from(svc, store: FinalStore, f: Final, layer: FinalLayer, body: RunBody, model_id: str, prompt: str, anim_ref: str | None) -> dict:
     """CA5 (02 §3): batch k and the ones after it again with a new seed — batch k continues the kept batch k−1's clip (its last frames
     carried, W1) on the layer's placed reference and pose guide; each finisher queues the next, the last stitches every batch and mattes."""
-    from ..finals import FINAL_LAYER_SURFACE, character_recipe, plan_batches
+    from ..finals import BACK_WORDS, FINAL_LAYER_SURFACE, character_recipe, plan_batches
     from ..origin import JobOrigin
     k = body.from_batch
     plan = plan_batches(f.frames)
@@ -574,7 +581,8 @@ async def _retake_from(svc, store: FinalStore, f: Final, layer: FinalLayer, body
     f2 = await asyncio.to_thread(store.add_job, f.id, layer.id, jobs[0].id, status="queued", error=None, seed=seed, frames_done=0,
                                  batches=[*kept, {"k": k, "job_id": jobs[0].id, "clip_id": None}])
     svc.hub.broadcast("final.updated", {"id": f.id, "revision": f2.revision})
-    return {"job_id": jobs[0].id, "batches": len(plan), "reference_asset_id": layer.reference_asset_id, "placed": layer.reference_asset_id != anim_ref}
+    return {"job_id": jobs[0].id, "batches": len(plan), "reference_asset_id": layer.reference_asset_id, "placed": layer.reference_asset_id != anim_ref,
+            "from_behind": BACK_WORDS in prompt, "back_view": False}
 
 
 class PlanBatch(BaseModel):

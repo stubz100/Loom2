@@ -1,7 +1,7 @@
 // ST3: the pass maths (16 §12: "keypoint projection, depth normalisation … are modules with Vitest tests").
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
-import { COCO, COLOURS, depthRange, hslToHex, LIMBS, maskColour, projectPoints } from './passes'
+import { COCO, COLOURS, depthRange, drawnPoints, facesAway, hslToHex, LIMBS, maskColour, projectPoints, type Keypoint } from './passes'
 
 const cam = () => { const c = new THREE.PerspectiveCamera(40, 16 / 9, 0.05, 500); c.position.set(0, 1, 4); c.lookAt(0, 1, 0); c.updateProjectionMatrix(); c.updateMatrixWorld(); return c }
 
@@ -29,5 +29,24 @@ describe('passes', () => {
     expect(new Set(cs).size).toBe(12)
     for (const c of cs) expect(c).toMatch(/^#[0-9a-f]{6}$/)
     expect(hslToHex(0, 1, 0.5)).toBe('#ff0000'); expect(hslToHex(120, 1, 0.5)).toBe('#00ff00')
+  })
+})
+
+describe('the pose pass of a figure facing away (D158, E42)', () => {
+  const kp = (away: boolean, eyes = true): Keypoint[] => {
+    const k: Keypoint[] = Array.from({ length: 18 }, () => [0, 0, 0] as Keypoint)
+    k[0] = [64, 20, 1]
+    k[2] = away ? [74, 30, 1] : [54, 30, 1]; k[5] = away ? [54, 30, 1] : [74, 30, 1]
+    if (eyes) { k[14] = away ? [70, 18, 1] : [58, 18, 1]; k[15] = away ? [58, 18, 1] : [70, 18, 1] }
+    k[16] = [76, 20, 1]; k[17] = [52, 20, 1]
+    return k
+  }
+  it('faces away by its eyes, else its shoulders, and then draws no nose or eyes — the ears and the shoulders stay', () => {
+    expect(facesAway(kp(true))).toBe(true); expect(facesAway(kp(false))).toBe(false)
+    expect(facesAway(kp(true, false))).toBe(true)
+    const drawn = drawnPoints(kp(true))
+    expect([0, 14, 15].map((i) => drawn[i][2])).toEqual([0, 0, 0])
+    expect([2, 5, 16, 17].map((i) => drawn[i][2])).toEqual([1, 1, 1, 1])
+    expect(drawnPoints(kp(false))).toEqual(kp(false))                                      // facing the camera: as before
   })
 })

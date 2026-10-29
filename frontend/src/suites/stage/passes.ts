@@ -63,12 +63,28 @@ const hue = (h: number): [number, number, number] => {
   return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)]
 }
 
+/** D158 (E42): a figure with its back to the camera — its right eye on the image's right of its left one (the head's own facing), or, an eye
+ *  out of frame, its right shoulder right of its left. The server's twin is finals.faces_away. */
+export function facesAway(kp: Keypoint[]): boolean {
+  const re = kp[14], le = kp[15]
+  if (re?.[2] && le?.[2]) return re[0] > le[0]
+  const rs = kp[2], ls = kp[5]
+  return !!(rs?.[2] && ls?.[2] && rs[0] > ls[0])
+}
+/** D158: the points the pose pass draws — a figure facing away shows no nose and no eyes (nor their limbs), as DWPose sees a real back;
+ *  the neck, the shoulders and the ears stay. Wan Animate drew a face on the back of a head from them (E42). */
+export function drawnPoints(kp: Keypoint[]): Keypoint[] {
+  if (!facesAway(kp)) return kp
+  return kp.map((p, i) => (i === 0 || i === 14 || i === 15 ? [p[0], p[1], 0] : p))
+}
+
 export function drawPose(keypoints: Keypoint[][], w: number, h: number, wholebody?: (WholeBody | null)[]): HTMLCanvasElement {
   const c = document.createElement('canvas'); c.width = w; c.height = h
   const g = c.getContext('2d')!
   g.fillStyle = '#000'; g.fillRect(0, 0, w, h)
   const r = Math.max(3, Math.round(Math.min(w, h) / 180))                               // the stroke scales with the frame (4 px at 720)
-  for (const kp of keypoints) {
+  for (const all of keypoints) {
+    const kp = drawnPoints(all)
     LIMBS.forEach(([a, b], k) => {
       if (!kp[a]?.[2] || !kp[b]?.[2]) return
       const [x1, y1] = kp[a], [x2, y2] = kp[b]

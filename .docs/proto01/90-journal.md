@@ -12373,3 +12373,40 @@ behind. The facing-away mark (U5d) tells a character without a back view what it
 - other seeds.
 
 U6's rig check owes a turning figure.
+
+## 2026-10-29 08:11 — U6a: D158 built — a turned figure's pose pass draws no face, its layer is performed from the back view with the words for it (D157, D158; proto01_UI2 04 §4)
+
+**The guide** (`passes.ts`):
+
+- `facesAway` says when a frame's figure has its back to the camera: its right eye on the image's right of its left one (the head's own
+  facing, so a head looking back over the shoulder counts), else its right shoulder right of its left.
+- `drawnPoints` hides the nose and the eyes on such a frame; `drawPose` then draws neither them nor their limbs. The neck, the shoulders
+  and the ears stay, as DWPose sees a real back. It is decided per frame, so a turn is carried frame by frame.
+- Every pose pass drawn from now on has it: a final's character layers and Clay's pose passes alike. Passes drawn before keep their face
+  points until they are drawn again.
+
+**The layer** (`routes/finals.final_layer_run`, `finals.faces_away` / `mostly_away`, the server's twins):
+
+- A character layer whose frames mostly face away is performed from the version's back A-pose (CA0's `anim_ref_back_asset_id`), placed
+  where the figure starts as the front one is (E23c).
+- Its prompt says *seen from behind, facing away from the camera*. E42 measured *… walking away from the camera, her back to the camera*;
+  the walk is the guide's, and a figure may also stand with its back turned (D158 says so).
+- Without a back view, the front one serves and the words still apply. The track's facing-away mark (U5d) says what the character lacks.
+- A re-take from a batch takes the same words.
+- The run's reply says `from_behind` and `back_view`.
+- Before this, every layer took the front A-pose and the app's words only, and the back view the author made went unused (F43).
+
+**Tests:**
+
+- `test_facing_d158.py` 2: a frame faces away by its eyes, else its shoulders, a head looking back counts, a layer by its majority; the run
+  of a layer facing away takes the back view and the words, without a back view the front one and the words, a layer facing the camera as
+  before;
+- `passes.test.ts` + 1: the client's twin, and the points a turned figure's pass draws.
+
+**Checks:** offline 723 passed; Vitest 635 + 3 skipped; typecheck, build and lint clean; e2e 87/87 (alone); `agents_check`,
+`model_literals_check` and `settings_audit` (319, 0) clean; the API contract regenerated.
+
+**Rig owed:** a performance through the app's route on the GPU (the wiring — E42 measured the same graph and inputs directly), and a
+figure that turns during a batch.
+
+Next: U6b — Performance and Final inside Shots.

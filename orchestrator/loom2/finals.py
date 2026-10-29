@@ -246,6 +246,29 @@ def cutout(ref: Path) -> tuple["np.ndarray", "np.ndarray", tuple[int, int, int]]
     return a[ys.min():ys.max() + 1, xs.min():xs.max() + 1], alpha[ys.min():ys.max() + 1, xs.min():xs.max() + 1], ground   # type: ignore[return-value]
 
 
+# ---- D158 (E42): a figure turned away from the camera is performed from behind ----
+BACK_WORDS = "seen from behind, facing away from the camera"          # E42 measured "… walking away …"; the walk is the guide's, not the words'
+
+
+def faces_away(kp: list[list[float]] | None) -> bool:
+    """D158: a frame's figure has its back to the camera — its right eye on the image's right of its left one (the head's own facing), or,
+    an eye out of frame, its right shoulder right of its left (COCO-18: 2 / 5 the shoulders, 14 / 15 the eyes). The client's twin is
+    passes.ts `facesAway`."""
+    if not kp or len(kp) < 16:
+        return False
+    re_, le = kp[14], kp[15]
+    if re_[2] and le[2]:
+        return re_[0] > le[0]
+    rs, ls = kp[2], kp[5]
+    return bool(rs[2] and ls[2] and rs[0] > ls[0])
+
+
+def mostly_away(kps: list) -> bool:
+    """D158: a layer performed from behind — more than half of its frames face away (one reference and one prompt serve the layer)."""
+    frames = [faces_away(k) for k in kps if k]
+    return bool(frames) and sum(frames) * 2 > len(frames)
+
+
 def place_reference(ref: Path, kp: list[list[float]] | None, w: int, h: int, out: Path) -> bool:
     """E23c (D105): the animation reference placed where the figure starts — its cut-out scaled to the figure's height in the first frame
     (nose to ankles is 0.86 of the reference's figure) with its feet on the figure's, on the reference's own ground — so Wan Animate leaves

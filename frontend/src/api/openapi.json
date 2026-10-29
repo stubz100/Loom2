@@ -18048,9 +18048,19 @@
       },
       "RunQueued": {
         "properties": {
+          "back_view": {
+            "default": false,
+            "title": "Back View",
+            "type": "boolean"
+          },
           "batches": {
             "title": "Batches",
             "type": "integer"
+          },
+          "from_behind": {
+            "default": false,
+            "title": "From Behind",
+            "type": "boolean"
           },
           "job_id": {
             "title": "Job Id",

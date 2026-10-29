@@ -20148,6 +20148,23 @@
             "title": "Id",
             "type": "string"
           },
+          "method": {
+            "anyOf": [
+              {
+                "enum": [
+                  "layered",
+                  "one_pass",
+                  "start_still",
+                  "speaking"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
+          },
           "range": {
             "anyOf": [
               {
@@ -20231,7 +20248,8 @@
           "finalized_at",
           "recipe",
           "range",
-          "words"
+          "words",
+          "method"
         ],
         "title": "ShotVersion",
         "type": "object"

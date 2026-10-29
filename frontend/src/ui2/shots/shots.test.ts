@@ -60,3 +60,19 @@ describe("the header's scene (U4c)", () => {
     expect(castOf(stage, profiles).map((m) => [m.name, m.cls, m.line])).toEqual([['Ines', 'character', 'Ready for Clay'], ['Figure 2', null, 'not bound to World'], ['Lantern', 'prop', '2 to go']])
   })
 })
+
+describe('the owed layers (U6c)', () => {
+  it('the newest final of the shot version, its plate and the character layers not performed yet, the GPU minutes by their batches', async () => {
+    const { batchesOf, owedOf } = await import('./shotsStore')
+    expect([batchesOf(65), batchesOf(77), batchesOf(100), batchesOf(149)]).toEqual([1, 1, 2, 2])
+    const fin = (id: string, at: string, statuses: [string, string][], extra = {}) => ({ id, shot_id: 'sht_a', shot_version: 'v1', created_at: at, frames: 65,
+      layers: statuses.map(([kind, status], i) => ({ id: `${kind}${i}`, kind, status })), ...extra })
+    const finals = [fin('f_old', '1', [['plate', 'passes'], ['figure', 'passes']]), fin('f_new', '2', [['plate', 'done'], ['figure', 'passes'], ['figure', 'done'], ['prop', 'passes']]),
+      fin('f_other', '3', [['figure', 'passes']], { shot_id: 'sht_b' })]
+    expect(owedOf(finals, 'sht_a', 'v1')).toEqual({ fid: 'f_new', plate: false, figures: ['figure1'], minutes: 3 })
+    expect(owedOf([fin('f', '1', [['plate', 'failed'], ['figure', 'passes'], ['figure', 'failed']])], 'sht_a', 'v1')!.minutes).toBe(8)   // 2 × 3.3 + 1
+    expect(owedOf([fin('f', '1', [['plate', 'done'], ['figure', 'done']])], 'sht_a', 'v1')).toBeNull()
+    expect(owedOf(finals, 'sht_a', 'v2')).toBeNull()                                                                  // v1's finals are not v2's
+    expect(owedOf([fin('f_a1', '1', [['figure', 'passes']], { shot_version: null })], 'sht_a', 'v2')).toEqual(expect.objectContaining({ fid: 'f_a1' }))   // one made before A1 names no version: it counts
+  })
+})

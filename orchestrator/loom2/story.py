@@ -322,6 +322,7 @@ class ShotVersion(BaseModel):
     recipe: ShotRecipe | None = None              # RC0 (D96, 05 §4): the steps that made the frame and the clip, their runs and stamps (shot_recipe.py)
     range: dict[str, int] | None = None           # U2 (D157, G6): the frames of its scene's timeline it covers {start, end}; None: the stage's range
     words: str = Field("", max_length=2000)       # U4d (G13): this shot only — the author's extra words for its pictures (shot_prompt.py)
+    method: Literal["layered", "one_pass", "start_still", "speaking"] | None = None   # U6c (04 §4): how Performance makes it; None = layered
 
 
 class Shot(BaseModel):
@@ -1028,9 +1029,9 @@ class _ShotMixin:
                 v = next((x for x in part.versions if x.id == patch.get("id")), None)
                 if v is None:
                     raise ValueError(f"no version {patch.get('id')!r}")
-                if v.state != "open" and any(k in patch for k in ("frame_asset_id", "clip_id", "stage_id", "camera_id", "range", "words")):
+                if v.state != "open" and any(k in patch for k in ("frame_asset_id", "clip_id", "stage_id", "camera_id", "range", "words", "method")):
                     raise ValueError(f"version {v.id} is final — its frame and clip are fixed; make a new version")
-                for k in ("frame_asset_id", "clip_id", "stage_id", "camera_id", "stage_revision", "range", "words"):
+                for k in ("frame_asset_id", "clip_id", "stage_id", "camera_id", "stage_revision", "range", "words", "method"):
                     if k in patch:
                         setattr(v, k, patch[k])
             part = part.model_copy(update={"current": data.get("current", part.current), "revision": part.revision + 1, "updated_at": utc_now()})

@@ -89,3 +89,17 @@ def test_a_layer_facing_away_is_performed_from_behind(tmp_path: Path):
     assert out["from_behind"] and not out["back_view"] and BACK_WORDS in job["recipe"]["prompt_text"]
     out, job = _run(tmp_path / "c", away=False, back=True)                   # facing the camera: as before
     assert not out["from_behind"] and not out["back_view"] and BACK_WORDS not in job["recipe"]["prompt_text"]
+
+
+def test_a_shots_method_is_kept_on_its_version(tmp_path):
+    """U6c (04 §4): Performance's method on the shot version — layered by default (None), one of four, fixed with a final version."""
+    import pytest
+    from loom2.story import StoryStore
+    from loom2.workspace import Workspace
+    st = StoryStore(Workspace.create(tmp_path / "p", name="P"))
+    n = st.create_node("shot", "Wide")
+    assert st.shot(n.shot_id).version().method is None
+    s = st.patch_shot(n.shot_id, {"revision": st.shot(n.shot_id).revision, "versions": [{"id": "v1", "method": "start_still"}]})
+    assert s.version().method == "start_still"
+    with pytest.raises(ValueError):
+        st.patch_shot(n.shot_id, {"revision": s.revision, "versions": [{"id": "v1", "method": "sideways"}]})

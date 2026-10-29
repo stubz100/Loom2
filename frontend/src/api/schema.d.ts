@@ -12896,6 +12896,8 @@ export interface components {
             frame_asset_id: string | null;
             /** Id */
             id: string;
+            /** Method */
+            method: ("layered" | "one_pass" | "start_still" | "speaking") | null;
             /** Range */
             range: {
                 [key: string]: number;

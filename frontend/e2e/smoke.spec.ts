@@ -3742,7 +3742,7 @@ test('the three modes (D121, proto01_animate 26): each Animate level has its own
   await expect(page.locator('.perf-cards button.active')).toHaveText('Final shot')
   // Final: the composition; nothing open yet — the foot says why
   await openAnimate(page, 'Final')
-  await expect.poll(sections).toEqual(['shot', 'layers', 'output'])
+  await expect.poll(sections).toEqual(['shot', 'layers', 'voice', 'output'])              // U6c: Voice and lip-sync
   await expect.poll(rail).toEqual(['Shot', 'Layers', 'Output'])
   await expect(page.locator('.panel .foot button.primary')).toBeDisabled()
   await expect(page.locator('.panel .foot .estimate')).toContainText('open a final in the Shot section')
@@ -4572,7 +4572,7 @@ test('World\'s owed parts (U3f, D157 · proto01_UI2 03 §2, §5, §8): a charact
   await expect(page.locator('[data-testid="world-make"]')).toBeVisible()
 })
 
-test('Performance and Final in Shots (U6b, D157 · proto01_UI2 04 §4–5): the open shot\'s levels — the For chip its version, the Layered method by default and kept per shot, To Final ▸', async ({ page }) => {
+test('Performance and Final in Shots (U6b–c, D157 · proto01_UI2 04 §4–5): the open shot\'s levels — the For chip its version, the Layered method by default and kept on the shot\'s record, To Final ▸', async ({ page }) => {
   test.setTimeout(90_000)
   const tag = Date.now().toString(36)
   const a = await api<{ id: string; shot_id: string }>('POST', '/story/flow/shots', { title: `Lantern ${tag}`, scene: 'new' })
@@ -4584,6 +4584,8 @@ test('Performance and Final in Shots (U6b, D157 · proto01_UI2 04 §4–5): the 
   await page.locator('.w-rail-btn[data-level="clay"]').click()
   await page.locator('.w-rail-btn[data-level="performance"]').click()
   await expect(page.locator('.perf-cards button[aria-pressed="true"]')).toHaveText('Image to video')             // the shot's method, kept
+  await expect.poll(async () => (await api<{ items: { id: string; versions: { method: string | null }[] }[] }>('GET', '/story/shots')).items.find((s) => s.id === a.shot_id)!.versions[0].method,
+    { timeout: 10_000 }).toBe('start_still')                                                                        // U6c: on the shot version's record
   await page.locator('.s-foot button', { hasText: 'To Final ▸' }).click()
   await expect(page.locator('[data-testid="shots-layer"]')).toHaveAttribute('data-level', 'final')
   await expect(page.locator('[data-testid="shots-final"]')).toBeVisible()

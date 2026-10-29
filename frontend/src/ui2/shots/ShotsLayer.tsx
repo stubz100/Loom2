@@ -85,12 +85,15 @@ function Centre() {
 /** The level's column and foot under the header (Clay's, Performance's or Final's), the way on to the next level beside the foot's verb. */
 function LevelColumn() {
   const level = useShots((s) => s.level)
+  const owed = useShots((s) => s.owed)
   const staged = useStory((st) => !!st.shotVersion()?.stage_id)
   if (!staged || level === 'flow') return <div className="w-panel" />
   const [Col, Foot, next] = level === 'clay' ? [ClayColumn, ClayFoot, 'shots.toPerformance'] : level === 'performance' ? [PerfColumn, PerfFoot, 'shots.toFinal'] : [FinalColumn, FinalFoot, 'story.shot.finalize']
   return <>
     <div className="w-panel"><Suspense fallback={null}><Col /></Suspense></div>
-    <div className="s-foot"><Suspense fallback={null}><Foot /></Suspense><CommandButton id={next} text label={level === 'final' ? 'Mark the shot final ✓' : undefined} /></div>
+    <div className="s-foot"><Suspense fallback={null}><Foot /></Suspense>
+      {level === 'performance' && owed && <CommandButton id="shots.performOwed" text label={`Perform the owed layers ▶ · ≈ ${owed.minutes} min on the GPU`} />}
+      <CommandButton id={next} text label={level === 'final' ? 'Mark the shot final ✓' : undefined} /></div>
   </>
 }
 

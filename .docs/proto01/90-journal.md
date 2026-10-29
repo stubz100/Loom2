@@ -12497,3 +12497,48 @@ One flaw seen: a small red blot by her feet on a mid-turn frame (the model's, no
 
 D158 is confirmed on the rig. The first run of the rig stopped after A's checks on printing a ≤ to the Windows console (A's results were
 already saved); the script writes UTF-8 now and B ran alone after it.
+
+## 2026-10-29 09:26 — U6c: U6 closed — the shot's lines on Final's lanes by themselves, lip-sync per speaking character, Perform the owed layers ▶, the method on the shot's record (D157; proto01_UI2 04 §4–5)
+
+**Final's Voice and lip-sync** (a section of its own, 04 §5):
+
+- **The shot's lines on the lanes.** When the shot's final opens in Shots without any lines, its voiced lines are laid by themselves
+  (`compositionStore.layLines`): one after another after the last one there, a breath of 0.25 s between, each as long as its voice and
+  bound to its speaker's layer. *Lay the lines* does the same for lines voiced later. Before this, each line was attached at the playhead
+  by hand (*Attach a line…* stays for that).
+- **Lip-sync per speaking character.** Each character layer with a line on the lanes is a row. *Lip-sync ▶* runs the Lip-sync pass over
+  that layer (Passes keeps the settings: the mouth, the strength), and the row says *lip-synced ✓* when the take in use is one.
+
+**Perform the owed layers ▶** (Performance's foot in Shots, `shots.performOwed`, 04 §4): the shot's newest final's plate when it is owed,
+and every character layer not performed yet, queued in turn (one GPU job at a time), with the GPU minutes.
+
+- The estimate counts each layer's batches at the D158 rig's 3.3 min a 65-frame batch, plus a minute for the plate's still (`owedOf`,
+  `batchesOf`).
+- On the copy: *Perform the owed layers ▶ · ≈ 1 min on the GPU* for Stay's rig final, whose plate is owed.
+
+**The method on the shot's record:** `ShotVersion.method` (layered, one pass, start still, speaking; none = layered), patched with the
+version and fixed with a final version.
+
+- Performance's card reads it when the shot opens and writes it when another card is picked.
+- Before this it was the session's.
+
+**Tests:**
+
+- `test_facing_d158.py` + 1: the method on the version, its values, a wrong one refused;
+- `shots.test.ts` + 1: the owed layers of the newest final of the shot version, the batches and the minutes, a version's finals not
+  another's, a final from before A1 counting for every version;
+- the U6b e2e scenario now polls the method on the shot's record; the D121 modes scenario lists Final's new section.
+
+**Checks:** offline 724 passed; Vitest 636 + 3 skipped; typecheck, build and lint clean; e2e 88/88 (alone); `agents_check`,
+`model_literals_check` and `settings_audit` (319, 0) clean; the API contract regenerated.
+
+**U6 is built:**
+
+- D158 in the pipeline (U6a);
+- Performance and Final inside Shots on the open shot, a take's identity (U6b);
+- the voice, the owed layers and the method (U6c).
+
+Rig: D158's two runs met their bars. Owed: Final's lip-sync pass on the rig in the new shell (the pass is D118's, unchanged); the
+*speaking close-up* method's own card (it is Story's *Lip-sync ▶* today).
+
+Next is U7: Episode.

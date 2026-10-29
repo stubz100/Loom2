@@ -46,6 +46,8 @@
 
 **E42 is done** (2026-10-29): the pose guide's face points on a turned head were the fault; each of the three inputs alone fixed Stay, and all three are adopted → D158. Next: U6, which builds D158 into Performance.
 
+**U6 is built** (2026-10-29 08:05 – 2026-10-29 09:26): D158 in the pipeline (U6a, its rig met: Stay 0/65 faces away, a turning figure 12/12 toward and 2/53 away); Performance and Final inside Shots on the open shot with a take's identity (U6b); the shot's lines on Final's lanes by themselves, lip-sync per speaking character, *Perform the owed layers ▶*, the method on the shot's record (U6c). Owed: Final's lip-sync pass on the rig in the new shell; the speaking close-up's own card. Next: U7, Episode.
+
 **The order.** U0 can start at once. U1 and U2 are the foundation. After them, U3 and U4 can run in either order: World first follows the work's order;
 Shots first answers the author's biggest change sooner. U5 and U6 follow U4. Most of U7 can run once U6 has the shot's final.
 

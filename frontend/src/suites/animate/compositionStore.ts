@@ -181,6 +181,9 @@ interface CompState {
   finalLayerId: () => string | null
   /** A pass queued on the selected layer's final layer (a GPU job); its take lands as the layer's source and the composition syncs. */
   runPass: (point?: string) => Promise<boolean>
+  /** U6c (04 §5): the shot's voiced lines not on a lane yet, laid one after another after the last one there (a breath between), each bound
+   *  to its speaker's layer; the count laid. */
+  layLines: () => Promise<number>
   /** The take the layer shows (null: its original frames); the composition swaps the footage in the same call. */
   useTake: (take: string | null) => Promise<boolean>
   dropTake: (take: string) => Promise<boolean>
@@ -453,6 +456,29 @@ export const useComposition = create<CompState>((set, get) => {
       } finally { set({ busy: false }) }
     },
     finalLayerId: () => { const s = get(); const cl = s.comp?.layers.find((l) => l.layer === s.selected); return cl && (cl.kind === 'figure' || cl.kind === 'plate') ? cl.id : null },
+    layLines: async () => {
+      const s = get()
+      if (!s.finalId || !s.final || !s.comp) return 0
+      const lines = await get().loadLines()
+      const on = new Set((s.comp.audio ?? []).map((a) => `${a.node_id}:${a.index}`))
+      const owed = lines.filter((l) => !on.has(`${l.node_id}:${l.index}`))
+      if (!owed.length) return 0
+      const ends = (s.comp.audio ?? []).map((a) => s.layers.find((l) => l.id === a.layer)?.out ?? 0)           // the lines already on the lanes end there
+      let t = ends.length ? Math.max(...ends) + 0.25 : 0
+      set({ busy: true })
+      let laid = 0
+      try {
+        for (const line of owed) {
+          const r = await http.POST('/finals/{fid}/composition/audio', { params: { path: { fid: s.finalId } },
+            body: { asset_id: line.audio_asset_id, layer_id: line.layer_id, node_id: line.node_id, index: line.index, t } })
+          if (r.error) { useSession.getState().toast(`Line: ${(r.error as { detail?: string }).detail ?? 'refused'}`, 'error'); break }
+          laid += 1
+          t += (line.duration_s ?? 2) + 0.25
+        }
+        if (laid) await edited()
+        return laid
+      } finally { set({ busy: false }) }
+    },
     runPass: async (point) => {
       const s = get()
       const below = s.passScope === 'below'

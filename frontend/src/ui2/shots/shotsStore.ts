@@ -44,13 +44,53 @@ interface ShotsState {
   reopen: () => void
   wordsOpen: boolean
   wordsFor: WordsFor
+  /** U6c (04 §4): what the shot's newest final still owes — its plate, the character layers not performed yet — and the GPU minutes. */
+  owed: Owed | null
   toggleWords: () => void
   setWordsFor: (w: WordsFor) => void
 }
 
-/** U6b (04 §4): the method each shot is performed by this session — a Performance card (`final` Layered, the default; `clip` One pass;
- *  `i2v` From the start still). */
-const methods: Record<string, 'final' | 'clip' | 'i2v'> = {}
+/** U6b–c (04 §4): a shot's method is its version's (`ShotVersion.method`), shown as Performance's card — Layered the Final shot card (the
+ *  default), One pass the Stage clip, From the start still Image to video. */
+type Card = 'final' | 'clip' | 'i2v'
+type Method = 'layered' | 'one_pass' | 'start_still' | 'speaking'
+const CARD: Record<Method, Card> = { layered: 'final', one_pass: 'clip', start_still: 'i2v', speaking: 'i2v' }
+const METHOD: Record<Card, Method> = { final: 'layered', clip: 'one_pass', i2v: 'start_still' }
+
+/** U6c: the shot's final's owed layers (the D158 rig: one 65-frame batch ≈ 3.3 min; the plate's still ≈ 1 min). */
+export interface Owed { fid: string; plate: boolean; figures: string[]; minutes: number }
+export const BATCH_MINUTES = 3.3
+/** The batches a layer of n frames is performed in (finals.plan_batches): one when it fits 77, else 72 new frames a batch after the first. */
+export const batchesOf = (n: number): number => (n <= 77 ? 1 : 1 + Math.ceil((n - 77) / 72))
+type FinalLite = { id: string; shot_id?: string | null; shot_version?: string | null; created_at: string; frames: number; layers: { id: string; kind: string; status: string }[] }
+/** The newest final made for the shot version and what it owes, or null. */
+export function owedOf(finals: FinalLite[], shotId: string, version: string): Owed | null {
+  const f = finals.filter((x) => x.shot_id === shotId && (!x.shot_version || x.shot_version === version)).sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0]
+  if (!f) return null
+  const owes = (st: string) => st === 'passes' || st === 'failed'
+  const plate = f.layers.some((l) => l.kind === 'plate' && owes(l.status))
+  const figures = f.layers.filter((l) => l.kind === 'figure' && owes(l.status)).map((l) => l.id)
+  if (!plate && !figures.length) return null
+  return { fid: f.id, plate, figures, minutes: Math.max(1, Math.round(figures.length * batchesOf(f.frames) * BATCH_MINUTES + (plate ? 1 : 0))) }
+}
+let unOwed: (() => void) | null = null
+async function followOwed(): Promise<void> {
+  const { useFinals } = await import('../../suites/stage/finalShot')
+  const calc = () => { const st = useStory.getState(), s = st.shot(), v = st.shotVersion(); useShots.setState({ owed: s && v ? owedOf(useFinals.getState().finals as unknown as FinalLite[], s.id, v.id) : null }) }
+  calc()
+  unOwed?.()
+  unOwed = useFinals.subscribe(calc)
+}
+
+/** The card picked becomes the open version's method (a final version keeps its own). */
+async function keepMethod(card: Card): Promise<void> {
+  const st = useStory.getState(), s = st.shot(), v = st.shotVersion()
+  if (!s || !v || v.state !== 'open' || (v.method ?? 'layered') === METHOD[card]) return
+  try {
+    const next = await unwrap(http.PATCH('/story/shots/{sid}', { params: { path: { sid: s.id } }, body: { revision: s.revision, versions: [{ id: v.id, method: METHOD[card] }] } as never }))
+    useStory.setState({ shots: useStory.getState().shots.map((x) => (x.id === next.id ? next : x)) })
+  } catch { /* the card stays; the method is written with the next pick */ }
+}
 
 /** U6b: Performance and Final act on this shot (F41) — Animate's For chip is the open shot version, its method's card is open, and the
  *  card picked is kept as the shot's method. */
@@ -59,9 +99,10 @@ async function enterPerformance(): Promise<void> {
   if (!s || !v) return
   const [{ useMakeFor }, { forShot }, { useAnimRoute }] = await Promise.all([import('../../store/origin'), import('../../suites/story/makeFor'), import('../../suites/animate/routeStore')])
   useMakeFor.getState().set('animate', forShot(s, v))
-  useAnimRoute.getState().set(methods[s.id] ?? 'final')
+  useAnimRoute.getState().set(CARD[(v.method ?? 'layered') as Method] ?? 'final')
   unfollow?.()
-  unfollow = useAnimRoute.subscribe((r) => { const id = useStory.getState().shotId; if (id && useShots.getState().level !== 'flow') methods[id] = r.route as 'final' | 'clip' | 'i2v' })
+  unfollow = useAnimRoute.subscribe((r, prev) => { if (r.route !== prev.route && useShots.getState().level === 'performance') void keepMethod(r.route as Card) })
+  void followOwed()
 }
 let unfollow: (() => void) | null = null
 
@@ -75,6 +116,7 @@ async function openShotFinal(): Promise<void> {
   const { finals, compositions } = useFinals.getState()
   const mine = finals.filter((f) => f.shot_id === s.id && (!f.shot_version || f.shot_version === v.id) && compositions[f.id]).sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0]
   if (mine && useComposition.getState().finalId !== mine.id) await useComposition.getState().open(mine.id)
+  if (mine && !(useComposition.getState().comp?.audio ?? []).length) await useComposition.getState().layLines()   // U6c: the shot's lines on their lanes by themselves
 }
 
 /** Clay on the shot's scene, through its camera (U4: the stage the version points at, its camera active). */
@@ -112,7 +154,7 @@ export const useShots = create<ShotsState>()((set, get) => ({
     get().setLevel(level ?? get().level)                                // 04 §2: a card opens the shot at the level last used
   },
   reopen: () => { const l = get().level; if (l !== 'flow') void openClay().then(() => (l === 'performance' || l === 'final' ? enterPerformance() : undefined)) },
-  wordsOpen: false, wordsFor: 'still',
+  wordsOpen: false, wordsFor: 'still', owed: null,
   toggleWords: () => set({ wordsOpen: !get().wordsOpen }),
   setWordsFor: (wordsFor) => set({ wordsFor }),
 }))

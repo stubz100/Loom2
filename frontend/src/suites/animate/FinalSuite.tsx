@@ -3,7 +3,7 @@
 // model: the picture, the lanes and one verb. The Shot section opens a final of the stage; Layers is AE2–AE4's editor; Output says what was
 // rendered and from which revision. Keys: Final's reach (animateCommands.ts) — its own commands, the mode keys, the Shot head's and the one
 // transport (the composition's here); Performance's player keys stay off.
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { AnimateLevels, GraphPill } from '../../frame/AnimateLevels'
 import { handleKeysAt, markUsed, runCommand } from '../../frame/commands'
 import { inField } from '../../frame/fieldKeys'
@@ -22,7 +22,7 @@ import { FinalViewer } from './FinalViewer'
 import './animate.css'
 import { registerKeyHost } from '../../frame/keyHosts'
 
-const FINAL_SECTIONS = ['shot', 'layers', 'output'] as const
+const FINAL_SECTIONS = ['shot', 'layers', 'voice', 'output'] as const
 
 /** The stage's finals, one to open — under the Shot head's stage and steps (Performance › Final shot makes them). */
 function FinalPicker() {
@@ -46,6 +46,37 @@ function FinalPicker() {
           </div>
         )
       })}
+    </div>
+  )
+}
+
+/** U6c (04 §5): the shot's voice — its lines on their lanes (*Lay the lines*: every voiced line not there yet, one after another), and
+ *  lip-sync per speaking character: the Lip-sync pass over that character's layer (Passes has its settings), on when the take in use is one. */
+function VoiceSection() {
+  const comp = useComposition((s) => s.comp)
+  const final = useComposition((s) => s.final)
+  const busy = useComposition((s) => s.busy)
+  const [lines, setLines] = useState<number | null>(null)
+  const fid = useComposition((s) => s.finalId)
+  useEffect(() => { let live = true; void useComposition.getState().loadLines().then((x) => { if (live) setLines(x.length) }); return () => { live = false } }, [fid, comp?.revision])
+  if (!comp || !final) return <span className="hint">No final open.</span>
+  const audio = comp.audio ?? []
+  const speakers = final.layers.filter((l) => l.kind === 'figure' && audio.some((a) => a.final_layer === l.id))
+  const lipsynced = (lid: string) => { const l = final.layers.find((x) => x.id === lid) as unknown as { source?: string | null; takes?: { id: string; preset: string }[] }
+    return (l?.takes ?? []).some((t) => t.id === l?.source && t.preset === 'lipsync') }
+  const sync = async (lid: string) => {
+    const c = useComposition.getState()
+    c.setScope('layer'); c.setPass('lipsync')
+    await c.runPass(lid)
+  }
+  return (
+    <div className="final-voice" data-testid="final-voice">
+      <div className="kv"><span>lines</span><span>{audio.length} on the lanes{lines !== null && lines > audio.length ? ` · ${lines - audio.length} voiced, not laid` : ''}
+        {lines !== null && lines > audio.length && <button type="button" className="quiet" disabled={busy} onClick={() => void useComposition.getState().layLines()}>Lay the lines</button>}</span></div>
+      {speakers.length ? speakers.map((l) => (
+        <div key={l.id} className="kv" data-speaker={l.id}><span>{l.name}</span><span>{lipsynced(l.id) ? 'lip-synced ✓' : 'not lip-synced'}
+          <button type="button" className="quiet" disabled={busy} title="The Lip-sync pass over this character's layer — its lines drive the mouth (Passes has the settings)" onClick={() => void sync(l.id)}>{lipsynced(l.id) ? 'Again ▶' : 'Lip-sync ▶'}</button></span></div>))
+        : <span className="hint">No line on a character's layer yet.</span>}
     </div>
   )
 }
@@ -84,6 +115,7 @@ function FinalColumn({ tab }: { tab: string }) {
     <AnimColumn suite="final" sections={FINAL_SECTIONS} tab={tab}>
       <Sec id="shot" title="Shot"><ShotHead /><FinalPicker /></Sec>
       <Sec id="layers" title="Layers"><LayersSection /></Sec>
+      <Sec id="voice" title="Voice and lip-sync"><VoiceSection /></Sec>
       <Sec id="output" title="Output"><OutputSection /></Sec>
     </AnimColumn>
   )

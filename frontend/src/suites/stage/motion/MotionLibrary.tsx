@@ -1,6 +1,8 @@
 // CA1 (proto01_animate 01 step 5): the motion library in Animate's Motion section — the starter set (CC0) and the local folder's files,
 // each opened to its clips; a picked clip plays on a dummy in the preview (its own small canvas); trim, speed and in-place; *Apply at the
 // playhead* puts it on the selected figure as keys (stage.motion.apply). Presets and keys by hand stay below (PosesTab).
+import { applyTemplate, importMotion, removeTemplate, templateToLibrary, useTemplates } from '../blockEdit'
+import type { AnimationTemplate } from '../blocks'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { CommandButton } from '../../../frame/CommandButton'
@@ -28,16 +30,17 @@ export function MotionLibrary() {
       <div className="head"><b>Motion library</b><span className="hint">{m.files.length} file{m.files.length === 1 ? '' : 's'}</span><CommandButton id="stage.motion.refresh" size={13} /></div>
       <div className="motion-bar">
         <span className="segmented" role="group" aria-label="motion source">
-          {(['all', 'starter', 'local'] as MotionFilter[]).map((k) => <button key={k} type="button" className={m.filter === k ? 'active' : ''} onClick={() => m.set({ filter: k })}>{k === 'starter' ? 'Starter (CC0)' : k === 'local' ? 'Local' : 'All'}</button>)}
+          {(['all', 'starter', 'local', 'mine'] as MotionFilter[]).map((k) => <button key={k} type="button" className={m.filter === k ? 'active' : ''} onClick={() => m.set({ filter: k })}>{k === 'starter' ? 'Starter (CC0)' : k === 'local' ? 'Local' : k === 'mine' ? 'Mine' : 'All'}</button>)}
         </span>
+        {m.filter === 'local' && <button type="button" className="link" title="Copy a .glb, .gltf or .fbx into the local motion folder (U5)" disabled={!m.localDir} onClick={() => void importMotion(() => m.refresh())}>Import…</button>}
         <input type="search" aria-label="search the motion library" placeholder="search clips" value={m.q} onChange={(e) => m.set({ q: e.target.value })} />
       </div>
       {m.error && <span className="hint error">{m.error}</span>}
       {m.loaded && !m.files.length && <span className="hint">No motion files found — the starter set lives in &lt;models root&gt;/motion; your own clips go in Settings › Motion.</span>}
       {m.loaded && m.filter !== 'starter' && !m.localDir && <span className="hint">No local folder yet: set one in Settings › Motion for your own downloads (Mixamo FBX at 24 fps, without skin).</span>}
-      <div className="motion-list" role="list">
+      {m.filter === 'mine' ? <MineList q={m.q} fig={fig?.name ?? null} /> : <div className="motion-list" role="list">
         {files.map((f) => <FileRow key={f.id} f={f} />)}
-      </div>
+      </div>}
       {p && (
         <div className="motion-picked">
           <MotionPreview clip={p} start={m.start} end={m.end} speed={m.speed} inPlace={m.inPlace} />
@@ -56,6 +59,32 @@ export function MotionLibrary() {
           <div className="verbs"><CommandButton id="stage.motion.apply" text label={m.applying ? 'Applying…' : fig ? `Apply to ${fig.name} at the playhead` : 'Apply at the playhead (select a figure)'} /></div>
         </div>
       )}
+    </div>
+  )
+}
+
+/** U5c (G9): *Mine* — the project's animations and the author's library, each applied as a block to the selected figure at the playhead. */
+function MineList({ q, fig }: { q: string; fig: string | null }) {
+  const t = useTemplates()
+  useEffect(() => { if (!t.loaded) void t.load() }, [])   // eslint-disable-line react-hooks/exhaustive-deps
+  const want = q.trim().toLowerCase()
+  const shown = (xs: AnimationTemplate[]) => xs.filter((x) => !want || x.name.toLowerCase().includes(want))
+  const inLib = new Set(t.library.map((x) => x.id))
+  const row = (x: AnimationTemplate, from: 'project' | 'library') => (
+    <div key={`${from}:${x.id}`} className="motion-clip mine" role="listitem" data-id={x.id}>
+      <span>{x.name}<small> · {(x.frames / Math.max(1, x.fps)).toFixed(1)} s</small></span>
+      <span className="verbs">
+        <button type="button" className="link" disabled={!fig} title={fig ? `A clip block on ${fig} at the playhead` : 'Select a figure'} onClick={() => void applyTemplate(x)}>Apply</button>
+        {from === 'project' && !inLib.has(x.id) && <button type="button" className="link" title="Every project has it under Mine" onClick={() => void templateToLibrary(x)}>To my library</button>}
+        <button type="button" className="link danger" title={from === 'project' ? 'Remove it from the project' : 'Remove it from your library'} onClick={() => void removeTemplate(x, from)}>Remove</button>
+      </span>
+    </div>)
+  if (!t.loaded) return <span className="hint">Reading…</span>
+  if (!t.items.length && !t.library.length) return <span className="hint">None yet — a clip's or a track's right-click has Save as animation…</span>
+  return (
+    <div className="motion-list" role="list">
+      {shown(t.items).length > 0 && <><b className="motion-sub">This project</b>{shown(t.items).map((x) => row(x, 'project'))}</>}
+      {shown(t.library).length > 0 && <><b className="motion-sub">My library</b>{shown(t.library).map((x) => row(x, 'library'))}</>}
     </div>
   )
 }

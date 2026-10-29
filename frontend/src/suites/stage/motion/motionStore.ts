@@ -1,20 +1,15 @@
 // CA1 (proto01_animate 01 step 5): the motion library's state in the Motion section — the files, the clips of the files opened so far, the
-// clip picked with its trim / speed / in-place, and *Apply at the playhead*: the clip retargeted onto the selected figure (its body's hip
-// height), baked from the playhead where the figure stands and facing its way, thinned, written as its keys (one undo step).
+// clip picked with its trim / speed / in-place, and *Apply at the playhead*. U5 (G8): the clip becomes a block on the selected figure's
+// track (blocks.ts evaluates it: retargeted onto its body's hip height, from where it stands at the playhead and facing its way).
 import { create } from 'zustand'
 import { useSession } from '../../../store/session'
 import type { ApiError } from '../../../api/client'
-import { bodyDims } from '../body'
 import { st } from '../stageStore'
-import { bakeAlongPath, bakeKeys, blendIn, repeatLoop, thinKeys } from './bake'
-import { footLock } from './footlock'
-import { footContact } from './contact'
-import { measure } from './path'
-import { walkAlong } from './walkpath'
-import { keyframesOf, sampleObject } from '../anim'
-import { clipsOf, listFiles, retargetClip, type MotionClip, type MotionFile } from './library'
+import { keyframesOf } from '../anim'
+import { blockKeys, useBlocks, type MotionBlock } from '../blocks'
+import { clipsOf, listFiles, type MotionClip, type MotionFile } from './library'
 
-export type MotionFilter = 'all' | 'starter' | 'local'
+export type MotionFilter = 'all' | 'starter' | 'local' | 'mine'   // U5c: mine — the project's animations and the author's library
 
 interface MotionState {
   files: MotionFile[]; localDir: string | null; starterDir: string | null; loaded: boolean; error: string | null
@@ -54,36 +49,27 @@ export const useMotion = create<MotionState>((set, get) => ({
   pick: (clip) => set({ picked: clip, start: 0, end: null, speed: 1, inPlace: false }),                   // the lock, path and blend choices stay
   set: (patch) => set(patch),
   apply: async () => {
+    // U5 (D157 G8): a clip is a block on the figure's track — evaluated first (its length goes on the block; a clip that cannot be
+    // evaluated is not added), never baked into its keys, and the stage's range stays as it is (F37)
     const s = useSession.getState()
     const clip = get().picked
     const o = st().object(st().selected)
     const doc = st().current
     if (!clip || !o || o.kind !== 'mannequin' || !doc) return
-    const at = st().sampledDoc()?.objects.find((x) => x.id === o.id) ?? o
-    const dims = bodyDims(o.body as never)
-    const hip = (0.04 + dims.limbs.thigh + dims.limbs.shin) * dims.scale                 // the figure's hip above its ankles (its body's)
+    const path = get().alongPath && !!o.path && o.path.length >= 2
+    const had = (keyframesOf(doc).objects[o.id]?.length ?? 0) > 0 || (doc.tracks?.[o.id]?.length ?? 0) > 0
+    const block: MotionBlock = { id: `blk_${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}`, source: { kind: 'library', id: clip.file.id, clip: clip.name },
+      start: st().frame, trim_in: get().start, trim_out: get().end ?? null, loops: path && /_loop$|loop$/i.test(clip.name) ? 0 : 1, speed: get().speed,
+      blend_in: had ? get().blend : 0, blend_out: 0, in_place: get().inPlace && !path, foot_lock: get().lock, ground: get().ground, mirror: false, path, length: 0 }
     set({ applying: true })
     try {
-      const r = await retargetClip(clip, { fps: doc.size.fps || 24, start: get().start, end: get().end ?? undefined, speed: get().speed, hip })
-      const path = get().alongPath && o.path && o.path.length >= 2 ? (o.path as number[][]).map((p) => [p[0], p[1]] as [number, number]) : null
-      const lock = (fr: typeof r.frames) => { const locked = get().lock ? footLock(fr, o.body as never) : fr; return get().ground ? footContact(locked, o.body as never) : locked }   // AP1 (D141): and the feet on the floor
-      let frames = lock(r.frames)
-      if (path && /_loop$|loop$/i.test(clip.name)) {                                // a loop repeats until its travel covers the path
-        const per = Math.hypot(frames[frames.length - 1].offset[0] - frames[0].offset[0], frames[frames.length - 1].offset[2] - frames[0].offset[2]) * (at.transform.scale[1] ?? 1)
-        const times = per > 0.05 ? Math.min(30, Math.ceil(measure(path).length / per)) : 1
-        if (times > 1) frames = lock(repeatLoop(r.frames, times))
-      }
-      if (get().inPlace && !path) frames = frames.map((f) => ({ ...f, offset: [0, f.offset[1], 0] as [number, number, number] }))
-      const frame = st().frame
-      // along a path: steered with the planted foot pinned (feet locked), or laid along it by distance (the lock off)
-      let keys = path ? (get().lock ? walkAlong(frames, at.transform, frame, path, o.body as never) : bakeAlongPath(frames, at.transform, frame, path)) : bakeKeys(frames, at.transform, frame)
-      const had = keyframesOf(doc).objects[o.id]
-      if (get().blend > 0 && had?.length) keys = blendIn(keys, (f) => sampleObject(o, had, f).pose?.joints ?? null, get().blend)
-      keys = thinKeys(keys)
-      st().applyMotion(o.id, keys, `motion · ${clip.name}`)
-      const last = keys[keys.length - 1].frame
-      const travel = Math.hypot(frames[frames.length - 1].offset[0] - frames[0].offset[0], frames[frames.length - 1].offset[2] - frames[0].offset[2])
-      s.toast(`${clip.name} on ${o.name}: frames ${frame}–${last} (${keys.length} keys${path ? ', along its path' : travel > 0.05 ? `, ${travel.toFixed(2)} m travelled` : ''}${get().lock ? ', feet locked' : ''})`, 'success')
+      const probe = { ...doc, tracks: { ...(doc.tracks ?? {}), [o.id]: [...(doc.tracks?.[o.id] ?? []), block] } }
+      const keys = await blockKeys(probe, o.id, block.id)
+      if (!keys?.length) throw new Error(useBlocks.getState().errors[block.id] ?? 'it could not be evaluated')
+      const first = keys[0].frame, last = keys[keys.length - 1].frame
+      st().addBlock(o.id, { ...block, length: last - first + 1 })
+      const past = last > doc.range.end ? ` — past the shot's end (${doc.range.end}); the range stays` : ''
+      s.toast(`${clip.name} on ${o.name}: a clip from frame ${first} to ${last}${path ? ', along its path' : ''}${get().lock ? ', feet locked' : ''}${past}`, 'success')
     } catch (e) { s.toast(`The clip was not applied: ${e instanceof Error ? e.message : String(e)}`, 'error') }
     finally { set({ applying: false }) }
   },

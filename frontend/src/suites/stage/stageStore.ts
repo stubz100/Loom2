@@ -20,6 +20,7 @@ import type { Keypoint, WholeBody } from './passes'
 import { profilesForMentions, useStory, versionPointsOfShell } from '../story/storyStore'
 import { navigate } from '../../frame/router'
 import { contextSlot } from '../../store/contexts'
+import { blocksReady, type MotionBlock } from './blocks'
 
 /** CA0: the body of a bound figure's Cast version (its pinned version, else the character's current one); null = the preset's dummy;
  *  undefined = the character is not loaded (the figure keeps what it has). */
@@ -231,6 +232,12 @@ interface StageState {
   setExtra: (id: string, extra: Record<string, number[]>, label?: string) => void
   /** CA1: a library clip's baked keys on a figure — the figure's keys in their frames replaced, the range grown to hold them (one undo step). */
   applyMotion: (id: string, keys: ObjectKey[], label: string) => void
+  /** U5 (G8): a clip block on a figure's track (one undo step); its fields patched; removed. */
+  addBlock: (objectId: string, block: MotionBlock) => void
+  patchBlock: (objectId: string, blockId: string, patch: Partial<MotionBlock>) => void
+  removeBlock: (objectId: string, blockId: string) => void
+  /** U5c: *Bake to keys* — the block goes and its keys join the figure's (one undo step). */
+  bakeBlock: (objectId: string, blockId: string, keys: ObjectKey[]) => void
   /** CA1: a point clicked on the floor added to the figure's path; the path cleared. */
   addPathPoint: (id: string, p: [number, number]) => void
   clearPath: (id: string) => void
@@ -376,6 +383,12 @@ async function saveNow(get: () => StageState, set: (p: Partial<StageState>) => v
   } finally { set({ saving: false }) }
 }
 
+/** U5 (G8): an object that moves — it has keys, or clip blocks on its track. An edit on it is a key at the playhead (over a block, a
+ *  correction on its key layer), not a change of the pose the keys and the blocks hide. */
+export function animated(doc: StageDoc | null | undefined, id: string): boolean {
+  return !!doc && (!!keyframesOf(doc).objects[id]?.length || !!doc.tracks?.[id]?.length)
+}
+
 /** A pose edit (joints, a preset, the Detailed level's own bones): on a keyed figure it is a key at the playhead — the figure as sampled
  *  there, its pose changed — as a transform edit is (ST4); otherwise the figure's pose itself. Before CA1 a pose edit on a keyed figure
  *  changed only the unkeyed pose, which the keys hide: a preset or a hand after a library clip did nothing. */
@@ -384,7 +397,7 @@ const rest = (p: StageObject['pose']) => ({ contacts: p?.contacts ?? {}, gaze: p
 function editPose(get: () => StageState, id: string, fn: (p: StageObject['pose']) => NonNullable<StageObject['pose']>, label: string): void {
   const cur = get().current
   if (!cur) return
-  if (keyframesOf(cur).objects[id]?.length) {
+  if (animated(cur, id)) {
     const o = get().sampledDoc()?.objects.find((x) => x.id === id)
     if (!o) return
     const pose = fn(o.pose)
@@ -486,8 +499,28 @@ export const useStage = create<StageState>()((set, get) => ({
     get().apply((d) => {
       const k = keyframesOf(d)
       const kept = (k.objects[id] ?? []).filter((x) => x.frame < first || x.frame > last)
-      return { ...d, keyframes: { ...k, objects: { ...k.objects, [id]: [...kept, ...keys].sort((a, b) => a.frame - b.frame) } }, range: { ...d.range, end: Math.max(d.range.end, last) } }
+      return { ...d, keyframes: { ...k, objects: { ...k.objects, [id]: [...kept, ...keys].sort((a, b) => a.frame - b.frame) } } }   // U5 (F37): the range never moves by itself
     }, label)
+  },
+  addBlock: (objectId, block) => get().apply((d) => ({ ...d, tracks: { ...(d.tracks ?? {}), [objectId]: [...(d.tracks?.[objectId] ?? []), block] } }), `clip · ${block.source.clip || 'animation'}`),
+  patchBlock: (objectId, blockId, patch) => get().apply((d) => ({ ...d, tracks: { ...(d.tracks ?? {}), [objectId]: (d.tracks?.[objectId] ?? []).map((b) => (b.id === blockId ? { ...b, ...patch } : b)) } }), 'clip block'),
+  removeBlock: (objectId, blockId) => get().apply((d) => {
+    const rest = (d.tracks?.[objectId] ?? []).filter((b) => b.id !== blockId)
+    const { [objectId]: _gone, ...others } = d.tracks ?? {}
+    void _gone
+    return { ...d, tracks: rest.length ? { ...others, [objectId]: rest } : others }
+  }, 'remove clip block'),
+  bakeBlock: (objectId, blockId, keys) => {
+    if (!keys.length) return
+    const first = keys[0].frame, last = keys[keys.length - 1].frame
+    get().apply((d) => {
+      const k = keyframesOf(d)
+      const kept = (k.objects[objectId] ?? []).filter((x) => x.frame < first || x.frame > last)
+      const rest = (d.tracks?.[objectId] ?? []).filter((b) => b.id !== blockId)
+      const { [objectId]: _gone, ...others } = d.tracks ?? {}
+      void _gone
+      return { ...d, keyframes: { ...k, objects: { ...k.objects, [objectId]: [...kept, ...keys].sort((a, b) => a.frame - b.frame) } }, tracks: rest.length ? { ...others, [objectId]: rest } : others }
+    }, 'bake clip to keys')
   },
   removeKeyAt: (frame) => get().apply((d) => {
     const k = keyframesOf(d)
@@ -553,6 +586,7 @@ export const useStage = create<StageState>()((set, get) => ({
       await flushSave(get, set)
       const doc = get().current
       if (!doc) return false
+      await blocksReady(doc)                                                          // U5: every clip block evaluated before a frame is sampled
       const kind = get().guideKind
       const { start } = doc.range
       const n = get().guideFrames()
@@ -627,6 +661,7 @@ export const useStage = create<StageState>()((set, get) => ({
       await flushSave(get, set)
       const doc = get().current
       if (!doc) return false
+      await blocksReady(doc)                                                          // U5: the figures' clip blocks evaluated
       const cam = sampleDoc(doc, get().frame).cameras.find((c) => c.id === base.id) ?? base   // V80 (T8): the camera as the viewport shows it at the playhead, its keys applied
       const [w, h] = get().shotSize()
       const out = await render(cam, w, h)
@@ -704,7 +739,7 @@ export const useStage = create<StageState>()((set, get) => ({
     const name = preset ?? 'stand'
     if (!Object.keys(joints).length && castPoses(get().object(id))[name]) { get().applyCharacterPose(id, name); return }   // AP1b: the character's own
     // on a keyed figure the preset is keyed as every joint spelled out, so the keys around it interpolate into it (not a snap at halfway)
-    const keyed = !!keyframesOf(get().current ?? { keyframes: {} } as never).objects[id]?.length
+    const keyed = animated(get().current, id)
     const full = keyed ? { ...Object.fromEntries(JOINTS.map((j) => [j, [...(POSES[name]?.j[j] ?? [0, 0, 0])]])), ...joints } : joints
     // AP1 (D141): a pose on the ground stands on its feet on this figure's body — its lower foot on the floor, the other bent up where it
     // would go under (a run is in the air: as it is)
@@ -716,7 +751,7 @@ export const useStage = create<StageState>()((set, get) => ({
   applyCharacterPose: (id, name) => {
     const own = castPoses(get().object(id))[name]
     if (!own) return
-    const keyed = !!keyframesOf(get().current ?? { keyframes: {} } as never).objects[id]?.length
+    const keyed = animated(get().current, id)
     const preset = own.preset ?? 'stand'
     const joints = keyed ? { ...Object.fromEntries(JOINTS.map((j) => [j, [...(POSES[preset]?.j[j] ?? [0, 0, 0])]])), ...own.joints } : { ...own.joints }
     editPose(get, id, (p) => ({ preset, joints, extra: { ...(p?.extra ?? {}), ...(own.extra ?? {}) }, ground: own.ground ?? 0, pins: { ...(own.pins ?? {}) }, contacts: { ...(own.contacts ?? {}) }, gaze: own.gaze ?? p?.gaze ?? null }), 'pose'); set({ selectedJoint: null })
@@ -935,7 +970,7 @@ export const useStage = create<StageState>()((set, get) => ({
   },
   setTransform: (id, t) => {
     const cur = get().current
-    if (cur && keyframesOf(cur).objects[id]?.length) {                   // ST4: a keyed object takes the edit as a key at this frame
+    if (cur && animated(cur, id)) {                   // ST4: a keyed object takes the edit as a key at this frame
       const o = get().sampledDoc()?.objects.find((x) => x.id === id)
       get().apply((d) => withObjectKey(d, id, { frame: get().frame, ease: 'ease', transform: t, pose: o?.pose ? { preset: o.pose.preset, joints: { ...o.pose.joints }, extra: { ...(o.pose.extra ?? {}) }, ground: o.pose.ground ?? 0, pins: { ...(o.pose.pins ?? {}) } } : null }), 'key object')
       return

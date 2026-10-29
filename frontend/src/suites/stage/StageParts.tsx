@@ -16,6 +16,7 @@ import { useStory } from '../story/storyStore'
 import { handleKeysAt, markUsed, runCommand, sep, type MenuItem } from '../../frame/commands'
 import { inField, primaryInField } from '../../frame/fieldKeys'
 import { showMenu } from '../../frame/ContextMenu'
+import { navigate } from '../../frame/router'
 import { onlyAssets, useDropTarget } from '../../frame/drag'
 import { shotRefDrop } from '../../frame/dropRules'
 import { api } from '../../api/client'
@@ -30,6 +31,9 @@ import { ShotHead } from './ShotStepper'
 import { AnimColumn, Sec } from '../animate/column'
 import type { StageCamera, StageDoc, StageObject } from '../../api/types'
 import { keyedFrames as keyedFramesOf, keyframesOf, sampleCamera, sampleDoc } from './anim'
+import { blockMenu, dragBlock, saveRangeAsAnimation } from './blockEdit'
+import { blocksReady, useBlocks, type MotionBlock } from './blocks'
+import { awayStretches, lineSpans } from './tracks'
 import { Timeline as TimelineView, TransportBar, type TLRow } from '../animate/Timeline'
 import { keyRuns, stageSpan } from '../animate/timelineMath'
 import { JOINTS, MANNEQUIN_PRESETS, POSE_NAMES, PROP_PRESETS, SET_PRESETS, type Joint } from './builders'
@@ -55,7 +59,9 @@ function devHook(): Record<string, unknown> {
   w.__loom2Stage ??= { open: (id: string) => st().open(id), setShot: (p: Partial<ShotState>) => st().setShot(p), renderPasses: () => st().renderPasses(),
     generateShot: () => st().generateShot(), state: () => ({ current: st().current, shot: st().shot, passes: st().passesEntry(), guide: st().guideEntry(), frame: st().frame, selected: st().selected }), screenOf: () => null,
     // ST4: the clip path
-    setFrame: (f: number) => st().setFrame(f), keyCamera: () => st().keyCamera(), setRange: (a: number, b: number) => st().setRange(a, b), setGuideKind: (k: 'depth' | 'pose') => st().setGuideKind(k),
+    setFrame: (f: number) => st().setFrame(f), keyCamera: () => st().keyCamera(),
+    sampleAt: async (f: number) => { const d = st().current; if (!d) return null; await blocksReady(d); return sampleDoc(d, f) },   /* U5: the document at a frame, its clip blocks evaluated */
+    setRange: (a: number, b: number) => st().setRange(a, b), setGuideKind: (k: 'depth' | 'pose') => st().setGuideKind(k),
     renderGuide: () => st().renderGuide(), setShotStart: (id: string | null) => st().setShotStart(id), animateShot: () => st().animateShot(),
     updateCamera: (id: string, patch: Partial<StageCamera>) => st().updateCamera(id, patch), setTransform: (id: string, t: { pos: number[]; rot: number[]; scale: number[] }) => st().setTransform(id, t),
     frameAll: () => st().frameView(null),
@@ -756,6 +762,47 @@ export function Strip() {
 // field, the range and the stage's key verbs; then the one timeline: the range as the work area (its ends dragged), a row for the active
 // camera and one for each keyed object — a motion clip's bake as a bar, single keys as diamonds (drag one to move it, right-click to remove
 // it, click to go to it). Nothing keyed: the ruler alone (the bar), as ArtCraft's collapsed timeline.
+/** U5d: the shot this stage camera is for — the Story store's open shot when it is, else the first whose current version looks through it. */
+function useLineShot(stageId: string, cameraId: string | null) {
+  const shots = useStory((s) => s.shots)
+  const sel = useStory((s) => s.shotId)
+  return useMemo(() => {
+    const mine = (x: (typeof shots)[number]) => { const v = x.versions.find((y) => y.id === x.current) ?? x.versions[0]; return !!cameraId && v?.stage_id === stageId && v.camera_id === cameraId }
+    return shots.find((x) => x.id === sel && mine(x)) ?? shots.find(mine) ?? null
+  }, [shots, sel, stageId, cameraId])
+}
+
+/** U5d: the timeline's read-only rows — the shot's lines (each as long as its voice) and each bound figure's stretches with its back to
+ *  the active camera, saying when its character has no back view (right-click: make it in World). */
+function useReadOnlyRows(current: StageDoc, cam: StageCamera | null, start: number, end: number): TLRow[] {
+  const shot = useLineShot(current.id, cam?.id ?? null)
+  const node = useStory((s) => (shot?.owner_node ? s.flowNodes[shot.owner_node] : undefined))
+  const secs = useStory((s) => s.audioSecs)
+  const profiles = useStory((s) => s.profiles)
+  const version = useBlocks((s) => s.version)
+  useEffect(() => { const ids = (node?.lines ?? []).map((l) => l.audio_asset_id).filter((x): x is string => !!x); if (ids.length) void useStory.getState().loadAudioSecs(ids) }, [node])
+  const away = useMemo(() => (cam ? current.objects.filter((o) => o.kind === 'mannequin' && o.visible).map((o) => ({ o, at: awayStretches(current, o.id, cam.id, start, end) })).filter((x) => x.at.length) : []),
+    [current, cam, start, end, version])   // eslint-disable-line react-hooks/exhaustive-deps
+  const out: TLRow[] = []
+  const v = shot ? shot.versions.find((x) => x.id === shot.current) ?? shot.versions[0] : null
+  const spans = node ? lineSpans(node.lines, secs, v?.range?.start ?? start, current.size.fps || 24) : []
+  const who = (id: string | null) => (id ? profiles.find((p) => p.id === id)?.name ?? 'someone' : 'narrator')
+  if (spans.length) out.push({ id: 'lines', label: 'Lines', data: { kind: 'lin' }, title: `${shot?.name}'s lines, one after another from the shot's start, each as long as its voice`,
+    bars: spans.map((l) => ({ id: `ln${l.index}`, from: l.from, to: l.to, className: `line${l.estimated ? ' estimated' : ''}`, label: `${who(l.speaker)}: ${l.text}`,
+      title: `${who(l.speaker)}: “${l.text}” — ${l.seconds.toFixed(1)} s${l.estimated ? ' (not voiced yet: timed by its words)' : ''}` })) })
+  for (const { o, at } of away) {
+    const p = o.profile_id ? profiles.find((x) => x.id === o.profile_id) : undefined
+    const pv = p ? p.versions.find((x) => x.id === (o.version ?? p.current)) ?? p.versions[0] : undefined
+    const noBack = !!p && p.cls === 'character' && !pv?.anim_ref_back_asset_id
+    out.push({ id: `away:${o.id}`, label: `${o.name} · back to camera`, data: { kind: 'away' },
+      bars: at.map(([a, b]) => ({ id: `aw${a}`, from: a, to: b, className: `away${noBack ? ' warn' : ''}`, label: noBack ? 'no back view' : 'back to camera',
+        title: `${p?.name ?? o.name} faces away from ${cam!.name} here${noBack ? `, and has no back view — right-click: make it in World` : ''}` })),
+      onMenu: (e) => { e.preventDefault(); showMenu(e, [{ label: `Make ${p?.name ?? o.name}'s back view in World ▸`, disabled: !p || p.cls !== 'character',
+        run: () => { if (!p) return; useStory.getState().selectProfile(p.id, pv?.id ?? null); navigate({ suite: 'story', tab: 'cast' }) } }]) } })
+  }
+  return out
+}
+
 function Timeline() {
   const current = useStage((s) => s.current)!
   const frame = useStage((s) => s.frame)
@@ -767,9 +814,13 @@ function Timeline() {
   const { start, end } = current.range
   const cam = current.cameras.find((c) => c.id === current.active_camera) ?? null
   const camKeys = cam ? (k.camera[cam.id] ?? []).map((x) => x.frame) : []
-  const objects = current.objects.filter((o) => (k.objects[o.id] ?? []).length > 0)
+  const tracks = current.tracks ?? {}
+  const blockErrors = useBlocks((s) => s.errors)
+  const objects = current.objects.filter((o) => (k.objects[o.id] ?? []).length > 0 || (tracks[o.id] ?? []).length > 0)
   const skeletons = current.objects.filter((o) => (k.skeleton?.[o.id] ?? []).length > 0)        // CS3: the figures with skeleton keys
-  const span = stageSpan(end, [...camKeys, ...objects.flatMap((o) => k.objects[o.id].map((x) => x.frame)), ...skeletons.flatMap((o) => k.skeleton![o.id].map((x) => x.frame + x.transition))])
+  const blockEnd = (b: MotionBlock) => b.start + Math.max(1, b.length) - 1
+  const span = stageSpan(end, [...camKeys, ...objects.flatMap((o) => (k.objects[o.id] ?? []).map((x) => x.frame)), ...objects.flatMap((o) => (tracks[o.id] ?? []).map(blockEnd)),
+    ...skeletons.flatMap((o) => k.skeleton![o.id].map((x) => x.frame + x.transition))])
   markUsed('stage.anim.keyCamera'); markUsed('stage.anim.keyObject'); markUsed('stage.anim.removeKey')
   const row = (id: string, label: string, frames: number[], sel: boolean, onSelect: () => void): TLRow => {
     const { runs, singles } = keyRuns(frames)
@@ -778,8 +829,21 @@ function Timeline() {
       keys: singles.map((f) => ({ frame: f, title: `key at frame ${f} — click: go there; drag: move it; right-click: move it to the playhead or remove it` })) }
   }
   const rows: TLRow[] = []
+  const extraRows = useReadOnlyRows(current, cam, start, end)
   if (cam && camKeys.length) rows.push(row(`cam:${cam.id}`, `camera · ${cam.name}`, camKeys, selectedCamera === cam.id, () => st().selectCamera(cam.id)))
-  for (const o of objects) rows.push(row(`obj:${o.id}`, o.name, k.objects[o.id].map((x) => x.frame), selected === o.id, () => st().select(o.id)))
+  for (const o of objects) {
+    const r = row(`obj:${o.id}`, o.name, (k.objects[o.id] ?? []).map((x) => x.frame), selected === o.id, () => st().select(o.id))
+    // U5 (G8): the figure's clip blocks — the clip and its loops, past the range's end when longer than the shot (the range never moves by itself)
+    r.onMenu = (e) => {                                                           // U5c: a block's own menu, else the track's
+      e.preventDefault()
+      const bid = (e.target as HTMLElement).closest('[data-block]')?.getAttribute('data-block')
+      showMenu(e, bid ? blockMenu(o.id, bid) : [{ label: `Save ${o.name}'s motion in the shot's range as an animation…`, run: () => void saveRangeAsAnimation(o.id) }])
+    }
+    r.bars = [...(tracks[o.id] ?? []).map((b) => ({ id: `blk:${b.id}`, from: b.start, to: blockEnd(b), className: `block${blockErrors[b.id] ? ' failed' : ''}`, drag: true, data: { block: b.id },
+      label: `${b.source.clip || 'animation'}${b.loops > 1 ? ` ×${b.loops}` : b.loops === 0 ? ' · along its path' : ''}`,
+      title: blockErrors[b.id] ? `${b.source.clip}: ${blockErrors[b.id]}` : `${b.source.clip || 'an animation'}: frames ${b.start}–${blockEnd(b)}${blockEnd(b) > end ? " (past the shot's range)" : ''} — drag to move it, its edges to trim or loop it (Alt: slide the clip in it); right-click: speed, loops, blend, bake, save` })), ...(r.bars ?? [])]
+    rows.push(r)
+  }
   for (const o of skeletons) {                                                    // CS3: a skeleton key a diamond, its transition a bar after it
     const ks = k.skeleton![o.id]
     const what = (x: { body: unknown; transition: number }) => `${x.body ? 'the body held as it was keyed' : "Cast's skeleton"}${x.transition ? `, reached over ${x.transition} frames` : ', a cut'}`
@@ -787,6 +851,8 @@ function Timeline() {
       bars: ks.filter((x) => x.transition > 0).map((x) => ({ id: `t${x.frame}`, from: x.frame, to: x.frame + x.transition, label: x.body ? '→ held' : '→ Cast', className: 'transition', title: `frames ${x.frame}–${x.frame + x.transition}: ${what(x)}` })),
       keys: ks.map((x) => ({ frame: x.frame, title: `skeleton key at frame ${x.frame}: ${what(x)} — right-click: its transition, held or Cast's, remove it` })) })
   }
+  // U5d (04 §3.2): the open shot's lines, read-only, at their place on the scene's timeline; F42: a figure's back to the camera, marked
+  for (const r of extraRows) rows.push(r)
   const keyMenu = (e: React.MouseEvent, r: string, f: number) => {
     const skl = r.startsWith('skl:') ? (k.skeleton?.[r.slice(4)] ?? []).find((x) => x.frame === f) : undefined
     const id = r.slice(4)
@@ -811,7 +877,8 @@ function Timeline() {
       </TransportBar>
       <TimelineView className="stage-tl" span={span} fps={current.size.fps} frame={frame} onSeek={(f) => { st().setPlaying(false); st().setFrame(f) }}
         work={{ from: start, to: end, title: "the clip's range", onChange: (a, b) => st().setRange(a, b) }} rows={rows}
-        onKeyDrag={(r, from, to) => st().moveKey(r, from, to)} onKeyMenu={keyMenu} />
+        onKeyDrag={(r, from, to) => st().moveKey(r, from, to)} onKeyMenu={keyMenu}
+        onBarDrag={(r, bar, mode, delta) => { if (r.startsWith('obj:') && bar.startsWith('blk:')) dragBlock(r.slice(4), bar.slice(4), mode, delta) }} />
     </div>
   )
 }
@@ -913,7 +980,7 @@ function Viewport() {
     })
     engineRef.current = engine
     viewport.centre = () => engine.centre(); viewport.freePose = () => engine.freePose(); viewport.frame = (ids) => engine.frame(ids); viewport.snapshot = (id) => engine.snapshotOf(id); useStage.setState({ worldOf: (id) => engine.worldOf(id) })
-    useStage.setState({ passRenderer: (cam, w, h) => engine.renderPasses(cam, w, h), sequenceRenderer: (fr, w, h, kind, restore, on) => engine.renderSequence(fr, w, h, kind, restore, on),
+    useStage.setState({ passRenderer: (cam, w, h) => { const s = st(); if (s.current) engine.sync(sampleDoc(s.current, s.frame)); return engine.renderPasses(cam, w, h) },   // U5: the document at the playhead, its blocks evaluated sequenceRenderer: (fr, w, h, kind, restore, on) => engine.renderSequence(fr, w, h, kind, restore, on),
       plateProjector: (fr, w, h, plate, proj, aspect, restore, on, coverage) => engine.renderProjected(fr, w, h, plate, proj, aspect, restore, on, coverage) })   // ST3 / ST4, D111; D132: coverage
     viewport.handPreset = (id, side, preset) => engine.handPreset(id, side, preset)                                   // CA1
     if (DEV_HOOKS) Object.assign(devHook(), { worldOf: (id: string) => engine.worldOf(id), heightOf: (id: string) => engine.heightOf(id), screenOf: (at: string) => engine.screenOf(at as Joint), cameraScreen: (id: string) => engine.cameraScreen(id), gizmoMode: () => engine.gizmoMode(), pipRect: () => engine.pipRect(), imageSetLayers: (id: string) => engine.imageSetLayers(id),
@@ -926,7 +993,8 @@ function Viewport() {
   useEffect(() => { const e = engineRef.current; if (!e) return; if (active) e.start(); else e.stop() }, [active])
   const frame = useStage((s) => s.frame)
   const playing = useStage((s) => s.playing)
-  useEffect(() => { const e = engineRef.current; if (e && current) { e.setAspect(current.size.w / current.size.h); e.sync(sampleDoc(current, frame)); setRect({ ...e.frameRect() }); setPipRect(e.pipRect()) } }, [current, frame])   // ST4: the document at the frame
+  const blocksVersion = useBlocks((s) => s.version)                                                                 // U5: a clip block evaluated — sync again
+  useEffect(() => { const e = engineRef.current; if (e && current) { e.setAspect(current.size.w / current.size.h); e.sync(sampleDoc(current, frame)); setRect({ ...e.frameRect() }); setPipRect(e.pipRect()) } }, [current, frame, blocksVersion])   // ST4: the document at the frame
   useEffect(() => {                                                                                                     // ST4: playback loops over the range at the project's fps
     if (!playing || !current || !active) return                                                                         // V87 (D69): hidden, the loop rests; it goes on when the level is back
     const t = window.setInterval(() => { const s = st(); const cur = s.current; if (!cur) return; s.setFrame(s.frame + 1 > cur.range.end ? cur.range.start : s.frame + 1) }, 1000 / Math.max(1, current.size.fps))

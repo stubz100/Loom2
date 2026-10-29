@@ -220,3 +220,6 @@
 .final-section .final-plan { display: flex; gap: 8px; align-items: center; margin: 4px 0; }
 .final-section .final-layers .plate-method { padding: 0 6px; font-size: 11px; line-height: 16px; }   /* CA3 (D130): the plate's method, its menu on a click */
 .final-section .final-layers .skeleton-changed { padding: 0 6px; font-size: 11px; line-height: 16px; border-color: var(--warn, #d29922); color: var(--warn, #d29922); }   /* CS3: the skeleton changed under a drawn layer */
+.motion-lib .motion-sub { font-size: 11px; color: var(--fg3); margin-top: 4px; }   /* U5c: Mine's two lists */
+.motion-lib .motion-clip.mine { cursor: default; align-items: center; }
+.motion-lib .motion-clip.mine .verbs { display: flex; gap: 6px; }

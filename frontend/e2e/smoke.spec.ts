@@ -3408,7 +3408,7 @@ test('a test animation in Cast (CA0, 01 step 2): Test it draws a turn on the spo
   await expect(page.locator('.anim-ref-slot[data-side="test"] img')).toBeVisible({ timeout: 15_000 })
 })
 
-test('the motion library (CA1, 01 step 5): the starter folder\'s clips listed in the Motion section, one previewed and applied to a figure at the playhead as keys with its root motion', async ({ page }) => {
+test('the motion library (CA1, 01 step 5; U5b G8): the starter folder\'s clips listed in the Motion section, one previewed and applied to a figure at the playhead as a clip block with its root motion — no keys baked, the range as it was', async ({ page }) => {
   await openApp(page, { suite: 'stage' })
   await page.locator('.placeholder button', { hasText: /^New stage/ }).click()
   const dialog = page.locator('.modal.ask')
@@ -3424,19 +3424,23 @@ test('the motion library (CA1, 01 step 5): the starter folder\'s clips listed in
   await expect(lib.locator('.motion-clip', { hasText: 'Walk_RM' })).toContainText('moves')
   await expect(lib.locator('.motion-preview')).toContainText('25 frames at 24 fps · unreal · 0.96 m')
   await lib.locator('label', { hasText: /^ ?foot lock/ }).locator('input').uncheck()               // the test rig's hips glide without stepping: the root motion as made
-  await lib.locator('button', { hasText: /^Apply to Figure 1 at the playhead/ }).click()
-  type Doc = { id: string; name: string; range: { end: number }; objects: { id: string; transform: { pos: number[] } }[]; keyframes: { objects: Record<string, { frame: number; transform: { pos: number[] }; pose: { joints: Record<string, number[]> } }[]> } }
+  type Doc = { id: string; name: string; range: { end: number }; objects: { id: string; transform: { pos: number[] } }[]; keyframes: { objects: Record<string, unknown[]> }
+    tracks: Record<string, { source: { kind: string; clip: string }; start: number; length: number; foot_lock: boolean }[]> }
   const doc = async () => (await api<{ items: Doc[] }>('GET', '/stages')).items.find((s) => s.name === 'Motion test')!
-  await expect.poll(async () => Object.keys((await doc()).keyframes.objects ?? {}).length, { timeout: 10_000 }).toBe(1)
+  const range = (await doc()).range.end
+  await lib.locator('button', { hasText: /^Apply to Figure 1 at the playhead/ }).click()
+  await expect.poll(async () => Object.values((await doc()).tracks ?? {})[0]?.length ?? 0, { timeout: 15_000 }).toBe(1)
   const d = await doc()
-  const keys = Object.values(d.keyframes.objects)[0]
-  const base = d.objects[0].transform.pos
-  expect(keys[0].frame).toBe(0)
-  expect(keys[keys.length - 1].frame).toBe(24)
-  expect(keys.length).toBeLessThan(25)                                                         // thinned
-  expect(keys[keys.length - 1].transform.pos[2] - base[2]).toBeCloseTo(0.958, 2)               // 1 m of the rig's hips, scaled by the hip heights
-  expect(Object.keys(keys[0].pose.joints)).toHaveLength(12)
-  expect(d.range.end).toBeGreaterThanOrEqual(24)
+  const b = Object.values(d.tracks)[0][0]
+  expect([b.source.kind, b.source.clip, b.start, b.length, b.foot_lock]).toEqual(['library', 'Walk_RM', 0, 25, false])
+  expect(Object.keys(d.keyframes.objects ?? {})).toHaveLength(0)                                // a block, not baked keys
+  expect(d.range.end).toBe(range)                                                               // F37: the range never moves by itself
+  type Fig = { transform: { pos: number[] }; pose: { joints: Record<string, number[]> } }
+  const at = (f: number) => page.evaluate((fr) => (window as unknown as { __loom2Stage: { sampleAt: (f: number) => Promise<{ objects: Fig[] }> } }).__loom2Stage.sampleAt(fr), f)
+  const [p0, p24] = [(await at(0)).objects[0], (await at(24)).objects[0]]
+  expect(p24.transform.pos[2] - p0.transform.pos[2]).toBeCloseTo(0.958, 2)                      // 1 m of the rig's hips, scaled by the hip heights
+  expect(Object.keys(p24.pose.joints)).toHaveLength(12)
+  await expect(page.locator('.tl-bar.block', { hasText: 'Walk_RM' })).toBeVisible()                // the block on the figure's track
   await page.screenshot({ path: 'node_modules/.e2e/ca1-motion-library.png' })
 })
 
@@ -3488,11 +3492,11 @@ test('a floor path (CA1, 01 step 5): the Path tool adds the floor points clicked
   await lib.locator('.motion-clip', { hasText: 'Walk_RM' }).click()
   await expect(lib.locator('label', { hasText: /^ ?along Figure 1's path/ })).toBeVisible()
   await lib.locator('button', { hasText: /^Apply to Figure 1 at the playhead/ }).click()
-  await expect.poll(async () => Object.values((await doc())?.keyframes.objects ?? {})[0]?.length ?? 0, { timeout: 10_000 }).toBeGreaterThan(1)
+  await expect.poll(async () => Object.values(((await doc()) as unknown as { tracks?: Record<string, unknown[]> })?.tracks ?? {})[0]?.length ?? 0, { timeout: 15_000 }).toBe(1)   // U5b: a clip block
   const d = (await doc())!
-  const keys = Object.values(d.keyframes.objects)[0]
+  const first = await page.evaluate(() => (window as unknown as { __loom2Stage: { sampleAt: (f: number) => Promise<{ objects: { transform: { pos: number[] } }[] }> } }).__loom2Stage.sampleAt(0))
   const p0 = d.objects[0].path![0]
-  expect(Math.hypot(keys[0].transform.pos[0] - p0[0], keys[0].transform.pos[2] - p0[1])).toBeLessThan(0.05)   // it starts at the path's start
+  expect(Math.hypot(first.objects[0].transform.pos[0] - p0[0], first.objects[0].transform.pos[2] - p0[1])).toBeLessThan(0.05)   // it starts at the path's start
   await expect(page.locator('.toast')).toContainText(/along its path, feet locked/)
   // a pose preset on the keyed figure is a key at the playhead (before CA1 it changed only the unkeyed pose, which the keys hide)
   type Key = { frame: number; pose: { preset: string; joints: Record<string, number[]> } | null }
@@ -4480,4 +4484,68 @@ test('Shots in the new shell (U4a–d, D157 · proto01_UI2 04 §2–3, §6–7):
   await expect(page.locator('.s-parts li[data-part="shot"]')).toContainText('rain on the planks')
   await page.locator('[data-testid="shots-words"] .w-chips button', { hasText: 'the plate' }).click()
   await expect(page.locator('.s-parts li[data-part="shot"]')).toContainText('rain on the planks')            // the plate is told it too (no cast, no action)
+  // U5d (F39, 04 §2.1 · §3.2): a line longer than the shot — the header says so and extends the range only when asked; the line on Clay's track
+  const nodeId = (await shots()).find((s) => s.id === c.id)!.owner_node!
+  const line = 'Do you know whose seal this is, and why it was pressed in green wax on a ferry ticket?'
+  const nodeRev = (await api<{ nodes: { id: string; revision: number }[] }>('GET', '/story/flow')).nodes.find((n) => n.id === nodeId)!.revision
+  await api('PATCH', `/story/flow/nodes/${nodeId}`, { revision: nodeRev, lines: [{ speaker: null, text: line, audio_asset_id: null, audio_text: null }] })
+  await page.evaluate(() => (window as unknown as { __loom2Story: { loadFlow: () => Promise<void> } }).__loom2Story.loadFlow())
+  const outlast = page.locator('[data-testid="shots-outlast"]')
+  await expect(outlast).toContainText('the lines run')
+  await expect(outlast).toContainText('the shot 2.0 s')
+  await outlast.locator('button', { hasText: 'Extend to the lines' }).click()
+  const words = line.split(/\s+/).length
+  await expect.poll(async () => (await api<{ items: (ShotLite & { versions: { range: { start: number; end: number } | null }[] })[] }>('GET', '/story/shots')).items.find((s) => s.id === c.id)!.versions[0].range?.end ?? 0, { timeout: 10_000 })
+    .toBe(Math.round((words / 2.6) * 24) - 1)                                                              // the unvoiced line timed by its words, from frame 0
+  await expect(outlast).toHaveCount(0)
+  await expect(page.locator('.tl-bar.line')).toContainText('narrator: Do you know whose seal')
+})
+
+test('the animation editor (U5c, D157 G8 G9 · proto01_UI2 04 §3.2): a clip block looped from its right-click and moved by a drag (the range as it was), saved as an animation under Mine and into the library, then baked to keys', async ({ page }) => {
+  test.setTimeout(90_000)
+  await openApp(page, { suite: 'stage' })
+  await page.locator('.placeholder button', { hasText: /^New stage/ }).click()
+  const dialog = page.locator('.modal.ask')
+  await dialog.locator('input').fill('Editor test')
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('#anim-sec-shot .stage-picker select option:checked')).toHaveText('Editor test')
+  await libAdd(page, 'figures', 'Adult')
+  await openSection(page, 'Motion')
+  const lib = page.locator('.motion-lib')
+  await lib.locator('.motion-file-head', { hasText: 'test_rig' }).click()
+  await lib.locator('.motion-clip', { hasText: 'Walk_RM' }).click()
+  await lib.locator('button', { hasText: /^Apply to Figure 1 at the playhead/ }).click()
+  type Block = { id: string; start: number; loops: number; length: number }
+  type Doc = { name: string; range: { start: number; end: number }; tracks: Record<string, Block[]>; keyframes: { objects: Record<string, unknown[]> } }
+  const doc = async () => (await api<{ items: Doc[] }>('GET', '/stages')).items.find((s) => s.name === 'Editor test')!
+  const block = async () => Object.values((await doc()).tracks ?? {})[0]?.[0] ?? null
+  await expect.poll(async () => (await block())?.length ?? 0, { timeout: 15_000 }).toBe(25)
+  const range = (await doc()).range
+  const bar = page.locator('.tl-bar.block')
+  await bar.click({ button: 'right' })
+  await page.locator('.ctx-menu .item.sub', { hasText: 'Loops' }).hover()
+  await page.locator('.ctx-menu button', { hasText: /^✓?2×$/ }).click()
+  await expect.poll(async () => (await block())?.loops, { timeout: 15_000 }).toBe(2)
+  expect((await block())!.length).toBeGreaterThan(25)                                            // re-flowed: two loops of the clip
+  const box = (await bar.boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await page.mouse.down()
+  await page.mouse.move(box.x + box.width / 2 + 60, box.y + box.height / 2, { steps: 8 }); await page.mouse.up()
+  await expect.poll(async () => (await block())?.start ?? 0, { timeout: 15_000 }).toBeGreaterThan(0)   // moved along the track
+  expect((await doc()).range).toEqual(range)                                                     // F37: the range never moves by itself
+  await bar.click({ button: 'right' })
+  await page.locator('.ctx-menu button', { hasText: 'Save as animation…' }).click()
+  await dialog.locator('input').fill('Walk twice')
+  await dialog.locator('button.primary').click()
+  type Anim = { id: string; name: string; frames: number }
+  await expect.poll(async () => (await api<{ items: Anim[] }>('GET', '/stages/animations')).items.map((x) => x.name), { timeout: 10_000 }).toEqual(['Walk twice'])
+  await lib.locator('.segmented button', { hasText: 'Mine' }).click()
+  const mine = lib.locator('.motion-clip.mine', { hasText: 'Walk twice' })
+  await expect(mine).toBeVisible()
+  await mine.locator('button', { hasText: 'To my library' }).click()
+  await expect.poll(async () => (await api<{ library: Anim[] }>('GET', '/stages/animations')).library.map((x) => x.name), { timeout: 10_000 }).toEqual(['Walk twice'])
+  await bar.click({ button: 'right' })
+  await page.locator('.ctx-menu button', { hasText: 'Bake to keys' }).click()
+  await expect.poll(async () => Object.keys((await doc()).tracks ?? {}).length, { timeout: 15_000 }).toBe(0)
+  expect(Object.values((await doc()).keyframes.objects)[0].length).toBeGreaterThan(1)          // its frames are the figure's keys now
+  expect((await doc()).range).toEqual(range)
 })

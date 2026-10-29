@@ -1,11 +1,12 @@
 // U4 (D157, proto01_UI2 04 §2.1): the shot header — the shot and its version, the description, the lines, the scene (its stage, the shot's
 // camera, its range) and the cast standing on the stage, each cast member with what it still lacks for Clay (a click opens it in World).
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { CommandButton, MenuButton } from '../../frame/CommandButton'
 import type { MenuItem } from '../../frame/commands'
 import { Help } from '../../frame/Help'
 import { navigate } from '../../frame/router'
 import { useStory } from '../../suites/story/storyStore'
+import { lineSpans, linesOutlast } from '../../suites/stage/tracks'
 import { useWorld } from '../world/worldStore'
 import { cameraUsers, castOf, rescene, setRange, useRouteRows, useShotStage, type CastMember } from './scene'
 import { flushClay, useShots } from './shotsStore'
@@ -47,6 +48,8 @@ export function ShotHeader() {
   const route = useRouteRows()
   const stage = useShotStage(v?.stage_id ?? null)
   const level = useShots((x) => x.level)
+  const secs = useStory((st) => st.audioSecs)
+  useEffect(() => { const ids = (node?.lines ?? []).map((l) => l.audio_asset_id).filter((x): x is string => !!x); if (ids.length) void useStory.getState().loadAudioSecs(ids) }, [node])
   if (!s || !v) return <div className="w-head"><span className="w-empty">Pick a shot on the storyboard, or make one</span></div>
   const at = route.findIndex((x) => x.shot.id === s.id)
   const r = at >= 0 ? route[at] : undefined
@@ -67,7 +70,10 @@ export function ShotHeader() {
     run: () => void flushClay().then(() => useStory.getState().linkStage(s.id, v.id, stage!.id, c.id)).then(() => useShots.getState().reopen()) }))
   const cam = stage?.cameras.find((c) => c.id === v.camera_id)
   const cast = stage ? castOf(stage, profiles) : []
-  const range = v.range ?? stage?.range
+  const range = (v.range ?? stage?.range) as { start: number; end: number } | undefined
+  // F39 (U5d): the lines outlast the shot — say so, and extend the range to them only when asked (the range never moves by itself)
+  const fps = stage?.fps ?? 24
+  const need = range && node ? linesOutlast(lineSpans(node.lines, secs, range.start, fps), range) : null
   return (
     <div className="w-head" data-testid="shots-header">
       <div className="w-head-row"><MenuButton label={r ? `${r.n} · ${r.label}` : node?.title || s.name} items={shotMenu} text /><MenuButton label={`${v.id}${v.state === 'final' ? ' · final' : ''}`} items={versions} text /></div>
@@ -79,6 +85,8 @@ export function ShotHeader() {
           <MenuButton label={stage?.name ?? 'the stage'} items={sceneMenu} text />
           <MenuButton label={cam?.name ?? 'no camera'} items={camMenu} text />
           {range && stage && <RangeField start={range.start} end={range.end} fps={stage.fps} whole={!v.range} />}
+          {need !== null && range && <span className="s-outlast" data-testid="shots-outlast">the lines run {((need - range.start + 1) / fps).toFixed(1)} s, the shot {((range.end - range.start + 1) / fps).toFixed(1)} s
+            {open && <button className="link" onClick={() => void setRange({ start: range.start, end: need })}>Extend to the lines</button>}</span>}
         </span> : <span className="w-val">no scene yet <MenuButton label="Give it a scene" items={sceneMenu} text /></span>}
       </div>
       {stage && <div className="w-field"><span>cast <Help text="What stands on the shot's stage, from World: add a figure or a prop in Clay's Scene section. A member that is not ready for Clay says what it lacks; a click opens it in World." /></span>

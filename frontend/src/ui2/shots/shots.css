@@ -37,3 +37,4 @@
 .s-part-head { display: flex; gap: 6px; align-items: baseline; }
 .s-part-src { color: var(--fg3); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .s-part-text { display: block; color: var(--fg2); overflow-wrap: anywhere; }
+.s-outlast { color: var(--warn); font-size: 11px; display: inline-flex; gap: 6px; align-items: center; }   /* F39 */

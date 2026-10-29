@@ -12077,3 +12077,168 @@ files are never in a fixture: the test uses bytes the scanner does not parse.
 
 Next: U5b. The client evaluates the blocks into frames, cached per block, under the key layer; renders wait for them; applying a clip adds
 a block; the range never moves by itself.
+
+## 2026-10-29 06:05 — U5b: clip blocks evaluated at play and render time, under the key layer; Apply adds a block; the range never moves by itself (D157 G8; proto01_UI2 04 §3.2, 06 §2.4; F37)
+
+**Evaluating a block** (`suites/stage/blocks.ts`) runs the steps that applying a clip ran before:
+
+- retargeted onto the figure's hip;
+- foot lock and the floor contact (D141);
+- loops (as many as its path needs when it walks one), in place, mirror;
+- baked from where the figure stands at the block's start, along its path when it walks one.
+
+It now runs per block, and its keys are cached by everything it reads: the block, the fps, the figure's body and path, and where the
+figure stands at its start. Moving, looping or re-timing a block re-flows it, and so does an earlier block that moves it.
+
+- The evaluator stays synchronous (`anim.sampleDoc`). A block not evaluated yet is left out, so the figure keeps to its keys, and its
+  evaluation starts. When it lands, the viewport syncs again (`useBlocks.version`).
+- A block that cannot be evaluated (its file gone, say) keeps its reason and is not tried again until something it reads changes.
+- A template's block (`templateRun`) is re-based to where the figure stands and its facing, its root scaled by the figure's hip over the
+  one it was saved from, re-timed by its speed and repeated by its loops.
+
+**Blocks under the key layer** (`anim.sampleFigure`, 04 §3.2):
+
+- Outside the blocks, the figure's keys interpolate as before, reaching each block's first pose and leaving from its last.
+- Inside a block the block plays (the latest-started block wins), eased in over its `blend_in` from where the figure was.
+- Each key of the layer inside a block is a correction that eases in and out over 6 frames, for a head turn or a gesture.
+- An edit of a figure that has blocks (a pose, a preset, a move) is therefore a key at the playhead, as on a keyed figure
+  (`stageStore.animated`). Before, it would have changed the pose the block hides.
+
+**The renders wait** for every block of the document (`blocksReady`) before they sample a frame:
+
+- the passes;
+- the clip's guide;
+- a final shot's passes, a redrawn layer, the projected and picture plates, the plate fill.
+
+The viewport's pass renderer syncs the document at the playhead first, as the headless one did.
+
+**Apply at the playhead** (`motionStore.apply`) adds a block to the selected figure's track, evaluated first: its length goes on it, and
+a clip that cannot be evaluated is not added. The figure's keys are not touched. The stage's range stays as it is, also for *Bake to keys*
+(`applyMotion`) — F37. A block longer than the shot is drawn past the range's end, and the toast says so.
+
+**The timeline** draws a figure's blocks on its row: the clip, ×loops or *along its path*, a dashed red bar when a block failed with its
+reason in the tooltip. Moving, trimming, looping and the block's menu are U5c.
+
+**Tests:**
+
+- `blocks.test.ts` 5:
+  - the merge rule (the layer reaching a block, the block playing, after it);
+  - the blend in and a correction;
+  - a figure with blocks and no keys moving in `sampleDoc`;
+  - what a block's evaluation reads;
+  - a template re-based, re-timed and looped.
+- The e2e scenarios of the motion library and the floor path now apply the clip as a block. A block is on the track, no keys are baked,
+  the range is as it was, and the figure sampled with its blocks evaluated has travelled the rig's 0.958 m by frame 24 (as the baked keys
+  had). The path walk still starts at the path's start, with the feet locked, and a preset at frame 0 is a correction key.
+- A `sampleAt` dev hook gives the document at a frame with its blocks evaluated.
+
+**Checks:** offline 721 passed (no backend change); Vitest 630 + 3 skipped; typecheck, build and lint clean; e2e 86/86 (alone, run with U5c and U5d: the next entries).
+
+Next: U5c — the editor: blocks moved, trimmed and looped on the track, their right-click (speed, mirror, in place, foot lock, *Bake to
+keys*, *Save as animation…*), the Library drawer with *Mine* and *Import…*, the lines' track (F39) and the facing-away marks.
+
+## 2026-10-29 06:05 — U5c: the animation editor's verbs — a clip block moved, trimmed and looped on its track, its right-click, Bake to keys, Save as animation…, Mine and Import… in the motion library (D157 G8, G9; proto01_UI2 04 §3.2)
+
+**On the track** (Clay's timeline, `blockEdit.ts`):
+
+- A block's bar is dragged:
+  - its body moves the block;
+  - its left edge trims the clip's start;
+  - its right edge trims the clip's end, or on a looping clip sets how many times it loops;
+  - Alt slides the clip inside the block.
+- `dragPatch` turns a drag into the block's change: frames of the stage into seconds of the clip by the speed, never before frame 0 or the
+  clip's start.
+- Every change is evaluated first and written with the block's new length in one undo step. A change the block cannot be evaluated with
+  is not made, and the toast says why.
+
+**A block's right-click** (04 §3.2):
+
+- Speed ▸ ×0.5 … ×2; Loops ▸ 1× … 8×, or as far as the figure's path goes; Blend in ▸ none, 6, 12 or 24 frames;
+- Mirror, In place, Foot lock, Feet on the floor, Along its path;
+- *Bake to keys*: the block's frames become the figure's keys (thinned) and the block goes, in one undo step, the range left alone;
+- *Save as animation…*;
+- *Remove the clip*.
+
+**The track's right-click:** *Save ‹figure›'s motion in the shot's range as an animation…* — everything it does over the range (clips,
+keys and corrections), a key a frame, thinned.
+
+**Save as animation…** asks for a name and keeps the frames in the project's templates (U5a's `stages/animations.json`):
+
+- re-based to frame 0;
+- with the figure's hip;
+- with where they came from.
+
+**The motion library** gains *Mine* and *Import…*:
+
+- *Mine*: the project's animations and the author's library. *Apply* adds one as a block on the selected figure at the playhead,
+  re-based to where it stands and scaled by its hips. *To my library* makes one the author's in every project. *Remove* takes one out.
+- *Import…* (under Local): the OS picker in the app (`pickFiles` now takes the kind of file), a typed path in a browser. It copies the file
+  into the local motion folder and lists it.
+
+The Library drawer on the editor's right edge (04 §3.2) is these sources in Clay's Motion section, where the library already was; moving
+it to a drawer waits for the light editor's room in the column (Q10).
+
+**The U5b run that did not count:** its e2e was stopped at 70 of 86, after two stage scenarios had failed while I rebuilt the e2e bundle
+it was serving and typechecked under it. U5b and U5c were run again together, alone: five stage scenarios failed on the e2e's stage hook.
+U5b's `sampleAt` had been added to it with a line comment that swallowed `setRange` and `setGuideKind` after it on the same line. It is a
+block comment now, and the run below holds U5b to U5d.
+
+**Tests:**
+
+- `blocks.test.ts` + 1: the drag's change (move, trim in and out in clip seconds, loops, slide; nothing before frame 0 or the clip);
+- an e2e scenario: a block looped 2× from its right-click and re-flowed, moved by a drag with the range as it was, saved as *Walk twice*,
+  listed under *Mine* and copied into the library, then baked to keys (no track left, its frames the figure's keys, the range as it was).
+
+**Checks:** offline 721 passed (no backend change since U5a); Vitest 631 + 3 skipped; typecheck, build and lint clean; e2e 86/86 (alone,
+with U5b and U5d).
+
+Next: U5d — the lines' track (each line at its place, its length from the voice; F39 *Extend to the lines*) and a figure facing away from
+the camera marked on its track (F42).
+
+## 2026-10-29 06:05 — U5d: the lines' track and F39's Extend to the lines; a figure's back to the camera marked on its track (F42); U5 closed (D157; proto01_UI2 04 §2.1, §3.2)
+
+**The lines' track** (Clay's timeline, `suites/stage/tracks.ts`, read-only, 04 §3.2):
+
+- It holds the lines of the shot the stage camera is for (the open shot when it is, else the first whose current version looks through
+  it).
+- They are laid one after another from the shot's range start, 6 frames apart.
+- Each is as long as its voice's audio (`duration_s`, read once per line). A line not voiced yet is timed by its words at 2.6 a second and
+  drawn dashed.
+- A bar says the speaker and the line, with its seconds in the tooltip. The action is timed to them.
+
+**F39 in the shot header:**
+
+- When the lines outlast the shot it says *the lines run 7.3 s, the shot 2.0 s*.
+- *Extend to the lines* sets the range's end to hold them. The range never moves by itself.
+
+**A figure's back to the camera (F42):** a row under each figure that turns more than 110° from the active camera (`awayStretches`, the
+document sampled with its keys and evaluated blocks; yaw 0 faces +Z, as the walk steers it).
+
+- A character without a back view says so on the bar: *no back view*, and the tooltip *Ines faces away from Camera 1 here, and has no
+  back view*.
+- Its right-click is *Make Ines's back view in World ▸*, which opens the character in World (Story's Cast in the old shell) at the version
+  the figure wears.
+- The back view alone did not fix the walkthrough's take (F43). Spike E42 measures what Wan Animate is given before U6.
+
+**Tests:**
+
+- `tracks.test.ts` 3: the lines laid by their voices and their words; when they outlast the shot; the frames a turning figure's back is
+  to the camera;
+- the Shots e2e scenario gains F39: an unvoiced line of 19 words on a 2.0 s shot, *Extend to the lines* setting the range's end to
+  frame 174, the warning gone, the line on Clay's track.
+
+**Checks:** offline 721 passed; Vitest 634 + 3 skipped; typecheck, build and lint clean; e2e 86/86 (alone, with U5b and U5c).
+
+**U5 is built:**
+
+- clip blocks on the figures' tracks, evaluated under the key layer (U5a, U5b);
+- the editor's verbs — move, trim, loop, the right-click, *Bake to keys*, *Save as animation…* —, *Mine* and *Import…* (U5c);
+- the lines' track, *Extend to the lines* and the facing-away marks (U5d).
+
+Owed to it:
+
+- the camera's and the props' tracks as rows of their own (their keys show as today: the camera's row, a keyed prop's row);
+- the Library as a drawer on the editor's edge;
+- the blocks' corner handles for blend out.
+
+Next is spike E42 (GPU, alone), then U6: Performance and Final.

@@ -52,11 +52,11 @@ export async function pickFolder(title: string, defaultPath?: string): Promise<s
   return typeof picked === 'string' ? picked : null
 }
 
-/** OS file picker for imports; returns [] when cancelled or in a browser. */
-export async function pickFiles(title: string): Promise<string[]> {
+/** OS file picker for imports; returns [] when cancelled or in a browser. U5: `filters` for another kind of file (motion files). */
+export async function pickFiles(title: string, filters: { name: string; extensions: string[] }[] = [{ name: 'Images and clips', extensions: ['png', 'jpg', 'jpeg', 'webp', 'mp4', 'webm'] }]): Promise<string[]> {
   if (!isTauri()) return []
   const { open } = await import('@tauri-apps/plugin-dialog')
-  const picked = await open({ multiple: true, title, filters: [{ name: 'Images and clips', extensions: ['png', 'jpg', 'jpeg', 'webp', 'mp4', 'webm'] }] })
+  const picked = await open({ multiple: true, title, filters })
   return Array.isArray(picked) ? picked : picked ? [picked] : []
 }
 

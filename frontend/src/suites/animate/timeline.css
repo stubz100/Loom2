@@ -19,6 +19,8 @@
 .tl-bar[draggable], .tl-bar:has(.h) { cursor: grab; }
 .tl-bar.dragging { opacity: .75; cursor: grabbing; }
 .tl-bar.motion { background: color-mix(in srgb, var(--info) 25%, var(--bg3)); border-color: var(--info); }
+.tl-bar.block { background: color-mix(in srgb, var(--accent) 22%, var(--bg3)); border-color: var(--accent); }   /* U5 (G8): a clip block on a figure's track */
+.tl-bar.block.failed { background: color-mix(in srgb, var(--danger, #c0392b) 18%, var(--bg3)); border-style: dashed; border-color: var(--danger, #c0392b); }
 .tl-bar.transition { background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 30%, var(--bg3))); border-color: var(--accent); border-style: dashed; }   /* CS3: a skeleton key reached over frames */
 .tl-bar .h { position: absolute; top: 0; bottom: 0; width: 6px; cursor: ew-resize; }
 .tl-bar .h-in { left: 0; }
@@ -35,3 +37,7 @@
 .tl-transport .frame-field { width: 58px; }
 .tl-transport .spacer { flex: 1; }
 .tl-transport .sep { width: 1px; height: 16px; background: var(--line2); margin: 0 2px; }
+.tl-bar.line { background: color-mix(in srgb, var(--keep, #4caf50) 18%, var(--bg3)); border-color: var(--keep, #4caf50); cursor: default; }   /* U5d: a line at its place */
+.tl-bar.line.estimated { border-style: dashed; }
+.tl-bar.away { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--fg3) 20%, var(--bg3)) 0 6px, var(--bg3) 6px 12px); border-color: var(--fg3); cursor: default; }   /* F42 */
+.tl-bar.away.warn { border-color: var(--warn); color: var(--warn); }

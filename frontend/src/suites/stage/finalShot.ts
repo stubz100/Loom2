@@ -3,6 +3,7 @@
 // camera (the plate: the bare set's depth and lit clay; a figure alone with the set: its pose and depth; a prop alone with the set: its
 // beauty and depth; the shadows: everything, lit) and uploads them (each frame once, by its hash) into a final record on the server.
 // The later steps make each layer's own frames and the assembly from these.
+import { blocksReady } from './blocks'
 import { useEffect } from 'react'
 import { create } from 'zustand'
 import { api, http, sha256Hex, unwrap, type ApiError } from '../../api/client'
@@ -119,6 +120,7 @@ export async function makeFinal(opts: MakeOptions): Promise<Final> {
   const plan = planFinal(doc, opts.rate)
   const [w, h] = opts.size ?? finalSize()
   const plate = opts.plate ?? (hasPictureSet(doc) || hasBuiltSet(doc) ? null : plateChoice(cameraTravel(doc, cam.id, plan.times)).method)
+  await blocksReady(doc)                                                          // U5: the figures' clip blocks evaluated before a frame is sampled
   const sampled = plan.times.map((t) => { const d = sampleDoc(doc, t); return { cam: d.cameras.find((c) => c.id === cam.id) ?? cam, doc: d } })
   const actors = plan.layers.filter((l) => l.object_id).map((l) => l.object_id!)
   const todo = plan.layers.flatMap((l) => passesOf(l).map((p) => ({ l, p })))
@@ -187,6 +189,7 @@ async function redrawLayer(f: Final, lid: string): Promise<Final> {
   const cam = doc?.cameras.find((c) => c.id === f.camera_id)
   if (!render || !doc || doc.id !== f.stage_id || !l?.object_id || !cam) throw new Error("open the final's stage to draw its guide again")
   const times = framesAt(f.range.start, f.range.end, f.rate as Rate)
+  await blocksReady(doc)                                                          // U5: the figures' clip blocks evaluated before a frame is sampled
   const sampled = times.map((t) => { const d = sampleDoc(doc, t); return { cam: d.cameras.find((c) => c.id === cam.id) ?? cam, doc: d } })
   const uploaded = new Set<string>(), passes: Record<string, string[]> = {}
   let keypoints: unknown[] = []
@@ -239,6 +242,7 @@ export async function projectPlate(f: Final, onProgress?: (done: number, total: 
   const img = await loadImage(api.assetUrl(plate.still_asset_id))
   const times = framesAt(f.range.start, f.range.end, f.rate as Rate)
   const camOf = (d: StageDoc) => d.cameras.find((c) => c.id === f.camera_id) ?? d.cameras[0]
+  await blocksReady(doc)                                                          // U5: the figures' clip blocks evaluated before a frame is sampled
   const frames = times.map((t) => { const d = sampleDoc(doc, t); return { cam: camOf(d), doc: only(d, []) } })
   const blobs = await project(frames, f.size.w, f.size.h, img, frames[0].cam, img.naturalWidth / img.naturalHeight, sampleDoc(doc, st().frame), onProgress)
   return storePlate(f, blobs)
@@ -256,6 +260,7 @@ export async function picturePlate(f: Final, onProgress?: (done: number, total: 
   if (!render) throw new Error('the stage is not ready to render')
   const times = framesAt(f.range.start, f.range.end, f.rate as Rate)
   const camOf = (d: StageDoc) => d.cameras.find((c) => c.id === f.camera_id) ?? d.cameras[0]
+  await blocksReady(doc)                                                          // U5: the figures' clip blocks evaluated before a frame is sampled
   const frames = times.map((t) => { const d = sampleDoc(doc, t); return { cam: camOf(d), doc: only(d, []) } })
   const out = await render(frames, f.size.w, f.size.h, 'beauty', sampleDoc(doc, st().frame), onProgress)
   return storePlate(f, out.blobs)
@@ -525,6 +530,7 @@ export const useFinals = create<FinalsState>((set, get) => ({
     try {
       if (!st().plateProjector) (await import('./headless')).ensureHeadless()
       const camOf = (d: StageDoc) => d.cameras.find((c) => c.id === f.camera_id) ?? d.cameras[0]
+      await blocksReady(doc)                                                          // U5: the figures' clip blocks evaluated before a frame is sampled
       const frames = framesAt(f.range.start, f.range.end, f.rate as Rate).map((t) => { const d = sampleDoc(doc, t); return { cam: camOf(d), doc: only(d, []) } })
       const { fillStep } = await import('./fillPlate')
       const r = await fillStep(f, frames, sampleDoc(doc, st().frame), (what) => set({ filling: { id, what } }))

@@ -73,6 +73,44 @@ export function sampleObject(o: StageObject, keys: ObjectKey[] | undefined, fram
   return { ...o, transform, pose }
 }
 
+// ---- U5 (D157 G8; proto01_UI2 04 §3.2): clip blocks under the key layer ----
+/** A clip block evaluated (blocks.ts): its keys at the stage's frames from `start` to `end`, and how many frames it eases in over. */
+export interface BlockRun { id: string; start: number; end: number; blendIn: number; keys: ObjectKey[] }
+/** The frames a key of the layer reaches into a block it lies in: a correction eases in and out over them. */
+export const CORRECTION_FRAMES = 6
+let runsOf: (doc: StageDoc, objectId: string, layer?: ObjectKey[]) => BlockRun[] = () => []
+/** blocks.ts registers the evaluated blocks here (anim.ts stays pure of the motion library and its loads). */
+export function setBlockRuns(fn: (doc: StageDoc, objectId: string, layer?: ObjectKey[]) => BlockRun[]): void { runsOf = fn }
+
+const keyOf = (o: StageObject, frame: number, ease: Ease = 'linear'): ObjectKey => ({ frame, ease, transform: o.transform, pose: o.pose ? { ...o.pose, joints: o.pose.joints ?? {} } : null })
+/** Two states of a figure mixed (w = 0: a, 1: b), by the keys' own interpolation. */
+export function mixObjects(o: StageObject, a: StageObject, b: StageObject, w: number): StageObject {
+  return w <= 0 ? a : w >= 1 ? b : sampleObject(o, [keyOf(a, 0), keyOf(b, 1)], w)
+}
+
+/** A figure at a frame under its blocks and its key layer (04 §3.2). Outside the blocks the layer interpolates as before, reaching each
+ *  block's first pose and leaving from its last; inside a block (the latest started wins) the block plays, eased in over its `blendIn`
+ *  from where the figure was, and each layer key inside it is a correction easing in and out over CORRECTION_FRAMES. */
+export function sampleFigure(o: StageObject, layer: ObjectKey[] | undefined, runs: BlockRun[], frame: number): StageObject {
+  if (!runs.length) return sampleObject(o, layer, frame)
+  const inBlock = (f: number) => runs.some((r) => f >= r.start && f <= r.end)
+  const outside = [...(layer ?? []).filter((k) => !inBlock(k.frame)),
+    ...runs.flatMap((r) => [{ ...r.keys[0], frame: r.start, ease: 'ease' as Ease }, { ...r.keys[r.keys.length - 1], frame: r.end }])].sort((a, b) => a.frame - b.frame)
+  const run = [...runs].sort((a, b) => a.start - b.start).filter((r) => frame >= r.start && frame <= r.end).pop()
+  if (!run) return sampleObject(o, outside, frame)
+  let at = sampleObject(o, run.keys, frame)
+  if (run.blendIn > 0 && frame < run.start + run.blendIn) {
+    const before = sampleObject(o, outside.filter((k) => k.frame < run.start), run.start)
+    at = mixObjects(o, before, at, smoothstep((frame - run.start) / run.blendIn))
+  }
+  for (const k of layer ?? []) {
+    const d = Math.abs(frame - k.frame)
+    if (k.frame < run.start || k.frame > run.end || d >= CORRECTION_FRAMES) continue
+    at = mixObjects(o, at, sampleObject(o, [k], k.frame), smoothstep(1 - d / CORRECTION_FRAMES))
+  }
+  return at
+}
+
 type Body = NonNullable<StageObject['body']>
 /** Two bodies blended factor by factor (the hands at rest too); what is not a number switches at the half. */
 function lerpBody(a: Body, b: Body, w: number): Body {
@@ -116,8 +154,10 @@ export function bodyHash(body: unknown): string {
 /** The document as it stands at a frame: keyed cameras and objects sampled (CS3: the figures' bodies too), the rest as they are. */
 export function sampleDoc(doc: StageDoc, frame: number): StageDoc {
   const k = keyframesOf(doc), sk = k.skeleton ?? {}
-  if (!Object.keys(k.camera).length && !Object.keys(k.objects).length && !Object.keys(sk).length) return doc
-  return { ...doc, cameras: doc.cameras.map((c) => sampleCamera(c, k.camera[c.id], frame)), objects: doc.objects.map((o) => sampleBody(sampleObject(o, k.objects[o.id], frame), sk[o.id], frame)) }
+  const tracks = Object.keys(doc.tracks ?? {})                          // U5: a figure with clip blocks and no keys moves too
+  if (!Object.keys(k.camera).length && !Object.keys(k.objects).length && !Object.keys(sk).length && !tracks.length) return doc
+  return { ...doc, cameras: doc.cameras.map((c) => sampleCamera(c, k.camera[c.id], frame)),
+    objects: doc.objects.map((o) => sampleBody(sampleFigure(o, k.objects[o.id], tracks.includes(o.id) ? runsOf(doc, o.id, k.objects[o.id]) : [], frame), sk[o.id], frame)) }
 }
 
 /** A key written at its frame (replacing one already there), the list kept sorted. */

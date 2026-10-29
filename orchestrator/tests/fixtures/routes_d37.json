@@ -135,6 +135,8 @@
  "POST /assets/restore",
  "POST /assets/trash",
  "POST /bin/homes",
+ "POST /bin/homes/{gid}/rehome",
+ "POST /bin/move",
  "POST /catalogue/rebuild",
  "POST /clips/{clip_id}/extend",
  "POST /clips/{clip_id}/extract",

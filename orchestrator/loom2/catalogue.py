@@ -86,6 +86,7 @@ GROUP_KEY = {"batch": "COALESCE(batch_id, job_id, id)", "lineage": "COALESCE(roo
 class AssetQuery(BaseModel):
     folder: Folder = "all"
     kind: AssetKind | None = None
+    kinds: list[AssetKind] = Field(default_factory=list)   # B0 (D159): any of these kinds (the Bin's chips: pictures are images, masks and renders)
     suite: str | None = None
     model_id: str | None = None
     tags_any: list[str] = Field(default_factory=list)
@@ -464,6 +465,8 @@ class Catalogue:
             where.append("suite = 'import'")
         if q.kind:
             where.append("kind = ?"); args.append(q.kind)
+        if q.kinds:
+            where.append(f"kind IN ({','.join('?' * len(q.kinds))})"); args.extend(q.kinds)
         if q.suite:
             where.append("suite = ?"); args.append(q.suite)
         if q.model_id:
@@ -581,6 +584,12 @@ class Catalogue:
             with self._lock:
                 out[folder] = self._db.execute(f"SELECT COUNT(*) FROM assets WHERE {where}", args).fetchone()[0]
         return out
+
+    def placed_counts(self) -> dict[str, int]:
+        """B0 (D159): each page's live things, by its group id (the Bin's tree counts its homes with it, no manifest read)."""
+        with self._lock:
+            rows = self._db.execute("SELECT p.group_id, COUNT(*) FROM placements p JOIN assets a ON a.id = p.asset_id WHERE a.trashed_at IS NULL GROUP BY p.group_id").fetchall()
+        return {r[0]: r[1] for r in rows}
 
     def last_session_id(self) -> str | None:
         with self._lock:

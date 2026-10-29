@@ -12826,3 +12826,65 @@ The author answered 11's Q1–Q6:
 in homes · B4 Unprocessed retired. The old shell goes before the two moves of records, so they need not keep it working.
 
 Next: B0.
+
+## 2026-10-29 13:26 — B0: a Bin that holds up (D159; proto01_UI2 11 §4–5, R2–R6, R8)
+
+**A home is read a page at a time** (R2, R4):
+
+- `GET /bin/homes/{id}/items` takes a cursor, a limit and the kinds, newest first. The total comes with the first page.
+- The grid (`ui2/bin/BinGrid.tsx`) is windowed: only the rows in view are drawn. It reads the next page as its last rows come into view.
+- The kind chips filter on the server (`AssetQuery.kinds`).
+- Imports' list is its count: the things on no page are read in SQL, no longer capped at 2,000.
+- The tree is counted from the index (`Catalogue.placed_counts`, one query) instead of reading every thing.
+- A thing's roles come from the records alone, read once per request.
+
+**The records' frames are applied where they land** (R3):
+
+- A thing changed or deleted is changed in place; a trashed one leaves the grid.
+- The open home is read again only when a frame touches it: a change of one of its pages, a thing on no page while Imports is open, or
+  its record's hero or frame chosen. It is one request for the loaded window, and the scroll stays.
+- The tree is read once, 300 ms after the last frame. 260 things duplicated at once in the e2e gave one read.
+
+**Homes follow their records** (R5):
+
+- A home's name is read from its record now, so a rename shows at once.
+- A home whose entity, shot or cut was deleted is marked *deleted* in the tree. Opened, it says so, and *Give its things to the Sketches*
+  moves them (the Trash's too) and removes the home (`POST /bin/homes/{id}/rehome`).
+- A deleted record's home with nothing left in it is not shown.
+
+***Move to…* asks before a thing loses a role** (R6, Q5; `POST /bin/move`):
+
+- A thing that would lose a role in its home is named in the question ("the hero of world/character/Mara/v1 — moved to Sketches, it is no
+  longer"). The roles asked about: the hero, an A-pose, a shot's frame, a reference, a style's sample, a board.
+- Confirmed, the record lets go of it: the hero or the A-pose cleared, the shot's frame cleared.
+- Refused, with the reason in a toast: a role a job built its record on (a 3D model, a set's picture, a final, a shot's clip), and a final
+  version's hero. Clearing those would break the set, the final or the version, so the thing stays with its record.
+- Within its home a thing just moves.
+
+**R8:** *Open its version in World ▸* reads the profiles first when World has not. A cut opens by its own read, so it needed nothing.
+
+**R1 (a page in no home)** waits for B3, which folds the pages into homes.
+
+**Measured** at 3,000 assets (`bin_perf_b0.py`):
+
+| Read | U8 (11 §4) | B0 |
+| --- | --- | --- |
+| tree | 73 ms | 14 ms warm (119 ms the first read after start) |
+| the shots home | 304 ms, 2,000 things | 11 ms, a page of 200 |
+| Imports | 46 ms, 1,000 things | 7 ms, a page of 200 |
+
+The first B0 page read was 87 ms: a story lookup per shot home, each miss rewriting the shot index. It now reads the records once per
+request.
+
+**Tests:**
+
+- `test_bin_b0.py` (4): paging, the kind filter and the counts; homes following a rename and a delete; the rehome; Move asking, letting go,
+  refusing a 3D model and a final version's hero; a shot's frame let go.
+- `bin.test.ts` + 2: which frames touch the open home; a change and a removal in place.
+- An e2e scenario: a home of 262 things draws under 120 tiles and reads its next page at the end; Move to… of the hero asks, and the version
+  lets go of it; a deleted character's home says so and its things go to the Sketches.
+
+**Checks:** offline 735 passed; Vitest 646 + 3 skipped; typecheck, build and lint clean (no new warning); e2e 93/93 (alone); the route snapshot
+and the API contract regenerated; agents_check, model_literals_check and settings_audit (321, 0) clean.
+
+Next: B1, one Bin with every verb.

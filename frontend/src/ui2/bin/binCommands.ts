@@ -1,14 +1,16 @@
 // U8 (D157, proto01_UI2 05 §2.2): the Bin's verbs on the thing selected (rule 3: commands with a mouse home — the Inspector and a tile's
 // right-click). The Bin makes nothing: it opens a thing where it belongs, moves it to another home, tags it, trashes or restores it.
-import { ArrowUpRight, ExternalLink, FolderInput, Maximize2, RotateCcw, Tag, Trash2 } from 'lucide-react'
+// B0 (D159 Q5): a move that would take a thing's role away asks first, naming the role; a home whose record was deleted gives its things
+// to the Sketches.
+import { ArrowUpRight, ExternalLink, FolderInput, FolderOutput, Maximize2, RotateCcw, Tag, Trash2 } from 'lucide-react'
 import { openDetached } from '../../frame/loupeLink'
 import { http, unwrap } from '../../api/client'
 import type { BinThing, BinNode } from '../../api/types'
 import { showMenu } from '../../frame/ContextMenu'
 import { registerCommands, type MenuItem } from '../../frame/commands'
 import { navigate } from '../../frame/router'
-import { askText, useSession } from '../../store/session'
-import { homesById, TRASH, useBin } from './binStore'
+import { askConfirm, askText, useSession } from '../../store/session'
+import { homesById, pathLabel, ROLE_WORDS, TRASH, useBin } from './binStore'
 
 const b = () => useBin.getState()
 export const selectedItem = (): BinThing | null => b().items.find((x) => x.asset.id === b().selected) ?? null
@@ -19,7 +21,11 @@ export function belongs(path: string): { label: string; open: () => void } | nul
   if (top === 'world' && (a === 'look' || a === 'sketches')) return { label: a === 'look' ? 'the Look' : 'the Sketches', open: () => {
     navigate({ suite: 'generate' }); void import('../world/worldStore').then((m) => m.useWorld.getState().setRail(a)) } }
   if (top === 'world' && c) return { label: 'its version in World', open: () => {
-    navigate({ suite: 'generate' }); void import('../world/worldStore').then((m) => m.useWorld.getState().pick(c, d || undefined)) } }
+    navigate({ suite: 'generate' })
+    void Promise.all([import('../world/worldStore'), import('../../suites/story/storyStore')]).then(async ([m, s]) => {
+      if (!s.useStory.getState().profiles.some((p) => p.id === c)) await s.useStory.getState().loadProfiles()   // R8: World may not have read them yet
+      m.useWorld.getState().pick(c, d || undefined)
+    }) } }
   if (top === 'shots' && a) return { label: 'its shot', open: () => {
     navigate({ suite: 'story', tab: 'flow' })
     void Promise.all([import('../shots/shotsStore'), import('../../suites/story/storyStore')]).then(async ([m, s]) => {
@@ -43,13 +49,33 @@ export function moveTargets(homes: BinNode[], from: string | null): MenuItem[] {
 }
 
 async function moveTo(n: BinNode): Promise<void> {
-  const it = selectedItem(); if (!it) return
-  await unwrap(http.POST('/groups/move', { body: { items: [{ kind: 'asset', id: it.asset.id }], to: n.id } }))
-  useSession.getState().toast(`Moved to ${n.path}`, 'success')
-  await b().reload()
+  const it = selectedItem(); if (it) await moveThings([it.asset.id], n)
+}
+
+/** B0 (D159 Q5): things moved to a home. One that would lose its role in its home (the hero, a reference, an A-pose, a shot's frame) is
+ *  asked about first, naming the role; one a record is made on (a 3D model, a final, a set's picture) or a final version's hero stays. */
+export async function moveThings(ids: string[], n: BinNode): Promise<void> {
+  const homes = b().homes, toast = useSession.getState().toast
+  const first = await unwrap(http.POST('/bin/move', { body: { ids, to: n.id } }))
+  let moved = first.moved.length
+  const refused = [...first.refused]
+  if (first.ask.length) {
+    const lines = first.ask.map((a) => `${a.roles.map((r) => ROLE_WORDS[r] ?? r).join(' and ')} of ${pathLabel(homes, a.home)}`)
+    const ok = await askConfirm({ title: first.ask.length === 1 ? 'Move it and take its role away?' : `Move ${first.ask.length} and take their roles away?`,
+      text: `${[...new Set(lines)].join(' · ')} — moved to ${n.name}, ${first.ask.length === 1 ? 'it is' : 'they are'} no longer.`, okLabel: 'Move', danger: true })
+    if (ok) {
+      const again = await unwrap(http.POST('/bin/move', { body: { ids: first.ask.map((a) => a.id), to: n.id, confirm: true } }))
+      moved += again.moved.length
+      refused.push(...again.refused)
+    }
+  }
+  if (refused.length) toast(`${refused.length === 1 ? 'It stays' : `${refused.length} stay`}: ${ROLE_WORDS[refused[0].role] ?? refused[0].role} of ${pathLabel(homes, refused[0].home)} (${refused[0].why})`, 'info')
+  if (moved) toast(`Moved to ${n.name}`, 'success')
+  await b().refresh({ tree: true, home: true })
 }
 
 const inTrash = () => b().open === TRASH
+const openNode = () => homeOf(b().open)
 
 registerCommands([
   { id: 'bin.item.open', scope: 'catalogue', label: 'Open where it belongs ▸', icon: ArrowUpRight, placement: ['inspector', 'context'],
@@ -62,6 +88,12 @@ registerCommands([
   { id: 'bin.item.move', scope: 'catalogue', label: 'Move to…', icon: FolderInput, placement: ['inspector'], when: () => !!selectedItem() && !inTrash(),
     hint: 'another home: what it was made for (a tile\'s right-click has the homes as a submenu)',
     run: () => { const it = selectedItem(); if (it) showMenu({ clientX: window.innerWidth / 2, clientY: window.innerHeight / 3 }, moveTargets(b().homes, it.home_id ?? null)) } },
+  { id: 'bin.home.rehome', scope: 'catalogue', label: 'Give its things to the Sketches', icon: FolderOutput, placement: ['panel'], when: () => !!openNode()?.gone,
+    hint: 'a home whose entity, shot or cut was deleted: its things go to World › Sketches, the home goes',
+    run: async () => { const n = openNode(); if (!n) return
+      const r = await unwrap(http.POST('/bin/homes/{gid}/rehome', { params: { path: { gid: n.id } } }))
+      useSession.getState().toast(`${r.moved} ${r.moved === 1 ? 'thing' : 'things'} went to the Sketches`, 'success')
+      await b().refresh({ tree: true }); await b().openHome(r.to) } },
   { id: 'bin.item.tag', scope: 'catalogue', label: 'Tag…', icon: Tag, placement: ['inspector', 'context'], when: () => !!selectedItem() && !inTrash(),
     run: async () => {
       const it = selectedItem(); if (!it) return

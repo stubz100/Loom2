@@ -280,11 +280,52 @@ export interface paths {
         };
         /**
          * Bin Home Items
-         * @description U8 (05 §2.2): a home's things and everything below it, newest first, each with its roles and its home.
+         * @description U8 (05 §2.2): a home's things and everything below it, newest first, each with its roles and its home — B0: a page at a time
+         *     (`cursor` from the last page's `next_cursor`), `kinds` keeping those kinds only.
          */
         get: operations["bin_home_items_bin_homes__gid__items_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bin/homes/{gid}/rehome": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bin Rehome
+         * @description B0 (R5): a home whose record was deleted gives its things to the Sketches and goes.
+         */
+        post: operations["bin_rehome_bin_homes__gid__rehome_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bin/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bin Move
+         * @description B0 (D159 Q5, R6): things moved to another home; a role they would lose is asked first (`ask`), a role a record is made on refused.
+         */
+        post: operations["bin_move_bin_move_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5437,6 +5478,37 @@ export interface components {
             /** Roles */
             roles: string[];
         };
+        /** BinMove */
+        BinMove: {
+            /**
+             * Confirm
+             * @description B0 (D159 Q5): move the things that lose a role too, the record letting go of them
+             * @default false
+             */
+            confirm?: boolean;
+            /** Ids */
+            ids: string[];
+            /**
+             * To
+             * @description the home (or a page inside it) the things go to
+             */
+            to: string;
+        };
+        /**
+         * BinMoved
+         * @description B0 (D159 Q5): what moved; what would lose a role in its home (`ask`: moved only when confirmed); what stays (`refused`: a job's
+         *     record is made on it, or its version is final); the roles the records let go of.
+         */
+        BinMoved: {
+            /** Ask */
+            ask: components["schemas"]["BinRole"][];
+            /** Dropped */
+            dropped: components["schemas"]["BinRole"][];
+            /** Moved */
+            moved: string[];
+            /** Refused */
+            refused: components["schemas"]["BinRole"][];
+        };
         /**
          * BinNode
          * @description U8 (05 §2.1): a home in the Bin's tree — its own things and its role pages' (`count`), with the homes under it (`total`).
@@ -5446,6 +5518,11 @@ export interface components {
             children: components["schemas"]["BinNode"][];
             /** Count */
             count: number;
+            /**
+             * Gone
+             * @default false
+             */
+            gone: boolean;
             /** Id */
             id: string;
             /** Name */
@@ -5456,6 +5533,32 @@ export interface components {
             path: string;
             /** Total */
             total: number;
+        };
+        /** BinRehomed */
+        BinRehomed: {
+            /** Moved */
+            moved: number;
+            /** To */
+            to: string;
+        };
+        /** BinRole */
+        BinRole: {
+            /** Home */
+            home: string;
+            /** Id */
+            id: string;
+            /**
+             * Role
+             * @default
+             */
+            role: string;
+            /** Roles */
+            roles: string[];
+            /**
+             * Why
+             * @default
+             */
+            why: string;
         };
         /** BinThing */
         BinThing: {
@@ -5476,11 +5579,15 @@ export interface components {
             home_id: string | null;
             /** Items */
             items: components["schemas"]["BinThing"][];
+            /** Next Cursor */
+            next_cursor: string | null;
             /**
              * Path
              * @default
              */
             path: string;
+            /** Total */
+            total: number | null;
         };
         /** BinTree */
         BinTree: {
@@ -15259,6 +15366,7 @@ export interface operations {
             query?: {
                 folder?: "all" | "unprocessed" | "today" | "last_session" | "images" | "clips" | "documents" | "imported" | "trash";
                 kind?: ("image" | "video" | "mask" | "document-render" | "mesh" | "audio") | null;
+                kinds?: ("image" | "video" | "mask" | "document-render" | "mesh" | "audio")[];
                 suite?: string | null;
                 model_id?: string | null;
                 tags_any?: string[];
@@ -15407,6 +15515,7 @@ export interface operations {
             query?: {
                 folder?: "all" | "unprocessed" | "today" | "last_session" | "images" | "clips" | "documents" | "imported" | "trash";
                 kind?: ("image" | "video" | "mask" | "document-render" | "mesh" | "audio") | null;
+                kinds?: ("image" | "video" | "mask" | "document-render" | "mesh" | "audio")[];
                 suite?: string | null;
                 model_id?: string | null;
                 tags_any?: string[];
@@ -15839,7 +15948,11 @@ export interface operations {
     };
     bin_home_items_bin_homes__gid__items_get: {
         parameters: {
-            query?: never;
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+                kinds?: ("image" | "video" | "mask" | "document-render" | "mesh" | "audio")[];
+            };
             header?: never;
             path: {
                 gid: string;
@@ -15855,6 +15968,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BinThings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bin_rehome_bin_homes__gid__rehome_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                gid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BinRehomed"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bin_move_bin_move_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BinMove"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BinMoved"];
                 };
             };
             /** @description Validation Error */

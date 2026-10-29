@@ -2,7 +2,8 @@
 // their counts (World's entity versions, the Look, the Sketches, the shots, the cuts, the imports — the things on no page — and the
 // Trash). The centre: the home's path, the kind chips and its grid (a parent shows everything below it), each thing with its role as a
 // badge; a tile drags anywhere a thing goes (frame/drag). The Inspector: the thing's preview or player, its home and roles, how it was
-// made, its run, and the verbs (binCommands). No batches, no Unprocessed, no Library (05 §2.1).
+// made, its run, and the verbs (binCommands). No batches, no Unprocessed, no Library (05 §2.1). B0 (D159): the grid is windowed and
+// reads a page at a time; a home whose record was deleted says so and gives its things to the Sketches.
 import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api, http, unwrap } from '../../api/client'
@@ -12,7 +13,8 @@ import { showMenu } from '../../frame/ContextMenu'
 import type { MenuItem } from '../../frame/commands'
 import { beginDrag, mediaOf } from '../../frame/drag'
 import { useSession } from '../../store/session'
-import { belongs, moveTargets } from './binCommands'
+import { belongs, homeOf, moveTargets } from './binCommands'
+import { BinGrid } from './BinGrid'
 import { FILTERS, passes, pathLabel, ROLE_LABEL, startBin, TRASH, useBin } from './binStore'
 import '../world/world.css'
 import './bin.css'
@@ -22,9 +24,9 @@ function Node({ n, depth }: { n: BinNode; depth: number }) {
   const expanded = useBin((s) => !!s.expanded[n.id])
   return (
     <>
-      <div className={`b-node${open ? ' active' : ''}`} style={{ paddingLeft: 4 + depth * 14 }} data-path={n.path}>
+      <div className={`b-node${open ? ' active' : ''}${n.gone ? ' gone' : ''}`} style={{ paddingLeft: 4 + depth * 14 }} data-path={n.path}>
         {n.children.length ? <button className="b-chev" aria-label={expanded ? 'Fold' : 'Unfold'} onClick={() => useBin.getState().toggle(n.id)}>{expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</button> : <span className="b-chev" />}
-        <button className="b-open" title={n.path} onClick={() => void useBin.getState().openHome(n.id)}><span>{n.name}</span><span className="n">{n.total}</span></button>
+        <button className="b-open" title={n.gone ? `${n.path} — deleted` : n.path} onClick={() => void useBin.getState().openHome(n.id)}><span>{n.name}{n.gone ? ' · deleted' : ''}</span><span className="n">{n.total}</span></button>
       </div>
       {expanded && n.children.map((k) => <Node key={k.id} n={k} depth={depth + 1} />)}
     </>
@@ -68,22 +70,28 @@ function Tile({ it }: { it: BinThing }) {
   )
 }
 
+const loadMore = () => void useBin.getState().loadMore()
+
 function Grid() {
   const items = useBin((s) => s.items)
   const filter = useBin((s) => s.filter)
   const path = useBin((s) => s.path)
   const query = useBin((s) => s.query)
   const loading = useBin((s) => s.loading)
+  const total = useBin((s) => s.total)
   const homes = useBin((s) => s.homes)
-  const shown = items.filter((x) => passes(x, filter))
+  const node = homeOf(useBin((s) => s.open))
+  const shown = query ? items.filter((x) => passes(x, filter)) : items        // a home's chips filter on the server; a search's here
   return (
     <section className="w-centre">
       <div className="w-bin" data-testid="bin-grid">
         <div className="w-bin-head">
           <span className="w-path" title={path}>{query ? `search: ${query}` : path === TRASH ? 'trash' : `bin/${pathLabel(homes, path)}`}</span>
+          {total !== null && !loading && <span className="hint" data-testid="bin-count">{query ? shown.length : total}</span>}
           <span className="w-chips">{FILTERS.map(([f, l]) => <button key={f} className={filter === f ? 'active' : ''} onClick={() => useBin.getState().setFilter(f)}>{l}</button>)}</span>
         </div>
-        {shown.length ? <div className="w-grid">{shown.map((it) => <Tile key={it.asset.id} it={it} />)}</div>
+        {node?.gone && !query && <div className="b-gone" data-testid="bin-gone"><span>{node.name} was deleted</span><CommandButton id="bin.home.rehome" text /></div>}
+        {shown.length ? <BinGrid items={shown} keyOf={(it) => it.asset.id} render={(it) => <Tile it={it} />} onEnd={loadMore} />
           : <div className="w-empty">{loading ? 'Reading the Bin…' : query ? 'Nothing found' : 'Nothing here'}</div>}
         <Loupe />
       </div>

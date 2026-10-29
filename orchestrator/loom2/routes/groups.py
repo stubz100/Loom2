@@ -10,7 +10,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..catalogue import AssetRecord
+from ..catalogue import AssetKind, AssetRecord
 
 from ..groups import ROOT_ID, GroupRecord
 from ..schemas import AlbumNode, ChangedGroups, GroupDeleted, GroupPage, LayoutReply, Location, Ungrouped
@@ -104,6 +104,7 @@ class BinNode(BaseModel):
     count: int
     total: int
     pages: list[str] = Field(default_factory=list)   # its role pages (a version's reference set and candidates): a page id → this home
+    gone: bool = False                               # B0 (R5): its record (an entity, a shot, a cut) was deleted; its things are still here
     children: list[BinNode] = Field(default_factory=list)
 
 
@@ -126,26 +127,90 @@ class BinThings(BaseModel):
     home_id: str | None = None
     path: str = ""
     items: list[BinThing]
+    total: int | None = None                         # B0: with the first page of a home
+    next_cursor: str | None = None                   # B0: the next page, None at the end
+
+
+class BinMove(BaseModel):
+    ids: list[str] = Field(min_length=1)
+    to: str = Field(description="the home (or a page inside it) the things go to")
+    confirm: bool = Field(False, description="B0 (D159 Q5): move the things that lose a role too, the record letting go of them")
+
+
+class BinRole(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    id: str
+    roles: list[str] = Field(default_factory=list)
+    role: str = ""
+    home: str
+    why: str = ""
+
+
+class BinMoved(BaseModel):
+    """B0 (D159 Q5): what moved; what would lose a role in its home (`ask`: moved only when confirmed); what stays (`refused`: a job's
+    record is made on it, or its version is final); the roles the records let go of."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    moved: list[str]
+    ask: list[BinRole]
+    refused: list[BinRole]
+    dropped: list[BinRole]
+
+
+class BinRehomed(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    moved: int
+    to: str
 
 
 @router.get("/bin/tree", response_model=BinTree)
 async def bin_tree(svc: Svc):
     """U8 (D157, 05 §2.1): the Bin's tree of homes with their counts (`imports` holds the things on no page), and the Trash's count."""
     from ..bins import home, tree
+    ws, _, _ = svc.require_project()
     groups = svc.require_groups()
     await asyncio.to_thread(home, groups, "imports")
-    return await asyncio.to_thread(tree, groups)
+    return await asyncio.to_thread(tree, groups, ws)
 
 
 @router.get("/bin/homes/{gid}/items", response_model=BinThings)
-async def bin_home_items(svc: Svc, gid: str):
-    """U8 (05 §2.2): a home's things and everything below it, newest first, each with its roles and its home."""
-    from ..bins import home_items
+async def bin_home_items(svc: Svc, gid: str, cursor: str | None = None, limit: int = Query(200, ge=1, le=2000),
+                         kinds: list[AssetKind] = Query(default_factory=list)):
+    """U8 (05 §2.2): a home's things and everything below it, newest first, each with its roles and its home — B0: a page at a time
+    (`cursor` from the last page's `next_cursor`), `kinds` keeping those kinds only."""
+    from ..bins import home_page
     ws, _, _ = svc.require_project()
     try:
-        return await asyncio.to_thread(home_items, svc.require_groups(), ws, gid)
+        return await asyncio.to_thread(home_page, svc.require_groups(), ws, gid, cursor, limit, list(kinds))
     except KeyError:
         raise HTTPException(404, "no such home")
+
+
+@router.post("/bin/move", response_model=BinMoved)
+async def bin_move(svc: Svc, body: BinMove):
+    """B0 (D159 Q5, R6): things moved to another home; a role they would lose is asked first (`ask`), a role a record is made on refused."""
+    from ..bins import move_things
+    ws, _, _ = svc.require_project()
+    try:
+        out = await asyncio.to_thread(move_things, svc.require_groups(), ws, body.ids, body.to, body.confirm)
+    except KeyError:
+        raise HTTPException(404, "no such home")
+    if out["changed"]:
+        svc.group_changed(out["changed"])
+    for rid in out["records"]:
+        svc.hub.broadcast("story.changed", {"kind": "profile" if rid.startswith("prf_") else "shot", "id": rid, "revision": 0})
+    return out
+
+
+@router.post("/bin/homes/{gid}/rehome", response_model=BinRehomed)
+async def bin_rehome(svc: Svc, gid: str):
+    """B0 (R5): a home whose record was deleted gives its things to the Sketches and goes."""
+    from ..bins import rehome
+    try:
+        out = await asyncio.to_thread(rehome, svc.require_groups(), gid)
+    except KeyError:
+        raise HTTPException(404, "no such home")
+    svc.group_changed(out["changed"])
+    return out
 
 
 @router.get("/bin/search", response_model=BinThings)

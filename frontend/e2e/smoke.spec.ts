@@ -4706,6 +4706,51 @@ test('the Bin (U8, D157 · proto01_UI2 05 §2): a take made for a shot is in its
   await expect(page.locator(`.dock .bin-grid [data-id="${take}"]`)).toHaveCount(1)
 })
 
+test("the Bin holds up (B0, D159 · proto01_UI2 11 R2–R6): a home of 262 things draws only the rows in view and reads its next page at the end; Move to… of the hero asks, naming the role, and the version lets go of it; a deleted character's home says so and gives its things to the Sketches", async ({ page }) => {
+  test.setTimeout(120_000)
+  const tag = Date.now().toString(36)
+  const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
+  const [hero, cand] = (await api<{ ids: string[] }>('POST', '/assets/duplicate', { ids: [img, img] })).ids
+  await api('POST', '/bin/homes', { path: 'world/sketches' })
+  const mara = await api<{ id: string }>('POST', '/story/profiles', { name: `Mara ${tag}`, cls: 'character', hero_asset_id: hero })
+  type Node = { id: string; path: string; children: Node[] }
+  const find = (ns: Node[], path: string): Node | undefined => ns.map((n) => (n.path === path ? n : find(n.children, path))).find(Boolean)
+  const vpath = `world/character/${mara.id}/v1`
+  const vh = find((await api<{ homes: Node[] }>('GET', '/bin/tree')).homes, vpath)!
+  const many = (await api<{ ids: string[] }>('POST', '/assets/duplicate', { ids: Array(260).fill(cand) })).ids    // 260 events at once
+  await api('POST', '/groups/move', { items: [cand, ...many].map((id) => ({ kind: 'asset', id })), to: vh.id })
+  await page.goto(`${appUrl({ ui: '2' })}#bin`)
+  await page.locator('[data-testid="bin-tree"] .b-node[data-path="world/character"] .b-chev').click()          // Characters unfolded
+  const node = page.locator(`[data-testid="bin-tree"] .b-node[data-path="world/character/${mara.id}"]`)
+  await node.locator('.b-open').click()                                                                     // her home: v1 below it
+  await expect(page.locator('[data-testid="bin-count"]')).toHaveText('262')
+  const tiles = page.locator('[data-testid="bin-grid"] .w-tile')
+  await expect(tiles.first()).toBeVisible()
+  expect(await tiles.count()).toBeLessThan(120)                                                              // only the rows in view
+  const grid = page.locator('[data-testid="bin-grid"] .b-grid')
+  await expect.poll(async () => {                                                                           // to the end: the next page comes
+    await grid.evaluate((el) => { el.scrollTop = el.scrollHeight })
+    return page.locator(`[data-testid="bin-grid"] .w-tile[data-id="${hero}"]`).count()
+  }, { timeout: 15_000 }).toBe(1)
+  expect(await tiles.count()).toBeLessThan(120)
+  // Move to… of the hero asks first, naming the role; the version lets go of it
+  await page.locator(`[data-testid="bin-grid"] .w-tile[data-id="${hero}"]`).click()
+  await page.locator('[data-testid="bin-inspector"] button', { hasText: 'Move to…' }).click()
+  await page.locator('.ctx-menu button.item', { hasText: 'Sketches' }).click()
+  await expect(page.locator('.modal.ask')).toContainText('the hero')
+  await page.locator('.modal.ask button', { hasText: 'Move' }).click()
+  await expect.poll(async () => (await api<{ versions: { hero_asset_id: string | null }[] }>('GET', `/story/profiles/${mara.id}`)).versions[0].hero_asset_id, { timeout: 10_000 }).toBeNull()
+  await expect(page.locator('[data-testid="bin-count"]')).toHaveText('261')
+  // deleted, her home says so and gives its things to the Sketches
+  await api('DELETE', `/story/profiles/${mara.id}`)
+  await expect(node).toContainText('deleted')
+  await node.locator('.b-open').click()
+  await expect(page.locator('[data-testid="bin-gone"]')).toContainText(`Mara ${tag} was deleted`)
+  await page.locator('[data-testid="bin-gone"] button', { hasText: 'Give its things to the Sketches' }).click()
+  await expect(node).toHaveCount(0)
+  await expect(page.locator('[data-testid="bin-grid"] .w-path')).toHaveText('bin/world/sketches')
+})
+
 /** Half a second of silence as a 16-bit mono WAV at 24 kHz (a sound to bring in). */
 function silentWav(seconds: number): Buffer {
   const rate = 24000, n = Math.round(rate * seconds), data = n * 2

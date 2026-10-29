@@ -1605,6 +1605,76 @@
         "title": "BinItem",
         "type": "object"
       },
+      "BinMove": {
+        "properties": {
+          "confirm": {
+            "default": false,
+            "description": "B0 (D159 Q5): move the things that lose a role too, the record letting go of them",
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "ids": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Ids",
+            "type": "array"
+          },
+          "to": {
+            "description": "the home (or a page inside it) the things go to",
+            "title": "To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ids",
+          "to"
+        ],
+        "title": "BinMove",
+        "type": "object"
+      },
+      "BinMoved": {
+        "description": "B0 (D159 Q5): what moved; what would lose a role in its home (`ask`: moved only when confirmed); what stays (`refused`: a job's\nrecord is made on it, or its version is final); the roles the records let go of.",
+        "properties": {
+          "ask": {
+            "items": {
+              "$ref": "#/components/schemas/BinRole"
+            },
+            "title": "Ask",
+            "type": "array"
+          },
+          "dropped": {
+            "items": {
+              "$ref": "#/components/schemas/BinRole"
+            },
+            "title": "Dropped",
+            "type": "array"
+          },
+          "moved": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Moved",
+            "type": "array"
+          },
+          "refused": {
+            "items": {
+              "$ref": "#/components/schemas/BinRole"
+            },
+            "title": "Refused",
+            "type": "array"
+          }
+        },
+        "required": [
+          "moved",
+          "ask",
+          "refused",
+          "dropped"
+        ],
+        "title": "BinMoved",
+        "type": "object"
+      },
       "BinNode": {
         "description": "U8 (05 §2.1): a home in the Bin's tree — its own things and its role pages' (`count`), with the homes under it (`total`).",
         "properties": {
@@ -1618,6 +1688,11 @@
           "count": {
             "title": "Count",
             "type": "integer"
+          },
+          "gone": {
+            "default": false,
+            "title": "Gone",
+            "type": "boolean"
           },
           "id": {
             "title": "Id",
@@ -1650,9 +1725,66 @@
           "count",
           "total",
           "pages",
+          "gone",
           "children"
         ],
         "title": "BinNode",
+        "type": "object"
+      },
+      "BinRehomed": {
+        "properties": {
+          "moved": {
+            "title": "Moved",
+            "type": "integer"
+          },
+          "to": {
+            "title": "To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "moved",
+          "to"
+        ],
+        "title": "BinRehomed",
+        "type": "object"
+      },
+      "BinRole": {
+        "properties": {
+          "home": {
+            "title": "Home",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "role": {
+            "default": "",
+            "title": "Role",
+            "type": "string"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Roles",
+            "type": "array"
+          },
+          "why": {
+            "default": "",
+            "title": "Why",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "roles",
+          "role",
+          "home",
+          "why"
+        ],
+        "title": "BinRole",
         "type": "object"
       },
       "BinThing": {
@@ -1713,16 +1845,40 @@
             "title": "Items",
             "type": "array"
           },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
           "path": {
             "default": "",
             "title": "Path",
             "type": "string"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total"
           }
         },
         "required": [
           "home_id",
           "path",
-          "items"
+          "items",
+          "total",
+          "next_cursor"
         ],
         "title": "BinThings",
         "type": "object"
@@ -25660,6 +25816,26 @@
           },
           {
             "in": "query",
+            "name": "kinds",
+            "required": false,
+            "schema": {
+              "items": {
+                "enum": [
+                  "image",
+                  "video",
+                  "mask",
+                  "document-render",
+                  "mesh",
+                  "audio"
+                ],
+                "type": "string"
+              },
+              "title": "Kinds",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
             "name": "suite",
             "required": false,
             "schema": {
@@ -26284,6 +26460,26 @@
                 }
               ],
               "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kinds",
+            "required": false,
+            "schema": {
+              "items": {
+                "enum": [
+                  "image",
+                  "video",
+                  "mask",
+                  "document-render",
+                  "mesh",
+                  "audio"
+                ],
+                "type": "string"
+              },
+              "title": "Kinds",
+              "type": "array"
             }
           },
           {
@@ -27250,7 +27446,7 @@
     },
     "/bin/homes/{gid}/items": {
       "get": {
-        "description": "U8 (05 §2.2): a home's things and everything below it, newest first, each with its roles and its home.",
+        "description": "U8 (05 §2.2): a home's things and everything below it, newest first, each with its roles and its home — B0: a page at a time\n(`cursor` from the last page's `next_cursor`), `kinds` keeping those kinds only.",
         "operationId": "bin_home_items_bin_homes__gid__items_get",
         "parameters": [
           {
@@ -27260,6 +27456,54 @@
             "schema": {
               "title": "Gid",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 2000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kinds",
+            "required": false,
+            "schema": {
+              "items": {
+                "enum": [
+                  "image",
+                  "video",
+                  "mask",
+                  "document-render",
+                  "mesh",
+                  "audio"
+                ],
+                "type": "string"
+              },
+              "title": "Kinds",
+              "type": "array"
             }
           }
         ],
@@ -27286,6 +27530,91 @@
           }
         },
         "summary": "Bin Home Items",
+        "tags": [
+          "groups"
+        ]
+      }
+    },
+    "/bin/homes/{gid}/rehome": {
+      "post": {
+        "description": "B0 (R5): a home whose record was deleted gives its things to the Sketches and goes.",
+        "operationId": "bin_rehome_bin_homes__gid__rehome_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "gid",
+            "required": true,
+            "schema": {
+              "title": "Gid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BinRehomed"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bin Rehome",
+        "tags": [
+          "groups"
+        ]
+      }
+    },
+    "/bin/move": {
+      "post": {
+        "description": "B0 (D159 Q5, R6): things moved to another home; a role they would lose is asked first (`ask`), a role a record is made on refused.",
+        "operationId": "bin_move_bin_move_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BinMove"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BinMoved"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bin Move",
         "tags": [
           "groups"
         ]

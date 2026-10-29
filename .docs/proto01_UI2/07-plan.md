@@ -50,6 +50,8 @@
 
 **U7 is built** (2026-10-29 09:41 – 2026-10-29 10:22): Episode as its own layer, the FilmCraft cut editor with the route's Finals beside it (U7a); Assemble on the server — each shot at its final (marked, else the latest, a one-pass version's clip), only what changed placed with the author's edits kept, a shot held for its lines or listed, clips named after their shots, the sheet counting the route (U7b, G14, F33, F39, F40); a 16 fps take conformed by RIFE as it lands in one undo step, the cut's changes by jobs heard, a change holding the FilmCraft session whole, the cut editor's ranges in `/capabilities` (U7c). Owed: Sound in Episode's column (with the Bin), Q8's closed lists, a bed across a shot being taken off blocks the Assemble. Next: U8, the Bin and parity.
 
+**U8a–b are built** (2026-10-29 10:55 – 2026-10-29 11:06): the Bin as a layer (the tree of homes with counts and a search, the home's grid with role badges, the Inspector's *Open where it belongs ▸ · Move to… · Tag… · Trash · See it large · Detach ↗*) and as the Dock's drawer in World, Shots and Episode (D95's Bin with the homes in place of its places); `imports` shows the things on no page; a cut's movie lands in its home; Episode's Sound. The author's click-through is [10](10-trying-the-new-ui.md). Owed: that click-through, then the new UI as the default and the old shell removed (U8's last two steps); compare in the Bin.
+
 **The order.** U0 can start at once. U1 and U2 are the foundation. After them, U3 and U4 can run in either order: World first follows the work's order;
 Shots first answers the author's biggest change sooner. U5 and U6 follow U4. Most of U7 can run once U6 has the shot's final.
 

@@ -2084,13 +2084,16 @@ class StoryStore(_ShotMixin, _FlowMixin):
         if cls == "prop" and fields.get("height_m") is None:               # CW4: a prop's height from its words (a cup 0.1 m, a door 2.1 m), else 1 m
             from .sizes import prop_height
             fields["height_m"] = prop_height(name, fields.get("appearance"))
-        ProfileVersion.model_validate({"id": "v1", "group_id": "-", **fields})   # a bad colour is refused before the group is made
-        g = groups.create(f"{name} · v1")
+        stub_v = ProfileVersion.model_validate({"id": "v1", "group_id": "-", **fields})   # a bad colour is refused before the group is made
+        from .bins import version_home
+        draft = Profile(name=name, cls=cls, current="v1", versions=[stub_v])
+        h = version_home(groups, draft, "v1")                                     # U2 (G1): the version's home in the Bin, its reference set inside
+        g = groups.create(f"{name} · v1", parent_id=h.id, kind="role", role="reference")
         if hero_asset_id:
             groups.move([("asset", hero_asset_id)], g.id)
             groups.update(g.id, cover_id=hero_asset_id)
         v = ProfileVersion.model_validate({"id": "v1", "group_id": g.id, "hero_asset_id": hero_asset_id, **fields})
-        p = Profile(name=name, cls=cls, current="v1", versions=[v])
+        p = Profile(id=draft.id, name=name, cls=cls, current="v1", versions=[v])
         check_profile(p)
         self.save_profile(p)
         return p
@@ -2356,6 +2359,9 @@ class StoryStore(_ShotMixin, _FlowMixin):
         n = max(int(v.id[1:]) for v in cur.versions if v.id[1:].isdigit()) + 1
         g = groups.duplicate_group(src.group_id)
         groups.update(g.id, name=f"{cur.name} · v{n}")
+        from .bins import as_role, home
+        base = f"world/{cur.cls}/{cur.id}"
+        as_role(groups, g.id, home(groups, f"{base}/v{n}", {base: cur.name}), "reference")   # U2 (G1): the new version's home, its copy inside
         g = groups.groups[g.id]
         v = ProfileVersion.model_validate({**src.model_dump(include={*SHEET_FIELDS, "poses", "place_set"}), "id": f"v{n}", "group_id": g.id,   # D93 (B4): the sheet copied, a label of its own; AP1b: the poses fitted to its body; CW6: a place's set
                                            "hero_asset_id": g.cover_id if src.hero_asset_id else None, "derived_from": src.id})
@@ -2400,7 +2406,8 @@ class StoryStore(_ShotMixin, _FlowMixin):
         v = p.version(vid)
         if v.candidates_group_id and v.candidates_group_id in groups.groups:
             return p, v.candidates_group_id, False
-        gid = groups.create(f"{p.name} · {v.id} · candidates").id
+        from .bins import version_home
+        gid = groups.create(f"{p.name} · {v.id} · candidates", parent_id=version_home(groups, p, v.id).id, kind="role", role="candidates").id   # U2 (G1)
         return self.set_candidates(pid, v.id, gid), gid, True
 
     def add_assets(self, pid: str, vid: str | None, ids: list[str], role: Literal["hero", "reference", "candidate"], groups: GroupStore,

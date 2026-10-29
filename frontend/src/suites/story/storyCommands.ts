@@ -215,7 +215,9 @@ async function ensureStyleGroup(id: string): Promise<string | null> {
   const s = sy().world?.styles.find((x) => x.id === id)
   if (!s || !tree) return null
   if (s.group_id && findNode(tree, s.group_id)) return s.group_id
-  const gid = await useAlbum.getState().create(styleGroupName(s.name))
+  const { http, unwrap } = await import('../../api/client')
+  const look = await unwrap(http.POST('/bin/homes', { body: { path: 'world/look' } }))          // U2 (G1): the Look's home in the Bin
+  const gid = await useAlbum.getState().create(styleGroupName(s.name), look.id)
   sy().setStyle(id, { group_id: gid }); await sy().flush()
   return gid
 }

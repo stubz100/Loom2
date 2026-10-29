@@ -8828,6 +8828,16 @@
             "title": "Items",
             "type": "array"
           },
+          "kind": {
+            "default": "album",
+            "enum": [
+              "album",
+              "bin",
+              "role"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
           "locked": {
             "default": false,
             "title": "Locked",
@@ -8837,10 +8847,32 @@
             "title": "Name",
             "type": "string"
           },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
           "revision": {
             "default": 0,
             "title": "Revision",
             "type": "integer"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
           },
           "schema_version": {
             "default": 1,
@@ -8861,7 +8893,10 @@
           "updated_at",
           "revision",
           "items",
-          "locked"
+          "locked",
+          "kind",
+          "path",
+          "role"
         ],
         "title": "GroupRecord",
         "type": "object"
@@ -9303,6 +9338,25 @@
           "data"
         ],
         "title": "HelloEvent",
+        "type": "object"
+      },
+      "HomeAsk": {
+        "properties": {
+          "path": {
+            "description": "U2 (D157, G1): a named home of the Bin; an entity's, a shot's or a cut's comes with its record",
+            "enum": [
+              "world/look",
+              "world/sketches",
+              "imports"
+            ],
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "title": "HomeAsk",
         "type": "object"
       },
       "I2I": {
@@ -25880,6 +25934,48 @@
         "summary": "Audio Plugins",
         "tags": [
           "audio"
+        ]
+      }
+    },
+    "/bin/homes": {
+      "post": {
+        "description": "U2 (G1): a named home of the Bin, made with its parents when missing (the Look's style samples go in `world/look`).",
+        "operationId": "bin_home_bin_homes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HomeAsk"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bin Home",
+        "tags": [
+          "groups"
         ]
       }
     },

@@ -67,6 +67,9 @@ class GroupRecord(BaseModel):
     revision: int = 0
     items: list[GroupItem] = Field(default_factory=list)
     locked: bool = False                    # 17 (D85): a final profile version's reference set — no mutation route touches it
+    kind: Literal["album", "bin", "role"] = "album"   # U2 (D157, G1): an album page, a Bin home (bins.py), or a role page inside a home
+    path: str | None = None                 # U2: a home's path from ids (world/character/<profile>/<version>, shots/<shot>, world/look …)
+    role: str | None = None                 # U2: a role page's role in its home (reference, candidates, sample, board)
 
 
 Key = tuple[str, str]                         # (kind, id)
@@ -342,14 +345,23 @@ class GroupStore:
             return out
 
     # ---- writes (each returns the ids of the groups it changed) -----------------------------------
-    def create(self, name: str, parent_id: str = ROOT_ID, x: float | None = None, y: float | None = None) -> GroupRecord:
+    def create(self, name: str, parent_id: str = ROOT_ID, x: float | None = None, y: float | None = None, *, kind: str = "album",
+               path: str | None = None, role: str | None = None) -> GroupRecord:
         with self._lock:
             parent = self._get(parent_id)
-            g = GroupRecord(name=name.strip() or "Group")
+            g = GroupRecord(name=name.strip() or "Group", kind=kind, path=path, role=role)     # type: ignore[arg-type]
             self.groups[g.id] = g
             self._place(parent.id, [("group", g.id)], [{"x": x, "y": y}] if x is not None and y is not None else None)
             self._write(g)
             self._write(parent, bump=True)
+            return g
+
+    def mark(self, gid: str, *, kind: str, role: str | None = None, path: str | None = None) -> GroupRecord:
+        """U2 (G1): a group's place in the Bin — a home (`bin` with its path) or a role page (`role`). The page itself is unchanged."""
+        with self._lock:
+            g = self._get(gid)
+            g.kind, g.role, g.path = kind, role, path                       # type: ignore[assignment]
+            self._write(g, bump=True)
             return g
 
     def update(self, gid: str, name: str | None = None, cover_id: str | None = None) -> GroupRecord:

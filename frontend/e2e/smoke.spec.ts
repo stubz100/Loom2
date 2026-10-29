@@ -2729,13 +2729,19 @@ test('a group\'s "used by" (D92 §4.2): a Cast version\'s reference set says so 
   const users = await api<Record<string, { kind: string; name: string; extra: string }[]>>('GET', `/groups/used-by?ids=${gid}`)
   expect(users[gid]).toEqual([expect.objectContaining({ kind: 'profile_ref', name, extra: 'v1' })])
   await openApp(page, { suite: 'catalogue' })
-  const row = page.locator('.place-row', { hasText: name })
+  // U2 (D157, G1): the reference set lives in the version's home in the Bin — World › Characters › <name> › v1 › "<name> · v1"
+  const rowOf = (label: string, scope = page.locator('.places')) => scope.locator('.place-row').filter({ has: page.getByText(label, { exact: true }) })
+  const expand = async (r: ReturnType<typeof rowOf>) => { const chev = r.locator('button.chev[aria-label^="Expand"]'); if (await chev.count()) await chev.click() }
+  await expand(rowOf('World')); await expand(rowOf('Characters'))
+  const who = rowOf(name); await expand(who)
+  const v1 = rowOf('v1', who.locator('xpath=..')); await expand(v1)
+  const row = rowOf(`${name} · v1`)
   await expect(row).toBeVisible()
   await row.locator('button.place-open').click()
   const line = page.locator('.page-head .used-by')                                                     // the page's header
   await expect(line).toContainText(`used by:${name} v1 · references`)
-  // the card on the Album page: its Inspector says so too
-  await page.locator('.place-open.album').click()
+  // the card on its home's page: its Inspector says so too
+  await v1.locator('button.place-open').click()
   const card = page.locator('.pcard', { hasText: name })
   await expect(card).toBeVisible()
   await card.click()

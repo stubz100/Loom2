@@ -79,6 +79,20 @@ async def groups_used_by(svc: Svc, ids: Annotated[list[str] | None, Query()] = N
     return await asyncio.to_thread(users_of, ws, svc.require_groups(), ids, deep)
 
 
+class HomeAsk(BaseModel):
+    path: Literal["world/look", "world/sketches", "imports"] = Field(description="U2 (D157, G1): a named home of the Bin; an entity's, a shot's or a cut's comes with its record")
+
+
+@router.post("/bin/homes", response_model=GroupRecord)
+async def bin_home(svc: Svc, body: HomeAsk):
+    """U2 (G1): a named home of the Bin, made with its parents when missing (the Look's style samples go in `world/look`)."""
+    from ..bins import home
+    groups = svc.require_groups()
+    g = await asyncio.to_thread(home, groups, body.path)
+    svc.group_changed([g.id])
+    return g.model_dump()
+
+
 @router.post("/groups", response_model=GroupRecord)
 async def groups_create(svc: Svc, body: GroupCreate):
     g = await asyncio.to_thread(svc.require_groups().create, body.name, body.parent_id, body.x, body.y)

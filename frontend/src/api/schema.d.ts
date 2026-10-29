@@ -251,6 +251,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/bin/homes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bin Home
+         * @description U2 (G1): a named home of the Bin, made with its parents when missing (the Look's style samples go in `world/look`).
+         */
+        post: operations["bin_home_bin_homes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/blobs/{sha}": {
         parameters: {
             query?: never;
@@ -8007,17 +8027,27 @@ export interface components {
             /** Items */
             items: components["schemas"]["GroupItem"][];
             /**
+             * Kind
+             * @default album
+             * @enum {string}
+             */
+            kind: "album" | "bin" | "role";
+            /**
              * Locked
              * @default false
              */
             locked: boolean;
             /** Name */
             name: string;
+            /** Path */
+            path: string | null;
             /**
              * Revision
              * @default 0
              */
             revision: number;
+            /** Role */
+            role: string | null;
             /**
              * Schema Version
              * @default 1
@@ -8246,6 +8276,15 @@ export interface components {
              * @constant
              */
             type: "hello";
+        };
+        /** HomeAsk */
+        HomeAsk: {
+            /**
+             * Path
+             * @description U2 (D157, G1): a named home of the Bin; an entity's, a shot's or a cut's comes with its record
+             * @enum {string}
+             */
+            path: "world/look" | "world/sketches" | "imports";
         };
         /**
          * I2I
@@ -14971,6 +15010,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["VstPluginList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bin_home_bin_homes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HomeAsk"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupRecord"];
                 };
             };
             /** @description Validation Error */

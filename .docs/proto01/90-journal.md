@@ -11532,7 +11532,7 @@ beside `after` and put between it and the node it led to.
 
 No visible change in the current UI: a second link to a taken camera now gets a camera of its own.
 
-## 2026-10-29 01:36 — U2c (G2): the Look's sample scene is the project's own (D157, proto01_UI2 03 §6, F3)
+## 2026-10-29 01:31 — U2c (G2): the Look's sample scene is the project's own (D157, proto01_UI2 03 §6, F3)
 
 The walkthrough judged a harbour story's styles on "a cyber spy in an office", the app-wide scene of Settings › Samples.
 
@@ -11547,3 +11547,46 @@ The walkthrough judged a harbour story's styles on "a cyber spy in an office", t
 
 **Checks:** the Story backend tests (31) and Vitest 611 + 3 skipped pass; typecheck, build, lint and `settings_audit` (319, 0) are clean;
 the API contract was regenerated. U2's e2e runs with U2d.
+
+## 2026-10-29 01:47 — U2d (G1, part 1): the Bin's tree of homes; each version's pages are its home's role children (D157, proto01_UI2 05 §2, 06 §1.2)
+
+**The records.**
+
+- `GroupRecord` gains `kind` (`album` · `bin` · `role`), `path` and `role`. A file before U2 reads as an album page.
+- `GroupStore.create` takes them, and `GroupStore.mark` sets them.
+- `loom2/bins.py`:
+  - `home(groups, path, names)` makes a home with its parents, the top one on the album (World › Characters / Props / Places / Look /
+    Sketches, Shots, Episode, Imports). A home's name follows its record's.
+  - `version_home(groups, profile, vid)` is `world/<class>/<profile id>/<version>`, named after the entity and the version's label.
+  - `as_role` moves a page under a home and marks its role.
+
+**Where pages go now.**
+
+- A new profile's reference set is made inside its version's home (`create_profile`), and so is a version's candidates page
+  (`ensure_candidates`).
+- A new version's copy goes into the new version's home (`new_version`).
+- Every reader of `v.group_id` (mentions, staleness, Cast) reads on unchanged.
+- The current UI's new style groups go into `world/look` (`POST /bin/homes`, which only makes the named homes).
+
+**The migration**, `migrate_bins`, runs once at open (`groups/bins.json`) and its note joins the open's recovery list:
+
+- each version's reference set and candidates page under its home;
+- each style's sample group under `world/look`;
+- a Flow board used by exactly one Shot under `shots/<shot>`. A board two Shots share stays where it was.
+
+**In the current UI**, the album now shows the tree: World › Characters › Ines › v1 › "Ines · v1".
+
+**Tests:**
+
+- `test_bins_u2.py` (2): a version's home and its role pages through create, candidates and new version; the migration of today's
+  pages, styles and boards, once;
+- the D37 route snapshot gains `/bin/homes`;
+- the "used by" e2e scenario reaches the reference set through its home.
+
+**Checks:**
+
+- offline 703 passed (then the snapshot fix); Vitest 611 + 3 skipped; typecheck, build and lint clean;
+- e2e 78/79 in the full run (alone): the one failure was that scenario looking for the page on the album root, fixed and passed alone;
+- `agents_check`, `model_literals_check` and `settings_audit` (319, 0) clean; the API contract regenerated.
+
+This entry also corrects the time in the U2c entry's header (01:36 → 01:31, the clock's).

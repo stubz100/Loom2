@@ -22,7 +22,7 @@ export function StyleTiles({ value, onChange, size = 48, showText = false }: { v
   useEffect(() => { if (open && !sy().world && !sy().loading) void sy().load(); if (open && !useAlbum.getState().tree) void useAlbum.getState().load() }, [open])   // once per project open
   const styles = world?.styles ?? []
   if (!styles.length) return (
-    <div className="style-tiles-empty"><span>Styles are made in Story · World</span><CommandButton id="story.world.open" text /></div>
+    <div className="style-tiles-empty"><span>Styles are made in World's Look</span><CommandButton id="story.world.open" text /></div>
   )
   const items = pickerItems(styles, world?.default_style, (s) => styleFace(s, tree), (id) => api.thumbUrl(id, 256), <Ban size={Math.round(size * 0.45)} />)
   return (

@@ -148,7 +148,7 @@ registerCommands([
   { id: 'stage.set.toPlace', scope: 'stage', label: 'Make it a Cast place…', icon: MapPin, placement: ['inspector', 'context'],
     hint: "a Cast place with this set's picture as its set picture, and Build the set ▶ on it: a room, a corridor or a street fitted to the picture",
     when: () => sel()?.kind === 'set' && sel()?.preset === 'image' && !!sel()?.plate_asset_id, run: () => void st().setToPlace(st().selected!) },
-  { id: 'stage.figure.openInCast', scope: 'stage', label: 'Edit in Cast', icon: UserRound, placement: ['inspector', 'context'], when: () => !!sel()?.profile_id,
+  { id: 'stage.figure.openInCast', scope: 'stage', label: 'Edit in World', icon: UserRound, placement: ['inspector', 'context'], when: () => !!sel()?.profile_id,
     run: () => { const o = sel(); if (o?.profile_id) void import('../../store/origin').then((m) => m.goToStory({ tab: 'cast', id: o.profile_id!, ...(o.version ? { version: o.version } : {}) })) } },
   // ST3: the frame (the Render tab; D90 02 §8.1: a shot is a Story shot)
   { id: 'stage.shot.generate', scope: 'stage', label: 'Render frame', icon: Aperture, placement: ['panel', 'context'], when: () => hasStage() && !!st().activeCamera() && !st().rendering,

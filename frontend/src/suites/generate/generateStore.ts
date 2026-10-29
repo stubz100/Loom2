@@ -592,7 +592,7 @@ export const useGenerate = create<GenerateState>()(
         if (!gid) return null
         return get().generate(false, withIdea(castOrigin(prof.id, v.id, gid)), {                 // V76: a look made under the idea chip is the idea's too
           text: ` — they land as ${prof.name}'s candidates (add ✓ the good ones to the reference set, make one the hero)`,
-          action: { label: `Open ${prof.name} in Cast`, run: () => void import('../../store/origin').then((m) => m.goToStory({ tab: 'cast', id: prof.id, version: v.id })) } })
+          action: { label: `Open ${prof.name} in World`, run: () => void import('../../store/origin').then((m) => m.goToStory({ tab: 'cast', id: prof.id, version: v.id })) } })
       },
       // ---- D115: Expand ----
       setRun: (run) => set({ run }),
@@ -642,7 +642,7 @@ export const useGenerate = create<GenerateState>()(
           const batch = jobs.jobs[0] ? batchOf(jobs.jobs[0]) : null
           set({ lastBatch: batch, show: 'batch' })
           ss.toast(`${stage ? 'Queued for later' : 'Queued'}: ${jobs.jobs.length} image${jobs.jobs.length === 1 ? '' : 's'} for ${cells.length} pose${cells.length === 1 ? '' : 's'}` +
-            (prof ? ` — they land as ${prof.name}'s candidates in Cast` : ''), 'success')
+            (prof ? ` — they land as ${prof.name}'s candidates in World` : ''), 'success')
           await ss.refreshAll()
           if (p.seed_mode === 'increment') get().set({ seed: p.seed + p.count })
           return jobs.jobs

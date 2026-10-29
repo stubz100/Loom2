@@ -50,9 +50,9 @@ describe('D93 (A9) the description', () => {
     expect(needsLook('a red-haired diver', 'char01')).toBe(false)
   })
   it('the warning line: the ask first, then the name-only warning, else nothing', () => {
-    expect(html(<SubjectWarn name="char01" nameOnly ask={false} refs={0} />).textContent).toBe('the model only sees the name — describe the look in Cast')   // D93 (B4): the sheet is Cast's
+    expect(html(<SubjectWarn name="char01" nameOnly ask={false} refs={0} />).textContent).toBe('the model only sees the name — describe the look in World')   // D93 (B4): the sheet is Cast's
     expect(html(<SubjectWarn name="char01" nameOnly ask={false} refs={3} />).textContent).toContain('(and its reference images)')
-    expect(html(<SubjectWarn name="char01" nameOnly ask refs={0} />).textContent).toContain("describe char01's look in Story · Cast first")
+    expect(html(<SubjectWarn name="char01" nameOnly ask refs={0} />).textContent).toContain("describe char01's look in World first")
     expect(html(<SubjectWarn name="char01" nameOnly={false} ask={false} refs={0} />).textContent).toBe('')
   })
 })

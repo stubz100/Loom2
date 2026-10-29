@@ -280,7 +280,7 @@ export const useAnimate = create<AnimateState>()(
           if (onScreen) {
             followed = { from, to: d.clip_id }
             get().select(d.clip_id)
-            s.toast('Clip ready — playing in Animate', 'success')
+            s.toast('Clip ready — playing at Performance', 'success')
             return
           }
           const c = r.items.find((x) => x.id === d.clip_id)

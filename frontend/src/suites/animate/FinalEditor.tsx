@@ -258,7 +258,7 @@ async function pickLine(at: { clientX: number; clientY: number }): Promise<void>
   const items: MenuItem[] = lines.length
     ? lines.map((ln) => ({ label: `${ln.speaker_name ?? 'someone'}: "${ln.text.length > 40 ? `${ln.text.slice(0, 40)}…` : ln.text}"${ln.duration_s ? ` · ${ln.duration_s.toFixed(1)} s` : ''}${ln.layer_id ? '' : ' · no layer of theirs here'}`,
         run: () => { void cp().attachLine(ln) } }))
-    : [{ label: 'No voiced line in this shot — voice one in Story · Flow (🎙)', disabled: true, run: () => {} }]
+    : [{ label: "No voiced line in this shot — voice one in Shots' Flow (🎙)", disabled: true, run: () => {} }]
   showMenu(at, items)
 }
 

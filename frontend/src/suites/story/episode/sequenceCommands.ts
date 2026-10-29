@@ -182,7 +182,7 @@ registerCommands([
   { id: 'story.episode.revealMovie', scope: 'story', label: 'Reveal the movie in its folder', icon: FolderOpen, placement: ['inspector'], when: () => !!movieFile(),
     run: () => { const f = movieFile(); if (f) void revealPath(f) } },
   { id: 'story.episode.openClip', scope: 'story', label: 'Open the clip in the player', icon: Pause, placement: ['inspector', 'context'], when: () => hasSel() || !!selCut()?.item.clip_id,
-    run: () => { const id = isCut() ? selCut()?.item.clip_id : sq().lane!.clips[sq().selected!].source; if (id) { an().select(id); useSession.getState().toast('Opened in the clip player (Animate · Performance)', 'info') } } },
+    run: () => { const id = isCut() ? selCut()?.item.clip_id : sq().lane!.clips[sq().selected!].source; if (id) { an().select(id); useSession.getState().toast('Opened in the clip player (Shots · Performance)', 'info') } } },
 ])
 
 /** Right-click on a lane clip (selected by the caller) or on the lane's empty space. */

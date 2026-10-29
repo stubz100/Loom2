@@ -699,7 +699,7 @@ export const useStory = create<StoryState>()((set, get) => {
         const copies = Object.keys(r.copied).length
         const what = role === 'hero' ? `is ${p.name}'s hero` : role === 'reference' ? `${ids.length === 1 ? 'is' : 'are'} in ${p.name}'s reference set` : `${ids.length === 1 ? 'is a candidate' : 'are candidates'} of ${p.name}`
         useSession.getState().toast(`${ids.length === 1 ? 'The image' : `${ids.length} images`} ${what}${copies ? ` — ${copies === ids.length ? 'as a copy' : `${copies} as copies`}; the original${copies === 1 ? ' stays' : 's stay'} on ${copies === 1 ? 'its page' : 'their pages'}` : ''}`, 'success',
-          { label: `Open ${p.name} in Cast`, run: () => void import('../../store/origin').then((m) => m.goToStory({ tab: 'cast', id: pid, version: into })) })
+          { label: `Open ${p.name} in World`, run: () => void import('../../store/origin').then((m) => m.goToStory({ tab: 'cast', id: pid, version: into })) })
         return r
       } catch (e) { toast(`Add to ${p.name}: ${detail(e)}`); return null }
     },

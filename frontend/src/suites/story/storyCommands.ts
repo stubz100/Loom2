@@ -125,7 +125,7 @@ export const STEP_VERB: Record<Step, (v: ShotVersion, c: Cell) => { label: strin
   lines: () => ({ label: 'Write its lines in Flow' }),
   voice: () => ({ label: 'Voice its lines' }),
   frame: (v) => ({ label: v.stage_id ? 'Make frame from the stage (Image)' : 'Make frame in Image', always: true }),
-  stage: (v) => ({ label: v.stage_id ? 'Open the stage (Animate · Clay)' : 'Link a stage camera…', always: true }),
+  stage: (v) => ({ label: v.stage_id ? 'Open the stage (Shots · Clay)' : 'Link a stage camera…', always: true }),
   clip: (v) => ({ label: v.stage_id ? 'Make clip on the stage (Animate)' : 'Make clip in Animate', always: true }),
   final: (v) => ({ label: v.stage_id ? 'The final shot (Animate)' : 'Link a stage camera first', always: !!v.stage_id }),
   lipsync: (v) => ({ label: routeOf(v).startsWith('clay') ? 'The Lip-sync pass (the final shot)' : 'Lip-sync ▶ (experimental)', always: true }),
@@ -312,7 +312,7 @@ const cmds: Command[] = [
   { id: 'story.world.openStyleGroup', scope: 'story', label: 'Open the samples in the Bin', icon: FolderOpen, placement: ['inspector', 'context'],
     when: () => !!style()?.group_id && !!findNode(useAlbum.getState().tree, style()?.group_id),
     run: () => { const g = style()?.group_id; if (g) openGroupPage(g) } },
-  { id: 'story.world.open', scope: 'story', label: 'Open Story · World', icon: BookOpen, placement: ['panel', 'context'], when: () => !!useSession.getState().project?.open,
+  { id: 'story.world.open', scope: 'story', label: "Open World's Look", icon: BookOpen, placement: ['panel', 'context'], when: () => !!useSession.getState().project?.open,
     run: () => { sy().setSection('styles'); navigate({ suite: 'story', tab: 'world' }) } },
   { id: 'story.world.defaultStyle', scope: 'story', label: 'Make it the default style', icon: Star, placement: ['inspector', 'context'], when: () => selStyle() && sy().world?.default_style !== selected()?.id,
     run: () => { const s = selected(); if (s?.kind === 'style') sy().setDefaultStyle(s.id) } },
@@ -324,7 +324,7 @@ const cmds: Command[] = [
   { id: 'story.world.entryPicture', scope: 'story', label: 'Make a new picture', icon: ImagePlus, placement: ['inspector', 'context'], hint: 'one small image on the sample model (Settings › Samples), run now',
     when: () => { const e = entry(); return !!e && needsPicture(e.field, e.text) && projectOpen() && !!sampleModel() && !swatchJob(useSession.getState().jobs, e.field, e.text) },
     run: () => { const e = entry(); if (e) void useSwatches.getState().make([{ field: e.field, value: e.text }]).then((n) => { if (n) useSession.getState().toast(`A new picture for “${e.name}” is queued`, 'info') }) } },
-  { id: 'story.world.editEntry', scope: 'story', label: 'Edit in Story · World', icon: Pencil, placement: ['context'], when: () => !!entry() || !!panelName(),
+  { id: 'story.world.editEntry', scope: 'story', label: "Edit in World's Look", icon: Pencil, placement: ['context'], when: () => !!entry() || !!panelName(),
     run: () => openWorld(entry() ? 'library' : 'panels') },
   { id: 'story.world.entryEarlier', scope: 'story', label: 'Move earlier', icon: ChevronLeft, placement: ['inspector', 'context'], when: () => entryAt(-1), run: () => { const e = entry(); if (e) void useLibrary.getState().move(e.id, -1) } },
   { id: 'story.world.entryLater', scope: 'story', label: 'Move later', icon: ChevronRight, placement: ['inspector', 'context'], when: () => entryAt(1), run: () => { const e = entry(); if (e) void useLibrary.getState().move(e.id, 1) } },
@@ -505,15 +505,15 @@ const cmds: Command[] = [
   // D90 (01 §11.2): a take becomes the version's frame or clip (the take card's ✓ use and its right-click)
   { id: 'story.shot.useTake', scope: 'story', label: 'Use this take', icon: Check, placement: ['toolbar', 'context'], hint: 'a frame take becomes the version\'s frame, a clip take its clip', when: takeUsable,
     run: () => { const t = storyItem.take; storyItem.take = undefined; if (t) void sy().useTake(t.kind, t.id) } },
-  { id: 'story.shot.openStage', scope: 'story', label: 'Open the stage (Animate · Clay)', icon: Shapes, placement: ['strip', 'inspector', 'context'], when: () => !!shotVersion()?.stage_id,
+  { id: 'story.shot.openStage', scope: 'story', label: 'Open the stage (Shots · Clay)', icon: Shapes, placement: ['strip', 'inspector', 'context'], when: () => !!shotVersion()?.stage_id,
     run: () => { if (shotTarget()?.stage_id) { openStageRoute('clay'); return } const v = shotVersion(); if (v?.stage_id) openStageAt(v.stage_id, v.camera_id) } },   // D125: in context while open
   // D125 (S11): an existing shot pointed at a stage camera (no second shot); a new stage made for it; its final shot opened in context
   { id: 'story.shot.linkStage', scope: 'story', label: 'Link a stage camera…', icon: Link, hint: 'this version takes a stage camera as its source — its stills and clips come back by the camera', placement: ['inspector', 'context'],
     when: () => projectOpen() && !!shotTarget(), run: () => { const s = shot(); const v = shotTarget(); if (s && v) sy().setLinkFor({ shotId: s.id, version: v.id }) } },
-  { id: 'story.shot.blockOnStage', scope: 'story', label: 'Block it on a stage…', icon: Shapes, hint: 'a new stage named after the shot, its camera linked; Animate · Clay opens on it for this shot', placement: ['inspector', 'context'],
+  { id: 'story.shot.blockOnStage', scope: 'story', label: 'Block it on a stage…', icon: Shapes, hint: 'a new stage named after the shot, its camera linked; Shots · Clay opens on it for this shot', placement: ['inspector', 'context'],
     when: () => projectOpen() && !!shotTarget() && !shotTarget()?.stage_id,
     run: () => { const s = shot(); const v = shotTarget(); if (!s || !v) return
-      void askConfirm({ title: `Block ${s.name} on a new stage?`, okLabel: 'Make the stage', text: `A stage named ${s.name} with one camera, linked to ${s.name} ${v.id}; Animate · Clay opens on it, the speakers bound to its figures as you add them.` })
+      void askConfirm({ title: `Block ${s.name} on a new stage?`, okLabel: 'Make the stage', text: `A stage named ${s.name} with one camera, linked to ${s.name} ${v.id}; Shots · Clay opens on it, the speakers bound to its figures as you add them.` })
         .then(async (ok) => { if (!ok) return
           try {
             const { http, unwrap } = await import('../../api/client')
@@ -697,7 +697,7 @@ const cmds: Command[] = [
       void import('../generate/generateStore').then((g) => {
         g.useGenerate.getState().useAsSubject(p); navigate({ suite: 'generate', tab: 'prompt' })
         useSession.getState().toast(`${p.name} is a subject in Image's Tree prompt — its reference set${version()?.lora ? ' and LoRA' : ''} follow`, 'info') }) } },
-  { id: 'story.cast.openInStory', scope: 'story', label: 'Open in Story · Cast', icon: Users, placement: ['context'], when: () => !!profile(),
+  { id: 'story.cast.openInStory', scope: 'story', label: 'Open in World', icon: Users, placement: ['context'], when: () => !!profile(),
     run: () => { const p = profile(); if (p) revealClass(p.cls); navigate({ suite: 'story', tab: 'cast' }) } },
   { id: 'story.cast.delete', scope: 'story', label: 'Delete profile', icon: Trash2, placement: ['inspector', 'context'], danger: true, when: () => !!profile(),
     run: () => { const p = profile(); if (!p) return

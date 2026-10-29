@@ -21,9 +21,9 @@ export function CastButton({ offer, onCast }: { offer: CastOffer | null; onCast:
 
 /** The line under the sheet: the casting run's ask first, else the name-only warning. D93 (B4): the look is written in Cast. */
 export function SubjectWarn({ name, nameOnly, ask, refs }: { name: string; nameOnly: boolean; ask: boolean; refs: number }) {
-  if (ask) return <p className="subject-warn ask" role="status">describe {name}'s look in Story · Cast first — the casting run renders the sheet</p>
+  if (ask) return <p className="subject-warn ask" role="status">describe {name}'s look in World first — the casting run renders the sheet</p>
   if (!nameOnly) return null
-  return <p className="subject-warn" role="status">the model only sees the name{refs ? ' (and its reference images)' : ''} — describe the look in Cast</p>
+  return <p className="subject-warn" role="status">the model only sees the name{refs ? ' (and its reference images)' : ''} — describe the look in World</p>
 }
 
 /** D93 (B5): the version chip — which version (costume, age, look) of the character the subject uses; a press opens the versions. */
@@ -39,9 +39,9 @@ export function SheetView({ i, v, name, outfitOverridden, onEdit, cls = 'charact
   const colours = (v?.colours ?? []).filter((c) => c.object.trim())
   return (
     <div className="subject-sheet" id={domId ?? `gen-subject-sheet-${i}`} tabIndex={-1} aria-label={`${name}'s sheet`}>
-      <div className="sheet-head"><span>{name}'s sheet{v ? ` · ${versionName(v)}` : ''} — from Story · Cast</span>
-        <button type="button" className="quiet" title={`Edit ${name}'s sheet in Story · Cast — every linked subject follows`} onClick={onEdit}><PenLine size={12} /> edit in Cast</button></div>
-      {!v || sheetEmpty(v, cls) ? <p className="sheet-empty">no look yet — the sheet in Cast is empty</p> : <>
+      <div className="sheet-head"><span>{name}'s sheet{v ? ` · ${versionName(v)}` : ''} — from World</span>
+        <button type="button" className="quiet" title={`Edit ${name}'s sheet in World — every linked subject follows`} onClick={onEdit}><PenLine size={12} /> edit in World</button></div>
+      {!v || sheetEmpty(v, cls) ? <p className="sheet-empty">no look yet — the sheet in World is empty</p> : <>
         {v.appearance.trim() && <p className="sheet-look">{v.appearance}</p>}
         {cls === 'character' && v.outfit.trim() && <p className={`sheet-row${outfitOverridden ? ' over' : ''}`}><span className="k">outfit</span> <span className="v">{v.outfit}</span></p>}
         {colours.length > 0 && <p className="sheet-row"><span className="k">colours</span> {colours.map((c, k) => <span key={k} className="colour-chip" title={sentColours({ colours: [c] })[0]}><i style={{ background: c.hex }} />{c.object}</span>)}</p>}

@@ -21,7 +21,7 @@ export async function newPropFrom(mesh: Mesh, name: string, done?: Done): Promis
   if (!next) return null
   const source = mesh.parents?.[0]
   if (source) await st.addToProfile(p.id, [source], 'hero')
-  useSession.getState().toast(`${p.name} is a Cast prop — this is its 3D model`, 'success', { label: `Open ${p.name} in Cast`, run: open(p.id, p.current) })
+  useSession.getState().toast(`${p.name} is a Cast prop — this is its 3D model`, 'success', { label: `Open ${p.name} in World`, run: open(p.id, p.current) })
   done?.(p.id)
   return next
 }
@@ -30,7 +30,7 @@ export async function newPropFrom(mesh: Mesh, name: string, done?: Done): Promis
 export async function intoProp(mesh: Mesh, p: Profile, done?: Done): Promise<Profile | null> {
   const next = await useStory.getState().setPropModel(p.id, p.current, mesh.id)
   if (!next) return null
-  useSession.getState().toast(`This is ${p.name}'s 3D model now (${p.current})`, 'success', { label: `Open ${p.name} in Cast`, run: open(p.id, p.current) })
+  useSession.getState().toast(`This is ${p.name}'s 3D model now (${p.current})`, 'success', { label: `Open ${p.name} in World`, run: open(p.id, p.current) })
   done?.(p.id)
   return next
 }

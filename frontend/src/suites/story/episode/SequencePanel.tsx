@@ -54,7 +54,7 @@ export function SequencePanel() {
         {(() => {
           const order = flowOrder(flowGraph, flowNodes, shots).map((r) => r.shot.id)                  // D125 (S13): the Flow's order
           const rows = shotRows(shots, clips).sort((x, y) => order.indexOf(x.sh.id) - order.indexOf(y.sh.id)).map((r) => ({ ...r, node: r.sh.owner_node ? flowNodes[r.sh.owner_node] : undefined }))
-          if (!rows.length) return <span className="hint">No shot has a clip yet — Story · Shots.</span>
+          if (!rows.length) return <span className="hint">No shot has a clip yet — Shots makes them.</span>
           return rows.map(({ sh, v, c, node }) => (
             <div key={sh.id} className={`seq-clip-card shot${v.state === 'final' ? ' final' : ''}`} data-shot={sh.id} title={`${sh.name} ${v.id} · ${v.state}${node ? ` · node ${node.title || node.type}` : ' · unbound'} · ${c.frames} f @ ${c.fps} · ${c.w}×${c.h}`}
               onPointerDown={(e) => beginDrag(e, () => ({ items: [{ kind: 'asset', id: c.asset_id ?? c.id, media: 'video' }], from: 'shots-bin', thumb: c.asset_id ? api.thumbUrl(c.asset_id, 256) : undefined, label: sh.name }))}>
@@ -68,7 +68,7 @@ export function SequencePanel() {
       <SoundBin />
       <div className="seq-bin">
         <div className="seq-list-head"><b>Clips</b><span className="hint">{current ? 'drag onto the lane, or +' : 'open a cut first'}</span></div>
-        {!clips.length && <span className="hint">No clips in this project yet — Animate makes them.</span>}
+        {!clips.length && <span className="hint">No clips in this project yet — Shots' Performance makes them.</span>}
         {clips.map((c) => (
           <div key={c.id} className="seq-clip-card" title={`${c.frames} frames @ ${c.fps} fps · ${c.w}×${c.h}`}
             onPointerDown={(e) => beginDrag(e, () => ({ items: [{ kind: 'asset', id: c.asset_id ?? c.id, media: 'video' }], from: 'sequence-bin', thumb: c.asset_id ? api.thumbUrl(c.asset_id, 256) : undefined, label: c.id }))}>

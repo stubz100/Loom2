@@ -49,17 +49,17 @@ registerCommands([
   { id: 'anim.clearEnd', scope: 'animate', label: 'Clear end frame', icon: X, placement: ['panel', 'context'], when: () => !!an().panel.end, run: () => an().setEnd(null) },
   // transport — D90 (02 §8.2): the one key set of Animate, the Stage timeline and the Episode lane; `,` `.` and Shift+, / Shift+. stay as alternates
   // D99 (UX0 #19): the viewer levels by number — 1 goes to Clay (the stage) from here; the strip's switch is their mouse home
-  { id: 'anim.level.clay', scope: 'animate', label: 'Animate · Clay', keys: '1', placement: ['strip'], run: () => navigate({ suite: 'stage' }) },
+  { id: 'anim.level.clay', scope: 'animate', label: 'Shots · Clay', keys: '1', placement: ['strip'], run: () => navigate({ suite: 'stage' }) },
   // AE1 / AP1 (D114): the Final level — the composition's frames; its own transport (the clip player's keys stay the clip's)
-  { id: 'anim.level.performance', scope: 'animate', label: 'Animate · Performance', keys: '2', placement: ['strip'], run: () => navigate({ suite: 'animate' }) },
-  { id: 'anim.level.final', scope: 'animate', label: 'Animate · Final', keys: '3', placement: ['strip'], run: () => navigate({ suite: 'final' }) },
+  { id: 'anim.level.performance', scope: 'animate', label: 'Shots · Performance', keys: '2', placement: ['strip'], run: () => navigate({ suite: 'animate' }) },
+  { id: 'anim.level.final', scope: 'animate', label: 'Shots · Final', keys: '3', placement: ['strip'], run: () => navigate({ suite: 'final' }) },
   // RC1 (D96, proto01_animate 28): the Graph — the For chip's shot's recipe over the viewer, in whichever mode is on
   { id: 'anim.level.graph', scope: 'animate', label: "Animate · Graph (the shot's recipe)", icon: Workflow, keys: '4', placement: ['strip'], run: () => { const s = useSession.getState(); s.setUi({ graph: !s.ui.graph }) } },
   // D121 (AW3): the Shot stepper's steps — each opens the level and card where the step's verb is (the foot); the frame's is stage.frame.make
-  { id: 'anim.step.passes', scope: 'animate', label: 'The passes (Animate · Clay)', icon: Layers, placement: ['panel'], run: () => navigate({ suite: 'stage' }) },
+  { id: 'anim.step.passes', scope: 'animate', label: 'The passes (Shots · Clay)', icon: Layers, placement: ['panel'], run: () => navigate({ suite: 'stage' }) },
   { id: 'anim.step.clip', scope: 'animate', label: "The stage's clip (Performance · Stage clip)", icon: Clapperboard, placement: ['panel'], run: () => { useAnimRoute.getState().set('clip'); navigate({ suite: 'animate' }) } },
   { id: 'anim.step.final', scope: 'animate', label: 'The final shot (Performance · Final shot)', icon: Layers, placement: ['panel'], run: () => { useAnimRoute.getState().set('final'); navigate({ suite: 'animate' }) } },
-  { id: 'anim.step.final.open', scope: 'animate', label: "The final's composition (Animate · Final)", icon: Film, placement: ['panel'],
+  { id: 'anim.step.final.open', scope: 'animate', label: "The final's composition (Shots · Final)", icon: Film, placement: ['panel'],
     run: () => void Promise.all([import('../stage/finalShot'), import('../stage/stageStore')]).then(([m, s]) => {     // the stage's newest final with a composition, else the Final level as it is
       const id = s.useStage.getState().current?.id
       const f = m.newestFinal(m.useFinals.getState().finals, id)

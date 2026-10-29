@@ -65,10 +65,10 @@ function FieldPresets({ field, value, onChange, section }: { field: FieldKey; va
   const chosen = items.filter((i) => has.has(i.text.toLowerCase()))
   return (
     <PresetPanel label={`${FIELD_LABEL[field]} presets`} size={pic ? 44 : 38} showText={showText} onShowText={(on) => setText(section, on)} items={items} chosen={chosen}
-      selected={chosen.map((i) => i.id)} title={`The ${FIELD_LABEL[field]} presets: pick, save the current words, make a picture, edit, remove (Story · World holds them)`}
+      selected={chosen.map((i) => i.id)} title={`The ${FIELD_LABEL[field]} presets: pick, save the current words, make a picture, edit, remove (World's Look holds them)`}
       empty={<>No {FIELD_LABEL[field]} presets yet — type the words and save them here.</>}
       canSave={!!value.trim()} saveWhy={`type ${FIELD_LABEL[field]} words first`} saveLabel={`Save the current ${FIELD_LABEL[field]} as a preset…`}
-      onSave={(name) => useLibrary.getState().add(field, value, name).then((e) => { if (e) useSession.getState().toast(`“${e.name}” is in the library (Story · World)`, 'info') })}
+      onSave={(name) => useLibrary.getState().add(field, value, name).then((e) => { if (e) useSession.getState().toast(`“${e.name}” is in the library (World's Look)`, 'info') })}
       onPick={(id) => { const it = items.find((i) => i.id === id); if (it) toggle(it.text) }}
       onContext={(id, e) => {
         const it = items.find((i) => i.id === id)
@@ -162,7 +162,7 @@ export function HoldsChip({ i, s }: { i: number; s: Subject }) {
   if (!held) return <button type="button" className="quiet holds-btn" aria-haspopup="menu" title="This subject holds a Cast prop — its sheet and its images go with the subject" onPointerDown={(e) => openPressMenu(e, menu)}><Hand size={12} /> holds ▸</button>
   const img = heroUrl(held)
   return (
-    <span className="holds-chip" title={`holding ${held.name} — its sheet and reference images follow from Story · Cast`}>
+    <span className="holds-chip" title={`holding ${held.name} — its sheet and reference images follow from World`}>
       <button type="button" className="quiet" aria-haspopup="menu" aria-label={`subject ${i + 1} holds ${held.name}`} onPointerDown={(e) => openPressMenu(e, menu)}>
         {img ? <img src={img} alt="" /> : <span className="glyph">{fieldGlyph('prop')}</span>}holds {held.name} ▾</button>
       <SubjectSlots slots={slots} />
@@ -551,11 +551,11 @@ function SavedSection() {
             <PresetPanel label="saved panels" size={44} showText items={items} selected={g.lastPreset} chosen={last ? [last] : []}
               title="The saved panels: apply one, save the current panel, rename, delete" empty="None yet — Save the current panel keeps every field under a name."
               saveLabel="Save the current panel…" onSave={(name) => g.savePreset(name || `Panel ${g.presets.length + 1}`)}
-              onPick={(id) => g.applyPreset(id)} onContext={(id, e) => { sy().select({ kind: 'panel', id }); showMenu(e, [{ cmd: 'story.world.applyPanel', label: 'Apply' }, { cmd: 'story.world.renamePanel' }, { cmd: 'story.world.editEntry', label: 'Show in Story · World' }, sep, { cmd: 'story.world.remove', label: `Delete "${id}"…` }]) }}
+              onPick={(id) => g.applyPreset(id)} onContext={(id, e) => { sy().select({ kind: 'panel', id }); showMenu(e, [{ cmd: 'story.world.applyPanel', label: 'Apply' }, { cmd: 'story.world.renamePanel' }, { cmd: 'story.world.editEntry', label: "Show in World's Look" }, sep, { cmd: 'story.world.remove', label: `Delete "${id}"…` }]) }}
               verbs={(focused) => {
                 if (!focused) return <span className="hint">Click a panel: it is applied; its verbs appear here.</span>
                 if (sy().selected?.id !== focused) sy().select({ kind: 'panel', id: focused })
-                return <CommandRow ids={['story.world.applyPanel', 'story.world.renamePanel', 'story.world.editEntry', 'story.world.remove']} labels={{ 'story.world.editEntry': 'Show in Story · World', 'story.world.remove': 'Delete' }} />
+                return <CommandRow ids={['story.world.applyPanel', 'story.world.renamePanel', 'story.world.editEntry', 'story.world.remove']} labels={{ 'story.world.editEntry': "Show in World's Look", 'story.world.remove': 'Delete' }} />
               }} />
             {!g.presets.length && <span className="hint">{g.presets.length} saved</span>}
           </div>)
@@ -597,7 +597,7 @@ function SourceSwitch() {
     <div className="gen-source">
       <span className="segmented" role="group" aria-label="Make from">
         <button type="button" className={source === 'prompt' ? 'active' : ''} aria-pressed={source === 'prompt'} onClick={() => useGenerate.setState({ source: 'prompt' })} title="Make from the prompt, references and look">Prompt</button>
-        <button type="button" className={source === 'stage' ? 'active' : ''} aria-pressed={source === 'stage'} onClick={() => useGenerate.setState({ source: 'stage' })} title="Stills from a stage: its figures and camera (the stage itself is edited in Animate · Clay)">From a stage</button>
+        <button type="button" className={source === 'stage' ? 'active' : ''} aria-pressed={source === 'stage'} onClick={() => useGenerate.setState({ source: 'stage' })} title="Stills from a stage: its figures and camera (the stage itself is edited in Shots · Clay)">From a stage</button>
       </span>
     </div>
   )

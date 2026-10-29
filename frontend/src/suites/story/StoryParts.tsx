@@ -599,7 +599,7 @@ function CastPage() {
         <h3>In {uses.length} shot{uses.length === 1 ? '' : 's'} <Help text={"The shots that use this profile — a line's speaker, a node's place, a stage figure or a prop's mesh bound to it — with each shot's route and what it still needs from this version. A click opens the shot."} /></h3>
         {uses.length ? <div className="use-list">{uses.map((u) => { const need = shotNeeds(u, cells, p.cls)
           return (
-            <button key={u.shot_id} type="button" className="use-row" data-id={u.shot_id} onClick={() => openShotRow(u.shot_id)} title="Open the shot in Story · Shots">
+            <button key={u.shot_id} type="button" className="use-row" data-id={u.shot_id} onClick={() => openShotRow(u.shot_id)} title="Open the shot in Shots">
               <b>{u.name}</b><span className="route">{ROUTE_LABEL[u.route] ?? u.route} · {u.how.join(', ')}</span><span className={need.length ? 'needs' : 'ok'}>{need.length ? `needs ${need.join(', ')}` : 'ready'}</span>
             </button>
           ) })}</div> : <span className="hint">in no shot yet</span>}

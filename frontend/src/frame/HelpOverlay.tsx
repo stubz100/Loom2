@@ -27,7 +27,7 @@ const GESTURES: Record<string, [string, string][]> = {
 
 /** D72: the gesture keys every suite shares — not remappable, listed so they are discoverable (07 §4). */
 const FIXED_ROWS: [string, string][] = [['move the selection / step frames / nudge a transform box', '← ↑ → ↓'], ['cancel, close, back out of the loupe', 'Esc'],
-  ['hold to pan in Edit · play / pause in Animate', 'Space'], ['focus mode · swap in Compare', 'Tab']]
+  ['hold to pan in Edit · play / pause in Shots', 'Space'], ['focus mode · swap in Compare', 'Tab']]
 
 /** D121: Animate's modes by their names (their suites' ids are stage · animate · final). */
 const SECTION: Record<string, string> = { stage: 'Shots · Clay', animate: 'Shots · Performance', final: 'Shots · Final', catalogue: 'Bin', generate: 'World · Make', edit: 'World · Edit' }   // B2 (D159): the layers' names

@@ -22,12 +22,12 @@ registerCommands([
   { id: 'gen.angle.clear', scope: 'generate', label: 'Remove the source', icon: X, placement: ['panel'], when: () => !!useGenerate.getState().angle.asset_id, run: () => useGenerate.getState().setAngle({ asset_id: null }) },
   { id: 'gen.savePreset', scope: 'generate', label: 'Save panel preset…', icon: Bookmark, keys: 'Ctrl+S', placement: ['panel'], run: () => { const g = useGenerate.getState(); void askText({ title: 'Save panel preset', text: 'Saves every field of the panel under this name; an existing preset of the same name is replaced.', initial: g.lastPreset ?? '', placeholder: 'preset name' }).then((n) => { if (n) void g.savePreset(n) }) } },
   // D93 (A1): a linked subject card's casting run — "Give <name> a look" / "More looks for <name>" (the card's button sets the card first)
-  { id: 'gen.subject.cast', scope: 'generate', label: 'Give the character a look', icon: Sparkles, placement: ['panel'], hint: "the panel's images land as the linked character's candidates in Story · Cast",
+  { id: 'gen.subject.cast', scope: 'generate', label: 'Give the character a look', icon: Sparkles, placement: ['panel'], hint: "the panel's images land as the linked character's candidates in World",
     when: () => { const i = subjectItem.i, g = useGenerate.getState(); const pid = i !== undefined ? g.panel.tree.subjects?.[i]?.profile_id : undefined
       const o = pid ? castOffer(profilesForMentions().find((p) => p.id === pid), 0, g.panel.tree.subjects?.[i ?? -1]?.version) : null; return !!o && !o.disabled && g.panel.prompt_mode === 'tree' && !!useSession.getState().project?.open },
     run: () => { const i = subjectItem.i; if (i !== undefined) void useGenerate.getState().castLook(i) } },
   // D93 (B4): the sheet a linked card shows is Cast's — edited there (the card's "edit in Cast", the version chip's menu); every linked subject follows
-  { id: 'gen.subject.editSheet', scope: 'generate', label: 'Edit the character sheet in Story · Cast', icon: PenLine, placement: ['panel', 'context'],
+  { id: 'gen.subject.editSheet', scope: 'generate', label: 'Edit the character sheet in World', icon: PenLine, placement: ['panel', 'context'],
     hint: 'the appearance, outfit, bound colours and marks of the version this subject uses — every linked subject follows',
     when: () => { const i = subjectItem.i; return i !== undefined && !!useGenerate.getState().panel.tree.subjects?.[i]?.profile_id },
     run: () => { const i = subjectItem.i, s = i !== undefined ? useGenerate.getState().panel.tree.subjects?.[i] : undefined
@@ -43,7 +43,7 @@ registerCommands([
   { id: 'gen.subject.unhold', scope: 'generate', label: 'Put the prop down', icon: Hand, placement: ['panel', 'context'], hint: 'the subject holds nothing — its words and images leave the prompt',
     when: () => { const i = subjectItem.i; return i !== undefined && !!useGenerate.getState().panel.tree.subjects?.[i]?.holds },
     run: () => { const i = subjectItem.i; if (i !== undefined) useGenerate.getState().holdProp(i, null) } },
-  { id: 'gen.scene.editSheet', scope: 'generate', label: 'Edit the place in Story · Cast', icon: PenLine, placement: ['panel', 'context'],
+  { id: 'gen.scene.editSheet', scope: 'generate', label: 'Edit the place in World', icon: PenLine, placement: ['panel', 'context'],
     hint: 'the look, colours and marks of the place the scene uses — the scene follows', when: () => !!useGenerate.getState().panel.tree.scene_link,
     run: () => { const l = useGenerate.getState().panel.tree.scene_link, p = l ? profilesForMentions().find((x) => x.id === l.profile_id) : undefined, v = versionOf(p, l?.version)
       if (p && v) void import('../../store/origin').then((m) => m.goToStory({ tab: 'cast', id: p.id, version: v.id })) } },

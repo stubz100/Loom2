@@ -76,7 +76,7 @@ export function SettingsModal() {
           <span className="hint">Icon scenes <Help text={`The scenes of Image's look-preset icons; {value} is the preset (added at the end when left out). Clear a field and Save to get its default back. Existing samples and icons stay — remake one from its right-click menu.`} /></span>
           <h4 id="settings-motion">Motion</h4>
           {/* CA1 (proto01_animate 02 §5): the motion library's folders — the CC0 starter set ships; the local folder is the author's own */}
-          <label>Local motion folder <Help text={"Your own downloads (Mixamo FBX at 24 fps, without skin; glb / gltf) — listed in Animate's Motion library, never bundled or copied; Adobe's terms keep Mixamo clips out of anything that trains or tests AI"} /></label>
+          <label>Local motion folder <Help text={"Your own downloads (Mixamo FBX at 24 fps, without skin; glb / gltf) — listed in Clay's motion library's Motion library, never bundled or copied; Adobe's terms keep Mixamo clips out of anything that trains or tests AI"} /></label>
           <input type="text" aria-label="local motion folder" value={draft.motion.local_dir} placeholder="e.g. F:/loom2-motion-mixamo" onChange={(e) => set({ motion: { ...draft.motion, local_dir: e.target.value } })} />
           <label>Starter set folder <Help text={"The CC0 clips that ship with loom2 (Quaternius' Universal Animation Library 1 and 2)"} /></label>
           <input type="text" aria-label="starter motion folder" value={draft.motion.starter_dir} placeholder="blank = <models root>/motion" onChange={(e) => set({ motion: { ...draft.motion, starter_dir: e.target.value } })} />
@@ -106,7 +106,7 @@ export function SettingsModal() {
           <h4 id="settings-keyboard">Keyboard</h4>
           <KeyboardSettings />
           <h4>Licences</h4>
-          <label>MiniMax H3 <Help text={"Records the confirmation that unlocks the H3 hero tier in Animate once its graph and weights land (04 §5b). Licence checks are read against EU terms."} /></label><label className="chk"><input type="checkbox" checked={!!draft.h3_licence_confirmed} onChange={(e) => set({ h3_licence_confirmed: e.target.checked })} /> the EU community-licence application is filed (D17)</label>
+          <label>MiniMax H3 <Help text={"Records the confirmation that unlocks the H3 hero tier in Shots once its graph and weights land (04 §5b). Licence checks are read against EU terms."} /></label><label className="chk"><input type="checkbox" checked={!!draft.h3_licence_confirmed} onChange={(e) => set({ h3_licence_confirmed: e.target.checked })} /> the EU community-licence application is filed (D17)</label>
           <h4>About</h4>
           <About />
         </div>

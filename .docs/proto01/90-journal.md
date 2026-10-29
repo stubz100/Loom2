@@ -13273,3 +13273,23 @@ The first full run failed 15. Their causes, all fixed above or in the scenarios:
 - the two races.
 
 Next: B3, the pages in homes.
+
+## 2026-10-29 19:13 — B2b follow-up: the old shell's place names leave the UI (D159)
+
+The UI's words still named the old shell's places: *Story · Cast*, *Story · World*, *Story · Shots*, *Image · Make*, *Animate · Clay*,
+*in Animate* and *in Cast* — about 80 strings in 28 files. They now name the layers:
+
+| Old name | New name |
+| --- | --- |
+| an entity's page in Cast | World |
+| the library, styles and samples | World's Look |
+| Animate's levels | Shots · Clay / Performance / Final |
+| Shots, the Flow, Episode | the same names, without *Story ·* |
+| a clip played in Animate | played at Performance |
+
+Some single-quoted literals gained an apostrophe and are double-quoted. The code's comments keep their history.
+
+The Models table's empty LoRA line no longer offers the training D157 dropped.
+
+**Checks:** Vitest 598 + 3 skipped (three tests read the new words); typecheck, build and lint clean (61 warnings, as before); e2e 83/83
+(alone, 5.8 min).

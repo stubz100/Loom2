@@ -31,7 +31,7 @@ export function refDrop(current: string[], p: DragPayload | DragItem[], max: num
 export function startDrop(p: DragPayload | DragItem[], opts: { tab?: boolean } = {}): { start?: string; end?: string; play?: string; verdict: DropVerdict } {
   const items = assets(p)
   if (!items.length) return { verdict: { ok: false } }
-  if (items[0].media === 'video') return opts.tab ? { play: items[0].id, verdict: { ok: true, label: 'Play this clip in Animate' } } : { verdict: { ok: false, reason: "A clip can't be the start frame" } }
+  if (items[0].media === 'video') return opts.tab ? { play: items[0].id, verdict: { ok: true, label: 'Play this clip (Performance)' } } : { verdict: { ok: false, reason: "A clip can't be the start frame" } }
   const end = items[1] && items[1].media !== 'video' ? items[1].id : undefined
   return { start: items[0].id, end, verdict: { ok: true, label: end ? 'Set the start and the end frame' : 'Set the start frame' } }
 }
@@ -49,7 +49,7 @@ export function editOpenDrop(p: DragPayload | DragItem[]): { open?: string; verd
   const items = assets(p)
   const first = images(items)[0]
   if (!items.length) return { verdict: { ok: false } }
-  if (!first) return { verdict: { ok: false, reason: 'Clips open in Animate, not Edit' } }
+  if (!first) return { verdict: { ok: false, reason: 'Clips play at Performance, not in Edit' } }
   return { open: first.id, verdict: { ok: true, label: items.length > 1 ? `Open in Edit (the first of ${items.length})` : 'Open in Edit' } }
 }
 

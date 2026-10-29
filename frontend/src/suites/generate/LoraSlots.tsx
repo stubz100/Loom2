@@ -55,7 +55,7 @@ export function LoraSlots() {
         })}
         <span className="hint">
           {opts.length === 0 ? 'no LoRA on disk for this model' : `${fitting.length} available${others.length ? `, ${others.length} for other models` : ''}`}
-          <Help text={opts.length === 0 ? 'Train one in Story · Cast (the LT wave) or put a .safetensors under the loras folder.' : 'A file LoRA declares no family: the job log names keys the engine cannot load.'} />
+          <Help text={opts.length === 0 ? 'Train one in World (the LT wave) or put a .safetensors under the loras folder.' : 'A file LoRA declares no family: the job log names keys the engine cannot load.'} />
         </span>
       </div>
     </div>

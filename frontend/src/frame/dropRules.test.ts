@@ -44,7 +44,7 @@ describe('Animate', () => {
   })
   it('a clip is not a frame: the slot refuses it, the tab plays it', () => {
     expect(startDrop(pay(clip('v'))).verdict).toEqual({ ok: false, reason: "A clip can't be the start frame" })
-    expect(startDrop(pay(clip('v')), { tab: true })).toEqual({ play: 'v', verdict: { ok: true, label: 'Play this clip in Animate' } })
+    expect(startDrop(pay(clip('v')), { tab: true })).toEqual({ play: 'v', verdict: { ok: true, label: 'Play this clip (Performance)' } })
     expect(endDrop(pay(clip('v'))).verdict).toEqual({ ok: false, reason: "A clip can't be the end frame" })
     expect(endDrop(pay(img('b')))).toEqual({ end: 'b', verdict: { ok: true, label: 'Set the end frame' } })
   })
@@ -56,7 +56,7 @@ describe('Animate', () => {
 describe('Edit', () => {
   it('opens the first image; a clip goes to Animate instead', () => {
     expect(editOpenDrop(pay(clip('v'), img('a'), img('b')))).toEqual({ open: 'a', verdict: { ok: true, label: 'Open in Edit (the first of 3)' } })
-    expect(editOpenDrop(pay(clip('v'))).verdict).toEqual({ ok: false, reason: 'Clips open in Animate, not Edit' })
+    expect(editOpenDrop(pay(clip('v'))).verdict).toEqual({ ok: false, reason: 'Clips play at Performance, not in Edit' })
   })
   it('layers take every image, clips skipped', () => {
     expect(layerDrop(pay(img('a'), clip('v'), img('b')), 'at this row')).toEqual({ take: ['a', 'b'], verdict: { ok: true, label: 'Add 2 layers at this row · 1 clip skipped' } })

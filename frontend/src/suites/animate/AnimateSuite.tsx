@@ -581,7 +581,7 @@ function ClipTab({ clip }: { clip: Clip }) {
           <dt>extend</dt><dd><CommandButton id="anim.extend" text />{' '}
             {experimental?.extend.models[clip.model_id] ? <span className="hint">{experimental.extend.caveat}</span> : <span className="hint">this model does not continue clips</span>}</dd>
           {clip.chained_from && <><dt>continues</dt><dd className="mono">{clip.chained_from} · its first {clip.overlap} frame{clip.overlap === 1 ? '' : 's'} repeat the end of it</dd></>}
-          <dt>lip-sync</dt><dd>{clip.audio_asset_id ? <><span className="badge experimental">lip-sync</span> the proxy carries the line</> : <span className="hint">made from a shot version with a voiced line: Story · Shots › Make clip ▸ Lip-sync</span>}</dd>
+          <dt>lip-sync</dt><dd>{clip.audio_asset_id ? <><span className="badge experimental">lip-sync</span> the proxy carries the line</> : <span className="hint">made from a shot version with a voiced line: Shots › Make clip ▸ Lip-sync</span>}</dd>
         </dl>
       </details>
     </div>

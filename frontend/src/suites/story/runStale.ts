@@ -34,7 +34,7 @@ export async function runStale(shotId: string, version: string): Promise<void> {
     if (!dry.plan.length) { toast('Nothing in this recipe is stale', 'info'); return }
     const label = (id: string) => dry.plan.find((p) => p.id === id)?.label.toLowerCase() ?? id
     const lines = dry.plan.map((p) => `• ${p.label}${p.seconds ? ` · ≈ ${secs(p.seconds)}` : ''}`
-      + (p.how === 'passes' ? ' — the stage\'s passes are rendered first' : p.how === 'stage' ? ' — made again on the stage (Animate · Clay)' : p.how === 'manual' ? ' — made again by hand' : '')
+      + (p.how === 'passes' ? ' — the stage\'s passes are rendered first' : p.how === 'stage' ? ' — made again on the stage (Shots · Clay)' : p.how === 'manual' ? ' — made again by hand' : '')
       + (p.after.length && p.how === 'server' ? ` — after the ${p.after.map(label).join(', ')}` : '') + ` (${p.reasons.join('; ')})`)
     const ok = await askConfirm({ title: 'Run the stale steps again?', text: `${lines.join('\n')}\n\nAbout ${secs(dry.seconds)} on the GPU, one job at a time. The results become this version's frame and clip; the old takes stay.`, okLabel: 'Run' })
     if (!ok) return

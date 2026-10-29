@@ -183,7 +183,7 @@ function FinalRow({ f }: { f: Final }) {
         {f.assembled_at && <button className={comp ? 'quiet' : 'primary'} data-compose disabled={busy} onClick={() => void useFinals.getState().compose(f.id)}
           title={comp ? 'Write the composition afresh from the layers and the assembly (the edits are dropped)' : 'An EffectCraft composition beside the final: the plate, the shadows, each prop, each character over her matte at her contact offset — the shot to finish by hand'}>
           {comp ? 'Make the composition again' : 'Make the composition'}</button>}
-        {comp && <button className="quiet" data-open-final onClick={() => useFinals.getState().openFinal(f.id)} title="Scrub and play the composition at Animate's Final level">Open in Final</button>}
+        {comp && <button className="quiet" data-open-final onClick={() => useFinals.getState().openFinal(f.id)} title="Scrub and play the composition at Shots' Final level">Open in Final</button>}
         {comp && <button className={comp.clip_id ? 'quiet' : 'primary'} data-render disabled={rendersNow} onClick={() => void useFinals.getState().render(f.id)}
           title="effectcraft-cli renders the composition on the CPU with its render settings (Animate › Final › Output; RIFE to 24 fps at F16); the clip becomes the final's and a take on its shot">
           {rendersNow ? 'Rendering…' : comp.clip_id ? 'Render again' : 'Render the finished shot'}</button>}

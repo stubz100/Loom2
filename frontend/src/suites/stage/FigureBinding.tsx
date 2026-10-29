@@ -76,10 +76,10 @@ export function LibraryProps({ centre }: { centre: () => number[] }) {
   const props = profiles.filter((p) => p.cls === 'prop')
   const modelOf = (p: Profile) => p.versions.find((v) => v.id === p.current)?.model_asset_id
   const items: PresetIcon[] = props.map((p) => ({ id: p.id, label: p.name, icon: fieldGlyph('prop'), img: propThumb(p),
-    hint: modelOf(p) ? "its 3D model at the viewport's centre, bound to the prop (its version's model follows)" : 'no 3D model yet — opens in Story · Cast to make one', badge: modelOf(p) ? undefined : '!' }))
+    hint: modelOf(p) ? "its 3D model at the viewport's centre, bound to the prop (its version's model follows)" : 'no 3D model yet — opens in World to make one', badge: modelOf(p) ? undefined : '!' }))
   const place = (id: string) => { const p = props.find((x) => x.id === id); if (!p) return; if (modelOf(p)) st().placeProp(p.id, centre()); else openProp(p.id) }
-  return <PresetPanel label="Cast props" items={items} showText onPick={place} empty="None yet — make one in Story · Cast: its images first, then its 3D model." title="A Cast prop's 3D model at the viewport's centre, bound to the prop"
-    onContext={(id, e) => { e.preventDefault(); const p = props.find((x) => x.id === id); if (p) showMenu(e, [{ label: 'Place in the scene', run: () => place(id), disabled: !modelOf(p) }, { label: 'Open in Story · Cast', run: () => openProp(id) }]) }} />
+  return <PresetPanel label="Cast props" items={items} showText onPick={place} empty="None yet — make one in World: its images first, then its 3D model." title="A Cast prop's 3D model at the viewport's centre, bound to the prop"
+    onContext={(id, e) => { e.preventDefault(); const p = props.find((x) => x.id === id); if (p) showMenu(e, [{ label: 'Place in the scene', run: () => place(id), disabled: !modelOf(p) }, { label: 'Open in World', run: () => openProp(id) }]) }} />
 }
 
 const heightWords = (h: number | null) => (h != null ? `${h.toFixed(2)} m` : 'its own size')   // CW4
@@ -91,13 +91,13 @@ export function MeshProp({ o }: { o: StageObject }) {
   const props = profiles.filter((p) => p.cls === 'prop' && p.versions.some((v) => v.model_asset_id))
   const p = o.profile_id ? profiles.find((x) => x.id === o.profile_id) : undefined
   const ver = p?.versions.find((v) => v.id === (o.version ?? p.current))
-  const items: PresetIcon[] = [...props.map((c): PresetIcon => ({ id: c.id, label: c.name, hint: `${c.current} — its 3D model, made in Story · Cast`, icon: fieldGlyph('prop'), img: propThumb(c) })),
+  const items: PresetIcon[] = [...props.map((c): PresetIcon => ({ id: c.id, label: c.name, hint: `${c.current} — its 3D model, made in World`, icon: fieldGlyph('prop'), img: propThumb(c) })),
     { id: NONE, label: 'no prop', hint: 'a mesh of its own, not a Cast prop', icon: fieldGlyph('free') }]
   return (
     <>
       <div className="kv"><span>prop</span><span className="hint">{p ? `${p.name} — ${ver?.model_asset_id ? 'its version\'s 3D model follows' : 'this version has no 3D model yet (the mesh stays)'}` : props.length ? 'bind it to a Cast prop' : 'no props with a 3D model yet'}</span></div>
       <PresetIcons label="the mesh's prop" size={40} items={items} selected={o.profile_id ?? NONE} onPick={(id) => st().bindProp(o.id, id === NONE ? null : id)}
-        onContext={(id, e) => { if (id !== NONE) showMenu(e, [{ label: 'Open in Story · Cast', run: () => openProp(id) }]) }} />
+        onContext={(id, e) => { if (id !== NONE) showMenu(e, [{ label: 'Open in World', run: () => openProp(id) }]) }} />
       {p && p.versions.length > 1 && <div className="kv"><span>version</span><select value={o.version ?? ''} aria-label="the prop's version" onChange={(e) => st().bindProp(o.id, p.id, e.target.value || null)}>
         <option value="">current ({p.current})</option>{p.versions.map((v) => <option key={v.id} value={v.id}>{v.label && v.label !== v.id ? `${v.id} · ${v.label}` : v.id}{v.model_asset_id ? '' : ' (no model)'}</option>)}</select></div>}
       <div className="kv"><span>height</span>{p                                                       /* CW4 (03 §4): the model at a height in metres */
@@ -105,7 +105,7 @@ export function MeshProp({ o }: { o: StageObject }) {
         : <span><input type="number" key={`h${o.height_m ?? ''}`} defaultValue={o.height_m ?? ''} min={0.01} max={100} step={0.05} placeholder="its own size" aria-label="the mesh's height in metres"
             onBlur={(e) => { const v = e.target.value.trim(), h = v ? Number(v) : null; if (h !== (o.height_m ?? null) && (h === null || h > 0)) st().setHeight(o.id, h) }}
             onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} /> m</span>}</div>
-      {p && <div className="verbs"><button className="quiet" onClick={() => openProp(p.id)} title="The prop's page in Story · Cast: its model, its height, its bench">Edit in Cast</button><CommandButton id="stage.object.freeCopy" text /></div>}
+      {p && <div className="verbs"><button className="quiet" onClick={() => openProp(p.id)} title="The prop's page in World: its model, its height, its bench">Edit in World</button><CommandButton id="stage.object.freeCopy" text /></div>}
       {!p && o.asset_id && <div className="verbs"><button className="quiet" data-verb="cast-prop" title="A new Cast prop with this model (bound here), or this model for a prop you have"
         onClick={(e) => { const id = o.asset_id!; const a = useStage.getState().meshes.find((m) => m.id === id)
           showMenu(e, castPropMenu({ id, parents: a?.parents ?? [] }, (pid) => st().bindProp(o.id, pid)).items) }}>Make it a Cast prop ▾</button><CommandButton id="stage.object.prototype" text /></div>}   {/* proto01_UIcast CF8; CW3: or an idea */}

@@ -7957,6 +7957,39 @@
         "title": "FlowProblems",
         "type": "object"
       },
+      "FoldedIdea": {
+        "properties": {
+          "candidates": {
+            "title": "Candidates",
+            "type": "integer"
+          },
+          "cls": {
+            "title": "Cls",
+            "type": "string"
+          },
+          "idea_id": {
+            "title": "Idea Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "profile_id": {
+            "title": "Profile Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "idea_id",
+          "profile_id",
+          "name",
+          "cls",
+          "candidates"
+        ],
+        "title": "FoldedIdea",
+        "type": "object"
+      },
       "FramesBody": {
         "properties": {
           "frames": {
@@ -10314,6 +10347,22 @@
           "variant_id"
         ],
         "title": "IdeaRef",
+        "type": "object"
+      },
+      "IdeasFolded": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FoldedIdea"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "IdeasFolded",
         "type": "object"
       },
       "IdsReply": {
@@ -33128,6 +33177,28 @@
           }
         },
         "summary": "Idea Create",
+        "tags": [
+          "ideas"
+        ]
+      }
+    },
+    "/story/ideas/fold": {
+      "post": {
+        "description": "U3 (D157, G4): every idea not kept yet folded into a draft entity of its class (World's Sketches · *Bring the ideas in*).",
+        "operationId": "ideas_fold_story_ideas_fold_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdeasFolded"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Ideas Fold",
         "tags": [
           "ideas"
         ]

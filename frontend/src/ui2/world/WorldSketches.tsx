@@ -33,7 +33,7 @@ export function SketchCentre() {
   useEffect(() => { void useSketches.getState().load() }, [])
   return (
     <div className="w-bin">
-      <div className="w-bin-head"><span className="w-path">bin/world/sketches</span></div>
+      <div className="w-bin-head"><span className="w-path">bin/world/sketches</span><span className="spacer" /><CommandButton id="world.ideas.fold" text /></div>
       {items.length ? <div className="w-grid">{items.map((a) => (
         <button key={a.id} className={`w-tile${selected === a.id ? ' selected' : ''}`} data-id={a.id} title={a.prompt_text ?? ''} onClick={() => useSketches.getState().select(a.id)}
           onContextMenu={(e) => { useSketches.getState().select(a.id); showMenu(e, MENU) }}>

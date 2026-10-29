@@ -206,6 +206,7 @@
  "POST /story/flow/validate",
  "POST /story/flow/voice",
  "POST /story/ideas",
+ "POST /story/ideas/fold",
  "POST /story/ideas/from-clay",
  "POST /story/ideas/{iid}/keep",
  "POST /story/ideas/{iid}/variants",

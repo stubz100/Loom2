@@ -454,6 +454,24 @@ def made_for_landed(q: Any, job: Any, asset_ids: list[str]) -> None:
 
 
 # ---- Keep ▶ (CW1; 06 §2.1) ------------------------------------------------------------------------------------------------------------
+def fold(ws: Workspace, groups: GroupStore) -> list[dict[str, Any]]:
+    """U3 (D157, G4; proto01_UI2 03 §7): the ideas folded into draft entities — each idea not kept yet becomes a draft profile of its class
+    (*Keep ▶* on its variant in focus: the hero, a sheet drafted from its prompt, its clay carried over), its other variants' pictures the new
+    version's candidates. The ideas stay, with where they went (`kept`), for the old Cast's board until U8. One row per idea folded."""
+    from .story import StoryStore
+    out: list[dict[str, Any]] = []
+    for idea in IdeaStore(ws).list():
+        if idea.kept or not idea.variants:
+            continue
+        vid = idea.focus if idea.focus and any(v.id == idea.focus for v in idea.variants) else idea.variants[0].id
+        p, _ = keep(ws, groups, idea.id, vid)
+        others = [v.asset_id for v in idea.variants if v.id != vid and groups.cat.get(v.asset_id) is not None]
+        if others:
+            StoryStore(ws).add_assets(p.id, p.current, others, "candidate", groups, groups.cat)
+        out.append({"idea_id": idea.id, "profile_id": p.id, "name": p.name, "cls": p.cls, "candidates": len(others)})
+    return out
+
+
 def keep(ws: Workspace, groups: GroupStore, iid: str, vid: str, profile_id: str | None = None, name: str | None = None) -> tuple[Any, Idea]:
     """A variant kept: a new Cast profile (v1) — or a new version of `profile_id` — with the variant's picture (a copy) as the hero, a sheet
     drafted from its prompt, its clay carried over (the A-pose picture as the animation reference, the fitted body and its points, the

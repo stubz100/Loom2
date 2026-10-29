@@ -2939,6 +2939,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/ideas/fold": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ideas Fold
+         * @description U3 (D157, G4): every idea not kept yet folded into a draft entity of its class (World's Sketches · *Bring the ideas in*).
+         */
+        post: operations["ideas_fold_story_ideas_fold_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/ideas/from-clay": {
         parameters: {
             query?: never;
@@ -7725,6 +7745,19 @@ export interface components {
             /** Problems */
             problems: components["schemas"]["FlowProblem"][];
         };
+        /** FoldedIdea */
+        FoldedIdea: {
+            /** Candidates */
+            candidates: number;
+            /** Cls */
+            cls: string;
+            /** Idea Id */
+            idea_id: string;
+            /** Name */
+            name: string;
+            /** Profile Id */
+            profile_id: string;
+        };
         /** FramesBody */
         FramesBody: {
             /** Frames */
@@ -8721,6 +8754,11 @@ export interface components {
             idea_id: string;
             /** Variant Id */
             variant_id: string;
+        };
+        /** IdeasFolded */
+        IdeasFolded: {
+            /** Items */
+            items: components["schemas"]["FoldedIdea"][];
         };
         /** IdsReply */
         IdsReply: {
@@ -20071,6 +20109,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ideas_fold_story_ideas_fold_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdeasFolded"];
                 };
             };
         };

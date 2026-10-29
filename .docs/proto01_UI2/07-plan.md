@@ -38,6 +38,8 @@
 
 **U2 is built** (2026-10-29 01:04 – 02:08): one Shot node (G5); the scene's stage, a shot's camera and range, *New shot* (G6, G12); the Look's sample scene (G2); the Bin's homes, its migration and every creation landing home (G1). Deferred: old projects' shared cameras and stageless shots to U4, retiring Unprocessed to U8.
 
+**U3 is built** (2026-10-29 02:30 – 03:33): World in the new shell — the rail, the entity header and its readiness, one bin with roles, the Inspector, Make scoped to the entity, Edit on a creation, Look, Sketches, the Look's words (G3, its World part) and the ideas brought in (G4). Owed, small: the header's voice field, *Import GLB…*, the Inspector's entity facts, *See in clay ▶*.
+
 **The order.** U0 can start at once. U1 and U2 are the foundation. After them, U3 and U4 can run in either order: World first follows the work's order;
 Shots first answers the author's biggest change sooner. U5 and U6 follow U4. Most of U7 can run once U6 has the shot's final.
 

@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..body import Body
 
-from ..ideas import ClayStep, Idea, IdeaClass, IdeaStore, StaleIdea, keep, plan_clay, start_step
+from ..ideas import ClayStep, Idea, IdeaClass, IdeaStore, StaleIdea, fold, keep, plan_clay, start_step
 from ..schemas import Deleted
 from ..story import Profile
 from .deps import Svc
@@ -72,6 +72,33 @@ class Kept(BaseModel):
 
 def _changed(svc, idea: Idea, **extra) -> None:
     svc.hub.broadcast("story.changed", {"kind": "idea", "id": idea.id, "revision": idea.revision, **extra})
+
+
+class FoldedIdea(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    idea_id: str
+    profile_id: str
+    name: str
+    cls: str
+    candidates: int
+
+
+class IdeasFolded(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    items: list[FoldedIdea]
+
+
+@router.post("/story/ideas/fold", response_model=IdeasFolded)
+async def ideas_fold(svc: Svc):
+    """U3 (D157, G4): every idea not kept yet folded into a draft entity of its class (World's Sketches · *Bring the ideas in*)."""
+    ws, _, _ = svc.require_project()
+    groups = svc.require_groups()
+    items = await asyncio.to_thread(fold, ws, groups)
+    for it in items:
+        svc.hub.broadcast("story.changed", {"kind": "profile", "id": it["profile_id"], "revision": 0})
+    if items:
+        svc.group_changed([])
+    return {"items": items}
 
 
 @router.get("/story/ideas", response_model=IdeaList)

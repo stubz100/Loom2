@@ -4403,3 +4403,29 @@ test('World\'s Look and Sketches (U3d, D157 · proto01_UI2 03 §6–7): the Look
   await expect(page.locator('[data-testid="world-header"]')).toContainText(`Keeper ${tag}`)
   await expect(page.locator(`.w-tile[data-id="${sketch}"] .w-badge`)).toHaveText('★')                 // the sketch is its hero
 })
+
+test('World\'s Look words and the ideas brought in (U3e, D157 · G3, G4): a Library art style joins a style\'s words; an idea of the old board becomes a draft character with its pictures', async ({ page }) => {
+  const tag = Date.now().toString(36)
+  const imgs = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=2')).items
+  type WorldLite = { revision: number; styles: { id: string; name: string; fragment: string }[] }
+  const w0 = await api<WorldLite>('GET', '/story/world')
+  const sid = `sty_${tag}`
+  await api('PUT', '/story/world', { revision: w0.revision, styles: [...w0.styles, { id: sid, name: `Grey ${tag}`, fragment: 'soft grey light' }] })
+  const idea = await api<{ id: string }>('POST', '/story/ideas', { cls: 'character', asset_id: imgs[0].id })
+  await api('POST', `/story/ideas/${idea.id}/variants`, { asset_id: imgs[1].id })
+  await page.goto(`${appUrl({ ui: '2' })}#world/look`)
+  await page.locator(`.style-grid .style-tile[data-id="${sid}"]`).click()
+  const words = page.locator('[data-testid="world-look-words"]')
+  await expect(words).toBeVisible()
+  const preset = words.locator('.w-chips button').first()
+  const text = (await preset.getAttribute('title'))!
+  await preset.click()
+  await expect.poll(async () => (await api<WorldLite>('GET', '/story/world')).styles.find((s) => s.id === sid)?.fragment, { timeout: 10_000 }).toBe(`soft grey light, ${text}`)
+  await page.locator('.w-rail-btn[aria-label="Sketches"]').click()
+  await page.locator('.w-bin-head button', { hasText: 'Bring the ideas in' }).click()
+  await page.locator('.modal.ask button.primary').click()
+  await expect.poll(async () => (await api<{ kept: { profile_id: string }[] }>('GET', `/story/ideas/${idea.id}`)).kept.length, { timeout: 15_000 }).toBe(1)
+  const pid = (await api<{ kept: { profile_id: string }[] }>('GET', `/story/ideas/${idea.id}`)).kept[0].profile_id
+  const bin = await api<{ items: { roles: string[] }[] }>('GET', `/story/profiles/${pid}/versions/v1/bin`)
+  expect(bin.items.map((x) => x.roles[0]).sort()).toEqual(['candidate', 'hero'])
+})

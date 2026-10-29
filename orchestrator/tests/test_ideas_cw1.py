@@ -143,3 +143,25 @@ async def test_make_the_clay_runs_the_chain(tmp_path: Path, object_info: dict, m
         assert rig.catalogue.get(after.made_for[0]).origin.payload[FOR_IDEA] == idea.id               # the lineage on the asset too
     finally:
         await rig.close()
+
+
+def test_the_ideas_fold_into_draft_entities(tmp_path: Path):
+    """U3 (D157, G4; proto01_UI2 03 §7): Bring the ideas in — each idea not kept yet becomes a draft entity of its class, its variant in
+    focus the hero (Keep ▶), its other variants the version's candidates; an idea kept before, or without a picture, is left; once."""
+    app, cl = _client(tmp_path)
+    with cl:
+        assert cl.post("/project", json={"path": str(tmp_path / "p"), "name": "p", "size_cap_gb": 10}).status_code == 200
+        _, cat, _ = app.state.services.require_project()
+        a, b, c = (_picture(cat, tmp_path, n, PROMPT) for n in ("a", "b", "c"))
+        girl = cl.post("/story/ideas", json={"cls": "character", "asset_id": a.id}).json()
+        girl = cl.post(f"/story/ideas/{girl['id']}/variants", json={"asset_id": b.id}).json()            # two variants, the second in focus
+        bell = cl.post("/story/ideas", json={"cls": "prop", "asset_id": c.id}).json()
+        cl.post("/story/ideas", json={"cls": "place"})                                                    # no picture: left
+        r = cl.post("/story/ideas/fold").json()["items"]
+        assert sorted((x["cls"], x["candidates"]) for x in r) == [("character", 1), ("prop", 0)]
+        prof = cl.get(f"/story/profiles/{next(x['profile_id'] for x in r if x['cls'] == 'character')}").json()
+        hero = prof["versions"][0]["hero_asset_id"]
+        bin_ = cl.get(f"/story/profiles/{prof['id']}/versions/v1/bin").json()
+        assert {tuple(x["roles"]) for x in bin_["items"]} == {("hero",), ("candidate",)} and hero not in (a.id, b.id)   # copies, the focus the hero
+        assert cl.get(f"/story/ideas/{girl['id']}").json()["kept"][0]["profile_id"] == prof["id"]        # the idea says where it went
+        assert cl.post("/story/ideas/fold").json()["items"] == [] and bell["id"]                          # once

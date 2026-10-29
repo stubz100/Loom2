@@ -47,3 +47,13 @@ describe('U3d: a prototype\'s name from its sketch', () => {
     expect(nameFrom('{broken', 'prop')).toBe('prop')
   })
 })
+
+describe('U3e: the Look\'s words', () => {
+  it('adds a preset once, after a comma', async () => {
+    const { withWords } = await import('./look')
+    expect(withWords('', 'film noir')).toBe('film noir')
+    expect(withWords('muted teal palette', 'film noir')).toBe('muted teal palette, film noir')
+    expect(withWords('muted teal palette, Film Noir', 'film noir')).toBe('muted teal palette, Film Noir')
+    expect(withWords('a', '  ')).toBe('a')
+  })
+})

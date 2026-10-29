@@ -11781,3 +11781,46 @@ and its empty home.
 clean. Backend unchanged.
 
 Next is U3e: the Library's look words in the Look (G3, the part that belongs to World), and the ideas folded into draft entities (G4).
+
+## 2026-10-29 03:33 — U3e: the Look's words from the Library (G3), the ideas brought in as draft entities (G4); U3 closed (D157, proto01_UI2 03 §6–7, 06 §1.3–1.4)
+
+**G3, the Look's part.** With a style selected, the Look's Inspector offers the Library's art-style and mood entries as word presets
+(`ui2/world/look.ts`: `LOOK_FIELDS`, `withWords`). A click adds the words to the style's prompt fragment once, after a comma. The
+Library's light, camera, lens, distance, composition, pose and action words belong to Clay, and move with U4–U5. Sketches keeps the whole
+Library through Image's column.
+
+**G4, on the author's word.** `POST /story/ideas/fold` (`ideas.fold`) is World Sketches' *Bring the ideas in*, offered while the old board
+has ideas not kept yet and confirmed first.
+
+- Each such idea becomes a draft entity of its class: *Keep ▶* on its variant in focus, so the hero, a sheet drafted from its prompt and
+  its clay come with it.
+- Its other variants' pictures become the new version's candidates.
+- The ideas stay on the old Cast board, marked kept, until U8 retires the board.
+- It is a command, not a silent migration at open, so the current UI's Ideas board keeps working.
+
+**Tests:**
+
+- `test_ideas_cw1.py` + 1 (the fold: the focus the hero, the others candidates, an idea without a picture left, once);
+- `world.test.ts` + 1 (`withWords`);
+- an e2e scenario: a Library art style joins a style's words; an idea with two pictures brought in becomes a draft character with a hero
+  and a candidate;
+- the D37 route snapshot gains the route.
+
+**Checks:** offline 708 passed; Vitest 619 + 3 skipped; typecheck, build and lint clean; e2e 84/84 (alone); `agents_check`,
+`model_literals_check` and `settings_audit` (319, 0) clean; the API contract regenerated.
+
+**U3 is closed.** World in the new shell has:
+
+- the rail, the entity header with its readiness line, whose items run their verbs (U3a, U3b);
+- one bin with roles, badges and filters, and the Inspector (U3a);
+- Make scoped to the entity (U3b) and Edit on a creation (U3c);
+- Look and Sketches (U3d), the Look's words and the ideas brought in (U3e).
+
+**Owed to World from 03, small:**
+
+- the header's voice field (*speaks with ▾*, *New voice…*);
+- the 3D model's *Import GLB…* and the set's sizes in the header (their *Make* / *Build* / *Fill* are the readiness items);
+- *Used in shots*, *Versions* and *Delete…* in the Inspector's entity facts;
+- *See in clay ▶*, D142's bench opened from World.
+
+Next is U4: Shots — the Flow and Clay (07 §2).

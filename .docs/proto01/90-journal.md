@@ -12783,3 +12783,25 @@ suite 92/92 alone; `agents_check` clean.
 
 **Owed to the author:** the click-through (10), and the ones before it (animate 27, UIcomp 05, D90). Then the new UI as the default and the
 old shell's removal.
+
+## 2026-10-29 11:37 — A study: retiring the Catalogue, and a Bin that holds up (proto01_UI2 11; D157)
+
+The author asked to get rid of the Catalogue and to make the Bin more robust. `proto01_UI2/11-retiring-the-catalogue.md` holds the study:
+
+- what depends on the Catalogue: the tab, the Dock's drawer, the detached loupe, the events, *Go to origin*, Image's results grid, the
+  album's store, and 27 of 92 e2e scenarios;
+- what the Bin lacks against it;
+- what is not robust in U8a's Bin (R1–R10);
+- waves B0–B4 and the questions Q1–Q6.
+
+**Found:**
+
+- On the copy of The Last Ferry, an album page in no home (*Stage · Stay*, 10 pictures) is invisible in the Bin.
+- A deleted shot or entity leaves its home under its old name.
+- A file dropped from the OS does nothing in the new shell.
+
+**Measured** on a synthetic project of 3,000 assets (2,000 in 30 shot homes, 1,000 on no page): the tree 73 ms; the *shots* home 304 ms for
+2,000 things, all sent at once; Imports 46 ms for 1,000; search 13 ms; the drawer's page 9 ms. The server holds up. The page does not: it
+draws every tile, and it reloads on every asset event.
+
+Nothing is built yet. The answers become a D-number first.

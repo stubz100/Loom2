@@ -41,6 +41,7 @@ The author, 2026-10-28, after the walkthrough:
 | 08 | [The registers](08-register.md) | the walkthrough's findings F1–F44 and its timings; the code review's FE, BE and RC findings |
 | 09 | [The answers](09-answers.md) | **the author's answers (D157)** and what they change: no Expand and no LoRA; lights with templates and an editor; the synopsis as a note |
 | 10 | [Trying the new UI](10-trying-the-new-ui.md) | **the author's click-through** of the built UI (U0–U8): what to try in each layer, the checks, what is not there yet |
+| 11 | [Retiring the Catalogue](11-retiring-the-catalogue.md) | **a study** for the author's answers: what depends on the Catalogue, what the Bin lacks, R1–R10 (what is not robust in it), waves B0–B4 and Q1–Q6 |
 
 `img/ui-*.jpg` are wireframes, rendered from `mock/ui2-mock.html` by `mock/render.cjs` (a static mock, not the app). Their pictures are the walkthrough's
 own (`img/src/`); their numbers (scores, times, counts) are examples. **Dashed orange marks what is new.**

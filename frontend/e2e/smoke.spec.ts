@@ -4325,3 +4325,29 @@ test('World in the new shell (U3a, D157 · proto01_UI2 03): a character\'s heade
   await expect(page.locator('.w-tile')).toHaveCount(2)                                                  // the hero is a reference too
   expect(new URL(page.url()).hash).toBe(`#world/character/${prof.id}/v1`)
 })
+
+test('World\'s Make (U3b, D157 · proto01_UI2 03 §3): the panel is the entity\'s own — seeded with it, a framing, words for this picture; Give a look lands the pictures as its candidates in its bin', async ({ page }) => {
+  test.setTimeout(120_000)
+  const tag = Date.now().toString(36)
+  const name = `Odile ${tag}`
+  type ProfileLite = { id: string; versions: { id: string; candidates_group_id: string | null }[] }
+  const prof = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', appearance: 'a tall woman in her sixties, silver hair in a bun' })
+  await page.goto(`${appUrl({ ui: '2' })}#world/character/${prof.id}/v1`)
+  const make = page.locator('[data-testid="world-make"]')
+  await expect(make).toBeVisible()
+  const caps = await api<{ models: Record<string, { recipes?: { t2i?: unknown } }> }>('GET', '/capabilities')
+  const present = (await api<{ items: { id: string; health: string }[] }>('GET', '/models')).items.find((m) => m.health !== 'missing' && caps.models[m.id]?.recipes?.t2i)!
+  await make.locator('select[aria-label="model"]').selectOption(present.id)                               // a model the fixture has weights for
+  await make.locator('button', { hasText: 'full body' }).click()
+  await make.locator('textarea[aria-label="this picture only"]').fill('a grey wool coat, wind in her hair')
+  while ((await make.locator('.w-val b').innerText()) !== '1') await make.locator('button[aria-label="fewer"]').click()
+  const before = (await api<{ items: unknown[] }>('GET', '/jobs')).items.length
+  await make.locator('.w-foot button.primary', { hasText: `Give ${name} a look` }).click()
+  await expect.poll(async () => (await api<{ items: { status: string; origin: { surface: string; ref: string } | null }[] }>('GET', '/jobs')).items.filter((j) => j.origin?.surface === 'cast' && j.origin.ref === prof.id && j.status === 'done').length, { timeout: 60_000 }).toBe(1)
+  expect((await api<{ items: unknown[] }>('GET', '/jobs')).items.length).toBe(before + 1)
+  await expect(page.locator('.w-tile')).toHaveCount(1)                                                    // in its bin, as a candidate
+  await page.locator('.w-chips button', { hasText: 'candidates' }).click()
+  await expect(page.locator('.w-tile')).toHaveCount(1)
+  const job = (await api<{ items: { origin: { surface: string; ref: string } | null; recipe: { prompt_json?: unknown; prompt_text?: string } }[] }>('GET', '/jobs')).items.find((j) => j.origin?.surface === 'cast' && j.origin.ref === prof.id)!
+  expect(JSON.stringify(job.recipe)).toContain('a grey wool coat, wind in her hair')                     // this picture's words went in
+})

@@ -11677,3 +11677,45 @@ The first look found the place's picture badged A-pose (one picture held two rol
 `agents_check`, `model_literals_check` and `settings_audit` (319, 0) clean; the API contract regenerated.
 
 Next is U3b: Make and Edit in the left column, scoped to the entity (the Generate panel through `makeContext`).
+
+## 2026-10-29 02:52 — U3b: World's Make, scoped to the entity; the readiness items run their verbs (D157, proto01_UI2 03 §2–3)
+
+**The Make panel** (`ui2/world/WorldMake.tsx`, its pure parts in `make.ts`) is the entity version's own Generate panel. It uses
+`makeContext` (U1's context slot): a version never seen is seeded with the entity linked — a character or prop as the subject card, a
+place as the scene (`applyFrame`). A return finds what was set there.
+
+What stays of Image's column:
+
+- *this picture* (the subject's `shot_note`, a place's scene note);
+- a framing per class (character: portrait · waist-up · full body, beside *A-pose front* / *A-pose back*, the animation-reference route;
+  prop: on its own · in a hand · in its setting; place: wide · empty, eye level · a detail, beside *the set picture*);
+- the Look (the project's styles, the default ★);
+- the model and the count.
+
+The foot is *Give ‹name› a look ▶* with the estimate, references counted (F27) and the spill said. It runs the casting run (`castLook`;
+a place's own with `castOrigin`): the pictures land as the version's candidates, in its bin.
+
+**The readiness items run their verbs:** A-pose front and back, *Fit the body*, *Make the 3D model*, the set picture, *Build the set*,
+*Fill*. These are the Cast commands, which act on the entity the header shows (the Story store's selection).
+
+**The bin follows the records:** it reloads on `group.changed` and on an asset's update or delete, through U1's records bus
+(`onRecords`). World also loads the world record, for the Look's styles.
+
+**Fixed on the way:** a selector that returned a fresh empty list looped React (#185) before the world was loaded.
+
+**Looked at** on the copy of "The Last Ferry" (no job submitted):
+
+- Ines's panel is seeded with her, takes *full body* and "soaked, hood up", offers "Harbour noir ★", and estimates ≈ 10 min for 4 with
+  her references;
+- switching to the Town street and back keeps Ines's words.
+
+**Tests:**
+
+- `ui2/world/make.test.ts` 2 (a new context seeded, a known one restored; the framings);
+- an e2e scenario: the panel seeded, a framing and words, *Give a look* on the fake engine lands one candidate in the bin, and the words
+  are in the job's recipe. It picks a model the fixture has weights for.
+
+**Checks:** offline 707 passed; Vitest 617 + 3 skipped; typecheck, build and lint clean; e2e 81/81 (alone); `agents_check`,
+`model_literals_check` and `settings_audit` (319, 0) clean; the API contract unchanged.
+
+Next is U3c: Edit on a creation in World.

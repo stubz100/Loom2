@@ -5,16 +5,20 @@ import { Box, MapPin, Palette, PenLine, User } from 'lucide-react'
 import { useEffect } from 'react'
 import { api } from '../../api/client'
 import { CommandButton, MenuButton } from '../../frame/CommandButton'
-import type { MenuItem } from '../../frame/commands'
+import { command, isEnabled, runCommand, type MenuItem } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import { Help } from '../../frame/Help'
 import { useStory, type ProfileClass } from '../../suites/story/storyStore'
 import { readiness } from './readiness'
+import { WorldMake } from './WorldMake'
 import { CLASSES, CLASS_LABEL, ONE, passes, startWorld, useWorld, type BinItem, type RoleFilter, type WorldRail } from './worldStore'
 import './worldCommands'
 import './world.css'
 
 const RAIL_ICON: Record<WorldRail, typeof User> = { character: User, prop: Box, place: MapPin, look: Palette, sketches: PenLine }
+/** 03 §2: an item is its verb — the Cast command that makes it (they act on the entity the header shows: the Story store's selection). */
+const READY_VERB: Record<string, string> = { a_pose_front: 'story.cast.makeAnimRef', a_pose_back: 'story.cast.makeAnimRefBack', body: 'story.cast.fitBody', model: 'story.cast.makeModel',
+  set_picture: 'cast.place.picture', set: 'cast.place.build', faces: 'cast.place.fill' }
 const BADGE: Record<string, string> = { hero: '★', reference: 'ref', a_pose_front: 'A·F', a_pose_back: 'A·B', set_picture: 'set', model: '3D' }
 const FILTERS: [RoleFilter, string][] = [['all', 'all'], ['hero', 'hero'], ['reference', 'references'], ['a_pose', 'A-pose'], ['set_picture', 'set'], ['model', 'model'], ['candidate', 'candidates']]
 
@@ -61,7 +65,12 @@ function Header() {
       {p.cls === 'prop' && <div className="w-field"><span>3D model</span><span className="w-val">{v.model_asset_id ? `made${v.height_m ? ` · ${v.height_m} m` : ''}` : 'not made yet'}</span></div>}
       {p.cls === 'place' && <div className="w-field"><span>the set</span><span className="w-val">{v.place_set ? `${v.place_set.kind} · ${v.place_set.faces.length} faces` : 'not built yet'}</span></div>}
       <div className="w-ready" data-testid="world-readiness">
-        {r.items.map((x) => <span key={x.id} className={`w-ready-item ${x.state}`} title={x.state === 'done' ? 'done' : x.state === 'owed' ? 'owed' : 'optional'}>{x.state === 'done' ? '✓' : x.state === 'owed' ? '○' : '–'} {x.label}{x.detail ? ` ${x.detail}` : ''}</span>)}
+        {r.items.map((x) => {
+          const verb = READY_VERB[x.id], c = verb ? command(verb) : undefined
+          const text = <>{x.state === 'done' ? '✓' : x.state === 'owed' ? '○' : '–'} {x.label}{x.detail ? ` ${x.detail}` : ''}</>
+          return c && x.state !== 'done' ? <button key={x.id} className={`w-ready-item ${x.state}`} disabled={!isEnabled(c)} title={c.label} onClick={() => runCommand(verb!)}>{text}</button>
+            : <span key={x.id} className={`w-ready-item ${x.state}`} title={x.state === 'done' ? 'done' : x.state === 'owed' ? 'owed' : 'optional'}>{text}</span>
+        })}
         <b className={`w-ready-line${r.owed ? '' : ' ok'}`}>{r.line}</b>
       </div>
     </div>
@@ -138,7 +147,7 @@ export function WorldLayer() {
     <div className="w-layer" data-testid="world-layer">
       <Rail />
       {classRail ? <>
-        <section className="w-left"><Header /><div className="w-panel"><span className="w-empty">Make and Edit come next (U3b)</span></div></section>
+        <section className="w-left"><Header /><div className="w-panel"><WorldMake /></div></section>
         <section className="w-centre"><Bin /></section>
         <Inspector />
       </> : <section className="w-centre wide"><Pending what={rail === 'look' ? 'Look' : 'Sketches'} /></section>}

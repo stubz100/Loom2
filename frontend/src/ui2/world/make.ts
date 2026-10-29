@@ -1,0 +1,37 @@
+// U3b (D157, proto01_UI2 03 §3): Make's pure parts — the framings per class and an entity version's Make context (makeContext, U1): a
+// context never seen is seeded with the entity linked (a character or prop as the subject card, a place as the scene).
+import { makeContext, useGenerate, type Tree } from '../../suites/generate/generateStore'
+import type { ProfileClass } from '../../suites/story/storyStore'
+
+/** A framing per class (03 §3): the words a picture of the entity needs, not a shot's — the camera and the light are Clay's. */
+export const FRAMINGS: Record<ProfileClass, { id: string; label: string; tree: Partial<Tree> }[]> = {
+  character: [
+    { id: 'portrait', label: 'portrait', tree: { camera: { distance: 'close-up portrait' }, composition: 'head and shoulders' } },
+    { id: 'waist', label: 'waist-up', tree: { camera: { distance: 'medium shot' }, composition: 'from the waist up' } },
+    { id: 'full', label: 'full body', tree: { camera: { distance: 'full shot' }, composition: 'full body, head to feet in frame' } },
+  ],
+  prop: [
+    { id: 'alone', label: 'on its own', tree: { background: 'a plain light grey studio backdrop', composition: 'the object alone, centred' } },
+    { id: 'hand', label: 'in a hand', tree: { composition: 'held in a hand, close' } },
+    { id: 'setting', label: 'in its setting', tree: { background: '', composition: 'in its everyday setting' } },
+  ],
+  place: [
+    { id: 'wide', label: 'wide', tree: { camera: { distance: 'wide establishing shot' }, composition: 'the whole place' } },
+    { id: 'empty', label: 'empty, eye level', tree: { camera: { distance: 'wide shot', angle: 'eye level' }, composition: 'empty, no people, seen straight on' } },
+    { id: 'detail', label: 'a detail', tree: { camera: { distance: 'close-up' }, composition: 'a telling detail of the place' } },
+  ],
+}
+
+/** The context key of an entity version's Make panel. */
+export const makeKey = (cls: string, pid: string, vid: string): string => `world/${cls}/${pid}/${vid}`
+
+/** Enter an entity version's Make context; a context never seen is seeded with the entity linked (a subject card, or a place's scene). */
+export function enterMake(cls: ProfileClass, pid: string, vid: string): void {
+  const key = makeKey(cls, pid, vid)
+  const fresh = makeContext.saved(key) === undefined && makeContext.key !== key
+  makeContext.enter(key)
+  if (!fresh) return
+  const g = useGenerate.getState()
+  g.applyFrame(cls === 'place' ? { text: null, subjects: [], place: pid } : { text: null, subjects: [{ profile_id: pid, version: vid }], place: null })
+  g.set({ count: Math.min(g.panel.count, 4) })
+}

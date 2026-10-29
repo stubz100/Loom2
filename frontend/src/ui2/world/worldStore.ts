@@ -4,6 +4,7 @@
 import { create } from 'zustand'
 import { http, unwrap } from '../../api/client'
 import type { components } from '../../api/schema'
+import { onRecords } from '../../store/records'
 import { useSession } from '../../store/session'
 import { useStory, type ProfileClass } from '../../suites/story/storyStore'
 
@@ -89,6 +90,7 @@ export function startWorld(): () => void {
     if (!path || path === opened) return
     opened = path
     const from = placeOfHash(location.hash)
+    void useStory.getState().load()                                         // the world record: the Look's styles
     void useStory.getState().loadProfiles().then(() => {
       const w = useWorld.getState()
       if (from?.entity) w.pick(from.entity, from.version)
@@ -104,8 +106,9 @@ export function startWorld(): () => void {
     else if (!at.entity && at.rail !== useWorld.getState().rail) useWorld.getState().setRail(at.rail)
   }
   window.addEventListener('hashchange', onHash)
+  const offRecords = onRecords('ui2.world.bin', ['group.changed', 'asset.deleted', 'asset.updated'], () => void useWorld.getState().loadBin())   // U1's bus: a creation landed or moved
   const offStory = useStory.subscribe((s, prev) => {                     // the version's pages changed (a hero, a reference, a new version)
     if (s.profiles !== prev.profiles || s.versionId !== prev.versionId || s.refPage !== prev.refPage || s.candPage !== prev.candPage) void useWorld.getState().loadBin()
   })
-  return () => { offSession(); offStory(); window.removeEventListener('hashchange', onHash) }
+  return () => { offSession(); offStory(); offRecords(); window.removeEventListener('hashchange', onHash) }
 }

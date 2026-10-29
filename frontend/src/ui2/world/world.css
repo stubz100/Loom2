@@ -39,3 +39,9 @@
 .w-prompt-block > span { color: var(--fg3); }
 .w-prompt { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 8; -webkit-box-orient: vertical; overflow: hidden; color: var(--fg2); }
 .w-verbs { display: flex; flex-direction: column; gap: 4px; align-items: stretch; }
+button.w-ready-item { background: transparent; border: 1px dashed var(--line2); border-radius: 999px; padding: 0 6px; font-size: 11px; cursor: pointer; }
+.w-make { display: flex; flex-direction: column; gap: 8px; }
+.w-chips.left { margin-left: 0; flex-wrap: wrap; }
+.w-foot { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.w-foot .primary { flex: 1; }
+.w-foot .spill { color: var(--warn); font-size: 11px; }

@@ -7,7 +7,9 @@ display name follows the record's. A version's two pages — its reference set a
 and gains a role. The album stays as it is around them.
 
 `migrate_bins` runs once per project at open: each version's pages under its home, each style's samples under `world/look`, a Flow board
-used by one Shot under its shot's home; then (U2e, bins schema 2) the Unprocessed assets whose origin names an owner go to its home.
+used by one Shot under its shot's home; then (U2e, bins schema 2) the Unprocessed assets whose origin names an owner go to its home; then
+(B3 of D159, bins schema 3) every album page still in no home goes to the home of what uses it, else the Sketches. A page is a folder of
+its home from then on (the tree lists it, it opens on its own things), and a new page is made in a home (`page_parent`).
 Every finished job's assets land in their owner's home (`land`, from the queue's completion tail). An asset without an owner stays
 unplaced until B4 (D159) retires Unprocessed.
 """
@@ -20,7 +22,7 @@ from .fsio import atomic_write_json, read_json_or, unlink, utc_now
 from .catalogue import AssetQuery
 from .groups import ROOT_ID, GroupRecord, GroupStore
 
-BINS_SCHEMA_VERSION = 2                            # U2e: 2 — the Unprocessed assets sorted by their origin
+BINS_SCHEMA_VERSION = 3                            # U2e: 2 — the Unprocessed assets sorted by their origin; B3: 3 — every page in a home
 CLASS_HOME = {"character": "Characters", "prop": "Props", "place": "Places"}
 NAMED = {"world": "World", "world/look": "Look", "world/sketches": "Sketches", "shots": "Shots", "episode": "Episode", "imports": "Imports",
          **{f"world/{c}": n for c, n in CLASS_HOME.items()}}
@@ -294,6 +296,8 @@ def _pages_of(groups: GroupStore, top: GroupRecord) -> dict[str, tuple[GroupReco
         pages, subs = _inside(groups, g)
         for p in pages:
             out[p.id] = (g, KIND_ROLE.get(p.role or "", p.role) if p.kind == "role" else None)
+            if p.kind == "album":                                             # B3: the pages inside a page are its home's too
+                out.update({k.id: (g, None) for k in _all_sub_pages(groups, p)})
         for h in subs:
             walk(h)
     walk(top)
@@ -336,17 +340,24 @@ def tree(groups: GroupStore, ws: Any = None) -> dict[str, Any]:
     names = _names(ws) if ws is not None else {}
     with groups._lock:
 
+        def folder(p: GroupRecord, path: str) -> dict[str, Any]:                 # B3: an album page inside a home, and the pages in it
+            kids = [folder(k, f"{path}/{k.id}") for k in _sub_pages(groups, p)]
+            count = placed.get(p.id, 0)
+            return {"id": p.id, "path": path, "name": p.name, "count": count, "total": count + sum(k["total"] for k in kids), "gone": False,
+                    "page": True, "pages": [], "children": kids}
+
         def node(g: GroupRecord) -> dict[str, Any] | None:
             pages, subs = _inside(groups, g)
             path = g.path or ""
             count = placed.get(g.id, 0) + sum(placed.get(p.id, 0) for p in pages) + (loose if path == "imports" else 0)
             kids = [k for k in (node(h) for h in subs) if k is not None]
+            folders = [folder(p, f"{path}/{p.id}") for p in pages if p.kind == "album"]
             gone = ws is not None and _is_record(path) and path not in names
-            total = count + sum(k["total"] for k in kids)
+            total = count + sum(k["total"] for k in kids) + sum(f["total"] - f["count"] for f in folders)   # a page's own count is in the home's
             if gone and not total:
                 return None
             return {"id": g.id, "path": path, "name": names.get(path, g.name), "count": count, "total": total, "gone": gone,
-                    "pages": [p.id for p in pages], "children": kids}
+                    "pages": [p.id for p in pages], "children": [*folders, *kids]}
 
         def top(g: GroupRecord) -> bool:
             par = groups.groups.get(groups.parent.get(("group", g.id)) or "")
@@ -361,11 +372,12 @@ def home_page(groups: GroupStore, ws: Any, gid: str, cursor: str | None = None, 
     page too. `kinds` keeps those kinds only. `total` comes with the first page."""
     with groups._lock:
         top = groups.groups.get(gid)
-        if top is None or top.kind != "bin":
+        h0 = home_of(groups, gid) if top is not None and top.kind == "album" else None
+        if top is None or (top.kind != "bin" and h0 is None):
             raise KeyError(gid)
-        pages = _pages_of(groups, top)
+        pages = _pages_of(groups, top) if h0 is None else {p.id: (h0, None) for p in [top, *_all_sub_pages(groups, top)]}   # B3: a page, alone
         imports = next((g for g in groups.groups.values() if g.kind == "bin" and g.path == "imports"), None)
-        loose = imports is not None and imports.id in pages
+        loose = h0 is None and imports is not None and imports.id in pages
     page = groups.cat.list(AssetQuery(group_ids=list(pages), unplaced_too=loose, kinds=kinds or [], limit=limit, cursor=cursor))  # type: ignore[arg-type]
     rec = _Records(ws)
     records: dict[str, tuple[dict[str, list[str]], bool] | None] = {}
@@ -379,7 +391,8 @@ def home_page(groups: GroupStore, ws: Any, gid: str, cursor: str | None = None, 
             if h.id not in records:
                 records[h.id] = _record_roles(ws, h.path or "", rec)
             items.append({"asset": a, "roles": roles_of(a.id, role, records[h.id]), "home_id": h.id, "path": h.path or ""})
-    return {"home_id": top.id, "path": top.path or "", "items": items, "total": page.total, "next_cursor": page.next_cursor}
+    path = top.path or "" if h0 is None else f"{h0.path}/{top.id}"
+    return {"home_id": top.id, "path": path, "items": items, "total": page.total, "next_cursor": page.next_cursor}
 
 
 def home_items(groups: GroupStore, ws: Any, gid: str) -> dict[str, Any]:
@@ -494,7 +507,12 @@ def move_things(groups: GroupStore, ws: Any, ids: list[str], to: str, confirm: b
     target = settle(groups, ws, to)                               # B1: an entity's or a shot's current version; a heading takes nothing
     if target is None:
         raise ValueError("a heading of the Bin holds no things — pick a home inside it")
-    to = to if groups.groups[to].kind == "role" and home_of(groups, to) == target else target.id
+    tg = groups.groups[to]
+    if tg.kind == "album" and home_of(groups, to) is not None:                # B3: a page of a home keeps what is moved into it
+        target = home_of(groups, to)
+        assert target is not None
+    else:
+        to = to if tg.kind == "role" and home_of(groups, to) == target else target.id
     plain: list[str] = []
     ask: list[dict[str, Any]] = []
     refused: list[dict[str, Any]] = []
@@ -651,10 +669,12 @@ def migrate_bins(ws: Any, groups: GroupStore) -> list[str]:
     done = read_json_or(marker, None)
     if isinstance(done, dict) and int(done.get("schema_version", 1)) >= BINS_SCHEMA_VERSION:
         return []
-    if isinstance(done, dict):                                              # U2d's pages are in: only the Unprocessed assets are left
-        notes = _sort_unprocessed(ws, groups)
-        atomic_write_json(marker, {**done, "schema_version": BINS_SCHEMA_VERSION, "sorted_at": utc_now()})
-        return notes
+    if isinstance(done, dict):                                              # U2d's pages are in; then the Unprocessed (2), the pages (3)
+        notes = _sort_unprocessed(ws, groups) if int(done.get("schema_version", 1)) < 2 else []
+        moved, more = _pages_into_homes(ws, groups)
+        atomic_write_json(marker, {**done, "schema_version": BINS_SCHEMA_VERSION, "sorted_at": done.get("sorted_at") or utc_now(),
+                                   "paged_at": utc_now(), "pages_homed": moved})
+        return [*notes, *more]
     from .story import StoryStore
     st = StoryStore(ws)
     pages = styles = boards = 0
@@ -679,7 +699,10 @@ def migrate_bins(ws: Any, groups: GroupStore) -> list[str]:
             h = home(groups, f"shots/{n.shot_id}", {f"shots/{n.shot_id}": n.title or "Shot"})
             boards += int(as_role(groups, gid, h, "board"))
     sorted_notes = _sort_unprocessed(ws, groups)
-    atomic_write_json(marker, {"schema_version": BINS_SCHEMA_VERSION, "migrated_at": utc_now(), "pages": pages, "styles": styles, "boards": boards})
+    homed, paged_notes = _pages_into_homes(ws, groups)
+    sorted_notes += paged_notes
+    atomic_write_json(marker, {"schema_version": BINS_SCHEMA_VERSION, "migrated_at": utc_now(), "pages": pages, "styles": styles, "boards": boards,
+                               "pages_homed": homed})
     if not (pages or styles or boards):
         return sorted_notes
     parts = [f"{pages} version page{'s' if pages != 1 else ''}" if pages else "", f"{styles} style sample group{'s' if styles != 1 else ''}" if styles else "",
@@ -700,3 +723,85 @@ def _sort_unprocessed(ws: Any, groups: GroupStore) -> list[str]:
         if not cursor or not page.items:
             break
     return [f"U2: {moved} unprocessed asset{'s' if moved != 1 else ''} went to the home of what {'they were' if moved != 1 else 'it was'} made for"] if moved else []
+
+
+# ---- B3 (D159): every page in a home --------------------------------------------------------------------------------------------------
+def _sub_pages(groups: GroupStore, p: GroupRecord) -> list[GroupRecord]:
+    """The album pages directly inside a page (a home's pages can hold pages, as the album's could)."""
+    kids = [groups.groups[it.id] for it in p.items if it.kind == "group" and it.id in groups.groups]
+    return sorted((k for k in kids if k.kind == "album"), key=lambda k: k.name.lower())
+
+
+def _all_sub_pages(groups: GroupStore, p: GroupRecord) -> list[GroupRecord]:
+    out: list[GroupRecord] = []
+    for k in _sub_pages(groups, p):
+        out += [k, *_all_sub_pages(groups, k)]
+    return out
+
+
+def stage_home(groups: GroupStore, ws: Any, stage: Any) -> GroupRecord:
+    """B3: where a stage's album page lives — the shot first made through it, a bench's version, else the Sketches."""
+    from .story import StoryStore
+    st = StoryStore(ws)
+    shots = sorted((s for s in st.shots() if any(v.stage_id == stage.id for v in s.versions)), key=lambda s: s.created_at)
+    if shots:
+        s = shots[0]
+        return home(groups, f"shots/{s.id}", {f"shots/{s.id}": s.name})
+    bound = getattr(stage, "bound", None)
+    prof = st.profile(bound.profile_id) if bound is not None else None
+    if prof is not None and any(v.id == bound.version for v in prof.versions):
+        return version_home(groups, prof, bound.version)
+    return home(groups, "world/sketches")
+
+
+def page_parent(groups: GroupStore, parent_id: str) -> str:
+    """B3: a new page is made in a home — asked for on the album's root, it goes to the Sketches (the root holds the homes only)."""
+    return home(groups, "world/sketches").id if parent_id == ROOT_ID else parent_id
+
+
+def _owner_home(groups: GroupStore, ws: Any, users: list[Any], stages: dict[str, Any]) -> GroupRecord | None:
+    """The home of a page's first user that has one: a version's (its reference set, candidates), the Look's (a style, a library entry),
+    a Flow board's shot, a stage's (`stage_home`); an idea's page has none of its own (the Sketches)."""
+    from .story import StoryStore
+    st = StoryStore(ws)
+    for u in users:
+        if u.kind in ("profile_ref", "profile_candidates") and u.version:
+            prof = st.profile(u.id)
+            if prof is not None and any(v.id == u.version for v in prof.versions):
+                return version_home(groups, prof, u.version)
+        elif u.kind in ("style", "library"):
+            return home(groups, "world/look")
+        elif u.kind == "flow_board":
+            n = st.flow_nodes().get(u.id)
+            s = st.shot(n.shot_id) if n is not None and n.shot_id else None
+            if s is not None:
+                return home(groups, f"shots/{s.id}", {f"shots/{s.id}": s.name})
+        elif u.kind == "stage" and u.id in stages:
+            return stage_home(groups, ws, stages[u.id])
+    return None
+
+
+def _pages_into_homes(ws: Any, groups: GroupStore) -> tuple[int, list[str]]:
+    """B3 (D159 Q2, R1): each album page in no home — a stage's page, a board several shots share, a page the author made — into the home
+    of what uses it (its pages' users too), else the Sketches; a page moves with the pages inside it. A locked page stays (noted)."""
+    from .fsio import StateError
+    from .stages import StageStore
+    from .usedby import all_users
+    users = all_users(ws)
+    stages = {s.id: s for s in StageStore(ws).list()}
+    with groups._lock:
+        root = groups.groups.get(ROOT_ID)
+        loose = [groups.groups[it.id] for it in (root.items if root else []) if it.kind == "group" and it.id in groups.groups and groups.groups[it.id].kind == "album"]
+    moved, kept = 0, []
+    for p in loose:
+        around = [u for g in [p, *_all_sub_pages(groups, p)] for u in users.get(g.id, [])]
+        h = _owner_home(groups, ws, around, stages) or home(groups, "world/sketches")
+        try:
+            groups.move([("group", p.id)], h.id)
+            moved += 1
+        except StateError:
+            kept.append(p.name)
+    notes = [f"B3: {moved} album page{'s' if moved != 1 else ''} moved into {'their homes' if moved != 1 else 'its home'} (the Bin: pages are folders of a home)"] if moved else []
+    if kept:
+        notes.append(f"B3: {len(kept)} locked page{'s' if len(kept) != 1 else ''} stayed on the album ({', '.join(kept[:4])})")
+    return moved, notes

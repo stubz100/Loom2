@@ -13337,3 +13337,51 @@ and the pictures still land as the version's candidates.
 **Checks:** Vitest 598 + 3 skipped; typecheck, build and lint clean (61 warnings, as before); e2e 83/83 (alone, 5.6 min).
 
 Next: B3, the pages in homes, as planned (D159).
+
+## 2026-10-29 20:28 — B3: every page in a home; a page is a folder of its home (D159 Q2; proto01_UI2 11 §5, R1)
+
+**The migration** (`bins.py`, bins schema 3) runs once per project at open, after U2's steps. Each album page still on the album's root
+goes, with the pages inside it, to the home of its first user:
+
+| The page's user | Its home |
+| --- | --- |
+| a version (its reference set, its candidates) | that version |
+| a style or a library entry | World › Look |
+| a Flow board | its node's shot (a board several shots share: the first's) |
+| a stage's page | the shot first made through the stage, else a bench's version |
+| an idea, or nothing | World › Sketches |
+
+A locked page stays where it is and is noted. The mark is `bins.json` (`schema_version` 3, `pages_homed`), and the startup notes say how
+many pages moved. The album's root then holds the homes only.
+
+On a copy of *The Last Ferry*'s records (without the media), R1's *Stage · Stay* (10 pictures) went to the shot made through its stage,
+*Stay*, and nothing is left on the root.
+
+**New pages are made in a home:**
+
+- a stage's page, in its shot's (`stage_home`);
+- an idea's page, in the Sketches;
+- a page asked for on the album's root (`POST /groups`), in the Sketches (`page_parent`).
+
+**Pages as folders:**
+
+- **The tree.** A home's album pages are its folders (`BinNode.page`, path `‹home›/‹page id›`), with the pages inside them. A home counts
+  each thing once.
+- **A folder opens on its own things,** the pages inside it included, and a thing moved into it stays there.
+- **The verbs:**
+  - *New page…* in the grid's head and a node's right-click;
+  - *Rename the page…* and *Delete the page…* (its things and its pages go to its home; nothing is deleted; a user, such as a board,
+    is named in the ask).
+- **The grid's path** names a page by its name.
+- ***Open … in the Bin*** opens the page itself (a board, a stage's page); a role page still opens its home.
+
+**Tests:**
+
+- `test_bin_b3.py` (3): the migration and its owners; a folder's tree, listing and move; new pages in a home.
+- U2's and D34's tests follow: a shared board now goes to its first shot; a page made on the root is the Sketches'.
+- A new e2e scenario, *pages in homes*: a page made on the album lands in the Sketches; New page…, a thing moved in, Rename…, Delete the
+  page… with the mouse.
+
+**Checks:** offline 741 passed; Vitest 598 + 3 skipped; typecheck, build and lint clean (61 warnings, as before); e2e 84/84 (alone, 5.8 min).
+
+Next: B4, Unprocessed retired.

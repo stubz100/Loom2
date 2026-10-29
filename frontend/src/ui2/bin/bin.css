@@ -9,6 +9,7 @@
 .b-open { flex: 1; min-width: 0; display: flex; justify-content: space-between; gap: 8px; padding: 2px 6px 2px 2px; border: 0; background: none; color: var(--fg); text-align: left; cursor: pointer; }
 .b-open span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
 .b-open .n { color: var(--fg3); font-variant-numeric: tabular-nums; }
+.b-node.page .b-open svg { color: var(--fg3); flex: none; }   /* B3 (D159): a page is a folder of its home */
 .b-audio { display: flex; align-items: center; justify-content: center; height: 100%; padding: 6px; font-size: 11px; color: var(--fg2); text-align: center; }
 .b-player { width: 100%; }
 .w-bin { position: relative; }

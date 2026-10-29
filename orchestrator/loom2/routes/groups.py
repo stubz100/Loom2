@@ -105,6 +105,7 @@ class BinNode(BaseModel):
     total: int
     pages: list[str] = Field(default_factory=list)   # its role pages (a version's reference set and candidates): a page id → this home
     gone: bool = False                               # B0 (R5): its record (an entity, a shot, a cut) was deleted; its things are still here
+    page: bool = False                               # B3 (D159): an album page inside a home — a folder: its path is its home's and its id
     children: list[BinNode] = Field(default_factory=list)
 
 
@@ -253,8 +254,11 @@ async def bin_search(svc: Svc, q: str = ""):
 
 @router.post("/groups", response_model=GroupRecord)
 async def groups_create(svc: Svc, body: GroupCreate):
-    g = await asyncio.to_thread(svc.require_groups().create, body.name, body.parent_id, body.x, body.y)
-    svc.group_changed([g.id, body.parent_id])
+    from ..bins import page_parent
+    groups = svc.require_groups()
+    parent = page_parent(groups, body.parent_id)                          # B3 (D159): the album's root holds the homes only
+    g = await asyncio.to_thread(groups.create, body.name, parent, body.x, body.y)
+    svc.group_changed([g.id, parent])
     return g.model_dump()
 
 

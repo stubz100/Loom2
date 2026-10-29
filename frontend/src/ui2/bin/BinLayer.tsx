@@ -7,11 +7,12 @@
 // B1 (D159, 11 §3): the selection is many (a click, Ctrl, Shift, Select all; the arrows with Shift), the keys run the Bin's commands
 // (Enter opens where it belongs, Space shows it large, Delete trashes, C pins, [ ] the tile size), compare, the tile size, Import… and a
 // file dropped from Windows into the open home, and the Inspector's lineage (made from, made into) and what uses the thing.
-import { ChevronDown, ChevronRight, Trash2, Wand2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Folder, Trash2, Wand2 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, http, unwrap } from '../../api/client'
 import type { BinNode, BinThing } from '../../api/types'
 import { CommandButton, MenuButton } from '../../frame/CommandButton'
+import { showMenu } from '../../frame/ContextMenu'
 import { assetIds, onlyAssets, useDropTarget } from '../../frame/drag'
 import { Help } from '../../frame/Help'
 import { useSession } from '../../store/session'
@@ -34,9 +35,10 @@ function Node({ n, depth }: { n: BinNode; depth: number }) {
     (p) => (takes ? { ok: true, label: `Move ${p.items.length === 1 ? 'it' : p.items.length} to ${n.name}` } : { ok: false, reason: n.gone ? 'its record was deleted' : 'a heading holds no things' }))
   return (
     <>
-      <div ref={dropRef} className={`b-node${open ? ' active' : ''}${n.gone ? ' gone' : ''}${dropOver && takes ? ' drop-over' : ''}`} style={{ paddingLeft: 4 + depth * 14 }} data-path={n.path}>
+      <div ref={dropRef} className={`b-node${open ? ' active' : ''}${n.gone ? ' gone' : ''}${n.page ? ' page' : ''}${dropOver && takes ? ' drop-over' : ''}`} style={{ paddingLeft: 4 + depth * 14 }} data-path={n.path}
+        onContextMenu={(e) => { if (!takes) return; void useBin.getState().openHome(n.id); showMenu(e, [{ cmd: 'bin.page.new' }, { cmd: 'bin.page.rename' }, { cmd: 'bin.page.delete' }]) }}>   {/* B3: the node opens, then its page verbs */}
         {n.children.length ? <button className="b-chev" aria-label={expanded ? 'Fold' : 'Unfold'} onClick={() => useBin.getState().toggle(n.id)}>{expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</button> : <span className="b-chev" />}
-        <button className="b-open" title={n.gone ? `${n.path} — deleted` : n.path} onClick={() => void useBin.getState().openHome(n.id)}><span>{n.name}{n.gone ? ' · deleted' : ''}</span><span className="n">{n.total}</span></button>
+        <button className="b-open" title={n.gone ? `${n.path} — deleted` : n.path} onClick={() => void useBin.getState().openHome(n.id)}><span>{n.page && <Folder size={12} />}{n.name}{n.gone ? ' · deleted' : ''}</span><span className="n">{n.total}</span></button>
       </div>
       {expanded && n.children.map((k) => <Node key={k.id} n={k} depth={depth + 1} />)}
     </>
@@ -97,7 +99,8 @@ function Grid() {
           {pins > 0 && <><CommandButton id="bin.compare" text label={`Compare ${pins}`} /><CommandButton id="bin.unpinAll" /></>}
           <CommandButton id="bin.selectAll" />
           <CommandButton id="bin.tileSmaller" /><CommandButton id="bin.tileLarger" />
-          {inTrash ? <CommandButton id="bin.trash.empty" text className="quiet danger" /> : <CommandButton id="bin.import" />}
+          {node?.page && <><CommandButton id="bin.page.rename" /><CommandButton id="bin.page.delete" /></>}
+          {inTrash ? <CommandButton id="bin.trash.empty" text className="quiet danger" /> : <><CommandButton id="bin.page.new" /><CommandButton id="bin.import" /></>}
           <Help text="A click selects, Ctrl+click adds, Shift+click a range; the arrows move (Shift: a range). Enter opens where it belongs, Space shows it large, Delete trashes, C pins for compare. A file dropped from Windows lands in this home." />
         </div>
         {node?.gone && !query && <div className="b-gone" data-testid="bin-gone"><span>{node.name} was deleted</span><CommandButton id="bin.home.rehome" text /></div>}

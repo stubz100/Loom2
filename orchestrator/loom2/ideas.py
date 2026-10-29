@@ -221,7 +221,8 @@ class IdeaStore:
                 raise ValueError("a variant is a picture in the Catalogue")
             prompt = rec.prompt_text or ""
         nm = (name or "").strip() or name_from_prompt(prompt, cls)
-        g = groups.create(f"{nm} · idea")
+        from .bins import home
+        g = groups.create(f"{nm} · idea", parent_id=home(groups, "world/sketches").id)   # B3 (D159): an idea's page is a folder of the Sketches
         idea = Idea(cls=cls, name=nm[:80], note=note, group_id=g.id)
         if asset_id and move:
             groups.move([("asset", asset_id)], g.id)

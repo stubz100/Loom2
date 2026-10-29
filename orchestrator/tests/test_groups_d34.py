@@ -192,10 +192,9 @@ def test_groups_api(tmp_path: Path):
         a = client.post("/assets/import", json={"paths": [str(_png(tmp_path / "a.png"))]}, headers=H).json()["items"][0]
         assert client.get("/assets/counts").json()["unprocessed"] == 1
         g = client.post("/groups", json={"name": "Act 1"}, headers=H).json()
-        assert client.get("/groups/tree").json()["children"][0]["name"] == "Act 1"
         assert client.post("/groups/move", json={"items": [{"kind": "asset", "id": a["id"]}], "to": g["id"]}, headers=H).status_code == 200
         page = client.get(f"/groups/{g['id']}").json()
-        assert page["path"][-1]["name"] == "Act 1" and a["id"] in page["assets"]
+        assert [s["name"] for s in page["path"]][-3:] == ["World", "Sketches", "Act 1"] and a["id"] in page["assets"]   # B3 (D159): the root holds the homes
         assert client.get("/assets", params={"folder": "unprocessed"}).json()["total"] == 0
         assert client.get("/groups/where", params={"ids": [a["id"]]}).json()[a["id"]]["group_id"] == g["id"]
         rev = page["group"]["revision"]

@@ -47,13 +47,13 @@ export function subtreeIds(n: BinNode): Set<string> {
   return out
 }
 
-/** A home's path as the author reads it: an id segment (an entity, a shot, a cut) by its home's name — `world/character/Ines/v1`. */
+/** A home's path as the author reads it: an id segment (an entity, a shot, a cut, B3: a page) by its node's name — `world/character/Ines/v1`. */
 export function pathLabel(homes: BinNode[], path: string): string {
   const byPath = new Map<string, BinNode>()
   const walk = (n: BinNode) => { byPath.set(n.path, n); n.children.forEach(walk) }
   homes.forEach(walk)
   const parts = path.split('/')
-  return parts.map((seg, i) => (/^(prf|sht|tl)_/.test(seg) ? byPath.get(parts.slice(0, i + 1).join('/'))?.name ?? seg : seg)).join('/')
+  return parts.map((seg, i) => (/^(prf|sht|tl|grp)_/.test(seg) ? byPath.get(parts.slice(0, i + 1).join('/'))?.name ?? seg : seg)).join('/')
 }
 
 interface BinState {

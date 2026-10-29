@@ -44,5 +44,5 @@ def test_unprocessed_is_sorted_once(tmp_path: Path):
     atomic_write_json(groups.dir / "bins.json.corrupt-20261029-021718", {"schema_version": 1, "migrated_at": "2026-10-29T00:00:00Z", "pages": 0, "styles": 0, "boards": 0})   # U2d's run (moved aside by the album, U4)
     assert migrate_bins(ws, groups) == ["U2: 1 unprocessed asset went to the home of what it was made for"]
     assert groups.groups[groups.parent[("asset", made.id)]].path == f"shots/{gate.shot_id}/v1" and ("asset", free.id) not in groups.parent
-    assert read_json(ws.path / "bins.json")["schema_version"] == 2 and migrate_bins(ws, groups) == []
+    assert read_json(ws.path / "bins.json")["schema_version"] == 3 and migrate_bins(ws, groups) == []                 # B3: 3 — the pages in homes too
     assert not list(groups.dir.glob("bins.json*"))                                          # the misfiled marks are gone from the album

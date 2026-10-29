@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, Field
 
 from ..animations import AnimationStore, AnimationTemplate, StaleAnimations
+from ..bins import stage_home
 from ..fsio import atomic_write_json, read_json_or, utc_now
 from ..stages import encode_guide
 from ..origin import JobOrigin
@@ -482,7 +483,7 @@ async def stage_passes(svc: Svc, st_id: str, body: PassesUpload):
         files[name] = p
     gid = st.group_id if st.group_id and st.group_id in groups.groups else None
     if gid is None:
-        gid = (await asyncio.to_thread(groups.create, f"Stage · {st.name}")).id
+        gid = (await asyncio.to_thread(lambda: groups.create(f"Stage · {st.name}", parent_id=stage_home(groups, ws, st).id))).id   # B3 (D159): in its shot's home
     origin = JobOrigin(suite="stage", surface="passes", ref=st_id, payload={"camera_id": body.camera_id})
     assets: dict[str, str] = {}
     for name, p in files.items():
@@ -546,7 +547,7 @@ async def stage_guide(svc: Svc, st_id: str, body: GuideUpload):
         paths.append(p)
     gid = st.group_id if st.group_id and st.group_id in groups.groups else None
     if gid is None:
-        gid = (await asyncio.to_thread(groups.create, f"Stage · {st.name}")).id
+        gid = (await asyncio.to_thread(lambda: groups.create(f"Stage · {st.name}", parent_id=stage_home(groups, ws, st).id))).id   # B3 (D159): in its shot's home
     out_dir = ws.stages_dir / st_id / "guides"
     out = out_dir / f"{body.camera_id}-{body.kind}-r{body.revision}.mp4"
     await asyncio.to_thread(encode_guide, paths, out, body.fps)

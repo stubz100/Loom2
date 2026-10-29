@@ -5567,6 +5567,11 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+            /**
+             * Page
+             * @default false
+             */
+            page: boolean;
             /** Pages */
             pages: string[];
             /** Path */

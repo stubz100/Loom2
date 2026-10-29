@@ -1702,6 +1702,11 @@
             "title": "Name",
             "type": "string"
           },
+          "page": {
+            "default": false,
+            "title": "Page",
+            "type": "boolean"
+          },
           "pages": {
             "items": {
               "type": "string"
@@ -1726,6 +1731,7 @@
           "total",
           "pages",
           "gone",
+          "page",
           "children"
         ],
         "title": "BinNode",

@@ -194,4 +194,4 @@ Catalogue; it moves with B2b.
 **B2b done (2026-10-29):** the shell is the only UI. The old frame, the suites' wrappers, the Catalogue and the per-pane stores are gone,
 `albumStore` is `store/album.ts`, and the events and *Go to origin* point at the Bin (the journal lists the rest). Owed: the headed editor
 check and the browser steps of seven older acceptance scripts still drive the old shell's DOM, and move onto the shell before their next
-run. Next: B3.
+run. **B3 done (2026-10-29):** every album page is in a home (bins schema 3), and a page is a folder of its home. Next: B4.

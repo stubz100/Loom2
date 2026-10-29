@@ -3845,6 +3845,46 @@ test('Assemble in Episode (U7b, D157 · proto01_UI2 05 §1, F33, F40): each shot
   expect((await v1())[0]).toMatchObject({ id: gate, speed: 0.5 })                                                         // the author's edit kept
 })
 
+test('pages in homes (B3, D159 Q2): a page asked for on the album lands in the Sketches; New page… makes a folder of the open home, a thing moved into it stays there, Rename… and Delete the page… (its things go to the home) from its right-click and the grid head', async ({ page }) => {
+  const tag = Date.now().toString(36)
+  type Node = { id: string; path: string; name: string; page: boolean; total: number; children: Node[] }
+  const find = (ns: Node[], f: (n: Node) => boolean): Node | undefined => { for (const n of ns) { if (f(n)) return n; const k = find(n.children, f); if (k) return k } return undefined }
+  const treeNow = async () => (await api<{ homes: Node[] }>('GET', '/bin/tree')).homes
+  const loose = await api<{ id: string }>('POST', '/groups', { name: `Loose ${tag}`, parent_id: 'album' })   // the album's root holds the homes only
+  const sketches = find(await treeNow(), (n) => n.path === 'world/sketches')!
+  expect(find(await treeNow(), (n) => n.id === loose.id)).toMatchObject({ page: true, path: `world/sketches/${loose.id}` })
+  await openShell(page, 'bin')
+  await openHome(page, 'world/sketches')
+  const dialog = page.locator('.modal.ask')
+  await page.locator('[data-testid="bin-grid"] .w-bin-head button[aria-label="New page…"]').click()
+  await dialog.locator('input').fill(`Picks ${tag}`)
+  await dialog.locator('button.primary').click()
+  await expect.poll(async () => find(await treeNow(), (n) => n.name === `Picks ${tag}`)?.path ?? '').toMatch(/^world\/sketches\/grp_/)
+  const picks = find(await treeNow(), (n) => n.name === `Picks ${tag}`)!
+  const folder = page.locator(`[data-testid="bin-tree"] .b-node.page[data-path="${picks.path}"]`)
+  await expect(folder).toBeVisible()
+  await expect(page.locator('[data-testid="bin-grid"] .w-path')).toContainText(`Picks ${tag}`)            // the new page is open
+  // a thing moved into it stays in the page (a folder of the Sketches)
+  const src = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_asc&limit=1')).items[0]
+  const copy = (await api<{ ids: string[] }>('POST', '/assets/duplicate', { ids: [src.id] })).ids[0]
+  await api('POST', '/bin/move', { ids: [copy], to: picks.id })
+  await expect(binTiles(page)).toHaveCount(1)
+  await expect(folder.locator('.n')).toHaveText('1')
+  // Rename… from its right-click
+  await folder.click({ button: 'right' })
+  await page.locator('.ctx-menu button.item', { hasText: 'Rename the page…' }).click()
+  await dialog.locator('input').fill(`Best ${tag}`)
+  await dialog.locator('button.primary').click()
+  await expect(folder.locator('.b-open')).toContainText(`Best ${tag}`)
+  // Delete the page… from the grid head: its thing goes to the Sketches, nothing is deleted
+  await page.locator('[data-testid="bin-grid"] .w-bin-head button[aria-label="Delete the page…"]').click()
+  await expect(dialog).toContainText(`1 thing and the pages inside it go to ${sketches.name}`)
+  await dialog.locator('button', { hasText: 'Delete the page' }).click()
+  await expect(folder).toHaveCount(0)
+  await expect.poll(async () => (await api<{ home_id: string }>('GET', `/bin/things/${copy}`)).home_id).toBe(sketches.id)
+  await expect(page.locator('[data-testid="bin-grid"] .w-path')).toHaveText('bin/world/sketches')           // the home is open again
+})
+
 test('the Bin (U8, D157 · proto01_UI2 05 §2): a take made for a shot is in its shot\'s home — the tree, the grid, its home and roles in the Inspector, Tag…, Open its shot ▸; the Dock\'s drawer in World shows the homes', async ({ page }) => {
   test.setTimeout(90_000)
   const tag = Date.now().toString(36)

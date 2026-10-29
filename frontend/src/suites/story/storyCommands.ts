@@ -252,12 +252,12 @@ export async function addStyleSamples(id: string, assetIds: string[]): Promise<v
   } catch { /* the album verbs toast their own failures */ }
 }
 
-/** B2 (D159): a group page in the Bin — the home it is, or the home that holds it as a page. */
+/** B2 (D159): a group page in the Bin — the home it is, the page itself (B3: a folder of its home), or the home a role page is in. */
 export function openGroupPage(gid: string): void {
   navigate({ suite: 'catalogue' })
   void import('../../ui2/bin/binStore').then(async ({ homesById, useBin }) => {
     if (!useBin.getState().homes.length) await useBin.getState().loadTree()
-    const home = [...homesById(useBin.getState().homes).values()].find((n) => n.id === gid || n.pages.includes(gid))
+    const home = homesById(useBin.getState().homes).get(gid)                         // B3: a page is a folder of its home; a role page opens its home
     if (home) await useBin.getState().openHome(home.id)
     else useSession.getState().toast('That page is in no home of the Bin yet', 'info')
   })

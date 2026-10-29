@@ -5,7 +5,7 @@ import type { BinNode, BinThing } from '../../api/types'
 import { belongs, moveTargets } from './binCommands'
 import { homesById, passes, pathLabel, subtreeIds, touches, TRASH, useBin } from './binStore'
 
-const node = (id: string, path: string, name: string, children: BinNode[] = [], pages: string[] = []): BinNode => ({ id, path, name, count: 0, total: 0, pages, children, gone: false })
+const node = (id: string, path: string, name: string, children: BinNode[] = [], pages: string[] = []): BinNode => ({ id, path, name, count: 0, total: 0, pages, children, gone: false, page: false })
 const homes = [
   node('g_w', 'world', 'World', [node('g_c', 'world/character', 'Characters', [node('g_i', 'world/character/prf_1', 'Ines', [node('g_v', 'world/character/prf_1/v1', 'v1 · rain gear', [], ['g_ref'])])])]),
   node('g_s', 'shots', 'Shots', [node('g_sh', 'shots/sht_9', 'The seal', [node('g_sv', 'shots/sht_9/v1', 'v1')])]),

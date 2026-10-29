@@ -7,7 +7,7 @@
 // the keys shown (handleKeyFor('bin')). B2a (D159, 11 §7): the quick starts on a picture — Open in Edit, Select subject…, Upscale…, New
 // angle…, Make a 3D prop… — and Add to World ▸ (the things named go into an entity's version as the hero, a reference or a candidate).
 import { ArrowLeftRight, ArrowUpRight, Box, ChevronLeft, ChevronRight, Columns2, Copy, Eraser, ExternalLink, FolderInput, FolderOpen, FolderOutput, ImagePlus, ImageUp,
-  ImageUpscale, Inbox, Maximize2, Orbit, Pencil, Pin, PinOff, RotateCcw, Shuffle, SquareCheck, SquareX, Tag, Trash, Trash2, Undo, Upload, ZoomIn, ZoomOut } from 'lucide-react'
+  FolderPlus, ImageUpscale, Inbox, Maximize2, Orbit, Pencil, PencilLine, Pin, PinOff, RotateCcw, Shuffle, SquareCheck, SquareX, Tag, Trash, Trash2, Undo, Upload, ZoomIn, ZoomOut } from 'lucide-react'
 import { http, unwrap } from '../../api/client'
 import type { BinNode, BinThing } from '../../api/types'
 import { showMenu } from '../../frame/ContextMenu'
@@ -171,6 +171,11 @@ const addTo = (role: 'hero' | 'reference' | 'candidate') => async () => {
   await b().refresh({ tree: true, home: true })
 }
 const openNode = () => homeOf(b().open)
+/** B3 (D159): the open node is a page (a folder of a home) / a home that holds things (not a heading, the Trash or a deleted record's). */
+const openPage = () => { const n = openNode(); return n?.page ? n : undefined }
+const holds = () => { const n = openNode(); return !!n && !b().query && !n.gone && !HEADINGS.has(n.path) }
+/** The node a page sits in: its home, or the page around it. */
+const parentOf = (page: BinNode): BinNode | undefined => [...homesById(b().homes).values()].find((x) => x.children.some((k) => k.id === page.id))
 const live = () => n() > 0 && !inTrash()
 const order = () => b().items.map((x) => x.asset.id)
 const step = (d: number) => { const o = order(), i = o.indexOf(b().selected ?? ''); const j = i + d; if (j >= 0 && j < o.length) b().select(o[j]) }
@@ -219,6 +224,29 @@ registerCommands([
   { id: 'bin.clearSelection', scope: 'bin', label: 'Clear selection', icon: SquareX, keys: 'Escape', placement: ['inspector'], when: () => b().selection.length > 0, run: () => b().select(null) },
   { id: 'bin.tileSmaller', scope: 'bin', label: 'Smaller tiles', icon: ZoomOut, keys: '[', placement: ['panel'], when: () => b().tile > TILE.min, run: () => b().setTile(b().tile - TILE.step) },
   { id: 'bin.tileLarger', scope: 'bin', label: 'Larger tiles', icon: ZoomIn, keys: ']', placement: ['panel'], when: () => b().tile < TILE.max, run: () => b().setTile(b().tile + TILE.step) },
+  // B3 (D159 Q2): pages are folders of a home — made, renamed and removed here; a page's things are its home's too
+  { id: 'bin.page.new', scope: 'bin', label: 'New page…', icon: FolderPlus, placement: ['panel', 'context'], when: holds,
+    hint: 'a folder of the open home (or page): its things are the home\'s too', run: async () => {
+      const node = openNode(); if (!node) return
+      const name = await askText({ title: 'New page', text: `A folder of ${node.name}: what goes into it is ${node.name}'s too.`, placeholder: 'the page\'s name', okLabel: 'Make the page' })
+      if (!name?.trim()) return
+      const g = await unwrap(http.POST('/groups', { body: { name: name.trim(), parent_id: node.id } }))
+      await b().refresh({ tree: true }); if (!b().expanded[node.id]) b().toggle(node.id); await b().openHome(g.id) } },
+  { id: 'bin.page.rename', scope: 'bin', label: 'Rename the page…', icon: PencilLine, placement: ['panel', 'context'], when: () => !!openPage(), run: async () => {
+    const page = openPage(); if (!page) return
+    const name = await askText({ title: 'Rename the page', initial: page.name, placeholder: 'the page\'s name', okLabel: 'Rename' })
+    if (!name?.trim() || name.trim() === page.name) return
+    await unwrap(http.PATCH('/groups/{gid}', { params: { path: { gid: page.id } }, body: { name: name.trim() } }))
+    await b().refresh({ tree: true }) } },
+  { id: 'bin.page.delete', scope: 'bin', label: 'Delete the page…', icon: FolderOutput, placement: ['panel', 'context'], danger: true, when: () => !!openPage(), run: async () => {
+    const page = openPage(); if (!page) return
+    const up = parentOf(page)
+    const users = (await unwrap(http.GET('/groups/used-by', { params: { query: { ids: [page.id] } } })).catch(() => ({} as Record<string, { name: string }[]>)))[page.id] ?? []
+    const ok = await askConfirm({ title: `Delete the page ${page.name}?`, okLabel: 'Delete the page', danger: true,
+      text: `Its ${plural(page.total, 'thing')} and the pages inside it go to ${up?.name ?? 'its home'}; nothing is deleted.${users.length ? ` It is used by ${users.map((u) => u.name).slice(0, 3).join(', ')}, which will no longer find it.` : ''}` })
+    if (!ok) return
+    await unwrap(http.POST('/groups/{gid}/ungroup', { params: { path: { gid: page.id } } }))
+    await b().refresh({ tree: true }); if (up) await b().openHome(up.id) } },
   { id: 'bin.import', scope: 'bin', label: 'Import…', icon: Upload, placement: ['panel'], hint: 'pictures, clips or sounds from the disk, into the open home (or Imports); a file dropped from Windows too',
     run: importAsk },
   { id: 'bin.loupe.prev', scope: 'bin', label: 'Previous', icon: ChevronLeft, keys: 'ArrowLeft', placement: ['toolbar'], when: () => b().viewing && order().indexOf(b().selected ?? '') > 0, run: () => step(-1) },

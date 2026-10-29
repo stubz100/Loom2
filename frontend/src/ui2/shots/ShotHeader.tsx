@@ -9,6 +9,7 @@ import { useStory } from '../../suites/story/storyStore'
 import { useWorld } from '../world/worldStore'
 import { cameraUsers, castOf, rescene, setRange, useRouteRows, useShotStage, type CastMember } from './scene'
 import { flushClay, useShots } from './shotsStore'
+import { ShotWords } from './ShotWords'
 
 const LinesEditor = lazy(() => import('../../suites/story/StoryParts').then((m) => ({ default: m.LinesEditor })))
 
@@ -88,6 +89,7 @@ export function ShotHeader() {
           {open && level !== 'clay' && <CommandButton id="shots.level.clay" text label="Add in Clay ▸" />}
         </span>
       </div>}
+      <ShotWords stageRev={stage?.revision} />
     </div>
   )
 }

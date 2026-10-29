@@ -1320,7 +1320,7 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   const plate = await plateOf()
   expect(plate.still_asset_id).toBeTruthy(); expect(plate.job_ids).toHaveLength(1)
   const job = (await api<{ items: { id: string; recipe: { kind: string; prompt_text: string } }[] }>('GET', '/jobs')).items.find((j) => j.id === plate.job_ids[0])!
-  expect(job.recipe.kind).toBe('stage_shot'); expect(job.recipe.prompt_text).toMatch(/^The room is empty/)
+  expect(job.recipe.kind).toBe('stage_shot'); expect(job.recipe.prompt_text).toMatch(/^The place is empty/)   // U4d (F38): the lead names no room
   const pf = await fetch(`http://127.0.0.1:${env().port}/finals/${fin.id}/layers/plate/frames/8`, { headers: { 'X-Loom-Token': env().token } })
   expect(pf.status).toBe(200)
   await expect(page.locator('.final-section li[data-kind="plate"] .status')).toHaveText(/done · 9 frames/)
@@ -4430,7 +4430,7 @@ test('World\'s Look words and the ideas brought in (U3e, D157 · G3, G4): a Libr
   await expect.poll(roles, { timeout: 10_000 }).toEqual(['candidate', 'hero'])                          // the fold keeps the idea first, then adds its candidates
 })
 
-test('Shots in the new shell (U4a–c, D157 · proto01_UI2 04 §2–3, §7): the storyboard, the header, Clay on the shot\'s stage through its camera; the Flow\'s double-click, New shot in the same scene, the header\'s New scene and range', async ({ page }) => {
+test('Shots in the new shell (U4a–d, D157 · proto01_UI2 04 §2–3, §6–7): the storyboard, the header, Clay on the shot\'s stage through its camera; the Flow\'s double-click, New shot in the same scene, the header\'s New scene, range and words', async ({ page }) => {
   test.setTimeout(90_000)
   const tag = Date.now().toString(36)
   type NodeLite = { id: string; shot_id: string | null }
@@ -4472,4 +4472,12 @@ test('Shots in the new shell (U4a–c, D157 · proto01_UI2 04 §2–3, §7): the
   await end.fill('48'); await end.press('Enter')
   await expect.poll(async () => (await api<{ items: (ShotLite & { versions: { range: unknown }[] })[] }>('GET', '/story/shots')).items.find((s) => s.id === c.id)!.versions[0].range, { timeout: 10_000 }).toEqual({ start: 0, end: 48 })
   await expect(page.locator('[data-testid="shots-range"]')).toContainText('2.0 s')
+  // U4d (G13, 04 §6): this shot's own words, kept with its version, are a part of what its pictures are told — shown with their source
+  await page.locator('[data-testid="shots-words"] button', { hasText: 'Show the words' }).click()
+  const mine = page.locator(`textarea[aria-label="this shot's words"]`)
+  await mine.fill('rain on the planks'); await mine.blur()
+  await expect.poll(async () => (await api<{ items: (ShotLite & { versions: { words: string }[] })[] }>('GET', '/story/shots')).items.find((s) => s.id === c.id)!.versions[0].words, { timeout: 10_000 }).toBe('rain on the planks')
+  await expect(page.locator('.s-parts li[data-part="shot"]')).toContainText('rain on the planks')
+  await page.locator('[data-testid="shots-words"] .w-chips button', { hasText: 'the plate' }).click()
+  await expect(page.locator('.s-parts li[data-part="shot"]')).toContainText('rain on the planks')            // the plate is told it too (no cast, no action)
 })

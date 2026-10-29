@@ -11961,3 +11961,63 @@ animation editor, where the range is edited and never moves by itself.
 `model_literals_check` and `settings_audit` (319, 0) clean.
 
 Next: U4d — G13, the words of a shot's pictures (`shot_prompt`, 06 §2.8, 04 §6).
+
+## 2026-10-29 05:15 — U4d: the words of a shot's pictures (G13) — one composer from the shot's own records, shown part by part with their sources; the plate told its place, not a room (D157, proto01_UI2 04 §6, 06 §2.8)
+
+**The composer** (`loom2/shot_prompt.py`, `shot_prompt(ws, shot, version, purpose)`) builds the words of a picture from the shot's own
+records, so nothing is carried over from the last picture made (F25, F29). The parts, in order:
+
+1. **the Look** — the project's default style (★);
+2. **the place** — the World place bound to the stage's built set, else the one the shot's node is at: its sheet, its hero as a
+   reference;
+3. **the cast in frame** — each figure and World prop the shot's camera sees, left to right, by where it falls in the camera's frame
+   (`screen_x`; a thing behind the camera or out of frame is left out): its sheet, its hero;
+4. **the lights as words** — each Clay light for that camera (`light_words`): warm or cool from its colour, dim or strong, soft or hard,
+   its name when the author gave one, and from the left, the right, the front, behind or above. On the test stage: *warm soft lamp light
+   from the left, cool dim moonlight from behind*;
+5. **the scene's words** — time of day, weather, the air (`Scene.words`, new);
+6. **the action** — the shot's description;
+7. **this shot only** — the author's own words, kept with the version (`ShotVersion.words`, new; fixed with a final version).
+
+A plate has no cast and no action (its people are layers). A still and a performance have all seven. Every part names its source
+(*World › Places › Town street v1*, *Clay › Ines (left to right)*, *Scene › At the quay*).
+
+**The route:** `GET /story/shots/{sid}/versions/{vid}/prompt?purpose=still|plate|performance`.
+
+**The plate (F38):**
+
+- A final made for a shot is now told that shot's plate words.
+- The lead is place-neutral: *The place is empty: there are no people and no objects in it*. It was *The room is empty … only the bare
+  walls and floor*, which was wrong on a street.
+- The author's own plate text still follows.
+- Rig owed: one plate on the GPU with the new words; E28's lead found that a plate without "no people" grows people, and the new lead
+  keeps that clause.
+
+**In the shot header** (`ShotWords.tsx`): *Show the words ▸* (`shots.words.toggle`) opens:
+
+- the scene's words and this shot's own words, each saved with its record when left;
+- the chips *a still* · *the plate* · *a performance*;
+- the composed parts, each with its source.
+
+The words also follow Clay's edits: they are read again after the stage saves (a light moved, a figure stepped out of frame).
+
+On the copy of The Last Ferry, Stay is told Harbour noir's words, *Town street* (the place bound to its street set, though its node still
+says Harbour pier), Ines's sheet and its description; its plate is told the Look and the street only.
+
+**Not yet:** the start still, the stills from the stage and the performances still take the panels' own prompts. They take these words
+when U6 rebuilds them as Performance; the composer's `still` and `performance` are ready for it. A scene's own Look (04 §6.1) waits for a
+scene style.
+
+**Tests:**
+
+- `test_shot_prompt_u4d.py` 4: the seven parts with their sources and order; the plate's five; the set's place over the node's; the
+  camera's frame and the lights' words; the route and the plate route's words;
+- the e2e scenario gains the words: this shot's own words saved with the version and shown, for a still and the plate;
+- the D37 snapshot gains the route;
+- the final shot's e2e scenario now expects the new lead.
+
+**Checks:** offline 717 passed; Vitest 625 + 3 skipped; typecheck, build and lint clean; e2e 85/85 (alone); `agents_check`,
+`model_literals_check` and `settings_audit` (319, 0) clean; the API contract regenerated.
+
+U4's list in 07 §2 is done except *the pose editor*, which is Clay's own, unchanged (04 §3.1), and F39, which is owed to U5 with the
+animation editor. Next is U5: the animation editor.

@@ -25,7 +25,7 @@ FINAL_PLATE_PATH_SURFACE = "final_plate_path"     # CA3 (D130): origin.surface o
 FINAL_PLATE_KEY_SURFACE = "final_plate_key"       # PF1 (D135): origin.surface of a filled plate's keyframe Fill; ref = the final, payload {frame}
 BATCH, CARRY = 77, 5                              # E23a W1: 77-frame batches, the last 5 frames carried into the next (72 new)
 CHARACTER_TAIL = "moving exactly as the pose shows. Plain studio background, static camera."
-PLATE_LEAD = "The room is empty: there are no people and no objects in it, only the bare walls and floor."   # E28: a plate without the lead grew people
+PLATE_LEAD = "The place is empty: there are no people and no objects in it."   # E28: a plate without the lead grew people; U4d (F38): not "the room … bare walls and floor" on a street
 PLATE_PATH_TAIL = "The camera moves slowly through the place; nothing in it moves."   # CA3: E34's clip prompt ended on the camera's move
 PLATE_PATH_MAX = 257                               # CA3: LTX-2.3's longest clip (I2V.frames) — a longer plate is projected
 FILL_LEAD = ("Continue the surrounding surfaces seamlessly with the same materials and the same light; add nothing that is not already "

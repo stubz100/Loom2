@@ -230,8 +230,17 @@ async def final_plate(svc: Svc, fid: str, body: PlateBody):
     first = await asyncio.to_thread(_scene_plate, ws, f)                    # O4: the scene's first plate leads the references
     refs = ([{"asset_id": first, "note": "the same place as this picture: its walls, floor, light and materials"}] if first else []) + \
         [r for r in body.refs if r.get("asset_id") != first]
+    words = ""
+    if f.shot_id:                                                           # U4d (G13): the shot's own words for its plate (F38)
+        from ..shot_prompt import shot_prompt
+        try:
+            words = (await asyncio.to_thread(shot_prompt, ws, f.shot_id, f.shot_version, "plate")).text
+        except KeyError:
+            words = ""
+    extra = body.prompt_text.strip()
+    text = " ".join(x for x in (PLATE_LEAD, words, extra if extra not in words else "") if x)
     recipe = {"kind": "stage_shot", "stage_id": f.stage_id, "camera_id": f.camera_id, "passes": {"clay": rec.id}, "method": "clay", "empty": True,
-              "prompt_text": f"{PLATE_LEAD} {body.prompt_text.strip()}".strip(), "refs": refs, "seeds": [body.seed], "width": w, "height": h}
+              "prompt_text": text, "refs": refs, "seeds": [body.seed], "width": w, "height": h}
     try:
         jobs = svc.queue.submit(recipe, origin=JobOrigin(suite="stage", surface=FINAL_PLATE_SURFACE, ref=fid, payload={"prompt": body.prompt_text.strip()}))
     except ValueError as e:

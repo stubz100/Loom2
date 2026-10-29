@@ -321,6 +321,7 @@ class ShotVersion(BaseModel):
     finalized_at: str | None = None
     recipe: ShotRecipe | None = None              # RC0 (D96, 05 §4): the steps that made the frame and the clip, their runs and stamps (shot_recipe.py)
     range: dict[str, int] | None = None           # U2 (D157, G6): the frames of its scene's timeline it covers {start, end}; None: the stage's range
+    words: str = Field("", max_length=2000)       # U4d (G13): this shot only — the author's extra words for its pictures (shot_prompt.py)
 
 
 class Shot(BaseModel):
@@ -574,6 +575,7 @@ class Scene(BaseModel):
     colour: str | None = None
     cast_versions: dict[str, str] = Field(default_factory=dict)   # RC2f: the versions its Shots wear (linked); a node with `own` cast keeps its own
     stage_id: str | None = None                   # U2 (D157, G6): the scene's stage — its shots are cameras on it
+    words: str = Field("", max_length=1000)       # U4d (G13): the scene's words for its shots' pictures — time of day, weather, the air
     created_at: str = Field(default_factory=utc_now)
     updated_at: str = Field(default_factory=utc_now)
 
@@ -1026,9 +1028,9 @@ class _ShotMixin:
                 v = next((x for x in part.versions if x.id == patch.get("id")), None)
                 if v is None:
                     raise ValueError(f"no version {patch.get('id')!r}")
-                if v.state != "open" and any(k in patch for k in ("frame_asset_id", "clip_id", "stage_id", "camera_id", "range")):
+                if v.state != "open" and any(k in patch for k in ("frame_asset_id", "clip_id", "stage_id", "camera_id", "range", "words")):
                     raise ValueError(f"version {v.id} is final — its frame and clip are fixed; make a new version")
-                for k in ("frame_asset_id", "clip_id", "stage_id", "camera_id", "stage_revision", "range"):
+                for k in ("frame_asset_id", "clip_id", "stage_id", "camera_id", "stage_revision", "range", "words"):
                     if k in patch:
                         setattr(v, k, patch[k])
             part = part.model_copy(update={"current": data.get("current", part.current), "revision": part.revision + 1, "updated_at": utc_now()})
@@ -1934,7 +1936,7 @@ class _FlowMixin:
             cur = next((s for s in b.scenes if s.id == sid), None)
             if cur is None:
                 raise KeyError(sid)
-            upd = {k: v for k, v in data.items() if k in ("name", "colour")}
+            upd = {k: v for k, v in data.items() if k in ("name", "colour", "words")}
             if "name" in upd and not str(upd["name"] or "").strip():
                 raise ValueError("a scene needs a name")
             s = cur.model_copy(update={**upd, "updated_at": utc_now()})

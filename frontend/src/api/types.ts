@@ -81,6 +81,7 @@ export type ShotCard = S['ShotCard']                          // RC2b: a Shot ca
 export type SceneOut = S['SceneOut']                          // RC2c: a scene group and its member nodes
 export type ShotTemplate = S['ShotTemplate']                  // RC2e: a Shot kept to start others from (World › Presets)
 export type ShotVersion = S['ShotVersion']
+export type ShotPrompt = S['ShotPrompt']                      // U4d (D157, G13): the words of a shot's pictures, part by part with their sources
 export type CastUse = S['CastUse']                            // D125 (S5): a shot that uses a Cast profile, how and its route
 export type CastReadiness = S['CastReadiness']
 export type FlowNode = S['FlowNode']                          // 17 (D85) SY3: the flow

@@ -9,6 +9,8 @@ import { useSession } from '../../store/session'
 import { useStory } from '../../suites/story/storyStore'
 
 export type ShotLevel = 'flow' | 'clay' | 'performance' | 'final'
+/** U4d (G13): the picture the header's words are shown for. */
+export type WordsFor = 'still' | 'plate' | 'performance'
 export const LEVELS: { id: ShotLevel; label: string }[] = [{ id: 'flow', label: 'Flow' }, { id: 'clay', label: 'Clay' }, { id: 'performance', label: 'Performance' }, { id: 'final', label: 'Final' }]
 
 /** The hash's Shots place: #shots/<shot>/<level> (its parts optional). */
@@ -40,6 +42,10 @@ interface ShotsState {
   open: (shotId: string, level?: ShotLevel) => void
   /** The shot's scene or camera changed: Clay opens on it again. */
   reopen: () => void
+  wordsOpen: boolean
+  wordsFor: WordsFor
+  toggleWords: () => void
+  setWordsFor: (w: WordsFor) => void
 }
 
 /** Clay on the shot's scene, through its camera (U4: the stage the version points at, its camera active). */
@@ -77,6 +83,9 @@ export const useShots = create<ShotsState>()((set, get) => ({
     get().setLevel(level ?? get().level)                                // 04 §2: a card opens the shot at the level last used
   },
   reopen: () => { if (get().level === 'clay') void openClay() },
+  wordsOpen: false, wordsFor: 'still',
+  toggleWords: () => set({ wordsOpen: !get().wordsOpen }),
+  setWordsFor: (wordsFor) => set({ wordsFor }),
 }))
 
 /** Mounted with the Shots layer: once a project is open, the Flow, the shots and the board's facts, then the place from the hash. */

@@ -798,6 +798,7 @@ class SceneOut(Out):
     colour: str | None
     cast_versions: dict[str, str]
     stage_id: str | None = None                     # U2 (D157, G6): the scene's stage
+    words: str = ""                                 # U4d (G13): the scene's words for its shots' pictures
     created_at: str
     updated_at: str
     node_ids: list[str]

@@ -22,6 +22,7 @@ from ..schemas import Deleted, VersionBin, ProfileAdded, LibraryChange, LibraryR
 from ..stages import PlaceSet, Pose, SetFace, StageStore, encode_guide
 from ..shot_recipe import TEMPLATES, StampReader, Template, recipe_state, rerun_recipe, stale_plan, used_run
 from ..shot_graph import ShotGraph, clay_rows, final_for, shot_graph
+from ..shot_prompt import ShotPrompt, shot_prompt
 from ..story import FOR_SHOT, NODE_TYPES, VISUAL_TYPES, has_lines, node_type, StaleScenes, CastUse, cast_uses, body_fit_origin, model_source, prop_model_origin, shell_origin, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
 from ..voices import VoiceRecord, VoiceStore, check_voice
 from .deps import Svc
@@ -1632,6 +1633,16 @@ async def shot_source(svc: Svc, sid: str, vid: str, body: SourceBody):
         raise HTTPException(422, str(e))
     _shot_changed(svc, s)
     return s.model_dump()
+
+
+@router.get("/story/shots/{sid}/versions/{vid}/prompt", response_model=ShotPrompt)
+async def shot_words(svc: Svc, sid: str, vid: str, purpose: Literal["plate", "still", "performance"] = "still"):
+    """U4d (D157, G13; 04 §6): the words of the shot's pictures for a purpose, part by part with their sources (*Show the words*)."""
+    ws, _, _ = svc.require_project()
+    try:
+        return (await asyncio.to_thread(shot_prompt, ws, sid, vid, purpose)).model_dump()
+    except KeyError as e:
+        raise HTTPException(404, f"{e.args[0]} not found")
 
 
 class SceneBody(BaseModel):

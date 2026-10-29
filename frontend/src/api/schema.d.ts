@@ -3995,6 +3995,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/shots/{sid}/versions/{vid}/prompt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Shot Words
+         * @description U4d (D157, G13; 04 §6): the words of the shot's pictures for a purpose, part by part with their sources (*Show the words*).
+         */
+        get: operations["shot_words_story_shots__sid__versions__vid__prompt_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/shots/{sid}/versions/{vid}/run-stale": {
         parameters: {
             query?: never;
@@ -11090,6 +11110,25 @@ export interface components {
              */
             type: "project.opened";
         };
+        /**
+         * PromptPart
+         * @description One part of a shot's words, with where it came from.
+         */
+        PromptPart: {
+            /**
+             * Id
+             * @enum {string}
+             */
+            id: "look" | "place" | "cast" | "lights" | "scene" | "action" | "shot";
+            /** Label */
+            label: string;
+            /** Refs */
+            refs: string[];
+            /** Source */
+            source: string;
+            /** Text */
+            text: string;
+        };
         /** PropModelImport */
         PropModelImport: {
             /** Path */
@@ -11893,6 +11932,11 @@ export interface components {
             stage_id: string | null;
             /** Updated At */
             updated_at: string;
+            /**
+             * Words
+             * @default
+             */
+            words: string;
         };
         /**
          * Segment
@@ -12435,6 +12479,18 @@ export interface components {
              */
             title?: string;
         };
+        /** ShotPrompt */
+        ShotPrompt: {
+            /** Parts */
+            parts: components["schemas"]["PromptPart"][];
+            /**
+             * Purpose
+             * @enum {string}
+             */
+            purpose: "plate" | "still" | "performance";
+            /** Text */
+            text: string;
+        };
         /** ShotRecipe */
         ShotRecipe: {
             /** Steps */
@@ -12537,6 +12593,11 @@ export interface components {
             state: "open" | "final";
             /** Takes */
             takes: components["schemas"]["ShotTake"][];
+            /**
+             * Words
+             * @default
+             */
+            words: string;
         };
         /** ShuttingDown */
         ShuttingDown: {
@@ -22378,6 +22439,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Shot"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    shot_words_story_shots__sid__versions__vid__prompt_get: {
+        parameters: {
+            query?: {
+                purpose?: "plate" | "still" | "performance";
+            };
+            header?: never;
+            path: {
+                sid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShotPrompt"];
                 };
             };
             /** @description Validation Error */

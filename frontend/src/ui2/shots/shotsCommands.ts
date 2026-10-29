@@ -1,6 +1,6 @@
 // U4 (D157, proto01_UI2 04 §8): Shots' commands (rule 3: every action a command with a mouse home; keys are accelerators). They act on the
 // shot the header shows (the Story store's selection) and the level the rail shows.
-import { Box, Clapperboard, GitBranch, MonitorPlay, Plus, SquarePlus } from 'lucide-react'
+import { Box, Clapperboard, GitBranch, MonitorPlay, Plus, SquarePlus, Text } from 'lucide-react'
 import { registerCommands } from '../../frame/commands'
 import { useSession } from '../../store/session'
 import { useStory } from '../../suites/story/storyStore'
@@ -20,6 +20,8 @@ registerCommands([
   { id: 'shots.scene.new', scope: 'shots', label: 'New scene', icon: SquarePlus, placement: ['panel'], when: () => useStory.getState().shotVersion()?.state === 'open',
     hint: "a scene and a stage of this shot's own — its place's set when the shot has a place, else an empty stage",
     run: () => void rescene('new').then((ok) => { if (ok) useShots.getState().reopen() }) },
+  { id: 'shots.words.toggle', scope: 'shots', label: 'Show the words', icon: Text, placement: ['panel'], when: () => !!shot(),
+    hint: "what the shot's pictures are told, part by part, with where each part comes from", run: () => useShots.getState().toggleWords() },
   { id: 'shots.toPerformance', scope: 'shots', label: 'To Performance ▸', icon: Clapperboard, placement: ['panel'], when: () => !!shot(), run: level('performance') },
   // G12 (04 §7): a new shot after the open one
   { id: 'shots.new.scene', scope: 'shots', label: 'New shot in a new scene', icon: SquarePlus, placement: ['strip', 'context'], when: open,

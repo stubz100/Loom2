@@ -31,3 +31,9 @@
 .s-member.owed { border-style: dashed; }
 .s-owed { color: var(--warn); }
 .s-foot { display: flex; flex-direction: column; gap: 6px; }
+.s-words > span:first-child { display: flex; align-items: center; gap: 6px; }
+.s-words-body { display: flex; flex-direction: column; gap: 6px; padding: 4px 0 2px; }
+.s-parts { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow: auto; }
+.s-part-head { display: flex; gap: 6px; align-items: baseline; }
+.s-part-src { color: var(--fg3); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.s-part-text { display: block; color: var(--fg2); overflow-wrap: anywhere; }

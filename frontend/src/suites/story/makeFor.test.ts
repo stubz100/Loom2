@@ -10,7 +10,7 @@ const node = (type: FlowNode['type'], extra: Partial<FlowNode> = {}): FlowNode =
   schema_version: 1, id: 'node_1', type, title: '', lines: [], options: [], cond: null, set: [], target: null, text: '', shot_id: null, shot_version: null, board_group_id: null, place_id: null, speaker_versions: {}, colour: null, beat_id: null, scene_id: null, own: [],
   revision: 0, created_at: '', updated_at: '', ...extra,
 })
-const version = (id: string, state: 'open' | 'final' = 'open') => ({ id, state, stage_id: null, camera_id: null, stage_revision: null, frame_asset_id: null, clip_id: null, takes: [], derived_from: null, created_at: '', finalized_at: null, recipe: null, range: null })
+const version = (id: string, state: 'open' | 'final' = 'open') => ({ id, state, stage_id: null, camera_id: null, stage_revision: null, frame_asset_id: null, clip_id: null, takes: [], derived_from: null, created_at: '', finalized_at: null, recipe: null, range: null, words: '' })
 const shot = (current: string, versions: ReturnType<typeof version>[], owner: string | null = null): Shot =>
   ({ schema_version: 1, id: 'sht_1', name: 'Shot 12', owner_node: owner, current, versions, revision: 0, created_at: '', updated_at: '' }) as Shot
 const profile = (id: string, name: string): Profile => ({ id, name, cls: 'character', current: 'v1', versions: [{ id: 'v1', group_id: `grp_${id}` }] }) as unknown as Profile

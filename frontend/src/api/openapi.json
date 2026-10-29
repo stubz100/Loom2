@@ -16143,6 +16143,52 @@
         "title": "ProjectOpenedEvent",
         "type": "object"
       },
+      "PromptPart": {
+        "description": "One part of a shot's words, with where it came from.",
+        "properties": {
+          "id": {
+            "enum": [
+              "look",
+              "place",
+              "cast",
+              "lights",
+              "scene",
+              "action",
+              "shot"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Refs",
+            "type": "array"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "source",
+          "text",
+          "refs"
+        ],
+        "title": "PromptPart",
+        "type": "object"
+      },
       "PropModelImport": {
         "properties": {
           "path": {
@@ -18021,6 +18067,11 @@
           "updated_at": {
             "title": "Updated At",
             "type": "string"
+          },
+          "words": {
+            "default": "",
+            "title": "Words",
+            "type": "string"
           }
         },
         "required": [
@@ -18029,6 +18080,7 @@
           "colour",
           "cast_versions",
           "stage_id",
+          "words",
           "created_at",
           "updated_at",
           "node_ids"
@@ -19404,6 +19456,37 @@
         "title": "ShotNodeCreate",
         "type": "object"
       },
+      "ShotPrompt": {
+        "properties": {
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/PromptPart"
+            },
+            "title": "Parts",
+            "type": "array"
+          },
+          "purpose": {
+            "enum": [
+              "plate",
+              "still",
+              "performance"
+            ],
+            "title": "Purpose",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "purpose",
+          "text",
+          "parts"
+        ],
+        "title": "ShotPrompt",
+        "type": "object"
+      },
       "ShotRecipe": {
         "properties": {
           "steps": {
@@ -19689,6 +19772,12 @@
             },
             "title": "Takes",
             "type": "array"
+          },
+          "words": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Words",
+            "type": "string"
           }
         },
         "required": [
@@ -19704,7 +19793,8 @@
           "created_at",
           "finalized_at",
           "recipe",
-          "range"
+          "range",
+          "words"
         ],
         "title": "ShotVersion",
         "type": "object"
@@ -36545,6 +36635,73 @@
           }
         },
         "summary": "Shot Own Stage",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/shots/{sid}/versions/{vid}/prompt": {
+      "get": {
+        "description": "U4d (D157, G13; 04 §6): the words of the shot's pictures for a purpose, part by part with their sources (*Show the words*).",
+        "operationId": "shot_words_story_shots__sid__versions__vid__prompt_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "title": "Sid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "purpose",
+            "required": false,
+            "schema": {
+              "default": "still",
+              "enum": [
+                "plate",
+                "still",
+                "performance"
+              ],
+              "title": "Purpose",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShotPrompt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Shot Words",
         "tags": [
           "story"
         ]

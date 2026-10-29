@@ -17863,6 +17863,48 @@
         "title": "SavedPanels",
         "type": "object"
       },
+      "SceneBody": {
+        "description": "U4 (D157, 04 §2.1): an open version's scene.",
+        "properties": {
+          "like": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`same`: the Shot node whose scene and camera it takes (the shot before on the route)",
+            "title": "Like"
+          },
+          "place_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`new`: the World place whose set the new stage is built from (else the node's place)",
+            "title": "Place Id"
+          },
+          "scene": {
+            "enum": [
+              "new",
+              "same"
+            ],
+            "title": "Scene",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scene"
+        ],
+        "title": "SceneBody",
+        "type": "object"
+      },
       "SceneCreate": {
         "properties": {
           "name": {
@@ -36565,6 +36607,68 @@
           }
         },
         "summary": "Shot Run Stale",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/shots/{sid}/versions/{vid}/scene": {
+      "post": {
+        "description": "U4 (D157, 04 §2.1, the header's scene menu): *New scene…* — a scene and stage of its own; *Same scene as the shot before* — that\nshot's scene, with a copy of its camera.",
+        "operationId": "shot_scene_story_shots__sid__versions__vid__scene_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "title": "Sid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SceneBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Shot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Shot Scene",
         "tags": [
           "story"
         ]

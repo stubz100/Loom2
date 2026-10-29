@@ -562,7 +562,7 @@ class NodeRecord(FlowNode):
 
 
 # ---- scene groups (RC2c, proto01_animate 31 §3b) ----------------------------------------------------------------------------------------
-SCENES_SCHEMA_VERSION = 2                          # U2 (D157, G6): 2 — a scene owns its stage (`Scene.stage_id`)
+SCENES_SCHEMA_VERSION = 3                          # U2 (D157, G6): 2 — a scene owns its stage (`Scene.stage_id`); U4: 3 — every shot a camera of its own on it
 
 
 class Scene(BaseModel):
@@ -1043,6 +1043,11 @@ class _ShotMixin:
         follows the source (RC0: `stage` for a stage camera's shot) unless one was chosen."""
         if (stage_id is None) != (camera_id is None):
             raise ValueError("a stage source names both the stage and the camera")
+        if stage_id:                                                          # U4 (06 §2.3): a bench or the line-up is no shot's scene
+            from .stages import StageStore
+            st = StageStore(self.ws).get(stage_id)                            # type: ignore[attr-defined]
+            if st is not None and st.purpose != "stage":
+                raise ValueError(f"{st.name} is a {'bench' if st.purpose == 'bench' else 'line-up'}, not a scene — a shot looks through a stage's camera")
         with _LOCK:
             if stage_id and camera_id:                                        # U2 (G6): a camera serves one shot — another's is copied for this one
                 camera_id, rev = self._own_camera(stage_id, camera_id, sid)
@@ -1685,24 +1690,138 @@ class _FlowMixin:
             self._save_book(b.model_copy(update={"scenes": scenes, "revision": b.revision + 1}))
 
     def migrate_u2_scenes(self) -> list[str]:
-        """U2 (D157, G6), once — a book of schema 1: each scene whose Shots look at one stage owns it now. Shots that share a camera and the
-        shots without a stage are brought into the model with the clay template (U4); nothing else is touched."""
-        raw = read_json_or(self.flow_dir / "scenes.json", None)
-        if not isinstance(raw, dict) or int(raw.get("schema_version", 1)) >= SCENES_SCHEMA_VERSION:
-            return []
+        """U2 (D157, G6), once — a book of schema 1: each scene whose Shots look at one stage owns it now. Then U4 (06 §2.3), once — a book
+        before schema 3, or none yet: every shot is a camera of its own on its scene's stage (`_u4_scenes`); nothing else is touched."""
+        path = self.flow_dir / "scenes.json"
         with _LOCK:
-            b = SceneBook.model_validate(raw)
-            recs = self._records()
-            owned = 0
-            scenes = []
-            for s in b.scenes:
-                stages = {r.shot.version().stage_id for r in recs.values() if r.scene_id == s.id and r.shot is not None} - {None}
-                if s.stage_id is None and len(stages) == 1:
-                    s = s.model_copy(update={"stage_id": next(iter(stages))})
-                    owned += 1
-                scenes.append(s)
-            self._save_book(b.model_copy(update={"scenes": scenes}))
-            return [f"U2: {owned} scene owns its stage now" if owned == 1 else f"U2: {owned} scenes own their stage now"] if owned else []
+            raw = read_json_or(path, None)
+            if raw is not None and not isinstance(raw, dict):
+                return []
+            was = int(raw.get("schema_version", 1)) if raw is not None else 0
+            if was >= SCENES_SCHEMA_VERSION:
+                return []
+            notes: list[str] = []
+            if raw is not None and was < 2:
+                b = SceneBook.model_validate(raw)
+                recs = self._records()
+                owned = 0
+                scenes = []
+                for s in b.scenes:
+                    stages = {r.shot.version().stage_id for r in recs.values() if r.scene_id == s.id and r.shot is not None} - {None}
+                    if s.stage_id is None and len(stages) == 1:
+                        s = s.model_copy(update={"stage_id": next(iter(stages))})
+                        owned += 1
+                    scenes.append(s)
+                self._save_book(b.model_copy(update={"scenes": scenes}))
+                if owned:
+                    notes.append(f"U2: {owned} scene owns its stage now" if owned == 1 else f"U2: {owned} scenes own their stage now")
+            notes += self._u4_scenes()
+            if not path.is_file():
+                self._save_book(self.scene_book())                            # the mark that it ran: a stageless shot made later (the old UI's New shot) is left as made
+            return notes
+
+    def _u4_scenes(self) -> list[str]:
+        """U4 (D157, 06 §2.3): an older project brought into "a shot is a camera on its scene's stage", once.
+
+        - Shots that look through one camera: the first in the Flow (a shot whose current version is final first) keeps it; each other shot's open
+          versions get a copy of it, keys and all (coverage, as *New shot in the same scene* makes).
+        - A Shot whose current version is open and has no stage: its scene's stage with a new camera at eye level when the scene has one,
+          else a stage of its own (the place's built set, else an empty one) for its scene — a scene of its own when it is in none.
+
+        A camera added changes nothing any other camera sees, so the stages are written at their revision: nothing made through them goes
+        stale (the frames, the clips, the passes and the finals keep their stamps). A final version is a fixed record and keeps its source."""
+        from .stages import StageCamera, StageStore
+        stages = StageStore(self.ws)                                          # type: ignore[attr-defined]
+        at = {p.id: (p.y, p.x) for p in self.flow_graph().nodes}            # the Flow's reading order, as the scenes list their members
+        recs = sorted(self._records().values(), key=lambda r: (*at.get(r.id, (float("inf"), float("inf"))), r.shot.created_at if r.shot else ""))
+        shots = [r for r in recs if r.shot is not None]
+        if not shots:
+            return []
+
+        def quiet_camera(st: Any, cam: Any) -> Any:
+            st = st.model_copy(update={"cameras": [*st.cameras, cam]})
+            stages.save(st)
+            return st
+
+        def repoint(r: NodeRecord, fn: Any) -> NodeRecord:
+            r = self._record(r.id) or r                                       # as it is now (a shot may be repointed twice)
+            vs = [fn(v) if v.state == "open" else v for v in r.shot.versions]   # type: ignore[union-attr]
+            part = r.shot.model_copy(update={"versions": vs, "revision": r.shot.revision + 1, "updated_at": utc_now()})   # type: ignore[union-attr]
+            return self._save_record(r.model_copy(update={"shot": part}))
+
+        split = 0
+        users: dict[tuple[str, str], list[NodeRecord]] = {}
+        for r in shots:
+            for key in {(v.stage_id, v.camera_id) for v in r.shot.versions if v.stage_id and v.camera_id}:   # type: ignore[union-attr]
+                users.setdefault(key, []).append(r)                           # type: ignore[arg-type]
+        for (stage_id, camera_id), rs in users.items():
+            st = stages.get(stage_id)
+            if len(rs) < 2 or st is None:
+                continue
+            keeper = next((r for r in rs if r.shot.version().state == "final"), rs[0])   # type: ignore[union-attr]
+            for r in rs:
+                if r is keeper or not any(v.state == "open" and v.stage_id == stage_id and v.camera_id == camera_id for v in r.shot.versions):   # type: ignore[union-attr]
+                    continue
+                cam = next(c for c in st.cameras if c.id == camera_id) if any(c.id == camera_id for c in st.cameras) else None
+                if cam is None:
+                    break
+                names = {c.name for c in st.cameras}
+                k = 2
+                while f"{cam.name} {k}" in names:
+                    k += 1
+                copy = cam.model_copy(update={"id": new_id("cam"), "name": f"{cam.name} {k}"})
+                keys = dict(st.keyframes or {})
+                camkeys = dict(keys.get("camera") or {})
+                if camera_id in camkeys:
+                    camkeys[copy.id] = [dict(x) if isinstance(x, dict) else x for x in camkeys[camera_id]]
+                keys["camera"] = camkeys
+                st = st.model_copy(update={"keyframes": keys})
+                st = quiet_camera(st, copy)
+                repoint(r, lambda v, c=copy: v.model_copy(update={"camera_id": c.id}) if v.stage_id == stage_id and v.camera_id == camera_id else v)
+                split += 1
+
+        given, kept_final = 0, 0
+        book = self.scene_book()
+        for r in [x for x in self._records().values() if x.shot is not None]:
+            v = r.shot.version()                                              # type: ignore[union-attr]
+            if v.stage_id:
+                continue
+            if v.state != "open":
+                kept_final += 1
+                continue
+            name = r.title.strip() or VISUAL_LABEL.get(r.type, "Shot")
+            scene = next((s for s in book.scenes if s.id == r.scene_id), None) if r.scene_id else None
+            st = stages.get(scene.stage_id) if scene is not None and scene.stage_id else None
+            if st is not None and st.purpose == "stage":
+                n = len(st.cameras) + 1
+                taken = {c.name for c in st.cameras}
+                while f"Camera {n}" in taken:
+                    n += 1
+                cam = StageCamera(id=new_id("cam"), name=f"Camera {n}")       # at eye level, as a new stage's
+                st = quiet_camera(st, cam)
+            else:
+                prof = self.profile(r.place_id) if r.place_id else None       # type: ignore[attr-defined]
+                st = stages.scene_stage(scene.name if scene is not None else name, prof if prof is not None and prof.cls == "place" else None)
+                cam = st.cameras[0]
+                if scene is None:
+                    scene = Scene(name=name)
+                    book = self._save_book(book.model_copy(update={"scenes": [*book.scenes, scene], "revision": book.revision + 1}))
+                    self._join([r.id], scene.id)
+                    r = self._record(r.id) or r
+                book = self.scene_book()
+                book = self._save_book(book.model_copy(update={"scenes": [s.model_copy(update={"stage_id": st.id, "updated_at": utc_now()}) if s.id == scene.id else s for s in book.scenes],
+                                                              "revision": book.revision + 1}))
+            cur = v.id
+            repoint(r, lambda x, s=st, c=cam: x.model_copy(update={"stage_id": s.id, "camera_id": c.id, "stage_revision": s.revision}) if x.id == cur else x)
+            given += 1
+        notes = []
+        if given:
+            notes.append(f"U4: {given} shot{'s' if given != 1 else ''} without a stage got a camera of {'their' if given != 1 else 'its'} own on {'their' if given != 1 else 'its'} scene's stage")
+        if split:
+            notes.append(f"U4: {split} shot{'s' if split != 1 else ''} sharing a camera got {'their' if split != 1 else 'its'} own (a copy, keys and all)")
+        if kept_final:
+            notes.append(f"U4: {kept_final} final shot{'s' if kept_final != 1 else ''} without a stage kept {'their' if kept_final != 1 else 'its'} record — a new version can be blocked on one")
+        return notes
 
     def make_shot(self, title: str = "", *, after: str | None = None, scene: str = "new", place_id: str | None = None) -> FlowNode:
         """U2 (D157, G12; 04 §7 *New shot*): a Shot node with its scene, the scene's stage and a camera of its own, in one call, placed and
@@ -1754,6 +1873,39 @@ class _FlowMixin:
             out = self.flow_node(n.id)
             assert out is not None
             return out
+
+    def rescene(self, sid: str, vid: str, scene: str, *, like: str | None = None, place_id: str | None = None) -> Shot:
+        """U4 (D157, 04 §2.1, the header's scene menu): an open version's scene changed. `"new"`: a new scene and its stage (the World
+        place's set — `place_id`, else the node's place — seen from its picture's camera, else an empty stage), the node in it alone.
+        `"same"`: the scene of the Shot `like` (the shot before on the route), the node joining it, with a copy of that shot's camera."""
+        from .stages import StageStore
+        if scene not in ("new", "same"):
+            raise ValueError("a shot's scene is a new one or the same as the shot before")
+        with _LOCK:
+            holder = self._holder(sid)                                        # type: ignore[attr-defined]
+            if holder is None:
+                raise KeyError(sid)
+            if holder.shot is None or holder.shot.version(vid).state != "open":
+                raise ValueError(f"{holder.as_shot().name} {vid} is final — make a new version to change its scene")
+            if scene == "same":
+                other = self._record(like) if like else None
+                ov = other.shot.version() if other is not None and other.shot is not None else None
+                if ov is None or not ov.stage_id or not ov.camera_id:
+                    raise ValueError("the shot before has no scene on a stage")
+                if other.scene_id:                                            # type: ignore[union-attr]
+                    self._join([holder.id], other.scene_id)                   # type: ignore[union-attr]
+                return self.set_source(sid, vid, ov.stage_id, ov.camera_id, ov.stage_revision)   # set_source copies a camera that is taken
+            place = place_id or holder.place_id
+            prof = self.profile(place) if place else None                    # type: ignore[attr-defined]
+            if place_id and (prof is None or prof.cls != "place"):
+                raise ValueError(f"{place_id} is not a World place")
+            name = holder.title.strip() or (prof.name if prof is not None and prof.cls == "place" else "Scene")
+            st = StageStore(self.ws).scene_stage(name, prof if prof is not None and prof.cls == "place" else None)   # type: ignore[attr-defined]
+            if place_id and holder.place_id != place_id:
+                self.patch_node(holder.id, {"place_id": place_id})
+            s = self.create_scene(name, [holder.id])
+            self._scene_stage(s.id, st.id)
+            return self.set_source(sid, vid, st.id, st.cameras[0].id, st.revision)
 
     def create_scene(self, name: str, node_ids: list[str]) -> Scene:
         """A scene around the nodes (they leave the scene they were in)."""

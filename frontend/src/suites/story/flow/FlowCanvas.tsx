@@ -54,6 +54,9 @@ function SceneFrames({ frames, picked, onMove, onDrop }: { frames: Frame[]; pick
   )
 }
 
+/** What a node's handles depend on: its type and a Choice's options. */
+const handlesOf = (n: FlowNode): string => `${n.type}|${n.options.map((o) => o.id).join(',')}`
+
 function StoryNode({ id, data, selected }: NodeProps<StoryNodeT>) {
   const n = data.node
   const name = n.title || NODE_LABEL[n.type]
@@ -102,7 +105,9 @@ function FitBridge() {
   return null
 }
 
-export function FlowCanvas() {
+/** U4 (D157 04 §7), the new shell's: `onOpen` — a Shot node's double-click opens its shot (Clay); `paneItems` — the canvas menu's own
+ *  entries first (*New shot*). The old shell passes neither. */
+export function FlowCanvas({ onOpen, paneItems }: { onOpen?: (shotId: string) => void; paneItems?: MenuItem[] } = {}) {
   const flowNodes = useStory((s) => s.flowNodes)
   const graph = useStory((s) => s.flowGraph)
   const nodeId = useStory((s) => s.nodeId)
@@ -143,7 +148,15 @@ export function FlowCanvas() {
         board: g ? { name: g.name, cover: g.cover_ids[0] ?? null, total: g.total } : null, place: n.place_id ? profiles.find((x) => x.id === n.place_id)?.name ?? 'a deleted place' : null } }
     })
   }, [graph, flowNodes, nodeId, shots, clipsById, profiles, problems, tree, boardFinals, boardCuts, cards, cardGuide])
-  if (from !== built) { setFrom(built); setNodes(built) }                                      // derived state, synced in render (not an effect)
+  if (from !== built) {                                                                       // derived state, synced in render (not an effect)
+    setFrom(built)
+    // U4: the sizes measured so far carried over — a node without them is hidden until measured, so a selection made it blink (and the
+    // second click of a double-click fell through to the pane). Not when its handles changed (a Choice's options): it is measured again.
+    setNodes((prev) => {
+      const was = new Map(prev.map((p) => [p.id, p]))
+      return built.map((b) => { const p = was.get(b.id); return p?.measured && handlesOf(p.data.node) === handlesOf(b.data.node) ? { ...b, measured: p.measured } : b })
+    })
+  }
   const edges = useMemo<Edge[]>(() => (graph?.edges ?? []).filter((e) => flowNodes[e.from] && flowNodes[e.to]).map((e) => {
     const n = flowNodes[e.from]
     const label = e.port.startsWith('opt:') ? n.options.find((o) => `opt:${o.id}` === e.port)?.label : e.port === 'then' || e.port === 'else' ? e.port : undefined
@@ -182,12 +195,13 @@ export function FlowCanvas() {
         onConnect={(c: Connection) => { if (c.source && c.target) void sy().connect(c.source, c.sourceHandle ?? 'out', c.target) }}
         onEdgesDelete={(es) => { for (const e of es) void sy().disconnect(e.source, e.sourceHandle ?? 'out') }}
         onNodeClick={(_e, n) => { sy().selectScene(null); sy().selectNode(n.id) }}
+        onNodeDoubleClick={onOpen ? (_e, n) => { const id = flowNodes[n.id]?.shot_id; if (id) onOpen(id) } : undefined}
         onPaneClick={() => { sy().selectNode(null); sy().selectEdge(null); sy().selectScene(null) }}
         onEdgeClick={(_e, ed) => sy().selectEdge({ from: ed.source, port: ed.sourceHandle ?? 'out' })}
         onEdgeContextMenu={(e, ed) => { e.preventDefault(); sy().selectEdge({ from: ed.source, port: ed.sourceHandle ?? 'out' }); showMenu(e, edgeMenu()) }}
         onNodeContextMenu={(e, n) => { e.preventDefault(); sy().selectScene(null); sy().selectNode(n.id); showMenu(e, nodeMenu() as MenuItem[]) }}
         onPaneContextMenu={(e) => { e.preventDefault(); sy().setAddAt(flowView.toFlow?.(e.clientX, e.clientY) ?? null)
-          showMenu(e, [{ heading: 'Add a node here' }, ...(['start', 'hub', 'choice', 'condition', 'action', 'shot', 'jump', 'comment'] as const).map((t) => ({ cmd: `story.flow.add.${t}` })),
+          showMenu(e, [...(paneItems ?? []), { heading: 'Add a node here' }, ...(['start', 'hub', 'choice', 'condition', 'action', 'shot', 'jump', 'comment'] as const).map((t) => ({ cmd: `story.flow.add.${t}` })),
             ...templateItems(null, flowView.toFlow?.(e.clientX, e.clientY) ?? null), sep, { cmd: 'story.flow.voiceEpisode' }, { cmd: 'story.flow.validate' }, { cmd: 'story.flow.play' }, { cmd: 'story.flow.fit' }]) }}>
         <Background gap={24} />
         <MiniMap pannable zoomable />

@@ -11824,3 +11824,140 @@ has ideas not kept yet and confirmed first.
 - *See in clay ▶*, D142's bench opened from World.
 
 Next is U4: Shots — the Flow and Clay (07 §2).
+
+## 2026-10-29 04:45 — U4a: Shots in the new shell — the storyboard, the rail, the shot header, the Flow and Clay (D157, proto01_UI2 04 §2–3, §7)
+
+**The layer** (`ui2/shots/`, mounted by the `?ui=2` shell on the Shots tab):
+
+- **The storyboard strip** across the top: the route's shots in the Flow's order (`route.ts`, `routeRows` on D125's `flowOrder` and
+  `cellsOf`), numbered and named after their nodes, each with its picture and three dots — Clay (the stage), Performance (the clip, else
+  the frame), Final (the assembled shot). A card opens its shot at the level last used. *＋ New shot* and a card's right-click offer
+  *New shot in a new scene* and *New shot in the same scene* (U2's `POST /story/flow/shots`; coverage puts a new camera on the scene's
+  stage).
+- **The rail:** Flow, then the shot's Clay · Performance · Final, each a `shots.level.*` command (a new `shots` scope).
+- **The shot header:** the number · name menu (the route's shots), the version menu (*New version (copy)*, *Mark final*), the description
+  (the node's text), the lines (Story's lines editor, exported, at the column's width) and the scene — the stage and the shot's camera
+  by name, the range — or *Block it on a stage…* when there is none.
+- **Flow:** Story's Flow canvas in the centre and its node Inspector. A Shot node's double-click opens it in Clay (`FlowCanvas`'s new
+  `onOpen`; the old shell passes none).
+- **Clay:** the stage suite's column (Scene · Motion · Camera), strip, viewport and foot (*Render the passes ▶*), opened on the version's
+  stage through its camera (active, and the viewer's camera view by default, 04 §3). The strip's Clay | Performance | Final pills and Graph
+  are hidden: the rail is the levels.
+- **Performance and Final** say they come with U6.
+
+**A Flow fix on the way** (the old shell has it too): when the selection changed, the Flow canvas rebuilt its nodes without the sizes React
+Flow had measured, and React Flow hides a node until it is measured — every selection made the nodes blink, and the second click of a
+double-click on a node not yet selected fell through to the pane (it zoomed instead). The measured sizes are carried over now, except
+for a node whose handles changed (a Choice's options), which is measured again: the first try kept them too and a new option's handle could
+not be dragged from (the e2e's Flow scenario caught it).
+
+**The place** is in the hash (`#shots/<shot>/<level>`), and the level follows a navigation from the old commands: *Open the stage* or
+*Block it on a stage…* land on Clay (`levelOf`). Each level reads with its old suite through U1's router (Flow is Story's Flow tab, Clay
+the stage suite), so their keys, reads and key hosts come alive with it; the layer stays Shots.
+
+**Looked at** on the copy of The Last Ferry: five cards; *The seal* selected in the Flow with its node Inspector; *Stay* in Clay through
+Camera 1 (the header: *Stay · Camera 1 · the stage's whole range*). The first four shots were made on the old Image to video route and have
+no stage: the header and Clay offer *Block it on a stage…*. Giving them a scene at open, and a camera of their own to shots that share one,
+is U4b (06 §2.3's migration).
+
+**Tests:** `ui2/shots/shots.test.ts` 5 (the hash, the suite per level, the level per old place, the storyboard's order, numbers and dots);
+an e2e scenario (two shots made with a scene, opened in Clay by the hash, a card, the Flow's double-click; *New shot in the same scene* puts a
+third camera on the stage, each shot its own); the command audit gains the scope.
+
+**Checks:** run with U4b and U4c (the next entries): Vitest 625 + 3 skipped; typecheck, build and lint clean; e2e 85/85 (alone).
+
+Next: U4b — the scene migration for old projects.
+
+## 2026-10-29 04:45 — U4b: older projects brought into "a shot is a camera of its own on its scene's stage"; the scene menu's route; the Bin's mark out of the album (D157, proto01_UI2 06 §2.3, 04 §2.1)
+
+**The scene migration** (`StoryStore._u4_scenes`, once — the scenes book's schema 3, or the first open of a project without one; 06 §2.3,
+deferred from U2):
+
+- Shots that look through one camera: the first in the Flow (a shot whose current version is final first) keeps it. Each other shot's open
+  versions get a copy of it with its keys (coverage, as *New shot in the same scene* makes).
+- A Shot whose current version is open and has no stage gets a camera on its scene's stage. If the scene has a stage, that is a new camera
+  at eye level. If not, it is a stage of its own (the World place's built set, else an empty one) that the scene then owns. A shot in no
+  scene gets one of its own.
+- A final version is a fixed record and keeps its source; the note says how many.
+- The cameras are added at the stage's revision. A camera added changes nothing any other camera sees, so nothing made through them goes
+  stale: frames, clips, passes and finals keep their stamps.
+- It runs once. A stageless shot made after it (the old UI's *New shot…*) is left as it was made.
+
+On the copy of The Last Ferry: *U4: 4 shots without a stage got a camera of their own on their scene's stage*. The four Image-to-video shots
+at the Harbour pier now each have a scene and an empty stage (the pier has no built set yet), and open in Clay through Camera 1.
+
+**The guard** (06 §2.3): `set_source` refuses a bench or the line-up as a shot's scene.
+
+**The scene menu's route:** `POST /story/shots/{sid}/versions/{vid}/scene` (`StoryStore.rescene`, 04 §2.1).
+
+- *New scene…* gives the node a scene and a stage of its own (a place's set, else empty).
+- *Same scene as the shot before* (`like`: that Shot node) joins that shot's scene with a copy of its camera.
+- The header's menus come with U4c.
+
+**A U2 bug, fixed:** the Bin migration's mark `groups/bins.json` sat among the album's group files. At every open the album read it as a
+torn group and moved it aside (`bins.json.corrupt-<time>`), so the migration ran again each time: one more file per open, and Unprocessed
+sorted again (harmless, since every creation lands home since U2, but not once).
+
+- The mark is `bins.json` at the project's root now.
+- The old mark, or the newest of its moved-aside copies, is taken over once, and the copies are removed (they were never groups).
+- A project opened with U2's build is put right at its next open. The walkthrough copy had six.
+
+**Tests:**
+
+- `test_scenes_u4.py` 5: the stageless shots, the shared camera, once and later shots left alone, the bench refused, the scene menu's two
+  changes;
+- `test_scene_shot_u2.py` and `test_shot_node_rc2a.py` follow the new step;
+- `test_bins_u2.py` and `test_homes_u2.py`: the mark outside the album, an old moved-aside mark taken over;
+- the D37 route snapshot gains the route.
+
+**Checks:** offline 713 passed; Vitest 625 + 3 skipped (with U4c); typecheck, build and lint clean; e2e 85/85 (alone); `agents_check`,
+`model_literals_check` and `settings_audit` (319, 0) clean; the API contract regenerated.
+
+Next: U4c — the header's scene, camera and range menus and the cast; the canvas's *New shot*; Clay's *To Performance ▸*.
+
+## 2026-10-29 04:45 — U4c: the shot header's scene, camera, range and cast; the canvas's New shot; Clay's To Performance ▸ (D157, proto01_UI2 04 §2.1, §3, §7)
+
+**The scene line** of the shot header (`ui2/shots/ShotHeader.tsx`, the pure parts in `scene.ts`):
+
+- **The stage menu** (`The seal ▾`):
+  - *New scene* (`shots.scene.new`): a scene and a stage of the shot's own, its place's set when it has one;
+  - *Same scene as 2 · The ferryman*: the shot before on the route, its camera copied;
+  - *A new scene at a World place ▸*: each place, its set.
+
+  All three go through U4b's route. Clay opens on the new stage.
+- **The camera menu** (`Camera 1 ▾`): the stage's cameras, each with the shot that looks through it. Picking another shot's camera makes
+  a copy (U2's rule: a camera serves one shot).
+- **The range:** start and end frames on the scene's timeline and their length in seconds. It defaults to the stage's whole range, and
+  *whole* goes back to it.
+- **The stage** is read live from Clay while it is open, else fetched, and read again when the shots change (a camera copied).
+
+**The cast line:** what stands on the stage — its figures, bound or not, and its World props — each with what it still lacks for Clay
+(World's readiness; the hero counts as a reference, as in World's bin). A click opens the member in World at the version the stage wears.
+*Add in Clay ▸* outside Clay. On the copy, Stay's cast reads *Ines · 1 to go* (no A-pose back yet).
+
+**Elsewhere:**
+
+- The Flow canvas's right-click starts with *New shot in a new scene* and *New shot in the same scene* (`FlowCanvas`'s new `paneItems`;
+  the old shell passes none).
+- Clay's foot has *To Performance ▸* under *Render the passes ▶* (04 §3; Performance itself is U6).
+- A shot without a scene offers *New scene* instead of the old *Block it on a stage…*.
+
+**Clay and the server's changes to its stage:** a camera copied for a shot (*New shot in the same scene*, *Same scene as…*, another shot's
+camera picked) changes the stage Clay has open. Clay's pending save goes first now (`flushClay`), and Clay reads the stage again when the
+shot's camera is not in it or the shot was linked at a newer revision. Before this, Clay set the new camera active on its old copy, the save
+was refused, and the stage reloaded with *your last change was not saved* (the e2e's toast check caught it).
+
+**Owed to U5:** the lines-outlast-the-range warning and *Extend to the lines* (F39). The lines' lengths come with the lines track of the
+animation editor, where the range is edited and never moves by itself.
+
+**Tests:**
+
+- `shots.test.ts` + 2: each camera's shot; the cast with its gaps;
+- the e2e scenario gains the header: *New scene* gives the open shot a stage of its own, and the range's end set to 48 is 2.0 s;
+- U3e's ideas scenario had a race: it read the new draft's bin as soon as the idea was marked kept, while the fold was still adding the
+  candidates (the keep is written first). It polls the bin now; it failed once in three runs.
+
+**Checks:** offline 713 passed (U4b); Vitest 625 + 3 skipped; typecheck, build and lint clean; e2e 85/85 (alone); `agents_check`,
+`model_literals_check` and `settings_audit` (319, 0) clean.
+
+Next: U4d — G13, the words of a shot's pictures (`shot_prompt`, 06 §2.8, 04 §6).

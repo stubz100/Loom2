@@ -1,0 +1,32 @@
+// U4 (D157, proto01_UI2 04 §8): Shots' commands (rule 3: every action a command with a mouse home; keys are accelerators). They act on the
+// shot the header shows (the Story store's selection) and the level the rail shows.
+import { Box, Clapperboard, GitBranch, MonitorPlay, Plus, SquarePlus } from 'lucide-react'
+import { registerCommands } from '../../frame/commands'
+import { useSession } from '../../store/session'
+import { useStory } from '../../suites/story/storyStore'
+import { rescene } from './scene'
+import { newShot, useShots, type ShotLevel } from './shotsStore'
+
+const open = () => !!useSession.getState().project?.open
+const shot = () => useStory.getState().shot()
+const level = (id: ShotLevel) => () => useShots.getState().setLevel(id)
+
+registerCommands([
+  { id: 'shots.level.flow', scope: 'shots', label: 'Flow', icon: GitBranch, placement: ['rail'], when: open, run: level('flow'), hint: 'the story\'s graph — its shots, lines and choices' },
+  { id: 'shots.level.clay', scope: 'shots', label: 'Clay', icon: Box, placement: ['rail'], when: () => !!shot(), run: level('clay'), hint: 'the shot\'s scene through its camera: blocking, poses, the camera\'s moves' },
+  { id: 'shots.level.performance', scope: 'shots', label: 'Performance', icon: Clapperboard, placement: ['rail'], when: () => !!shot(), run: level('performance') },
+  { id: 'shots.level.final', scope: 'shots', label: 'Final', icon: MonitorPlay, placement: ['rail'], when: () => !!shot(), run: level('final') },
+  // 04 §2.1: the header's scene menu (the same scene as the shot before is the menu's own entry: it names that shot)
+  { id: 'shots.scene.new', scope: 'shots', label: 'New scene', icon: SquarePlus, placement: ['panel'], when: () => useStory.getState().shotVersion()?.state === 'open',
+    hint: "a scene and a stage of this shot's own — its place's set when the shot has a place, else an empty stage",
+    run: () => void rescene('new').then((ok) => { if (ok) useShots.getState().reopen() }) },
+  { id: 'shots.toPerformance', scope: 'shots', label: 'To Performance ▸', icon: Clapperboard, placement: ['panel'], when: () => !!shot(), run: level('performance') },
+  // G12 (04 §7): a new shot after the open one
+  { id: 'shots.new.scene', scope: 'shots', label: 'New shot in a new scene', icon: SquarePlus, placement: ['strip', 'context'], when: open,
+    hint: 'a Shot node after this one, with a scene and a stage of its own — the place\'s set when the shot before has a place',
+    run: () => void newShot('new') },
+  { id: 'shots.new.same', scope: 'shots', label: 'New shot in the same scene', icon: Plus, placement: ['strip', 'context'],
+    when: () => { const v = useStory.getState().shotVersion(); return open() && !!v?.stage_id && !!v.camera_id },
+    hint: 'coverage: a new camera on this shot\'s stage, copied from its camera with its keys',
+    run: () => void newShot('same') },
+])

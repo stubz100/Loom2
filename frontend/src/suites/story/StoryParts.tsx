@@ -1000,7 +1000,7 @@ function ShotVersionFields({ v, clip, stage }: { v: ShotVersion; clip?: { frames
   )
 }
 
-function LinesEditor({ n }: { n: FlowNode }) {
+export function LinesEditor({ n }: { n: FlowNode }) {
   const profiles = useStory((s) => s.profiles)
   const voices = useStory((s) => s.voices)
   const voiceId = useStory((s) => s.voiceId)

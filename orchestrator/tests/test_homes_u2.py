@@ -41,7 +41,8 @@ def test_unprocessed_is_sorted_once(tmp_path: Path):
     gate = st.create_node("shot", "Gate")
     made = cat.ingest_file(_png(tmp_path / "take.png"), origin={"suite": "generate", "surface": FOR_SHOT, "ref": None, "payload": {"shot_id": gate.shot_id, "version": "v1"}})
     free = cat.ingest_file(_png(tmp_path / "free.png"), origin={"suite": "generate", "surface": "panel", "ref": None, "payload": {}})
-    atomic_write_json(groups.dir / "bins.json", {"schema_version": 1, "migrated_at": "2026-10-29T00:00:00Z", "pages": 0, "styles": 0, "boards": 0})   # U2d's run
+    atomic_write_json(groups.dir / "bins.json.corrupt-20261029-021718", {"schema_version": 1, "migrated_at": "2026-10-29T00:00:00Z", "pages": 0, "styles": 0, "boards": 0})   # U2d's run (moved aside by the album, U4)
     assert migrate_bins(ws, groups) == ["U2: 1 unprocessed asset went to the home of what it was made for"]
     assert groups.groups[groups.parent[("asset", made.id)]].path == f"shots/{gate.shot_id}/v1" and ("asset", free.id) not in groups.parent
-    assert read_json(groups.dir / "bins.json")["schema_version"] == 2 and migrate_bins(ws, groups) == []
+    assert read_json(ws.path / "bins.json")["schema_version"] == 2 and migrate_bins(ws, groups) == []
+    assert not list(groups.dir.glob("bins.json*"))                                          # the misfiled marks are gone from the album

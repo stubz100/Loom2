@@ -4017,6 +4017,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/shots/{sid}/versions/{vid}/scene": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Shot Scene
+         * @description U4 (D157, 04 §2.1, the header's scene menu): *New scene…* — a scene and stage of its own; *Same scene as the shot before* — that
+         *     shot's scene, with a copy of its camera.
+         */
+        post: operations["shot_scene_story_shots__sid__versions__vid__scene_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/shots/{sid}/versions/{vid}/source": {
         parameters: {
             query?: never;
@@ -11806,6 +11827,27 @@ export interface components {
              * @default 1
              */
             schema_version: number;
+        };
+        /**
+         * SceneBody
+         * @description U4 (D157, 04 §2.1): an open version's scene.
+         */
+        SceneBody: {
+            /**
+             * Like
+             * @description `same`: the Shot node whose scene and camera it takes (the shot before on the route)
+             */
+            like?: string | null;
+            /**
+             * Place Id
+             * @description `new`: the World place whose set the new stage is built from (else the node's place)
+             */
+            place_id?: string | null;
+            /**
+             * Scene
+             * @enum {string}
+             */
+            scene: "new" | "same";
         };
         /** SceneCreate */
         SceneCreate: {
@@ -22372,6 +22414,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunStaleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    shot_scene_story_shots__sid__versions__vid__scene_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SceneBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Shot"];
                 };
             };
             /** @description Validation Error */

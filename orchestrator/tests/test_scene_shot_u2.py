@@ -62,10 +62,11 @@ def test_a_scene_owns_the_stage_its_shots_look_at(tmp_path: Path):
         s.pop("stage_id", None)
     atomic_write_json(ws.story_dir / "flow" / "scenes.json", {**book, "schema_version": 1})
     again = StoryStore(ws)
-    assert again.migrated == ["U2: 1 scene owns its stage now"]
+    assert again.migrated[0] == "U2: 1 scene owns its stage now"
     by_id = {s.id: s for s in again.scene_book().scenes}
-    assert by_id[scn.id].stage_id == stg.id and by_id[other.id].stage_id is None
-    assert read_json(ws.story_dir / "flow" / "scenes.json")["schema_version"] == 2 and StoryStore(ws).migrated == []   # once
+    assert by_id[scn.id].stage_id == stg.id
+    assert by_id[other.id].stage_id == again.shot(b.shot_id).version().stage_id is not None   # U4 then gives the stageless Shot a stage for its scene
+    assert read_json(ws.story_dir / "flow" / "scenes.json")["schema_version"] == 3 and StoryStore(ws).migrated == []   # once
 
 
 def _client(tmp_path: Path):

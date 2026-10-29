@@ -1634,6 +1634,29 @@ async def shot_source(svc: Svc, sid: str, vid: str, body: SourceBody):
     return s.model_dump()
 
 
+class SceneBody(BaseModel):
+    """U4 (D157, 04 §2.1): an open version's scene."""
+    scene: Literal["new", "same"]
+    like: str | None = Field(None, description="`same`: the Shot node whose scene and camera it takes (the shot before on the route)")
+    place_id: str | None = Field(None, description="`new`: the World place whose set the new stage is built from (else the node's place)")
+
+
+@router.post("/story/shots/{sid}/versions/{vid}/scene", response_model=Shot)
+async def shot_scene(svc: Svc, sid: str, vid: str, body: SceneBody):
+    """U4 (D157, 04 §2.1, the header's scene menu): *New scene…* — a scene and stage of its own; *Same scene as the shot before* — that
+    shot's scene, with a copy of its camera."""
+    ws, _, _ = svc.require_project()
+    try:
+        s = await asyncio.to_thread(StoryStore(ws).rescene, sid, vid, body.scene, like=body.like, place_id=body.place_id)
+    except KeyError as e:
+        raise HTTPException(404, f"{e.args[0]} not found")
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    _shot_changed(svc, s)
+    svc.hub.broadcast("story.changed", {"kind": "flow", "id": s.owner_node or s.id, "revision": 0})   # the node's scene moved
+    return s.model_dump()
+
+
 class SpawnBody(BaseModel):
     name: str = ""
 

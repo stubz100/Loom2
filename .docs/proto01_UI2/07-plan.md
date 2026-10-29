@@ -40,6 +40,8 @@
 
 **U3 is built** (2026-10-29 02:30 – 03:33): World in the new shell — the rail, the entity header and its readiness, one bin with roles, the Inspector, Make scoped to the entity, Edit on a creation, Look, Sketches, the Look's words (G3, its World part) and the ideas brought in (G4). Owed, small: the header's voice field, *Import GLB…*, the Inspector's entity facts, *See in clay ▶*.
 
+**U4a–c are built** (2026-10-29 04:45): Shots in the new shell — the storyboard strip with its level dots, the rail, the shot header (lines; the scene, camera and range menus; the cast with its gaps), the Flow (a node's double-click opens Clay, *New shot* on the canvas), Clay on the shot's stage through its camera; older projects brought into "a shot is a camera of its own on its scene's stage" (U2's deferred migration). Next: U4d, the words of a shot's pictures (G13). Owed to U5: the lines-outlast-the-range warning (F39).
+
 **The order.** U0 can start at once. U1 and U2 are the foundation. After them, U3 and U4 can run in either order: World first follows the work's order;
 Shots first answers the author's biggest change sooner. U5 and U6 follow U4. Most of U7 can run once U6 has the shot's final.
 

@@ -7,7 +7,7 @@ import type { Suite } from '../api/types'
 import { DEV_HOOKS } from '../devHooks'
 import { loadOverrides, type Overrides } from './keyStore'
 
-export type Scope = 'global' | 'catalogue' | 'generate' | 'edit' | 'animate' | 'stage' | 'story' | 'models' | 'world'   // U3 (D157): the new shell's World layer
+export type Scope = 'global' | 'catalogue' | 'generate' | 'edit' | 'animate' | 'stage' | 'story' | 'models' | 'world' | 'shots'   // U3 / U4 (D157): the new shell's World and Shots layers
 /** Where the command is reachable with the mouse. */
 export type Placement = 'context' | 'toolbar' | 'strip' | 'panel' | 'inspector' | 'topbar' | 'rail' | 'dock'
 export type IconType = ComponentType<{ size?: number | string; className?: string }>

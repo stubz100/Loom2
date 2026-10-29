@@ -64,6 +64,7 @@ def test_the_migration_moves_todays_pages_once(tmp_path: Path):
     assert _chain(groups, ink.id) == ["World", "Look", "Ink wash samples"] and _chain(groups, one.id) == ["Shots", "Gate", "Gate board"]
     assert groups.parent[("group", shared.id)] == ROOT_ID                                   # a board two Shots use stays where it was
     assert migrate_bins(ws, groups) == []                                                   # once
+    assert (ws.path / "bins.json").is_file() and not list(groups.dir.glob("bins.json*"))    # U4: the mark outside the album (it read it as a torn group)
     assert st.profile(mara.id).version("v1").group_id == v.group_id                         # the records unchanged: readers read on
 
 

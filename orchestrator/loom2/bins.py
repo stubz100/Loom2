@@ -16,7 +16,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .fsio import atomic_write_json, read_json_or, utc_now
+from .fsio import atomic_write_json, read_json_or, unlink, utc_now
 from .groups import ROOT_ID, GroupRecord, GroupStore
 
 BINS_SCHEMA_VERSION = 2                            # U2e: 2 — the Unprocessed assets sorted by their origin
@@ -161,9 +161,30 @@ def land(groups: GroupStore, ws: Any, origin: Any, asset_ids: list[str]) -> Grou
     return h
 
 
+def _marker(ws: Any, groups: GroupStore) -> Path:
+    """The migration's mark, `bins.json` at the project's root. U4: U2 wrote it into `groups/`, where the album read it as a torn group file
+    and moved it aside at every open (so the migration ran again); such a mark — the file or its moved-aside copies, the newest — is taken
+    over once and the copies removed (they were never groups)."""
+    root = Path(getattr(ws, "path", Path(groups.dir).parent))
+    marker = root / "bins.json"
+    old = sorted(Path(groups.dir).glob("bins.json*"), key=lambda p: p.stat().st_mtime)
+    if old:
+        if not marker.is_file():
+            for p in reversed(old):
+                raw = read_json_or(p, None)
+                if isinstance(raw, dict) and "schema_version" in raw and "id" not in raw:
+                    atomic_write_json(marker, raw)
+                    break
+        for p in old:
+            raw = read_json_or(p, None)
+            if isinstance(raw, dict) and "id" not in raw:
+                unlink(p)
+    return marker
+
+
 def migrate_bins(ws: Any, groups: GroupStore) -> list[str]:
-    """Once per project (`groups/bins.json`): the versions' pages, the styles' samples and the one-shot boards into their homes. Notes."""
-    marker = Path(groups.dir) / "bins.json"
+    """Once per project (`bins.json`): the versions' pages, the styles' samples and the one-shot boards into their homes. Notes."""
+    marker = _marker(ws, groups)
     done = read_json_or(marker, None)
     if isinstance(done, dict) and int(done.get("schema_version", 1)) >= BINS_SCHEMA_VERSION:
         return []

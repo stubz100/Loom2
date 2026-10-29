@@ -44,6 +44,7 @@ def test_the_migration_joins_each_shot_to_its_node_once(tmp_path: Path):
     _old_node(ws, "node_e", "choice", "Pick", "sht_free", "v1")                       # a logic node never holds one
     atomic_write_json(ws.story_dir / "flow" / "graph.json", {"schema_version": 1, "nodes": [{"id": "node_a", "x": 0, "y": 0}, {"id": "node_b", "x": 300, "y": 0}],
                                                             "edges": [{"from": "node_a", "port": "out", "to": "node_b"}], "start": None, "revision": 7})
+    atomic_write_json(ws.story_dir / "flow" / "scenes.json", {"schema_version": 3, "scenes": [], "revision": 0})   # U4's scenes for the shots: test_scenes_u4
     st = StoryStore(ws)
     assert st.migrated and st.migrated[0].startswith("RC2: 2 shots joined their Flow nodes; 1 without a node became a Shot node outside the routes")
     assert any("Second" in n for n in st.migrated) and any("Gone" in n for n in st.migrated)

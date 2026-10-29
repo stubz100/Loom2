@@ -239,6 +239,7 @@
  "POST /story/shots/{sid}/versions/{vid}/lipsync",
  "POST /story/shots/{sid}/versions/{vid}/own-stage",
  "POST /story/shots/{sid}/versions/{vid}/run-stale",
+ "POST /story/shots/{sid}/versions/{vid}/scene",
  "POST /story/shots/{sid}/versions/{vid}/take",
  "POST /story/voices",
  "POST /timelines",

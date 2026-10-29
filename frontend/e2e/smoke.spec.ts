@@ -4426,6 +4426,50 @@ test('World\'s Look words and the ideas brought in (U3e, D157 · G3, G4): a Libr
   await page.locator('.modal.ask button.primary').click()
   await expect.poll(async () => (await api<{ kept: { profile_id: string }[] }>('GET', `/story/ideas/${idea.id}`)).kept.length, { timeout: 15_000 }).toBe(1)
   const pid = (await api<{ kept: { profile_id: string }[] }>('GET', `/story/ideas/${idea.id}`)).kept[0].profile_id
-  const bin = await api<{ items: { roles: string[] }[] }>('GET', `/story/profiles/${pid}/versions/v1/bin`)
-  expect(bin.items.map((x) => x.roles[0]).sort()).toEqual(['candidate', 'hero'])
+  const roles = async () => (await api<{ items: { roles: string[] }[] }>('GET', `/story/profiles/${pid}/versions/v1/bin`)).items.map((x) => x.roles[0]).sort()
+  await expect.poll(roles, { timeout: 10_000 }).toEqual(['candidate', 'hero'])                          // the fold keeps the idea first, then adds its candidates
+})
+
+test('Shots in the new shell (U4a–c, D157 · proto01_UI2 04 §2–3, §7): the storyboard, the header, Clay on the shot\'s stage through its camera; the Flow\'s double-click, New shot in the same scene, the header\'s New scene and range', async ({ page }) => {
+  test.setTimeout(90_000)
+  const tag = Date.now().toString(36)
+  type NodeLite = { id: string; shot_id: string | null }
+  type ShotLite = { id: string; owner_node: string | null; versions: { stage_id: string | null; camera_id: string | null }[] }
+  const a = await api<NodeLite>('POST', '/story/flow/shots', { title: `Quay ${tag}`, scene: 'new' })
+  const b = await api<NodeLite>('POST', '/story/flow/shots', { title: `Pier ${tag}`, after: a.id, scene: 'same' })
+  await page.goto(`${appUrl({ ui: '2' })}#shots/${a.shot_id}/clay`)
+  const head = page.locator('[data-testid="shots-header"]')
+  await expect(head).toContainText(`Quay ${tag}`)
+  await expect(page.locator('[data-testid="shots-layer"]')).toHaveAttribute('data-level', 'clay')
+  await expect(page.locator('[data-testid="shots-scene"] button').first()).toHaveText(new RegExp(`Quay ${tag}`))   // the scene's stage and the shot's camera, by name
+  await expect(page.locator('[data-testid="shots-scene"] button').nth(1)).toHaveText(/Camera 1/)
+  await expect(page.locator('.s-clay canvas').first()).toBeVisible()
+  const card = (id: string) => page.locator(`.s-card[data-id="${id}"]`)
+  await expect(card(a.shot_id!)).toHaveClass(/active/)
+  await card(b.shot_id!).click()                                                                            // a card opens the shot at the level last used
+  await expect(head).toContainText(`Pier ${tag}`)
+  await expect.poll(() => new URL(page.url()).hash).toBe(`#shots/${b.shot_id}/clay`)
+  await page.locator('.w-rail-btn[data-level="flow"]').click()
+  await expect(page.locator('[data-testid="flow-canvas"]')).toBeVisible()
+  await page.locator(`.react-flow__node[data-id="${a.id}"]`).dblclick()                                    // a Shot node's double-click opens it in Clay
+  await expect(page.locator('[data-testid="shots-layer"]')).toHaveAttribute('data-level', 'clay')
+  await expect(head).toContainText(`Quay ${tag}`)
+  await page.locator('.s-new button').click()
+  await page.locator('.ctx-menu button', { hasText: 'New shot in the same scene' }).click()
+  const shots = async () => (await api<{ items: ShotLite[] }>('GET', '/story/shots')).items
+  const stage = (await shots()).find((s) => s.id === a.shot_id)!.versions[0].stage_id
+  await expect.poll(async () => (await shots()).filter((s) => s.versions[0].stage_id === stage).length, { timeout: 10_000 }).toBe(3)   // coverage: a third camera on the scene's stage
+  const cams = (await shots()).filter((s) => s.versions[0].stage_id === stage).map((s) => s.versions[0].camera_id)
+  expect(new Set(cams).size).toBe(3)                                                                        // each shot its own camera
+  await expect(page.locator('.s-card.active')).not.toHaveAttribute('data-id', a.shot_id!)                  // the new shot is open
+  // U4c (04 §2.1): the header's scene menu gives the open shot a scene of its own; its range on the scene's timeline
+  const c = (await shots()).find((s) => s.versions[0].stage_id === stage && s.id !== a.shot_id && s.id !== b.shot_id)!
+  await expect(page.locator('.s-card.active')).toHaveAttribute('data-id', c.id)
+  await page.locator('[data-testid="shots-scene"] button').first().click()
+  await page.locator('.ctx-menu button', { hasText: /^New scene/ }).click()
+  await expect.poll(async () => (await shots()).find((s) => s.id === c.id)!.versions[0].stage_id, { timeout: 10_000 }).not.toBe(stage)
+  const end = page.locator('[data-testid="shots-range"] input[aria-label="range end"]')
+  await end.fill('48'); await end.press('Enter')
+  await expect.poll(async () => (await api<{ items: (ShotLite & { versions: { range: unknown }[] })[] }>('GET', '/story/shots')).items.find((s) => s.id === c.id)!.versions[0].range, { timeout: 10_000 }).toEqual({ start: 0, end: 48 })
+  await expect(page.locator('[data-testid="shots-range"]')).toContainText('2.0 s')
 })

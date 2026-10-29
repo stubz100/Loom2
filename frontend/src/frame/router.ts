@@ -6,8 +6,9 @@ import { create } from 'zustand'
 import type { Suite } from '../api/types'
 import { useSession } from '../store/session'
 
-/** A place in the old shell: a suite and, when named, the rail tab (the panel section) it opens on. */
-export interface Place { suite: Suite; tab?: string }
+/** A place in the old shell: a suite and, when named, the rail tab (the panel section) it opens on. U3f: `layer` — the new shell's layer
+ *  it is in when that is not the suite's own (World's *See in clay* is the stage suite on the World layer). */
+export interface Place { suite: Suite; tab?: string; layer?: Layer }
 
 /** D157 (02 §1): the new shell's four layers. */
 export type Layer = 'world' | 'shots' | 'episode' | 'bin'
@@ -34,7 +35,7 @@ export function onNavigate(fn: Listener): () => void {
 export function navigate(p: Place): void {
   if (p.tab) setRailTab(p.suite, p.tab)
   useSession.getState().setSuite(p.suite)
-  const at: Place = { suite: p.suite, tab: p.tab ?? useRailState.getState().active[p.suite] }
+  const at: Place = { suite: p.suite, tab: p.tab ?? useRailState.getState().active[p.suite], ...(p.layer ? { layer: p.layer } : {}) }
   for (const fn of listeners) fn(at)
 }
 
@@ -47,6 +48,7 @@ export function currentPlace(): Place {
 /** D157 (02 §1): the layer an old place belongs to — Image's Make and Edit and Story's World and Cast are World; Animate's three levels and
  *  Story's Flow and Shots are Shots; Story's Episode is Episode; the Catalogue is the Bin. */
 export function layerOf(p: Place): Layer {
+  if (p.layer) return p.layer
   switch (p.suite) {
     case 'animate': case 'stage': case 'final': return 'shots'
     case 'catalogue': return 'bin'

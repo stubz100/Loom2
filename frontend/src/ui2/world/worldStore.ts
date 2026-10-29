@@ -2,6 +2,7 @@
 // the role filter. The entity and its version are the Story store's selection (the records layer of today: profiles, their sheets, the
 // add and hero routes), so World and the old Cast act on the same records. The place is kept in the hash: #world/<class>/<profile>/<version>.
 import { create } from 'zustand'
+import { navigate } from '../../frame/router'
 import { http, unwrap } from '../../api/client'
 import type { components } from '../../api/schema'
 import { onRecords } from '../../store/records'
@@ -38,8 +39,8 @@ export function passes(it: Pick<BinItem, 'roles'>, f: RoleFilter): boolean {
 
 interface WorldState {
   rail: WorldRail; bin: VersionBin | null; binFor: string | null; loading: boolean; selected: string | null; filter: RoleFilter
-  mode: 'make' | 'edit'                                                    // U3c: the left column's Make or the editor on a creation
-  setMode: (mode: 'make' | 'edit') => void
+  mode: 'make' | 'edit' | 'clay'                                           // U3c: the left column's Make or the editor on a creation; U3f: the bench
+  setMode: (mode: 'make' | 'edit' | 'clay') => void
   setRail: (rail: WorldRail) => void
   pick: (entity: string | null, version?: string | null) => void
   loadBin: () => Promise<void>
@@ -63,6 +64,7 @@ export const useWorld = create<WorldState>()((set, get) => ({
     const st = useStory.getState()
     st.selectProfile(entity, version)
     const p = st.profile()
+    if (get().mode === 'clay') navigate({ suite: 'generate' })                // U3f: off the bench, back to Make
     set({ selected: null, mode: 'make', bin: p ? get().bin : null, binFor: p ? get().binFor : null, ...(p ? { rail: p.cls } : {}) })
     writeHash(p ? p.cls : get().rail, p?.id ?? null, p ? useStory.getState().versionId : null)
     if (p) void get().loadBin()

@@ -41,3 +41,4 @@
 .tl-bar.line.estimated { border-style: dashed; }
 .tl-bar.away { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--fg3) 20%, var(--bg3)) 0 6px, var(--bg3) 6px 12px); border-color: var(--fg3); cursor: default; }   /* F42 */
 .tl-bar.away.warn { border-color: var(--warn); color: var(--warn); }
+.tl-bar.held { background: color-mix(in srgb, var(--accent) 10%, var(--bg3)); border-color: var(--line2); border-style: dotted; cursor: default; }   /* U5e: carried in a hand */

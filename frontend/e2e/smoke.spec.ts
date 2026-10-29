@@ -3788,7 +3788,7 @@ test('the one timeline and transport (D121 AW2): Clay keys the camera on its row
   const camFrames = async () => (Object.values((await doc()).keyframes?.camera ?? {})[0] ?? []).map((k) => k.frame)
   const tl = page.locator('.stage-timeline')
   const camRow = tl.locator('.tl-row[data-row^="cam:"]')
-  await expect(camRow).toHaveCount(0)                                                                      // nothing keyed: the ruler alone
+  await expect(camRow.locator(".tl-key")).toHaveCount(0)                                                    // nothing keyed: U5e — the camera's track is a row of its own, empty
   await tl.locator('button', { hasText: /^Key camera$/ }).click()
   await tl.locator('.frame-field').fill('8'); await tl.locator('.frame-field').dispatchEvent('change')
   await tl.locator('button', { hasText: /^Key camera$/ }).click()
@@ -4548,4 +4548,26 @@ test('the animation editor (U5c, D157 G8 G9 · proto01_UI2 04 §3.2): a clip blo
   await expect.poll(async () => Object.keys((await doc()).tracks ?? {}).length, { timeout: 15_000 }).toBe(0)
   expect(Object.values((await doc()).keyframes.objects)[0].length).toBeGreaterThan(1)          // its frames are the figure's keys now
   expect((await doc()).range).toEqual(range)
+})
+
+test('World\'s owed parts (U3f, D157 · proto01_UI2 03 §2, §5, §8): a character\'s voice in the header, its facts in the Inspector (used in shots, versions), See in clay ▶ — its bench — inside World', async ({ page }) => {
+  test.setTimeout(90_000)
+  const tag = Date.now().toString(36)
+  type ProfileLite = { id: string }
+  const prof = await api<ProfileLite>('POST', '/story/profiles', { name: `Maren ${tag}`, cls: 'character', appearance: 'a lighthouse keeper in a yellow oilskin' })
+  await page.goto(`${appUrl({ ui: '2' })}#world/character/${prof.id}/v1`)
+  const head = page.locator('[data-testid="world-header"]')
+  await expect(head.locator('select[aria-label="speaks with"]')).toBeVisible()
+  const insp = page.locator('[data-testid="world-inspector"]')
+  await expect(insp.locator('[data-testid="world-uses"]')).toContainText('none yet')
+  await expect(insp).toContainText('v1')
+  await expect(insp.locator('button', { hasText: `Delete Maren ${tag}…` })).toBeVisible()
+  await head.locator('button', { hasText: 'See in clay ▶' }).click()
+  await expect(page.locator('[data-testid="world-clay"] canvas').first()).toBeVisible({ timeout: 20_000 })
+  await expect(page.locator('.w-mode button.active')).toHaveText('Clay')
+  expect(new URL(page.url()).hash).toMatch(/^#world/)                                                     // the bench opens inside World
+  type StageLite = { purpose: string; bound: { profile_id: string } | null }
+  await expect.poll(async () => (await api<{ items: StageLite[] }>('GET', '/stages?purpose=bench')).items.some((s) => s.bound?.profile_id === prof.id), { timeout: 10_000 }).toBe(true)
+  await page.locator('.w-mode button', { hasText: 'Make' }).click()
+  await expect(page.locator('[data-testid="world-make"]')).toBeVisible()
 })

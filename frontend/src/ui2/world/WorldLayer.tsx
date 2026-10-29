@@ -8,7 +8,9 @@ import { CommandButton, MenuButton } from '../../frame/CommandButton'
 import { command, isEnabled, runCommand, type MenuItem } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import { useSession } from '../../store/session'
-import { useStory, type ProfileClass } from '../../suites/story/storyStore'
+import type { Profile } from '../../api/types'
+import { navigate } from '../../frame/router'
+import { useStory, voiceLabel, type ProfileClass } from '../../suites/story/storyStore'
 import { readiness } from './readiness'
 import { WorldMake } from './WorldMake'
 import { CLASSES, CLASS_LABEL, ONE, passes, startWorld, useWorld, type BinItem, type RoleFilter, type WorldRail } from './worldStore'
@@ -16,6 +18,14 @@ import './worldCommands'
 import './world.css'
 
 // U3c: the editor loads on the first Edit (its Pixi code stays out of World until then)
+// U3f: the bench's Clay parts and the voices block load with their use
+const BenchColumn = lazy(() => import('../../suites/stage/StageParts').then((m) => ({ default: () => <m.ClayColumn tab="scene" /> })))
+const BenchStrip = lazy(() => import('../../suites/stage/StageParts').then((m) => ({ default: m.Strip })))
+const BenchStage = lazy(() => import('../../suites/stage/StageParts').then((m) => ({ default: m.Stage })))
+const Voices = lazy(() => import('../../suites/story/VoicesBlock').then((m) => ({ default: m.VoicesBlock })))
+/** A built set's sizes in metres (width × depth × height, as the set builder gives them). */
+const setSizes = (z: Record<string, number> | undefined): string => { const d = ['w', 'd', 'h'].map((k) => z?.[k]).filter((x): x is number => typeof x === 'number'); return d.length ? ` · ${d.map((x) => x.toFixed(1)).join(' × ')} m` : '' }
+
 const EditColumn = lazy(() => import('./WorldEdit').then((m) => ({ default: m.WorldEditColumn })))
 const EditCentre = lazy(() => import('./WorldEdit').then((m) => ({ default: m.WorldEditCentre })))
 const EditInspector = lazy(() => import('./WorldEdit').then((m) => ({ default: m.WorldEditInspector })))
@@ -49,6 +59,7 @@ function Header() {
   const p = useStory((s) => s.profiles.find((x) => x.id === s.profileId))
   const vid = useStory((s) => s.versionId)
   const bin = useWorld((s) => s.bin)
+  const voices = useStory((s) => s.voices)
   const cls = rail as ProfileClass
   const mine = profiles.filter((x) => x.cls === cls)
   const entities = (): MenuItem[] => [...mine.map((x) => ({ label: x.name, checked: x.id === p?.id, run: () => useWorld.getState().pick(x.id) })), { sep: true }, { cmd: 'world.entity.new', label: `New ${ONE[cls]}…` }]
@@ -69,13 +80,17 @@ function Header() {
       <div className="w-head-row">
         <MenuButton label={p.name} items={entities} text />
         <MenuButton label={`${v.id}${v.label && v.label !== v.id ? ` · ${v.label}` : ''}${v.state === 'final' ? ' · final' : ''}`} items={versions} text />
-        <span className="spacer" /><CommandButton id="world.entity.new" />
+        <span className="spacer" /><CommandButton id="world.mode.clay" text /><CommandButton id="world.entity.new" />
       </div>
       <label className="w-field"><span>appearance</span><textarea rows={2} value={v.appearance} disabled={!open} aria-label="appearance" placeholder="face, hair, build — the words every picture of it carries" onChange={(e) => sheet({ appearance: e.target.value })} /></label>
       {p.cls === 'character' && <label className="w-field"><span>outfit</span><textarea rows={1} value={v.outfit} disabled={!open} aria-label="outfit" onChange={(e) => sheet({ outfit: e.target.value })} /></label>}
       {p.cls === 'character' && <div className="w-field"><span>body</span><span className="w-val">{(v.body?.height_m ?? 1.75).toFixed(2)} m · {v.body_fit_from ? 'fitted ✓' : 'not fitted'}</span></div>}
-      {p.cls === 'prop' && <div className="w-field"><span>3D model</span><span className="w-val">{v.model_asset_id ? `made${v.height_m ? ` · ${v.height_m} m` : ''}` : 'not made yet'}</span></div>}
-      {p.cls === 'place' && <div className="w-field"><span>the set</span><span className="w-val">{v.place_set ? `${v.place_set.kind} · ${v.place_set.faces.length} faces` : 'not built yet'}</span></div>}
+      {p.cls === 'character' && <div className="w-field"><span>voice</span><span className="w-val w-voice">
+        <select aria-label="speaks with" value={p.voice_id ?? ''} onChange={(e) => void useStory.getState().patchProfile({ voice_id: e.target.value || null })}>
+          <option value="">(no voice)</option>{voices.map((x) => <option key={x.id} value={x.id}>{voiceLabel(x)}</option>)}
+        </select><CommandButton id="story.cast.newVoice" text /></span></div>}
+      {p.cls === 'prop' && <div className="w-field"><span>3D model</span><span className="w-val">{v.model_asset_id ? `made${v.height_m ? ` · ${v.height_m} m` : ''}` : 'not made yet'} <CommandButton id="story.cast.importModel" text label="Import GLB…" /></span></div>}
+      {p.cls === 'place' && <div className="w-field"><span>the set</span><span className="w-val">{v.place_set ? `${v.place_set.kind}${setSizes(v.place_set.sizes)} · ${v.place_set.faces.length} faces` : 'not built yet'}</span></div>}
       <div className="w-ready" data-testid="world-readiness">
         {r.items.map((x) => {
           const verb = READY_VERB[x.id], c = verb ? command(verb) : undefined
@@ -121,19 +136,34 @@ function Bin() {
   )
 }
 
+/** U3f (03 §5): the entity's facts — the shots that use it (and how), its versions (a click opens one), its voice, *Delete…*. */
+function EntityFacts({ p, binCount }: { p: Profile; binCount: number }) {
+  const uses = useStory((s) => s.castUses[p.id]?.uses)
+  const vid = useStory((s) => s.versionId)
+  useEffect(() => { void useStory.getState().loadCastUses(); void useStory.getState().loadVoices() }, [p.id])
+  const HOW: Record<string, string> = { speaker: 'speaks', place: 'its place', figure: 'on its stage', prop: 'on its stage' }
+  return (
+    <aside className="w-insp" data-testid="world-inspector">
+      <h4>{p.name}</h4>
+      <div className="kv"><span>in the bin</span><span>{binCount}</span></div>
+      <div className="w-facts" data-testid="world-uses"><span>used in shots</span>
+        {uses?.length ? <ul>{uses.map((u) => <li key={u.shot_id}><button className="link" title={`Open ${u.name} in Shots`} onClick={() => { navigate({ suite: 'story', tab: 'flow' }); void import('../shots/shotsStore').then((m) => m.useShots.getState().open(u.shot_id, 'clay')) }}>{u.name}</button>
+          <small> · {u.how.map((h) => HOW[h] ?? h).join(', ')} · {u.version}</small></li>)}</ul> : <span className="w-val">none yet</span>}</div>
+      <div className="w-facts"><span>versions</span><ul>{p.versions.map((x) => <li key={x.id}><button className={`link${x.id === vid ? ' active' : ''}`} onClick={() => useWorld.getState().pick(p.id, x.id)}>
+        {x.id}{x.label && x.label !== x.id ? ` · ${x.label}` : ''}</button><small> · {x.state === 'final' ? 'final' : 'open'}{x.id === p.current ? ' · current' : ''}</small></li>)}</ul></div>
+      {p.cls === 'character' && <Suspense fallback={null}><Voices p={p} /></Suspense>}
+      <div className="w-verbs"><CommandButton id="story.cast.delete" text label={`Delete ${p.name}…`} /></div>
+    </aside>
+  )
+}
+
 function Inspector() {
   const bin = useWorld((s) => s.bin)
   const selected = useWorld((s) => s.selected)
   const p = useStory((s) => s.profiles.find((x) => x.id === s.profileId))
   const it = bin?.items.find((x) => x.asset.id === selected)
   if (!p) return <aside className="w-insp" />
-  if (!it) return (
-    <aside className="w-insp" data-testid="world-inspector">
-      <h4>{p.name}</h4>
-      <div className="kv"><span>versions</span><span>{p.versions.length}</span></div>
-      <div className="kv"><span>in the bin</span><span>{bin?.items.length ?? 0}</span></div>
-    </aside>
-  )
+  if (!it) return <EntityFacts p={p} binCount={bin?.items.length ?? 0} />
   return (
     <aside className="w-insp" data-testid="world-inspector">
       <img className="w-preview" src={api.thumbUrl(it.asset.id, 512)} alt="" />
@@ -148,9 +178,10 @@ function Inspector() {
 
 function ModeSwitch() {
   const mode = useWorld((s) => s.mode)
-  return <div className="w-mode segmented" role="group" aria-label="Make or Edit">
+  return <div className="w-mode segmented" role="group" aria-label="Make, Edit or Clay">
     <button className={mode === 'make' ? 'active' : ''} onClick={() => runCommand('world.mode.make')}>Make</button>
     <button className={mode === 'edit' ? 'active' : ''} disabled={mode !== 'edit' && !isEnabled(command('world.mode.edit')!)} title="Edit the selected creation" onClick={() => runCommand('world.mode.edit')}>Edit</button>
+    <button className={mode === 'clay' ? 'active' : ''} disabled={mode !== 'clay' && !isEnabled(command('world.mode.clay')!)} title={command('world.mode.clay')?.hint} onClick={() => runCommand('world.mode.clay')}>Clay</button>
   </div>
 }
 
@@ -165,8 +196,9 @@ export function WorldLayer() {
     <div className="w-layer" data-testid="world-layer">
       <Rail />
       {classRail ? <>
-        <section className="w-left"><Header /><ModeSwitch /><div className="w-panel">{mode === 'edit' ? <Suspense fallback={null}><EditColumn /></Suspense> : <WorldMake />}</div></section>
-        <section className="w-centre">{mode === 'edit' ? <Suspense fallback={<div className="w-empty">Loading the editor…</div>}><EditCentre /></Suspense> : <Bin />}</section>
+        <section className="w-left"><Header /><ModeSwitch /><div className="w-panel">{mode === 'edit' ? <Suspense fallback={null}><EditColumn /></Suspense> : mode === 'clay' ? <Suspense fallback={null}><BenchColumn /></Suspense> : <WorldMake />}</div></section>
+        <section className="w-centre">{mode === 'edit' ? <Suspense fallback={<div className="w-empty">Loading the editor…</div>}><EditCentre /></Suspense>
+          : mode === 'clay' ? <Suspense fallback={<div className="w-empty">Loading Clay…</div>}><div className="strip w-edit-strip"><BenchStrip /></div><div className="w-edit-stage" data-testid="world-clay"><BenchStage /></div></Suspense> : <Bin />}</section>
         {mode === 'edit' ? <Suspense fallback={<aside className="w-insp" />}><EditInspector /></Suspense> : <Inspector />}
       </> : <Suspense fallback={<section className="w-centre wide"><div className="w-empty">Loading…</div></section>}>
         {rail === 'look' ? <><section className="w-left"><div className="w-panel"><LookColumn /></div></section><section className="w-centre"><LookCentre /></section><LookInspector /></>

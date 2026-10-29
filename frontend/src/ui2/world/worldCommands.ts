@@ -1,6 +1,6 @@
 // U3 (D157, proto01_UI2 03 §8): World's commands (rule 3: every action a command with a mouse home; keys are accelerators). They act on the
 // entity and version the header shows (the Story store's selection) and on the creation selected in the bin.
-import { CopyPlus, ImagePlus, Lock, Pencil, Plus, Sparkles, Star, Trash2, UserRoundPlus } from 'lucide-react'
+import { Box, CopyPlus, ImagePlus, Lock, Pencil, Plus, Sparkles, Star, Trash2, UserRoundPlus } from 'lucide-react'
 import { http, unwrap } from '../../api/client'
 import { registerCommands } from '../../frame/commands'
 import { navigate } from '../../frame/router'
@@ -16,6 +16,13 @@ const cls = () => { const r = w().rail; return r === 'look' || r === 'sketches' 
 
 registerCommands([
   // U3c (03 §4): Make or Edit in the left column — Edit opens the selected creation in Image's editor (the World layer stays)
+  // U3f (03 §8, D142): See in clay — the entity version's bench (Clay opened for it: a character's figure, a prop's model beside a 1.75 m
+  // figure, a place's set from its picture's camera) inside World, with Clay's tools
+  { id: 'world.mode.clay', scope: 'world', label: 'See in clay ▶', icon: Box, placement: ['panel'],
+    hint: "Clay opened for this version on a scene of its own — the figure, the model at its height or the set — with all of Clay's tools",
+    when: () => { const p = sy().profile(); const v = sy().version(); return !!p && !!v && (p.cls === 'character' || (p.cls === 'prop' && !!v.model_asset_id) || (p.cls === 'place' && !!v.place_set)) },
+    run: () => { const p = sy().profile(); const v = sy().version(); if (!p || !v) return
+      void import('../../suites/stage/stageStore').then(async (m) => { if (await m.st().openBench(p.id, v.id, 'world')) w().setMode('clay') }) } },
   { id: 'world.mode.make', scope: 'world', label: 'Make', icon: Sparkles, placement: ['panel'], when: () => w().mode !== 'make',
     run: () => { w().setMode('make'); navigate({ suite: 'generate' }) } },
   { id: 'world.mode.edit', scope: 'world', label: 'Edit', icon: Pencil, placement: ['panel', 'inspector', 'context'], when: () => !!selected(),

@@ -816,7 +816,8 @@ function Timeline() {
   const camKeys = cam ? (k.camera[cam.id] ?? []).map((x) => x.frame) : []
   const tracks = current.tracks ?? {}
   const blockErrors = useBlocks((s) => s.errors)
-  const objects = current.objects.filter((o) => (k.objects[o.id] ?? []).length > 0 || (tracks[o.id] ?? []).length > 0)
+  // U5e (04 §3.2): a thing held in a figure's hand has a track too — carried, it goes where the hand goes
+  const objects = current.objects.filter((o) => (k.objects[o.id] ?? []).length > 0 || (tracks[o.id] ?? []).length > 0 || (!!o.parent_joint && !!o.parent))
   const skeletons = current.objects.filter((o) => (k.skeleton?.[o.id] ?? []).length > 0)        // CS3: the figures with skeleton keys
   const blockEnd = (b: MotionBlock) => b.start + Math.max(1, b.length) - 1
   const span = stageSpan(end, [...camKeys, ...objects.flatMap((o) => (k.objects[o.id] ?? []).map((x) => x.frame)), ...objects.flatMap((o) => (tracks[o.id] ?? []).map(blockEnd)),
@@ -830,7 +831,7 @@ function Timeline() {
   }
   const rows: TLRow[] = []
   const extraRows = useReadOnlyRows(current, cam, start, end)
-  if (cam && camKeys.length) rows.push(row(`cam:${cam.id}`, `camera · ${cam.name}`, camKeys, selectedCamera === cam.id, () => st().selectCamera(cam.id)))
+  if (cam) rows.push(row(`cam:${cam.id}`, `camera · ${cam.name}`, camKeys, selectedCamera === cam.id, () => st().selectCamera(cam.id)))   // U5e (04 §3.2): the camera's track, keyed or not
   for (const o of objects) {
     const r = row(`obj:${o.id}`, o.name, (k.objects[o.id] ?? []).map((x) => x.frame), selected === o.id, () => st().select(o.id))
     // U5 (G8): the figure's clip blocks — the clip and its loops, past the range's end when longer than the shot (the range never moves by itself)
@@ -842,6 +843,9 @@ function Timeline() {
     r.bars = [...(tracks[o.id] ?? []).map((b) => ({ id: `blk:${b.id}`, from: b.start, to: blockEnd(b), className: `block${blockErrors[b.id] ? ' failed' : ''}`, drag: true, data: { block: b.id },
       label: `${b.source.clip || 'animation'}${b.loops > 1 ? ` ×${b.loops}` : b.loops === 0 ? ' · along its path' : ''}`,
       title: blockErrors[b.id] ? `${b.source.clip}: ${blockErrors[b.id]}` : `${b.source.clip || 'an animation'}: frames ${b.start}–${blockEnd(b)}${blockEnd(b) > end ? " (past the shot's range)" : ''} — drag to move it, its edges to trim or loop it (Alt: slide the clip in it); right-click: speed, loops, blend, bake, save` })), ...(r.bars ?? [])]
+    const holder = o.parent_joint && o.parent ? current.objects.find((x) => x.id === o.parent) : undefined
+    if (holder) r.bars = [...(r.bars ?? []), { id: 'held', from: start, to: end, className: 'held', label: `in ${holder.name}'s ${o.parent_joint === 'r_hand' ? 'right' : 'left'} hand`,
+      title: `${o.name} is held by ${holder.name} — it moves with the hand (its right-click on the stage: put it down)` }]
     rows.push(r)
   }
   for (const o of skeletons) {                                                    // CS3: a skeleton key a diamond, its transition a bar after it

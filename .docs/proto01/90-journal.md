@@ -12242,3 +12242,48 @@ Owed to it:
 - the blocks' corner handles for blend out.
 
 Next is spike E42 (GPU, alone), then U6: Performance and Final.
+
+## 2026-10-29 07:39 — U3f and U5e: World's and the animation editor's small owed parts — the voice, Import GLB…, the set's sizes, the entity's facts, See in clay ▶ inside World; the camera's track, a held thing's (D157; proto01_UI2 03 §2, §5, §8, 04 §3.2)
+
+The author said to do the small owed parts first, without the GPU. Spike E42 waits for their word.
+
+**World's header (03 §2):**
+
+- a character's **voice**: *speaks with ▾* (the project's voices) and *New voice…*;
+- a prop's 3D model has **Import GLB…** (Cast's `story.cast.importModel`);
+- a place's set says its **sizes** (width × depth × height);
+- **See in clay ▶** (`world.mode.clay`) opens D142's bench for the version: Clay opened for it on a scene of its own (a character's
+  figure, a prop's model at its height beside a 1.75 m figure, a place's set from its picture's camera). It opens **inside World**, as the
+  left column's third mode beside Make and Edit, with Clay's column, strip and viewport.
+  - A navigation can now name the layer it belongs to (`Place.layer`, U1's router), and `openBench` passes it through. Before this, the
+    stage suite always meant Shots, where Clay shows only a shot's stage.
+  - Picking another entity or *Make* leaves the bench.
+  - Animate's mode pills are hidden on the bench's strip.
+
+**The Inspector's entity facts (03 §5)**, when no creation is selected:
+
+- **used in shots**: each shot that uses it, how (it speaks, it is the place, it stands on the stage) and the version it wears; a click
+  opens the shot in Shots;
+- its **versions**: a click opens one;
+- the character's **voice block** (Cast's: tier, measured pace, *New voice…* with its form, *Delete the voice*);
+- **Delete…**.
+
+On the copy of The Last Ferry: Ines is used in *The seal* (speaks) and *Stay* (on its stage); her bench opens in World with her figure
+and the bench camera.
+
+**The animation editor (04 §3.2):**
+
+- The active camera's track is always a row, keyed or not.
+- A thing held in a figure's hand (D129) has a track: *in Ines's right hand*, across the range — carried, it goes where the hand goes.
+
+**Still owed:**
+
+- the Library as a drawer on the editor's edge (the sources are in Clay's Motion section);
+- blend out: past a block's end the key layer already eases from its last pose to the next key, so it would matter only between
+  overlapping blocks.
+
+**Tests:** an e2e scenario: a character's voice field, its facts (none yet, v1, *Delete…*), *See in clay ▶* opening its bench inside
+World (a bench stage bound to it, the hash still World's), back to Make.
+The timeline scenario (D121 AW2) now expects the camera's row with no keys, not no row.
+
+**Checks:** offline 721 passed (no backend change); Vitest 634 + 3 skipped; typecheck, build and lint clean; e2e 87/87 (alone).

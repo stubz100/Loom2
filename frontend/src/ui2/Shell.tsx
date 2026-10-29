@@ -25,8 +25,18 @@ import { ShotsLayer } from './shots/ShotsLayer'
 import { WorldLayer } from './world/WorldLayer'
 import { KeyHosts } from '../frame/keyHosts'
 import { AngleSheet } from '../suites/generate/AngleTab'
+// B2 (D159): commands register at import (D32: the help, the menus, the palette and the keys list them before a part is opened) — the old
+// registry loaded Animate's and the Catalogue loaded Story's; the layers' parts load lazily, so the shell loads both
+import '../suites/animate/animateCommands'
+import '../suites/story/storyCommands'
 import '../frame/frame.css'
 import './shell.css'
+
+// D69: Edit's code (and its commands) loads on the first idle moment after startup, so the first Open in Edit does not wait for the chunk
+{
+  const idle = window.requestIdleCallback ?? ((f: () => void) => window.setTimeout(f, 200))
+  idle(() => void import('../suites/edit/EditSuite').catch(() => undefined))
+}
 
 /** The layer tabs — each the global command its key runs (Ctrl+1–4), so the tab, the key, the palette and the help list agree. */
 function LayerTabs() {

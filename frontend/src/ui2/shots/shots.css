@@ -22,7 +22,6 @@
 .s-insp { padding: 0; }
 .w-field.stack { grid-template-columns: 1fr; gap: 2px; }
 .s-lines .lines-editor { max-width: 100%; }
-.s-clay-strip .animate-levels, .s-clay-strip .graph-pill { display: none; }   /* the rail is the levels in the new shell */
 .s-scene { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
 .s-range { display: inline-flex; align-items: center; gap: 4px; }
 .s-range input { width: 56px; }

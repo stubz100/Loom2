@@ -28,8 +28,6 @@ export const SHARED_KEYS: { scope: Scope; chord: string; ids: [string, string]; 
   { scope: 'story', chord: 'delete', ids: ['story.flow.deleteEdge', 'story.world.remove'], byDispatch: true, why: 'each Story tab dispatches only its own commands (storyKeys.ts, D90 B2): Delete removes a World row on World, a connection on Flow' },
   { scope: 'story', chord: 'ctrl+enter', ids: ['story.cast.expand', 'story.shot.next'], byDispatch: true, why: "each Story tab dispatches only its own commands (storyKeys.ts): Ctrl+Enter is Cast's Expand on Cast and the shot's next step on Shots (D125)" },
   { scope: 'animate', chord: 'ctrl+enter', ids: ['anim.final.render', 'anim.run'], why: "D121: each level's primary on Ctrl+Enter — the Final level's render needs the final suite, the Performance card's verb the animate suite (and the Final's key hook dispatches only anim.final.*)" },
-  { scope: 'catalogue', chord: 'tab', ids: ['cat.compare.swap', 'global.focus'], byDispatch: true, why: 'Compare listens in the capture phase and stops Tab while it is open (swap); elsewhere Tab is focus mode' },
-  { scope: 'bin', chord: 'tab', ids: ['bin.compare.swap', 'global.focus'], byDispatch: true, why: "B1: the Bin's compare listens in the capture phase and stops Tab while it is open (swap); elsewhere Tab is focus mode" },
 ]
 
 export const normChord = (s: string): string => { const c = parseChord(s); return `${c.ctrl ? 'ctrl+' : ''}${c.alt ? 'alt+' : ''}${c.shift ? 'shift+' : ''}${c.key}` }

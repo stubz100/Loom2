@@ -13175,3 +13175,101 @@ with B2b.
 **Checks:** Vitest 646 + 3 skipped; typecheck, build and lint clean (92 warnings, as before); e2e 83/83 (alone, 6.3 min).
 
 Next: B2b — the old shell and the Catalogue go.
+
+## 2026-10-29 19:02 — B2b: the old shell and the Catalogue removed; the shell is the only UI (D159; proto01_UI2 11 §5)
+
+**One shell.** `App.tsx` renders the shell (`ui2/Shell.tsx`) — `?ui=2` is gone, and so are ☰'s *Try the new UI* and *Back to the current
+UI*. The four layer commands keep their old ids (`global.suite.story` …), so a key remapped under them stays.
+
+**What went (≈ 1 400 lines):**
+
+- The old frame: `Frame`, `Rail`, `Panel`, `Stage`, `Strip`, `Inspector`, `Resizer`, `panelWidth`, `topTabs`, `suiteRegistry`,
+  `lazySuite`, `ImageModeSwitch`.
+- The level pills (`AnimateLevels`): the Shots rail is the levels.
+- The keep-alive store, with its Settings row: the layers unmount what they do not show. `stageKeep.ts` keeps the `StageActive` context.
+- The suites' wrappers: `GenerateSuite`, `StageSuite`, `StorySuite`, `ModelsSuite`'s export, `placeholders`.
+- The Catalogue: `suites/catalogue`, 26 files and its stylesheet. Its Settings section (thumbnails, tile caption) went with it.
+- The LoRA training sheet (`TrainAlbumSheet`, `trainAlbum`; D157).
+- The frame's toggles: Ctrl+B (panel), Ctrl+I (inspector), Tab (focus mode).
+- The navigation commands: Alt+1–5 (Story's workspaces), *Image · Make / Edit*, *Animate · Clay / Performance / Final*.
+- Generate's old foot and its commands (Generate, Queue, Run, Fetch): World's Make and Sketches have their own feet.
+- The frame's dead CSS rules.
+
+**What moved:**
+
+- `albumStore` → `store/album.ts`.
+- The Generate column's commands → `suites/generate/generateCommands.ts`.
+- `useSuiteRail` → `router.ts`.
+- The parts a suite gives the layers → `frame/suiteParts.ts` (`SuiteParts`).
+- Two shared rules (`.row-btns`, the drawer's `.meta.picking`).
+
+**What changed:**
+
+- **The events.** The album follows them. The Bin reloads on `catalogue.changed` (the index rebuilt) and after a reconnect's gap; it
+  applies the other frames itself.
+- **Go to origin.** A Catalogue job shows its thing in its home in the Bin, or opens the home of its page.
+- ***Open … in the Bin*** (a version's reference set or candidates, a style's samples, a Flow node's board, a LoRA's album) opens the home
+  that page is, or the home that holds it. A page in no home says so; B3 puts every page in a home.
+- **A clip's *Show in the Bin*** reveals it.
+- **The word "Catalogue" left the UI**: about 60 strings, the help's sections, the origin labels, the key settings' scope names.
+- **Shift+F10 on the Bin's grid** opens the selected tile's menu.
+- **Launch places.** A start suite (`scripts/dev.ps1 -Suite`) or a `?suite=` deep link lands on its layer, unless the hash names a place.
+  `?suite=edit&doc=<id>` opens World's Edit as a free edit.
+- **Commands register at startup (D32).** The shell loads Animate's and Story's command modules, which the old registry and the Catalogue
+  used to load, and preloads Edit's code at idle (D69).
+
+**Found while removing it (fixed):**
+
+- World's free edit ended when its own rail was applied again (the place applied on opening).
+- *Open the shot* from World's *used in shots* found no shots loaded: World reads none. Opening a shot loads them first.
+- An effect's window: the cut's `timeline.updated` arriving before the window call's reply reopened the cut and dropped the track
+  selected in the Inspector. While a window is open the reply applies the cut.
+- The set-from-an-image scenario took the newest picture in Imports, which an earlier scenario's picture had become. Its colour check holds
+  only for some pictures, so the scenario now makes its own copy of the project's first photo.
+- Three scenarios selected a Flow node before the Flow had loaded. They load it first.
+
+**`scripts/csp_check.py`:**
+
+- It walks the shell's places: the Bin, World, Sketches, Edit and its AI tab, the smart-select Worker, Shots' Flow and Episode.
+- It works with Edge 156 again. Edge's `msedge.exe` now hands a run to a detached browser and returns at once (rc 0, no output), and with
+  the author's Edge open a run on the default profile went to that window. So every page gets its own profile, the log goes to a file,
+  and the check waits for the screenshot.
+- A stale screenshot no longer passes, and a page with no screenshot fails. Before this, the check had printed the previous run's
+  screenshots.
+- Result: **CSP clean.**
+
+**`e2e/perf.spec.ts`** measures the Bin and World's Edit: `edit_to_bin_ms`, `bin_edit_bin_roundtrip_ms` and `bin_scroll` replace the
+Catalogue's three metrics. They are not comparable with the earlier baselines.
+
+**The bundle:** the main chunk went from 620 kB to 507 kB.
+
+**Found, not fixed: the editor under the production CSP on WebGL.** With headless Edge's WebGL, Pixi refuses to start the editor: "Current
+environment does not allow unsafe-eval". The Tauri CSP has no `unsafe-eval`, and nothing imports `pixi.js/unsafe-eval`, which is Pixi's
+documented answer. The author's WebView2 runs WebGPU, so it is not affected. A machine that falls back to WebGL would get no editor. Not
+changed here.
+
+**Owed: scripts that still drive the old shell's DOM.** These scripts move onto the shell before their next run:
+
+- `scripts/edit_headed_check.py`: `.panel .body`, `.inspector`, the Catalogue's grid.
+- The browser steps of `ca0_acceptance.py`, `ca1_acceptance.py`, `ca1_detailed_check.py`, `ca1b_skeleton_check.py`, `p18_acceptance.py`,
+  `st_acceptance.py` and `sy_acceptance.py`: `?suite=stage` / `story` and the old rail.
+
+`m4_acceptance.py` and `m4_compositor_diag.py` open `?suite=edit&doc=`, which works.
+
+**Checks:**
+
+- Vitest 598 + 3 skipped. The 48 fewer are the Catalogue's, the keep-alive's and the LoRA sheet's tests, deleted with their code.
+- Typecheck and build clean.
+- Lint: 61 warnings, down from 92 (the deleted files' own).
+- The settings audit and the agent-doc check: clean.
+- CSP: clean.
+- e2e: 83/83 (alone, 5.7 min).
+
+The first full run failed 15. Their causes, all fixed above or in the scenarios:
+
+- the command modules that no longer loaded at startup;
+- Edit's idle preload;
+- the old words and level pills the scenarios still checked;
+- the two races.
+
+Next: B3, the pages in homes.

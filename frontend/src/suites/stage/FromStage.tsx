@@ -13,7 +13,7 @@ export function FromStage() {
   useStageLoad()
   const stages = useStage((s) => s.stages)
   const current = useStage((s) => s.current)
-  if (!stages.length) return <div className="from-stage"><p className="hint">No stage yet. <Help text="Make one in Animate, at its Clay level." /></p><CommandButton id="global.suite.stage" text label="Open Animate · Clay" /></div>
+  if (!stages.length) return <div className="from-stage"><p className="hint">No stage yet. <Help text="Make one in Shots, at a shot's Clay level." /></p><CommandButton id="global.suite.stage" text label="Open Shots · Clay" /></div>
   return (
     <div className="from-stage">
       <div className="kv"><span>stage</span>
@@ -21,7 +21,7 @@ export function FromStage() {
           {!current && <option value="">— pick a stage —</option>}
           {stages.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
-        <CommandButton id="global.suite.stage" label="Edit the stage (Animate · Clay)" />
+        <CommandButton id="global.suite.stage" label="Edit the stage (Shots · Clay)" />
       </div>
       {current && <div className="kv"><span>camera</span>
         <select aria-label="the camera" value={current.active_camera ?? ''} onChange={(e) => st().setActiveCamera(e.target.value)}>

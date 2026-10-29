@@ -4,12 +4,10 @@
 // rendered and from which revision. Keys: Final's reach (animateCommands.ts) — its own commands, the mode keys, the Shot head's and the one
 // transport (the composition's here); Performance's player keys stay off.
 import { useEffect, useState } from 'react'
-import { AnimateLevels, GraphPill } from '../../frame/AnimateLevels'
 import { handleKeysAt, markUsed, runCommand } from '../../frame/commands'
 import { inField } from '../../frame/fieldKeys'
 import { Help } from '../../frame/Help'
-import { DEFAULT_RAIL } from '../../frame/railTabs'
-import type { SuiteDef } from '../../frame/suiteRegistry'
+import type { SuiteParts } from '../../frame/suiteParts'
 import { useSession } from '../../store/session'
 import { rendering, useFinals, useFinalsPoll } from '../stage/finalShot'
 import { RenderSettingsBlock } from './RenderSettingsBlock'
@@ -143,7 +141,7 @@ function FinalStrip() {
   const final = useComposition((s) => s.final)
   return (
     <>
-      <AnimateLevels /><GraphPill />
+      
       <span className="spacer" />
       {final && <span className="hint" data-final-name>{final.name} · {final.size.w}×{final.size.h} @ {final.rate} fps</span>}
     </>
@@ -169,8 +167,4 @@ function FinalFoot() {
   )
 }
 
-export const FinalSuite: SuiteDef = {
-  id: 'final',
-  rail: DEFAULT_RAIL.final,
-  Panel: FinalColumn, Strip: FinalStrip, Stage: FinalViewer, Inspector: () => null, PrimaryAction: FinalFoot, noInspector: true, panelTitle: 'Animate',
-}
+export const FinalSuite: SuiteParts = { Panel: FinalColumn, Strip: FinalStrip, Stage: FinalViewer, Inspector: () => null, PrimaryAction: FinalFoot }

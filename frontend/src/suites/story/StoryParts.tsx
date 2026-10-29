@@ -14,7 +14,7 @@ import { CommandButton, MenuButton } from '../../frame/CommandButton'
 import { command, markUsed, runCommand, sep, type MenuItem } from '../../frame/commands'
 import { openPressMenu, showMenu } from '../../frame/ContextMenu'
 import { DEV_HOOKS } from '../../devHooks'
-import { useSuiteRail } from '../../frame/suiteRegistry'
+import { useSuiteRail } from '../../frame/router'
 import { useSession } from '../../store/session'
 import type { Asset, Shot, ShotVersion, StoryBeat, StoryVariable, WorldStyle } from '../../api/types'
 import { cellOf, coverageGrid } from './coverage'
@@ -35,7 +35,7 @@ import { AnimRef, PropModel } from './CastParts'
 import { askExpand, castCells, castNext, ITEM_NEXT, itemCommand, makeClipItems, makeFrameItems, NEXT_LABEL, onStoryItem, profileMenu, rowMenu, runOnItem, selectedNext, stageUsers } from './storyCommands'
 import { BoardPanel, LinkStageSheet, ShotsBoard, VoiceAllButton } from './ShotsBoard'
 import { FlowRecipe, ShotRecipe } from './recipe/StoryRecipe'
-import { flatGroups, useAlbum } from '../catalogue/albumStore'
+import { flatGroups, useAlbum } from '../../store/album'
 import { findNode } from './styleSamples'
 import { storyKey } from './storyKeys'
 import { CLASS_LABEL, SECTIONS, revealClass, sy, ttsJobFor, useStory, voiceLabel, type ProfileClass, type Section } from './storyStore'
@@ -153,7 +153,7 @@ function CastTab() {
           )
         })}
         {!shown.length && <div className="empty hint">{profiles.length ? (filter === 'prop' ? 'No props yet — New prop…' : 'No profile matches.')
-          : 'No profiles yet — New character…, or "Make a character…" on a Catalogue tile'}</div>}
+          : 'No profiles yet — New character…, or "Make a character…" on a picture in the Bin'}</div>}
       </div>
       <div className="verbs"><CommandButton id="story.cast.new" text /><CommandButton id="story.cast.newPlace" text /><CommandButton id="story.cast.newProp" text /><CommandButton id="story.cast.lineup" text /></div>
       </>}
@@ -381,7 +381,7 @@ export function Strip() {
   }
   if (tab === 'cast') {
     const p = profiles.find((x) => x.id === profileId)
-    if (!p) return <div className="story-strip"><span>Cast</span><span className="spacer" /><span className="hint">no profile picked</span><Help text={'Pick a character, a place or a prop, or make one — from a Catalogue tile, or New character / place / prop.'} /></div>
+    if (!p) return <div className="story-strip"><span>Cast</span><span className="spacer" /><span className="hint">no profile picked</span><Help text={'Pick a character, a place or a prop, or make one — from a picture in the Bin, or New character / place / prop.'} /></div>
     const v = p.versions.find((x) => x.id === (versionId ?? p.current))
     return (
       <div className="story-strip">
@@ -462,7 +462,7 @@ function WorldEditor() {
         <div className="adder"><CommandButton id="story.world.addBeat" text /></div>
       </section>
       <section id="story-sec-styles">
-        <h3>Styles<Help text={"One per generation; click a style to edit it, drop a Catalogue image on it to make its sample; ★ marks the default Generate preselects."} /></h3>
+        <h3>Styles<Help text={"One per generation; click a style to edit it, drop a picture from the Bin on it to make its sample; ★ marks the default Generate preselects."} /></h3>
         <StyleGrid />
         <div className="adder"><CommandButton id="story.world.addStyle" text /></div>
         <div className="kv sample-scene"><span>sample scene<Help text={"U2 (D157): the scene every style's sample is rendered on — this project's own (a harbour story's looks judged on a harbour), so the samples compare. Empty: the scene in Settings › Samples. A changed scene does not remake the samples already made."} /></span>
@@ -574,8 +574,8 @@ function CastPage() {
   markUsed('story.cast.useAsAnimRef'); markUsed('story.cast.useAsAnimRefBack')   // the candidates' menus (the animation reference's section is in CastParts)
   const p = profiles.find((x) => x.id === profileId)
   if (!p) return filterIsProp
-    ? <div className="story-empty"><div>Pick a prop on the left, or make one. A prop is made like a character: its look and reference images first, then its 3D model, which Animate places in the scene. <b>Make a prop…</b> on a Catalogue tile puts the image in as the hero.<div className="quick-cards"><CommandButton id="story.cast.newProp" text /></div></div></div>
-    : <div className="story-empty"><div>Pick a profile on the left, or make one: <b>Make a character…</b> on a Catalogue tile puts the image in as the hero.<div className="quick-cards"><CommandButton id="story.cast.new" text /></div></div></div>
+    ? <div className="story-empty"><div>Pick a prop on the left, or make one. A prop is made like a character: its look and reference images first, then its 3D model, which Animate places in the scene. <b>Make a prop…</b> on a picture in the Bin puts the image in as the hero.<div className="quick-cards"><CommandButton id="story.cast.newProp" text /></div></div></div>
+    : <div className="story-empty"><div>Pick a profile on the left, or make one: <b>Make a character…</b> on a picture in the Bin puts the image in as the hero.<div className="quick-cards"><CommandButton id="story.cast.new" text /></div></div></div>
   const v = p.versions.find((x) => x.id === (versionId ?? p.current))
   if (!v) return null
   const refs = Object.values(refPage?.assets ?? {})
@@ -605,11 +605,11 @@ function CastPage() {
           ) })}</div> : <span className="hint">in no shot yet</span>}
       </section>
       <section className="ref-set">{/* proto01_UIcast CF6: the kept pictures themselves, not only their count */}
-        <h3>Reference set <Help text={"The version's kept references, the hero first, each under its coverage cell. A click opens the set in the Catalogue (its page), where they are sorted, tagged or taken out."} /></h3>
+        <h3>Reference set <Help text={"The version's kept references, the hero first, each under its coverage cell. A click opens the set in the Bin (its page), where they are sorted, tagged or taken out."} /></h3>
         {refs.length ? <div className="story-refs" role="list" aria-label="the reference set">
           {[...refs].sort((a, b) => (a.id === v.hero_asset_id ? -1 : b.id === v.hero_asset_id ? 1 : a.created_at < b.created_at ? -1 : 1)).slice(0, REF_SHOWN).map((a) => { const c = cellOf(a)
             return <button key={a.id} type="button" role="listitem" className={`ref-card${a.id === v.hero_asset_id ? ' hero' : ''}`} data-id={a.id} onClick={() => runCommand('story.cast.openGroup')}
-              onContextMenu={(e) => showMenu(e, [{ cmd: 'story.cast.openGroup' }])} title="Open the reference set in the Catalogue">
+              onContextMenu={(e) => showMenu(e, [{ cmd: 'story.cast.openGroup' }])} title="Open the reference set in the Bin">
               <img src={api.thumbUrl(a.id, 256)} alt="" /><span className="cell">{a.id === v.hero_asset_id ? 'hero' : c ? `${c.shot} · ${c.angle}` : 'no cell'}</span></button> })}
           {refs.length > REF_SHOWN && <button type="button" className="link" onClick={() => runCommand('story.cast.openGroup')}>+{refs.length - REF_SHOWN} more</button>}
         </div> : <span className="hint">none yet — ✓ on a candidate keeps it here</span>}

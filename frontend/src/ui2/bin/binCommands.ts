@@ -13,7 +13,7 @@ import type { BinNode, BinThing } from '../../api/types'
 import { showMenu } from '../../frame/ContextMenu'
 import { registerCommands, setReach, type MenuItem } from '../../frame/commands'
 import { openDetached } from '../../frame/loupeLink'
-import { navigate, UI2 } from '../../frame/router'
+import { navigate } from '../../frame/router'
 import { isTauri, pickFiles, revealPath } from '../../shell/tauri'
 import { askConfirm, askText, useSession } from '../../store/session'
 import { castTarget } from '../../suites/story/addToCast'
@@ -245,8 +245,8 @@ registerCommands([
       useSession.getState().toast(`Trash emptied: ${plural(r.purged, 'thing')} deleted permanently`, 'success'); b().select(null); await b().reload() } },
 ])
 
-// B2a: the Bin layer is the `catalogue` suite; its keys, help and palette reach the Bin's scope first (the old Catalogue's after it, until B2b)
-if (UI2) setReach('catalogue', [{ scope: 'bin' }, { scope: 'catalogue' }])
+// B2 (D159): the Bin layer is still the `catalogue` suite in `ui.suite`; its keys, help and palette reach the Bin's scope
+setReach('catalogue', [{ scope: 'bin' }])
 
 /** A home of the tree by its id (a role page maps to its home). */
 export const homeOf = (id: string | null | undefined): BinNode | undefined => (id && id !== TRASH ? homesById(b().homes).get(id) : undefined)

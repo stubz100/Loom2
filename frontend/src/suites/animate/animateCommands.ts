@@ -121,7 +121,7 @@ registerCommands([
   { id: 'anim.view.filmstrip', scope: 'animate', label: 'Frames track (thumbnails on the timeline)', icon: Layers, placement: ['strip'], run: () => useAnimate.setState({ filmTrack: !an().filmTrack }) },   // D99 (UX0 #14)
   { id: 'anim.view.compare', scope: 'animate', label: 'Compare view', icon: Columns2, keys: 'C', placement: ['strip', 'context'], when: hasClip, run: () => an().setView(an().view === 'compare' ? 'player' : 'compare') },
   // frames
-  { id: 'anim.extractFrame', scope: 'animate', label: 'Extract frame to the Catalogue', icon: Download, keys: 'Alt+F', placement: ['inspector', 'context', 'toolbar'], when: hasClip, run: () => void an().extract([an().frame]) },
+  { id: 'anim.extractFrame', scope: 'animate', label: 'Extract frame to the Bin', icon: Download, keys: 'Alt+F', placement: ['inspector', 'context', 'toolbar'], when: hasClip, run: () => void an().extract([an().frame]) },
   { id: 'anim.extractRange', scope: 'animate', label: 'Extract range (every k-th frame between in and out)', icon: Download, keys: 'Alt+Shift+F', placement: ['inspector', 'context'], when: hasClip, run: () => void an().extractRange() },
   { id: 'anim.sendToEdit', scope: 'animate', label: 'Send frame to Edit', icon: Sparkles, keys: 'E', placement: ['inspector', 'context'], when: hasClip, run: () => void an().sendFrameToEdit() },
   { id: 'anim.extend', scope: 'animate', label: 'Extend ▶ (experimental)', icon: Clapperboard, placement: ['inspector', 'context'],
@@ -144,7 +144,8 @@ registerCommands([
         .then((n) => { if (n?.trim()) void import('../story/storyStore').then((m) => m.makeShotAndOpen(n.trim(), { clip_id: c.id })) }) } },
   // D90 (02 §9, A8): a clip goes to the Trash as in the Catalogue (Undo in the toast; Empty trash deletes it)
   { id: 'anim.trash', scope: 'animate', label: 'Move to trash', icon: Trash, danger: true, placement: ['inspector', 'context'], when: () => !!an().clip()?.asset_id, run: () => void an().trashClip() },
-  { id: 'anim.toCatalogue', scope: 'animate', label: 'Show in Catalogue', icon: Film, placement: ['inspector', 'context'], when: () => !!an().clip()?.asset_id, run: () => { navigate({ suite: 'catalogue' }); void import('../catalogue/catalogueStore').then((m) => { const c = m.useCatalogue.getState(); void c.setQuery({ folder: 'clips' }).then(() => { const id = an().clip()?.asset_id; if (id) c.select(id, 'single') }) }) } },
+  { id: 'anim.toCatalogue', scope: 'animate', label: 'Show in the Bin', icon: Film, placement: ['inspector', 'context'], when: () => !!an().clip()?.asset_id,   // B2 (D159): the clip in its home
+    run: () => { const id = an().clip()?.asset_id; if (!id) return; navigate({ suite: 'catalogue' }); void import('../../ui2/bin/binStore').then((m) => void m.useBin.getState().reveal(id)) } },
 ])
 
 // D121: what each mode's keys reach (commands.ts reachOf), one rule for its key hook, the help overlay and the palette. The three share the

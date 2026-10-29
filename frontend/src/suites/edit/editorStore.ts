@@ -991,7 +991,7 @@ export const useEditor = create<EditorState>()(
               const f = o.forShot
               await unwrap(http.POST('/story/shots/{sid}/versions/{vid}/take', { params: { path: { sid: f.shot_id, vid: f.version } }, body: { kind: 'image', id, use: true } }))
               useSession.getState().toast(`Saved · ${r.reused ? 'unchanged, the same version' : 'a new version'} is ${f.name}'s frame now`, 'success')
-            } else useSession.getState().toast(r.reused ? 'Saved · unchanged since the last version (no new one in the Catalogue)' : `Saved · a new version in the Catalogue (${id})`, 'success')
+            } else useSession.getState().toast(r.reused ? 'Saved · unchanged since the last version (no new one in the Bin)' : `Saved · a new version in the Bin (${id})`, 'success')
             return id
           } catch (e) { useSession.getState().toast(`Save failed: ${(e as ApiError).detail ?? e}`, 'error'); return null }
         },

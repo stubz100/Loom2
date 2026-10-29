@@ -190,3 +190,8 @@ hub and grouping).
 **B2a done (2026-10-29):** all 19 are in the new UI, and every scenario of `e2e/smoke.spec.ts` runs on the new shell. The Bin's wave
 moved 17 and dropped 4, World's moved 19 and dropped 4, and Shots' moved 36 and dropped 3. Only `e2e/perf.spec.ts` still opens the
 Catalogue; it moves with B2b.
+
+**B2b done (2026-10-29):** the shell is the only UI. The old frame, the suites' wrappers, the Catalogue and the per-pane stores are gone,
+`albumStore` is `store/album.ts`, and the events and *Go to origin* point at the Bin (the journal lists the rest). Owed: the headed editor
+check and the browser steps of seven older acceptance scripts still drive the old shell's DOM, and move onto the shell before their next
+run. Next: B3.

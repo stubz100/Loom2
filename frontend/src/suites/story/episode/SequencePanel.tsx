@@ -21,8 +21,7 @@ import { useStory } from '../storyStore'
 import { binItem, laneBelowFormat, laneChecklist } from './sequenceCommands'
 import { markUsed, runCommand } from '../../../frame/commands'
 import { shotRows } from './bin'
-import { assembleLane, laneChanges, routeFinals, routeFinalsText, routeLabel, routePicks, walkRoute } from './assemble'
-import { UI2 } from '../../../frame/router'
+import { laneChanges, routeFinals, routeFinalsText, routeLabel, routePicks, walkRoute } from './assemble'
 import { assembleCut } from './sequenceCommands'
 import { flowOrder } from '../board'
 
@@ -95,7 +94,6 @@ function SoundBin() {
     load()
     return onRecords('episode.sounds', ['asset.created', 'asset.deleted', 'asset.updated'], (f) => { if ((f.data as { kind?: string }).kind === 'audio' || f.type === 'asset.deleted') load() })
   }, [project?.path])                                                                                // eslint-disable-line react-hooks/exhaustive-deps
-  if (!UI2) return null                                                                              // the old shell's sounds come by the Catalogue
   return (
     <div className="seq-bin" data-testid="episode-sounds">
       <div className="seq-list-head"><b>Sound</b><span className="hint">{current?.file ? 'drag onto a track, or +' : 'open a cut first'}</span></div>
@@ -126,23 +124,21 @@ function AssembleBody({ target }: { target: { tlId: string | null } }) {
   const world = useStory((s) => s.world)
   const shots = useStory((s) => s.shots)
   const finals = useStory((s) => s.boardFinals)
-  const clips = useClips()
   const cut = target.tlId ? timelines.find((t) => t.id === target.tlId) : undefined
   const [picks, setPicks] = useState<Record<string, string>>(() => cut?.route ?? {})
   const [name, setName] = useState<string | null>(null)
   const walk = useMemo(() => (flowGraph ? walkRoute(flowGraph, flowNodes, world?.variables ?? [], picks) : null), [flowGraph, flowNodes, world, picks])
   if (!walk) return null
   const label = routeLabel(walk.choices)
-  const preview = assembleLane(walk.nodes, shots, new Map(clips.map((c) => [c.id, c])), cut?.fps ?? 24)
   const fin = routeFinals(walk.nodes, shots, finals)                          // U7b (F33): the new shell lays finals only
-  const ready = UI2 ? fin.shots - fin.without.length : preview.lane.clips.length
+  const ready = fin.shots - fin.without.length
   const auto = `Episode ${timelines.length + 1}${label ? ` · ${label}` : ''}`
   const close = () => useSequence.getState().setAssembleFor(null)
   const go = () => { close(); void assembleCut(routePicks(walk.choices), cut ? null : (name ?? auto).trim() || auto) }
   return (
     <div className="modal-backdrop" onClick={close}>
       <div className="modal assemble" role="dialog" aria-modal="true" aria-label="Assemble from the Flow" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === 'Escape') close() }}>
-        <div className="head">{cut ? `Assemble ${cut.name} again` : 'Assemble from the Flow'}<Help text={UI2 ? "One route of the Flow from its Start: every shot in order at its final (the version marked final, else its latest final); a shot without one is left out. Assembled again, only what changed is placed — the shots that stay keep their trims, speed, grade and dissolves; one undo step." : "One route of the Flow from its Start: every Dialogue or Shot node's shot in order, at its approved take (its final version, else the current one), stamped. Assembled again, the trims and dissolves stay where the same shots follow each other."} /></div>
+        <div className="head">{cut ? `Assemble ${cut.name} again` : 'Assemble from the Flow'}<Help text="One route of the Flow from its Start: every shot in order at its final (the version marked final, else its latest final); a shot without one is left out. Assembled again, only what changed is placed — the shots that stay keep their trims, speed, grade and dissolves; one undo step." /></div>
         <div className="body form">
           {walk.choices.map((c) => (
             <div key={c.node.id} className="row"><label htmlFor={`pick-${c.node.id}`}>{c.node.title || 'Choice'}</label>
@@ -152,11 +148,11 @@ function AssembleBody({ target }: { target: { tlId: string | null } }) {
           ))}
           {!walk.choices.length && <span className="hint">The Flow has one route.</span>}
           {!cut && <div className="row"><label htmlFor="assemble-name">name</label><input id="assemble-name" type="text" value={name ?? auto} onChange={(e) => setName(e.target.value)} /></div>}
-          <span className="what" data-testid="assemble-what">{UI2 ? routeFinalsText(fin) : `${preview.lane.clips.length} shot${preview.lane.clips.length === 1 ? '' : 's'}${preview.missing.length ? ` · ${preview.missing.length} without a clip yet (${preview.missing.slice(0, 4).join(', ')})` : ''}`}</span>
+          <span className="what" data-testid="assemble-what">{routeFinalsText(fin)}</span>
         </div>
         <div className="foot">
           <button onClick={close}>Cancel</button>
-          <button className="primary" disabled={UI2 ? !ready && !cut : !ready} onClick={go}>{cut ? 'Assemble again' : 'Assemble'}</button>
+          <button className="primary" disabled={!ready && !cut} onClick={go}>{cut ? 'Assemble again' : 'Assemble'}</button>
         </div>
       </div>
     </div>
@@ -201,7 +197,7 @@ export function SequenceInspector() {
       <ul className="seq-check">{(() => { const issues = laneChecklist(); return issues.length ? issues.map((x) => <li key={x.i} className="warn">clip {x.i + 1}: {x.what}</li>) : <li className="ok">{lane.clips.length ? 'every clip is a final shot version' : 'the lane is empty'}</li> })()}
         {(() => { const b = laneBelowFormat(); return b.count ? <li className="note" data-testid="below-format">{b.count} clip{b.count === 1 ? '' : 's'} below the format ({b.sizes.join(', ')}) <Help text={"A delivery note, not a problem: no video route renders the project format yet; Resolve scales the clips when it conforms the cut (D125)."} /></li> : null })()}</ul>
       {changes > 0 && <div className="verbs"><CommandButton id="story.episode.updateAll" text label={`Update ${changes} changed clip${changes === 1 ? '' : 's'}`} /></div>}
-      <h4>Export <Help text={"Export for Resolve writes the FCPXML (a chapter marker per shot — its node's title — and the lines' voices on an audio lane), the EDL, the SRT (the nodes' Dialogue lines) and markers.txt into one folder named after the cut; Resolve conforms each clip at its own rate. One file at a time is still there. The draft render is a CPU job: frames from the masters, dissolves blended, a clip at another rate mapped by nearest frame (not conformed). The movie is the finished file: the cut's size (each clip fitted, bars where its shape differs), a 16 fps clip conformed to 24 by RIFE when the tool is installed, the voiced lines mixed where the exports place them; an MP4 (H.264 + AAC) beside the Resolve export and a video in the Catalogue."} /></h4>
+      <h4>Export <Help text={"Export for Resolve writes the FCPXML (a chapter marker per shot — its node's title — and the lines' voices on an audio lane), the EDL, the SRT (the nodes' Dialogue lines) and markers.txt into one folder named after the cut; Resolve conforms each clip at its own rate. One file at a time is still there. The draft render is a CPU job: frames from the masters, dissolves blended, a clip at another rate mapped by nearest frame (not conformed). The movie is the finished file: the cut's size (each clip fitted, bars where its shape differs), a 16 fps clip conformed to 24 by RIFE when the tool is installed, the voiced lines mixed where the exports place them; an MP4 (H.264 + AAC) beside the Resolve export and a video in the Bin."} /></h4>
       <div className="verbs"><CommandButton id="story.episode.exportResolve" text /><CommandButton id="story.episode.renderMovie" text label="Render the movie" /><CommandButton id="story.episode.render" text label="Render draft" /></div>
       {current.file && <div className="kv delivery" data-testid="delivery"><span>movie as <Help text={"The movie FilmCraft renders: H.264 (.mp4) to watch and share, or ProRes 422 HQ (.mov) to finish in Resolve; the captions burned into the picture and / or written beside it as SubRip or WebVTT (Captions from the lines makes them)"} /></span>
         <span>

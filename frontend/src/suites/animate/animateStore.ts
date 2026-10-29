@@ -307,7 +307,7 @@ export const useAnimate = create<AnimateState>()(
       animate: async (stage) => {
         const p = get().panel
         const s = useSession.getState()
-        if (!p.start) { s.toast('Set a start frame first (drop a Catalogue tile on the slot, or Shift+A in the Catalogue)', 'info'); return }
+        if (!p.start) { s.toast('Set a start frame first (drop a picture from the Bin on the slot, or Set as the start frame in its right-click menu)', 'info'); return }
         if (get().preview?.missing.length) { s.toast(`Weights missing: ${get().preview!.missing.map((m) => m.model_id).join(', ')} — fetch them in Models`, 'error'); return }
         try {
           const origin = clipOrigin(get().current)
@@ -361,7 +361,7 @@ export const useAnimate = create<AnimateState>()(
           set({ clips: get().clips.map((x) => x.id === c.id ? r.clip : x), assets: { ...get().assets, ...Object.fromEntries(r.items.map((a) => [a.id, a])) } })
           const pins = [...(get().pins[c.id] ?? []), ...r.items.map((a) => ({ frame: Number((a.params as { frame_index?: number }).frame_index ?? -1), asset_id: a.id }))]
           set({ pins: { ...get().pins, [c.id]: pins } })
-          useSession.getState().toast(`${r.items.length} frame${r.items.length > 1 ? 's' : ''} extracted to the Catalogue`, 'success')
+          useSession.getState().toast(`${r.items.length} frame${r.items.length > 1 ? 's' : ''} extracted to the Bin`, 'success')
           return r.items
         } catch (e) { useSession.getState().toast(`Extract failed: ${(e as ApiError).detail ?? e}`, 'error'); return [] } finally { set({ busy: null }) }
       },

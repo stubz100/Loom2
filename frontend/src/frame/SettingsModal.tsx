@@ -55,13 +55,6 @@ export function SettingsModal() {
           <select value={s.ui.theme} onChange={(e) => s.setUi({ theme: e.target.value as Theme })}>{THEMES.map(([t, l]) => <option key={t} value={t}>{l}</option>)}</select>
           <label>Density</label>
           <select value={s.ui.density} onChange={(e) => s.setUi({ density: e.target.value as 'comfortable' | 'compact' })}><option value="comfortable">comfortable</option><option value="compact">compact</option></select>
-          <label>Keep Edit / Animate loaded <Help text={"Switching back is instant while loaded (D69); a GPU job short of VRAM releases them at once"} /></label>
-          <select value={s.ui.editKeepAliveMin ?? 10} onChange={(e) => s.setUi({ editKeepAliveMin: Number(e.target.value) })}>{[2, 5, 10, 30, 60].map((m) => <option key={m} value={m}>{m} min after you leave</option>)}</select>
-          <h4>Catalogue</h4>
-          <label>Thumbnails</label>
-          <select value={s.ui.thumbFit} onChange={(e) => s.setUi({ thumbFit: e.target.value as 'fit' | 'fill' })}><option value="fit">fit: the whole picture</option><option value="fill">fill: cropped to the tile</option></select>
-          <label>Tile caption <Help text={"The tooltip and the Inspector always show model, seed, size and time"} /></label>
-          <select value={s.ui.caption} onChange={(e) => s.setUi({ caption: e.target.value as 'off' | 'prompt' | 'model' })}><option value="off">off</option><option value="prompt">prompt</option><option value="model">model · seed</option></select>
           <h4>Engine output</h4>
           <label>Thumbnail sizes</label><input type="text" value={draft.thumbnail_sizes.join(',')} onChange={(e) => set({ thumbnail_sizes: e.target.value.split(',').map(Number).filter(Boolean) })} />
           <label>Log level</label>

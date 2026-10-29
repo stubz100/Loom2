@@ -104,7 +104,9 @@ export const useSession = create<SessionState>()(
         }
         const q0 = new URLSearchParams(location.search)
         const deep = q0.get('suite') === 'animate' && q0.get('tab') === 'sequence' ? 'story' : q0.get('suite')   // 17 SY4: the Sequence tab moved to Story · Episode
-        if (deep && ['catalogue', 'generate', 'edit', 'animate', 'stage', 'final', 'story', 'models'].includes(deep)) get().setSuite(deep as Suite)
+        // B2 (D159): a suite named at launch lands on its layer through the router (the shell maps it), unless the hash names a place
+        const goTo = (suite: Suite) => { if (location.hash) get().setSuite(suite); else void import('../frame/router').then((m) => m.navigate({ suite })) }
+        if (deep && ['catalogue', 'generate', 'edit', 'animate', 'stage', 'final', 'story', 'models'].includes(deep)) goTo(deep as Suite)
         else if (get().ui.suite === 'models') set({ ui: { ...get().ui, suite: 'catalogue' } })   // D90: a remembered Models suite lands in the Catalogue
         try {
           await get().refreshAll()
@@ -113,7 +115,7 @@ export const useSession = create<SessionState>()(
           return
         }
         const start = get().health?.start_suite
-        if (!deep && start && ['catalogue', 'generate', 'edit', 'animate', 'stage', 'final', 'story', 'models'].includes(start)) get().setSuite(start as Suite)
+        if (!deep && start && ['catalogue', 'generate', 'edit', 'animate', 'stage', 'final', 'story', 'models'].includes(start)) goTo(start as Suite)
         socket?.close()
         socket = new EventsSocket(
           (f) => applyEvent(f, set, get),
@@ -292,13 +294,6 @@ export function applyEvent(f: EventFrame, set: (p: Partial<SessionState>) => voi
     case 'job.deleted': { const jobs = { ...s.jobs }; delete jobs[f.data.id]; set({ jobs }); break }
     case 'queue.state': queueFetch++; set({ queue: f.data }); break          // V67: the state itself — a fetch in flight is stale now
     case 'engine.state': set({ engine: { ...(s.engine ?? {}), ...f.data } }); break
-    case 'engine.vram_pressure': {                                     // D69: a GPU job needs the memory a hidden stage holds
-      void import('../frame/stageKeep').then((m) => {
-        const gone = m.useStageKeep.getState().releaseHidden(s.ui.suite, `the engine had ${f.data.free_gb} GB free for job ${f.data.job_id}`)
-        if (gone.length) s.toast(`Released the hidden ${gone.map((id) => (id === 'edit' ? 'editor canvas' : id === 'animate' ? 'player' : id)).join(' and ')} to give the GPU job room — it reloads when you return`, 'info')
-      })
-      break
-    }
     case 'model.fetch': {
       const st = f.data
       set({ fetches: { ...s.fetches, [st.model_id]: st } })

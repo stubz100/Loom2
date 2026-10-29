@@ -115,7 +115,7 @@ export function ShotHead({ stage = true }: { stage?: boolean }) {
     <div className="shot-head">
       <BenchChip /><ForChip maker="animate" /><ForRecipe maker="animate" />
       {stage && <><StagePicker /><ShotStepper /></>}
-      {!stage && !forShot && <span className="hint">Not for a Story shot. <Help text="A clip made here stands alone in the Catalogue. Opened from Story (a shot's Make clip ▸), the shot is named here and its clips come back as its takes." /></span>}
+      {!stage && !forShot && <span className="hint">Not for a Story shot. <Help text="A clip made here stands alone in the Bin. Opened from Story (a shot's Make clip ▸), the shot is named here and its clips come back as its takes." /></span>}
     </div>
   )
 }

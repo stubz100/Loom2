@@ -1,10 +1,10 @@
-// The album (D34, proto01_design/01 §6a, §6c): the group tree for the Places panel and the group verbs. The pages themselves
-// (free arrangement) are loaded by the Stage; this store keeps the tree, which nodes are expanded, and calls the API.
+// The album (D34, proto01_design/01 §6a, §6c): the group tree and the group verbs — the pages the Bin's homes hold, a version's reference
+// set, a style's pictures, a Flow node's board. B2 (D159): moved here from the Catalogue, which is gone; its pages stay the Bin's storage.
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { http, unwrap } from '../../api/client'
-import type { AlbumNode as ApiAlbumNode, GroupUser, PathStep as ApiPathStep } from '../../api/types'
-import { useSession } from '../../store/session'
+import { http, unwrap } from '../api/client'
+import type { AlbumNode as ApiAlbumNode, GroupUser, PathStep as ApiPathStep } from '../api/types'
+import { useSession } from './session'
 
 export const ALBUM_ID = 'album'
 

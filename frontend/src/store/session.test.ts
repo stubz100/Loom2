@@ -1,25 +1,22 @@
-// D68 (ArtCraft P6): session.applyEvent routes every WebSocket frame — session state for jobs, queue, engine and project; the suite
-// stores (mocked here with spies) for catalogue, album, clip and document frames — and onEvents hands frames to subscribers.
+// D68 (ArtCraft P6): session.applyEvent routes every WebSocket frame — session state for jobs, queue, engine and project; the stores
+// (mocked here with spies) for the index, album, clip and document frames — and onEvents hands frames to subscribers.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { setBackend } from '../api/client'
 import type { EventFrame, Job } from '../api/types'
 import { applyEvent, onEvents, useSession } from './session'
 
 const spies = vi.hoisted(() => {
-  const store = (q: Record<string, unknown>) => {
-    const state = { q, load: vi.fn(async () => undefined), refreshMeta: vi.fn(async () => undefined), applyEvent: vi.fn() }
-    return { getState: () => state, state }
-  }
   const album = { load: vi.fn(async () => undefined) }
+  const bin = { reload: vi.fn(async () => undefined) }
   const animate = { onClipReady: vi.fn(), onClipUpdated: vi.fn() }
   const editor = { onDocumentChanged: vi.fn() }
   return {
-    grid: store({ folder: 'all' }), unprocessed: store({ folder: 'unprocessed' }), page: store({ folder: 'all', group_id: 'grp_1' }), album, animate, editor,
-    albumLoad: album.load, onClipReady: animate.onClipReady, onClipUpdated: animate.onClipUpdated, onDocumentChanged: editor.onDocumentChanged,
+    album, bin, animate, editor,
+    albumLoad: album.load, binReload: bin.reload, onClipReady: animate.onClipReady, onClipUpdated: animate.onClipUpdated, onDocumentChanged: editor.onDocumentChanged,
   }
 })
-vi.mock('../suites/catalogue/catalogueStore', () => ({ allCatalogueStores: () => [spies.grid, spies.unprocessed, spies.page] }))
-vi.mock('../suites/catalogue/albumStore', () => ({ useAlbum: { getState: () => spies.album } }))
+vi.mock('../ui2/bin/binStore', () => ({ useBin: { getState: () => spies.bin } }))
+vi.mock('./album', () => ({ useAlbum: { getState: () => spies.album } }))
 vi.mock('../suites/animate/animateStore', () => ({ useAnimate: { getState: () => spies.animate } }))
 vi.mock('../suites/edit/editorStore', () => ({ useEditor: { getState: () => spies.editor } }))
 
@@ -41,8 +38,7 @@ beforeEach(() => {
     return new Response('not stubbed', { status: 500 })
   }))
   setBackend({ host: '127.0.0.1', port: 8766, token: 't' })
-  for (const s of [spies.grid, spies.unprocessed, spies.page]) Object.values(s.state).forEach((v) => typeof v === 'function' && (v as ReturnType<typeof vi.fn>).mockClear())
-  for (const f of [spies.albumLoad, spies.onClipReady, spies.onClipUpdated, spies.onDocumentChanged]) f.mockClear()
+  for (const f of [spies.albumLoad, spies.binReload, spies.onClipReady, spies.onClipUpdated, spies.onDocumentChanged]) f.mockClear()
 })
 
 describe('applyEvent: session state', () => {
@@ -94,21 +90,14 @@ describe('applyEvent: session state', () => {
 })
 
 describe('applyEvent: suite stores', () => {
-  it('hands asset frames to every catalogue store', async () => {
-    const f = frame('asset.updated', { id: 'ast_1' })
-    route(f)
-    await vi.waitFor(() => { for (const s of [spies.grid, spies.unprocessed, spies.page]) expect(s.state.applyEvent).toHaveBeenCalledWith(f) })
-  })
-  it('reloads every catalogue store on catalogue.changed', async () => {
+  it('reloads the Bin when the asset index was rebuilt (catalogue.changed)', async () => {
     route(frame('catalogue.changed', { reason: 'import' }))
-    await vi.waitFor(() => { for (const s of [spies.grid, spies.unprocessed, spies.page]) { expect(s.state.load).toHaveBeenCalledTimes(1); expect(s.state.refreshMeta).toHaveBeenCalledTimes(1) } })
+    await vi.waitFor(() => expect(spies.binReload).toHaveBeenCalledTimes(1))       // B2 (D159): the Bin applies asset and group frames itself
   })
-  it('on group.changed reloads the album, every store’s counts, and only the views that show placements', async () => {
+  it('on group.changed reloads the album', async () => {
     route(frame('group.changed', { ids: ['grp_1'] }))
-    await vi.waitFor(() => { expect(spies.albumLoad).toHaveBeenCalled(); for (const s of [spies.grid, spies.unprocessed, spies.page]) expect(s.state.refreshMeta).toHaveBeenCalled() })
-    expect(spies.grid.state.load).not.toHaveBeenCalled()
-    expect(spies.unprocessed.state.load).toHaveBeenCalledWith({ keepSelection: true })
-    expect(spies.page.state.load).toHaveBeenCalledWith({ keepSelection: true })
+    await vi.waitFor(() => expect(spies.albumLoad).toHaveBeenCalled())
+    expect(spies.binReload).not.toHaveBeenCalled()
   })
   it('routes clip frames to Animate and document frames to Edit', async () => {
     const ready = { clip_id: 'clp_1', asset_id: 'ast_c', job_id: 'job_1', fps: 16, frames: 81, w: 832, h: 480 }

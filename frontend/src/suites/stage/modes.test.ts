@@ -2,7 +2,7 @@
 // pose mode by the figure (the pose pill), not by the column's scroll; the Final shot card's foot as the final's next step.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Composition, Final, StageDoc, StageObject } from '../../api/types'
-import { DEFAULT_RAIL, TOP_TABS, widthKeyOf } from '../../frame/railTabs'
+import { DEFAULT_RAIL } from '../../frame/railTabs'
 import { useSession } from '../../store/session'
 import { nextFinalStep, useFinals } from './finalShot'
 import { stageSteps, type StepInput } from './steps'
@@ -19,13 +19,10 @@ const fin = (id: string, stage: string, layers: Lay[], extra: Partial<Final> = {
 const lay = (id: string, kind: string, status: string, done = 0): Lay => ({ id, kind, name: kind === 'figure' ? 'Mara' : id, status, frames_done: done })
 
 describe('D121: a level is a mode', () => {
-  it('gives each Animate level its own rail and the tab one panel width', () => {
+  it('gives each level its own column sections', () => {
     expect(DEFAULT_RAIL.stage.map((t) => t.id)).toEqual(['shot', 'scene', 'motion', 'camera'])
     expect(DEFAULT_RAIL.animate.map((t) => t.id)).toEqual(['shot', 'performance', 'clips'])                 // AW3: a clip's details under its row
     expect(DEFAULT_RAIL.final.map((t) => t.id)).toEqual(['shot', 'layers', 'output'])
-    expect(TOP_TABS.find((t) => t.id === 'animate')?.suites).toEqual(['animate', 'stage', 'final'])
-    expect(['stage', 'animate', 'final'].map(widthKeyOf)).toEqual(['animate', 'animate', 'animate'])
-    expect(widthKeyOf('generate')).toBe('generate')
   })
 })
 

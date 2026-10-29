@@ -11,7 +11,7 @@ import { navigate } from '../frame/router'
 
 type Origin = NonNullable<Job['origin']>
 
-const SUITE_LABEL: Record<Origin['suite'], string> = { generate: 'Image', edit: 'Image · Edit', animate: 'Animate', catalogue: 'Catalogue', stage: 'Stage', story: 'Story', api: 'API' }
+const SUITE_LABEL: Record<Origin['suite'], string> = { generate: 'World · Make', edit: 'World · Edit', animate: 'Shots · Performance', catalogue: 'Bin', stage: 'Shots · Clay', story: 'Story', api: 'API' }   // B2 (D159): the layers' names
 
 /** D90 (02 §5): `origin.surface` of a job made for a shot version (the server's `story.FOR_SHOT`). */
 export const FOR_SHOT = 'for_shot'
@@ -137,16 +137,10 @@ export function goToOrigin(j: Job): void {
       navigate({ suite: 'edit' })
       if (o.ref) { const ref = o.ref; void import('../suites/edit/editorStore').then((m) => { const ed = m.useEditor.getState(); if (ed.doc?.id !== ref) void ed.openDocument(ref) }) }
       break
-    case 'catalogue':                                             // the group page (or, without one, the folder) in the active pane
-      navigate({ suite: 'catalogue' })
-      void import('../suites/catalogue/split').then((m) => {
-        const sp = m.useSplit.getState()
-        const c = m.paneStore(sp.mode === 'single' ? 0 : sp.active).getState()
-        const folder = typeof o.payload?.folder === 'string' ? o.payload.folder : null
-        if (o.ref && (o.surface === 'mesh' || o.ref.startsWith('ast_'))) { m.openPlace(c, 'library'); c.openLineage(o.ref) }   // proto01_UIcast CB1: a picture's job (Make a 3D prop…) — the picture and what came of it
-        else if (o.ref) m.openPlace(c, { group: o.ref })
-        else if (folder) void c.setQuery({ folder: folder as typeof c.q.folder, group_id: undefined, collection_id: undefined })
-      })
+    case 'catalogue':                                             // B2 (D159): the thing in its home in the Bin, or the home of the page
+      if (o.ref && (o.surface === 'mesh' || o.ref.startsWith('ast_'))) { const ref = o.ref; navigate({ suite: 'catalogue' }); void import('../ui2/bin/binStore').then((m) => void m.useBin.getState().reveal(ref)) }
+      else if (o.ref) void import('../suites/story/storyCommands').then((m) => m.openGroupPage(o.ref!))
+      else navigate({ suite: 'catalogue' })
       break
     case 'stage':                                                 // ST3: the stage the shot was framed in, at that camera
       navigate({ suite: 'stage' })

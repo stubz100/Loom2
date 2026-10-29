@@ -74,7 +74,7 @@ export function PosesSection() {
         </div>
         <span className="hint" data-lands>{!cells.length ? 'No pose picked.'
           : name ? `${cells.length * count} image${cells.length * count === 1 ? '' : 's'} land as ${name}'s candidates in Cast, each with its pose recorded.`
-            : 'No Cast character is linked in the prompt: the images land in the Catalogue as a batch (link one in the Prompt section to grow its reference set).'}</span>{!cells.length && <Help text={"A tile is a shot size and an angle; the chips add expressions to the chosen tiles."} />}
+            : 'No Cast character is linked in the prompt: the images land in the Bin as a batch (link one in the Prompt section to grow its reference set).'}</span>{!cells.length && <Help text={"A tile is a shot size and an angle; the chips add expressions to the chosen tiles."} />}
       </>}
     </section>
   )

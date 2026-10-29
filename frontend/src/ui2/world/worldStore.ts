@@ -53,7 +53,7 @@ export const useWorld = create<WorldState>()((set, get) => ({
   rail: placeOfHash(location.hash)?.rail ?? 'character', bin: null, binFor: null, loading: false, selected: null, filter: 'all', mode: 'make', free: null,
   setMode: (mode) => set({ mode, ...(mode === 'edit' ? {} : { free: null }) }),
   setRail: (rail) => {
-    set({ rail, selected: null, filter: 'all', ...(get().free ? { mode: 'make', free: null } : {}) })   // B2a: another rail ends a free edit
+    set({ rail, selected: null, filter: 'all', ...(get().free && rail !== get().rail ? { mode: 'make', free: null } : {}) })   // B2a: another rail ends a free edit (the same one, as the place applied on opening, keeps it)
     const st = useStory.getState()
     const keep = st.profile()
     if (rail === 'look' || rail === 'sketches') { writeHash(rail, null, null); return }

@@ -14,7 +14,7 @@ test('open the project: the Bin shows tiles and their thumbnails load; the Proje
   await openShell(page, 'bin')
   await openHome(page, 'imports')
   await expect(binTiles(page).first()).toBeVisible()
-  expect(await thumbsLoaded(page, 12, '[data-testid="bin-grid"] .w-tile img')).toBeGreaterThanOrEqual(Math.min(12, env().assets))
+  expect(await thumbsLoaded(page, 12)).toBeGreaterThanOrEqual(Math.min(12, env().assets))
   // the Project menu leads the tabs: the open project's name, New / Open / Close and the recents
   const projectTab = page.locator('nav.tabs button.project-tab')
   await expect(page.locator('nav.tabs > button').first()).toHaveClass(/project-tab/)
@@ -287,7 +287,7 @@ test("the reference deck (D152): Inpaint and Refine show the model's slots in th
   const max = Number(await slots.getAttribute('data-max'))
   expect(max).toBeGreaterThanOrEqual(1)
   await expect(slots.locator('.ref-slot')).toHaveCount(max)
-  await expect(slots.locator('.ref-slot').first()).toHaveAttribute('title', /drop a Catalogue tile here/)
+  await expect(slots.locator('.ref-slot').first()).toHaveAttribute('title', /drop a picture from the Bin here/)
   await page.screenshot({ path: 'node_modules/.e2e/d152-refs.png' })
   await page.locator('.tool-opts select').first().selectOption('remove')                                 // Remove: no references
   await expect(page.locator('.ref-slots.ai-refs')).toHaveCount(0)
@@ -1304,7 +1304,7 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   expect(comp.layers.map((l) => l.id)).toEqual(['plate', 'shadows', ...comp.stack])
   await page.screenshot({ path: 'node_modules/.e2e/d121-performance-final-shot.png' })                  // D121: a look for the author — Performance's Final shot card
   await page.locator('.final-section [data-open-final]').click()
-  await expect(page.locator('.animate-levels button[aria-pressed="true"]')).toHaveText(/Final/)
+  await expect(page.locator('[data-testid="shots-layer"]')).toHaveAttribute('data-level', 'final')            // B2: the Shots rail is the levels
   await expect(page.locator('#anim-sec-shot .final-pick.active')).toContainText(fin.name)                  // D121: the Final level's own column — the final open
   await expect(page.locator('#anim-sec-performance')).toHaveCount(0)                                        // and nothing of the other levels
   await expect(page.locator('.final-viewer img.final-frame')).toBeVisible()
@@ -1874,7 +1874,7 @@ test('a voice (19 / CN2, D87): a draft voice from the Cast Inspector\'s form spe
   await page.locator('.w-rail-btn[data-level="flow"]').click()
   await expect(page.locator('[data-testid="flow-canvas"]')).toBeVisible()
   await page.waitForFunction(() => !!(window as unknown as { __loom2Story?: unknown }).__loom2Story)                  // the Flow's Inspector loaded Story's parts
-  await page.evaluate((id) => (window as unknown as { __loom2Story: { selectNode: (id: string) => void } }).__loom2Story.selectNode(id), node.id)   // the node selected (the canvas holds many)
+  await page.evaluate(async (id) => { const h = (window as unknown as { __loom2Story: { loadFlow: () => Promise<void>; selectNode: (id: string) => void } }).__loom2Story; await h.loadFlow(); h.selectNode(id) }, node.id)   // the node selected (the canvas holds many)
   await expect(page.locator('.s-insp input[aria-label="line 1"]')).toHaveValue('Hi there, come in.')
   await expect(page.locator('.s-insp button[aria-label="play line 1"]')).toHaveCount(0)
   await page.locator('.s-insp button[aria-label="voice line 1"]').click()
@@ -1935,7 +1935,7 @@ test("experimental extension and lip-sync (D88): Animate's Extend ▶ continues 
   await openShell(page, `shots/${shot.id}/clay`)
   await page.locator('.w-rail-btn[data-level="flow"]').click()                                             // the node's Inspector in Shots' Flow
   await page.waitForFunction(() => !!(window as unknown as { __loom2Story?: unknown }).__loom2Story)
-  await page.evaluate((id) => (window as unknown as { __loom2Story: { selectNode: (id: string) => void } }).__loom2Story.selectNode(id), node.id)
+  await page.evaluate(async (id) => { const h = (window as unknown as { __loom2Story: { loadFlow: () => Promise<void>; selectNode: (id: string) => void } }).__loom2Story; await h.loadFlow(); h.selectNode(id) }, node.id)
   const block = page.locator('.s-insp .lipsync')
   await expect(block.locator('.badge.experimental')).toBeVisible()
   await expect(block.locator('select[aria-label="lip-sync line"] option')).toContainText([`${name} node`])
@@ -2223,7 +2223,7 @@ test('Flatten image (D90 · UI6): the canvas menu\'s Layer ▸ folds a group, a 
   await openHome(page, 'imports', 'pictures')
   const photo = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=unprocessed&kind=image&sort=created_desc&limit=8')).items.at(-1)!.id   // a plain photo (a saved document has layers)
   await contextChoose(page, page.locator(`[data-testid="bin-grid"] .w-tile[data-id="${photo}"]`), 'Open in Edit')
-  const docId = await page.waitForFunction(() => (window as unknown as { __loom2Editor: Ed }).__loom2Editor.getState().doc?.id ?? null).then((h) => h.jsonValue() as Promise<string>)
+  const docId = await page.waitForFunction(() => (window as unknown as { __loom2Editor?: Ed }).__loom2Editor?.getState().doc?.id ?? null).then((h) => h.jsonValue() as Promise<string>)
   // arrange (dev hook): a copy of the photo in a group at screen, an invert adjustment on top at 40 %
   await page.evaluate(() => {
     const s = (window as unknown as { __loom2Editor: Ed }).__loom2Editor.getState()
@@ -2259,7 +2259,7 @@ test('Flatten image (D90 · UI6): the canvas menu\'s Layer ▸ folds a group, a 
   await page.locator('.edit-canvas canvas').click({ button: 'right', position: { x: 40, y: 40 } })
   await page.locator('.ctx-menu .item.sub', { hasText: /^Document/ }).hover()
   await page.locator('.ctx-menu .ctx-menu button.item', { has: page.locator('.lbl', { hasText: /^Save$/ }) }).click()
-  await expect(page.locator('.toast', { hasText: /^Saved · a new version in the Catalogue/ })).toBeVisible()
+  await expect(page.locator('.toast', { hasText: /^Saved · a new version in the Bin/ })).toBeVisible()
   await expect.poll(last).not.toBe(a0)
   expect((await api<{ params: { layers: number } }>('GET', `/assets/${await last()}`)).params.layers).toBe(1)                // flattened from the one-layer document
   // Undo (the layers footer's More ▾ has it too): the three layers again
@@ -2301,7 +2301,7 @@ test('the drawer (D95 · AN1, B2a): the Dock\'s Bin in World\'s Sketches and Sho
   await page.mouse.move(to.x, to.y, { steps: 12 })
   await page.mouse.up()
   await expect(page.locator(`.ref-slots .ref-slot img[src*="${id2}"]`)).toHaveCount(1)
-  await page.goto(`${appUrl({ ui: '2' })}#shots/${a.shot_id}/performance`)
+  await page.goto(`${appUrl()}#shots/${a.shot_id}/performance`)
   await page.locator('.perf-cards button', { hasText: 'Image to video' }).click()
   await expect(page.locator('.perf-cards button.active')).toHaveText('Image to video')
   await expect(page.locator('.dock .bin')).toBeVisible()                                                    // the drawer stays open across the layers
@@ -2922,6 +2922,8 @@ test('a floor path (CA1, 01 step 5): the Path tool adds the floor points clicked
 })
 
 test('a set from an image (D120, SC3): a Bin picture becomes a relief set on the stage with the picture camera active, its lens and budget in its row (Shots, B2a)', async ({ page }) => {
+  const photo = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_asc&limit=1')).items[0].id   // the project's first photo
+  await api('POST', '/assets/duplicate', { ids: [photo] })                                                                   // its copy the newest in Imports: no other scenario's picture is picked
   const made = await clayShot(page, 'Relief test')
   const dialog = page.locator('.modal.ask')
   await section(page, 'scene')
@@ -3414,7 +3416,8 @@ test('the recipe graph in Story and the Catalogue (RC1c): Open its recipe shows 
   await openShell(page, `shots/${n.shot_id}/clay`)
   await page.locator('.w-rail-btn[data-level="flow"]').click()
   await page.waitForFunction(() => !!(window as unknown as { __loom2Story?: unknown }).__loom2Story)
-  await page.evaluate((id) => (window as unknown as { __loom2Story: { selectNode: (id: string) => void } }).__loom2Story.selectNode(id), n.id)
+  type Hook = { loadFlow: () => Promise<void>; selectNode: (id: string) => void }
+  await page.evaluate(async (id) => { const h = (window as unknown as { __loom2Story: Hook }).__loom2Story; await h.loadFlow(); h.selectNode(id) }, n.id)   // the Flow loaded first
   await page.locator('.s-insp button[title^="Open its recipe"]').click()
   const pane = page.locator('[data-testid="flow-recipe"]')
   await expect(pane).toBeVisible()
@@ -3490,7 +3493,7 @@ test('World in the new shell (U3a, D157 · proto01_UI2 03): a character\'s heade
   type ProfileLite = { id: string; versions: { id: string; hero_asset_id: string | null }[] }
   const prof = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', hero_asset_id: imgs[0].id })
   await api('POST', `/story/profiles/${prof.id}/versions/v1/add`, { asset_ids: [imgs[1].id], role: 'reference' })
-  await page.goto(`${appUrl({ ui: '2' })}#world/character/${prof.id}/v1`)
+  await page.goto(`${appUrl()}#world/character/${prof.id}/v1`)
   const head = page.locator('[data-testid="world-header"]')
   await expect(head).toContainText(name)
   await expect(page.locator('[data-testid="world-readiness"]')).toContainText('✓ hero')
@@ -3514,7 +3517,7 @@ test('World\'s Make (U3b, D157 · proto01_UI2 03 §3): the panel is the entity\'
   const name = `Odile ${tag}`
   type ProfileLite = { id: string; versions: { id: string; candidates_group_id: string | null }[] }
   const prof = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', appearance: 'a tall woman in her sixties, silver hair in a bun' })
-  await page.goto(`${appUrl({ ui: '2' })}#world/character/${prof.id}/v1`)
+  await page.goto(`${appUrl()}#world/character/${prof.id}/v1`)
   const make = page.locator('[data-testid="world-make"]')
   await expect(make).toBeVisible()
   const caps = await api<{ models: Record<string, { recipes?: { t2i?: unknown } }> }>('GET', '/capabilities')
@@ -3541,7 +3544,7 @@ test('World\'s Edit (U3c, D157 · proto01_UI2 03 §4): the selected creation ope
   type ProfileLite = { id: string }
   type BinLite = { items: { asset: { id: string }; roles: string[] }[] }
   const prof = await api<ProfileLite>('POST', '/story/profiles', { name: `Pell ${tag}`, cls: 'character', hero_asset_id: img.id })
-  await page.goto(`${appUrl({ ui: '2', renderer: 'webgl' })}#world/character/${prof.id}/v1`)
+  await page.goto(`${appUrl({ renderer: 'webgl' })}#world/character/${prof.id}/v1`)
   await page.locator(`.w-tile[data-id="${img.id}"]`).click()
   await page.locator('[data-testid="world-inspector"]').getByRole('button', { name: 'Edit', exact: true }).click()
   await expect(page.locator('[data-testid="world-edit"]')).toBeVisible()
@@ -3561,7 +3564,7 @@ test('World\'s Edit (U3c, D157 · proto01_UI2 03 §4): the selected creation ope
 test('World\'s Look and Sketches (U3d, D157 · proto01_UI2 03 §6–7): the Look keeps the project\'s sample scene; a sketch made with the whole column lands in Sketches and becomes a draft character\'s hero', async ({ page }) => {
   test.setTimeout(120_000)
   const tag = Date.now().toString(36)
-  await page.goto(`${appUrl({ ui: '2' })}#world/look`)
+  await page.goto(`${appUrl()}#world/look`)
   const look = page.locator('[data-testid="world-look"]')
   await expect(look).toBeVisible()
   await look.locator('textarea[aria-label="sample scene"]').fill(`a ferry at the pier ${tag}`)
@@ -3595,7 +3598,7 @@ test('World\'s Look words and the ideas brought in (U3e, D157 · G3, G4): a Libr
   await api('PUT', '/story/world', { revision: w0.revision, styles: [...w0.styles, { id: sid, name: `Grey ${tag}`, fragment: 'soft grey light' }] })
   const idea = await api<{ id: string }>('POST', '/story/ideas', { cls: 'character', asset_id: imgs[0].id })
   await api('POST', `/story/ideas/${idea.id}/variants`, { asset_id: imgs[1].id })
-  await page.goto(`${appUrl({ ui: '2' })}#world/look`)
+  await page.goto(`${appUrl()}#world/look`)
   await page.locator(`.style-grid .style-tile[data-id="${sid}"]`).click()
   const words = page.locator('[data-testid="world-look-words"]')
   await expect(words).toBeVisible()
@@ -3619,7 +3622,7 @@ test('Shots in the new shell (U4a–d, D157 · proto01_UI2 04 §2–3, §6–7):
   type ShotLite = { id: string; owner_node: string | null; versions: { stage_id: string | null; camera_id: string | null }[] }
   const a = await api<NodeLite>('POST', '/story/flow/shots', { title: `Quay ${tag}`, scene: 'new' })
   const b = await api<NodeLite>('POST', '/story/flow/shots', { title: `Pier ${tag}`, after: a.id, scene: 'same' })
-  await page.goto(`${appUrl({ ui: '2' })}#shots/${a.shot_id}/clay`)
+  await page.goto(`${appUrl()}#shots/${a.shot_id}/clay`)
   const head = page.locator('[data-testid="shots-header"]')
   await expect(head).toContainText(`Quay ${tag}`)
   await expect(page.locator('[data-testid="shots-layer"]')).toHaveAttribute('data-level', 'clay')
@@ -3729,7 +3732,7 @@ test('World\'s owed parts (U3f, D157 · proto01_UI2 03 §2, §5, §8): a charact
   const tag = Date.now().toString(36)
   type ProfileLite = { id: string }
   const prof = await api<ProfileLite>('POST', '/story/profiles', { name: `Maren ${tag}`, cls: 'character', appearance: 'a lighthouse keeper in a yellow oilskin' })
-  await page.goto(`${appUrl({ ui: '2' })}#world/character/${prof.id}/v1`)
+  await page.goto(`${appUrl()}#world/character/${prof.id}/v1`)
   const head = page.locator('[data-testid="world-header"]')
   await expect(head.locator('select[aria-label="speaks with"]')).toBeVisible()
   const insp = page.locator('[data-testid="world-inspector"]')
@@ -3750,7 +3753,7 @@ test('Performance and Final in Shots (U6b–c, D157 · proto01_UI2 04 §4–5): 
   test.setTimeout(90_000)
   const tag = Date.now().toString(36)
   const a = await api<{ id: string; shot_id: string }>('POST', '/story/flow/shots', { title: `Lantern ${tag}`, scene: 'new' })
-  await page.goto(`${appUrl({ ui: '2' })}#shots/${a.shot_id}/performance`)
+  await page.goto(`${appUrl()}#shots/${a.shot_id}/performance`)
   await expect(page.locator('[data-testid="shots-layer"]')).toHaveAttribute('data-level', 'performance')
   await expect(page.locator('.for-chip').first()).toContainText(`Lantern ${tag} · v1`)                          // this shot's takes (F41)
   await expect(page.locator('.perf-cards button[aria-pressed="true"]')).toHaveText('Final shot')                 // Layered, the default
@@ -3773,7 +3776,7 @@ test('Episode (U7a, D157 · proto01_UI2 05 §1): the cut editor in its own layer
   const a = await api<{ id: string; shot_id: string }>('POST', '/story/flow/shots', { title: `Quay ${tag}`, scene: 'new' })
   const name = `Cut ${tag}`
   await api('POST', '/timelines', { name })
-  await page.goto(`${appUrl({ ui: '2' })}#episode`)
+  await page.goto(`${appUrl()}#episode`)
   const row = page.locator(`[data-testid="episode-finals"] li[data-id="${a.shot_id}"]`)
   await expect(row).toHaveAttribute('data-final', 'owed')                                          // no final yet: owed, not "not on this route"
   await page.locator('.seq-row', { hasText: name }).click()
@@ -3807,7 +3810,7 @@ test('Assemble in Episode (U7b, D157 · proto01_UI2 05 §1, F33, F40): each shot
   }
   await finalFor(a.shot_id)
   await finalFor(b.shot_id)
-  await page.goto(`${appUrl({ ui: '2' })}#episode`)
+  await page.goto(`${appUrl()}#episode`)
   await page.locator('[data-testid="episode-layer"] button.primary', { hasText: /^Assemble from the Flow/ }).click()
   const sheet = page.locator('.modal.assemble')
   await expect(sheet.locator('[data-testid="assemble-what"]')).toHaveText(`3 shots on this route · 1 without a final (left out): Pier ${tag}`)   // F33
@@ -3846,7 +3849,7 @@ test('the Bin (U8, D157 · proto01_UI2 05 §2): a take made for a shot is in its
     origin: { suite: 'story', surface: 'for_shot', payload: { shot_id: a.shot_id, version: 'v1' } } })).jobs[0]
   await expect.poll(async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.id === job.id)?.status, { timeout: 60_000 }).toBe('done')
   const take = (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.id === job.id)!.result.asset_ids![0]
-  await page.goto(`${appUrl({ ui: '2' })}#bin`)
+  await page.goto(`${appUrl()}#bin`)
   const shot = page.locator(`[data-testid="bin-tree"] .b-node[data-path="shots/${a.shot_id}"]`)
   await expect(shot).toContainText(`Quay ${tag}`)
   await shot.locator('.b-open').click()
@@ -3869,7 +3872,7 @@ test('the Bin (U8, D157 · proto01_UI2 05 §2): a take made for a shot is in its
   await expect(page.locator('[data-testid="shots-layer"]')).toBeVisible()
   await expect.poll(() => new URL(page.url()).hash, { timeout: 10_000 }).toContain(`#shots/${a.shot_id}`)            // once the shots are read
   // the drawer: World's Dock offers the Bin with the homes in place of the old places
-  await page.goto(`${appUrl({ ui: '2' })}#world`)
+  await page.goto(`${appUrl()}#world`)
   await page.locator('.dock .dock-tabs button', { hasText: 'Bin' }).click()
   const homes = page.locator('[data-testid="bin-drawer-homes"]')
   await expect(homes).toContainText('Shots')
@@ -3890,7 +3893,7 @@ test("the Bin holds up (B0, D159 · proto01_UI2 11 R2–R6): a home of 262 thing
   const vh = find((await api<{ homes: Node[] }>('GET', '/bin/tree')).homes, vpath)!
   const many = (await api<{ ids: string[] }>('POST', '/assets/duplicate', { ids: Array(260).fill(cand) })).ids    // 260 events at once
   await api('POST', '/groups/move', { items: [cand, ...many].map((id) => ({ kind: 'asset', id })), to: vh.id })
-  await page.goto(`${appUrl({ ui: '2' })}#bin`)
+  await page.goto(`${appUrl()}#bin`)
   await page.locator('[data-testid="bin-tree"] .b-node[data-path="world/character"] .b-chev').click()          // Characters unfolded
   const node = page.locator(`[data-testid="bin-tree"] .b-node[data-path="world/character/${mara.id}"]`)
   await node.locator('.b-open').click()                                                                     // her home: v1 below it
@@ -3935,7 +3938,7 @@ test("one Bin (B1, D159 · proto01_UI2 11 §3): two selected and tagged at once;
   const find = (ns: Node[], path: string): Node | undefined => ns.map((n) => (n.path === path ? n : find(n.children, path))).find(Boolean)
   const vh = find((await api<{ homes: Node[] }>('GET', '/bin/tree')).homes, `world/character/${lia.id}/v1`)!
   await api('POST', '/groups/move', { items: [a1, a2].map((id) => ({ kind: 'asset', id })), to: vh.id })
-  await page.goto(`${appUrl({ ui: '2' })}#bin`)
+  await page.goto(`${appUrl()}#bin`)
   await page.locator('[data-testid="bin-tree"] .b-node[data-path="world/character"] .b-chev').click()
   await page.locator(`[data-testid="bin-tree"] .b-node[data-path="world/character/${lia.id}"] .b-open`).click()
   await expect(page.locator('[data-testid="bin-count"]')).toHaveText('3')
@@ -3984,7 +3987,7 @@ test("one Bin (B1, D159 · proto01_UI2 11 §3): two selected and tagged at once;
   const brought = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&sort=created_desc&limit=1')).items[0].id
   expect((await api<{ path: string }>('GET', `/bin/things/${brought}`)).path).toBe(`world/character/${lia.id}/v1`)
   // the drawer in World: the same Bin — where the layer was (Lia's home, the pins) — the verbs of where you are first
-  await page.goto(`${appUrl({ ui: '2' })}#world`)
+  await page.goto(`${appUrl()}#world`)
   await page.locator('.dock .dock-tabs button', { hasText: 'Bin' }).click()
   await expect(page.locator(`[data-testid="bin-drawer-homes"] .b-node.active[data-path="world/character/${lia.id}"]`)).toBeVisible()
   await expect(page.locator(`.dock .bin-grid [data-id="${a1}"] .b-pin`)).toHaveText('A')
@@ -4012,7 +4015,7 @@ test("Episode's Sound (U8b, D157 · proto01_UI2 05 §1): a sound brought in is i
   expect(sound.kind).toBe('audio')
   const name = `Sound cut ${tag}`
   const tl = await api<{ id: string }>('POST', '/timelines', { name })
-  await page.goto(`${appUrl({ ui: '2' })}#episode`)
+  await page.goto(`${appUrl()}#episode`)
   await page.locator('.seq-row', { hasText: name }).click()
   const place = page.locator(`[data-testid="episode-sounds"] button[aria-label="place sound ${sound.id}"]`)
   await expect(place).toBeEnabled()

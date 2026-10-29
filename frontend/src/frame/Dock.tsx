@@ -5,14 +5,9 @@ import { canGoToOrigin, goToOrigin, originLabel } from '../store/origin'
 import { useSession } from '../store/session'
 import { sep, type MenuItem } from './commands'
 import { showMenu } from './ContextMenu'
-import { Bin } from '../suites/catalogue/Bin'
-import { UI2 } from './router'
 import { useLayer } from '../ui2/layers'
 
-const BinDrawer = lazy(() => import('../ui2/bin/BinDrawer'))               // U8 (D157, 05 §2.3): the new shell's drawer, its homes' tree
-
-/** D95 (AN1, 04 C1): where the Bin is offered — Image (Make, Edit) and Animate (Clay, Performance); Story has the Catalogue itself. */
-const BIN_SUITES = new Set(['generate', 'edit', 'animate', 'stage'])
+const BinDrawer = lazy(() => import('../ui2/bin/BinDrawer'))               // U8 (D157, 05 §2.3): the Bin's drawer, its homes' tree
 
 function JobRow({ j }: { j: Job }) {
   const cancelJob = useSession((s) => s.cancelJob)
@@ -56,9 +51,8 @@ export function Dock() {
   const open = useSession((s) => s.ui.dockOpen)
   const setUi = useSession((s) => s.setUi)
   const pauseQueue = useSession((s) => s.pauseQueue)
-  const suite = useSession((s) => s.ui.suite)
   const layer = useLayer((s) => s.layer)
-  const binHere = UI2 ? layer !== 'bin' : BIN_SUITES.has(suite)          // U8: the new shell offers it in World, Shots and Episode (the Bin is its own layer)
+  const binHere = layer !== 'bin'                                       // U8: offered in World, Shots and Episode (the Bin is its own layer)
   const tab = useSession((s) => (binHere ? s.ui.dockTab ?? 'queue' : 'queue'))
   const pick = (t: 'queue' | 'bin') => (e: React.MouseEvent) => { e.stopPropagation(); setUi({ dockTab: t, dockOpen: open && tab === t ? false : true }) }
   // derived in a memo, never in a selector: a selector returning a fresh object re-renders forever
@@ -74,7 +68,7 @@ export function Dock() {
         <ChevronUp size={14} style={{ transform: open ? 'rotate(180deg)' : undefined }} />
         {binHere && <span className="segmented dock-tabs" role="group" aria-label="Dock">
           <button className={tab === 'queue' ? 'active' : ''} onClick={pick('queue')} title="The render queue">Queue</button>
-          <button className={tab === 'bin' ? 'active' : ''} onClick={pick('bin')} title="The Bin: the Catalogue in a drawer — drag a tile where it is used">Bin</button>
+          <button className={tab === 'bin' ? 'active' : ''} onClick={pick('bin')} title="The Bin in a drawer — drag a tile where it is used">Bin</button>
         </span>}
         {active ? (
           <>
@@ -91,7 +85,7 @@ export function Dock() {
           </button>
         )}
       </div>
-      {open && tab === 'bin' && (UI2 ? <Suspense fallback={null}><BinDrawer /></Suspense> : <Bin />)}
+      {open && tab === 'bin' && <Suspense fallback={null}><BinDrawer /></Suspense>}
       {open && tab === 'queue' && (
         <div className="cols">
           <div className="col">

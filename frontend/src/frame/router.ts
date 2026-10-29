@@ -1,10 +1,11 @@
-// U1 (D157, proto01_UI2 06 §5.3): the router seam — where the author is, and the one way to go elsewhere. The old shell's places are its
-// suites and their rail tabs (`ui.suite`); stores and commands call `navigate` instead of `setSuite` / `setRailTab`, so the new shell
-// (`?ui=2`) hears the same calls and maps them onto its layers while the old UI works as before. A leaf module: it imports the session store
+// U1 (D157, proto01_UI2 06 §5.3): the router seam — where the author is, and the one way to go elsewhere. A place is still named as the
+// old shell named it, a suite and its rail tab (`ui.suite`); stores and commands call `navigate`, and the shell (B2, D159: the only one)
+// maps the call onto its layers. A leaf module: it imports the session store
 // only, so a store reaches it with a static import (the suite registry imports the suites, which is why they reached the rail dynamically).
 import { create } from 'zustand'
 import type { Suite } from '../api/types'
 import { useSession } from '../store/session'
+import { DEFAULT_RAIL } from './railTabs'
 
 /** A place in the old shell: a suite and, when named, the rail tab (the panel section) it opens on. U3f: `layer` — the new shell's layer
  *  it is in when that is not the suite's own (World's *See in clay* is the stage suite on the World layer). */
@@ -13,15 +14,21 @@ export interface Place { suite: Suite; tab?: string; layer?: Layer }
 /** D157 (02 §1): the new shell's four layers. */
 export type Layer = 'world' | 'shots' | 'episode' | 'bin'
 
-/** The new shell is on: `?ui=2` (07 §1: a second entry of the same frontend, on the same records). */
-export const UI2 = new URLSearchParams(location.search).get('ui') === '2'
-
 interface RailState { active: Record<string, string>; setActive: (suite: string, tab: string) => void }
 /** The rail tab each suite opens on (a session's memory, not persisted). */
 export const useRailState = create<RailState>()((set, get) => ({ active: {}, setActive: (suite, tab) => set({ active: { ...get().active, [suite]: tab } }) }))
 
 /** Remember the tab a suite opens on, without going there (a column's scroll, a section switch inside the suite on screen). */
 export const setRailTab = (suite: string, tab: string): void => useRailState.getState().setActive(suite, tab)
+
+/** The suite's rail tabs and the one it is on — the section a suite's parts show (Story's World · Cast · Flow · Shots · Episode). */
+export function useSuiteRail() {
+  const suite = useSession((s) => s.ui.suite)
+  const tabs = DEFAULT_RAIL[suite] ?? []
+  const active = useRailState((r) => r.active[suite]) ?? tabs[0]?.id ?? ''
+  const setActive = useRailState((r) => r.setActive)
+  return { tabs, active, setActive: (tab: string) => setActive(suite, tab) }
+}
 
 type Listener = (p: Place) => void
 const listeners = new Set<Listener>()

@@ -13,10 +13,9 @@ export const isMenuFromKeys = (e: Event): boolean => !!(e as unknown as Record<s
 
 export function openContextMenuAtFocus(): void {
   const el = (document.activeElement as HTMLElement | null) ?? document.body
-  let target = el.closest('[data-id], .layer-row, .job, .loupe, .edit-canvas, .cat-grid') as HTMLElement | null ?? el
-  // D90 (B16): the Catalogue grid has the focus, its tiles never do — the menu is the primary selected tile's when it is rendered; when it
-  // is scrolled out of the virtual window the grid opens the tile menu itself (it sees FROM_KEYS and a selection)
-  if (target.matches('.cat-grid')) target = target.querySelector<HTMLElement>('.tile.primary') ?? target.querySelector<HTMLElement>('.tile.selected') ?? target
+  let target = el.closest('[data-id], .layer-row, .job, .loupe, .edit-canvas, .w-bin, .bin-grid-host') as HTMLElement | null ?? el
+  // D90 (B16) → B2 (D159): the Bin's grid has the focus, its tiles never do — the menu is the primary selected tile's when it is rendered
+  if (target.matches('.w-bin, .bin-grid-host')) target = target.querySelector<HTMLElement>('.w-tile.primary') ?? target.querySelector<HTMLElement>('.w-tile.selected') ?? target
   const r = target.getBoundingClientRect()
   const ev = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + Math.min(24, r.width / 2), clientY: r.top + Math.min(24, r.height / 2) })
   target.dispatchEvent(Object.assign(ev, { [FROM_KEYS]: true }))
@@ -40,7 +39,7 @@ export function onGlobalKeydown(e: KeyboardEvent): void {
     else if (s.projectDialog) s.setProjectDialog(null)
     return
   }
-  handleKeyFor('global', e)                                         // incl. Tab → focus mode (global.focus, a fixed key)
+  handleKeyFor('global', e)
 }
 
 export function useKeyboardMap() {

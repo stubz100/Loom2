@@ -4,6 +4,7 @@
 // Catalogue's "New angle…" or by the loupe's hub.
 import { X } from 'lucide-react'
 import { useEffect } from 'react'
+import './generateCommands'
 import { api } from '../../api/client'
 import { CommandButton } from '../../frame/CommandButton'
 import { PresetIcons } from '../../frame/PresetIcons'
@@ -44,7 +45,7 @@ export function AngleTab() {
   const seconds = pv?.estimate?.seconds ?? methodCap?.seconds ?? null
   return (
     <div className="angle-tab">
-      <div ref={dropRef} className={`ref-slot source${over ? ' over' : ''}`} title={a.asset_id ? 'the source image' : 'drop a Catalogue tile here, or use "New angle…" on a tile'}>
+      <div ref={dropRef} className={`ref-slot source${over ? ' over' : ''}`} title={a.asset_id ? 'the source image' : 'drop a picture from the Bin here, or use "New angle…" on a tile'}>
         {a.asset_id ? <>
           <img src={api.thumbUrl(a.asset_id, 512)} alt="" />
           <CommandButton id="gen.angle.clear" className="quiet x" size={12} />
@@ -67,7 +68,7 @@ export function AngleTab() {
         <label>count</label>
         <div className="angle-count"><button onClick={() => g.setAngle({ count: Math.max(1, a.count - 1) })} disabled={a.count <= 1} title="fewer">−</button><span>{a.count}</span><button onClick={() => g.setAngle({ count: Math.min(4, a.count + 1) })} disabled={a.count >= 4} title="more (up to 4)">+</button></div>
       </div>
-      {!a.asset_id && <p className="disabled-why">Pick a source: right-click a Catalogue tile → Start from this image → New angle…, or drop a tile on the slot.</p>}
+      {!a.asset_id && <p className="disabled-why">Pick a source: right-click a picture in the Bin → New angle…, or drop one on the slot.</p>}
       {g.anglePreviewError && <p className="disabled-why">{g.anglePreviewError}</p>}
       {pv && pv.missing.length > 0 && <p className="disabled-why">Weights missing for this method: {pv.missing.map((m) => m.model_id).join(', ')} — Models › Fetch.</p>}
       {pv && seconds != null && <p className="disabled-why">{pv.params?.label as string} · ≈ {Math.round(seconds)} s each (measured 2026-10-12)</p>}

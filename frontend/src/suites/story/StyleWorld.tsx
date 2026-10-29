@@ -11,7 +11,7 @@ import { showMenu } from '../../frame/ContextMenu'
 import { useDropTarget } from '../../frame/drag'
 import { fieldGlyph } from '../../frame/presetGlyphs'
 import { useSession } from '../../store/session'
-import { useAlbum } from '../catalogue/albumStore'
+import { useAlbum } from '../../store/album'
 import { addStyleSamples, rowMenu } from './storyCommands'
 import { sy, useStory } from './storyStore'
 import { sampleDrop, sampleJob, styleFace } from './styleSamples'
@@ -72,7 +72,7 @@ export function StyleEditor({ s, isDefault }: { s: WorldStyle; isDefault: boolea
   return (
     <>
       <h4>Style · {s.name}</h4>
-      <div ref={ref} className={`style-sample${over ? ' over' : ''}`} title="The style's sample (its group's cover) — drop a Catalogue image here to make it the sample">
+      <div ref={ref} className={`style-sample${over ? ' over' : ''}`} title="The style's sample (its group's cover) — drop a picture from the Bin here to make it the sample">
         {face ? <img src={api.thumbUrl(face, 512)} alt={`the sample of ${s.name}`} draggable={false} /> : <span className="hint"><span className="glyph big">{fieldGlyph('palette')}</span>No sample yet — make one, or drop an image here.</span>}
         {busy && <span className="busy">rendering a sample…</span>}
       </div>

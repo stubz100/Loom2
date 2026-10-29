@@ -5,7 +5,7 @@ import { createElement, useEffect, type KeyboardEvent } from 'react'
 import { MenuButton } from '../../frame/CommandButton'
 import type { MenuItem } from '../../frame/commands'
 import { openPressMenu } from '../../frame/ContextMenu'
-import { flatGroups, useAlbum } from '../catalogue/albumStore'
+import { flatGroups, useAlbum } from '../../store/album'
 import { profilesForMentions } from '../story/storyStore'
 import { useGenerate, type MentionRef } from './generateStore'
 

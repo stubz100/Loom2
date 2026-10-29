@@ -22,7 +22,7 @@ const GESTURES: Record<string, [string, string][]> = {
   final: [['Drag on the ruler', 'scrub (also: the transport buttons, ← →)'], ["Drag a layer's bar · its ends", "move it in time · trim it (also: Trim in / out to the playhead, a layer's right-click)"],
     ["Alt-drag a layer's bar", 'slip its content between its in and out']],
   story: [['Drag between node handles (Flow)', 'connect two nodes; right-click a connection to delete it'], ['Drag a node (Flow)', 'move it; right-click the canvas → Add a node here'], ['Drag a clip block (Episode)', 'reorder (also: Earlier / Later)'],
-    ['Drag the edge of a block (Episode)', 'trim in / out'], ['Drag the shaded overlap (Episode)', 'set the dissolve length (also: Dissolve toggles 12 frames)'], ['Drop a Catalogue image on a style (World)', 'make it a sample of the style'], ['Drag a library tile (World › Library)', 'reorder it within its field (also: Move earlier / later)']],
+    ['Drag the edge of a block (Episode)', 'trim in / out'], ['Drag the shaded overlap (Episode)', 'set the dissolve length (also: Dissolve toggles 12 frames)'], ['Drop a picture from the Bin on a style (World)', 'make it a sample of the style'], ['Drag a library tile (World › Library)', 'reorder it within its field (also: Move earlier / later)']],
 }
 
 /** D72: the gesture keys every suite shares — not remappable, listed so they are discoverable (07 §4). */
@@ -30,7 +30,7 @@ const FIXED_ROWS: [string, string][] = [['move the selection / step frames / nud
   ['hold to pan in Edit · play / pause in Animate', 'Space'], ['focus mode · swap in Compare', 'Tab']]
 
 /** D121: Animate's modes by their names (their suites' ids are stage · animate · final). */
-const SECTION: Record<string, string> = { stage: 'Animate · Clay', animate: 'Animate · Performance', final: 'Animate · Final' }
+const SECTION: Record<string, string> = { stage: 'Shots · Clay', animate: 'Shots · Performance', final: 'Shots · Final', catalogue: 'Bin', generate: 'World · Make', edit: 'World · Edit' }   // B2 (D159): the layers' names
 
 export function HelpOverlay() {
   const setHelp = useSession((s) => s.setHelp)

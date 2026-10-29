@@ -84,24 +84,37 @@ def main() -> int:
         asset = api("POST", "/assets/import", {"paths": [str(src)]})["items"][0]
         doc = api("POST", "/documents", {"from_asset": asset["id"]})
         base = f"http://127.0.0.1:{sport}/?token={TOKEN}&port={ORCH_PORT}"
-        pages = {"catalogue": base + "&suite=catalogue", "edit": base + f"&suite=edit&doc={doc['id']}", "generate": base + "&suite=generate",
-                 "generate-model": base + "&suite=generate&tab=model", "edit-ai": base + f"&suite=edit&doc={doc['id']}&tab=ai",
+        # B2 (D159): the shell's layers by their hash; Edit by its deep link (World's Edit on the document)
+        pages = {"bin": base + "#bin", "world": base + "#world", "sketches": base + "#world/sketches",   # the Generate column (Sketches)
+                 "edit": base + f"&suite=edit&doc={doc['id']}", "edit-ai": base + f"&suite=edit&doc={doc['id']}&tab=ai",
                  "edit-wasm": base + f"&suite=edit&doc={doc['id']}&wasmprobe=1",            # D59: the smart-select Worker's WebAssembly
-                 "story-flow": base + "&suite=story&tab=flow",                                  # 17 SY3 (D85): React Flow's styles and scripts
-                 "story-episode": base + "&suite=story&tab=episode"}                             # 17 SY4: the lane (Mediabunny) in the Story chunk
+                 "shots-flow": base + "#shots/flow",                                            # 17 SY3 (D85): React Flow's styles and scripts
+                 "episode": base + "#episode"}                                                  # U7 (D157): the cut editor (FilmCraft) and Mediabunny
         violations: dict[str, list[str]] = {}
         for name, url in pages.items():
             OUT.mkdir(parents=True, exist_ok=True)
             shot = OUT / f"{name}.png"
-            r = subprocess.run([EDGE, "--headless=new", "--window-size=1600,1000", "--hide-scrollbars", "--enable-logging=stderr", "--v=0",
+            shot.unlink(missing_ok=True)                                                    # a stale screenshot never passes for this run's
+            # 2026-10-29: Edge 156's msedge.exe hands the run to a detached browser process and returns at once (rc 0, nothing on stderr), and
+            # with the author's Edge open a run on the default profile goes to that window. So each page gets a profile of its own, the log
+            # goes to a file, and the check waits for the screenshot the detached browser writes when its time budget is spent.
+            log_file = tmp / f"edge-{name}.log"
+            r = subprocess.run([EDGE, "--headless=new", f"--user-data-dir={tmp / f'edge-{name}'}", "--no-first-run", "--window-size=1600,1000", "--hide-scrollbars",
+                                "--enable-logging", f"--log-file={log_file}", "--v=0",
                                 "--virtual-time-budget=15000", "--enable-unsafe-webgpu", f"--screenshot={shot}", url],
                                capture_output=True, text=True, timeout=180, errors="replace")
-            log = r.stderr + r.stdout
+            t1 = time.time()
+            while time.time() - t1 < 150 and not (shot.exists() and shot.stat().st_size):
+                time.sleep(0.5)
+            time.sleep(2)                                                                    # the log's last lines
+            log = r.stderr + r.stdout + (log_file.read_text(encoding="utf-8", errors="replace") if log_file.exists() else "")
             hits = sorted({m.strip() for m in re.findall(r'"(Refused to [^"]+|[^"]*Content Security Policy[^"]*)"', log)})
             errors = [l for l in log.splitlines() if "CONSOLE" in l and ("Uncaught" in l or "TypeError" in l or "Failed to fetch" in l)]
             if name == "edit-wasm" and "smart-select worker ready" not in log:
                 hits.append("the smart-select Worker did not report its WebAssembly module ready" + (" — " + next((l[-200:] for l in log.splitlines() if "smart-select" in l), "") if "smart-select" in log else ""))
             violations[name] = hits
+            if not shot.exists() or not shot.stat().st_size:
+                hits.append("Edge wrote no screenshot (the page never rendered)")
             print(f"[{name}] screenshot {shot.stat().st_size if shot.exists() else 0} bytes · CSP hits {len(hits)} · js errors {len(errors)}")
             for h in hits[:8]:
                 print("   ", h[:220])

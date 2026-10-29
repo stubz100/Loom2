@@ -7,7 +7,6 @@ import { useAnimate } from '../../animate/animateStore'
 import { clipList, loadClips } from '../../../store/clips'
 import { useStory } from '../storyStore'
 import { assembleLane, assembledText, laneChanges, linesPast, routeLabel, routePicks, updateClip, walkRoute } from './assemble'
-import { UI2 } from '../../../frame/router'
 import { duration, ticks } from './lane'
 import { isCut, lastMovie, useSequence } from './sequenceStore'
 import { CAPTION_STYLES, CUT_TOOLS, dialogueOf, itemLabel, duckSteps, evenDialogueSteps, fadeStep, findItem, gainStep, isVideo, panLabel, ROLE_NAMES, STRIP, stripValue, ticksOf, trackRef, transitionInto, transitionStep, TRACK_ROLES, underSceneGrade, volumeLabel, widthLabel, type CutTool } from './cut'
@@ -99,7 +98,7 @@ export async function assembleCut(picks: Record<string, string>, name: string | 
   if (name !== null && !(await sq().create(name))) return
   const cur = sq().current
   if (!cur) return
-  if (UI2 && isCut()) {                                                       // U7b (D157, 05 §1): the server lays each shot's final, keeping V1's edits
+  if (isCut()) {                                                       // U7b (D157, 05 §1): the server lays each shot's final, keeping V1's edits
     const r = await sq().cutAssemble(routePicks(walk.choices), walk.nodes.flatMap((n) => (n.shot_id ? [{ shot_id: n.shot_id, node_id: n.id }] : [])))
     if (r) useSession.getState().toast(`${assembledText(cur.name, r.report)}${r.conforming.length ? ' · its 16 fps takes conforming to 24 fps (RIFE, one undo step)' : ''}`,
       r.report.missing.length || r.report.short.length ? 'info' : 'success')
@@ -147,7 +146,7 @@ registerCommands([
   { id: 'story.episode.rename', scope: 'story', label: 'Rename the cut…', icon: Clapperboard, placement: ['inspector', 'context'], when: hasSeq,
     run: () => void askText({ title: 'Rename the cut', initial: sq().current?.name ?? '', placeholder: 'cut name' }).then((n) => { if (n?.trim()) void sq().rename(n.trim()) }) },
   { id: 'story.episode.delete', scope: 'story', label: 'Delete the cut', icon: Trash2, placement: ['inspector', 'context'], when: hasSeq,
-    run: () => void askConfirm({ title: 'Delete this cut?', text: 'The cut and its exports go; the clips stay in the Catalogue.', okLabel: 'Delete', danger: true }).then((ok) => { if (ok) void sq().destroy() }) },
+    run: () => void askConfirm({ title: 'Delete this cut?', text: 'The cut and its exports go; the clips stay in the Bin.', okLabel: 'Delete', danger: true }).then((ok) => { if (ok) void sq().destroy() }) },
   { id: 'story.episode.addCurrent', scope: 'story', label: 'Add the current clip', icon: Plus, placement: ['panel', 'context'], when: () => hasSeq() && !!an().clip(),
     run: () => { const c = an().clip(); if (c) sq().addClip(c) } },
   { id: 'story.episode.addShot', scope: 'story', label: 'Add the shot to the cut', icon: Plus, placement: ['panel'], hint: 'at the end, stamped with the shot (or drag it onto the lane)', when: () => hasSeq() && !!binItem.shot,

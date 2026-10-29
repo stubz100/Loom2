@@ -1,36 +1,33 @@
 # frontend/src/frame — notes for coding agents
 
-Verified at e66a779 on 2026-10-27. Specs: `.docs/proto01/07-ui-frame.md` (regions, selection, verbs, keys, states),
-`.docs/proto01_design/01-catalogue-inventory.md` (D34 redesign). Decisions D32 (mouse-first) and D34 (groups, pointer drags).
+Verified at bf2c576 on 2026-10-29 (B2 of D159). Specs: `.docs/proto01/07-ui-frame.md` (selection, verbs, keys, states),
+`.docs/proto01_UI2/02-structure.md` (the layers), `.docs/proto01_UI2/11-retiring-the-catalogue.md` (the Bin). Decisions D32 (mouse-first),
+D34 (groups, pointer drags), D157 (the new UI) and D159 (the old shell and the Catalogue gone).
 
-The frame is the shell every suite lives in: TopBar, Banner, Rail, Panel, Strip, Stage, Inspector, Dock, Toasts, plus the
-context menu host, command palette, settings, project dialog, help overlay and AskDialog (`Frame.tsx`).
+This folder holds the services the shell (`frontend/src/ui2/Shell.tsx`, the only one since B2) is built from: TopBar, Banner, Dock, Toasts,
+the context menu host, the command palette, settings, the project dialog, the help overlay and AskDialog, plus the command registry, the
+router, the drag manager and the loupe.
 
-## Suites plug in through `suiteRegistry.tsx`
+## The layers place the suites' parts
 
-A suite is a `SuiteDef {id, rail, Panel, Strip, Stage, Inspector, primary?, wideStrip?, keepAlive?, PrimaryAction?}` in `SUITE_DEFS`. The
-frame places the components; it knows nothing about a suite's internals. Deep links: `?suite=` and `?tab=` (rail tab). Panel, Strip and
-Inspector are keyed by the suite id, so switching suites remounts them.
+The shell's four layers (World · Shots · Episode · Bin, `ui2/layers.ts`) place the parts a suite's code exports — `SuiteParts {Panel, Strip,
+Stage, Inspector, PrimaryAction?}` (`suiteParts.ts`): Shots' Performance and Final are `AnimateSuite` and `FinalSuite`, World's Edit is
+`EditSuite`, Clay is `StageParts`, the Flow and Episode are `StoryParts`. A layer loads them lazily (`React.lazy` in the layer) and unmounts
+what it does not show; `useStageActive()` (`stageKeep.ts`) is true unless a host says otherwise.
 
-- **Keep-alive (D69).** A `keepAlive` suite's Stage (Edit, Animate) stays mounted, hidden, after its first visit (`Stage.tsx`,
-  `stageKeep.ts`). Inside it, `useStageActive()` says whether it is on screen: pause work while hidden, expect a 0 × 0 host, and redraw on
-  return without resetting view state. The release policy (`useStageKeep.expire` / `releaseHidden`, on `ui.editKeepAliveMin` or the
-  `engine.vram_pressure` event) unmounts hidden stages — so cleanup on unmount must still be complete.
-- **Lazy suites (D69).** Edit, Animate and Models come from `lazySuite(meta, load, parts)` (`lazySuite.ts`): rail and flags are static
-  (their rails live in `railTabs.tsx`), the components load on first render behind a skeleton, and render directly once loaded (a lazy
-  boundary would add React's ≈ 300 ms reveal throttle). `preloadSuite(id)` runs on a pointer over a tab; Edit is preloaded at idle.
-  Commands register at import: a command module a lazy suite owns loads with it — keep Pixi and Mediabunny out of eager modules.
-- **A top tab's modes (D95, D121).** Image holds `generate` and `edit` (Make, Edit); Animate holds `stage`, `animate` and `final` (Clay,
-  Performance, Final) — each a suite with its own rail, column, strip, viewer and foot (`TOP_TABS` in `railTabs.tsx`). The Animate levels
-  share one panel width (`widthKeyOf`); the rail state and the column are per suite. A level's keys are its **reach** (`setReach` in
-  `commands.ts`, registered in `animateCommands.ts`): Clay the stage scope and the animate scope's shared commands (the one transport,
-  `anim.level.*`, the Shot head's `anim.step.*` / `anim.for.*`), Performance the animate scope but `anim.final.*`, Final `anim.final.*` and
-  the shared ones. The level's key hook (`handleKeysAt`), the help overlay, the palette and the dev audit (`commandsAt`) read the one list;
-  `commandAudit.test.ts` fails on a chord two scopes of one reach share.
-- **Error boundaries.** `ErrorBoundary.tsx` wraps the app and every lazy suite part: a render error or a chunk that failed to load
-  shows where it happened (the Stage explains, the panel says one line, strip / inspector / foot stay empty) instead of blanking the
-  window. A failed load is not cached by `lazySuite` (Try again re-imports), but the browser keeps a failed module for the page, so a
-  chunk failure offers Reload first.
+- **Places.** The hash names a layer's place (`#world/<class>/<profile>/<version>`, `#shots/<shot>/<level>`, `#episode`, `#bin`). A suite and
+  its rail tab still name a place inside the code (`navigate({ suite, tab })`); the shell maps it onto its layer (`layerOf`), and a
+  `?suite=` deep link or the dev start suite (`scripts/dev.ps1 -Suite`) lands there unless the hash names a place. `?suite=edit&doc=<id>`
+  opens World's Edit on the document; `?suite=edit&tool=…&ai=…&asset=…` is `ui2/deepLinks.ts`. The rail tabs in `railTabs.tsx` are the
+  sections of a suite's column (`useSuiteRail` in `router.ts`).
+- **A level's keys are its reach (D121).** Shots' Clay, Performance and Final are the `stage`, `animate` and `final` suites: `setReach` in
+  `commands.ts`, registered in `animateCommands.ts` — Clay the stage scope and the animate scope's shared commands (the one transport,
+  `anim.level.*`, the Shot head's `anim.step.*`), Performance the animate scope but `anim.final.*`, Final `anim.final.*` and the shared ones.
+  The Bin layer is the `catalogue` suite in `ui.suite`; its reach is the `bin` scope (`ui2/bin/binCommands.ts`). The level's key hook
+  (`handleKeysAt`), the help overlay, the palette and the dev audit (`commandsAt`) read the one list; `commandAudit.test.ts` fails on a chord
+  two scopes of one reach share.
+- **Error boundaries.** `ErrorBoundary.tsx` wraps the app, each layer and each lazily loaded part (`ui2/Part.tsx`): a render error or a chunk
+  that failed to load says where it happened instead of blanking the window; Try again re-imports, and a chunk failure offers Reload first.
 
 ## Rule 1 — every action is a command (`commands.ts`, D32)
 
@@ -82,9 +79,8 @@ delivers **no HTML5 drag events inside the page**. All internal drags use the po
   unit-tested) and use it for `accept`, `drop` and `describe` alike, so what the ghost says is what the drop does. A refusing target
   with a reason does not block an accepting parent (`resolveTarget`).
 
-Current drop sites: TopBar suite tabs (Image: references in Make, layers in Edit or the first image opened when no document is open —
-D95, `editPresence.ts`; Animate sets start/end), Generate reference slots, Animate
-slots and beats, the Edit canvas and empty stage, Places rows, pane bodies, album pages.
+Current drop sites: the Generate column's reference slots, Performance's start and end slots, the Edit canvas and its empty stage, the
+Bin's homes (a tile dropped on a home moves it; a heading refuses, saying why) and its grid (an OS file), the Shots storyboard.
 
 ## Rule 3 — no native dialogs
 
@@ -129,37 +125,38 @@ into a place (`goToOrigin`, the Dock's "Go to origin"). Interim strips list thei
 and replies come from `frontend/src/api/schema.d.ts`, generated from the orchestrator. `frontend/src/api/types.ts` re-exports the reply types
 (never hand-write an API shape). Bytes and URLs stay on `api.putBlob` / `api.thumbUrl` / `api.assetUrl` / `api.fileUrl`.
 
-## The seams of the new shell (U1, D157)
+## The shell's seams (U1, D157)
 
-The UI2 plan (`.docs/proto01_UI2`) builds a second shell beside this one (`?ui=2`, `frontend/src/ui2/Shell.tsx`; ☰ › *Try the new UI*,
-`global.ui2`) on four seams — keep them when adding code:
+The UI2 plan (`.docs/proto01_UI2`) built the shell (`frontend/src/ui2/Shell.tsx`) beside the old one, which B2 (D159) removed, on four seams —
+keep them when adding code:
 
 - **Navigate, never set the suite.** `router.ts` has `navigate({ suite, tab? })` (the tab first, then the suite, then the listeners),
-  `setRailTab` (the rail state lives here), `currentPlace()`, `onNavigate` and `layerOf` (an old place's layer). Only the router calls
-  `setSuite`; `router.test.ts` fails on any other caller. The new shell's layer follows every navigation and the hash (`ui2/layers.ts`).
+  `setRailTab` (the rail state lives here), `currentPlace()`, `onNavigate` and `layerOf` (a place's layer). Only the router calls
+  `setSuite` (and the session at launch, for a place the hash names); `router.test.ts` fails on any other caller. The layer follows every
+  navigation and the hash (`ui2/layers.ts`).
 - **Keys are the shell's.** A suite's key hook mounts through `registerKeyHost(id, Host)` (`keyHosts.tsx`) at its module's load, and
-  both shells render `<KeyHosts />`; a host checks `ui.suite` itself. Never mount a key hook inside a Strip.
+  the shell renders `<KeyHosts />`; a host checks `ui.suite` itself. Never mount a key hook inside a Strip.
 - **Records are shared through the records layer.** Episode reads clips through `frontend/src/store/clips.ts`, not Animate's store.
 - **Singletons have context slots.** `frontend/src/store/contexts.ts`'s `contextSlot(read, write)`: `makeContext` (the Make panel),
   `stageContext` (the open stage), `compositionContext` (the composition) keep a context's state on leaving and restore it on returning.
 
 ## The detached loupe (D155)
 
-`?view=loupe` makes `App.tsx` render `DetachedLoupe.tsx` (lazy) instead of the Frame: a second window — `openDetached` in `loupeLink.ts` opens a
+`?view=loupe` makes `App.tsx` render `DetachedLoupe.tsx` (lazy) instead of the shell: a second window — `openDetached` in `loupeLink.ts` opens a
 `WebviewWindow` labelled `loupe` in the shell (the capability in `src-tauri/capabilities/default.json` names the label and its window permissions)
 or a `window.open` popup in a browser, with the browser's token / port in the URL. The windows talk over one `BroadcastChannel` (`loom2-loupe`):
-the Catalogue's `Stage` publishes `show` with `followedAsset(loupe, primary)` and answers `hello`; the detached view follows unless held. It boots
+the Bin (`ui2/bin/binStore.ts`) publishes `show` with `followedAsset(loupe, primary)` and answers `hello`; the detached view follows unless held. It boots
 with `discoverBackend` + `setBackend` + the media key only (no session init, no events socket) and reuses the loupe's `useZoomPan` / `Playable`.
 
 ## Checks
 
-`npm run build` (tsc + vite), `npm run lint`, **`npm test`** (Vitest + jsdom, `src/**/*.test.ts(x)`, 560+ tests in ≈ 8 s — incl. `commandAudit.test.ts`, the
+`npm run build` (tsc + vite), `npm run lint`, **`npm test`** (Vitest + jsdom, `src/**/*.test.ts(x)`, 590+ tests in ≈ 8 s — incl. `commandAudit.test.ts`, the
 D32 audit: every registered command needs a mouse placement, a chord shared within a scope needs an allow-list entry with its reason;
 D90: a command that declares `context` must be named as `{ cmd: 'id' }` / `cmdItem('id')` in some menu, a hand `markUsed('id')` needs the
 id rendered or run in the same file, and Animate, the Stage timeline and the Episode lane keep one transport key set)
 and **`npm run build:e2e && npm run test:e2e`** (Playwright on Edge, WebGL2, against `vite preview` of `dist-e2e/`, a real orchestrator
 and `orchestrator/tests/fake_comfy.py` as a process — `e2e/global-setup.ts`, both started with `--parent-pid` so a killed run leaves
-nothing behind (V54); 74 scenarios in ≈ 6 min, run alone — it flakes under load; dev hooks stay in the e2e build through `src/devHooks.ts`).
-`npm run perf` measures startup, suite switches, Edit re-entry and scroll pacing over 10 000 assets into `bench/perf/<date>.json`;
+nothing behind (V54); 80+ scenarios in ≈ 6 min, run alone — it flakes under load; dev hooks stay in the e2e build through `src/devHooks.ts`).
+`npm run perf` measures startup to the Bin's first tile, the Bin ↔ World's Edit switches, Edit re-entry and the Bin's scroll pacing into `bench/perf/<date>.json`;
 `scripts/perf_compare.py` diffs the last two. Pure code goes in its own module (not a component file) so it can be tested; WebGPU and
 pixel-exact editor checks stay in `scripts/edit_headed_check.py` (a visible Edge window against the Vite dev server).

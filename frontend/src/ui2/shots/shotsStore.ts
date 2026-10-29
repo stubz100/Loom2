@@ -154,6 +154,10 @@ export const useShots = create<ShotsState>()((set, get) => ({
   open: (shotId, level) => {
     opens++
     const st = useStory.getState()
+    if (!st.shots.some((x) => x.id === shotId)) {                       // B2: opened from a layer that reads no shots (World's uses, the Bin)
+      void st.loadShots().then(() => { if (useStory.getState().shots.some((x) => x.id === shotId)) get().open(shotId, level) })
+      return
+    }
     st.selectShot(shotId)
     const s = useStory.getState().shot()
     if (s?.owner_node) useStory.getState().selectNode(s.owner_node)

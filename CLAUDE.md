@@ -12,8 +12,9 @@ the engine. The author works mouse-first and is EU-based.
   a change in direction is a new D-number there, recorded *before* the work.
 - **Journal:** `.docs/proto01/90-journal.md`, append-only, real timestamps (`date '+%Y-%m-%d %H:%M'`). Measurements and rig runs go
   there; never rewrite old entries.
-- **Proposals in flight:** `.docs/artcraft/08-delivery-plans.md` (waves H1–H4, X1, spikes E10–E14). The Catalogue redesign is in
-  `.docs/proto01_design/01-catalogue-inventory.md`.
+- **Proposals in flight:** `.docs/artcraft/08-delivery-plans.md` (waves H1–H4, X1, spikes E10–E14). The UI is the shell of
+  `.docs/proto01_UI2` (D157); the old shell and the Catalogue are gone (D159, `.docs/proto01_UI2/11-retiring-the-catalogue.md`), the Bin holds
+  every creation.
 - **Subsystem notes:** `orchestrator/AGENTS.md`, `orchestrator/loom2/engine/AGENTS.md`, `frontend/src/frame/AGENTS.md`,
   `frontend/src/suites/edit/AGENTS.md`.
 

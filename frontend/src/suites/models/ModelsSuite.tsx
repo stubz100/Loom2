@@ -1,7 +1,5 @@
 import { useEffect } from 'react'
 import type { ModelEntry } from '../../api/types'
-import type { SuiteDef } from '../../frame/suiteRegistry'
-import { DEFAULT_RAIL } from '../../frame/railTabs'
 import { CommandButton } from '../../frame/CommandButton'
 import { markUsed, runCommand, titleFor, command } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
@@ -146,9 +144,4 @@ export function ModelsSheetBody({ tab, missing }: { tab: 'roster' | 'engine'; mi
       <aside><ModelsInspector /></aside>
     </div>
   )
-}
-
-export const ModelsSuite: SuiteDef = {
-  id: 'models', rail: DEFAULT_RAIL.models,
-  Panel: ModelsPanel, Strip: ModelsStrip, Stage: ModelsStage, Inspector: ModelsInspector,
 }

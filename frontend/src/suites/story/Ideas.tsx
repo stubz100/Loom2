@@ -124,7 +124,7 @@ export function IdeaBench() {
   const profiles = useStory((s) => s.profiles)
   markUsed('story.idea.explore'); markUsed('story.idea.clay'); markUsed('story.idea.keep'); markUsed('story.idea.rename'); markUsed('story.idea.delete')
   const { ref, over } = useDropTarget((p) => !!i && onlyAssets(p) && imageIds(p).length > 0, (p) => { if (i) void addToIdea(i.id, imageIds(p)) }, (p) => ({ ok: true, label: `Add ${imageIds(p).length > 1 ? `${imageIds(p).length} variants` : 'a variant'}` }))
-  if (!i) return <div className="story-empty"><div>Pick an idea on the left, or start one: <b>Prototype ▸</b> on any picture in Image or the Catalogue copies it into a new idea; nothing in an idea is production until <b>Keep ▶</b>.<div className="quick-cards"><CommandButton id="story.idea.new" text /></div></div></div>
+  if (!i) return <div className="story-empty"><div>Pick an idea on the left, or start one: <b>Prototype ▸</b> on any picture in the Bin copies it into a new idea; nothing in an idea is production until <b>Keep ▶</b>.<div className="quick-cards"><CommandButton id="story.idea.new" text /></div></div></div>
   const v = focusOf(i)
   const kept = i.kept.map((k) => ({ k, p: profiles.find((p) => p.id === k.profile_id) }))
   return (

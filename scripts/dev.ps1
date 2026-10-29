@@ -5,7 +5,7 @@
 param([switch]$Browser, [string]$Suite)
 $ErrorActionPreference = "Stop"
 $repo = Split-Path -Parent $PSScriptRoot
-if ($Suite) { $env:LOOM2_START_SUITE = $Suite }   # open the app on a suite (catalogue|generate|edit|animate|models)
+if ($Suite) { $env:LOOM2_START_SUITE = $Suite }   # open the app on a suite's layer (catalogue: the Bin; generate, edit: World; animate, stage: Shots; models: the sheet)
 if ($Browser) {
     $env:LOOM2_TOKEN = "devtoken"
     $env:PYTHONIOENCODING = "utf-8"

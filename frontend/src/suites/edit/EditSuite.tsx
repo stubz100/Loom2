@@ -12,8 +12,8 @@ import { command, handleKeyFor, isEnabled, markUsed, matchesCommand, parseChord,
 import { useKeymap } from '../../frame/keymap'
 import { openPressMenu, showMenu } from '../../frame/ContextMenu'
 import { DEV_HOOKS } from '../../devHooks'
-import { DEFAULT_RAIL } from '../../frame/railTabs'
-import { setRailTab, type SuiteDef } from '../../frame/suiteRegistry'
+import { setRailTab } from '../../frame/router'
+import type { SuiteParts } from '../../frame/suiteParts'
 import { useColumnSync } from '../../frame/columnSync'
 import { useMakeFor } from '../../store/origin'
 import { byOrder } from '../../store/modelCaps'
@@ -371,7 +371,7 @@ function RefSlotsAi({ model }: { model: string }) {
       <label>references</label>
       <div ref={dropRef} className="ref-slots ai-refs" data-max={max}>
         {slots.map((r, i) => (
-          <div key={i} className={`ref-slot${over ? ' over' : ''}`} title={r ? `reference image ${i + 1}` : `drop a Catalogue tile here · reference ${i + 1} of ${max}`}
+          <div key={i} className={`ref-slot${over ? ' over' : ''}`} title={r ? `reference image ${i + 1}` : `drop a picture from the Bin here · reference ${i + 1} of ${max}`}
             onContextMenu={(e) => { if (!r) return; showMenu(e, [
               { label: 'Remove reference', icon: X, run: () => p.removeRef(r.asset_id) },
               { label: 'Move first', disabled: i === 0, run: () => p.moveRef(i, 0) },
@@ -389,7 +389,7 @@ function RefSlotsAi({ model }: { model: string }) {
         ))}
       </div>
       {p.refs.length > 0 && <><label>downscale</label><div><select value={p.refMaxPx} onChange={(e) => p.set({ refMaxPx: Number(e.target.value) })} title="a 1024² reference ≈ 4 096 tokens"><option value={512}>≤ 512²</option><option value={768}>≤ 768²</option><option value={1024}>≤ 1024²</option></select> <CommandButton id="edit.ai.clearRefs" text /></div></>}
-      <Help className="full" text={`Reference images go in after the region itself — a character's face, a material the fill should match. ${caps?.models[model]?.label ?? 'The model'} takes up to ${max}; drop Catalogue tiles on the slots, right-click a slot to move or remove one. The preview says how many go in.`} />
+      <Help className="full" text={`Reference images go in after the region itself — a character's face, a material the fill should match. ${caps?.models[model]?.label ?? 'The model'} takes up to ${max}; drop pictures from the Bin on the slots, right-click a slot to move or remove one. The preview says how many go in.`} />
     </>
   )
 }
@@ -581,7 +581,7 @@ function AiTab() {
         {p.op === 'upscale' && <>
           <label>model</label><select value={upscaleModel} onChange={(e) => setP({ upscaleModel: e.target.value })}>{upIds.map((id) => <option key={id} value={id}>{caps?.tools[id]?.label ?? id} {health(id) === 'missing' ? '(not fetched)' : ''}</option>)}</select>
           <label>on</label><div className="segmented">{(['visible', 'active'] as const).map((s) => <button key={s} className={p.upscaleSource === s ? 'active' : ''} onClick={() => setP({ upscaleSource: s })}>{s}</button>)}</div>
-          <label>result</label><label className="chk"><input type="checkbox" checked={p.asLayer} onChange={(e) => setP({ asLayer: e.target.checked })} /> also add a 1× detail layer (the full-size image goes to the Catalogue)</label>
+          <label>result</label><label className="chk"><input type="checkbox" checked={p.asLayer} onChange={(e) => setP({ asLayer: e.target.checked })} /> also add a 1× detail layer (the full-size image goes to the Bin)</label>
           <label>detail</label><label className="chk" title="re-samples every tile of the upscale at low strength (a tiled refine)"><input type="checkbox" checked={p.refineTiled} onChange={(e) => setP({ refineTiled: e.target.checked })} /> Upscale (detailed) — re-samples every tile at low strength</label>
           {p.refineTiled && <>
             <label>model</label><select value={tiledModel} onChange={(e) => setP({ tiledModel: e.target.value })}>{tiledIds.map((id) => <option key={id} value={id}>{i2iName(id, true)}</option>)}</select>
@@ -662,7 +662,7 @@ function DocumentsTab() {
             <button className="quiet icon-btn" title="Delete the document (its .ora file)" aria-label="delete document" onClick={(e) => { e.stopPropagation(); void askConfirm({ title: 'Delete document?', text: `"${d.name}" and its .ora file are removed from the project. This cannot be undone.`, okLabel: 'Delete document', danger: true }).then((ok) => { if (ok) void ed().deleteDocument(d.id).then(refresh) }) }}><Trash2 size={14} /></button>
           </div>
         ))}
-        {!items.length && <span className="muted">No documents yet. In the Catalogue, select an image and choose Open in Edit (E).</span>}
+        {!items.length && <span className="muted">No documents yet. In the Bin, right-click a picture and choose Open in Edit.</span>}
       </div>
     </div>
   )
@@ -834,8 +834,8 @@ function Stage() {
     <EmptyDrop><div>
       <h2>Edit</h2>
       {loading ? <p>loading document…</p> : <>
-        <p>Select an asset in the Catalogue and press <kbd>E</kbd>, drop a tile here or on the Edit tab, or start empty.</p>
-        <p><button onClick={() => void ed().newDocument(1920, 1080)}>New 1920×1080 document</button> <button onClick={() => navigate({ suite: 'catalogue' })}>Open the Catalogue</button></p>
+        <p>Right-click a picture in the Bin and choose Open in Edit, drop one here, or start empty.</p>
+        <p><button onClick={() => void ed().newDocument(1920, 1080)}>New 1920×1080 document</button> <button onClick={() => navigate({ suite: 'catalogue' })}>Open the Bin</button></p>
         <RecentDocuments />
       </>}
       {error && <p style={{ color: 'var(--error)' }}>{error}</p>}
@@ -1261,8 +1261,4 @@ function EmptyDrop({ children }: { children: React.ReactNode }) {
   return <div ref={ref} className={`edit-empty${over ? ' drop-over' : ''}`}>{children}</div>
 }
 
-export const EditSuite: SuiteDef = {
-  id: 'edit',
-  rail: DEFAULT_RAIL.edit,
-  Panel, Strip, Stage, Inspector, PrimaryAction, keepAlive: true,
-}
+export const EditSuite: SuiteParts = { Panel, Strip, Stage, Inspector, PrimaryAction }

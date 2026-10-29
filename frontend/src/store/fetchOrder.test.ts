@@ -5,8 +5,8 @@ import { setBackend } from '../api/client'
 import type { EventFrame, Job } from '../api/types'
 import { applyEvent, useSession } from './session'
 
-vi.mock('../suites/catalogue/catalogueStore', () => ({ allCatalogueStores: () => [] }))
-vi.mock('../suites/catalogue/albumStore', () => ({ useAlbum: { getState: () => ({ load: vi.fn(), loadUsedBy: vi.fn() }) } }))
+vi.mock('../ui2/bin/binStore', () => ({ useBin: { getState: () => ({ reload: vi.fn() }) } }))
+vi.mock('./album', () => ({ useAlbum: { getState: () => ({ load: vi.fn(), loadUsedBy: vi.fn() }) } }))
 vi.mock('../suites/animate/animateStore', () => ({ useAnimate: { getState: () => ({ onClipReady: vi.fn(), onClipUpdated: vi.fn() }) } }))
 vi.mock('../suites/edit/editorStore', () => ({ useEditor: { getState: () => ({ onDocumentChanged: vi.fn(), resync: vi.fn() }) } }))
 

@@ -22,28 +22,16 @@ export async function api<T = unknown>(method: string, path: string, body?: unkn
   return (await r.json()) as T
 }
 
-/** The app in a browser: the token and port in the query (shell/tauri.ts discoverBackend), plus deep links (`suite`, `tab`, `renderer`). */
+/** The app in a browser: the token and port in the query (shell/tauri.ts discoverBackend), plus deep links (`renderer`, `tool`, `ai`, `asset`). */
 export function appUrl(params: Record<string, string> = {}): string {
   const e = env()
   return `http://127.0.0.1:${PREVIEW_PORT}/?${new URLSearchParams({ token: e.token, port: String(e.port), ...params })}`
 }
 
 /** Per page: what went wrong while it ran (page errors, console errors, failed requests, HTTP ≥ 400) — attached to a failed
- *  `openApp`, so a CI failure says why the app did not come up (2026-10-11: a bare "`.frame` not visible" could not be explained). */
+ *  `openShell`, so a CI failure says why the app did not come up (2026-10-11: a bare "`.frame` not visible" could not be explained). */
 const DIAG = new WeakMap<Page, string[]>()
 export const diagnostics = (page: Page): string[] => (DIAG.get(page) ?? []).slice(-40)
-
-/** Open the app and wait until the frame is up and the project is open. */
-export async function openApp(page: Page, params: Record<string, string> = {}): Promise<void> {
-  try {
-    await page.goto(appUrl(params))
-    await expect(page.locator('.frame')).toBeVisible()
-    await page.waitForFunction(() => !!(window as unknown as { __loom2Session?: { getState: () => { project?: { open?: boolean } } } }).__loom2Session?.getState().project?.open)
-  } catch (e) {
-    const body = (await page.locator('body').innerText({ timeout: 2000 }).catch(() => '(no body)')).slice(0, 600)
-    throw new Error(`${(e as Error).message}\n--- page diagnostics ---\n${diagnostics(page).join('\n') || '(none)'}\n--- page text ---\n${body}`)
-  }
-}
 
 /** The centre of an element in page coordinates (for mouse gestures). */
 export async function centre(l: Locator): Promise<{ x: number; y: number }> {
@@ -61,20 +49,8 @@ export async function contextChoose(page: Page, target: Locator, label: string):
   await item.click()
 }
 
-/** Tiles of the Catalogue grid, and a wait until the first `n` visible thumbnails have decoded (naturalWidth > 0). */
-export const tiles = (page: Page) => page.locator('.cat-grid .tile')
-/** D125: the Catalogue is the fourth top tab — the tab, then Places on its rail if the panel is folded (a click on the rail button of the
- *  section already showing folds the panel, so it is clicked only while the Places panel is not up). */
-export async function openCatalogue(page: Page): Promise<void> {
-  await page.locator('nav.tabs button.tab', { hasText: 'Catalogue' }).click()
-  const rail = page.locator('nav.rail button[aria-label="Places"]')
-  await expect(rail).toBeVisible()
-  const places = page.locator('.panel .place-row').first()
-  if (!(await places.isVisible().catch(() => false))) await rail.click()
-  await expect(places).toBeVisible()
-  await expect(page.locator('.cat-grid, .page-world').first()).toBeVisible()
-}
-export async function thumbsLoaded(page: Page, n: number, sel = '.cat-grid .tile img'): Promise<number> {
+/** A wait until the first `n` visible thumbnails of `sel` have decoded (naturalWidth > 0). */
+export async function thumbsLoaded(page: Page, n: number, sel = '[data-testid="bin-grid"] .w-tile img'): Promise<number> {
   const handle = await page.waitForFunction(([want, q]) => {
     const imgs = [...document.querySelectorAll<HTMLImageElement>(q)].slice(0, want)
     return imgs.length >= Math.min(want, 1) && imgs.every((i) => i.complete && i.naturalWidth > 0) ? imgs.length : 0
@@ -82,10 +58,10 @@ export async function thumbsLoaded(page: Page, n: number, sel = '.cat-grid .tile
   return (await handle.jsonValue()) as number
 }
 
-/** B2a (D159): the new shell at a place — `bin`, `world/…`, `shots/…`, `episode` — once the project is open. */
+/** B2a (D159): the shell at a place — `bin`, `world/…`, `shots/…`, `episode` — once the project is open. */
 export async function openShell(page: Page, place = 'world', params: Record<string, string> = {}): Promise<void> {
   try {
-    await page.goto(`${appUrl({ ui: '2', ...params })}#${place}`)
+    await page.goto(`${appUrl(params)}#${place}`)
     await expect(page.locator('.frame.ui2')).toBeVisible()
     await page.waitForFunction(() => !!(window as unknown as { __loom2Session?: { getState: () => { project?: { open?: boolean } } } }).__loom2Session?.getState().project?.open)
   } catch (e) {

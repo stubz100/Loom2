@@ -8,6 +8,7 @@
 import { CaseSensitive, Hand, ImagePlus, Minus, Plus, X } from 'lucide-react'
 import { PosesSection } from './Poses'
 import { lazy, Suspense, useEffect, useRef } from 'react'
+import './generateCommands'
 import { api } from '../../api/client'
 import { CommandButton } from '../../frame/CommandButton'
 import { markUsed, runCommand as runCommandId, sep } from '../../frame/commands'
@@ -320,7 +321,7 @@ function RefSlots() {
     <>
       <div ref={dropRef} className="ref-slots">
         {slots.map((r, i) => (
-          <div key={i} className={`ref-slot${over ? ' over' : ''}`} title={r ? `reference image ${i + 1}` : `drop a Catalogue tile here, or select one and press R · reference ${i + 1}`}
+          <div key={i} className={`ref-slot${over ? ' over' : ''}`} title={r ? `reference image ${i + 1}` : `drop a picture from the Bin here · reference ${i + 1}`}
             onContextMenu={(e) => { if (!r) return; showMenu(e, [
               { label: 'Remove reference', icon: X, run: () => g.removeRef(r.asset_id) },
               { label: 'Move first', disabled: i === 0, run: () => g.moveRef(i, 0) },

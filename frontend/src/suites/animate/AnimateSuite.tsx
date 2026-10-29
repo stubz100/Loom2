@@ -4,7 +4,6 @@
 // D121 (proto01_animate 26 §5.3): this suite is Animate's Performance level, a mode of its own — its column (Shot · Performance · Clips ·
 // Selection), the player, and the foot that follows the Performance card (Image to video · Stage clip · Final shot). Clay is the stage
 // suite (StageParts.ClayColumn), Final the final suite (FinalSuite.tsx).
-import { AnimateLevels, GraphPill } from '../../frame/AnimateLevels'
 import { Help } from '../../frame/Help'
 import { useStageActive } from '../../frame/stageKeep'
 import { X } from 'lucide-react'
@@ -19,8 +18,7 @@ import { fieldGlyph } from '../../frame/presetGlyphs'
 import { handleKeysAt, markUsed, runCommand } from '../../frame/commands'
 import { inField, primaryInField } from '../../frame/fieldKeys'
 import { showMenu } from '../../frame/ContextMenu'
-import { DEFAULT_RAIL } from '../../frame/railTabs'
-import { type SuiteDef } from '../../frame/suiteRegistry'
+import type { SuiteParts } from '../../frame/suiteParts'
 import { byOrder, shortName } from '../../store/modelCaps'
 import { useSession } from '../../store/session'
 import { clipMenu, playerMenu } from './animateCommands'
@@ -54,7 +52,7 @@ function Slot({ which }: { which: 'start' | 'end' }) {
   }, (p) => verdict(p).verdict)
   return (
     <div ref={ref} className={`slot${over ? ' over' : ''}`} onContextMenu={(e) => { if (id) showMenu(e, [which === 'start' ? { cmd: 'anim.clearStart' } : { cmd: 'anim.clearEnd' }, { cmd: 'anim.swap' }]) }}
-      title={which === 'start' ? 'Start frame: drop a Catalogue tile, or Shift+A on a tile in the Catalogue' : 'End frame (optional): drop a tile, or Shift+Z in the Catalogue — enables first/last-frame mode'}>
+      title={which === 'start' ? 'Start frame: drop a picture from the Bin, or Set as the start frame in its right-click menu' : 'End frame (optional): drop a picture from the Bin, or Use as the end frame in its right-click menu — enables first/last-frame mode'}>
       <span className="tag">{which === 'start' ? 'S' : 'E'}</span>
       {id ? <>
         <img src={api.thumbUrl(id, 512)} alt="" />
@@ -376,7 +374,7 @@ function Strip() {
   const clip = useAnimate((s) => s.clips.find((c) => c.id === s.current))
   return (
     <>
-      <AnimateLevels /><GraphPill />{/* D95 (AN1): Animate's viewer levels */}
+      
       <CommandRow ids={['anim.view.player', 'anim.view.compare']} active={`anim.view.${view}`} />
       <CommandButton id="anim.view.filmstrip" active={filmTrack} />
       <span className="spacer" />
@@ -536,8 +534,8 @@ function Stage() {
   return (
     <div className="anim-stage">
       <div className="anim-view" onContextMenu={(e) => { if (clip) showMenu(e, playerMenu()) }}>
-        {!clip ? <div className="anim-empty"><h2>Animate</h2>{running ? 'rendering the first clip — it opens here when the proxy is ready' : route === 'clip' ? 'pick a frame of the stage, then Render clip ▶ — the clip opens here' : route === 'final' ? "the final shot's steps are in the column — Play ▶ shows the assembled shot here" : <>set a start frame (Shift+A on a Catalogue tile, or drop it on Performance's start slot), write the motion, Animate ▶
-          {!startSet && <div className="quick-cards"><CommandCard id="global.start.animate" hint="pick a still in the Catalogue" /></div>}</>}</div>
+        {!clip ? <div className="anim-empty"><h2>Animate</h2>{running ? 'rendering the first clip — it opens here when the proxy is ready' : route === 'clip' ? 'pick a frame of the stage, then Render clip ▶ — the clip opens here' : route === 'final' ? "the final shot's steps are in the column — Play ▶ shows the assembled shot here" : <>set a start frame (a picture's Set as the start frame in the Bin, or drop it on Performance's start slot), write the motion, Animate ▶
+          {!startSet && <div className="quick-cards"><CommandCard id="global.start.animate" hint="pick a still in the Bin" /></div>}</>}</div>
           : view === 'compare' ? <Compare clip={clip} /> : <Player clip={clip} frame={frame} onion={onion} />}
       </div>
       {clip && <Transport clip={clip} />}
@@ -611,7 +609,7 @@ function FramesTab({ clip }: { clip: Clip }) {
       </div>
       <h4 className="sect">harvested ({pins.length})</h4>
       <div className="insp-thumbs">{[...pins].sort((x, y) => x.frame - y.frame).map((p) => <img key={p.asset_id} src={api.thumbUrl(p.asset_id, 256)} alt="" className={p.frame === frame ? 'cur' : ''} title={`frame ${p.frame} — click to go there`} onClick={() => an().setFrame(p.frame)} />)}</div>
-      {!pins.length && <span className="hint">No frames extracted. <Help text="Extract frame (F) or Extract range (Shift+F): the frames land in the Catalogue with frame-extract lineage and open in Edit." /></span>}
+      {!pins.length && <span className="hint">No frames extracted. <Help text="Extract frame (F) or Extract range (Shift+F): the frames land in the Bin with frame-extract lineage and open in Edit." /></span>}
     </div>
   )
 }
@@ -630,11 +628,7 @@ function LineageTab({ clip }: { clip: Clip }) {
   )
 }
 
-export const AnimateSuite: SuiteDef = {
-  id: 'animate',
-  rail: DEFAULT_RAIL.animate,
-  Panel: PerformanceColumn, Strip, Stage, Inspector: () => null, PrimaryAction: PerformanceFoot, keepAlive: true, noInspector: true, panelTitle: 'Animate',
-}
+export const AnimateSuite: SuiteParts = { Panel: PerformanceColumn, Strip, Stage, Inspector: () => null, PrimaryAction: PerformanceFoot }
 
 /** D125 (A4): the clip's Story verb — with the For chip it becomes that shot's clip (no second shot), without one a shot is made from it. */
 function ClipShotVerb() {

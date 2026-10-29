@@ -7,7 +7,7 @@ import { linesToVoice, spineTodo } from './episodeVerbs'
 import { goBack, goBackToIdea, useMakeFor } from '../../store/origin'
 import { bareNode, cellsOf, hasWork, nextStep, routeOf, staleFrom, type Cell, type Step } from './board'
 import { askConfirm, askConfirmCheck, askText, useSession } from '../../store/session'
-import { useAlbum } from '../catalogue/albumStore'
+import { useAlbum } from '../../store/album'
 import { CLASS_LABEL, latestModelJob, latestTrainJob, modelSource, nodesAfterWithoutPlace, revealClass, sy, ttsJobFor, useStory, type ProfileClass, shellBlocked, fitBlocked } from './storyStore'
 import { forShot, makeClipFor, makeFrameFor, makeTarget, speakersOf } from './makeFor'
 import { runStale, staleOf } from './runStale'
@@ -16,7 +16,7 @@ import { findNode, pickSampleModel, sampleJob, sampleRecipe, sampleScene, styleG
 import { useLibrary } from './libraryStore'
 import { FIELD_LABEL, type FieldKey } from '../generate/fieldPresets'
 import { needsPicture, swatchJob, useSwatches } from '../generate/swatches'
-import { navigate, setRailTab, UI2 } from '../../frame/router'
+import { navigate, setRailTab } from '../../frame/router'
 import { hasLines } from './flow/types'
 
 const hasWorld = () => !!sy().world
@@ -252,14 +252,19 @@ export async function addStyleSamples(id: string, assetIds: string[]): Promise<v
   } catch { /* the album verbs toast their own failures */ }
 }
 
-/** A group page in the active Catalogue pane (the Catalogue tab, D125). */
+/** B2 (D159): a group page in the Bin — the home it is, or the home that holds it as a page. */
 export function openGroupPage(gid: string): void {
   navigate({ suite: 'catalogue' })
-  void import('../catalogue/split').then((m) => { const sp = m.useSplit.getState(); m.openPlace(m.paneStore(sp.mode === 'single' ? 0 : sp.active).getState(), { group: gid }) })
+  void import('../../ui2/bin/binStore').then(async ({ homesById, useBin }) => {
+    if (!useBin.getState().homes.length) await useBin.getState().loadTree()
+    const home = [...homesById(useBin.getState().homes).values()].find((n) => n.id === gid || n.pages.includes(gid))
+    if (home) await useBin.getState().openHome(home.id)
+    else useSession.getState().toast('That page is in no home of the Bin yet', 'info')
+  })
 }
 
 export async function newProfile(cls: ProfileClass = 'character', hero: string | null = null): Promise<void> {
-  const name = await askText({ title: `New ${CLASS_LABEL[cls]}`, text: hero ? 'The image becomes the hero and the cover of a new reference set; @name mentions it in prompts.' : 'An empty profile: give it a hero from the Catalogue ("Make a character…" on a tile) before expanding.', placeholder: `${CLASS_LABEL[cls]} name` })
+  const name = await askText({ title: `New ${CLASS_LABEL[cls]}`, text: hero ? 'The image becomes the hero and the cover of a new reference set; @name mentions it in prompts.' : 'An empty profile: give it a hero from the Bin ("Make a character…" on a tile) before expanding.', placeholder: `${CLASS_LABEL[cls]} name` })
   if (!name?.trim()) return
   const p = await sy().createProfile(name.trim(), cls, hero)
   if (p) { revealClass(cls); setRailTab('story', 'cast') }   // D125: Cast shows its class
@@ -304,7 +309,7 @@ const cmds: Command[] = [
   { id: 'story.world.styleSample', scope: 'story', label: 'Make a sample image', icon: ImagePlus, placement: ['inspector', 'context'],
     when: () => !!style() && !!useSession.getState().project?.open && !!sampleModel() && !sampleJob(useSession.getState().jobs, style()!.id),
     run: () => { const s = style(); if (s) void makeStyleSample(s.id) } },
-  { id: 'story.world.openStyleGroup', scope: 'story', label: 'Open the samples in the Catalogue', icon: FolderOpen, placement: ['inspector', 'context'],
+  { id: 'story.world.openStyleGroup', scope: 'story', label: 'Open the samples in the Bin', icon: FolderOpen, placement: ['inspector', 'context'],
     when: () => !!style()?.group_id && !!findNode(useAlbum.getState().tree, style()?.group_id),
     run: () => { const g = style()?.group_id; if (g) openGroupPage(g) } },
   { id: 'story.world.open', scope: 'story', label: 'Open Story · World', icon: BookOpen, placement: ['panel', 'context'], when: () => !!useSession.getState().project?.open,
@@ -341,8 +346,7 @@ const cmds: Command[] = [
   { id: 'story.cast.bench', scope: 'story', label: 'Bench ▶', icon: Hammer, placement: ['panel', 'inspector', 'context'],
     hint: "Clay opened for this version: its figure (a prop: its model at its height beside a 1.75 m figure; a place: its set from the picture's camera) on a scene of its own, with all of Clay's tools",
     when: () => { const p = sy().profile(); const v = sy().version(); return !!p && !!v && (p.cls === 'character' || (p.cls === 'prop' && !!v.model_asset_id) || (p.cls === 'place' && !!v.place_set)) },
-    run: () => { if (UI2) { runCommand('world.mode.clay'); return }                 // B2a: the new shell opens the bench inside World
-      const p = sy().profile(); const v = sy().version(); if (p && v) void import('../stage/stageStore').then((m) => m.st().openBench(p.id, v.id)) } },
+    run: () => runCommand('world.mode.clay') },                                   // B2a: the bench inside World
   { id: 'story.cast.lineup', scope: 'story', label: 'Line-up ▶', icon: Users, placement: ['panel', 'context'], hint: 'the characters and props shown, side by side at their sizes in Clay (twelve at most)',
     when: () => castLineup().length > 0, run: () => { const items = castLineup().map((p) => ({ profile_id: p.id })); void import('../stage/stageStore').then((m) => m.st().openLineup(items, backToBoard('cast'))) } },
   { id: 'story.idea.lineup', scope: 'story', label: 'Line-up ▶', icon: Users, placement: ['panel', 'context'], hint: 'the ideas picked (Ctrl-click), else those shown, in their clay side by side in Clay',
@@ -423,12 +427,12 @@ const cmds: Command[] = [
     when: () => profile()?.cls === 'prop' && !!version() && !!modelSource(version()!) && !!useSession.getState().capabilities?.mesh?.model_id && !modelBusy(),
     run: () => { const p = profile(); const v = version(); const mc = useSession.getState().capabilities?.mesh; if (!p || !v || !mc?.model_id) return
       void askConfirm({ title: `${v.model_asset_id ? 'Remake' : 'Make'} ${p.name}'s 3D model?`, okLabel: 'Queue it',
-        text: `${mc.label} builds a textured model from ${v.anim_ref_asset_id ? 'the animation reference' : 'the hero'} and stands it upright. About ${mins(mc.seconds)} with the model loaded, ${mins(mc.cold_seconds)} from cold, in the background${mc.health === 'missing' ? ' — its weights are missing (Models › Fetch)' : ''}.${v.model_asset_id ? ' The old model stays in the Catalogue.' : ''}` })
+        text: `${mc.label} builds a textured model from ${v.anim_ref_asset_id ? 'the animation reference' : 'the hero'} and stands it upright. About ${mins(mc.seconds)} with the model loaded, ${mins(mc.cold_seconds)} from cold, in the background${mc.health === 'missing' ? ' — its weights are missing (Models › Fetch)' : ''}.${v.model_asset_id ? ' The old model stays in the Bin.' : ''}` })
         .then((ok) => { if (ok) void sy().makeModel() }) } },
   { id: 'story.cast.importModel', scope: 'story', label: 'Import a 3D model (GLB)…', icon: Box, placement: ['panel', 'inspector', 'context'],
     hint: 'a .glb of your own (or one whose licence you vouch for) becomes this version\'s model, as it is — every prop has a 3D model (D128)',
     when: () => profile()?.cls === 'prop' && !!version() && !modelBusy(),
-    run: () => void askText({ title: 'Import a 3D model', text: 'The path of a .glb file (binary glTF 2.0). It joins the Catalogue as a mesh and becomes this version\'s model.', placeholder: 'D:\\models\\cup.glb' })
+    run: () => void askText({ title: 'Import a 3D model', text: 'The path of a .glb file (binary glTF 2.0). It joins the Bin as a mesh and becomes this version\'s model.', placeholder: 'D:\\models\\cup.glb' })
       .then((v) => { if (v?.trim()) void sy().importModel(v.trim()) }) },
   { id: 'story.cast.clearModel', scope: 'story', label: 'Clear the 3D model', icon: X, placement: ['inspector', 'context'], when: () => !!version()?.model_asset_id,
     run: () => void sy().setModel(null) },
@@ -448,7 +452,7 @@ const cmds: Command[] = [
     placement: ['context'], when: () => isPlace() && !!storyItem.face && fillable().includes(storyItem.face) && !setBusy(),
     run: () => { const f = storyItem.face; if (f) void import('./setBuilder').then((m) => m.fillSet([f])) } },
   { id: 'cast.place.clear', scope: 'story', label: 'Clear the set…', icon: X, danger: true, placement: ['inspector', 'context'], when: () => isPlace() && !!version()?.place_set && !setBusy(),
-    run: () => void askConfirm({ title: 'Clear the set?', okLabel: 'Clear', text: 'Its kind, sizes and faces go; the baked and filled faces stay in the Catalogue. Build the set ▶ fits it again.' })
+    run: () => void askConfirm({ title: 'Clear the set?', okLabel: 'Clear', text: 'Its kind, sizes and faces go; the baked and filled faces stay in the Bin. Build the set ▶ fits it again.' })
       .then((ok) => { if (ok) void import('./setBuilder').then((m) => m.saveSet(null)) }) },
   { id: 'story.cast.testAnimRef', scope: 'story', label: 'Test it: a turn on the spot…', icon: Play, hint: 'the reference performs a turn through the pose-driven model (the cost is asked first)',
     placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character' && !!version()?.anim_ref_asset_id && !!useSession.getState().capabilities?.stage?.animate,
@@ -477,9 +481,9 @@ const cmds: Command[] = [
     run: () => { const j = trainJob(); if (j) void sy().requeueTrain(j.id) } },
   { id: 'story.cast.cancelTrain', scope: 'story', label: 'Cancel the training job', icon: X, placement: ['inspector'], when: () => ['staged', 'queued', 'running'].includes(trainJob()?.status ?? ''),
     run: () => { const j = trainJob(); if (j) void useSession.getState().cancelJob(j.id) } },
-  { id: 'story.cast.openGroup', scope: 'story', label: 'Open the reference set in the Catalogue', icon: FolderOpen, placement: ['inspector', 'context'], when: () => !!version(),
+  { id: 'story.cast.openGroup', scope: 'story', label: 'Open the reference set in the Bin', icon: FolderOpen, placement: ['inspector', 'context'], when: () => !!version(),
     run: () => { const v = version(); if (v) openGroupPage(v.group_id) } },
-  { id: 'story.cast.openCandidates', scope: 'story', label: 'Open the candidates in the Catalogue', icon: FolderOpen, placement: ['inspector', 'context'], when: () => !!version()?.candidates_group_id,
+  { id: 'story.cast.openCandidates', scope: 'story', label: 'Open the candidates in the Bin', icon: FolderOpen, placement: ['inspector', 'context'], when: () => !!version()?.candidates_group_id,
     run: () => { const g = version()?.candidates_group_id; if (g) openGroupPage(g) } },
   // SY2 · Shots
   { id: 'story.shot.new', scope: 'story', label: 'New shot…', icon: Clapperboard, placement: ['panel', 'context'], when: () => !!useSession.getState().project?.open,
@@ -534,7 +538,7 @@ const cmds: Command[] = [
     run: () => openStageRoute('clip') },   // D95 (AN1, UX0 #21): the speakers bound; D125 (A2): Performance's Stage clip card, the For chip, the shot's frame as the start
   // the For chip's verbs in the makers' Panels (D32: a command each)
   { id: 'gen.for.back', scope: 'generate', label: 'Back to the shot', icon: ArrowLeft, placement: ['panel'], hint: 'and stop making for it (D125)', when: () => !!useMakeFor.getState().generate, run: () => goBack('generate') },
-  { id: 'gen.for.clear', scope: 'generate', label: 'Stop making for the shot (results stay in the Catalogue only)', icon: X, placement: ['panel'], when: () => !!useMakeFor.getState().generate,
+  { id: 'gen.for.clear', scope: 'generate', label: 'Stop making for the shot (results stay in the Bin only)', icon: X, placement: ['panel'], when: () => !!useMakeFor.getState().generate,
     run: () => useMakeFor.getState().set('generate', null) },
   // proto01_UIcast CW2: the idea chip's verbs
   { id: 'gen.idea.back', scope: 'generate', label: 'Back to the idea', icon: ArrowLeft, placement: ['panel'], hint: 'its bench in Cast, and stop making for it', when: () => !!useMakeFor.getState().idea, run: () => goBackToIdea() },
@@ -545,7 +549,7 @@ const cmds: Command[] = [
   { id: 'anim.for.runStale', scope: 'animate', label: 'Run stale steps…', icon: RotateCcw, hint: 'the plan and its cost first; the results become the frame and clip', placement: ['panel', 'strip'],   // RC1: the Graph's strip too
     when: () => { const f = useMakeFor.getState().animate; return !!f && staleOf(f.shot_id, f.version) > 0 }, run: () => { const f = useMakeFor.getState().animate; if (f) void runStale(f.shot_id, f.version) } },
   { id: 'anim.for.back', scope: 'animate', label: 'Back to the shot', icon: ArrowLeft, placement: ['panel'], hint: 'and stop making for it (D125)', when: () => !!useMakeFor.getState().animate, run: () => goBack('animate') },
-  { id: 'anim.for.clear', scope: 'animate', label: 'Stop making for the shot (clips stay in the Catalogue only)', icon: X, placement: ['panel'], when: () => !!useMakeFor.getState().animate,
+  { id: 'anim.for.clear', scope: 'animate', label: 'Stop making for the shot (clips stay in the Bin only)', icon: X, placement: ['panel'], when: () => !!useMakeFor.getState().animate,
     run: () => useMakeFor.getState().set('animate', null) },
   { id: 'story.shot.openAnimate', scope: 'story', label: 'Open in Animate', icon: Film, placement: ['strip', 'inspector', 'context'], when: () => !!shotVersion()?.clip_id,
     run: () => { const v = shotVersion(); if (!v?.clip_id) return; const cid = v.clip_id
@@ -558,7 +562,7 @@ const cmds: Command[] = [
     run: () => void sy().patchShot({ owner_node: null }) },
   { id: 'story.shot.delete', scope: 'story', label: 'Delete shot', icon: Trash2, placement: ['inspector', 'context'], danger: true, when: () => !!shot(),
     run: () => { const s = shot(); if (!s) return
-      void askConfirm({ title: `Delete ${s.name}?`, okLabel: 'Delete', danger: true, text: 'Its versions and takes go; the frames and clips stay in the Catalogue. Its node keeps its lines and gets a fresh shot — a Shot node outside the routes goes with it.' }).then((ok) => { if (ok) void sy().deleteShot() }) } },
+      void askConfirm({ title: `Delete ${s.name}?`, okLabel: 'Delete', danger: true, text: 'Its versions and takes go; the frames and clips stay in the Bin. Its node keeps its lines and gets a fresh shot — a Shot node outside the routes goes with it.' }).then((ok) => { if (ok) void sy().deleteShot() }) } },
   // SY3 · Flow
   ...(Object.keys(NODE_ICON) as (keyof typeof NODE_ICON)[]).map((t): Command => ({
     id: `story.flow.add.${t}`, scope: 'story', label: `Add ${NODE_LABEL[t]}`, icon: NODE_ICON[t], placement: ['strip', 'context'], when: () => !!useSession.getState().project?.open && !sy().play,
@@ -570,7 +574,7 @@ const cmds: Command[] = [
       if (!sh || sh.owner_node !== n.id) { void askConfirm({ title: `Delete ${n.title || NODE_LABEL[n.type]}?`, okLabel: 'Delete', danger: true, text: 'Its edges go with it.' }).then((ok) => { if (ok) void sy().deleteNode(n.id) }); return }
       // D125 (#4) / RC2a: the node is its shot — the shot moves to a Shot node of its own, or goes too (its frames and clips stay in the Catalogue)
       if (!hasWork(sh)) { void askConfirm({ title: `Delete ${n.title || NODE_LABEL[n.type]}?`, okLabel: 'Delete', danger: true, text: 'Its edges and its empty shot go with it.' }).then((ok) => { if (ok) void sy().deleteNode(n.id, true) }); return }
-      void askConfirmCheck({ title: `Delete ${n.title || NODE_LABEL[n.type]}?`, okLabel: 'Delete', danger: true, text: 'Its edges go with it; its shot stays, as a Shot node of its own.', check: `Delete its shot ${sh.name} too (its frames and clips stay in the Catalogue)` })
+      void askConfirmCheck({ title: `Delete ${n.title || NODE_LABEL[n.type]}?`, okLabel: 'Delete', danger: true, text: 'Its edges go with it; its shot stays, as a Shot node of its own.', check: `Delete its shot ${sh.name} too (its frames and clips stay in the Bin)` })
         .then((r) => { if (r) void sy().deleteNode(n.id, r.checked) }) } },
   // D90 (B3): an edge goes by its right-click menu or Delete / Backspace on the canvas while it is selected (nodes keep their confirm)
   { id: 'story.flow.deleteEdge', scope: 'story', label: 'Delete the connection', icon: Unlink, keys: 'Delete', alt: ['Backspace'], placement: ['context'], when: () => !!sy().edge && !sy().play,
@@ -633,12 +637,11 @@ const cmds: Command[] = [
   { id: 'story.flow.recipe', scope: 'story', label: 'Open its recipe', icon: Workflow, hint: "the shot's recipe as a graph, here in place of the canvas — what it is made of, what is stale",
     placement: ['inspector', 'context'], when: () => !!node()?.shot_id && !sy().play, run: () => { const n = node(); if (n) sy().setFlowRecipe(n.id) } },
   { id: 'story.flow.recipeClose', scope: 'story', label: 'The Flow', icon: ArrowLeft, hint: 'back to the canvas', placement: ['strip'], when: () => !!sy().flowRecipe, run: () => sy().setFlowRecipe(null) },
-  { id: 'story.shot.graphInAnimate', scope: 'story', label: UI2 ? 'Open its graph' : 'Open the graph in Animate', icon: Workflow, hint: "the Graph on this shot's level (its recipe): a node opens where it is made",
+  { id: 'story.shot.graphInAnimate', scope: 'story', label: 'Open its graph', icon: Workflow, hint: "the Graph on this shot's level (its recipe): a node opens where it is made",
     placement: ['strip', 'inspector', 'context'], when: () => !!shot() && !!shotVersion(),
     run: () => { const s = shot(); const v = shotVersion(); if (!s || !v) return
       useSession.getState().setUi({ graph: true })
-      if (UI2) { void import('../../ui2/shots/shotsStore').then((m) => m.useShots.getState().open(s.id, 'performance')); return }   // B2a: the shot at Performance in Shots, the Graph over it
-      useMakeFor.getState().set('animate', forShot(s, v)); navigate({ suite: 'animate' }) } },
+      void import('../../ui2/shots/shotsStore').then((m) => m.useShots.getState().open(s.id, 'performance')) } },   // B2a: the shot at Performance in Shots, the Graph over it
   { id: 'story.flow.openShot', scope: 'story', label: 'Open the shot', icon: Link, placement: ['inspector', 'context'], when: () => !!node()?.shot_id,
     run: () => { const n = node(); if (!n?.shot_id) return; const sid = n.shot_id, v = n.shot_version; setRailTab('story', 'shots'); sy().selectShot(sid, v) } },
   // D90 (02 §4.2, §5): a node's board (an album group) and Make ▸ for its shot (the board's images as Generate's references)
@@ -646,7 +649,7 @@ const cmds: Command[] = [
     run: () => { const s = nodeShot(); const v = nodeTarget(); const n = node(); if (s && v && n) void makeFrameFor(s, v, n.id) } },
   { id: 'story.flow.makeClip', scope: 'story', label: 'Make clip in Animate', icon: Film, placement: ['inspector', 'context'], when: () => projectOpen() && !!nodeTarget() && !sy().play,
     run: () => { const s = nodeShot(); const v = nodeTarget(); const n = node(); if (s && v && n) void makeClipFor(s, v, n.id) } },
-  { id: 'story.flow.openBoard', scope: 'story', label: 'Open the board in the Catalogue', icon: FolderOpen, placement: ['inspector', 'context'], when: () => !!board(),
+  { id: 'story.flow.openBoard', scope: 'story', label: 'Open the board in the Bin', icon: FolderOpen, placement: ['inspector', 'context'], when: () => !!board(),
     run: () => { const g = node()?.board_group_id; if (g) openGroupPage(g) } },
   { id: 'story.flow.clearBoard', scope: 'story', label: 'Remove the board (the group stays)', icon: ImageOff, placement: ['inspector', 'context'], when: () => !!node()?.board_group_id && !sy().play,
     run: () => { const n = node(); if (!n?.board_group_id) return; const was = n.board_group_id
@@ -662,7 +665,7 @@ const cmds: Command[] = [
     run: () => sy().setVoiceForm(!sy().voiceForm) },
   { id: 'story.cast.deleteVoice', scope: 'story', label: 'Delete the voice', icon: Trash2, placement: ['inspector'], danger: true, when: () => !!profile()?.voice_id,
     run: () => { const p = profile(); if (!p?.voice_id) return; const vid = p.voice_id; const v = sy().voices.find((x) => x.id === vid)
-      void askConfirm({ title: `Delete the voice ${v?.name ?? vid}?`, okLabel: 'Delete', danger: true, text: 'The record goes; its spoken lines stay in the Catalogue; every character that had it loses it.' }).then((ok) => { if (ok) void sy().deleteVoice(vid) }) } },
+      void askConfirm({ title: `Delete the voice ${v?.name ?? vid}?`, okLabel: 'Delete', danger: true, text: 'The record goes; its spoken lines stay in the Bin; every character that had it loses it.' }).then((ok) => { if (ok) void sy().deleteVoice(vid) }) } },
   { id: 'story.flow.validate', scope: 'story', label: 'Validate', icon: ListChecks, placement: ['strip', 'context'], when: () => !!useSession.getState().project?.open, run: () => void sy().validate() },
   { id: 'story.flow.play', scope: 'story', label: 'Play', icon: Play, keys: 'P', placement: ['strip', 'context'], when: () => !!sy().flowGraph && !sy().play, run: () => sy().playStart() },
   // D90 (01 §11.2): play mode's own controls

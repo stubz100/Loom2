@@ -69,7 +69,7 @@ registerCommands([
   { id: 'edit.undo', scope: 'edit', label: 'Undo', icon: Undo2, keys: 'Ctrl+Z', placement: ['strip', 'context'], when: () => ed().history.length > 0, run: () => ed().undo() },
   { id: 'edit.redo', scope: 'edit', label: 'Redo', icon: Redo2, keys: 'Ctrl+Shift+Z', alt: ['Ctrl+Y'], placement: ['strip', 'context'], when: () => ed().future.length > 0, run: () => ed().redo() },
   // D95 (IM1, UX0 #4): one Save — the document and a new Catalogue version with lineage (Save to Catalogue merged into it); #23 with a Shot
-  { id: 'edit.save', scope: 'edit', label: 'Save', icon: Save, keys: 'Ctrl+S', placement: ['panel', 'context'], when: hasDoc, hint: 'the document and a new version in the Catalogue, with lineage; unchanged since the last version: no second one', run: () => void ed().saveVersion() },
+  { id: 'edit.save', scope: 'edit', label: 'Save', icon: Save, keys: 'Ctrl+S', placement: ['panel', 'context'], when: hasDoc, hint: 'the document and a new version in the Bin, with lineage; unchanged since the last version: no second one', run: () => void ed().saveVersion() },
   // D95 (IM1, UX0 #8): a new camera angle of what is in Edit — Save makes (or keeps) its Catalogue version, the New angle sheet opens on it
   { id: 'edit.ai.angle', scope: 'edit', label: 'New angle…', icon: Orbit, placement: ['panel'], when: hasDoc, hint: 'save, then the New angle sheet with this image as its source',
     run: () => void ed().saveVersion().then((id) => { if (id) void import('../../frame/openWith').then((m) => m.openWith(id, { suite: 'generate', slot: 'angle' })) }) },
@@ -93,7 +93,7 @@ registerCommands([
       if (shown.some((n) => n.kind !== 'raster')) { useSession.getState().toast('Merge visible merges pixel layers only: hide the groups, adjustment and filter layers first, or use Flatten image (it folds in everything exactly)', 'info'); return }
       ed().mergeNodes(shown.map((n) => n.id)) } },
   // D90 (UI6, owed): Flatten image — everything (groups, masks, modes, adjustment and filter layers) into one layer, exactly as Save renders its version
-  { id: 'edit.layer.flatten', scope: 'edit', label: 'Flatten image', icon: Layers, placement: ['context'], when: () => !ed().transform && !flattenBlocker(ed().doc), hint: 'every layer into one, exactly as Save renders its Catalogue version; hidden layers are discarded', run: () => { void ed().flattenImage() } },
+  { id: 'edit.layer.flatten', scope: 'edit', label: 'Flatten image', icon: Layers, placement: ['context'], when: () => !ed().transform && !flattenBlocker(ed().doc), hint: 'every layer into one, exactly as Save renders its version in the Bin; hidden layers are discarded', run: () => { void ed().flattenImage() } },
   { id: 'edit.layer.mergeDown', scope: 'edit', label: 'Merge down', icon: Merge, keys: 'Ctrl+E', placement: ['toolbar', 'context'], when: () => activeRaster() || ed().targetIds().length > 1, hint: 'with several layers selected: merge them', run: () => ed().mergeNodes(ed().targetIds()) },
   { id: 'edit.layer.up', scope: 'edit', label: 'Move layer up', icon: ArrowUp, placement: ['toolbar', 'context'], when: () => !!active(), run: () => ed().moveNode(ed().activeId!, 'up') },
   { id: 'edit.layer.down', scope: 'edit', label: 'Move layer down', icon: ArrowDown, placement: ['toolbar', 'context'], when: () => !!active(), run: () => ed().moveNode(ed().activeId!, 'down') },

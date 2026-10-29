@@ -5,7 +5,6 @@
 // which images are a figure's (the preview's `ref_list`) and how each figure is said in the prompt.
 // D121 (proto01_animate 26 §5.2): the Clay level is a mode of its own — its column (Shot · Scene · Motion · Camera), its foot (Render passes ▶),
 // the viewport with the pose pill; the stage's frame form (`ShotTab`) is Image › From a stage's, the stage clip (`StageClipCard`) Performance's.
-import { AnimateLevels, GraphPill } from '../../frame/AnimateLevels'
 import { Help } from '../../frame/Help'
 import { Aperture, Bookmark, Box, Camera, Eye, EyeOff, Frame, LayoutTemplate, Lock, LockOpen, MapPin, PersonStanding, User, UserRound, Video } from 'lucide-react'
 import { PresetPanel } from '../../frame/PresetPanel'
@@ -119,9 +118,9 @@ export function SceneTab() {
     { key: 'standins', label: 'Stand-ins', of: (o) => o.kind === 'prop', help: 'Grey shapes for blocking (D109).',
       add: <PresetPanel label="stand-in presets" items={standins} showText onPick={(id) => runCommand(`stage.add.prop.${id}`)} title="A grey stand-in shape at the viewport's centre" /> },
     { key: 'meshes', label: 'Meshes', of: (o) => o.kind === 'mesh' && !o.profile_id, help: `3D models not bound to a Cast prop, named by where they came from: a picture's "Make a 3D prop…", a picture set's thing, an imported GLB. A mesh's editor makes it a Cast prop.`,
-      add: <PresetPanel label="mesh models" items={meshItems} showText onPick={(id) => st().addObject('mesh', null, centre(), id)} empty="None yet — a Catalogue image's Make a 3D prop… lands here." title="A Catalogue 3D model at the viewport's centre" /> },
+      add: <PresetPanel label="mesh models" items={meshItems} showText onPick={(id) => st().addObject('mesh', null, centre(), id)} empty="None yet — a picture's Make a 3D prop… lands here." title="A 3D model from the Bin at the viewport's centre" /> },
     { key: 'lights', label: 'Lights', of: (o) => o.kind === 'light', add: <CommandButton id="stage.add.light" text /> },           /* D110 (PS4) */
-    { key: 'planes', label: 'Image planes', of: (o) => o.kind === 'plane', help: "A Catalogue image standing in the scene, facing the camera. Also from the Bin: drag an image onto the viewport (it lands where the pointer is), or double-click it there (the viewport's centre).",
+    { key: 'planes', label: 'Image planes', of: (o) => o.kind === 'plane', help: "A picture from the Bin standing in the scene, facing the camera. Also from the Bin: drag an image onto the viewport (it lands where the pointer is), or double-click it there (the viewport's centre).",
       add: <CommandButton id="stage.add.plane" text label="Add image plane…" /> },
   ]
   return (
@@ -253,7 +252,7 @@ function ImageSetFields({ o }: { o: StageObject }) {
     <>
       <div className="kv"><span>lens</span><span className="lens-field">
         <input type="number" min={20} max={150} step={0.5} value={lens} aria-label="the picture's lens" onChange={(e) => setLens(e.target.value)} />° wide · {cam?.name ?? 'no picture camera'}
-        <Help text="The horizontal field of view the relief is built with: MoGe reads it from the picture, and the reading wobbles by a few degrees (E30: 75° from a PNG, 69° from its JPEG). When you know the lens, type it and Rebuild — seconds; the set and its camera take the new relief, the old one stays in the Catalogue." /></span></div>
+        <Help text="The horizontal field of view the relief is built with: MoGe reads it from the picture, and the reading wobbles by a few degrees (E30: 75° from a PNG, 69° from its JPEG). When you know the lens, type it and Rebuild — seconds; the set and its camera take the new relief, the old one stays in the Bin." /></span></div>
       <div className="kv"><span>level</span><span data-level={o.level ? 'laid' : 'as-it-came'}>{o.level ? `laid level · the camera ${Math.abs(o.level.pitch_deg) < 0.05 ? 'level' : `${Math.abs(o.level.pitch_deg).toFixed(1)}° ${o.level.pitch_deg < 0 ? 'down' : 'up'}`}${Math.abs(o.level.roll_deg ?? 0) >= 0.1 ? `, ${Math.abs(o.level.roll_deg).toFixed(1)}° askew` : ''}` : 'as it came'}
         <Help text="SC3d / SC3f: the floor fitted to the picture's lowest rows (the walls and the things standing there left out) tells how the photograph's camera was held — tilted up or down, and askew. The set is turned so that floor is the stage floor, where the figures stand, and the picture's camera is tilted and rolled to match, so the picture still lines up through it. The things made on it follow when the set is rebuilt (unless you moved them). 'As it came' when the picture shows too little floor, or a slope steeper than 25°." /></span></div>
       <div className="kv"><span>budget</span><span className={b.within ? 'ok' : 'warn'} data-budget={b.within ? 'within' : 'beyond'}>{b.text} <Help text="E30 (D120): a relief holds for small moves. Within ±0.25 m and ±5° of the picture's camera, or an orbit of ±10° about the picture's depth, nothing tears inside the picture and its edge stays under a tenth of the frame. Beyond, the edge comes into the frame (the plate shows it) and what was hidden behind things opens up." /></span></div>
@@ -594,14 +593,14 @@ export function ShotTab() {
                   {x.asset_id ? <img src={api.thumbUrl(x.asset_id, 256)} alt="" /> : null}<span className="n">{x.image}</span><span className="fig-badge">fig {x.figure} · {x.name}</span>
                 </div>
               ))}
-              {room - figSlots.length > 0 && <div className="ref-slot" title="drop a Catalogue tile here"><span className="empty">{sh.refs.length + figSlots.length + 2}</span></div>}
+              {room - figSlots.length > 0 && <div className="ref-slot" title="drop a picture from the Bin here"><span className="empty">{sh.refs.length + figSlots.length + 2}</span></div>}
             </div>
             {figLines.length > 0 && <ul className="figure-lines" aria-label="the figures and their reference images">{figLines.map((t) => <li key={t}>{t}</li>)}
               {pv?.params?.bind_refs === false && <li className="muted">this method reads the figures' images by their notes — not bound in its prompt</li>}
               {/* journal 2026-10-17 18:03: exact pose (one reference slot) drew both figures as figure 1's character; clay carried each one's images */}
               {figs.length > 1 && figs.some((f) => !f.refs?.length) && <li className="warn">this method has room for {method?.max_refs ?? 1} reference image{(method?.max_refs ?? 1) === 1 ? '' : 's'}: {figs.filter((f) => !f.refs?.length).map((f) => `figure ${f.figure}`).join(', ')} only get{figs.filter((f) => !f.refs?.length).length === 1 ? 's' : ''} words — for several characters use a method with more room (Clay reference)</li>}</ul>}
             {!figLines.length && current.objects.some((o) => o.kind === 'mannequin') && <p className="hint">Figures not bound <Help text="Bind a figure to a Cast character (Inspector › character, or right-click ▸ Bind to a character): its reference images and sheet go into the frame, figure by figure, left to right." /></p>}
-            {sh.method === 'refcontrol' && !sh.refs.length && <p className="disabled-why">Exact pose needs one reference image (image 2): drop a Catalogue tile on the deck.</p>}
+            {sh.method === 'refcontrol' && !sh.refs.length && <p className="disabled-why">Exact pose needs one reference image (image 2): drop a picture from the Bin on the deck.</p>}
           </div></div>
         {sh.refs.map((r, i) => <div key={r.asset_id} className="kv"><span>image {i + 2}</span><input value={r.note ?? ''} placeholder="shows … (one phrase)" onChange={(e) => st().setShot({ refs: sh.refs.map((x) => (x.asset_id === r.asset_id ? { ...x, note: e.target.value } : x)) })} /></div>)}
         <div className="kv tall"><span>prompt</span><textarea className="shot-prompt" rows={3} value={sh.prompt_text} placeholder="what the scene is — after the method's own sentence about image 1" onChange={(e) => st().setShot({ prompt_text: e.target.value })} /></div>
@@ -612,7 +611,7 @@ export function ShotTab() {
         {pv && pv.missing.length > 0 && <p className="disabled-why">Weights missing for this method: {pv.missing.map((m) => m.model_id).join(', ')} — Models › Fetch.</p>}
         <div className="kv tall"><span>results{stills.length ? <span className="hint"> · {stills.length}</span> : null}</span>
           <div>
-            {!stills.length && <span className="hint">None yet. <Help text="The frames of this stage land here and in the Catalogue (lineage: the pass and the references). Click one: it is the start of the stage's clip (Animate › Performance › Stage clip)." /></span>}
+            {!stills.length && <span className="hint">None yet. <Help text="The frames of this stage land here and in the Bin (lineage: the pass and the references). Click one: it is the start of the stage's clip (Animate › Performance › Stage clip)." /></span>}
             <div className="shot-results">{stills.slice(0, 12).map((a) => <img key={a.id} className={`shot-thumb${shotStart === a.id ? ' start' : ''}`} src={api.thumbUrl(a.id, 256)} alt="" title={`${a.model_id ?? ''} · seed ${a.seed ?? ''} — click: the stage clip starts from this frame`} onClick={() => st().setShotStart(shotStart === a.id ? null : a.id)} />)}</div>
           </div></div>
       </Step>
@@ -743,11 +742,11 @@ export function Strip() {
   const guides = useStage((s) => s.guides)
   const pip = useStage((s) => s.pip)
   const current = useStage((s) => s.current)
-  if (!current) return <div className="stage-strip-wrap"><div className="stage-strip"><AnimateLevels /><GraphPill /></div></div>
+  if (!current) return <div className="stage-strip-wrap"><div className="stage-strip"></div></div>
   return (
     <div className="stage-strip-wrap">
       <div className="stage-strip">
-        <AnimateLevels /><GraphPill />{/* D95 (AN1): Animate's viewer levels */}
+        
         <CommandButton id="stage.guides" active={guides} />
         <CommandButton id="stage.view.pip" active={pip} />{/* D121 (AW4); the view switch is the camera pill over the viewport */}
         <CommandButton id="stage.frameAll" />
@@ -1064,7 +1063,7 @@ function Viewport() {
       {current && pipRect && view === 'free' && <button type="button" className="pip-frame" style={{ left: pipRect.x, top: pipRect.y, width: pipRect.w, height: pipRect.h }}
         onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()} onClick={() => runCommand('stage.view.camera')}
         title="The active camera's picture — a click looks through it"><span>{shotCam?.name} · {shotCam?.focal_mm} mm</span></button>}
-      {current && !current.objects.length && <div className="stage-empty"><div>Empty stage — add a set and a figure from the Scene section, or drop a Catalogue image.<div className="quick-cards"><CommandButton id="stage.add.set.room" text /><CommandButton id="stage.add.mannequin.adult" text /></div></div></div>}
+      {current && !current.objects.length && <div className="stage-empty"><div>Empty stage — add a set and a figure from the Scene section, or drop a picture from the Bin.<div className="quick-cards"><CommandButton id="stage.add.set.room" text /><CommandButton id="stage.add.mannequin.adult" text /></div></div></div>}
     </div>
   )
 }

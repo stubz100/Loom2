@@ -34,23 +34,21 @@ function route(f: RecordFrame): void {
     case 'resync':                                                 // V65: a reconnect — the editor resyncs; after a gap the lists reload
       void import('../suites/edit/editorStore').then((m) => m.useEditor.getState().resync())
       if (!f.data.gap) return
-      void import('../suites/catalogue/catalogueStore').then((m) => { for (const h of m.allCatalogueStores()) { const st = h.getState(); void st.load({ keepSelection: true }); void st.refreshMeta() } })
-      void import('../suites/catalogue/albumStore').then((m) => void m.useAlbum.getState().load())
+      void import('../ui2/bin/binStore').then((m) => void m.useBin.getState().reload())
+      void import('./album').then((m) => void m.useAlbum.getState().load())
       void import('../suites/story/storyStore').then((m) => void m.useStory.getState().load())
       void import('../suites/animate/animateStore').then((m) => void m.useAnimate.getState().loadClips())
       return
     case 'preset_icons.changed': void import('../suites/generate/swatches').then((m) => m.useSwatches.getState().load()); return   // D90 (02 §6.3): a swatch was made or removed
-    case 'catalogue.changed':
-      void import('../suites/catalogue/catalogueStore').then((m) => { for (const h of m.allCatalogueStores()) { const st = h.getState(); void st.load(); void st.refreshMeta() } })
+    case 'catalogue.changed':                                      // the asset index was rebuilt: the Bin lists again
+      void import('../ui2/bin/binStore').then((m) => void m.useBin.getState().reload())
       return
     case 'group.changed':                                         // D34: placements moved; the tree, counts and open views follow
-      void import('../suites/catalogue/albumStore').then((m) => void m.useAlbum.getState().load())
+      void import('./album').then((m) => void m.useAlbum.getState().load())
       void import('../suites/story/storyStore').then((m) => m.useStory.getState().onGroupChanged(ids(f)))   // 17 SY1: a version's pages
       void import('../suites/generate/generateStore').then((m) => m.mentionsMoved({ groups: ids(f) }))   // D93: a mentioned set grew → the preview's references
-      void import('../suites/catalogue/catalogueStore').then((m) => { for (const h of m.allCatalogueStores()) { const st = h.getState(); void st.refreshMeta(); if (st.q.folder === 'unprocessed' || st.q.group_id) void st.load({ keepSelection: true }) } })
       return
     case 'asset.created': case 'asset.updated': case 'asset.deleted':
-      void import('../suites/catalogue/catalogueStore').then((m) => { for (const h of m.allCatalogueStores()) h.getState().applyEvent(f) })
       if (f.type === 'asset.created' && ((f.data as { origin?: { suite?: string } } | null)?.origin?.suite === 'stage' || (f.data as { kind?: string } | null)?.kind === 'mesh'))   // ST3: a shot or a pass of a stage; proto01_UIcast CB2: a mesh made anywhere joins Clay's Meshes
         void import('../suites/stage/stageStore').then((m) => m.useStage.getState().onAssetCreated(f.data as never))
       if (f.type === 'asset.deleted')
@@ -64,7 +62,7 @@ function route(f: RecordFrame): void {
       const d = f.data as { kind?: string; id?: string } | null
       void import('../suites/story/storyStore').then((m) => m.useStory.getState().onChanged(f.data as never))
       if (d?.kind === 'shot' && d.id) { const id = d.id; void import('../suites/story/recipeTick').then((m) => m.useRecipeTick.getState().bump(id)) }   // RC0: an open recipe refetches
-      void import('../suites/catalogue/albumStore').then((m) => void m.useAlbum.getState().loadUsedBy())      // D92 §4.2: a version, style, board or entry may name another group
+      void import('./album').then((m) => void m.useAlbum.getState().loadUsedBy())      // D92 §4.2: a version, style, board or entry may name another group
       if (d?.kind === 'profile' && d.id) { const id = d.id; void import('../suites/generate/generateStore').then((m) => m.mentionsMoved({ profile: id })) }   // D93: a linked character got a hero
       return
     }

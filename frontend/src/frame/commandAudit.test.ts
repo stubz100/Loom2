@@ -19,7 +19,7 @@ const SOURCES = import.meta.glob<string>(['../**/*.ts', '../**/*.tsx', '!../**/*
 const MODULES = import.meta.glob(['../**/*.ts', '../**/*.tsx', '!../**/*.test.ts', '!../**/*.test.tsx', '!../**/*.d.ts', '!../spikes/**'])
 const REGISTERING = Object.keys(SOURCES).filter((p) => p !== './commands.ts' && /\bregisterCommands\(\s*[[\w]/.test(SOURCES[p]))   // D90: also `registerCommands(cmds)` (storyCommands.ts was missed)
 
-const SCOPES: Scope[] = ['global', 'catalogue', 'generate', 'edit', 'animate', 'stage', 'story', 'models', 'world', 'shots', 'bin']   // D90 (01 §11.7): Stage and Story joined
+const SCOPES: Scope[] = ['global', 'generate', 'edit', 'animate', 'stage', 'story', 'models', 'world', 'shots', 'bin']   // D90 (01 §11.7): Stage and Story joined
 const PLACEMENTS: Placement[] = ['context', 'toolbar', 'strip', 'panel', 'inspector', 'topbar', 'rail', 'dock']
 
 type Chord = ReturnType<typeof import('./commands').parseChord>
@@ -86,7 +86,7 @@ beforeAll(async () => {
 
 describe('D32 command audit', () => {
   it('finds the registering modules', () => {
-    for (const p of ['./globalCommands.ts', '../suites/catalogue/catalogueCommands.ts', '../suites/generate/GenerateSuite.tsx', '../suites/edit/editCommands.ts', '../suites/animate/animateCommands.ts'])
+    for (const p of ['./globalCommands.ts', '../ui2/bin/binCommands.ts', '../suites/generate/generateCommands.ts', '../suites/edit/editCommands.ts', '../suites/animate/animateCommands.ts'])
       expect(REGISTERING).toContain(p)
     expect(all.length).toBeGreaterThan(150)
   })

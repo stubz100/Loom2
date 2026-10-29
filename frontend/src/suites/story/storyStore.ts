@@ -515,7 +515,7 @@ export const useStory = create<StoryState>()((set, get) => {
       const s = get().selected; if (!s) return
       if (s.kind === 'entry') { set({ selected: null }); void useLibrary.getState().remove(s.id); return }
       if (s.kind === 'panel') {
-        void askConfirm({ title: `Delete the saved panel "${s.id}"?`, text: 'Its fields and picture go; what it made stays in the Catalogue.', okLabel: 'Delete', danger: true })
+        void askConfirm({ title: `Delete the saved panel "${s.id}"?`, text: 'Its fields and picture go; what it made stays in the Bin.', okLabel: 'Delete', danger: true })
           .then(async (ok) => { if (!ok) return; const { useGenerate } = await import('../generate/generateStore'); await useGenerate.getState().deletePreset(s.id); if (get().selected?.id === s.id) set({ selected: null }) })
         return
       }
@@ -815,7 +815,7 @@ export const useStory = create<StoryState>()((set, get) => {
         await unwrap(http.DELETE('/story/voices/{vid}', { params: { path: { vid: id } } }))
         if (get().voiceId === id) set({ voiceId: null })
         await get().loadVoices(); await get().loadProfiles()
-        toast('Voice deleted — its spoken lines stay in the Catalogue', 'info')
+        toast('Voice deleted — its spoken lines stay in the Bin', 'info')
       } catch (e) { toast(`Delete voice: ${detail(e)}`) }
     },
     voiceLine: async (nodeId, index) => {                                                           // the speaker's voice, else the fallback picked under the lines

@@ -65,4 +65,3 @@ button.w-ready-item { background: transparent; border: 1px dashed var(--line2); 
 .w-facts > span:first-child { color: var(--fg3); }
 .w-facts ul { margin: 0; padding-left: 14px; display: flex; flex-direction: column; gap: 2px; }
 .w-facts .link.active { font-weight: 600; }
-.w-edit-strip .animate-levels, .w-edit-strip .graph-pill { display: none; }   /* U3f: the bench in World — World's Make | Edit | Clay are the modes */

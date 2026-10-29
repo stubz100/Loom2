@@ -82,7 +82,7 @@ def main() -> int:
             return {"frames": n, "with_face": sum(1 for s in sc if s >= 0.5), "share": round(sum(1 for s in sc if s >= 0.5) / n, 3) if n else None}
 
         def make_final(shot: str, stage: str) -> dict:
-            url = f"http://127.0.0.1:1420/?token={TOKEN}&port={PORT}&ui=2#shots/{shot}/performance"
+            url = f"http://127.0.0.1:1420/?token={TOKEN}&port={PORT}#shots/{shot}/performance"
             r = subprocess.run(["node", str(ROOT / "scripts" / "d158_make_final.cjs"), url, str(PORT), TOKEN, stage], capture_output=True, text=True, timeout=600)
             print(r.stdout.strip()[-400:], r.stderr.strip()[-400:], flush=True)
             if r.returncode:

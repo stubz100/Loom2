@@ -15,7 +15,7 @@ async function boot() {
   const commands = await import('./commands')
   const keymap = await import('./keymap')
   commands.registerCommands([
-    cmd('cat.alpha', 'catalogue', 'K'), cmd('cat.beta', 'catalogue', 'X'), cmd('cat.next', 'catalogue', 'ArrowRight'),
+    cmd('cat.alpha', 'bin', 'K'), cmd('cat.beta', 'bin', 'X'), cmd('cat.next', 'bin', 'ArrowRight'),
     cmd('edit.brush', 'edit', 'B'), cmd('global.help', 'global', '?'), cmd('global.find', 'global', 'Ctrl+F', { alt: ['F3'] }),
   ])
   return { commands, keymap }
@@ -30,8 +30,8 @@ describe('remap', () => {
     const keep = commands.command('cat.alpha')!
     expect(keep.keys).toBe('G')
     expect(commands.titleFor(keep)).toBe('alpha (G)')
-    expect(commands.handleKeyFor('catalogue', key('k'))).toBe(false)
-    expect(commands.handleKeyFor('catalogue', key('g'))).toBe(true)
+    expect(commands.handleKeyFor('bin', key('k'))).toBe(false)
+    expect(commands.handleKeyFor('bin', key('g'))).toBe(true)
     expect(keep.run).toHaveBeenCalledTimes(1)
     expect(commands.defaultKeysOf('cat.alpha')).toEqual({ keys: 'K', alt: undefined })
   })

@@ -110,7 +110,8 @@ interface SequenceState {
  *  its revision moved past what the page holds, unless a change of the page's own is on its way (its reply brings the new revision). */
 export function onTimelineUpdated(e: { id: string; revision: number }): void {
   const s = useSequence.getState()
-  if (!s.current || s.current.id !== e.id || e.revision <= s.current.revision || s.cutBusy || s.saving) return
+  // an effect's window open: its call's reply carries the newer cut (reopening here dropped the track selected under it)
+  if (!s.current || s.current.id !== e.id || e.revision <= s.current.revision || s.cutBusy || s.saving || s.fxOpen) return
   void s.open(e.id)
 }
 
@@ -265,7 +266,7 @@ export const useSequence = create<SequenceState>()((set, get) => ({
     try {
       const d = get().delivery                                                  // CE5: a FilmCraft cut's movie as the Inspector says
       await unwrap(http.POST('/timelines/{tl_id}/render', { params: { path: { tl_id: cur.id } }, body: { movie, ...(movie && cur.file ? { delivery: d.format, burn_captions: d.burn, captions_file: d.file } : {}) } }))
-      s.toast(movie ? 'Movie queued — an MP4 in the cut\'s folder and the Catalogue when it is done (CPU, no engine)'
+      s.toast(movie ? 'Movie queued — an MP4 in the cut\'s folder and the Bin when it is done (CPU, no engine)'
         : 'Draft render queued — the clip lands in the Clips bin when it is done (CPU, no engine)', 'success')
       await s.refreshAll()
     } catch (e) { s.toast(`Render failed: ${(e as ApiError).detail ?? e}`, 'error') }

@@ -11,7 +11,7 @@ import { canHold, HAND_LABEL, holders } from './held'
 import { profilesForMentions, useStory } from '../story/storyStore'
 import { useMakeFor } from '../../store/origin'
 import { useMotion } from './motion/motionStore'
-import { navigate, UI2 } from '../../frame/router'
+import { navigate } from '../../frame/router'
 
 const hasStage = () => !!st().current
 const sel = () => st().object(st().selected)
@@ -40,7 +40,7 @@ registerCommands([
   { id: 'stage.rename', scope: 'stage', label: 'Rename stage…', icon: Frame, placement: ['inspector', 'context'], when: hasStage,
     run: () => void askText({ title: 'Rename stage', initial: st().current?.name ?? '', placeholder: 'stage name' }).then((n) => { if (n?.trim()) void st().rename(n.trim()) }) },
   { id: 'stage.delete', scope: 'stage', label: 'Delete stage', icon: Trash2, placement: ['inspector', 'context'], when: hasStage,
-    run: () => void askConfirm({ title: 'Delete this stage?', text: 'The document goes; assets stay in the Catalogue.', okLabel: 'Delete', danger: true }).then((ok) => { if (ok) void st().destroy() }) },
+    run: () => void askConfirm({ title: 'Delete this stage?', text: 'The document goes; assets stay in the Bin.', okLabel: 'Delete', danger: true }).then((ok) => { if (ok) void st().destroy() }) },
   tool('select', 'Select', MousePointer2, 'W'), tool('move', 'Move', Move3d, 'G'), tool('rotate', 'Rotate', Rotate3d, 'R'), tool('scale', 'Scale', Scaling, 'S'),
   tool('path', 'Path (click the floor to add to the figure\'s path)', Route, 'P'),                                           // CA1
   { id: 'stage.path.clear', scope: 'stage', label: 'Clear the path', icon: X, placement: ['panel', 'context'], when: () => !!sel()?.path?.length, run: () => st().clearPath(sel()!.id) },
@@ -138,8 +138,8 @@ registerCommands([
   { id: 'stage.lineup.send', scope: 'stage', label: 'Send to a new stage…', icon: Plus, placement: ['panel'], hint: "the line-up's figures and props, where they stand, in a stage of their own",
     when: () => st().current?.purpose === 'lineup', run: () => void st().sendLineup(null) },
   { id: 'stage.lineup.pose', scope: 'stage', label: 'Stand them all', icon: PersonStanding, placement: ['panel'], when: () => st().current?.purpose === 'lineup', run: () => st().poseAll('stand') },
-  { id: 'stage.object.prototype', scope: 'stage', label: UI2 ? 'Prototype ▸ a draft entity' : 'Prototype ▸ a new idea', icon: FlaskConical, placement: ['inspector', 'context'],
-    hint: UI2 ? "a draft character (its body and shell) or prop (its model and height) in World, with Clay's view of it as its hero" : "a new idea in Cast from this free figure (its body and shell) or mesh (its model and height), with Clay's view of it as its picture",
+  { id: 'stage.object.prototype', scope: 'stage', label: 'Prototype ▸ a draft entity', icon: FlaskConical, placement: ['inspector', 'context'],
+    hint: "a draft character (its body and shell) or prop (its model and height) in World, with Clay's view of it as its hero",
     when: () => { const o = sel(); return !!o && !o.profile_id && (o.kind === 'mannequin' || (o.kind === 'mesh' && !!o.asset_id)) && !!viewport.snapshot },
     run: () => void st().prototypeObject(st().selected!) },
   { id: 'stage.object.freeCopy', scope: 'stage', label: 'Make a free copy', icon: Copy, placement: ['inspector', 'context'], hint: "beside it, free of Cast: its body and shell (or its model and height, or a set's faces) as they are now, to experiment with",

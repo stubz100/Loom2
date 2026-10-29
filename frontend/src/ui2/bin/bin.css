@@ -39,3 +39,4 @@
 .bin-grid-host { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .b-grid.bin-grid { display: block; padding: 0; }
 .b-node.drop-over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.bin-bar .meta.picking { color: var(--fg); display: inline-flex; align-items: center; gap: 6px; }   /* a pick from a panel (was in catalogue.css) */

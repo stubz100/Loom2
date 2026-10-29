@@ -154,3 +154,35 @@ The author's answers (2026-10-29), recorded as D159, are in the last column.
 | Q4 | A thing with no owner: Image's free work → Sketches; an import → the home it is dropped on, else Imports? | yes | as proposed (Sketches) |
 | Q5 | Moving a thing that holds a role (hero, reference, A-pose) out of its home: ask, refuse, or let it carry the role? | ask, naming the role it loses | as proposed |
 | Q6 | Keep "Bin" as the place's name, and "catalogue" only inside the code for the asset index? | yes | Bin; the frontend's Catalogue code deleted |
+
+## 7. What the new UI does not reach yet (found for B2, 2026-10-29)
+
+Mapping the 79 old-shell e2e scenarios onto the new shell found these features, built in the old shell, that nothing in the new one
+opens. D157 dropped none of them (it keeps the Flow's List view, Q11). Deleting the old shell now would lose them, so B2 builds them into
+the new UI first (B2a), moves the scenarios onto it, then removes the old shell (B2b). The author may drop any of them instead.
+
+| Where | What | The old part | Size |
+| --- | --- | --- | --- |
+| World | the body editor: height, build, attachments, the figure's sliders, ♀ / ♂, hands at rest | `CastBody` (Cast's sheet) | M |
+| World | bound colours on the sheet | Cast's sheet | S |
+| World | a prop's height, edited | Cast's sheet (World's header shows it only) | S |
+| World | the skeleton bench: the reference's points and the figure's, Fit again, the version's poses | `SkeletonBench` | M |
+| World | the test animation: a turn on the spot, performed with the reference | `story.cast.testAnimRef` | M |
+| World | *Use as the A-pose front / back* on a creation | Cast's tile menu | S |
+| World | the place set builder: the overlay, the handles, the kind, the face materials, *Bake again* | `PlaceSetSection` | M |
+| World | the Line-up ▶ and *Send to a stage* | Cast | M |
+| World | a prop's turning 3D model | Cast's prop page | S |
+| World | Edit's own foot: the *Save •* mark, Export PNG / PSD, Close | Image · Edit's foot | S |
+| Shots | the Flow's List view: by scene, a search, the shot's Recipe section, *Voice all lines (N)* | `ShotsBoard` | L |
+| Shots | *Play* the Flow | `PlayView` | M |
+| Shots | the recipe graph over a shot's levels, *Open its recipe* in the Flow | `AnimateGraph`, `FlowRecipe` | M |
+| Shots | a still from the stage: the frame form with *Render frame* | Image · Make › From a stage (`ShotTab`) | M |
+| Shots | Clay's *Prototype ▸* makes an idea (the ideas store is folded into Sketches) | Clay | S |
+| Bin | *New angle…* | `AngleSheet` | S |
+| Bin | the quick starts on a picture: *Select subject…*, *Upscale…*, *Make a 3D prop…*; the deep link into Edit with an AI operation | `cat.start.*`, `openWith` | M |
+| Bin | *Add to ‹entity› ▸* on the Bin's own commands (today the Catalogue's `cat.addTo.*`) | `addToCast` | S |
+| Everywhere | a part whose code fails to load says so and recovers, instead of taking the shell down | `lazySuite`'s boundary | S |
+
+The scenarios split as: about 55 move onto the new shell, about 15 are covered by new-shell ones already, and about 12 go with what D157
+and D159 dropped (the tabs as drop targets, the For chip, the album's pages, Expand, LoRA training, the ideas store, the Catalogue's loupe
+hub and grouping).

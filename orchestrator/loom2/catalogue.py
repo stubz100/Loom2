@@ -104,6 +104,9 @@ class AssetQuery(BaseModel):
     session_id: str | None = None
     collection_id: str | None = None
     group_id: str | None = None                 # D34: the assets placed on that group's page
+    home_id: str | None = None                  # U8 (D157, 05 §2.3): a Bin home — what is on its pages and in every home under it (the route expands it)
+    group_ids: list[str] = Field(default_factory=list)   # U8: the pages a home's listing reads (set from home_id by the route)
+    unplaced_too: bool = False                  # U8: with them, what is on no page (the imports home)
     job_id: str | None = None
     sort: Sort = "created_desc"
     group: GroupMode = "none"
@@ -498,6 +501,12 @@ class Catalogue:
                 where.append(f"{col} = ?"); args.append(val)
         if q.group_id:
             where.append("id IN (SELECT asset_id FROM placements WHERE group_id = ?)"); args.append(q.group_id)
+        if q.group_ids or q.unplaced_too:                                                 # U8: a Bin home's pages (and, for imports, no page)
+            parts = [f"id IN (SELECT asset_id FROM placements WHERE group_id IN ({','.join('?' * len(q.group_ids))}))"] if q.group_ids else []
+            args.extend(q.group_ids)
+            if q.unplaced_too:
+                parts.append("id NOT IN (SELECT asset_id FROM placements)")
+            where.append(f"({' OR '.join(parts)})")
         if q.collection_id:
             where.append("id IN (SELECT asset_id FROM collection_assets WHERE collection_id = ?)"); args.append(q.collection_id)
         if q.group_by and q.group_by != "none" and q.group_key is not None:

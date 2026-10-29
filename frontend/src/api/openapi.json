@@ -1605,6 +1605,149 @@
         "title": "BinItem",
         "type": "object"
       },
+      "BinNode": {
+        "description": "U8 (05 §2.1): a home in the Bin's tree — its own things and its role pages' (`count`), with the homes under it (`total`).",
+        "properties": {
+          "children": {
+            "items": {
+              "$ref": "#/components/schemas/BinNode"
+            },
+            "title": "Children",
+            "type": "array"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pages": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Pages",
+            "type": "array"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "path",
+          "name",
+          "count",
+          "total",
+          "pages",
+          "children"
+        ],
+        "title": "BinNode",
+        "type": "object"
+      },
+      "BinThing": {
+        "properties": {
+          "asset": {
+            "$ref": "#/components/schemas/AssetRecord"
+          },
+          "home_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Home Id"
+          },
+          "path": {
+            "default": "",
+            "title": "Path",
+            "type": "string"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Roles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "asset",
+          "roles",
+          "home_id",
+          "path"
+        ],
+        "title": "BinThing",
+        "type": "object"
+      },
+      "BinThings": {
+        "properties": {
+          "home_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Home Id"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BinThing"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "path": {
+            "default": "",
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "home_id",
+          "path",
+          "items"
+        ],
+        "title": "BinThings",
+        "type": "object"
+      },
+      "BinTree": {
+        "properties": {
+          "homes": {
+            "items": {
+              "$ref": "#/components/schemas/BinNode"
+            },
+            "title": "Homes",
+            "type": "array"
+          },
+          "trash": {
+            "title": "Trash",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "homes",
+          "trash"
+        ],
+        "title": "BinTree",
+        "type": "object"
+      },
       "BindBody": {
         "properties": {
           "shot_id": {
@@ -25808,6 +25951,44 @@
           },
           {
             "in": "query",
+            "name": "home_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Home Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "group_ids",
+            "required": false,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Group Ids",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "unplaced_too",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Unplaced Too",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
             "name": "job_id",
             "required": false,
             "schema": {
@@ -26394,6 +26575,44 @@
                 }
               ],
               "title": "Group Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "home_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Home Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "group_ids",
+            "required": false,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Group Ids",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "unplaced_too",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Unplaced Too",
+              "type": "boolean"
             }
           },
           {
@@ -27024,6 +27243,115 @@
           }
         },
         "summary": "Bin Home",
+        "tags": [
+          "groups"
+        ]
+      }
+    },
+    "/bin/homes/{gid}/items": {
+      "get": {
+        "description": "U8 (05 §2.2): a home's things and everything below it, newest first, each with its roles and its home.",
+        "operationId": "bin_home_items_bin_homes__gid__items_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "gid",
+            "required": true,
+            "schema": {
+              "title": "Gid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BinThings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bin Home Items",
+        "tags": [
+          "groups"
+        ]
+      }
+    },
+    "/bin/search": {
+      "get": {
+        "description": "U8 (05 §2.2): a search across every home — the prompt, the name, the tags, a seed — each thing with its home.",
+        "operationId": "bin_search_bin_search_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BinThings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bin Search",
+        "tags": [
+          "groups"
+        ]
+      }
+    },
+    "/bin/tree": {
+      "get": {
+        "description": "U8 (D157, 05 §2.1): the Bin's tree of homes with their counts (`imports` holds the things on no page), and the Trash's count.",
+        "operationId": "bin_tree_bin_tree_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BinTree"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Bin Tree",
         "tags": [
           "groups"
         ]

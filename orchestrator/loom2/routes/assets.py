@@ -50,6 +50,10 @@ class PurgeRequest(BaseModel):
 @router.get("/assets", response_model=AssetPage)
 async def assets_list(svc: Svc, q: Annotated[AssetQuery, Query()]):
     _, cat, _ = svc.require_project()
+    if q.home_id:                                                     # U8: a Bin home and every home under it (the Dock's drawer)
+        from ..bins import subtree_pages
+        ids, loose = await asyncio.to_thread(subtree_pages, svc.require_groups(), q.home_id)
+        q = q.model_copy(update={"home_id": None, "group_ids": ids or ["-"], "unplaced_too": loose})
     return await asyncio.to_thread(cat.list, q)
 
 

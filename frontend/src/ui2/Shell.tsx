@@ -9,7 +9,6 @@ import { CommandPalette } from '../frame/CommandPalette'
 import { runCommand } from '../frame/commands'
 import { ContextMenuHost } from '../frame/ContextMenu'
 import { Dock } from '../frame/Dock'
-import { Help } from '../frame/Help'
 import { HelpOverlay } from '../frame/HelpOverlay'
 import { ModelsSheet } from '../frame/ModelsSheet'
 import { ProjectDialog } from '../frame/ProjectDialog'
@@ -20,6 +19,7 @@ import { TopBar } from '../frame/TopBar'
 import { useKeyboardMap } from '../frame/useKeyboardMap'
 import { followNavigation, LAYERS, useLayer } from './layers'
 import { EpisodeLayer } from './episode/EpisodeLayer'
+import { BinLayer } from './bin/BinLayer'
 import { ShotsLayer } from './shots/ShotsLayer'
 import { WorldLayer } from './world/WorldLayer'
 import { KeyHosts } from '../frame/keyHosts'
@@ -37,13 +37,8 @@ function LayerTabs() {
   ))}</>
 }
 
-/** What a layer says until its wave builds it: its name and a few words (rule 11: the why behind the ?). */
-const PENDING: Record<string, [string, string]> = {
-  world: ['World', 'Characters, props and places, made and readied for Clay — wave U3 (03-ui-world.md).'],
-  shots: ['Shots', 'The Flow, and each shot refined through Clay, Performance and Final — waves U4–U6 (04-ui-shots.md).'],
-  episode: ['Episode', 'The cut of the shots’ finals — wave U7 (05-ui-episode-and-bin.md).'],
-  bin: ['Bin', 'Every asset in its home — wave U8 (05-ui-episode-and-bin.md).'],
-}
+/** Each layer's name (the main region's label). */
+const NAME: Record<string, string> = { world: 'World', shots: 'Shots', episode: 'Episode', bin: 'Bin' }
 
 export function Shell() {
   const init = useSession((s) => s.init)
@@ -57,13 +52,13 @@ export function Shell() {
   useEffect(() => followNavigation(), [])
   useEffect(() => { document.body.classList.toggle('density-compact', ui.density === 'compact') }, [ui.density])
   useEffect(() => { applyTheme(ui.theme) }, [ui.theme])
-  const [name, why] = PENDING[layer]
+  const name = NAME[layer]
   return (
     <div className="frame ui2" data-layer={layer}>
       <TopBar tabs={<LayerTabs />} />
       <Banner />
-      <main className={`ui2-layer${layer !== 'bin' ? ' filled' : ''}`} aria-label={name}>
-        {layer === 'world' ? <WorldLayer /> : layer === 'shots' ? <ShotsLayer /> : layer === 'episode' ? <EpisodeLayer /> : <div className="ui2-pending"><b>{name}</b><span>not built yet <Help text={why} /></span></div>}
+      <main className="ui2-layer filled" aria-label={name}>
+        {layer === 'world' ? <WorldLayer /> : layer === 'shots' ? <ShotsLayer /> : layer === 'episode' ? <EpisodeLayer /> : <BinLayer />}
       </main>
       <Dock />
       <Toasts />

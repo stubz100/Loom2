@@ -271,6 +271,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/bin/homes/{gid}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Bin Home Items
+         * @description U8 (05 §2.2): a home's things and everything below it, newest first, each with its roles and its home.
+         */
+        get: operations["bin_home_items_bin_homes__gid__items_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bin/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Bin Search
+         * @description U8 (05 §2.2): a search across every home — the prompt, the name, the tags, a seed — each thing with its home.
+         */
+        get: operations["bin_search_bin_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bin/tree": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Bin Tree
+         * @description U8 (D157, 05 §2.1): the Bin's tree of homes with their counts (`imports` holds the things on no page), and the Trash's count.
+         */
+        get: operations["bin_tree_bin_tree_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/blobs/{sha}": {
         parameters: {
             query?: never;
@@ -5376,6 +5436,58 @@ export interface components {
             page: string;
             /** Roles */
             roles: string[];
+        };
+        /**
+         * BinNode
+         * @description U8 (05 §2.1): a home in the Bin's tree — its own things and its role pages' (`count`), with the homes under it (`total`).
+         */
+        BinNode: {
+            /** Children */
+            children: components["schemas"]["BinNode"][];
+            /** Count */
+            count: number;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Pages */
+            pages: string[];
+            /** Path */
+            path: string;
+            /** Total */
+            total: number;
+        };
+        /** BinThing */
+        BinThing: {
+            asset: components["schemas"]["AssetRecord"];
+            /** Home Id */
+            home_id: string | null;
+            /**
+             * Path
+             * @default
+             */
+            path: string;
+            /** Roles */
+            roles: string[];
+        };
+        /** BinThings */
+        BinThings: {
+            /** Home Id */
+            home_id: string | null;
+            /** Items */
+            items: components["schemas"]["BinThing"][];
+            /**
+             * Path
+             * @default
+             */
+            path: string;
+        };
+        /** BinTree */
+        BinTree: {
+            /** Homes */
+            homes: components["schemas"]["BinNode"][];
+            /** Trash */
+            trash: number;
         };
         /** BindBody */
         BindBody: {
@@ -15165,6 +15277,9 @@ export interface operations {
                 session_id?: string | null;
                 collection_id?: string | null;
                 group_id?: string | null;
+                home_id?: string | null;
+                group_ids?: string[];
+                unplaced_too?: boolean;
                 job_id?: string | null;
                 sort?: "created_desc" | "created_asc" | "model" | "size_desc";
                 group?: "none" | "batch" | "lineage" | "session" | "model";
@@ -15310,6 +15425,9 @@ export interface operations {
                 session_id?: string | null;
                 collection_id?: string | null;
                 group_id?: string | null;
+                home_id?: string | null;
+                group_ids?: string[];
+                unplaced_too?: boolean;
                 job_id?: string | null;
                 sort?: "created_desc" | "created_asc" | "model" | "size_desc";
                 group?: "none" | "batch" | "lineage" | "session" | "model";
@@ -15715,6 +15833,88 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bin_home_items_bin_homes__gid__items_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                gid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BinThings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bin_search_bin_search_get: {
+        parameters: {
+            query?: {
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BinThings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bin_tree_bin_tree_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BinTree"];
                 };
             };
         };

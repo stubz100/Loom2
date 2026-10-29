@@ -1,0 +1,13 @@
+/* U8 (D157, proto01_UI2 05 §2.2): the Bin — the tree with its search, the home's grid, the Inspector (World's tiles and Inspector rules). */
+.b-layer { display: grid; grid-template-columns: minmax(260px, 320px) 1fr 300px; height: 100%; min-height: 0; width: 100%; }
+.b-left { display: flex; flex-direction: column; gap: 8px; min-height: 0; padding: 10px; box-sizing: border-box; border-right: 1px solid var(--line); }
+.b-search { width: 100%; box-sizing: border-box; }
+.b-tree { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 1px; font-size: 12px; }
+.b-node { display: flex; align-items: center; gap: 2px; border-radius: 4px; border: 1px solid transparent; }
+.b-node.active { border-color: var(--accent); }
+.b-chev { width: 16px; height: 18px; display: inline-flex; align-items: center; justify-content: center; padding: 0; border: 0; background: none; color: var(--fg3); }
+.b-open { flex: 1; min-width: 0; display: flex; justify-content: space-between; gap: 8px; padding: 2px 6px 2px 2px; border: 0; background: none; color: var(--fg); text-align: left; cursor: pointer; }
+.b-open span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
+.b-open .n { color: var(--fg3); font-variant-numeric: tabular-nums; }
+.b-audio { display: flex; align-items: center; justify-content: center; height: 100%; padding: 6px; font-size: 11px; color: var(--fg2); text-align: center; }
+.b-player { width: 100%; }

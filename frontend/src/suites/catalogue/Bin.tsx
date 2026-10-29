@@ -9,7 +9,7 @@
 // the `bin.*` commands of catalogueCommands.ts (D32: every action a command; V59), run on the tile through `onBinTile`.
 import { Trash2, UserRound } from 'lucide-react'
 import { madeForIdea, prototypeMenu } from '../story/prototype'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Asset } from '../../api/types'
 import { CommandButton } from '../../frame/CommandButton'
 import { showMenu } from '../../frame/ContextMenu'
@@ -103,7 +103,8 @@ function verbs(a: Asset, suite: string): Verb[] {
   return [...edit, ...plane, ...(first ? [first] : []), ...rest.filter((x) => x !== first)]
 }
 
-export function Bin() {
+/** `places`: U8 (D157) — the new shell's drawer puts the Bin's homes in place of the places below. */
+export function Bin({ places }: { places?: ReactNode } = {}) {
   const project = useSession((s) => s.project)
   const suite = useSession((s) => s.ui.suite)
   const pick = useSession((s) => s.ui.pick) ?? null
@@ -144,14 +145,14 @@ export function Bin() {
   const endPick = () => useSession.getState().setUi({ pick: null })
   return (
     <div className="bin">
-      <nav className="bin-places" aria-label="Bin places">
+      {places ?? <nav className="bin-places" aria-label="Bin places">
         <button className={place === 'unprocessed' ? 'active' : ''} onClick={() => open('unprocessed')}>Unprocessed</button>
         <button className={place === 'all' ? 'active' : ''} onClick={() => open('all')}>Library</button>
         {groups.length > 0 && <span className="bin-label">Album</span>}
         {groups.map((g) => <button key={g.id} className={place === g.id ? 'active' : ''} onClick={() => open(g.id)} title={`${g.assets} items`}>{g.name}<small>{g.assets}</small></button>)}
         <button className={`bin-trash${inTrash ? ' active' : ''}`} onClick={() => open('trash')} title="What was moved to the trash: restore it, or delete it permanently">
           <Trash2 size={12} /> Trash{trashed > 0 && <small>{trashed}</small>}</button>
-      </nav>
+      </nav>}
       <div className="bin-main">
         <div className="bin-bar">
           <span className="segmented" role="group" aria-label="Bin type">

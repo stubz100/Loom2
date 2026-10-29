@@ -7,8 +7,10 @@ from __future__ import annotations
 import asyncio
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Query
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, ConfigDict, Field
+
+from ..catalogue import AssetRecord
 
 from ..groups import ROOT_ID, GroupRecord
 from ..schemas import AlbumNode, ChangedGroups, GroupDeleted, GroupPage, LayoutReply, Location, Ungrouped
@@ -91,6 +93,66 @@ async def bin_home(svc: Svc, body: HomeAsk):
     g = await asyncio.to_thread(home, groups, body.path)
     svc.group_changed([g.id])
     return g.model_dump()
+
+
+class BinNode(BaseModel):
+    """U8 (05 §2.1): a home in the Bin's tree — its own things and its role pages' (`count`), with the homes under it (`total`)."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    id: str
+    path: str
+    name: str
+    count: int
+    total: int
+    pages: list[str] = Field(default_factory=list)   # its role pages (a version's reference set and candidates): a page id → this home
+    children: list[BinNode] = Field(default_factory=list)
+
+
+class BinTree(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    homes: list[BinNode]
+    trash: int
+
+
+class BinThing(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    asset: AssetRecord
+    roles: list[str] = Field(default_factory=list)   # hero, reference, a_pose_front, a_pose_back, set_picture, model, candidate, final, frame, clip …
+    home_id: str | None = None
+    path: str = ""                                   # its home's path (`imports` for a thing on no page)
+
+
+class BinThings(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    home_id: str | None = None
+    path: str = ""
+    items: list[BinThing]
+
+
+@router.get("/bin/tree", response_model=BinTree)
+async def bin_tree(svc: Svc):
+    """U8 (D157, 05 §2.1): the Bin's tree of homes with their counts (`imports` holds the things on no page), and the Trash's count."""
+    from ..bins import home, tree
+    groups = svc.require_groups()
+    await asyncio.to_thread(home, groups, "imports")
+    return await asyncio.to_thread(tree, groups)
+
+
+@router.get("/bin/homes/{gid}/items", response_model=BinThings)
+async def bin_home_items(svc: Svc, gid: str):
+    """U8 (05 §2.2): a home's things and everything below it, newest first, each with its roles and its home."""
+    from ..bins import home_items
+    ws, _, _ = svc.require_project()
+    try:
+        return await asyncio.to_thread(home_items, svc.require_groups(), ws, gid)
+    except KeyError:
+        raise HTTPException(404, "no such home")
+
+
+@router.get("/bin/search", response_model=BinThings)
+async def bin_search(svc: Svc, q: str = ""):
+    """U8 (05 §2.2): a search across every home — the prompt, the name, the tags, a seed — each thing with its home."""
+    from ..bins import search
+    return await asyncio.to_thread(search, svc.require_groups(), q)
 
 
 @router.post("/groups", response_model=GroupRecord)

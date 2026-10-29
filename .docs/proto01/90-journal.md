@@ -12699,3 +12699,59 @@ undo.
 - a bed across a shot being taken off blocks the Assemble (FilmCraft's sync rule).
 
 Next is U8: the Bin and parity.
+
+## 2026-10-29 10:55 — U8a: the Bin — every creation in its home, as a layer and as the Dock's drawer (D157; proto01_UI2 05 §2)
+
+**The Bin layer** (`ui2/bin/`) is the fourth layer's place, the last one built. The new shell shows no "not built yet" any more.
+
+- **The left:** a search across every home (the prompt, the name, the tags, a seed), and the tree of homes with their counts. The tree holds
+  World's characters, props and places with their versions, the Look, the Sketches, the shots with their versions, the cuts, the imports
+  and the Trash.
+- **The centre:** the home's path by its names (`bin/world/character/Ines/v1`), the kind chips (all, pictures, clips, audio, models) and
+  the grid. A parent home shows everything below it. Each thing carries its role as a badge: hero, ref, A-pose front / back, set picture,
+  model, final, frame, clip. A tile drags to wherever it is used.
+- **The Inspector:** the preview or the player; the home and the roles; how it was made (the model, the time, the seed) and its run's size;
+  the tags and the prompt.
+- **The Inspector's verbs:** *Open where it belongs ▸* (World's entity version, the Look, the Sketches, the shot, the cut), *Move to…*
+  (the homes, also as a submenu on a tile's right-click), *Tag…*, *Trash* with its Undo, and *Restore* in the Trash.
+
+**The backend** (`bins.py`, routes beside `/bin/homes`):
+
+- `GET /bin/tree`: each home's own things and its role pages' (a version's reference set and candidates are roles inside it, not
+  places), the totals with the homes under it, the Trash's count.
+- `GET /bin/homes/{id}/items`: the roles a home's record gives — a version's as World shows them, a shot version's final, frame and clip.
+- `GET /bin/search`.
+- `imports` shows the things on no page (Image's free work, the files brought in, a stage's own passes; 05 §2.1: an asset with no
+  owner). Nothing is moved for it; Unprocessed retires with the old Catalogue.
+- A cut's movie and draft now land in the cut's own home, `episode/<cut>`.
+
+**The Dock's drawer** (05 §2.3): in World, Shots and Episode the Dock offers the Bin; in the Bin layer it does not. The drawer is D95's Bin
+(its grid, its double-click verb of the mode, its right-click verbs, its drag) with the homes' tree in place of Unprocessed, the Library
+and the album. `/assets?home_id=` lists a home and everything under it through the catalogue; the route expands it.
+
+**Seen on the copy of The Last Ferry:**
+
+- The tree: World 24 (Characters 11, Props 4, Places 8, Look 1), Shots 24 (Stay 13 …), Imports 31, Trash 0.
+- Characters: Ines and Tomas with their badges (★ hero, ref, A-pose front / back); a candidate's Inspector says `world/character/Ines/v1 ·
+  candidate · klein-9b · 33 s · seed 1`.
+- A search for "ferry" finds 12.
+- The drawer under World's Make shows the World home's 24 with the Bin's verbs.
+
+**Tests:**
+
+- `test_bin_u8.py`: the tree's order and counts, the roles, a parent's things, the imports, the search, the drawer's listing, a cut's
+  home.
+- `bin.test.ts` 3: the path by its names, a role page's home, the kind chips, where a thing belongs, the homes to move to.
+- An e2e scenario: a take made for a shot is in its shot's home — the grid, the Inspector's home and role, Tag…, Open its shot ▸ — and the
+  drawer in World shows it under its shot.
+
+**Checks:** offline 731 passed; Vitest 644 + 3 skipped; typecheck, build and lint clean (no new warning); e2e 90/91 alone, then the Bin's scenario 1/1 alone after a fix (*Open its shot ▸* from the Bin opened no shot: the Bin reads no shots of its own — they are read first now); `agents_check`,
+`model_literals_check` and `settings_audit` (321, 0) clean; the API contract regenerated.
+
+**Owed in U8:**
+
+- the loupe, compare and *Detach* in the Bin (05 §2.2, D155);
+- Sound in Episode's column (the drawer's audio, U7's note);
+- a scenario per old one where the new shell has none (the parity), then the author's click-through.
+
+The new UI as the default and the old shell's removal wait for that click-through.

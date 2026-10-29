@@ -17,6 +17,7 @@ export interface Query {
   tags_any: string[]; aspect?: 'landscape' | 'portrait' | 'square'; has_children?: boolean; search: string
   sort: Sort; group: GroupMode; collection_id?: string; root_id?: string; created_from?: string; created_to?: string; batch_id?: string; session_id?: string
   group_id?: string; date_preset?: DatePreset; has_document?: boolean
+  home_id?: string                                                 // U8 (D157): a Bin home and every home under it (the new shell's drawer)
   batch_label?: string; root_label?: string                       // chip labels only, never sent
 }
 export type GroupHeader = ApiGroupHeader
@@ -32,7 +33,7 @@ export function queryOf(q: Query, extra: Partial<AssetQueryParams> = {}): AssetQ
     kind: q.kind, suite: text(q.suite), model_id: text(q.model_id),
     tags_any: q.tags_any.length ? q.tags_any : undefined, aspect: q.aspect, has_children: q.has_children, has_document: q.has_document,
     search: text(q.search.trim()), collection_id: text(q.collection_id), root_id: text(q.root_id), created_from: text(q.created_from), created_to: text(q.created_to),
-    batch_id: text(q.batch_id), session_id: text(q.session_id), group_id: text(q.group_id), date_preset: q.date_preset,
+    batch_id: text(q.batch_id), session_id: text(q.session_id), group_id: text(q.group_id), home_id: text(q.home_id), date_preset: q.date_preset,
   }, extra)
   return Object.fromEntries(Object.entries(out).filter(([, v]) => v !== undefined)) as AssetQueryParams
 }

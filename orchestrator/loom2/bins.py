@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from .fsio import atomic_write_json, read_json_or, unlink, utc_now
+from .catalogue import AssetQuery
 from .groups import ROOT_ID, GroupRecord, GroupStore
 
 BINS_SCHEMA_VERSION = 2                            # U2e: 2 — the Unprocessed assets sorted by their origin
@@ -134,6 +135,10 @@ def owner_home(groups: GroupStore, ws: Any, origin: Any) -> GroupRecord | None:
         from .finals import FinalStore
         f = FinalStore(ws).get(ref)
         shot, version = (f.shot_id, f.shot_version) if f is not None else (None, None)
+    elif suite == "animate" and surface == "sequence" and ref.startswith("tl_"):     # U8: a cut's movie or draft lands in its home
+        from .timelines import TimelineStore
+        tl = TimelineStore(ws).get(ref)
+        return home(groups, f"episode/{tl.id}", {f"episode/{tl.id}": tl.name}) if tl is not None else None
     elif suite == "story" and ref.startswith("prf_"):
         prof = st.profile(ref)
         if prof is None:
@@ -159,6 +164,172 @@ def land(groups: GroupStore, ws: Any, origin: Any, asset_ids: list[str]) -> Grou
     if h is not None:
         groups.move([("asset", a) for a in loose], h.id)
     return h
+
+
+# ---- U8 (D157, proto01_UI2 05 §2): the Bin as a place — its tree, a home's things with their roles, a search across every home ------
+ORDER = ["world", "world/character", "world/prop", "world/place", "world/look", "world/sketches", "shots", "episode", "imports"]
+KIND_ROLE = {"reference": "reference", "candidates": "candidate"}   # a role page's role as its things carry it (World's names)
+
+
+def _rank(g: GroupRecord) -> tuple[int, str]:
+    path = g.path or ""
+    return (ORDER.index(path) if path in ORDER else len(ORDER), g.name.lower())
+
+
+def _live(groups: GroupStore, g: GroupRecord) -> list[str]:
+    out: list[str] = []
+    for it in g.items:
+        if it.kind == "asset":
+            a = groups.cat.get(it.id)
+            if a is not None and a.trashed_at is None:
+                out.append(it.id)
+    return out
+
+
+def _inside(groups: GroupStore, g: GroupRecord) -> tuple[list[GroupRecord], list[GroupRecord]]:
+    """A home's pages (its role pages, an album page inside it) and the homes under it."""
+    kids = [groups.groups[it.id] for it in g.items if it.kind == "group" and it.id in groups.groups]
+    return [k for k in kids if k.kind != "bin"], sorted((k for k in kids if k.kind == "bin"), key=_rank)
+
+
+def unplaced(groups: GroupStore) -> list[str]:
+    """The live assets on no page — Image's free work, a file brought in from disk, a stage's own passes: the Bin shows them in `imports`
+    (05 §2.1: an asset with no owner) until U8 retires Unprocessed with the old Catalogue."""
+    return [a.id for a in groups.cat.list(AssetQuery(folder="unprocessed", limit=2000)).items]    # the newest 2000 (the catalogue's page)
+
+
+def tree(groups: GroupStore) -> dict[str, Any]:
+    """U8 (05 §2.1): the Bin's tree — each home {id, path, name, count, total, pages, children}: its count is its own live things and its
+    role pages' (a version's reference set and candidates are roles inside it, not places), its total adds the homes under it; `imports`
+    counts the things on no page too. The Trash's count beside it."""
+    counts = groups.cat.counts()
+    loose = counts.get("unprocessed", 0)
+    with groups._lock:
+
+        def node(g: GroupRecord) -> dict[str, Any]:
+            pages, subs = _inside(groups, g)
+            count = len(set(_live(groups, g)).union(*(set(_live(groups, p)) for p in pages))) + (loose if g.path == "imports" else 0)
+            kids = [node(h) for h in subs]
+            return {"id": g.id, "path": g.path or "", "name": g.name, "count": count, "total": count + sum(k["total"] for k in kids),
+                    "pages": [p.id for p in pages], "children": kids}
+
+        def top(g: GroupRecord) -> bool:
+            par = groups.groups.get(groups.parent.get(("group", g.id)) or "")
+            return par is None or par.kind != "bin"
+        tops = sorted((g for g in groups.groups.values() if g.kind == "bin" and top(g)), key=_rank)
+        return {"homes": [node(g) for g in tops], "trash": counts.get("trash", 0)}
+
+
+def _roles(groups: GroupStore, ws: Any, g: GroupRecord) -> dict[str, list[str]] | None:
+    """The roles of a home's things when its record gives them: a version's (World's: hero, reference, A-pose front / back, set picture,
+    model; the rest candidates), a shot version's (its final, the frame and the clip it uses). None for any other home."""
+    parts = (g.path or "").split("/")
+    from .story import StoryStore
+    if len(parts) == 4 and parts[0] == "world":
+        prof = StoryStore(ws).profile(parts[2])
+        if prof is None or not any(v.id == parts[3] for v in prof.versions):
+            return None
+        return {x["asset"].id: x["roles"] for x in version_bin(groups, prof, parts[3])["items"]}
+    if len(parts) == 3 and parts[0] == "shots":
+        s = StoryStore(ws).shot(parts[1])
+        v = next((x for x in s.versions if x.id == parts[2]), None) if s is not None else None
+        if v is None:
+            return None
+        from .clips import ClipStore
+        from .finals import FinalStore
+        clips = ClipStore(ws)
+        out: dict[str, list[str]] = {}
+
+        def add(aid: str | None, role: str) -> None:
+            if aid and role not in out.setdefault(aid, []):
+                out[aid].append(role)
+        for f in FinalStore(ws).list():
+            if f.shot_id == s.id and (f.shot_version or s.current) == v.id and f.clip_id:
+                rec = clips.get(f.clip_id)
+                add(rec.asset_id if rec else None, "final")
+        add(v.frame_asset_id, "frame")
+        rec = clips.get(v.clip_id) if v.clip_id else None
+        add(rec.asset_id if rec else None, "clip")
+        return out
+    return None
+
+
+def home_items(groups: GroupStore, ws: Any, gid: str) -> dict[str, Any]:
+    """U8 (05 §2.2): what a home holds — its own things and its pages', and everything in the homes under it (a parent shows all below
+    it), newest first, each with its roles and its home. `imports` holds the things on no page too."""
+    with groups._lock:
+        top = groups.groups.get(gid)
+        if top is None or top.kind != "bin":
+            raise KeyError(gid)
+        seen: dict[str, dict[str, Any]] = {}
+
+        def walk(g: GroupRecord) -> None:
+            pages, subs = _inside(groups, g)
+            roles = _roles(groups, ws, g) or {}
+            for page, role in [(g, None), *[(p, KIND_ROLE.get(p.role or "", p.role)) for p in pages]]:
+                for aid in _live(groups, page):
+                    if aid not in seen:
+                        seen[aid] = {"asset": groups.cat.get(aid), "roles": roles.get(aid) or ([role] if role else []), "home_id": g.id, "path": g.path or ""}
+            if g.path == "imports":
+                for aid in unplaced(groups):
+                    seen.setdefault(aid, {"asset": groups.cat.get(aid), "roles": [], "home_id": g.id, "path": "imports"})
+            for h in subs:
+                walk(h)
+        walk(top)
+        items = [x for x in seen.values() if x["asset"] is not None]
+        items.sort(key=lambda x: x["asset"].created_at, reverse=True)
+        return {"home_id": top.id, "path": top.path or "", "items": items}
+
+
+def subtree_pages(groups: GroupStore, gid: str) -> tuple[list[str], bool]:
+    """U8 (05 §2.3): the pages a home's listing reads — the home, its role pages and every home under it with theirs — and whether it
+    reads what is on no page too (the imports home)."""
+    with groups._lock:
+        top = groups.groups.get(gid)
+        if top is None:
+            return [], False
+        out: list[str] = []
+
+        def walk(g: GroupRecord) -> None:
+            out.append(g.id)
+            pages, subs = _inside(groups, g)
+            out.extend(p.id for p in pages)
+            for h in subs:
+                walk(h)
+        walk(top)
+        return out, top.kind == "bin" and top.path == "imports"
+
+
+def where(groups: GroupStore, aid: str) -> GroupRecord | None:
+    """The home an asset is in (its page, or the home above its page); None on no page."""
+    gid = groups.parent.get(("asset", aid))
+    while gid and gid in groups.groups:
+        g = groups.groups[gid]
+        if g.kind == "bin":
+            return g
+        gid = groups.parent.get(("group", gid))
+    return None
+
+
+def search(groups: GroupStore, q: str, limit: int = 200) -> dict[str, Any]:
+    """U8 (05 §2.2): a search across every home — the prompt, the name and the tags (the catalogue's full-text search), and a seed when
+    the words are a number — each thing with its home (`imports` when it is on no page)."""
+    q = q.strip()
+    if not q:
+        return {"home_id": None, "path": "", "items": []}
+    found = {a.id: a for a in groups.cat.list(AssetQuery(search=q, limit=limit)).items}
+    if q.isdigit():
+        found.update({a.id: a for a in groups.cat.list(AssetQuery(seed=int(q), limit=limit)).items})
+    with groups._lock:
+        imports = next((g for g in groups.groups.values() if g.kind == "bin" and g.path == "imports"), None)
+        items = []
+        for a in found.values():
+            if a.trashed_at is not None:
+                continue
+            h = where(groups, a.id) or imports
+            items.append({"asset": a, "roles": [], "home_id": h.id if h else None, "path": h.path if h else "imports"})
+    items.sort(key=lambda x: x["asset"].created_at, reverse=True)
+    return {"home_id": None, "path": "", "items": items[:limit]}
 
 
 def _marker(ws: Any, groups: GroupStore) -> Path:

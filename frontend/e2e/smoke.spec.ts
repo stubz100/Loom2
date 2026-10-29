@@ -4660,3 +4660,41 @@ test('Assemble in Episode (U7b, D157 · proto01_UI2 05 §1, F33, F40): each shot
   await conformed(3)
   expect((await v1())[0]).toMatchObject({ id: gate, speed: 0.5 })                                                         // the author's edit kept
 })
+
+test('the Bin (U8, D157 · proto01_UI2 05 §2): a take made for a shot is in its shot\'s home — the tree, the grid, its home and roles in the Inspector, Tag…, Open its shot ▸; the Dock\'s drawer in World shows the homes', async ({ page }) => {
+  test.setTimeout(90_000)
+  const tag = Date.now().toString(36)
+  type JobLite = { id: string; status: string; result: { asset_ids?: string[] } }
+  const a = await api<{ id: string; shot_id: string }>('POST', '/story/flow/shots', { title: `Quay ${tag}`, scene: 'new' })
+  const caps = await api<{ defaults: { i2v: string } }>('GET', '/capabilities')
+  const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
+  const job = (await api<{ jobs: { id: string }[] }>('POST', '/jobs', { recipe: { kind: 'i2v', model_id: caps.defaults.i2v, start_asset: img, width: 832, height: 480, frames: 9, fps: 16, prompt_text: `quay ${tag}` }, stage: false,
+    origin: { suite: 'story', surface: 'for_shot', payload: { shot_id: a.shot_id, version: 'v1' } } })).jobs[0]
+  await expect.poll(async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.id === job.id)?.status, { timeout: 60_000 }).toBe('done')
+  const take = (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.id === job.id)!.result.asset_ids![0]
+  await page.goto(`${appUrl({ ui: '2' })}#bin`)
+  const shot = page.locator(`[data-testid="bin-tree"] .b-node[data-path="shots/${a.shot_id}"]`)
+  await expect(shot).toContainText(`Quay ${tag}`)
+  await shot.locator('.b-open').click()
+  const tile = page.locator(`[data-testid="bin-grid"] .w-tile[data-id="${take}"]`)
+  await expect(tile).toHaveCount(1)
+  await expect(page.locator('[data-testid="bin-grid"] .w-path')).toHaveText(`bin/shots/Quay ${tag}`)
+  await tile.click()
+  const insp = page.locator('[data-testid="bin-inspector"]')
+  await expect(insp).toContainText(`shots/Quay ${tag}/v1`)                                                   // its home, by its names
+  await expect(insp).toContainText('clip')                                                                    // its role: the shot's clip
+  await insp.locator('button', { hasText: 'Tag…' }).click()
+  await page.locator('.modal.ask input').fill(`quay, ${tag}`)
+  await page.locator('.modal.ask button.primary').click()
+  await expect.poll(async () => (await api<AssetLite & { tags: string[] }>('GET', `/assets/${take}`)).tags, { timeout: 10_000 }).toEqual(['quay', tag])
+  await insp.locator('button', { hasText: 'Open its shot ▸' }).click()
+  await expect(page.locator('[data-testid="shots-layer"]')).toBeVisible()
+  await expect.poll(() => new URL(page.url()).hash, { timeout: 10_000 }).toContain(`#shots/${a.shot_id}`)            // once the shots are read
+  // the drawer: World's Dock offers the Bin with the homes in place of the old places
+  await page.goto(`${appUrl({ ui: '2' })}#world`)
+  await page.locator('.dock .dock-tabs button', { hasText: 'Bin' }).click()
+  const homes = page.locator('[data-testid="bin-drawer-homes"]')
+  await expect(homes).toContainText('Shots')
+  await homes.locator(`.b-node[data-path="shots/${a.shot_id}"] .b-open`).click()
+  await expect(page.locator(`.dock .bin-grid [data-id="${take}"]`)).toHaveCount(1)
+})

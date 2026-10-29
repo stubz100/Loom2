@@ -1,11 +1,15 @@
 import { ChevronUp, ClipboardCopy, LocateFixed, Pause, Play, X } from 'lucide-react'
-import { useMemo } from 'react'
+import { lazy, Suspense, useMemo } from 'react'
 import type { Job } from '../api/types'
 import { canGoToOrigin, goToOrigin, originLabel } from '../store/origin'
 import { useSession } from '../store/session'
 import { sep, type MenuItem } from './commands'
 import { showMenu } from './ContextMenu'
 import { Bin } from '../suites/catalogue/Bin'
+import { UI2 } from './router'
+import { useLayer } from '../ui2/layers'
+
+const BinDrawer = lazy(() => import('../ui2/bin/BinDrawer'))               // U8 (D157, 05 §2.3): the new shell's drawer, its homes' tree
 
 /** D95 (AN1, 04 C1): where the Bin is offered — Image (Make, Edit) and Animate (Clay, Performance); Story has the Catalogue itself. */
 const BIN_SUITES = new Set(['generate', 'edit', 'animate', 'stage'])
@@ -53,7 +57,9 @@ export function Dock() {
   const setUi = useSession((s) => s.setUi)
   const pauseQueue = useSession((s) => s.pauseQueue)
   const suite = useSession((s) => s.ui.suite)
-  const tab = useSession((s) => (BIN_SUITES.has(s.ui.suite) ? s.ui.dockTab ?? 'queue' : 'queue'))
+  const layer = useLayer((s) => s.layer)
+  const binHere = UI2 ? layer !== 'bin' : BIN_SUITES.has(suite)          // U8: the new shell offers it in World, Shots and Episode (the Bin is its own layer)
+  const tab = useSession((s) => (binHere ? s.ui.dockTab ?? 'queue' : 'queue'))
   const pick = (t: 'queue' | 'bin') => (e: React.MouseEvent) => { e.stopPropagation(); setUi({ dockTab: t, dockOpen: open && tab === t ? false : true }) }
   // derived in a memo, never in a selector: a selector returning a fresh object re-renders forever
   const { running, queued, recent } = useMemo(() => {
@@ -66,7 +72,7 @@ export function Dock() {
     <footer className={`dock${open ? ' open' : ''}`}>
       <div className="line" onClick={() => setUi({ dockOpen: !open })}>
         <ChevronUp size={14} style={{ transform: open ? 'rotate(180deg)' : undefined }} />
-        {BIN_SUITES.has(suite) && <span className="segmented dock-tabs" role="group" aria-label="Dock">
+        {binHere && <span className="segmented dock-tabs" role="group" aria-label="Dock">
           <button className={tab === 'queue' ? 'active' : ''} onClick={pick('queue')} title="The render queue">Queue</button>
           <button className={tab === 'bin' ? 'active' : ''} onClick={pick('bin')} title="The Bin: the Catalogue in a drawer — drag a tile where it is used">Bin</button>
         </span>}
@@ -85,7 +91,7 @@ export function Dock() {
           </button>
         )}
       </div>
-      {open && tab === 'bin' && <Bin />}
+      {open && tab === 'bin' && (UI2 ? <Suspense fallback={null}><BinDrawer /></Suspense> : <Bin />)}
       {open && tab === 'queue' && (
         <div className="cols">
           <div className="col">

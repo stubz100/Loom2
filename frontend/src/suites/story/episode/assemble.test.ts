@@ -1,8 +1,8 @@
 // D125 (SP6): the cut from the Flow — a route's walk with the picks, its lane at the approved takes (trims and dissolves kept on Assemble
 // again), a newer approved take marked changed and Update swapping it.
 import { describe, expect, it } from 'vitest'
-import type { FlowGraph, FlowNode, Shot, ShotVersion } from '../../../api/types'
-import { assembleLane, laneChanges, routeLabel, routePicks, updateClip, walkRoute } from './assemble'
+import type { AssembleReport, CutTracks, FlowGraph, FlowNode, Shot, ShotVersion } from '../../../api/types'
+import { assembleLane, assembledText, finalOf, laneChanges, linesPast, routeFinals, routeFinalsText, routeLabel, routePicks, updateClip, walkRoute } from './assemble'
 
 const node = (id: string, type: FlowNode['type'], extra: Partial<FlowNode> = {}): FlowNode =>
   ({ id, type, title: id, lines: [], options: [], cond: null, set: [], target: null, text: '', shot_id: null, shot_version: null, board_group_id: null, place_id: null, speaker_versions: {}, colour: null, revision: 0, schema_version: 1, created_at: '', updated_at: '', ...extra }) as FlowNode
@@ -51,5 +51,33 @@ describe('the cut from the Flow (D125 S13)', () => {
     expect(ch).toEqual([{ i: 1, name: 's_reu', version: 'v2', clip: 'c_reu2' }])
     const up = updateClip({ ...lane, clips: lane.clips.map((c, i) => (i === 1 ? { ...c, in: 2, out: 30 } : c)) }, ch[0], clips.get('c_reu2')!)
     expect([up.clips[1].source, up.clips[1].shot?.version, up.clips[1].in, up.clips[1].out]).toEqual(['c_reu2', 'v2', 2, 20])
+  })
+})
+
+describe("U7b (D157, 05 §1): Episode lays each shot's final", () => {
+  const fin = (clip: string | null, version: string | null, at: string, sid = 's') => ({ shot_id: sid, shot_version: version, clip_id: clip, updated_at: at })
+  const finals = [fin('c_old', 'v1', '1'), fin('c_v2', 'v2', '3'), fin('c_v1', 'v1', '2'), fin(null, 'v1', '9'), fin('x', 'v1', '9', 't')]
+  const sh = (versions: Partial<ShotVersion>[], current = 'v1') => ({ ...shot('s', versions, current), id: 's' })
+  it("takes the marked-final version's final, else the latest final, else a one-pass clip, else none (as the server's final_of)", () => {
+    expect(finalOf(sh([{ state: 'final', clip_id: 'c_take' }, { id: 'v2' }], 'v2'), finals)).toEqual({ version: 'v1', clip: 'c_v1' })
+    expect(finalOf(sh([{}, { id: 'v2' }]), finals)).toEqual({ version: 'v2', clip: 'c_v2' })
+    expect(finalOf(sh([{ clip_id: 'c_take' }]), [])).toEqual({ version: 'v1', clip: null })
+    expect(finalOf(sh([{ clip_id: 'c_take', method: 'start_still' }]), [])).toEqual({ version: 'v1', clip: 'c_take' })
+    expect(finalOf(sh([{}]), [fin('c_pre', null, '1')])).toEqual({ version: 'v1', clip: 'c_pre' })
+  })
+  it("counts the route's shots and names the ones without a final (F33); says what the server did", () => {
+    const route = [node('a', 'shot', { shot_id: 's_arr', title: 'Arrival' }), node('b', 'shot', { shot_id: 's_reu', title: 'The seal' }), node('c', 'shot', { title: 'No shot' })]
+    const r = routeFinals(route, shots, [fin('c_arr', 'v1', '1', 's_arr')])
+    expect(r).toEqual({ shots: 2, without: ['The seal'] })
+    expect(routeFinalsText(r)).toBe('2 shots on this route · 1 without a final (left out): The seal')
+    const rep = { placed: ['Departure'], updated: [], kept: ['Arrival', 'The seal'], removed: [], missing: ['Road'], unfinished: [], held: [], short: [{ name: 'The seal', lines_s: 10.2, final_s: 5.1 }], renamed: 1 } as AssembleReport
+    expect(assembledText('Episode 1', rep)).toBe('Episode 1: 1 placed, 2 kept · 1 without a final (left out): Road · The seal: the lines run 10.2 s, the final 5.1 s')
+  })
+  it('finds a shot whose lines run past its end on the cut (F39)', () => {
+    const take = (id: number, node: string, start: number, duration: number) => ({ id, item: 1, name: node, kind: 'take', start, duration, node_id: node, shot_id: `s_${node}` })
+    const line = (id: number, node: string, start: number, duration: number) => ({ id, item: 2, name: '', kind: 'line', start, duration, node_id: node, line: 0 })
+    const t = { fps: 24, video: [{ items: [take(1, 'gate', 0, 48), take(2, 'road', 48, 12), take(3, 'road', 60, 12)] }],
+      audio: [{ items: [line(4, 'gate', 0, 40), line(5, 'road', 48, 36)] }] } as unknown as CutTracks
+    expect(linesPast(t)).toEqual([{ clip: 2, shot_id: 's_road', name: 'road', lines: 1.5, shot: 1 }])        // the razored road is one run
   })
 })

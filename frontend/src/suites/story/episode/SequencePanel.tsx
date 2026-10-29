@@ -19,7 +19,8 @@ import { useStory } from '../storyStore'
 import { binItem, laneBelowFormat, laneChecklist } from './sequenceCommands'
 import { markUsed, runCommand } from '../../../frame/commands'
 import { shotRows } from './bin'
-import { assembleLane, laneChanges, routeLabel, routePicks, walkRoute } from './assemble'
+import { assembleLane, laneChanges, routeFinals, routeFinalsText, routeLabel, routePicks, walkRoute } from './assemble'
+import { UI2 } from '../../../frame/router'
 import { assembleCut } from './sequenceCommands'
 import { flowOrder } from '../board'
 
@@ -91,6 +92,7 @@ function AssembleBody({ target }: { target: { tlId: string | null } }) {
   const flowNodes = useStory((s) => s.flowNodes)
   const world = useStory((s) => s.world)
   const shots = useStory((s) => s.shots)
+  const finals = useStory((s) => s.boardFinals)
   const clips = useClips()
   const cut = target.tlId ? timelines.find((t) => t.id === target.tlId) : undefined
   const [picks, setPicks] = useState<Record<string, string>>(() => cut?.route ?? {})
@@ -99,13 +101,15 @@ function AssembleBody({ target }: { target: { tlId: string | null } }) {
   if (!walk) return null
   const label = routeLabel(walk.choices)
   const preview = assembleLane(walk.nodes, shots, new Map(clips.map((c) => [c.id, c])), cut?.fps ?? 24)
+  const fin = routeFinals(walk.nodes, shots, finals)                          // U7b (F33): the new shell lays finals only
+  const ready = UI2 ? fin.shots - fin.without.length : preview.lane.clips.length
   const auto = `Episode ${timelines.length + 1}${label ? ` · ${label}` : ''}`
   const close = () => useSequence.getState().setAssembleFor(null)
   const go = () => { close(); void assembleCut(routePicks(walk.choices), cut ? null : (name ?? auto).trim() || auto) }
   return (
     <div className="modal-backdrop" onClick={close}>
       <div className="modal assemble" role="dialog" aria-modal="true" aria-label="Assemble from the Flow" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === 'Escape') close() }}>
-        <div className="head">{cut ? `Assemble ${cut.name} again` : 'Assemble from the Flow'}<Help text={"One route of the Flow from its Start: every Dialogue or Shot node's shot in order, at its approved take (its final version, else the current one), stamped. Assembled again, the trims and dissolves stay where the same shots follow each other."} /></div>
+        <div className="head">{cut ? `Assemble ${cut.name} again` : 'Assemble from the Flow'}<Help text={UI2 ? "One route of the Flow from its Start: every shot in order at its final (the version marked final, else its latest final); a shot without one is left out. Assembled again, only what changed is placed — the shots that stay keep their trims, speed, grade and dissolves; one undo step." : "One route of the Flow from its Start: every Dialogue or Shot node's shot in order, at its approved take (its final version, else the current one), stamped. Assembled again, the trims and dissolves stay where the same shots follow each other."} /></div>
         <div className="body form">
           {walk.choices.map((c) => (
             <div key={c.node.id} className="row"><label htmlFor={`pick-${c.node.id}`}>{c.node.title || 'Choice'}</label>
@@ -115,11 +119,11 @@ function AssembleBody({ target }: { target: { tlId: string | null } }) {
           ))}
           {!walk.choices.length && <span className="hint">The Flow has one route.</span>}
           {!cut && <div className="row"><label htmlFor="assemble-name">name</label><input id="assemble-name" type="text" value={name ?? auto} onChange={(e) => setName(e.target.value)} /></div>}
-          <span className="what" data-testid="assemble-what">{preview.lane.clips.length} shot{preview.lane.clips.length === 1 ? '' : 's'}{preview.missing.length ? ` · ${preview.missing.length} without a clip yet (${preview.missing.slice(0, 4).join(', ')})` : ''}</span>
+          <span className="what" data-testid="assemble-what">{UI2 ? routeFinalsText(fin) : `${preview.lane.clips.length} shot${preview.lane.clips.length === 1 ? '' : 's'}${preview.missing.length ? ` · ${preview.missing.length} without a clip yet (${preview.missing.slice(0, 4).join(', ')})` : ''}`}</span>
         </div>
         <div className="foot">
           <button onClick={close}>Cancel</button>
-          <button className="primary" disabled={!preview.lane.clips.length} onClick={go}>{cut ? 'Assemble again' : 'Assemble'}</button>
+          <button className="primary" disabled={UI2 ? !ready && !cut : !ready} onClick={go}>{cut ? 'Assemble again' : 'Assemble'}</button>
         </div>
       </div>
     </div>

@@ -12573,3 +12573,70 @@ over the left column; the shot's row opens Shots at Final (`#shots/<id>/final`).
 **Checks:** Vitest 636 + 3 skipped; typecheck, build and lint clean; e2e 88/89 alone (the new scenario failed on the race), then after the fix the ten UI2 scenarios 10/10 alone.
 
 Next is U7b: the backend assemble that keeps V1's edits (G14).
+
+## 2026-10-29 10:04 — U7b: Assemble on the server — each shot at its final, only what changed placed, the author's edits kept; a shot held for its lines or listed; clips named after their shots (D157; proto01_UI2 05 §1, 06 §3; G14, F33, F39, F40)
+
+**Why:** Assemble ran in the frontend, and its save (`Cuts.write`) cleared V1 and A1's lines and rebuilt them. *Assemble again* lost V1's
+speed changes, holds and per-clip grades, and the author's moved lines, without a warning (06 §3).
+
+**`POST /timelines/{id}/assemble`** `{revision, route, shots}`. The client walks the Flow, as the sheet previews it, and sends the route's
+shots in order. The server (`Cuts.assemble`) makes one change, one undo step:
+
+- **Each shot's final** (`timelines.final_of`, its twin `assemble.finalOf`): the final of the version marked final; else the shot's latest
+  final; else none. A version made in one pass (a stage clip, from the start still, the speaking close-up) has its clip as its final.
+- **Kept:** a shot already on V1 in the route's order keeps its trims, speed, grade and dissolves. The most shots in the route's order are
+  kept (a longest increasing run); the rest move.
+- **Updated:** a kept shot with a newer final plays it in place (`clip.replaceFromBin`, its source in kept).
+- **Taken off:** a shot no longer on the route goes with its lines; the later clips close up on every track (`edit.rippleDelete`).
+- **Placed:** a shot not on V1 yet goes in after the one before it, at its final's length, as an insert; the later clips move on every track.
+- **Without a final:** left out, or kept as it is when it is on the cut already. Plain clips are never touched.
+- **Held for its lines (F39):** when a shot's voiced lines run longer than it (a 0.25 s breath between), a ripple out holds it for them if its
+  final has the frames; otherwise it is listed. The lines not on A1 yet are laid inside their shot, each early enough for the rest to fit
+  (`_line_steps_now`, shared with `sync_lines`).
+- **Named (F40):** every shot's clip is renamed after its shot (`clip.rename`), so the FCPXML and the EDL carry the names.
+- **The reply's `report`:** placed, updated, kept, removed, missing, unfinished, held, short, renamed.
+
+**The new shell** (`?ui=2`):
+
+- *Assemble from the Flow…* and *Assemble again…* call the route on a FilmCraft cut; the toast says what it did.
+- The sheet counts the route's shots and names the ones without a final (F33).
+- The checklist lists a shot whose lines run past its end, read from the cut's tracks: *The seal: the lines run 10.2 s, the shot 5.1 s*.
+- The old shell keeps its frontend assemble until U8 retires it.
+
+**The fake FilmCraft now ripples as the real one:**
+
+- an insert opens the gap on every track;
+- a ripple trim and a ripple delete move every track's later clips;
+- a ripple delete with a clip in the way on another track is refused.
+
+**On the real FilmCraft** (the built CLI), the three tests pass as they stand. One difference was found and taken into the test: a ripple trim
+that would cut a line on A1 is refused ("in the way"), so the test's own trim is a regular one.
+
+A ripple delete with a sound across the shot is refused too. The assemble then answers 422 with FilmCraft's words, and the cut stays as it was
+(rolled back). Owed: a bed across a shot being taken off blocks the Assemble (FilmCraft's sync rule). The author moves the bed or unlocks
+its sync today.
+
+**Seen on the copy of The Last Ferry:**
+
+- On *Board the ferry*, the sheet says 4 shots, 4 without a final, and Assemble is off.
+- On *Stay on the island*, it says *4 shots on this route · 3 without a final (left out): Arrival, The ferryman, The seal*.
+- Assembled, *Episode 2 · Stay on the island* holds Stay's final on V1, named Stay (97 frames at 24, the real FilmCraft).
+
+**Tests:**
+
+- `test_cuts_u7b.py`, 3 tests:
+  - `final_of`;
+  - the placements: a trim kept, a newer final in place, a shot off the route, the route's order, one undo step;
+  - the lines held or listed, and FilmCraft's refusal.
+- `assemble.test.ts` + 3: `finalOf`, the sheet's count and the report's line, the lines past a shot.
+- An e2e scenario: the sheet's count, two finals placed and named, the author's speed kept, the new final placed after.
+
+**Checks:** offline 727 passed; Vitest 639 + 3 skipped; typecheck, build and lint clean; e2e 90/90 (alone); `agents_check`,
+`model_literals_check` and `settings_audit` (319, 0) clean; the API contract regenerated.
+
+Next is U7c:
+
+- the 16 fps final conformed by RIFE as it lands, as one undoable step;
+- the cut's capabilities in `/capabilities`;
+- `sync_lines` bumping the revision;
+- a per-cut lock.

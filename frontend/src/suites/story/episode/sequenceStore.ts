@@ -3,7 +3,7 @@
 // and the toast says so). Project data lives here and on disk, never in component state.
 import { create } from 'zustand'
 import { ApiError, http, unwrap } from '../../../api/client'
-import type { Clip, CutEdited, CutTracks, Job, Timeline, TimelineClipIn, TrackRole, TrackStrip, VstPlugin, VstPluginList, ColourLooks } from '../../../api/types'
+import type { AssembleReport, Clip, CutEdited, CutTracks, Job, Timeline, TimelineClipIn, TrackRole, TrackStrip, VstPlugin, VstPluginList, ColourLooks } from '../../../api/types'
 import { useSession } from '../../../store/session'
 import { DEV_HOOKS } from '../../../devHooks'
 import { append, at, duration, move, remove, setOverlap, starts, trim, type Lane, type LaneClip, chainIn } from './lane'
@@ -73,6 +73,8 @@ interface SequenceState {
   cutEdit: (steps: Step[]) => Promise<boolean>
   cutPlace: (body: { clip_id?: string; asset_id?: string; shot_id?: string | null; shot_version?: string | null; node_id?: string | null; track: string | number; frame: number }) => Promise<boolean>
   cutReplace: (clip: number, take: { clip_id: string; shot_id?: string | null; shot_version?: string | null; node_id?: string | null }) => Promise<boolean>
+  /** U7b (D157): Assemble from the Flow on the server — the route's shots at their finals, only what changed placed (one undo step). */
+  cutAssemble: (route: Record<string, string>, shots: { shot_id: string; node_id: string }[]) => Promise<AssembleReport | null>
   cutUndo: (redo?: boolean) => Promise<void>
   /** D127: an audio track's strip (what changes; the rest stays) and its role (Settings › Audio's strip for it). */
   cutStrip: (track: number, change: Partial<TrackStrip>) => Promise<boolean>
@@ -270,6 +272,15 @@ export const useSequence = create<SequenceState>()((set, get) => ({
   cutEdit: (steps) => cutCall(get, set, (id, revision) => unwrap(http.POST('/timelines/{tl_id}/edit', { params: { path: { tl_id: id } }, body: { revision, steps: steps.map((s) => ({ id: s.id, params: s.params ?? {} })) } }))),
   cutPlace: (body) => cutCall(get, set, (id, revision) => unwrap(http.POST('/timelines/{tl_id}/place', { params: { path: { tl_id: id } }, body: { revision, insert: false, ...body } }))),
   cutReplace: (clip, take) => cutCall(get, set, (id, revision) => unwrap(http.POST('/timelines/{tl_id}/replace', { params: { path: { tl_id: id } }, body: { revision, clip, ...take } }))),
+  cutAssemble: async (route, shots) => {
+    let report: AssembleReport | null = null
+    const ok = await cutCall(get, set, async (id, revision) => {
+      const r = await unwrap(http.POST('/timelines/{tl_id}/assemble', { params: { path: { tl_id: id } }, body: { revision, route, shots } }))
+      report = r.report
+      return r
+    })
+    return ok ? report : null
+  },
   cutUndo: async (redo = false) => {
     await cutCall(get, set, (id, revision) => unwrap(redo ? http.POST('/timelines/{tl_id}/redo', { params: { path: { tl_id: id } }, body: { revision } })
       : http.POST('/timelines/{tl_id}/undo', { params: { path: { tl_id: id } }, body: { revision } })))

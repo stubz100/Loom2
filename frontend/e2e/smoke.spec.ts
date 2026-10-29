@@ -4611,3 +4611,48 @@ test('Episode (U7a, D157 · proto01_UI2 05 §1): the cut editor in its own layer
   await expect(page.locator('[data-testid="shots-layer"]')).toHaveAttribute('data-level', 'final')
   expect(new URL(page.url()).hash).toBe(`#shots/${a.shot_id}/final`)
 })
+
+test('Assemble in Episode (U7b, D157 · proto01_UI2 05 §1, F33, F40): each shot of the route at its final, a shot without one left out and counted; Assemble again keeps the author\'s edit and places only the new final; the clips named after their shots', async ({ page }) => {
+  test.setTimeout(150_000)
+  const tag = Date.now().toString(36)
+  type NodeLite = { id: string; shot_id: string }
+  type JobLite = { id: string; status: string; result: { clip_id?: string } }
+  const [a, b, c] = await Promise.all(['Gate', 'Road', 'Pier'].map((t) => api<NodeLite>('POST', '/story/flow/nodes', { type: 'shot', title: `${t} ${tag}` })))
+  const g = (await api<{ graph: { revision: number; start: string | null; edges: { from: string; port: string; to: string }[] } }>('GET', '/story/flow')).graph
+  const start = g.start ?? (await api<{ id: string }>('POST', '/story/flow/nodes', { type: 'start' })).id
+  const g2 = (await api<{ graph: { revision: number; edges: { from: string; port: string; to: string }[] } }>('GET', '/story/flow')).graph
+  await api('PUT', '/story/flow/graph', { revision: g2.revision, start, edges: [...g2.edges.filter((e) => e.from !== start), { from: start, port: 'out', to: a.id }, { from: a.id, port: 'out', to: b.id }, { from: b.id, port: 'out', to: c.id }] })
+  const caps = await api<{ defaults: { i2v: string } }>('GET', '/capabilities')
+  const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
+  const finalFor = async (sid: string) => {                                    // a clip made from the start still: the version's final (one pass)
+    const job = (await api<{ jobs: { id: string }[] }>('POST', '/jobs', { recipe: { kind: 'i2v', model_id: caps.defaults.i2v, start_asset: img, width: 832, height: 480, frames: 9, fps: 16, prompt_text: sid }, stage: false,
+      origin: { suite: 'story', surface: 'for_shot', payload: { shot_id: sid, version: 'v1', use: true } } })).jobs[0]
+    await expect.poll(async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.id === job.id)?.status, { timeout: 60_000 }).toBe('done')
+    const sh = await api<{ revision: number }>('GET', `/story/shots/${sid}`)
+    await api('PATCH', `/story/shots/${sid}`, { revision: sh.revision, versions: [{ id: 'v1', method: 'start_still' }] })
+  }
+  await finalFor(a.shot_id)
+  await finalFor(b.shot_id)
+  await page.goto(`${appUrl({ ui: '2' })}#episode`)
+  await page.locator('[data-testid="episode-layer"] button.primary', { hasText: /^Assemble from the Flow/ }).click()
+  const sheet = page.locator('.modal.assemble')
+  await expect(sheet.locator('[data-testid="assemble-what"]')).toHaveText(`3 shots on this route · 1 without a final (left out): Pier ${tag}`)   // F33
+  const name = `Cut ${tag}`
+  await sheet.locator('input#assemble-name').fill(name)
+  await sheet.locator('button.primary', { hasText: /^Assemble$/ }).click()
+  await expect(page.locator('.e-stage .cut-clip.k-take')).toHaveCount(2)
+  type Tracks = { video: { items: { id: number; name: string; speed: number; start: number }[] }[] }
+  const tl = async () => (await api<{ items: { id: string; name: string; revision: number }[] }>('GET', '/timelines')).items.find((t) => t.name === name)!
+  const v1 = async () => (await api<Tracks>('GET', `/timelines/${(await tl()).id}/tracks`)).video[0].items
+  expect((await v1()).map((i) => i.name)).toEqual([`Gate ${tag}`, `Road ${tag}`])                                         // F40
+  // the author slows the gate; the pier's final lands; Assemble again keeps the gate's speed and places the pier after the road
+  const gate = (await v1())[0].id
+  await api('POST', `/timelines/${(await tl()).id}/edit`, { revision: (await tl()).revision, steps: [{ id: 'clip.speedDuration', params: { clips: [gate], speed: 50 } }] })
+  await finalFor(c.shot_id)
+  await page.locator('.seq-row', { hasText: name }).click()
+  await page.locator('.seq-insp button[title^="Assemble again"]').click()
+  await expect(sheet.locator('[data-testid="assemble-what"]')).toHaveText('3 shots on this route')
+  await sheet.locator('button.primary', { hasText: /^Assemble again$/ }).click()
+  await expect.poll(async () => (await v1()).map((i) => i.name), { timeout: 15_000 }).toEqual([`Gate ${tag}`, `Road ${tag}`, `Pier ${tag}`])
+  expect((await v1())[0]).toMatchObject({ id: gate, speed: 0.5 })                                                         // the author's edit kept
+})

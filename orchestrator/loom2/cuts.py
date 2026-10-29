@@ -437,6 +437,43 @@ class CutTracks(BaseModel):
     redo: int = 0
 
 
+LINE_BREATH_S = 0.25                                # U7b: between a shot's lines when it is held for them (U6c's layLines: the same breath)
+
+
+class AssembleShot(BaseModel):
+    """U7b (05 §1): one shot of the route as Assemble lays it — the version and its final's clip (None: no final yet), its name, and how
+    long its voiced lines run one after another (a breath between)."""
+    shot_id: str
+    node_id: str | None = None
+    version: str
+    clip_id: str | None = None
+    name: str = ""
+    lines_s: float = 0.0
+
+
+class ShortLines(BaseModel):
+    """F39: a shot whose lines run longer than its final, which has no more frames to hold them."""
+    name: str
+    lines_s: float
+    final_s: float
+
+
+class AssembleReport(BaseModel):
+    """U7b: what *Assemble* did to V1 — the shots placed, updated to a newer final, kept as they were, taken off (no longer on the route),
+    those without a final (left out, or kept as they are when already on the cut), held for their lines, too short for them, the clips
+    renamed after their shots."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    placed: list[str] = Field(default_factory=list)
+    updated: list[str] = Field(default_factory=list)
+    kept: list[str] = Field(default_factory=list)
+    removed: list[str] = Field(default_factory=list)
+    missing: list[str] = Field(default_factory=list)
+    unfinished: list[str] = Field(default_factory=list)
+    held: list[str] = Field(default_factory=list)
+    short: list[ShortLines] = Field(default_factory=list)
+    renamed: int = 0
+
+
 def _kind(it: dict) -> str:
     meta = it.get("metadata", {})
     if "loom2.clip" in meta:
@@ -1295,46 +1332,177 @@ class Cuts:
         on any audio track counts, and a line the cut placed before that is gone now was lifted by the author and stays out."""
         if self.audio_of is None:
             return 0
-        p = self.path(tl.id)
-        doc = read(p)
+        if self._line_steps_now(read(self.path(tl.id))) is None:
+            return 0
+
+        def run(p: Path) -> int:
+            steps = self._line_steps_now(read(p)) or []
+            self.fc.batch(steps)
+            self._markers(p)
+            return len(steps)
+        return self.changing(tl, run)
+
+    def _line_steps_now(self, doc: dict, forget: set[str] | frozenset[str] = frozenset()) -> list[dict] | None:
+        """sync_lines' steps on the cut as it stands (None: nothing to do). `forget`: lines the cut placed and took off with their shot
+        (U7b) — placed again, not taken for the author's. U7b (F39): a shot's missing lines stay inside its run when they fit there — each
+        after the one before it, and early enough for the rest; a line longer than the run is pushed past what is on A1 as before."""
         cut = tracks(doc)
         seq_id = cut.sequence
         a1 = cut.audio[0].items if cut.audio else []
         have = {(i.node_id, i.line): i for t in cut.audio for i in t.items if i.kind == "line"}
-        gone = placed_lines(doc)
+        gone = placed_lines(doc) - set(forget)
         missing: list[tuple[float, dict]] = []
         revoiced: list[tuple[CutItem, dict]] = []
         for first, start, end in runs(cut):
-            cues = self.audio_of(_as_clip(first)) or []
-            for (a0, _), cue in zip(line_spans(round(end - start), len(cues)), cues):
-                if not cue or not cue.get("path"):
-                    continue
-                ex = have.get((cue.get("node"), cue.get("line")))
-                if ex is None:
-                    if f"{cue.get('node')}:{cue.get('line')}" not in gone:              # lifted by the author: it stays out
-                        missing.append((start + a0, cue))
-                elif ex.asset_id != cue.get("asset"):
-                    revoiced.append((ex, cue))
+            cues = self.audio_of(_as_clip(first)) or []                             # type: ignore[misc]
+            lay = [(start + a0, cue) for (a0, _), cue in zip(line_spans(round(end - start), len(cues)), cues) if cue and cue.get("path")]
+            todo = [(t, cue) for t, cue in lay if (cue.get("node"), cue.get("line")) not in have and f"{cue.get('node')}:{cue.get('line')}" not in gone]
+            revoiced += [(have[(cue.get("node"), cue.get("line"))], cue) for _, cue in lay
+                         if (cue.get("node"), cue.get("line")) in have and have[(cue.get("node"), cue.get("line"))].asset_id != cue.get("asset")]
+            lens = [max(1.0, round(float(cue["duration_s"]) * cut.fps)) for _, cue in todo]
+            prev = start
+            for k, (t, cue) in enumerate(todo):
+                rest = sum(lens[k:])
+                if end - rest >= start:                                             # F39: early enough for the rest to fit before the run ends
+                    t = min(t, end - rest)
+                t = max(t, prev)                                                    # and after the line before it
+                missing.append((t, cue))
+                prev = t + lens[k]
         if not missing and not revoiced:
-            return 0
+            return None
+        steps: list[dict] = []
+        for ex, cue in revoiced:
+            steps.append({"id": "clip.replaceFromBin", "params": {"clips": [ex.id], "item": self._line_item(cue), "keepSourceIn": True}})
+        spans = sorted((i.start, i.start + i.duration) for i in a1)
+        for start, cue in sorted(missing, key=lambda x: x[0]):
+            length = max(1.0, round(float(cue["duration_s"]) * cut.fps))
+            for a, b in spans:                                          # pushed past a clip the line would land on
+                if a < start + length and start < b:
+                    start = b
+            spans = sorted(spans + [(start, start + length)])
+            steps.append({"id": "timeline.place", "params": {"item": self._line_item(cue), "track": "A1", "time": ticks(start, cut.fps), "insert": False, "video": False}})
+        known = sorted(gone | {f"{c.get('node')}:{c.get('line')}" for _, c in missing})
+        steps.append({"id": "metadata.set", "params": {"item": seq_id, "fields": {"loom2.lines": json.dumps(known)}}})
+        return steps
 
-        def run(p: Path) -> int:
+    # ---- U7b (D157, proto01_UI2 05 §1, 06 §3; G14): Assemble from the Flow, placing only what changed ---------------------------
+    def assemble(self, tl: Timeline, want: list[AssembleShot], records: dict[str, ClipRecord], route: dict[str, str] | None) -> AssembleReport:
+        """The route's shots onto V1 as one change (one undo step), keeping what the author did to what stays:
+
+        - a shot already on V1 in the route's order is kept with its trims, speed, grade and dissolves; with a newer final it plays it in
+          place (its start and length kept, as *Update*);
+        - a shot no longer on the route (or out of the route's order) goes with its lines, the later clips closing up on every track;
+        - a shot not on V1 yet goes in after the one before it, the later clips moving on every track (an insert), at its final's length;
+        - a shot whose lines run longer than it is held for them when its final has the frames, else it is listed (F39);
+        - every shot's clip is named after its shot (F40); the lines not on A1 yet are laid inside their shots; the route is kept.
+
+        A shot without a final is left out, or kept as it is when it is on the cut already. Plain clips (not shots) are never touched."""
+        def run(p: Path) -> AssembleReport:
+            rep = AssembleReport()
+            fps = tl.fps
+            cut = tracks(read(p))
+            on = [r for r in run_pieces(cut) if r[0].shot_id]
+            used: set[int] = set()
+            match: list[int | None] = []
+            for w in want:                                                  # each shot of the route: its first run on V1 not taken yet
+                j = next((k for k, r in enumerate(on) if k not in used and r[0].shot_id == w.shot_id), None)
+                if j is not None:
+                    used.add(j)
+                match.append(j)
+            keep = _in_order([(i, j) for i, j in enumerate(match) if j is not None])
+            kept_runs = {match[i] for i in keep}
+            # off: the runs no longer on the route (or out of its order), their lines first (they would stand in the gap's way)
+            off = [r for k, r in enumerate(on) if k not in kept_runs]
+            forget: set[str] = set()
+            if off:
+                lines_off = [i for r in off if r[0].node_id for t in cut.audio for i in t.items if i.kind == "line" and i.node_id == r[0].node_id
+                             and r[0].start - 0.5 <= i.start < r[-1].start + r[-1].duration - 0.5]
+                forget = {f"{i.node_id}:{i.line}" for i in lines_off}
+                if lines_off:
+                    self.fc.batch([{"id": "edit.clear", "params": {"clips": [i.id for i in lines_off]}}])
+                self.fc.batch([{"id": "edit.rippleDelete", "params": {"clips": [i.id for r in off for i in r]}}])
+                rep.removed = [(self.name_of(_as_clip(r[0])) if self.name_of else None) or r[0].name or "a shot" for r in off]
+
+            def doc_now() -> dict:
+                self.fc.save()
+                return read(p)
+
+            def now() -> CutTracks:
+                return tracks(doc_now())
+
+            def runs_of(c: CutTracks) -> dict[int, list[CutItem]]:
+                return {r[0].id: r for r in run_pieces(c)}
+
+            # kept: a newer final plays in place; a shot without a final stays as it is
+            firsts: dict[int, int] = {i: on[match[i]][0].id for i in keep}        # a want → its run's first piece (ids survive the edits)
+            for i in sorted(keep):
+                w, r = want[i], on[match[i]]                                        # type: ignore[index]
+                use = (w.clip_id or "", w.shot_id, w.version, w.node_id or "")
+                if not w.clip_id:
+                    rep.unfinished.append(w.name)
+                elif (r[0].clip_id, r[0].shot_id, r[0].shot_version, r[0].node_id or "") != use:
+                    item = self._media_item(doc_now(), tl, use, records[w.clip_id])
+                    self.fc.batch([{"id": "clip.replaceFromBin", "params": {"clips": [x.id for x in r], "item": item, "keepSourceIn": True}}])
+                    rep.updated.append(w.name)
+                else:
+                    rep.kept.append(w.name)
+            # placed: after the shot before it on the route (or before the next one on the cut, or at V1's end), as an insert
+            for i, w in enumerate(want):
+                if i in keep:
+                    continue
+                if not w.clip_id or w.clip_id not in records:
+                    rep.missing.append(w.name)
+                    continue
+                cur = now()
+                rs = runs_of(cur)
+                before = [firsts[k] for k in range(i - 1, -1, -1) if k in firsts and firsts[k] in rs]
+                after = [firsts[k] for k in range(i + 1, len(want)) if k in firsts and firsts[k] in rs]
+                if before:
+                    last = rs[before[0]][-1]
+                    at = last.start + last.duration
+                elif after:
+                    at = rs[after[0]][0].start
+                else:
+                    at = max((x.start + x.duration for x in (cur.video[0].items if cur.video else [])), default=0.0)
+                rec = records[w.clip_id]
+                item = self._media_item(doc_now(), tl, (w.clip_id, w.shot_id, w.version, w.node_id or ""), rec)
+                length = max(1, round(rec.frames * fps / rec.fps))
+                placed = self.fc.batch([{"id": "timeline.place", "params": {"item": item, "track": "V1", "time": ticks(at, fps), "insert": True, "audio": False,
+                                                                          "sourceIn": 0, "duration": ticks(length, fps)}}])
+                firsts[i] = int(placed[0]["clips"][0])
+                rep.placed.append(w.name)
+            # held for its lines (F39), and named after its shot (F40)
+            cur = now()
+            rs = runs_of(cur)
             steps: list[dict] = []
-            for ex, cue in revoiced:
-                steps.append({"id": "clip.replaceFromBin", "params": {"clips": [ex.id], "item": self._line_item(cue), "keepSourceIn": True}})
-            spans = sorted((i.start, i.start + i.duration) for i in a1)
-            for start, cue in sorted(missing, key=lambda x: x[0]):
-                length = max(1.0, round(float(cue["duration_s"]) * cut.fps))
-                for a, b in spans:                                          # pushed past a clip the line would land on
-                    if a < start + length and start < b:
-                        start = b
-                spans = sorted(spans + [(start, start + length)])
-                steps.append({"id": "timeline.place", "params": {"item": self._line_item(cue), "track": "A1", "time": ticks(start, cut.fps), "insert": False, "video": False}})
-            known = sorted(gone | {f"{c.get('node')}:{c.get('line')}" for _, c in missing})
-            steps.append({"id": "metadata.set", "params": {"item": seq_id, "fields": {"loom2.lines": json.dumps(known)}}})
+            for i, w in enumerate(want):
+                r = rs.get(firsts.get(i, -1))
+                if r is None:
+                    continue
+                span = r[-1].start + r[-1].duration - r[0].start
+                need = round(w.lines_s * fps)
+                if w.lines_s > 0 and need > span + 0.5:
+                    last = r[-1]
+                    rec = records.get(last.clip_id or "")
+                    room = (rec.frames / rec.fps * fps - (last.source_in * fps + last.duration * abs(last.speed))) if rec else 0.0
+                    if rec and abs(last.speed) == 1.0 and not last.hold and room >= need - span - 0.5:
+                        steps.append({"id": "timeline.trim", "params": {"clip": last.id, "edge": "out", "mode": "ripple", "deltaFrames": int(round(need - span))}})
+                        rep.held.append(w.name)
+                    else:
+                        rep.short.append(ShortLines(name=w.name, lines_s=round(w.lines_s, 1), final_s=round(span / fps, 1)))
+                for x in r:
+                    if w.name and x.name != w.name:
+                        steps.append({"id": "clip.rename", "params": {"clip": x.id, "name": w.name}})
+                        rep.renamed += 1
+            seq_id = cur.sequence
+            steps.append({"id": "metadata.set", "params": {"item": seq_id, "fields": {"loom2.route": json.dumps(route) if route is not None else ""}}})
             self.fc.batch(steps)
+            if self.audio_of is not None:                                            # the lines not on A1 yet, inside their shots
+                line_steps = self._line_steps_now(doc_now(), forget)
+                if line_steps:
+                    self.fc.batch(line_steps)
             self._markers(p)
-            return len(steps)
+            return rep
         return self.changing(tl, run)
 
 
@@ -1343,16 +1511,48 @@ def _as_clip(i: CutItem) -> TimelineClip:
     return TimelineClip(id=str(i.id), clip_id=i.clip_id or "", **{"in": 0}, out=1, shot_id=i.shot_id, shot_version=i.shot_version, node_id=i.node_id)
 
 
-def runs(cut: CutTracks) -> list[tuple[CutItem, float, float]]:
-    """V1's takes as shots: consecutive pieces of the same node (a take razored, or held) are one run — (its first piece, start, end)."""
-    out: list[tuple[CutItem, float, float]] = []
+def run_pieces(cut: CutTracks) -> list[list[CutItem]]:
+    """V1's takes as shots: consecutive pieces of the same node (a take razored, or held) are one run — its pieces in order."""
+    out: list[list[CutItem]] = []
     for i in (cut.video[0].items if cut.video else []):
         if i.kind != "take":
             continue
-        if out and i.node_id and out[-1][0].node_id == i.node_id and abs(out[-1][2] - i.start) < 0.5:
-            out[-1] = (out[-1][0], out[-1][1], i.start + i.duration)
+        last = out[-1][-1] if out else None
+        if last is not None and i.node_id and last.node_id == i.node_id and abs(last.start + last.duration - i.start) < 0.5:
+            out[-1].append(i)
         else:
-            out.append((i, i.start, i.start + i.duration))
+            out.append([i])
+    return out
+
+
+def runs(cut: CutTracks) -> list[tuple[CutItem, float, float]]:
+    """V1's runs (`run_pieces`) as (its first piece, start, end)."""
+    return [(r[0], r[0].start, r[-1].start + r[-1].duration) for r in run_pieces(cut)]
+
+
+def _in_order(pairs: list[tuple[int, int]]) -> set[int]:
+    """U7b: of (a shot's place on the route, its run's place on V1), the most that are in the same order on both — the route's places
+    kept (a longest increasing run of the V1 places); the rest move."""
+    prev: dict[int, int | None] = {}
+    tails: list[int] = []                                           # tails[k]: the pair ending the lowest run of length k + 1 so far
+    for n, (_, j) in enumerate(pairs):
+        lo, hi = 0, len(tails)
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if pairs[tails[mid]][1] < j:
+                lo = mid + 1
+            else:
+                hi = mid
+        prev[n] = tails[lo - 1] if lo else None
+        if lo == len(tails):
+            tails.append(n)
+        else:
+            tails[lo] = n
+    out: set[int] = set()
+    k = tails[-1] if tails else None
+    while k is not None:
+        out.add(pairs[k][0])
+        k = prev[k]
     return out
 
 

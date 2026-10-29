@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from ..clips import ClipStore
 from ..origin import JobOrigin
 from ..schemas import Deleted, JobsSubmitted, TimelineExported, TimelineList
-from ..cuts import CutTracks
+from ..cuts import AssembleReport, CutTracks
 from ..timelines import StaleTimeline, Timeline, TimelineStore
 from .deps import Svc
 
@@ -291,6 +291,50 @@ class CutRole(BaseModel):
     revision: int | None = None
     track: int
     role: Literal["dialogue", "music", "effects"] | None = None
+
+
+class AssembleStop(BaseModel):
+    shot_id: str
+    node_id: str | None = None
+
+
+class CutAssemble(BaseModel):
+    revision: int | None = None
+    route: dict[str, str] | None = None            # the picks the route was walked with (a Choice node id → its option id), kept on the cut
+    shots: list[AssembleStop]                      # the route's shots in order (the client walks the Flow, as its sheet previews it)
+
+
+class CutAssembled(CutEdited):
+    report: AssembleReport
+
+
+@router.post("/timelines/{tl_id}/assemble", response_model=CutAssembled, response_model_by_alias=True)
+async def timeline_assemble(svc: Svc, tl_id: str, body: CutAssemble):
+    """U7b (D157, proto01_UI2 05 §1, 06 §3; G14): *Assemble from the Flow* on a FilmCraft cut — each shot of the route at its final (the
+    version marked final, else its latest final, else none: listed), placing only what changed on V1 and keeping the author's edits to the
+    rest, held for its lines or listed (F39), its clip named after it (F40); one undo step."""
+    def run(store, tl, ws, cat):
+        from ..cuts import LINE_BREATH_S, AssembleShot
+        from ..finals import FinalStore
+        from ..story import StoryStore
+        from ..timelines import TimelineClip, final_of, story_lookup
+        story, finals = StoryStore(ws), FinalStore(ws).list()
+        recs = {c.id: c for c in ClipStore(ws).list()}
+        name_of, _, audio_of = story_lookup(ws, cat)
+        want: list[AssembleShot] = []
+        for x in body.shots:
+            sh = story.shot(x.shot_id)
+            if sh is None:
+                continue
+            version, clip = final_of(sh, finals)
+            probe = TimelineClip(id="-", clip_id=clip or "", **{"in": 0}, out=1, shot_id=sh.id, shot_version=version, node_id=x.node_id)
+            cues = [c for c in (audio_of(probe) or []) if c]
+            lines_s = sum(float(c["duration_s"]) for c in cues) + LINE_BREATH_S * max(0, len(cues) - 1)
+            want.append(AssembleShot(shot_id=sh.id, node_id=x.node_id, version=version, clip_id=clip if clip in recs else None,
+                                     name=name_of(probe) or sh.name, lines_s=lines_s))
+        return [store.cuts.assemble(tl, want, recs, body.route)]
+    r = await _cut_call(svc, tl_id, body.revision, run)
+    return {**r, "report": r["results"][0].model_dump(), "results": []}
 
 
 @router.post("/timelines/{tl_id}/strip", response_model=CutEdited, response_model_by_alias=True)

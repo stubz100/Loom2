@@ -88,6 +88,17 @@ class Fake:
                 return t
         raise Refused(f"no track {ref}")
 
+    def shift(self, at: int, d: int, skip: dict | None = None) -> None:
+        """U7b: every track's clips (and transitions) from `at` on move by `d` ticks — FilmCraft's ripple on the sync-locked tracks."""
+        s = self.sequence()
+        for t in s["video_tracks"] + s["audio_tracks"]:
+            for x in t["items"]:
+                if x is not skip and x["start"] >= at:
+                    x["start"] += d
+            for x in t["transitions"]:
+                if x["start"] >= at - x["duration"]:
+                    x["start"] += d
+
     def find_clip(self, cid: int) -> tuple[dict, dict]:
         s = self.sequence()
         for t in s["video_tracks"] + s["audio_tracks"]:
@@ -221,6 +232,8 @@ class Fake:
             src = int(p.get("sourceIn", 0))
             dur = int(p.get("duration", info["duration"] - src))
             end = start + dur
+            if p.get("insert"):                                        # U7b: an insert opens the gap on every track (all sync-locked, as the real one)
+                self.shift(start, dur)
             keep = []
             for ti in t["items"]:                                      # overwrite: what it covers goes, what it overlaps is trimmed
                 a, b = ti["start"], ti["start"] + ti["duration"]
@@ -596,13 +609,8 @@ class Fake:
             else:
                 old_end = ti["start"] + ti["duration"]
                 ti["duration"] += d
-                if p.get("mode") == "ripple":
-                    for x in t["items"]:
-                        if x is not ti and x["start"] >= old_end:
-                            x["start"] += d
-                    for x in t["transitions"]:
-                        if x["start"] >= old_end - x["duration"]:
-                            x["start"] += d
+                if p.get("mode") == "ripple":                           # U7b: every track's later clips follow (the real one: all sync-locked)
+                    self.shift(old_end, d, skip=ti)
             return {"delta": d}
         if cid == "timeline.roll":
             t, left = self.find_clip(int(p["left"]))
@@ -665,11 +673,13 @@ class Fake:
         if cid == "edit.rippleDelete":
             for c in p.get("clips") or []:
                 t, ti = self.find_clip(int(c))
+                a, b = ti["start"], ti["start"] + ti["duration"]
+                for o in self.sequence()["video_tracks"] + self.sequence()["audio_tracks"]:     # U7b: as the real one, a clip in the way refuses
+                    if o is not t and any(x["start"] < b and x["start"] + x["duration"] > a for x in o["items"]):
+                        raise Refused(f"this edit would break sync: {o.get('name', o['id'])} is sync-locked and has a clip in the way")
                 t["items"].remove(ti)
                 t["transitions"] = [x for x in t["transitions"] if ti["id"] not in (x.get("from"), x.get("to"))]
-                for x in t["items"]:
-                    if x["start"] >= ti["start"] + ti["duration"]:
-                        x["start"] -= ti["duration"]
+                self.shift(b, -ti["duration"])                         # the later clips move up by one amount on every track
             return None
         if cid == "clip.speedDuration":
             for c in p.get("clips") or []:

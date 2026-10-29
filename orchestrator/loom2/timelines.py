@@ -200,6 +200,32 @@ def line_spans(span: int, n: int) -> list[tuple[int, int]]:
 AudioCue = dict[str, Any]           # CN2: {name, src (a file URL), path (RC3: the movie reads it), duration_s, asset, node, line (CE1)} — a spoken line; None where a line has no voice yet
 
 
+CLIP_METHODS = ("one_pass", "start_still", "speaking")    # U6c: the methods whose clip is the shot's final (no layers to put together)
+
+
+def final_of(shot: Any, finals: list[Any]) -> tuple[str, str | None]:
+    """U7b (05 §1): the shot version and the clip Episode lays for a shot — the final of the version marked final, else the shot's latest
+    final, else none (the shot is listed as missing). A final is a final shot's assembled clip (`Final.clip_id`, made for the shot; a final
+    from before A1 names no version: the current one). A version made in one pass (a stage clip, from the start still, the speaking
+    close-up) has its clip as its final."""
+    cur = next((v for v in shot.versions if v.id == shot.current), None)
+    marked = cur if cur is not None and cur.state == "final" else next((v for v in reversed(shot.versions) if v.state == "final"), None)
+    mine = sorted((f for f in finals if f.shot_id == shot.id and f.clip_id), key=lambda f: f.updated_at, reverse=True)
+
+    def of(v: Any) -> str | None:
+        f = next((f for f in mine if (f.shot_version or shot.current) == v.id), None)
+        if f is not None:
+            return f.clip_id
+        return v.clip_id if v.method in CLIP_METHODS and v.clip_id else None
+    if marked is not None and (c := of(marked)):
+        return marked.id, c
+    if mine:
+        return mine[0].shot_version or shot.current, mine[0].clip_id
+    if cur is not None and (c := of(cur)):
+        return cur.id, c
+    return (marked or cur).id if (marked or cur) is not None else shot.current, None
+
+
 def story_lookup(ws, cat=None):
     """17 §3e: a lane clip's chapter name (its node's title, else its shot's name), its Dialogue lines and (CN2) the lines' voices — the
     audio assets as cues in the SRT's order, None where a line has no voice yet — from the Story records and the Catalogue."""

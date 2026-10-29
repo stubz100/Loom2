@@ -720,6 +720,109 @@
         "title": "AnimationsPut",
         "type": "object"
       },
+      "AssembleReport": {
+        "description": "U7b: what *Assemble* did to V1 — the shots placed, updated to a newer final, kept as they were, taken off (no longer on the route),\nthose without a final (left out, or kept as they are when already on the cut), held for their lines, too short for them, the clips\nrenamed after their shots.",
+        "properties": {
+          "held": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Held",
+            "type": "array"
+          },
+          "kept": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Kept",
+            "type": "array"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "placed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Placed",
+            "type": "array"
+          },
+          "removed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Removed",
+            "type": "array"
+          },
+          "renamed": {
+            "default": 0,
+            "title": "Renamed",
+            "type": "integer"
+          },
+          "short": {
+            "items": {
+              "$ref": "#/components/schemas/ShortLines"
+            },
+            "title": "Short",
+            "type": "array"
+          },
+          "unfinished": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unfinished",
+            "type": "array"
+          },
+          "updated": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Updated",
+            "type": "array"
+          }
+        },
+        "required": [
+          "placed",
+          "updated",
+          "kept",
+          "removed",
+          "missing",
+          "unfinished",
+          "held",
+          "short",
+          "renamed"
+        ],
+        "title": "AssembleReport",
+        "type": "object"
+      },
+      "AssembleStop": {
+        "properties": {
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "shot_id"
+        ],
+        "title": "AssembleStop",
+        "type": "object"
+      },
       "AssetDeletedEvent": {
         "properties": {
           "data": {
@@ -3818,6 +3921,72 @@
           "phrases"
         ],
         "title": "CoverageCaps",
+        "type": "object"
+      },
+      "CutAssemble": {
+        "properties": {
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "route": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route"
+          },
+          "shots": {
+            "items": {
+              "$ref": "#/components/schemas/AssembleStop"
+            },
+            "title": "Shots",
+            "type": "array"
+          }
+        },
+        "required": [
+          "shots"
+        ],
+        "title": "CutAssemble",
+        "type": "object"
+      },
+      "CutAssembled": {
+        "properties": {
+          "report": {
+            "$ref": "#/components/schemas/AssembleReport"
+          },
+          "results": {
+            "items": {},
+            "title": "Results",
+            "type": "array"
+          },
+          "timeline": {
+            "$ref": "#/components/schemas/Timeline"
+          },
+          "tracks": {
+            "$ref": "#/components/schemas/CutTracks"
+          }
+        },
+        "required": [
+          "timeline",
+          "tracks",
+          "report"
+        ],
+        "title": "CutAssembled",
         "type": "object"
       },
       "CutCaption": {
@@ -19527,6 +19696,30 @@
           "model_id"
         ],
         "title": "ShellQueued",
+        "type": "object"
+      },
+      "ShortLines": {
+        "description": "F39: a shot whose lines run longer than its final, which has no more frames to hold them.",
+        "properties": {
+          "final_s": {
+            "title": "Final S",
+            "type": "number"
+          },
+          "lines_s": {
+            "title": "Lines S",
+            "type": "number"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "lines_s",
+          "final_s"
+        ],
+        "title": "ShortLines",
         "type": "object"
       },
       "Shot": {
@@ -38165,6 +38358,59 @@
           }
         },
         "summary": "Timeline Put",
+        "tags": [
+          "timelines"
+        ]
+      }
+    },
+    "/timelines/{tl_id}/assemble": {
+      "post": {
+        "description": "U7b (D157, proto01_UI2 05 §1, 06 §3; G14): *Assemble from the Flow* on a FilmCraft cut — each shot of the route at its final (the\nversion marked final, else its latest final, else none: listed), placing only what changed on V1 and keeping the author's edits to the\nrest, held for its lines or listed (F39), its clip named after it (F40); one undo step.",
+        "operationId": "timeline_assemble_timelines__tl_id__assemble_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tl_id",
+            "required": true,
+            "schema": {
+              "title": "Tl Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CutAssemble"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CutAssembled"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Timeline Assemble",
         "tags": [
           "timelines"
         ]

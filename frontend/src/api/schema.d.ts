@@ -4313,6 +4313,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/timelines/{tl_id}/assemble": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Timeline Assemble
+         * @description U7b (D157, proto01_UI2 05 §1, 06 §3; G14): *Assemble from the Flow* on a FilmCraft cut — each shot of the route at its final (the
+         *     version marked final, else its latest final, else none: listed), placing only what changed on V1 and keeping the author's edits to the
+         *     rest, held for its lines or listed (F39), its clip named after it (F40); one undo step.
+         */
+        post: operations["timeline_assemble_timelines__tl_id__assemble_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/timelines/{tl_id}/captions": {
         parameters: {
             query?: never;
@@ -5059,6 +5081,42 @@ export interface components {
             items: components["schemas"]["AnimationTemplate-Input"][];
             /** Revision */
             revision: number;
+        };
+        /**
+         * AssembleReport
+         * @description U7b: what *Assemble* did to V1 — the shots placed, updated to a newer final, kept as they were, taken off (no longer on the route),
+         *     those without a final (left out, or kept as they are when already on the cut), held for their lines, too short for them, the clips
+         *     renamed after their shots.
+         */
+        AssembleReport: {
+            /** Held */
+            held: string[];
+            /** Kept */
+            kept: string[];
+            /** Missing */
+            missing: string[];
+            /** Placed */
+            placed: string[];
+            /** Removed */
+            removed: string[];
+            /**
+             * Renamed
+             * @default 0
+             */
+            renamed: number;
+            /** Short */
+            short: components["schemas"]["ShortLines"][];
+            /** Unfinished */
+            unfinished: string[];
+            /** Updated */
+            updated: string[];
+        };
+        /** AssembleStop */
+        AssembleStop: {
+            /** Node Id */
+            node_id?: string | null;
+            /** Shot Id */
+            shot_id: string;
         };
         /** AssetDeletedEvent */
         AssetDeletedEvent: {
@@ -6274,6 +6332,25 @@ export interface components {
             };
             /** Shots */
             shots: string[];
+        };
+        /** CutAssemble */
+        CutAssemble: {
+            /** Revision */
+            revision?: number | null;
+            /** Route */
+            route?: {
+                [key: string]: string;
+            } | null;
+            /** Shots */
+            shots: components["schemas"]["AssembleStop"][];
+        };
+        /** CutAssembled */
+        CutAssembled: {
+            report: components["schemas"]["AssembleReport"];
+            /** Results */
+            results?: unknown[];
+            timeline: components["schemas"]["Timeline"];
+            tracks: components["schemas"]["CutTracks"];
         };
         /**
          * CutCaption
@@ -12663,6 +12740,18 @@ export interface components {
             model_id: string;
             /** Source Asset Id */
             source_asset_id: string;
+        };
+        /**
+         * ShortLines
+         * @description F39: a shot whose lines run longer than its final, which has no more frames to hold them.
+         */
+        ShortLines: {
+            /** Final S */
+            final_s: number;
+            /** Lines S */
+            lines_s: number;
+            /** Name */
+            name: string;
         };
         /** Shot */
         Shot: {
@@ -23516,6 +23605,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Deleted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    timeline_assemble_timelines__tl_id__assemble_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tl_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CutAssemble"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CutAssembled"];
                 };
             };
             /** @description Validation Error */

@@ -6,7 +6,8 @@ import { askConfirm, askText, useSession } from '../../../store/session'
 import { useAnimate } from '../../animate/animateStore'
 import { clipList, loadClips } from '../../../store/clips'
 import { useStory } from '../storyStore'
-import { assembleLane, laneChanges, routeLabel, routePicks, updateClip, walkRoute } from './assemble'
+import { assembleLane, assembledText, laneChanges, linesPast, routeLabel, routePicks, updateClip, walkRoute } from './assemble'
+import { UI2 } from '../../../frame/router'
 import { duration, ticks } from './lane'
 import { isCut, lastMovie, useSequence } from './sequenceStore'
 import { CAPTION_STYLES, CUT_TOOLS, dialogueOf, itemLabel, duckSteps, evenDialogueSteps, fadeStep, findItem, gainStep, isVideo, panLabel, ROLE_NAMES, STRIP, stripValue, ticksOf, trackRef, transitionInto, transitionStep, TRACK_ROLES, underSceneGrade, volumeLabel, widthLabel, type CutTool } from './cut'
@@ -54,6 +55,12 @@ export function laneChecklist(): { i: number; what: string }[] {
     else if (v.state !== 'final') out.push({ i, what: `${sh.name} ${v.id} is not final` })
     else if (st.shotStale(v)) out.push({ i, what: `${sh.name} ${v.id} is stale (its stage moved)` })
   })
+  const tr = sq().tracks
+  if (isCut() && tr) for (const x of linesPast(tr)) {                         // F39 (U7b): a shot's lines run past its end
+    const i = lane.clips.findIndex((c) => c.id === String(x.clip))
+    const name = st.shots.find((s) => s.id === x.shot_id)?.name ?? x.name
+    out.push({ i: Math.max(0, i), what: `${name}: the lines run ${x.lines} s, the shot ${x.shot} s` })
+  }
   return out
 }
 
@@ -92,6 +99,11 @@ export async function assembleCut(picks: Record<string, string>, name: string | 
   if (name !== null && !(await sq().create(name))) return
   const cur = sq().current
   if (!cur) return
+  if (UI2 && isCut()) {                                                       // U7b (D157, 05 §1): the server lays each shot's final, keeping V1's edits
+    const report = await sq().cutAssemble(routePicks(walk.choices), walk.nodes.flatMap((n) => (n.shot_id ? [{ shot_id: n.shot_id, node_id: n.id }] : [])))
+    if (report) useSession.getState().toast(assembledText(cur.name, report), report.missing.length || report.short.length ? 'info' : 'success')
+    return
+  }
   const { lane, missing } = assembleLane(walk.nodes, st.shots, new Map(clipList().map((c) => [c.id, c])), cur.fps, name === null ? sq().lane : null)
   useSequence.setState({ current: { ...cur, route: routePicks(walk.choices) } })
   sq().apply(() => lane, 'assemble')

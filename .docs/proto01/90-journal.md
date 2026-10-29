@@ -12287,3 +12287,89 @@ World (a bench stage bound to it, the hash still World's), back to Make.
 The timeline scenario (D121 AW2) now expects the camera's row with no keys, not no row.
 
 **Checks:** offline 721 passed (no backend change); Vitest 634 + 3 skipped; typecheck, build and lint clean; e2e 87/87 (alone).
+
+## 2026-10-29 07:43 — E42 set up: why a figure walking away is performed facing the camera — the bars before the run (D157; proto01_UI2 07 §2, 04 §3.2; F42, F43)
+
+**The author's word (2026-10-29):** run E42 unattended, alone on the GPU (rule 10: one job at a time).
+
+**What the code shows** before any run:
+
+1. **The reference.** A character layer is always performed from the version's front A-pose (`routes/finals.final_layer_run`:
+   `anim_ref_asset_id`). The back view (`anim_ref_back_asset_id`, CA0) is made and kept, but never given to Wan Animate. So F43's back view
+   could not have changed the take.
+2. **The pose guide.** Stage draws every COCO-18 point that falls inside the frame (`passes.projectPoints`, `drawPose`), the nose, the eyes
+   and the ears included, whichever way the head faces. A real person seen from behind gives DWPose no face points. The guide of a figure
+   walking away thus shows a face, and its shoulders swapped.
+3. **The prompt** is the character's sheet and `CHARACTER_TAIL` (*moving exactly as the pose shows. Plain studio background, static
+   camera*). Nothing says from behind.
+
+**The spike** (`engine/spikes/e42_facing.py`) runs the app's own Wan Animate graph (`graphs.build_i2v`, the Draft preset, the layer's
+size and rate). It takes one batch of the walkthrough's *Stay* (the final made for it, Ines's layer, its stored keypoints), on a copy of The
+Last Ferry (`F:/loom2-projects/_u3-check/last-ferry-copy`). One seed for every run, five runs:
+
+| Run | The guide | The reference | The prompt |
+| --- | --- | --- | --- |
+| R0 baseline | as Stage draws it | the front A-pose, placed (the layer's own) | the app's |
+| R1 guide | no nose or eyes while the head faces away | front | the app's |
+| R2 reference | as drawn | the back A-pose, placed where the figure starts | the app's |
+| R3 prompt | as drawn | front | + *seen from behind, walking away from the camera, her back to the camera* |
+| R4 all | R1's | R2's | R3's |
+
+A frame *faces away* when the figure's shoulders are mirrored on screen (its right shoulder on the image's right), read from the stored
+keypoints.
+
+**The measure:** on each output frame, SCRFD (FaceSim's detector, CPU) looks for a frontal face; the share of the away frames with one,
+score ≥ 0.5. Also the seconds, the peak VRAM, and sheets of frames for the author.
+
+**Bars, set before the run:**
+
+- every run completes; peak ≤ 15.5 GB;
+- R0 shows the fault: a face on ≥ 50 % of its away frames (else the spike does not reproduce F42 and the result is that);
+- an input *fixes* the facing when its run has a face on ≤ 20 % of the away frames, and R4 within 10 points of the best single input;
+- the frames facing the camera (when the batch has any) keep a face on ≥ 80 %.
+
+The result becomes a decision before U6 builds Performance: which inputs a performance is given when its figure turns its back to the
+camera.
+
+## 2026-10-29 07:56 — E42 measured: each of the three inputs alone turns the figure's back to the camera; the guide's face points were the fault → D158 (proto01_UI2 07 §2; F42, F43)
+
+`engine/spikes/e42_facing.py` ran unattended, alone on the GPU (rule 10).
+
+- **The material:** five runs of Wan Animate Move (the app's graph, Draft) on Stay's Ines layer. One batch of 65 frames at 848×480, seed
+  20261029, her back to the camera in all 65 frames by the stored keypoints.
+- **The results** are in `engine/spikes/out/e42/` (results.json, sheet.jpg, r0–r4.mp4).
+
+| Run | What changed | A face on the away frames | Exec | Peak |
+| --- | --- | --- | --- | --- |
+| R0 | nothing (the app as it is) | 27 of 65 (41.5 %), mean score 0.23 | 168 s | 8.2 GB |
+| R1 | the guide without the nose and eyes | 0 of 65 | 103 s | 7.7 GB |
+| R2 | the back A-pose as the reference | 0 of 65 | 146 s | 7.8 GB |
+| R3 | *seen from behind, walking away from the camera, her back to the camera* in the prompt | 0 of 65 | 105 s | 9.6 GB |
+| R4 | all three | 0 of 65 | 145 s | 8.2 GB |
+
+**Against the bars:**
+
+- Every run completed, the peak was at most 9.6 GB, and R4 is within 10 points of the best single input.
+- **One bar failed as written:** *R0 shows the fault* asked for a face on at least 50 % of its away frames, and SCRFD found one on 41.5 %.
+  The sheet shows the fault in full: in every sampled frame of R0 Ines walks with her face, her sweater and the front of her coat to the
+  camera, against a guide that walks her away. The detector misses a face a third of the screen tall at 848×480 (the score is 0.23 on
+  average), so the bar was set too high for the measure. The fault is reproduced; the measure undercounts it.
+- R1, R2 and R3 each fix it by the bar (no face on any away frame). The sheet agrees: in all four runs she walks away with her back to the
+  camera, her hood and the satchel's strap across her back. In R2 and R4 the back of the coat is the back A-pose's.
+
+**Why the face was there:** Stage drew the nose and the eyes whichever way the head turned (D101's pose pass), and Wan Animate read them as
+a face towards the camera, against the shoulders' order. The back view (F43) was never given to the model, and the prompt never said from
+behind. Any one of the three is enough on this shot. The guide is the root: it was the one input that described a figure that does not
+exist.
+
+**Decision D158** (the decision log): a performance of a figure turned away from the camera is given all three. The guide drops the face
+points per frame, as DWPose would on a real back view. A batch whose frames mostly face away takes the back A-pose and the prompt's from
+behind. The facing-away mark (U5d) tells a character without a back view what it lacks. U6 builds it.
+
+**Not measured:**
+
+- a figure that turns during a batch (the guide carries the turn frame by frame; the reference and the prompt hold for a batch);
+- a close shot, where the face is large;
+- other seeds.
+
+U6's rig check owes a turning figure.

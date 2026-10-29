@@ -9,7 +9,7 @@ import { commandsFor, defaultKeysOf, keyLabel, type Scope } from './commands'
 import { chordFromEvent, remap, resetAllKeys, resetKey, useKeymap } from './keymap'
 import { preloadSuite } from './lazySuite'
 
-const SCOPES: [Scope, string][] = [['global', 'Everywhere'], ['story', 'Story'], ['catalogue', 'Catalogue'], ['generate', 'Image · Make'], ['edit', 'Image · Edit'], ['animate', 'Animate'], ['stage', 'Stage'], ['models', 'Models']]   // D90 (01 §11.7): Stage and Story were missing
+const SCOPES: [Scope, string][] = [['global', 'Everywhere'], ['story', 'Story'], ['catalogue', 'Catalogue'], ['generate', 'Image · Make'], ['edit', 'Image · Edit'], ['animate', 'Animate'], ['stage', 'Stage'], ['models', 'Models'], ['bin', 'Bin']]   // D90 (01 §11.7): Stage and Story were missing
 
 export function KeyboardSettings() {
   const overrides = useKeymap((s) => s.overrides)

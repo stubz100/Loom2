@@ -131,6 +131,16 @@ class BinThings(BaseModel):
     next_cursor: str | None = None                   # B0: the next page, None at the end
 
 
+class BinUse(BaseModel):
+    """B1 (D159): a record that names a thing — `kind` version (an entity's), shot or stage — with the role it gives it."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    kind: Literal["version", "shot", "stage"]
+    id: str
+    version: str | None = None
+    name: str
+    role: str
+
+
 class BinMove(BaseModel):
     ids: list[str] = Field(min_length=1)
     to: str = Field(description="the home (or a page inside it) the things go to")
@@ -185,6 +195,25 @@ async def bin_home_items(svc: Svc, gid: str, cursor: str | None = None, limit: i
         raise HTTPException(404, "no such home")
 
 
+@router.get("/bin/things/{aid}", response_model=BinThing)
+async def bin_thing(svc: Svc, aid: str):
+    """B1 (D159): one thing with its home and its roles there (the Bin opens it in its home, selected)."""
+    from ..bins import thing
+    ws, _, _ = svc.require_project()
+    out = await asyncio.to_thread(thing, svc.require_groups(), ws, aid)
+    if out is None:
+        raise HTTPException(404, "no such thing")
+    return out
+
+
+@router.get("/bin/things/{aid}/uses", response_model=list[BinUse])
+async def bin_thing_uses(svc: Svc, aid: str):
+    """B1 (D159, 11 §3): what uses a thing — an entity version, a shot version, a stage — and the role each gives it."""
+    from ..bins import uses_of
+    ws, _, _ = svc.require_project()
+    return await asyncio.to_thread(uses_of, ws, aid)
+
+
 @router.post("/bin/move", response_model=BinMoved)
 async def bin_move(svc: Svc, body: BinMove):
     """B0 (D159 Q5, R6): things moved to another home; a role they would lose is asked first (`ask`), a role a record is made on refused."""
@@ -194,6 +223,8 @@ async def bin_move(svc: Svc, body: BinMove):
         out = await asyncio.to_thread(move_things, svc.require_groups(), ws, body.ids, body.to, body.confirm)
     except KeyError:
         raise HTTPException(404, "no such home")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     if out["changed"]:
         svc.group_changed(out["changed"])
     for rid in out["records"]:

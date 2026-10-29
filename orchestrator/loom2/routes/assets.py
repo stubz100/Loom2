@@ -31,6 +31,7 @@ class AssetPatch(BaseModel):
 class ImportRequest(BaseModel):
     paths: list[str]
     suite: str = "import"
+    to: str | None = None                          # B1 (D159, R9): the Bin home (or a page) the files go to; none — Imports (no page)
 
 
 class IdList(BaseModel):
@@ -126,6 +127,14 @@ async def assets_import(svc: Svc, body: ImportRequest):
         rec = await asyncio.to_thread(_ingest_import, cat, src, body.suite)
         svc.hub.broadcast("asset.created", rec.model_dump())
         out.append(rec.model_dump())
+    if body.to and out:                                              # B1: an entity's or a shot's current version; a heading: Imports
+        from ..bins import settle
+        ws, _, _ = svc.require_project()
+        groups = svc.require_groups()
+        dest = await asyncio.to_thread(settle, groups, ws, body.to) if body.to in groups.groups else None
+        if dest is not None:
+            changed = await asyncio.to_thread(groups.move, [("asset", r["id"]) for r in out], dest.id)
+            svc.group_changed(changed)
     return {"items": out}
 
 

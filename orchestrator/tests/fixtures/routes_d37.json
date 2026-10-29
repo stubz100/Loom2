@@ -33,6 +33,8 @@
  "GET /audio/plugins",
  "GET /bin/homes/{gid}/items",
  "GET /bin/search",
+ "GET /bin/things/{aid}",
+ "GET /bin/things/{aid}/uses",
  "GET /bin/tree",
  "GET /blobs/{sha}",
  "GET /capabilities",

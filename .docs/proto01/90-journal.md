@@ -12888,3 +12888,63 @@ request.
 and the API contract regenerated; agents_check, model_literals_check and settings_audit (321, 0) clean.
 
 Next: B1, one Bin with every verb.
+
+## 2026-10-29 13:58 — B1: one Bin, every verb (D159; proto01_UI2 11 §3, R7, R9, R10)
+
+**One Bin** (R7): the Dock's drawer is the Bin itself, in a drawer's size — no Catalogue code left in the new shell.
+
+- The layer and the drawer read one store, started once for both. Its home, selection and pins carry from one to the other.
+- They share the tree, the windowed grid and the tile (`BinTile.tsx`), and the menus and keys (`binMenus.ts`).
+- The drawer keeps D95's verbs of where you are (`verbs.ts`), relabelled for the new places:
+  - a reference in Make; a layer in Edit;
+  - the start or end frame in Performance;
+  - an image plane, a set or a 3D model on Clay's stage;
+  - Play in Performance.
+
+  A tile's double-click does the likely one; its right-click lists them, then a picture's World verbs (Prototype ▸, Add to ‹entity› ▸,
+  Make an entity from it), then the Bin's own. A pick from a panel ("Add image plane…") still puts its button in a tile's corner.
+
+**Every verb, on the selection** (the scope `bin`, keys answered by the grid):
+
+- **Select:** a click selects, Ctrl+click adds, Shift+click takes a range; the arrows move (Shift: a range); *Select all* (Ctrl+A);
+  *Clear selection* (Esc).
+- **On the selection:** Move to…, Tag… (many: words added to each), Duplicate (Ctrl+D), Trash (Delete), Restore, *Delete permanently…*
+  (Shift+Delete), *Empty trash…* (R10).
+- **On one thing:** Reveal in folder; Re-run and Variations, which run the thing's own recipe with its own origin, so the new ones land
+  beside it.
+- **The large view** (Space, or a double-click): the loupe's zoom and pan (Ctrl+wheel, a drag), Fit (Ctrl+0), 1:1, previous and next
+  (← →), Pin, Detach ↗. The loupe's parts moved to `frame/loupe/` (the viewer, the media, the styles); the detached window uses them from
+  there.
+- **Compare:** C pins up to four things from any home, each tile wears its letter, and *Compare N* in the grid's head opens them side by
+  side, zoom and pan locked, with a wipe and a difference for two pictures. Tab swaps (listed beside the Catalogue's Tab).
+- **Tile size:** [ and ], kept per viewer.
+
+**The Inspector:**
+
+- *made from* and *made into*: the lineage as thumbnails; a click opens that thing in its home (`reveal`: `GET /bin/things/{id}`, paging
+  until it is loaded).
+- *used by*: the records that name the thing (`GET /bin/things/{id}/uses`) — an entity version (hero, A-pose, model, set picture), a shot
+  version (frame, take, clip, final), a stage (a plane, a 3D model, a plate). The first two open; a stage is named.
+- With many selected: their thumbnails and the bulk verbs.
+
+**Import… and a file dropped from Windows** land in the open home (R9; `POST /assets/import` with `to`). Things put into an entity or a
+shot go to its current version, which is where World and Shots read them; a heading of the tree (World, Characters, Shots, Episode) takes
+nothing: Move refuses it, an import goes to Imports. The e2e caught it: the first import landed on the character itself, beside her
+versions, where nothing shows it.
+
+**Tests:**
+
+- `test_bin_b1.py` (2): a thing with its home and roles, and what uses it; a thing put into an entity or a shot goes to its current
+  version, and a heading takes nothing.
+- An e2e scenario: two selected and tagged at once; Space, → and Esc on the large view; C pins two and Compare shows both; the hero's
+  Inspector says Lia v1 uses it; Import… lands in Lia's v1; the drawer in World opens where the layer was, its first verb *Use as a
+  reference (Make)*.
+- The command audit takes the scope `bin`.
+
+**Not checked here:** a file dropped from Windows (Tauri's drop event: the browser e2e cannot raise it; Import… covers the same path).
+
+**Checks:** offline 737 passed (one warning: a fake-ComfyUI thread exception in `test_shot_recipe_rc0`, not the Bin); Vitest 646 + 3
+skipped; typecheck, build and lint clean (92 warnings, as before); e2e 94/94 (alone); the route snapshot and the API contract regenerated;
+agents_check, model_literals_check and settings_audit (321, 0) clean.
+
+Next: B2, the old shell and the Catalogue removed.

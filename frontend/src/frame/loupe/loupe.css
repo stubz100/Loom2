@@ -1,0 +1,41 @@
+/* The loupe, compare and the detached window (08 §3c, D155) — moved out of the Catalogue for the Bin (B1, D159). */
+.loupe { position: absolute; inset: 0; background: var(--deep); display: flex; flex-direction: column; }
+.loupe .view { flex: 1; position: relative; overflow: hidden; cursor: grab; }
+.loupe .view img { position: absolute; left: 0; top: 0; transform-origin: 0 0; image-rendering: auto; user-select: none; -webkit-user-drag: none; }
+/* D90 (B10): clips and spoken lines play in the loupe and compare instead of a broken <img> */
+.loupe .view.play { cursor: default; }
+.loupe .view .loupe-media, .compare .cell .loupe-media { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: var(--deep); }
+.loupe .view .loupe-audio, .compare .cell .loupe-audio { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px; }
+.loupe .view .loupe-audio img, .compare .cell .loupe-audio img { position: static; transform: none; max-width: 100%; max-height: calc(100% - 72px); object-fit: contain; }
+.loupe .view .loupe-audio audio, .compare .cell .loupe-audio audio { width: min(480px, 100%); }
+.loupe .facts { min-height: 32px; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 14px; padding: 2px 12px; font-size: 12px; color: var(--fg2); background: var(--bg1); border-top: 1px solid var(--line); }
+.loupe .facts .spacer { flex: 1; }
+.loupe .facts span, .loupe .facts button, .compare .bar span, .compare .bar button, .compare .bar label { white-space: nowrap; }
+.loupe .facts, .compare .bar { overflow: hidden; }
+/* D71 (P11): the send-to hub under the loupe; below 760 px the secondary verbs fold into More (the tile menu has them all) */
+.loupe { container-type: inline-size; }
+.loupe .hub { min-height: 34px; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; padding: 2px 12px; background: var(--bg1); border-top: 1px solid var(--line); }
+.loupe .hub > * { flex: none; }
+.loupe .hub .cmd-row { flex-wrap: nowrap; }
+.loupe .hub .spacer { flex: 1 1 0; }
+.loupe .hub .gap { width: 1px; align-self: stretch; margin: 6px 4px; background: var(--line); }
+@container (max-width: 760px) { .loupe .hub .secondary { display: none; } .loupe .hub { flex-wrap: nowrap; overflow: hidden; } }
+@container (max-width: 480px) { .loupe .hub { padding: 2px 4px; gap: 0; } .loupe .hub .cmd-btn { padding-left: 4px; padding-right: 4px; } .loupe .hub .cmd-btn > span:not(.caret) { display: none; } .loupe .hub .gap { display: none; } }
+.compare { position: absolute; inset: 0; background: var(--deep); display: flex; flex-direction: column; }
+.compare .cells { flex: 1; display: grid; gap: 2px; background: var(--line); min-height: 0; }
+.compare .cell { position: relative; overflow: hidden; background: var(--deep); }
+.compare .cell img { position: absolute; left: 0; top: 0; transform-origin: 0 0; user-select: none; -webkit-user-drag: none; }
+.compare .cell .tag { position: absolute; top: 6px; left: 6px; font-size: 11px; background: var(--overlay); padding: 1px 6px; border-radius: 4px; color: var(--fg2); }
+.compare .cell.diff img.over { mix-blend-mode: difference; }
+.compare .bar { height: 32px; display: flex; align-items: center; gap: 12px; padding: 0 12px; font-size: 12px; color: var(--fg2); background: var(--bg1); border-top: 1px solid var(--line); }
+.compare .bar .spacer { flex: 1; }
+.compare .wipe { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); pointer-events: none; }
+.detached-loupe { position: fixed; inset: 0; display: flex; flex-direction: column; background: var(--deep); color: var(--fg); }
+.detached-loupe .view { flex: 1; position: relative; overflow: hidden; cursor: grab; display: grid; place-items: center; }
+.detached-loupe .view img { position: absolute; left: 0; top: 0; transform-origin: 0 0; user-select: none; }
+.detached-loupe .view.play { cursor: default; }
+.detached-loupe .view .loupe-media { max-width: 100%; max-height: 100%; }
+.detached-loupe .view p { margin: 0; }
+.detached-loupe .bar { display: flex; gap: 10px; align-items: center; padding: 6px 10px; border-top: 1px solid var(--line); font-size: 12px; white-space: nowrap; }
+.detached-loupe .bar .spacer { flex: 1; }
+.detached-loupe .bar button { display: inline-flex; align-items: center; gap: 4px; }

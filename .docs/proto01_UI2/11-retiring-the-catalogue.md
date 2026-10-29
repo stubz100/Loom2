@@ -85,7 +85,7 @@ D159 re-orders the waves: the old shell goes with the Catalogue, before the two 
 | Wave | What | Size |
 | --- | --- | --- |
 | **B0 · a Bin that holds up** — built 2026-10-29 | R2–R6, R8 (detail below; R1 comes with B3) | M |
-| **B1 · one Bin, every verb** | R7, R9, R10 and §3's *keep* rows (detail below) | L |
+| **B1 · one Bin, every verb** — built 2026-10-29 | R7, R9, R10 and §3's *keep* rows (detail below) | L |
 | **B2 · the old shell and the Catalogue removed** | the new UI the only one; the Catalogue's code and its last users (detail below) | L |
 | **B3 · pages in homes** | every album page placed in a home once (detail below) | S |
 | **B4 · Unprocessed retired** | every thing without an owner lands in a home (detail below) | S |

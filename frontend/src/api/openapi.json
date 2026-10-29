@@ -1904,6 +1904,52 @@
         "title": "BinTree",
         "type": "object"
       },
+      "BinUse": {
+        "description": "B1 (D159): a record that names a thing — `kind` version (an entity's), shot or stage — with the role it gives it.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "version",
+              "shot",
+              "stage"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "version",
+          "name",
+          "role"
+        ],
+        "title": "BinUse",
+        "type": "object"
+      },
       "BindBody": {
         "properties": {
           "shot_id": {
@@ -11553,6 +11599,17 @@
             "default": "import",
             "title": "Suite",
             "type": "string"
+          },
+          "to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To"
           }
         },
         "required": [
@@ -27659,6 +27716,96 @@
           }
         },
         "summary": "Bin Search",
+        "tags": [
+          "groups"
+        ]
+      }
+    },
+    "/bin/things/{aid}": {
+      "get": {
+        "description": "B1 (D159): one thing with its home and its roles there (the Bin opens it in its home, selected).",
+        "operationId": "bin_thing_bin_things__aid__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "aid",
+            "required": true,
+            "schema": {
+              "title": "Aid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BinThing"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bin Thing",
+        "tags": [
+          "groups"
+        ]
+      }
+    },
+    "/bin/things/{aid}/uses": {
+      "get": {
+        "description": "B1 (D159, 11 §3): what uses a thing — an entity version, a shot version, a stage — and the role each gives it.",
+        "operationId": "bin_thing_uses_bin_things__aid__uses_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "aid",
+            "required": true,
+            "schema": {
+              "title": "Aid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BinUse"
+                  },
+                  "title": "Response Bin Thing Uses Bin Things  Aid  Uses Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bin Thing Uses",
         "tags": [
           "groups"
         ]

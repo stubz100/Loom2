@@ -127,7 +127,7 @@ describe('allPlaced', () => {
 // D90 (B10): the loupe and compare show clips and spoken lines as media, not as a broken <img>
 describe('loupeMedia', () => {
   it('plays a clip in a video (an Animate clip names its clip), a line in an audio, and zooms only images', async () => {
-    const { loupeMedia } = await import('./media')
+    const { loupeMedia } = await import('../../frame/loupe/media')
     const v = loupeMedia({ id: 'ast_v', kind: 'video', params: { clip_id: 'clip_1' } })
     expect(v).toMatchObject({ kind: 'video', clipId: 'clip_1', zoom: false })
     expect(v.src).toContain('/assets/ast_v/file')

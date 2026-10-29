@@ -352,6 +352,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/bin/things/{aid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Bin Thing
+         * @description B1 (D159): one thing with its home and its roles there (the Bin opens it in its home, selected).
+         */
+        get: operations["bin_thing_bin_things__aid__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bin/things/{aid}/uses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Bin Thing Uses
+         * @description B1 (D159, 11 §3): what uses a thing — an entity version, a shot version, a stage — and the role each gives it.
+         */
+        get: operations["bin_thing_uses_bin_things__aid__uses_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/bin/tree": {
         parameters: {
             query?: never;
@@ -5596,6 +5636,25 @@ export interface components {
             /** Trash */
             trash: number;
         };
+        /**
+         * BinUse
+         * @description B1 (D159): a record that names a thing — `kind` version (an entity's), shot or stage — with the role it gives it.
+         */
+        BinUse: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "version" | "shot" | "stage";
+            /** Name */
+            name: string;
+            /** Role */
+            role: string;
+            /** Version */
+            version: string | null;
+        };
         /** BindBody */
         BindBody: {
             /** Shot Id */
@@ -9485,6 +9544,8 @@ export interface components {
              * @default import
              */
             suite?: string;
+            /** To */
+            to?: string | null;
         };
         /**
          * Inpaint
@@ -16063,6 +16124,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BinThings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bin_thing_bin_things__aid__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                aid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BinThing"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bin_thing_uses_bin_things__aid__uses_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                aid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BinUse"][];
                 };
             };
             /** @description Validation Error */

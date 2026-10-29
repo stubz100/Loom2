@@ -6,10 +6,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { http, setBackend, setMediaKey, unwrap } from '../api/client'
 import type { Asset } from '../api/types'
 import { discoverBackend, isTauri } from '../shell/tauri'
-import { Playable, useZoomPan, xfStyle } from '../suites/catalogue/Loupe'
-import { loupeMedia } from '../suites/catalogue/media'
+import { loupeMedia } from './loupe/media'
+import { Playable, useZoomPan, xfStyle } from './loupe/view'
 import { onLoupe, postLoupe } from './loupeLink'
-import '../suites/catalogue/catalogue.css'
 
 async function setFullscreen(on: boolean): Promise<void> {
   if (isTauri()) {

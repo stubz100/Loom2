@@ -391,6 +391,87 @@ def home_items(groups: GroupStore, ws: Any, gid: str) -> dict[str, Any]:
     return out
 
 
+def thing(groups: GroupStore, ws: Any, aid: str) -> dict[str, Any] | None:
+    """B1 (D159): one thing as the Bin shows it — its home (Imports when it is on no page) and its roles there; None when there is none."""
+    a = groups.cat.get(aid)
+    if a is None:
+        return None
+    with groups._lock:
+        page = groups.parent.get(("asset", aid))
+        h = home_of(groups, page)
+        g = groups.groups.get(page or "")
+        role = KIND_ROLE.get(g.role or "", g.role) if g is not None and g.kind == "role" else None
+        if h is None:
+            h = next((x for x in groups.groups.values() if x.kind == "bin" and x.path == "imports"), None)
+            role = None
+    roles = roles_of(aid, role, _record_roles(ws, h.path or "")) if h is not None and page else []
+    return {"asset": a, "roles": roles, "home_id": h.id if h else None, "path": h.path or "imports" if h else "imports"}
+
+
+def uses_of(ws: Any, aid: str) -> list[dict[str, Any]]:
+    """B1 (D159, 11 §3: *used by*): the records that name a thing — an entity version (its hero, an A-pose, its model, a set's picture), a
+    shot version (its frame, a take, its clip, its final), a stage (an image plane, a 3D model, a set's picture or its plate). Each with
+    what to open: `kind` (version, shot, stage), `id`, `version`, its name and the role. Read from the records (rebuildable, no new truth)."""
+    rec = _Records(ws)
+    out: list[dict[str, Any]] = []
+    for p in rec.st.profiles():
+        for v in p.versions:
+            named = [("hero", v.hero_asset_id), ("a_pose_front", v.anim_ref_asset_id), ("a_pose_back", v.anim_ref_back_asset_id),
+                     ("model", getattr(v, "shell_asset_id", None)), ("model", getattr(v, "model_asset_id", None)),
+                     *[("set_picture", src.asset_id) for src in (v.place_set.sources if v.place_set is not None else [])]]
+            for role, x in named:
+                if x == aid:
+                    out.append({"kind": "version", "id": p.id, "version": v.id, "name": f"{p.name} {v.id}", "role": role})
+    clips = {c.id for c in rec.clips().list() if c.asset_id == aid}
+    finals = {f.clip_id: f for f in rec.finals() if f.clip_id}
+    for s in rec.st.shots():
+        for v in s.versions:
+            role = ("frame" if v.frame_asset_id == aid else "clip" if v.clip_id and v.clip_id in clips
+                    else "take" if any((t.kind == "image" and t.id == aid) or (t.kind == "clip" and t.id in clips) for t in v.takes) else None)
+            if role:
+                out.append({"kind": "shot", "id": s.id, "version": v.id, "name": f"{s.name} {v.id}", "role": role})
+    for cid in clips:
+        f = finals.get(cid)
+        if f is not None:
+            s = rec.shot(f.shot_id)
+            out.append({"kind": "shot", "id": f.shot_id, "version": f.shot_version, "name": f"{s.name if s else f.shot_id} {f.shot_version or ''}".strip(), "role": "final"})
+    from .stages import StageStore
+    for stg in StageStore(ws).list():
+        role = None
+        for o in stg.objects:
+            if getattr(o, "asset_id", None) == aid:
+                role = "plane" if o.kind == "plane" else "model" if o.kind == "mesh" else o.kind
+            elif getattr(o, "plate_asset_id", None) == aid:
+                role = "plate"
+        if role:
+            out.append({"kind": "stage", "id": stg.id, "version": None, "name": stg.name, "role": role})
+    return out
+
+
+HEADINGS = {"world", "world/character", "world/prop", "world/place", "shots", "episode"}   # B1: the tree's headings hold no things
+
+
+def settle(groups: GroupStore, ws: Any, gid: str) -> GroupRecord | None:
+    """B1 (D159): the home things put into `gid` go to — an entity's or a shot's current version (the version's home is where World and
+    Shots read them), the home itself when it holds things (a version, the Look, the Sketches, a shot version, a cut, Imports); None for
+    a heading of the tree (World, Characters, Props, Places, Shots, Episode)."""
+    h = home_of(groups, gid)
+    if h is None:
+        return None
+    path = h.path or ""
+    if path in HEADINGS:
+        return None
+    parts = path.split("/")
+    from .story import StoryStore
+    if len(parts) == 3 and parts[0] == "world" and parts[1] in CLASS_HOME:
+        prof = StoryStore(ws).profile(parts[2])
+        return version_home(groups, prof, prof.current) if prof is not None else h
+    if len(parts) == 2 and parts[0] == "shots":
+        s = StoryStore(ws).shot(parts[1])
+        return home(groups, f"shots/{s.id}/{s.current}", {f"shots/{s.id}": s.name, f"shots/{s.id}/{s.current}": s.current}) if s is not None else h
+    return h
+
+
 def home_of(groups: GroupStore, gid: str | None) -> GroupRecord | None:
     """The home a page is in (a home is its own); None for no page or a page in no home."""
     while gid and gid in groups.groups:
@@ -408,9 +489,12 @@ def move_things(groups: GroupStore, ws: Any, ids: list[str], to: str, confirm: b
     picture, a final, a shot's clip) is `refused`, and so is a final version's hero. Within its home a thing just moves."""
     rec = _Records(ws)
     st = rec.st
-    target = home_of(groups, to)
-    if to not in groups.groups or target is None:
+    if to not in groups.groups:
         raise KeyError(to)
+    target = settle(groups, ws, to)                               # B1: an entity's or a shot's current version; a heading takes nothing
+    if target is None:
+        raise ValueError("a heading of the Bin holds no things — pick a home inside it")
+    to = to if groups.groups[to].kind == "role" and home_of(groups, to) == target else target.id
     plain: list[str] = []
     ask: list[dict[str, Any]] = []
     refused: list[dict[str, Any]] = []

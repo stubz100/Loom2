@@ -5,8 +5,11 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode 
 
 const PAD = 12
 
-export function BinGrid<T>({ items, keyOf, render, onEnd, min = 150, gap = 8, className = '' }: {
+export function BinGrid<T>({ items, keyOf, render, onEnd, min = 150, gap = 8, className = '', focus = -1, onCols, gridRef }: {
   items: T[]; keyOf: (t: T) => string; render: (t: T) => ReactNode; onEnd?: () => void; min?: number; gap?: number; className?: string
+  focus?: number                          // B1: the index kept in view (the keyboard's selection)
+  onCols?: (cols: number) => void         // B1: the columns, for the arrow keys
+  gridRef?: (el: HTMLDivElement | null) => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(0)
@@ -25,11 +28,13 @@ export function BinGrid<T>({ items, keyOf, render, onEnd, min = 150, gap = 8, cl
   const virt = useVirtualizer({ count: rows, getScrollElement: () => ref.current, estimateSize: () => cell + gap, overscan: 4,
     getItemKey: (i) => keyOf(items[i * cols]) ?? i, paddingStart: PAD, paddingEnd: PAD })
   useEffect(() => { virt.measure() }, [cell, cols, virt])
+  useEffect(() => { onCols?.(cols) }, [cols, onCols])
+  useEffect(() => { if (focus >= 0) virt.scrollToIndex(Math.floor(focus / cols), { align: 'auto' }) }, [focus, cols, virt])
   const vitems = virt.getVirtualItems()
   const last = vitems.length ? vitems[vitems.length - 1].index : -1
   useEffect(() => { if (onEnd && rows && last >= rows - 3) onEnd() }, [last, rows, onEnd])
   return (
-    <div ref={ref} className={`b-grid ${className}`}>
+    <div ref={(el) => { ref.current = el; gridRef?.(el) }} className={`b-grid ${className}`}>
       <div style={{ height: virt.getTotalSize(), position: 'relative' }}>
         {vitems.map((v) => (
           <div key={v.key} className="b-row" style={{ position: 'absolute', top: 0, left: PAD, right: PAD, height: cell, transform: `translateY(${v.start}px)`,

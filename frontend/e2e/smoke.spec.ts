@@ -4751,6 +4751,78 @@ test("the Bin holds up (B0, D159 · proto01_UI2 11 R2–R6): a home of 262 thing
   await expect(page.locator('[data-testid="bin-grid"] .w-path')).toHaveText('bin/world/sketches')
 })
 
+/** A 1×1 PNG to bring in from the disk. */
+const PNG_1PX = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64')
+
+test("one Bin (B1, D159 · proto01_UI2 11 §3): two selected and tagged at once; the keys move, show large and pin; two pinned side by side; the hero's Inspector says who uses it; Import… lands in the open home; the drawer in World offers the verbs of where you are", async ({ page }) => {
+  test.setTimeout(120_000)
+  const tag = Date.now().toString(36)
+  const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
+  const [hero, a1, a2] = (await api<{ ids: string[] }>('POST', '/assets/duplicate', { ids: [img, img, img] })).ids
+  const lia = await api<{ id: string }>('POST', '/story/profiles', { name: `Lia ${tag}`, cls: 'character', hero_asset_id: hero })
+  type Node = { id: string; path: string; children: Node[] }
+  const find = (ns: Node[], path: string): Node | undefined => ns.map((n) => (n.path === path ? n : find(n.children, path))).find(Boolean)
+  const vh = find((await api<{ homes: Node[] }>('GET', '/bin/tree')).homes, `world/character/${lia.id}/v1`)!
+  await api('POST', '/groups/move', { items: [a1, a2].map((id) => ({ kind: 'asset', id })), to: vh.id })
+  await page.goto(`${appUrl({ ui: '2' })}#bin`)
+  await page.locator('[data-testid="bin-tree"] .b-node[data-path="world/character"] .b-chev').click()
+  await page.locator(`[data-testid="bin-tree"] .b-node[data-path="world/character/${lia.id}"] .b-open`).click()
+  await expect(page.locator('[data-testid="bin-count"]')).toHaveText('3')
+  const tile = (id: string) => page.locator(`[data-testid="bin-grid"] .w-tile[data-id="${id}"]`)
+  const insp = page.locator('[data-testid="bin-inspector"]')
+  // two selected, tagged at once
+  await tile(a1).click()
+  await tile(a2).click({ modifiers: ['Control'] })
+  await expect(page.locator('[data-testid="bin-selected"]')).toContainText('2 selected')
+  await expect(insp).toContainText('2 selected')
+  await insp.locator('button', { hasText: 'Tag…' }).click()
+  await page.locator('.modal.ask input').fill(`dusk-${tag}`)
+  await page.locator('.modal.ask button.primary').click()
+  for (const id of [a1, a2]) await expect.poll(async () => (await api<{ tags: string[] }>('GET', `/assets/${id}`)).tags, { timeout: 10_000 }).toContain(`dusk-${tag}`)
+  // the keys: Space shows it large, → the next, Esc closes; C pins
+  await tile(a2).click()
+  await page.keyboard.press('Space')
+  const loupe = page.locator('[data-testid="bin-loupe"]')
+  await expect(loupe).toBeVisible()
+  const at = await loupe.locator('.facts').innerText()
+  await page.keyboard.press('ArrowRight')
+  await expect.poll(() => loupe.locator('.facts').innerText()).not.toBe(at)
+  await page.keyboard.press('Escape')
+  await expect(loupe).toHaveCount(0)
+  await tile(a1).click()
+  await page.keyboard.press('c')
+  await tile(a2).click()
+  await page.keyboard.press('c')
+  await expect(tile(a1).locator('.b-pin')).toHaveText('A')
+  await page.locator('[data-testid="bin-grid"] button', { hasText: 'Compare 2' }).click()
+  const compare = page.locator('[data-testid="bin-compare"]')
+  await expect(compare.locator('.cell')).toHaveCount(2)
+  await page.keyboard.press('Escape')
+  await expect(compare).toHaveCount(0)
+  // the hero's Inspector: what uses it
+  await tile(hero).click()
+  await expect(insp.locator('[data-testid="bin-uses"]')).toContainText(`Lia ${tag} v1`)
+  await expect(insp.locator('[data-testid="bin-uses"]')).toContainText('the hero')
+  // Import… lands in the open home
+  const file = join(tmpdir(), `bin-import-${tag}.png`)
+  writeFileSync(file, PNG_1PX)
+  await page.locator('[data-testid="bin-grid"] .w-bin-head button[aria-label="Import…"], [data-testid="bin-grid"] .w-bin-head button[title^="Import…"]').first().click()
+  await page.locator('.modal.ask input').fill(file)
+  await page.locator('.modal.ask button.primary').click()
+  await expect(page.locator('[data-testid="bin-count"]')).toHaveText('4')
+  const brought = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&sort=created_desc&limit=1')).items[0].id
+  expect((await api<{ path: string }>('GET', `/bin/things/${brought}`)).path).toBe(`world/character/${lia.id}/v1`)
+  // the drawer in World: the same Bin — where the layer was (Lia's home, the pins) — the verbs of where you are first
+  await page.goto(`${appUrl({ ui: '2' })}#world`)
+  await page.locator('.dock .dock-tabs button', { hasText: 'Bin' }).click()
+  await expect(page.locator(`[data-testid="bin-drawer-homes"] .b-node.active[data-path="world/character/${lia.id}"]`)).toBeVisible()
+  await expect(page.locator(`.dock .bin-grid [data-id="${a1}"] .b-pin`)).toHaveText('A')
+  await page.locator(`.dock .bin-grid [data-id="${a1}"]`).click({ button: 'right' })
+  await expect(page.locator('.ctx-menu button.item').first()).toContainText('Use as a reference (Make)')
+  await expect(page.locator('.ctx-menu')).toContainText('Tag…')
+  await page.keyboard.press('Escape')
+})
+
 /** Half a second of silence as a 16-bit mono WAV at 24 kHz (a sound to bring in). */
 function silentWav(seconds: number): Buffer {
   const rate = 24000, n = Math.round(rate * seconds), data = n * 2

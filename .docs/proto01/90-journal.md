@@ -11719,3 +11719,28 @@ a place's own with `castOrigin`): the pictures land as the version's candidates,
 `model_literals_check` and `settings_audit` (319, 0) clean; the API contract unchanged.
 
 Next is U3c: Edit on a creation in World.
+
+## 2026-10-29 03:05 — U3c: Edit in World, on a creation of the entity's bin (D157, proto01_UI2 03 §4)
+
+**A Make | Edit switch** under the header (`world.mode.make` / `world.mode.edit`; Edit also sits in a tile's right-click and the Inspector).
+
+- **The editor, mounted as it is.** Edit opens the selected creation in Image's editor: its column (tool options, brushes, selection,
+  AI), its strip (in the frame's strip row), its canvas and its Inspector (layers, properties, history).
+- **The World layer stays.** `openFromAsset` navigates to Edit, and U1's router keeps the World layer, so the editor's keys, paste and
+  autosave come alive with it.
+- **Lazy loading.** It loads on the first Edit (`WorldEdit.tsx`), so the Pixi code stays out of World until then.
+
+**Saving** writes a new creation into the same bin (`editSave.saveIntoBin`: the editor's Save, then the version's add route). *Save into
+the bin* adds it as a candidate; *Save as a reference* and *Save as the hero* (`world.edit.saveReference`, `.saveHero`) give it that role.
+Picking another entity goes back to Make.
+
+**Looked at** on the copy of "The Last Ferry": Ines's hero open in the editor inside World, with the tools on the left, the canvas,
+Layers / Properties / History on the right and the save foot. The first look had the editor's strip wrapping into a column (it expects the
+frame's strip row); it is hosted in one now.
+
+**Tests:** an e2e scenario (the hero opened in World's Edit, changed through the editor's dev hook, *Save as a reference* lands a new
+picture in the bin as a reference, back to Make, the hash World all along).
+
+**Checks:** Vitest 617 + 3 skipped; typecheck, build and lint clean; e2e 82/82 (alone); `agents_check` clean. Backend unchanged.
+
+Next is U3d: World's Look and Sketches.

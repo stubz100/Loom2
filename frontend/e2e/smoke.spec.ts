@@ -4351,3 +4351,27 @@ test('World\'s Make (U3b, D157 · proto01_UI2 03 §3): the panel is the entity\'
   const job = (await api<{ items: { origin: { surface: string; ref: string } | null; recipe: { prompt_json?: unknown; prompt_text?: string } }[] }>('GET', '/jobs')).items.find((j) => j.origin?.surface === 'cast' && j.origin.ref === prof.id)!
   expect(JSON.stringify(job.recipe)).toContain('a grey wool coat, wind in her hair')                     // this picture's words went in
 })
+
+test('World\'s Edit (U3c, D157 · proto01_UI2 03 §4): the selected creation opens in the editor inside World; Save as a reference puts the edited picture into the bin', async ({ page }) => {
+  test.setTimeout(120_000)
+  const tag = Date.now().toString(36)
+  const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=unprocessed&kind=image&sort=created_desc&limit=1')).items[0]
+  type ProfileLite = { id: string }
+  type BinLite = { items: { asset: { id: string }; roles: string[] }[] }
+  const prof = await api<ProfileLite>('POST', '/story/profiles', { name: `Pell ${tag}`, cls: 'character', hero_asset_id: img.id })
+  await page.goto(`${appUrl({ ui: '2', renderer: 'webgl' })}#world/character/${prof.id}/v1`)
+  await page.locator(`.w-tile[data-id="${img.id}"]`).click()
+  await page.locator('[data-testid="world-inspector"]').getByRole('button', { name: 'Edit', exact: true }).click()
+  await expect(page.locator('[data-testid="world-edit"]')).toBeVisible()
+  type Ed = { getState: () => { doc: { id: string } | null; addLayer: (k: string, extra?: Record<string, unknown>) => unknown } }
+  await page.waitForFunction(() => !!(window as unknown as { __loom2Editor?: Ed }).__loom2Editor?.getState().doc, null, { timeout: 30_000 })
+  await page.evaluate(() => (window as unknown as { __loom2Editor: Ed }).__loom2Editor.getState().addLayer('adjustment', { type: 'invert', params: {}, opacity: 0.4 }))   // an edit
+  await page.locator('[data-testid="world-edit"] button', { hasText: 'Save as a reference' }).click()
+  const bin = () => api<BinLite>('GET', `/story/profiles/${prof.id}/versions/v1/bin`)
+  await expect.poll(async () => (await bin()).items.filter((x) => x.roles.includes('reference')).length, { timeout: 30_000 }).toBe(1)
+  const made = (await bin()).items.find((x) => x.roles.includes('reference'))!.asset.id
+  expect(made).not.toBe(img.id)
+  await page.locator('.w-mode button', { hasText: 'Make' }).click()
+  await expect(page.locator(`.w-tile[data-id="${made}"] .w-badge`)).toHaveText('ref')
+  expect(new URL(page.url()).hash).toBe(`#world/character/${prof.id}/v1`)                             // World all along
+})

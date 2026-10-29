@@ -38,6 +38,8 @@ export function passes(it: Pick<BinItem, 'roles'>, f: RoleFilter): boolean {
 
 interface WorldState {
   rail: WorldRail; bin: VersionBin | null; binFor: string | null; loading: boolean; selected: string | null; filter: RoleFilter
+  mode: 'make' | 'edit'                                                    // U3c: the left column's Make or the editor on a creation
+  setMode: (mode: 'make' | 'edit') => void
   setRail: (rail: WorldRail) => void
   pick: (entity: string | null, version?: string | null) => void
   loadBin: () => Promise<void>
@@ -46,7 +48,8 @@ interface WorldState {
 }
 
 export const useWorld = create<WorldState>()((set, get) => ({
-  rail: placeOfHash(location.hash)?.rail ?? 'character', bin: null, binFor: null, loading: false, selected: null, filter: 'all',
+  rail: placeOfHash(location.hash)?.rail ?? 'character', bin: null, binFor: null, loading: false, selected: null, filter: 'all', mode: 'make',
+  setMode: (mode) => set({ mode }),
   setRail: (rail) => {
     set({ rail, selected: null, filter: 'all' })
     const st = useStory.getState()
@@ -60,7 +63,7 @@ export const useWorld = create<WorldState>()((set, get) => ({
     const st = useStory.getState()
     st.selectProfile(entity, version)
     const p = st.profile()
-    set({ selected: null, bin: p ? get().bin : null, binFor: p ? get().binFor : null, ...(p ? { rail: p.cls } : {}) })
+    set({ selected: null, mode: 'make', bin: p ? get().bin : null, binFor: p ? get().binFor : null, ...(p ? { rail: p.cls } : {}) })
     writeHash(p ? p.cls : get().rail, p?.id ?? null, p ? useStory.getState().versionId : null)
     if (p) void get().loadBin()
   },

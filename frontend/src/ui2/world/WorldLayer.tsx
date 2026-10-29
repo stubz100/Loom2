@@ -2,7 +2,7 @@
 // entity and its version, the centre is the version's bin (one grid, roles as badges and filters), the Inspector the selected creation.
 // U3a: the frame, the header, the bin and the Inspector; Make and Edit come into the left column in U3b.
 import { Box, MapPin, Palette, PenLine, User } from 'lucide-react'
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { api } from '../../api/client'
 import { CommandButton, MenuButton } from '../../frame/CommandButton'
 import { command, isEnabled, runCommand, type MenuItem } from '../../frame/commands'
@@ -14,6 +14,11 @@ import { WorldMake } from './WorldMake'
 import { CLASSES, CLASS_LABEL, ONE, passes, startWorld, useWorld, type BinItem, type RoleFilter, type WorldRail } from './worldStore'
 import './worldCommands'
 import './world.css'
+
+// U3c: the editor loads on the first Edit (its Pixi code stays out of World until then)
+const EditColumn = lazy(() => import('./WorldEdit').then((m) => ({ default: m.WorldEditColumn })))
+const EditCentre = lazy(() => import('./WorldEdit').then((m) => ({ default: m.WorldEditCentre })))
+const EditInspector = lazy(() => import('./WorldEdit').then((m) => ({ default: m.WorldEditInspector })))
 
 const RAIL_ICON: Record<WorldRail, typeof User> = { character: User, prop: Box, place: MapPin, look: Palette, sketches: PenLine }
 /** 03 §2: an item is its verb — the Cast command that makes it (they act on the entity the header shows: the Story store's selection). */
@@ -80,7 +85,7 @@ function Header() {
 function Tile({ it }: { it: BinItem }) {
   const sel = useWorld((s) => s.selected === it.asset.id)
   const badge = it.roles.map((r) => BADGE[r]).find(Boolean)
-  const menu = (): MenuItem[] => [{ cmd: 'world.creation.hero' }, { cmd: 'world.creation.reference' }, { cmd: 'world.creation.candidate' }, { sep: true }, { cmd: 'world.creation.trash' }]
+  const menu = (): MenuItem[] => [{ cmd: 'world.mode.edit' }, { sep: true }, { cmd: 'world.creation.hero' }, { cmd: 'world.creation.reference' }, { cmd: 'world.creation.candidate' }, { sep: true }, { cmd: 'world.creation.trash' }]
   return (
     <button className={`w-tile${sel ? ' selected' : ''}`} data-id={it.asset.id} title={it.asset.prompt_text ?? ''} onClick={() => useWorld.getState().select(it.asset.id)}
       onContextMenu={(e) => { useWorld.getState().select(it.asset.id); showMenu(e, menu()) }}>
@@ -128,7 +133,7 @@ function Inspector() {
       <div className="kv"><span>roles</span><span>{it.roles.join(' · ') || '—'}</span></div>
       {it.asset.prompt_text && <div className="w-prompt-block"><span>prompt</span><p className="w-prompt" title={it.asset.prompt_text}>{it.asset.prompt_text}</p></div>}
       <div className="w-verbs">
-        <CommandButton id="world.creation.hero" text /><CommandButton id="world.creation.reference" text /><CommandButton id="world.creation.candidate" text /><CommandButton id="world.creation.trash" text />
+        <CommandButton id="world.mode.edit" text /><CommandButton id="world.creation.hero" text /><CommandButton id="world.creation.reference" text /><CommandButton id="world.creation.candidate" text /><CommandButton id="world.creation.trash" text />
       </div>
     </aside>
   )
@@ -139,17 +144,26 @@ function Pending({ what }: { what: string }) {
   return <div className="w-empty">{what} — not built yet <Help text="U3d (proto01_UI2 03 §6, §7): the project's styles with their sample scene, and the pictures that belong to no one yet." /></div>
 }
 
+function ModeSwitch() {
+  const mode = useWorld((s) => s.mode)
+  return <div className="w-mode segmented" role="group" aria-label="Make or Edit">
+    <button className={mode === 'make' ? 'active' : ''} onClick={() => runCommand('world.mode.make')}>Make</button>
+    <button className={mode === 'edit' ? 'active' : ''} disabled={mode !== 'edit' && !isEnabled(command('world.mode.edit')!)} title="Edit the selected creation" onClick={() => runCommand('world.mode.edit')}>Edit</button>
+  </div>
+}
+
 export function WorldLayer() {
   const rail = useWorld((s) => s.rail)
+  const mode = useWorld((s) => s.mode)
   useEffect(() => startWorld(), [])
   const classRail = rail !== 'look' && rail !== 'sketches'
   return (
     <div className="w-layer" data-testid="world-layer">
       <Rail />
       {classRail ? <>
-        <section className="w-left"><Header /><div className="w-panel"><WorldMake /></div></section>
-        <section className="w-centre"><Bin /></section>
-        <Inspector />
+        <section className="w-left"><Header /><ModeSwitch /><div className="w-panel">{mode === 'edit' ? <Suspense fallback={null}><EditColumn /></Suspense> : <WorldMake />}</div></section>
+        <section className="w-centre">{mode === 'edit' ? <Suspense fallback={<div className="w-empty">Loading the editor…</div>}><EditCentre /></Suspense> : <Bin />}</section>
+        {mode === 'edit' ? <Suspense fallback={<aside className="w-insp" />}><EditInspector /></Suspense> : <Inspector />}
       </> : <section className="w-centre wide"><Pending what={rail === 'look' ? 'Look' : 'Sketches'} /></section>}
     </div>
   )

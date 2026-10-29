@@ -45,3 +45,11 @@ button.w-ready-item { background: transparent; border: 1px dashed var(--line2); 
 .w-foot { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
 .w-foot .primary { flex: 1; }
 .w-foot .spill { color: var(--warn); font-size: 11px; }
+.w-mode { display: flex; margin: 8px 12px 0; }
+.w-mode button { flex: 1; }
+.w-edit { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.w-edit-strip { border-bottom: 1px solid var(--line); }
+.w-edit-stage { flex: 1; min-height: 0; position: relative; display: flex; }
+.w-edit-stage > * { flex: 1; min-width: 0; }
+.w-edit-foot { display: flex; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--line); align-items: center; }
+.w-insp.edit { padding: 0; }

@@ -65,3 +65,27 @@ def test_the_migration_moves_todays_pages_once(tmp_path: Path):
     assert groups.parent[("group", shared.id)] == ROOT_ID                                   # a board two Shots use stays where it was
     assert migrate_bins(ws, groups) == []                                                   # once
     assert st.profile(mara.id).version("v1").group_id == v.group_id                         # the records unchanged: readers read on
+
+
+def test_a_versions_bin_is_one_grid_with_roles(tmp_path: Path):
+    """U3 (D157, 03 §5): the version's bin through its route — the home's and the role pages' creations, newest first, with their roles."""
+    from fastapi.testclient import TestClient
+    from loom2.api import create_app
+    from loom2.config import AppState
+    from test_groups_d34 import _png
+    state = tmp_path / "state"
+    AppState(state).update_settings({"engine": {"python": str(tmp_path / "missing.exe"), "health_timeout_s": 1}, "models_root": str(tmp_path / "models"),
+                                     "mounted_model_trees": [], "variant": "full"})
+    app = create_app(state)
+    with TestClient(app, headers={"X-Loom-Token": app.state.services.app.token}) as cl:
+        assert cl.post("/project", json={"path": str(tmp_path / "p"), "name": "p", "size_cap_gb": 10}).status_code == 200
+        svc = app.state.services
+        a, b, c = (svc.catalogue.ingest_file(_png(tmp_path / f"{i}.png"), prompt_text=f"Ines {i}").id for i in range(3))
+        prof = cl.post("/story/profiles", json={"name": "Ines", "cls": "character", "hero_asset_id": a}).json()
+        st = StoryStore(svc.ws)
+        st.add_assets(prof["id"], "v1", [b], "reference", svc.groups, svc.catalogue)
+        st.add_assets(prof["id"], "v1", [c], "candidate", svc.groups, svc.catalogue)
+        r = cl.get(f"/story/profiles/{prof['id']}/versions/v1/bin").json()
+        assert r["path"] == f"world/character/{prof['id']}/v1" and r["reference_id"] == prof["versions"][0]["group_id"]
+        assert {x["asset"]["id"]: x["roles"] for x in r["items"]} == {a: ["hero"], b: ["reference"], c: ["candidate"]}   # newest first (one second here)
+        assert cl.get(f"/story/profiles/{prof['id']}/versions/v9/bin").status_code == 404

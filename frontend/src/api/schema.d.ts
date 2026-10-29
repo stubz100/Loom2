@@ -3380,6 +3380,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/profiles/{pid}/versions/{vid}/bin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Profile Version Bin
+         * @description U3 (D157, 03 §5): the version's bin — one grid of its home and role pages, newest first, each creation with its roles.
+         */
+        get: operations["profile_version_bin_story_profiles__pid__versions__vid__bin_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/profiles/{pid}/versions/{vid}/body/fit": {
         parameters: {
             query?: never;
@@ -5012,6 +5032,18 @@ export interface components {
             /** Made */
             made: boolean;
             stage: components["schemas"]["Stage"];
+        };
+        /**
+         * BinItem
+         * @description U3 (D157, 03 §5): a creation in a version's bin — its roles (hero, reference, a_pose_front, a_pose_back, set_picture, model,
+         *     candidate) and the page it lives on (the home or a role page).
+         */
+        BinItem: {
+            asset: components["schemas"]["AssetRecord"];
+            /** Page */
+            page: string;
+            /** Roles */
+            roles: string[];
         };
         /** BindBody */
         BindBody: {
@@ -14080,6 +14112,19 @@ export interface components {
              */
             step: "drawing" | "fitting" | "shell" | "done" | "failed";
         };
+        /** VersionBin */
+        VersionBin: {
+            /** Candidates Id */
+            candidates_id: string | null;
+            /** Home Id */
+            home_id: string;
+            /** Items */
+            items: components["schemas"]["BinItem"][];
+            /** Path */
+            path: string | null;
+            /** Reference Id */
+            reference_id: string;
+        };
         /** VersionInfo */
         VersionInfo: {
             /** App */
@@ -20984,6 +21029,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AnimTestQueued"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_version_bin_story_profiles__pid__versions__vid__bin_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionBin"];
                 };
             };
             /** @description Validation Error */

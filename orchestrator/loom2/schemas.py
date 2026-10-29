@@ -650,6 +650,22 @@ class ChangedGroups(Out):
     changed: list[str]
 
 
+class BinItem(Out):
+    """U3 (D157, 03 §5): a creation in a version's bin — its roles (hero, reference, a_pose_front, a_pose_back, set_picture, model,
+    candidate) and the page it lives on (the home or a role page)."""
+    asset: AssetRecord
+    roles: list[str]
+    page: str
+
+
+class VersionBin(Out):
+    home_id: str
+    path: str | None
+    reference_id: str
+    candidates_id: str | None
+    items: list[BinItem]
+
+
 class GroupDeleted(Out):
     deleted: str
     unprocessed: list[str]

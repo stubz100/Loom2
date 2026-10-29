@@ -91,6 +91,7 @@
  "GET /story/loras/{lid}",
  "GET /story/profiles",
  "GET /story/profiles/{pid}",
+ "GET /story/profiles/{pid}/versions/{vid}/bin",
  "GET /story/recipe-templates",
  "GET /story/scenes",
  "GET /story/shot-templates",

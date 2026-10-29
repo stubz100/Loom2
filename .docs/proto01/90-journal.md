@@ -11620,3 +11620,60 @@ not.
 **U2 is closed.** G5 (one Shot node), G6 and G12 (the scene's stage, a shot's camera and range, *New shot*), G2 (the Look's sample scene)
 and G1 (the Bin's homes) are in, with two deferrals: the shared cameras and the stageless shots of old projects (U4), and retiring
 Unprocessed (U8). Next is U3, World (07 §2).
+
+## 2026-10-29 02:30 — U3a: World's frame in the new shell — the rail, the entity header with its readiness line, one bin with roles, the Inspector (D157, proto01_UI2 03 §1–2, §5)
+
+**The backend.** `GET /story/profiles/{pid}/versions/{vid}/bin` (`bins.version_bin`) gives the version's bin as one grid, newest first. It
+holds the home's own creations and its role pages' (the reference set, the candidates). Each creation carries its roles, ranked by
+class, the first one its badge:
+
+- every class: the hero;
+- a character: the A-pose front and back and its shell;
+- a prop: its 3D model;
+- a place: its set pictures;
+- references and candidates as their pages say.
+
+A page not yet under its home (a project opened before U2) is read where it is.
+
+**The frontend.** `ui2/world/` is mounted by the new shell on the World layer. The entity and its version are the Story store's
+selection, so World and the old Cast act on the same records.
+
+- **The rail:** Characters · Props · Places | Look · Sketches.
+- **The header:** the entity menu (its class's entities, *New …*), the version menu (the versions, *New version (copy)*, *Mark final*),
+  and the class's fields (appearance and outfit, edited in place through the Story store's sheet; the body, the 3D model and the set as
+  their states).
+- **The readiness line** (`readiness.ts`):
+  - a character: hero, references (a count), A-pose front, A-pose back (optional), body fitted, voice (optional);
+  - a prop: hero, 3D model, height;
+  - a place: set picture, set built, faces filled (a percentage);
+  - it ends in "Ready for Clay" or "N to go".
+- **The bin:** its path, the role chips (all · hero · references · A-pose · set · model · candidates) and the tiles with their badges.
+- **The Inspector:** the creation's preview, roles and prompt (clamped), and its verbs: *Make it the hero*, *Use as a reference*,
+  *Back to the candidates*, *Trash*. With nothing selected it shows the entity's facts.
+- **The place** is in the hash (`#world/<class>/<profile>/<version>`), followed when a link changes it.
+- **Commands** (rule 3): `ui2/world/worldCommands.ts` under a new `world` scope (`commands.ts`; the audit's scope list).
+
+**Fixed on the way:** World read the profiles before the session had found the backend (the request went to the page's own server).
+It now starts once a project is open, and again when another opens.
+
+**Looked at** on a copy of "The Last Ferry" (`F:/loom2-projects/_u3-check/last-ferry-copy`; opening it ran U2's migration: 9 version pages
+and 1 style group into their homes):
+
+- Ines's bin shows ★, three references, A-pose front and back and the other A-pose attempts as candidates, with readiness "1 to go"
+  (body fitted);
+- the Town street shows its set picture as "set", the relief as candidates, and faces filled 17 %.
+
+The first look found the place's picture badged A-pose (one picture held two roles and the later won). Roles are ranked per class now.
+
+**Tests:**
+
+- `test_bins_u2.py` + 1 (the bin's route and its roles);
+- `ui2/world/world.test.ts` 4 (readiness per class, the role filter, the hash);
+- an e2e scenario in the new shell (a character's header, readiness and tiles; a reference made the hero from the Inspector; the
+  references filter);
+- the D37 route snapshot gains the route.
+
+**Checks:** offline 706 passed (then the snapshot fix); Vitest 615 + 3 skipped; typecheck, build and lint clean; e2e 80/80 (alone);
+`agents_check`, `model_literals_check` and `settings_audit` (319, 0) clean; the API contract regenerated.
+
+Next is U3b: Make and Edit in the left column, scoped to the entity (the Generate panel through `makeContext`).

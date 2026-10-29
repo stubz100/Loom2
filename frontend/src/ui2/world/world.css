@@ -1,0 +1,41 @@
+/* U3 (D157, proto01_UI2 03 §1): World's columns — the rail, the left column (the header, then Make / Edit), the bin, the Inspector. */
+.w-layer { display: grid; grid-template-columns: 48px minmax(320px, 380px) 1fr 300px; height: 100%; min-height: 0; width: 100%; }
+.w-rail { display: flex; flex-direction: column; gap: 4px; padding: 8px 6px; background: var(--bg1); border-right: 1px solid var(--line); }
+.w-rail-btn { width: 36px; height: 36px; display: grid; place-items: center; border-radius: var(--radius); background: transparent; border: 1px solid transparent; color: var(--fg2); }
+.w-rail-btn.active { background: var(--bg3); color: var(--accent); border-color: var(--line2); }
+.w-rail-sep { height: 1px; background: var(--line2); margin: 4px 2px; }
+.w-left { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); background: var(--bg1); }
+.w-head { padding: 10px 12px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+.w-head-row { display: flex; align-items: center; gap: 6px; }
+.w-head-row .spacer { flex: 1; }
+.w-field { display: grid; grid-template-columns: 84px 1fr; gap: 8px; align-items: start; font-size: 12px; }
+.w-field > span:first-child { color: var(--fg3); padding-top: 4px; }
+.w-field textarea { resize: vertical; font: inherit; }
+.w-val { padding-top: 4px; color: var(--fg2); }
+.w-ready { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11px; color: var(--fg3); padding-top: 4px; }
+.w-ready-item.done { color: var(--keep); }
+.w-ready-item.owed { color: var(--fg2); }
+.w-ready-line { margin-left: auto; color: var(--warn); font-weight: 600; }
+.w-ready-line.ok { color: var(--keep); }
+.w-panel { flex: 1; min-height: 0; overflow: auto; padding: 12px; }
+.w-centre { min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--bg0); }
+.w-centre.wide { grid-column: 2 / -1; }
+.w-bin { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.w-bin-head { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--line); font-size: 12px; }
+.w-path { color: var(--fg3); font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.w-chips { display: flex; gap: 4px; margin-left: auto; }
+.w-chips button { padding: 2px 8px; border-radius: 999px; font-size: 11px; background: transparent; border: 1px solid var(--line2); color: var(--fg2); }
+.w-chips button.active { background: var(--bg3); color: var(--fg); }
+.w-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; padding: 12px; overflow: auto; align-content: start; }
+.w-tile { position: relative; aspect-ratio: 1; padding: 0; border: 2px solid transparent; border-radius: var(--radius); overflow: hidden; background: var(--bg2); }
+.w-tile.selected { border-color: var(--accent); }
+.w-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.w-badge { position: absolute; top: 4px; left: 4px; padding: 1px 5px; border-radius: 4px; font-size: 10px; background: color-mix(in srgb, var(--bg0) 75%, transparent); color: var(--fg); }
+.w-empty { margin: auto; color: var(--fg3); padding: 24px; text-align: center; }
+.w-insp { border-left: 1px solid var(--line); background: var(--bg1); padding: 12px; overflow: auto; display: flex; flex-direction: column; gap: 8px; font-size: 12px; }
+.w-insp h4 { margin: 0; }
+.w-preview { width: 100%; border-radius: var(--radius); background: var(--bg2); }
+.w-prompt-block { display: flex; flex-direction: column; gap: 2px; }
+.w-prompt-block > span { color: var(--fg3); }
+.w-prompt { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 8; -webkit-box-orient: vertical; overflow: hidden; color: var(--fg2); }
+.w-verbs { display: flex; flex-direction: column; gap: 4px; align-items: stretch; }

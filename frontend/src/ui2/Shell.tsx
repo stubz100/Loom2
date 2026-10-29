@@ -19,6 +19,7 @@ import { Toasts } from '../frame/Toasts'
 import { TopBar } from '../frame/TopBar'
 import { useKeyboardMap } from '../frame/useKeyboardMap'
 import { followNavigation, LAYERS, useLayer } from './layers'
+import { WorldLayer } from './world/WorldLayer'
 import { KeyHosts } from '../frame/keyHosts'
 import '../frame/frame.css'
 import './shell.css'
@@ -59,8 +60,8 @@ export function Shell() {
     <div className="frame ui2" data-layer={layer}>
       <TopBar tabs={<LayerTabs />} />
       <Banner />
-      <main className="ui2-layer" aria-label={name}>
-        <div className="ui2-pending"><b>{name}</b><span>not built yet <Help text={why} /></span></div>
+      <main className={`ui2-layer${layer === 'world' ? ' filled' : ''}`} aria-label={name}>
+        {layer === 'world' ? <WorldLayer /> : <div className="ui2-pending"><b>{name}</b><span>not built yet <Help text={why} /></span></div>}
       </main>
       <Dock />
       <Toasts />

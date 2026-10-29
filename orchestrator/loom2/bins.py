@@ -70,6 +70,47 @@ def as_role(groups: GroupStore, gid: str | None, under: GroupRecord, role: str) 
     return moved
 
 
+def version_bin(groups: GroupStore, profile: Any, vid: str) -> dict[str, Any]:
+    """U3 (D157, 03 §5): a version's bin as World shows it — one grid, newest first: the home's own assets and its role pages' (the
+    reference set, the candidates), each with its roles (hero, reference, A-pose front / back, set picture, model; the rest candidates).
+    A page that is not yet under the home (a project opened before U2) is read where it is."""
+    v = profile.version(vid)
+    h = version_home(groups, profile, v.id)
+    pages = {h.id: "candidate", v.group_id: "reference"}
+    if v.candidates_group_id:
+        pages[v.candidates_group_id] = "candidate"
+    ranked: list[tuple[str | None, str]] = [(v.hero_asset_id, "hero")]                  # the roles by class, the first the tile's badge
+    if profile.cls == "character":
+        ranked += [(v.anim_ref_asset_id, "a_pose_front"), (v.anim_ref_back_asset_id, "a_pose_back"), (v.shell_asset_id, "model")]
+    elif profile.cls == "prop":
+        ranked += [(v.model_asset_id, "model")]
+    elif v.place_set is not None:
+        ranked += [(src.asset_id, "set_picture") for src in v.place_set.sources]
+    special: dict[str, list[str]] = {}
+    for aid, role in ranked:
+        if aid and role not in special.setdefault(aid, []):
+            special[aid].append(role)
+    items: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for gid, role in pages.items():
+        g = groups.groups.get(gid)
+        if g is None:
+            continue
+        for it in g.items:
+            if it.kind != "asset" or it.id in seen:
+                continue
+            a = groups.cat.get(it.id)
+            if a is None or a.trashed_at is not None:
+                continue
+            seen.add(it.id)
+            roles = [role] if role != "reference" or it.id != v.hero_asset_id else []
+            if it.id in special:
+                roles = [*special[it.id], *[r for r in roles if r != "candidate"]]
+            items.append({"asset": a, "roles": roles, "page": gid})
+    items.sort(key=lambda x: x["asset"].created_at, reverse=True)
+    return {"home_id": h.id, "path": h.path, "reference_id": v.group_id, "candidates_id": v.candidates_group_id, "items": items}
+
+
 def owner_home(groups: GroupStore, ws: Any, origin: Any) -> GroupRecord | None:
     """U2e (G1): the home of what an origin was made for — a shot version (made for it, its lip-sync, a line's voice, a final made for it)
     or a profile version (a Cast job: the set fit and its Fill, the anim test, the body fit, the prop's model, a check …); None when it

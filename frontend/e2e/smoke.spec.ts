@@ -1,7 +1,7 @@
 // End-to-end smoke (D68, ArtCraft P6 §3): each scenario drives the real UI with the mouse in headless Edge against the e2e build, a real
 // orchestrator and the fake engine, and checks the outcome on the page and through the API. Scenarios are independent: each opens a
 // fresh page and picks its own assets; they share one project (global-setup.ts), so none relies on another's leftovers.
-import { api, centre, contextChoose, env, expect, openApp, openCatalogue, test, thumbsLoaded, tiles } from './fixtures'
+import { api, appUrl, centre, contextChoose, env, expect, openApp, openCatalogue, test, thumbsLoaded, tiles } from './fixtures'
 
 interface AssetLite { id: string; job_id: string | null }
 interface Group { id: string; name: string; items: { kind: string; id: string }[] }
@@ -4299,4 +4299,29 @@ test('a prop held in a hand (D129 · HP1): a prop goes into a figure\'s right ha
   await api('PUT', `/stages/${st0.id}`, { ...doc, objects: doc.objects.map((o) => (o.id === 'fig_m' ? { ...o, transform: { ...o.transform, pos: [2, 0, 0] } } : o)) })
   await page.evaluate(async (id) => { await (window as unknown as { __loom2Stage: StageHook }).__loom2Stage.open(id) }, st0.id)
   await expect.poll(async () => (await world())!.pos[0] - kept[0], { timeout: 10_000 }).toBeGreaterThan(1.9)   // two metres with Mara
+})
+
+test('World in the new shell (U3a, D157 · proto01_UI2 03): a character\'s header, readiness and one bin with its roles; a reference made the hero from the Inspector', async ({ page }) => {
+  const tag = Date.now().toString(36)
+  const imgs = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=unprocessed&kind=image&sort=created_desc&limit=2')).items
+  const name = `Wren ${tag}`
+  type ProfileLite = { id: string; versions: { id: string; hero_asset_id: string | null }[] }
+  const prof = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', hero_asset_id: imgs[0].id })
+  await api('POST', `/story/profiles/${prof.id}/versions/v1/add`, { asset_ids: [imgs[1].id], role: 'reference' })
+  await page.goto(`${appUrl({ ui: '2' })}#world/character/${prof.id}/v1`)
+  const head = page.locator('[data-testid="world-header"]')
+  await expect(head).toContainText(name)
+  await expect(page.locator('[data-testid="world-readiness"]')).toContainText('✓ hero')
+  await expect(page.locator('[data-testid="world-readiness"]')).toContainText('references 2')
+  await expect(page.locator('[data-testid="world-readiness"]')).toContainText('to go')                      // no A-pose, no body yet
+  const tile = (id: string) => page.locator(`.w-tile[data-id="${id}"]`)
+  await expect(tile(imgs[0].id).locator('.w-badge')).toHaveText('★')
+  await expect(tile(imgs[1].id).locator('.w-badge')).toHaveText('ref')
+  await tile(imgs[1].id).click()
+  await page.locator('[data-testid="world-inspector"] button', { hasText: 'Make it the hero' }).click()
+  await expect.poll(async () => (await api<ProfileLite>('GET', `/story/profiles/${prof.id}`)).versions[0].hero_asset_id).toBe(imgs[1].id)
+  await expect(tile(imgs[1].id).locator('.w-badge')).toHaveText('★')
+  await page.locator('.w-chips button', { hasText: 'references' }).click()
+  await expect(page.locator('.w-tile')).toHaveCount(2)                                                  // the hero is a reference too
+  expect(new URL(page.url()).hash).toBe(`#world/character/${prof.id}/v1`)
 })

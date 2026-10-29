@@ -1205,6 +1205,32 @@
         "title": "BenchOut",
         "type": "object"
       },
+      "BinItem": {
+        "description": "U3 (D157, 03 §5): a creation in a version's bin — its roles (hero, reference, a_pose_front, a_pose_back, set_picture, model,\ncandidate) and the page it lives on (the home or a role page).",
+        "properties": {
+          "asset": {
+            "$ref": "#/components/schemas/AssetRecord"
+          },
+          "page": {
+            "title": "Page",
+            "type": "string"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Roles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "asset",
+          "roles",
+          "page"
+        ],
+        "title": "BinItem",
+        "type": "object"
+      },
       "BindBody": {
         "properties": {
           "shot_id": {
@@ -23512,6 +23538,56 @@
         "title": "VariantClay",
         "type": "object"
       },
+      "VersionBin": {
+        "properties": {
+          "candidates_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidates Id"
+          },
+          "home_id": {
+            "title": "Home Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BinItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "reference_id": {
+            "title": "Reference Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "home_id",
+          "path",
+          "reference_id",
+          "candidates_id",
+          "items"
+        ],
+        "title": "VersionBin",
+        "type": "object"
+      },
       "VersionInfo": {
         "additionalProperties": true,
         "properties": {
@@ -34441,6 +34517,58 @@
           }
         },
         "summary": "Profile Anim Test",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/profiles/{pid}/versions/{vid}/bin": {
+      "get": {
+        "description": "U3 (D157, 03 §5): the version's bin — one grid of its home and role pages, newest first, each creation with its roles.",
+        "operationId": "profile_version_bin_story_profiles__pid__versions__vid__bin_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionBin"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Version Bin",
         "tags": [
           "story"
         ]

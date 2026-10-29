@@ -18,7 +18,7 @@ from ..models import registry
 from ..clips import ClipStore
 from ..loras import LoraRegistry, publish, unpublish
 from ..library import Library, LibraryStore, StaleLibrary
-from ..schemas import Deleted, ProfileAdded, LibraryChange, LibraryRemoved, Expanded, FlowOut, FlowProblems, LipsyncQueued, LoraCheckQueued, LoraRecordList, LoraRecordOut, NodeShot, ProfileList, SceneList, SceneOut, ShotCards, ShotList, ShotTemplateList, TrainQueued, TtsQueued, VoiceList, VoiceRecordOut
+from ..schemas import Deleted, VersionBin, ProfileAdded, LibraryChange, LibraryRemoved, Expanded, FlowOut, FlowProblems, LipsyncQueued, LoraCheckQueued, LoraRecordList, LoraRecordOut, NodeShot, ProfileList, SceneList, SceneOut, ShotCards, ShotList, ShotTemplateList, TrainQueued, TtsQueued, VoiceList, VoiceRecordOut
 from ..stages import PlaceSet, Pose, SetFace, StageStore, encode_guide
 from ..shot_recipe import TEMPLATES, StampReader, Template, recipe_state, rerun_recipe, stale_plan, used_run
 from ..shot_graph import ShotGraph, clay_rows, final_for, shot_graph
@@ -1856,6 +1856,21 @@ async def flow_get(svc: Svc):
     nodes = await asyncio.to_thread(store.flow_nodes)
     g = await asyncio.to_thread(store.flow_graph, nodes)
     return {"graph": g.model_dump(by_alias=True), "nodes": [n.model_dump() for n in nodes.values()]}
+
+
+@router.get("/story/profiles/{pid}/versions/{vid}/bin", response_model=VersionBin)
+async def profile_version_bin(svc: Svc, pid: str, vid: str):
+    """U3 (D157, 03 §5): the version's bin — one grid of its home and role pages, newest first, each creation with its roles."""
+    ws, _, _ = svc.require_project()
+    p = await asyncio.to_thread(StoryStore(ws).profile, pid)
+    if p is None:
+        raise HTTPException(404, "profile not found")
+    try:
+        p.version(vid)
+    except KeyError:
+        raise HTTPException(404, f"no version {vid}")
+    from ..bins import version_bin
+    return await asyncio.to_thread(version_bin, svc.require_groups(), p, vid)
 
 
 @router.post("/story/flow/shots", response_model=FlowNode)

@@ -12,6 +12,7 @@ import numpy as np
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, Field
 
+from ..animations import AnimationStore, AnimationTemplate, StaleAnimations
 from ..fsio import atomic_write_json, read_json_or, utc_now
 from ..stages import encode_guide
 from ..origin import JobOrigin
@@ -184,6 +185,67 @@ async def poses_put(svc: Svc, body: PoseLibrary):
     except StaleStage as e:
         raise HTTPException(409, str(e))
 
+
+class AnimationsOut(BaseModel):
+    """U5 (G9): the project's animation templates (revision-guarded) and the author's library (every project's) — the motion library's
+    *Mine*."""
+    revision: int
+    items: list[AnimationTemplate]
+    library: list[AnimationTemplate]
+
+
+class AnimationsPut(BaseModel):
+    revision: int
+    items: list[AnimationTemplate]
+
+
+def _animations(svc) -> AnimationStore:
+    ws, _, _ = svc.require_project()
+    return AnimationStore(ws.stages_dir, svc.app.state_dir)
+
+
+def _animations_out(store: AnimationStore) -> dict:
+    b = store.book()
+    return {"revision": b.revision, "items": [t.model_dump() for t in b.items], "library": [t.model_dump() for t in store.library()]}
+
+
+@router.get("/stages/animations", response_model=AnimationsOut)
+async def animations_get(svc: Svc):
+    return await asyncio.to_thread(_animations_out, _animations(svc))
+
+
+@router.put("/stages/animations", response_model=AnimationsOut)
+async def animations_put(svc: Svc, body: AnimationsPut):
+    """U5 (G9): *Save as animation…* (a template added), renamed or removed — the whole list, on the revision read."""
+    store = _animations(svc)
+    try:
+        await asyncio.to_thread(store.put, body.revision, body.items)
+    except StaleAnimations as e:
+        raise HTTPException(409, str(e))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    return await asyncio.to_thread(_animations_out, store)
+
+
+@router.post("/stages/animations/{aid}/library", response_model=AnimationsOut)
+async def animations_to_library(svc: Svc, aid: str):
+    """U5 (G9, Q4): *Save to my library* — the template becomes the author's in every project."""
+    store = _animations(svc)
+    try:
+        await asyncio.to_thread(store.to_library, aid)
+    except KeyError:
+        raise HTTPException(404, "animation not found")
+    return await asyncio.to_thread(_animations_out, store)
+
+
+@router.delete("/stages/animations/library/{aid}", response_model=AnimationsOut)
+async def animations_library_remove(svc: Svc, aid: str):
+    store = _animations(svc)
+    try:
+        await asyncio.to_thread(store.from_library_remove, aid)
+    except KeyError:
+        raise HTTPException(404, "animation not in the library")
+    return await asyncio.to_thread(_animations_out, store)
 
 
 @router.get("/stages/{st_id}", response_model=Stage)

@@ -73,7 +73,7 @@ def test_a_body_from_before_cs1_reads_as_an_adult_rig(tmp_path: Path):
     raw = st.model_dump() | {"schema_version": 2, "objects": [{"id": "fig_m", "kind": "mannequin", "name": "Mara", "body": old}]}
     atomic_write_json(store.dir / f"{st.id}.json", raw)
     again = store.get(st.id)
-    assert again.schema_version == 3 and again.objects[0].body.neck == pytest.approx(1.603, abs=1e-3)
+    assert again.schema_version == 4 and again.objects[0].body.neck == pytest.approx(1.603, abs=1e-3)   # U5: the stage reads at 4
 
 
 def test_the_reference_measured():

@@ -449,6 +449,277 @@
         "title": "AnimatePanels",
         "type": "object"
       },
+      "AnimationFrom-Input": {
+        "description": "Where a template was saved from (lineage).",
+        "properties": {
+          "end": {
+            "default": 0,
+            "title": "End",
+            "type": "integer"
+          },
+          "object_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Id"
+          },
+          "stage_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Id"
+          },
+          "start": {
+            "default": 0,
+            "title": "Start",
+            "type": "integer"
+          }
+        },
+        "title": "AnimationFrom",
+        "type": "object"
+      },
+      "AnimationFrom-Output": {
+        "description": "Where a template was saved from (lineage).",
+        "properties": {
+          "end": {
+            "default": 0,
+            "title": "End",
+            "type": "integer"
+          },
+          "object_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Id"
+          },
+          "stage_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Id"
+          },
+          "start": {
+            "default": 0,
+            "title": "Start",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "stage_id",
+          "object_id",
+          "start",
+          "end"
+        ],
+        "title": "AnimationFrom",
+        "type": "object"
+      },
+      "AnimationTemplate-Input": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "fps": {
+            "default": 24,
+            "maximum": 240.0,
+            "minimum": 1.0,
+            "title": "Fps",
+            "type": "integer"
+          },
+          "frames": {
+            "maximum": 100000.0,
+            "minimum": 1.0,
+            "title": "Frames",
+            "type": "integer"
+          },
+          "hip": {
+            "default": 0.91,
+            "exclusiveMinimum": 0.2,
+            "maximum": 2.0,
+            "title": "Hip",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "keys": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Keys",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "rig": {
+            "const": "mannequin",
+            "default": "mannequin",
+            "title": "Rig",
+            "type": "string"
+          },
+          "schema_version": {
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "source": {
+            "$ref": "#/components/schemas/AnimationFrom-Input"
+          }
+        },
+        "required": [
+          "name",
+          "frames"
+        ],
+        "title": "AnimationTemplate",
+        "type": "object"
+      },
+      "AnimationTemplate-Output": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "fps": {
+            "default": 24,
+            "maximum": 240.0,
+            "minimum": 1.0,
+            "title": "Fps",
+            "type": "integer"
+          },
+          "frames": {
+            "maximum": 100000.0,
+            "minimum": 1.0,
+            "title": "Frames",
+            "type": "integer"
+          },
+          "hip": {
+            "default": 0.91,
+            "exclusiveMinimum": 0.2,
+            "maximum": 2.0,
+            "title": "Hip",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "keys": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Keys",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "rig": {
+            "const": "mannequin",
+            "default": "mannequin",
+            "title": "Rig",
+            "type": "string"
+          },
+          "schema_version": {
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "source": {
+            "$ref": "#/components/schemas/AnimationFrom-Output"
+          }
+        },
+        "required": [
+          "schema_version",
+          "id",
+          "name",
+          "rig",
+          "frames",
+          "fps",
+          "hip",
+          "keys",
+          "source",
+          "created_at"
+        ],
+        "title": "AnimationTemplate",
+        "type": "object"
+      },
+      "AnimationsOut": {
+        "description": "U5 (G9): the project's animation templates (revision-guarded) and the author's library (every project's) — the motion library's\n*Mine*.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AnimationTemplate-Output"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "library": {
+            "items": {
+              "$ref": "#/components/schemas/AnimationTemplate-Output"
+            },
+            "title": "Library",
+            "type": "array"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revision",
+          "items",
+          "library"
+        ],
+        "title": "AnimationsOut",
+        "type": "object"
+      },
+      "AnimationsPut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AnimationTemplate-Input"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revision",
+          "items"
+        ],
+        "title": "AnimationsPut",
+        "type": "object"
+      },
       "AssetDeletedEvent": {
         "properties": {
           "data": {
@@ -1361,6 +1632,35 @@
           "bytes"
         ],
         "title": "BlobPut",
+        "type": "object"
+      },
+      "BlockSource": {
+        "description": "U5 (G8): what a clip block plays — a clip of a motion library file (`id` the file's, `clip` its name) or a saved animation\ntemplate (`id` the template's; `clip` empty).",
+        "properties": {
+          "clip": {
+            "default": "",
+            "title": "Clip",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "library",
+              "template"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "clip"
+        ],
+        "title": "BlockSource",
         "type": "object"
       },
       "Body-Input": {
@@ -13944,6 +14244,120 @@
         "title": "ModelVerify",
         "type": "object"
       },
+      "MotionBlock": {
+        "description": "U5 (D157 G8; proto01_UI2 04 §3.2, 06 §2.4): a clip kept as a block on a figure's track — not baked into keys, so changing its\npath, loop count or speed re-flows it. The client evaluates it (retarget, foot lock, the path) into frames that play under the\nfigure's key layer; `length` is the frames it last came to (the timeline draws it before it is evaluated again).",
+        "properties": {
+          "blend_in": {
+            "default": 6,
+            "maximum": 48.0,
+            "minimum": 0.0,
+            "title": "Blend In",
+            "type": "integer"
+          },
+          "blend_out": {
+            "default": 0,
+            "maximum": 48.0,
+            "minimum": 0.0,
+            "title": "Blend Out",
+            "type": "integer"
+          },
+          "foot_lock": {
+            "default": true,
+            "title": "Foot Lock",
+            "type": "boolean"
+          },
+          "ground": {
+            "default": true,
+            "title": "Ground",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "in_place": {
+            "default": false,
+            "title": "In Place",
+            "type": "boolean"
+          },
+          "length": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Length",
+            "type": "integer"
+          },
+          "loops": {
+            "default": 1,
+            "maximum": 30.0,
+            "minimum": 0.0,
+            "title": "Loops",
+            "type": "integer"
+          },
+          "mirror": {
+            "default": false,
+            "title": "Mirror",
+            "type": "boolean"
+          },
+          "path": {
+            "default": false,
+            "title": "Path",
+            "type": "boolean"
+          },
+          "source": {
+            "$ref": "#/components/schemas/BlockSource"
+          },
+          "speed": {
+            "default": 1.0,
+            "maximum": 4.0,
+            "minimum": 0.25,
+            "title": "Speed",
+            "type": "number"
+          },
+          "start": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Start",
+            "type": "integer"
+          },
+          "trim_in": {
+            "default": 0.0,
+            "minimum": 0.0,
+            "title": "Trim In",
+            "type": "number"
+          },
+          "trim_out": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trim Out"
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "start",
+          "trim_in",
+          "trim_out",
+          "loops",
+          "speed",
+          "blend_in",
+          "blend_out",
+          "in_place",
+          "foot_lock",
+          "ground",
+          "mirror",
+          "path",
+          "length"
+        ],
+        "title": "MotionBlock",
+        "type": "object"
+      },
       "MotionFile": {
         "properties": {
           "bytes": {
@@ -14029,6 +14443,19 @@
           "local_dir"
         ],
         "title": "MotionFiles",
+        "type": "object"
+      },
+      "MotionImport": {
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "title": "MotionImport",
         "type": "object"
       },
       "MotionSettings": {
@@ -20010,7 +20437,7 @@
             "type": "integer"
           },
           "schema_version": {
-            "default": 3,
+            "default": 4,
             "title": "Schema Version",
             "type": "integer"
           },
@@ -20019,6 +20446,16 @@
               "type": "integer"
             },
             "title": "Size",
+            "type": "object"
+          },
+          "tracks": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/MotionBlock"
+              },
+              "type": "array"
+            },
+            "title": "Tracks",
             "type": "object"
           },
           "updated_at": {
@@ -20037,6 +20474,7 @@
           "cameras",
           "active_camera",
           "keyframes",
+          "tracks",
           "range",
           "passes",
           "ambient",
@@ -30953,6 +31391,48 @@
         ]
       }
     },
+    "/motion/import": {
+      "post": {
+        "description": "U5 (G9; proto01_UI2 04 §3.2): *Import…* — a motion file copied into the local motion folder (Settings › Motion), where the library\nfinds it; a name already there gets a number. The author's files: never bundled, never in CI or tests' fixtures beyond CC0.",
+        "operationId": "motion_import_motion_import_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MotionImport"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MotionFiles"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Motion Import",
+        "tags": [
+          "motion"
+        ]
+      }
+    },
     "/preset-icons": {
       "get": {
         "operationId": "preset_icons_list_preset_icons_get",
@@ -31757,6 +32237,152 @@
           }
         },
         "summary": "Stage Create",
+        "tags": [
+          "stages"
+        ]
+      }
+    },
+    "/stages/animations": {
+      "get": {
+        "operationId": "animations_get_stages_animations_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnimationsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Animations Get",
+        "tags": [
+          "stages"
+        ]
+      },
+      "put": {
+        "description": "U5 (G9): *Save as animation…* (a template added), renamed or removed — the whole list, on the revision read.",
+        "operationId": "animations_put_stages_animations_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnimationsPut"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnimationsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Animations Put",
+        "tags": [
+          "stages"
+        ]
+      }
+    },
+    "/stages/animations/library/{aid}": {
+      "delete": {
+        "operationId": "animations_library_remove_stages_animations_library__aid__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "aid",
+            "required": true,
+            "schema": {
+              "title": "Aid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnimationsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Animations Library Remove",
+        "tags": [
+          "stages"
+        ]
+      }
+    },
+    "/stages/animations/{aid}/library": {
+      "post": {
+        "description": "U5 (G9, Q4): *Save to my library* — the template becomes the author's in every project.",
+        "operationId": "animations_to_library_stages_animations__aid__library_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "aid",
+            "required": true,
+            "schema": {
+              "title": "Aid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnimationsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Animations To Library",
         "tags": [
           "stages"
         ]

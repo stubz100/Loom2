@@ -66,9 +66,13 @@ def stage_stamps(stage: Any, camera_id: str) -> dict[str, str]:
     out = {"camera": _fp([cam.model_dump(exclude={"name"}) if cam else None, (keys.get("camera") or {}).get(camera_id)])}
     world = [o.model_dump(exclude=_QUIET) for o in stage.objects if o.kind in ("set", "light")]
     out["set"] = _fp([world, getattr(stage, "ambient", None)])
+    tracks = getattr(stage, "tracks", None) or {}
     for o in stage.objects:
         if o.kind in ("mannequin", "prop", "mesh", "plane"):
-            out[f"object:{o.id}"] = _fp([o.model_dump(exclude=_QUIET), (keys.get("objects") or {}).get(o.id)])
+            parts: list[Any] = [o.model_dump(exclude=_QUIET), (keys.get("objects") or {}).get(o.id)]
+            if tracks.get(o.id):                                       # U5 (G8): its clip blocks (a figure without any keeps its stamp)
+                parts.append([b.model_dump(exclude={"length"}) for b in tracks[o.id]])
+            out[f"object:{o.id}"] = _fp(parts)
     return out
 
 
@@ -152,8 +156,10 @@ def shot_graph(shot: Any, version: Any, *, rc0: dict[str, Any], node: Any | None
             link("stage", "camera")
         for o in figures:
             keys = len((stage.keyframes.get("objects") or {}).get(o.id) or [])
-            add(GraphNode(id=f"motion:{o.id}", kind="motion", label=f"Motion · {o.name}", sub=f"{keys} keys" if keys else "stands still",
-                          state="done" if keys else "none", ref={"stage_id": stage.id, "object_id": o.id}))
+            blocks = len((getattr(stage, "tracks", None) or {}).get(o.id) or [])
+            sub = " · ".join(x for x in (f"{blocks} clip{'s' if blocks != 1 else ''}" if blocks else "", f"{keys} keys" if keys else "") if x)
+            add(GraphNode(id=f"motion:{o.id}", kind="motion", label=f"Motion · {o.name}", sub=sub or "stands still",
+                          state="done" if keys or blocks else "none", ref={"stage_id": stage.id, "object_id": o.id}))
             link("stage", f"motion:{o.id}")
 
     # ---- RC0's steps (the frame, the clip, the lip-sync; the dialogue's voice is the lines node) ----

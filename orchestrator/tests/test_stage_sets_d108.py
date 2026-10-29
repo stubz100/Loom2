@@ -24,7 +24,7 @@ def a_set(preset: str, pos=(0, 0, 0), rot=(0, 0, 0), scale=(1, 1, 1), **kw) -> d
 
 def test_room_blocks_become_props():
     out = migrate(v1(a_set("room"), {"id": "fig_1", "kind": "mannequin", "name": "Ada", "colour_id": 2}))
-    assert out["schema_version"] == STAGE_SCHEMA_VERSION == 3                              # (CS1: 3 — the bodies and the figures read in the same pass)
+    assert out["schema_version"] == STAGE_SCHEMA_VERSION == 4                              # (CS1: 3 — the bodies and the figures read in the same pass; U5: 4, the tracks)
     props = [o for o in out["objects"] if o["kind"] == "prop"]
     assert [p["preset"] for p in props] == ["block", "block"]
     assert props[0]["transform"]["pos"] == pytest.approx([1.9, 0.0, -1.8]) and props[0]["transform"]["scale"] == pytest.approx([1.2, 0.8, 0.8])

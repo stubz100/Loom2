@@ -15,8 +15,9 @@ from .body import Body
 from .fsio import atomic_write_json, new_id, plain_name, read_json, utc_now
 from .workspace import Workspace
 
-STAGE_SCHEMA_VERSION = 3                           # 2 (D108): a set is architecture; schema 1's set blocks are read as props;
-                                                   # 3 (proto01_UIcast CS1, S3): a figure's body is of the adult dummy (body.rebase_body)
+STAGE_SCHEMA_VERSION = 4                           # 2 (D108): a set is architecture; schema 1's set blocks are read as props;
+                                                   # 3 (proto01_UIcast CS1, S3): a figure's body is of the adult dummy (body.rebase_body);
+                                                   # 4 (U5, D157 G8): clip blocks on the figures' tracks — today's baked keys stay as key layers
 # D108: the blocks schema 1's set presets carried, now props of their own — (size w h d, foot x y z) in the set's frame (builders.ts)
 SET_BLOCKS_V1: dict[str, list[tuple[tuple[float, float, float], tuple[float, float, float]]]] = {
     "room": [((1.2, 0.8, 0.8), (1.9, 0.0, -1.8)), ((0.45, 0.48, 0.45), (0.0, 0.0, 0.0))],
@@ -231,6 +232,37 @@ class StageBound(BaseModel):
     version: str
 
 
+class BlockSource(BaseModel):
+    """U5 (G8): what a clip block plays — a clip of a motion library file (`id` the file's, `clip` its name) or a saved animation
+    template (`id` the template's; `clip` empty)."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    kind: Literal["library", "template"]
+    id: str
+    clip: str = ""
+
+
+class MotionBlock(BaseModel):
+    """U5 (D157 G8; proto01_UI2 04 §3.2, 06 §2.4): a clip kept as a block on a figure's track — not baked into keys, so changing its
+    path, loop count or speed re-flows it. The client evaluates it (retarget, foot lock, the path) into frames that play under the
+    figure's key layer; `length` is the frames it last came to (the timeline draws it before it is evaluated again)."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    id: str = Field(default_factory=lambda: new_id("blk"))
+    source: BlockSource
+    start: int = Field(0, ge=0)                     # the stage frame it begins on
+    trim_in: float = Field(0.0, ge=0.0)             # seconds into the clip
+    trim_out: float | None = Field(None, ge=0.0)    # seconds; None = the clip's end
+    loops: int = Field(1, ge=0, le=30)              # 0 = as many as the figure's path needs (a walk loop along it)
+    speed: float = Field(1.0, ge=0.25, le=4.0)
+    blend_in: int = Field(6, ge=0, le=48)           # frames it eases in from what came before
+    blend_out: int = Field(0, ge=0, le=48)
+    in_place: bool = False
+    foot_lock: bool = True
+    ground: bool = True                             # D141: the planted foot on the floor
+    mirror: bool = False
+    path: bool = False                              # walks the figure's floor path
+    length: int = Field(0, ge=0)
+
+
 class Stage(BaseModel):
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
     schema_version: int = STAGE_SCHEMA_VERSION
@@ -243,6 +275,7 @@ class Stage(BaseModel):
     cameras: list[StageCamera] = Field(default_factory=list)
     active_camera: str | None = None
     keyframes: dict[str, Any] = Field(default_factory=lambda: {"camera": {}, "objects": {}})  # ST4
+    tracks: dict[str, list[MotionBlock]] = Field(default_factory=dict)                         # U5 (G8): each figure's clip blocks, by its object id
     range: StageRange = Field(default_factory=StageRange)
     passes: list[dict[str, Any]] = Field(default_factory=list)                                 # ST3: {camera_id, revision, size, assets, keypoints, legend, rendered_at}
     ambient: float | None = Field(None, ge=0.0, le=5.0)                                        # D110 (PS4): the sky light's strength; None = 0.85 with lights, 1.1 without
@@ -298,16 +331,17 @@ def migrate(raw: dict[str, Any]) -> dict[str, Any]:
         return raw
     if v < 2:
         raw = _migrate_sets(raw)
-    from .body import rebase_body
+    if v < 3:
+        from .body import rebase_body
 
-    def figure(o: dict[str, Any]) -> dict[str, Any]:
-        if isinstance(o.get("body"), dict):
-            o = {**o, "body": rebase_body(o["body"])}
-        if o.get("kind") == "mannequin" and not o.get("detail"):
-            o = {**o, "detail": "female"}                          # U18: the Simple dummy retired — every figure the Detailed mannequin
-        return o
-    objs = [figure(o) if isinstance(o, dict) else o for o in (raw.get("objects") or [])]
-    return {**raw, "objects": objs, "schema_version": STAGE_SCHEMA_VERSION}
+        def figure(o: dict[str, Any]) -> dict[str, Any]:
+            if isinstance(o.get("body"), dict):
+                o = {**o, "body": rebase_body(o["body"])}
+            if o.get("kind") == "mannequin" and not o.get("detail"):
+                o = {**o, "detail": "female"}                      # U18: the Simple dummy retired — every figure the Detailed mannequin
+            return o
+        raw = {**raw, "objects": [figure(o) if isinstance(o, dict) else o for o in (raw.get("objects") or [])]}
+    return {**raw, "schema_version": STAGE_SCHEMA_VERSION}         # 3 → 4 (U5): no blocks yet; the baked keys are the key layers
 
 
 def _migrate_sets(raw: dict[str, Any]) -> dict[str, Any]:
@@ -347,6 +381,14 @@ def check(st: Stage) -> None:
     if len(set(ids)) != len(ids):
         raise ValueError("object ids must be unique")
     by = {o.id: o for o in st.objects}
+    for oid, blocks in st.tracks.items():                              # U5 (G8): a track belongs to a figure on the stage
+        if oid not in by or by[oid].kind != "mannequin":
+            raise ValueError(f"a track of clip blocks belongs to a figure on the stage ({oid} is not one)")
+        if len({b.id for b in blocks}) != len(blocks):
+            raise ValueError(f"the blocks of {by[oid].name}'s track have unique ids")
+        for b in blocks:
+            if b.trim_out is not None and b.trim_out <= b.trim_in:
+                raise ValueError(f"block {b.id}: it ends after it starts in its clip")
     for o in st.objects:
         seen = {o.id}
         p = o.parent
@@ -490,9 +532,11 @@ class StageStore:
         base = data.get("revision")
         if base is not None and int(base) != cur.revision:
             raise StaleStage(f"the stage is at revision {cur.revision}, the change is based on {base} — reload it first")
-        keep = ("name", "size", "objects", "cameras", "active_camera", "keyframes", "range", "passes", "ambient")
+        keep = ("name", "size", "objects", "cameras", "active_camera", "keyframes", "tracks", "range", "passes", "ambient")
         merged = {**cur.model_dump(), **{k: v for k, v in data.items() if k in keep}, "id": st_id, "schema_version": STAGE_SCHEMA_VERSION,
                   "revision": cur.revision + 1, "created_at": cur.created_at, "updated_at": utc_now()}
+        alive = {o.get("id") for o in merged.get("objects") or [] if isinstance(o, dict)}
+        merged["tracks"] = {k: v for k, v in (merged.get("tracks") or {}).items() if k in alive}   # U5: a figure removed takes its track
         st = Stage.model_validate(merged)
         check(st)
         self.save(st)

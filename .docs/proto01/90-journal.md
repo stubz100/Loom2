@@ -12021,3 +12021,59 @@ scene style.
 
 U4's list in 07 §2 is done except *the pose editor*, which is Clay's own, unchanged (04 §3.1), and F39, which is owed to U5 with the
 animation editor. Next is U5: the animation editor.
+
+## 2026-10-29 05:38 — U5a: clip blocks on the figures' tracks (stage schema 4), animation templates and the author's library, motion Import… (D157 G8, G9; proto01_UI2 04 §3.2, 06 §2.4)
+
+The backend of the animation editor. The client's evaluation and the editor come with U5b and U5c.
+
+**Before it:** a library clip was retargeted once and baked into the figure's keys, one key per frame (`motionStore.apply` →
+`stageStore.applyMotion`). The stage then kept no record of the clip, its path, its loop count or its speed, and its range was stretched
+to the last baked key without a word: F37, a 1.3 s walk baked into 329 keys and the range from 120 to 328.
+
+**Clip blocks** (`stages.py`):
+
+- `Stage.tracks`: each figure's blocks, by its object id. It sits beside `keyframes`, not inside it: every key writer of the client
+  rebuilds `keyframes` from its camera, object and skeleton keys, and a field inside it would be dropped at the next key edit.
+- A `MotionBlock` has:
+  - its `source`: a library file's clip, or a template;
+  - its `start` frame on the stage;
+  - its trim in and out, in seconds of the clip;
+  - `loops` (0 = as many as the figure's path needs) and `speed`;
+  - blend in and out, in frames;
+  - in place, foot lock, the floor contact (D141) and mirror;
+  - whether it walks the figure's path;
+  - the `length` it last came to (the timeline draws it before the client evaluates it again).
+- `check` keeps the rules: a track is a figure's, its blocks' ids are unique, and a clip ends after it starts. A figure removed takes its
+  track on the next save.
+- **Schema 4** adds the tracks. A stage of schema 3 reads at 4 as it is: today's baked keys stay as the figure's key layer, and its bodies
+  are not rebased a second time (the migration now runs each step only from below it).
+- **Staleness:** a block is part of what a final read of its figure (`stage_stamps`), so an edited block marks the figure's layers stale.
+  A figure without blocks keeps its old stamp, so no final goes stale from the schema. The recipe graph's Motion node counts the clips.
+
+**Templates** (`loom2/animations.py`, `AnimationStore`): a stretch of a figure's motion in the stage's own key format on the mannequin
+rig — `{name, rig, frames, fps, keys, source}`.
+
+- The project keeps them in `stages/animations.json`, revision-guarded like the saved poses.
+- *Save to my library* copies one into `<state>/animations/`, so it is the author's in every project (Q4).
+- A template keeps the hip height of the figure it was saved from (`hip`), so another figure's root is scaled by its own over it.
+- Routes, declared before `/stages/{st_id}`:
+  - `GET` and `PUT /stages/animations` (409 on a stale revision): the project's templates and the library;
+  - `POST /stages/animations/{aid}/library`;
+  - `DELETE /stages/animations/library/{aid}`.
+
+**Motion Import…:** `POST /motion/import {path}` copies a .glb, .gltf or .fbx into the local motion folder (Settings › Motion). It is
+refused while none is set, and a name already there gets a number. The library's scanner finds the file at the next listing. The author's
+files are never in a fixture: the test uses bytes the scanner does not parse.
+
+**Tests:**
+
+- `test_clip_blocks_u5.py` 4: a track's rules and pruning, its stamp; schema 3 → 4 with the bodies untouched; the templates and the
+  library across two projects; the routes and the import;
+- `test_stage_sets_d108.py` and `test_body_fit_ca1b.py` read the stage at 4;
+- the D37 snapshot gains the five routes.
+
+**Checks:** offline 721 passed; Vitest 625 + 3 skipped; typecheck, build and lint clean; e2e 85/85 (alone); `agents_check`,
+`model_literals_check` and `settings_audit` (319, 0) clean; the API contract regenerated.
+
+Next: U5b. The client evaluates the blocks into frames, cached per block, under the key layer; renders wait for them; applying a clip adds
+a block; the range never moves by itself.

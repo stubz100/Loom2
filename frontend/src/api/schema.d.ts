@@ -2007,6 +2007,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/motion/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Motion Import
+         * @description U5 (G9; proto01_UI2 04 §3.2): *Import…* — a motion file copied into the local motion folder (Settings › Motion), where the library
+         *     finds it; a name already there gets a number. The author's files: never bundled, never in CI or tests' fixtures beyond CC0.
+         */
+        post: operations["motion_import_motion_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/preset-icons": {
         parameters: {
             query?: never;
@@ -2373,6 +2394,64 @@ export interface paths {
         put?: never;
         /** Stage Create */
         post: operations["stage_create_stages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stages/animations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Animations Get */
+        get: operations["animations_get_stages_animations_get"];
+        /**
+         * Animations Put
+         * @description U5 (G9): *Save as animation…* (a template added), renamed or removed — the whole list, on the revision read.
+         */
+        put: operations["animations_put_stages_animations_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stages/animations/library/{aid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Animations Library Remove */
+        delete: operations["animations_library_remove_stages_animations_library__aid__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stages/animations/{aid}/library": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Animations To Library
+         * @description U5 (G9, Q4): *Save to my library* — the template becomes the author's in every project.
+         */
+        post: operations["animations_to_library_stages_animations__aid__library_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4847,6 +4926,140 @@ export interface components {
              */
             schema_version: number;
         };
+        /**
+         * AnimationFrom
+         * @description Where a template was saved from (lineage).
+         */
+        "AnimationFrom-Input": {
+            /**
+             * End
+             * @default 0
+             */
+            end?: number;
+            /** Object Id */
+            object_id?: string | null;
+            /** Stage Id */
+            stage_id?: string | null;
+            /**
+             * Start
+             * @default 0
+             */
+            start?: number;
+        };
+        /**
+         * AnimationFrom
+         * @description Where a template was saved from (lineage).
+         */
+        "AnimationFrom-Output": {
+            /**
+             * End
+             * @default 0
+             */
+            end: number;
+            /** Object Id */
+            object_id: string | null;
+            /** Stage Id */
+            stage_id: string | null;
+            /**
+             * Start
+             * @default 0
+             */
+            start: number;
+        };
+        /** AnimationTemplate */
+        "AnimationTemplate-Input": {
+            /** Created At */
+            created_at?: string;
+            /**
+             * Fps
+             * @default 24
+             */
+            fps?: number;
+            /** Frames */
+            frames: number;
+            /**
+             * Hip
+             * @default 0.91
+             */
+            hip?: number;
+            /** Id */
+            id?: string;
+            /** Keys */
+            keys?: {
+                [key: string]: unknown;
+            }[];
+            /** Name */
+            name: string;
+            /**
+             * Rig
+             * @default mannequin
+             * @constant
+             */
+            rig?: "mannequin";
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version?: number;
+            source?: components["schemas"]["AnimationFrom-Input"];
+        };
+        /** AnimationTemplate */
+        "AnimationTemplate-Output": {
+            /** Created At */
+            created_at: string;
+            /**
+             * Fps
+             * @default 24
+             */
+            fps: number;
+            /** Frames */
+            frames: number;
+            /**
+             * Hip
+             * @default 0.91
+             */
+            hip: number;
+            /** Id */
+            id: string;
+            /** Keys */
+            keys: {
+                [key: string]: unknown;
+            }[];
+            /** Name */
+            name: string;
+            /**
+             * Rig
+             * @default mannequin
+             * @constant
+             */
+            rig: "mannequin";
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: number;
+            source: components["schemas"]["AnimationFrom-Output"];
+        };
+        /**
+         * AnimationsOut
+         * @description U5 (G9): the project's animation templates (revision-guarded) and the author's library (every project's) — the motion library's
+         *     *Mine*.
+         */
+        AnimationsOut: {
+            /** Items */
+            items: components["schemas"]["AnimationTemplate-Output"][];
+            /** Library */
+            library: components["schemas"]["AnimationTemplate-Output"][];
+            /** Revision */
+            revision: number;
+        };
+        /** AnimationsPut */
+        AnimationsPut: {
+            /** Items */
+            items: components["schemas"]["AnimationTemplate-Input"][];
+            /** Revision */
+            revision: number;
+        };
         /** AssetDeletedEvent */
         AssetDeletedEvent: {
             data: components["schemas"]["IdOnly"];
@@ -5151,6 +5364,25 @@ export interface components {
             bytes: number;
             /** Sha256 */
             sha256: string;
+        };
+        /**
+         * BlockSource
+         * @description U5 (G8): what a clip block plays — a clip of a motion library file (`id` the file's, `clip` its name) or a saved animation
+         *     template (`id` the template's; `clip` empty).
+         */
+        BlockSource: {
+            /**
+             * Clip
+             * @default
+             */
+            clip: string;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "library" | "template";
         };
         /**
          * Body
@@ -10237,6 +10469,79 @@ export interface components {
             /** Sha256 */
             sha256: string;
         };
+        /**
+         * MotionBlock
+         * @description U5 (D157 G8; proto01_UI2 04 §3.2, 06 §2.4): a clip kept as a block on a figure's track — not baked into keys, so changing its
+         *     path, loop count or speed re-flows it. The client evaluates it (retarget, foot lock, the path) into frames that play under the
+         *     figure's key layer; `length` is the frames it last came to (the timeline draws it before it is evaluated again).
+         */
+        MotionBlock: {
+            /**
+             * Blend In
+             * @default 6
+             */
+            blend_in: number;
+            /**
+             * Blend Out
+             * @default 0
+             */
+            blend_out: number;
+            /**
+             * Foot Lock
+             * @default true
+             */
+            foot_lock: boolean;
+            /**
+             * Ground
+             * @default true
+             */
+            ground: boolean;
+            /** Id */
+            id: string;
+            /**
+             * In Place
+             * @default false
+             */
+            in_place: boolean;
+            /**
+             * Length
+             * @default 0
+             */
+            length: number;
+            /**
+             * Loops
+             * @default 1
+             */
+            loops: number;
+            /**
+             * Mirror
+             * @default false
+             */
+            mirror: boolean;
+            /**
+             * Path
+             * @default false
+             */
+            path: boolean;
+            source: components["schemas"]["BlockSource"];
+            /**
+             * Speed
+             * @default 1
+             */
+            speed: number;
+            /**
+             * Start
+             * @default 0
+             */
+            start: number;
+            /**
+             * Trim In
+             * @default 0
+             */
+            trim_in: number;
+            /** Trim Out */
+            trim_out: number | null;
+        };
         /** MotionFile */
         MotionFile: {
             /** Bytes */
@@ -10265,6 +10570,11 @@ export interface components {
             local_dir: string | null;
             /** Starter Dir */
             starter_dir: string | null;
+        };
+        /** MotionImport */
+        MotionImport: {
+            /** Path */
+            path: string;
         };
         /**
          * MotionSettings
@@ -12700,12 +13010,16 @@ export interface components {
             revision: number;
             /**
              * Schema Version
-             * @default 3
+             * @default 4
              */
             schema_version: number;
             /** Size */
             size: {
                 [key: string]: number;
+            };
+            /** Tracks */
+            tracks: {
+                [key: string]: components["schemas"]["MotionBlock"][];
             };
             /** Updated At */
             updated_at: string;
@@ -18454,6 +18768,39 @@ export interface operations {
             };
         };
     };
+    motion_import_motion_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MotionImport"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MotionFiles"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     preset_icons_list_preset_icons_get: {
         parameters: {
             query?: never;
@@ -19119,6 +19466,121 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Stage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    animations_get_stages_animations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnimationsOut"];
+                };
+            };
+        };
+    };
+    animations_put_stages_animations_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnimationsPut"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnimationsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    animations_library_remove_stages_animations_library__aid__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                aid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnimationsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    animations_to_library_stages_animations__aid__library_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                aid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnimationsOut"];
                 };
             };
             /** @description Validation Error */

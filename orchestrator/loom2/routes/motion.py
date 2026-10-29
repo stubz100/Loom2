@@ -37,6 +37,32 @@ async def motion_files(svc: Svc):
     return {"items": [i.model_dump() for i in items], "starter_dir": str(starter) if starter else None, "local_dir": str(local) if local else None}
 
 
+class MotionImport(BaseModel):
+    path: str                                       # a .glb, .gltf or .fbx the author picked
+
+
+@router.post("/motion/import", response_model=MotionFiles)
+async def motion_import(svc: Svc, body: MotionImport):
+    """U5 (G9; proto01_UI2 04 §3.2): *Import…* — a motion file copied into the local motion folder (Settings › Motion), where the library
+    finds it; a name already there gets a number. The author's files: never bundled, never in CI or tests' fixtures beyond CC0."""
+    import shutil
+    _, local = _dirs(svc)
+    if local is None:
+        raise HTTPException(422, "set the local motion folder first (Settings › Motion)")
+    src = Path(body.path.strip().strip('"'))
+    if src.suffix.lower() not in MEDIA:
+        raise HTTPException(422, "a motion file is a .glb, .gltf or .fbx")
+    if not src.is_file():
+        raise HTTPException(404, f"{src} not found")
+    dest = local / src.name
+    k = 2
+    while dest.exists():
+        dest = local / f"{src.stem} {k}{src.suffix}"
+        k += 1
+    await asyncio.to_thread(shutil.copy2, src, dest)
+    return await motion_files(svc)
+
+
 @router.get("/motion/files/{file_id}")
 async def motion_file(svc: Svc, file_id: str):
     starter, local = _dirs(svc)

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AlbumNode, Job, WorldStyle } from '../../api/types'
-import { DEFAULT_ID, NONE_ID, SAMPLE_PX, SAMPLE_SEED, findNode, pickSampleModel, pickerId, pickerItems, pickerValue, sampleDrop, sampleJob, sampleOptions, sampleRecipe, sampleValue, styleFace, styleGroupName } from './styleSamples'
+import { DEFAULT_ID, NONE_ID, SAMPLE_PX, SAMPLE_SEED, findNode, pickSampleModel, pickerId, pickerItems, pickerValue, sampleDrop, sampleJob, sampleOptions, sampleRecipe, sampleScene, sampleValue, styleFace, styleGroupName } from './styleSamples'
 
 const node = (id: string, cover: string[] = [], children: AlbumNode[] = []): AlbumNode => ({ id, name: id, children, cover_ids: cover, assets: cover.length, groups: children.length, total: cover.length, revision: 1 })
 const tree = node('album', [], [node('g1', ['a1', 'a2']), node('g2', [], [node('g3', ['a9'])])])
@@ -24,6 +24,10 @@ describe('D90 styles as images', () => {
     expect(sampleRecipe('sty_1', 'm', false).seeds).toEqual([0])
     expect(sampleRecipe('sty_1', 'm', true, 'a lighthouse at dawn').prompt_text).toBe('a lighthouse at dawn')    // D90: Settings › Samples
     expect(sampleRecipe('sty_1', 'm', true, '  ').prompt_text).toBe(sampleRecipe('sty_1', 'm', true).prompt_text)  // blank = the default scene
+    // U2 (G2): the project's own sample scene first, then Settings › Samples', then the default
+    expect(sampleScene({ sample_scene: ' a fishing harbour at dusk ' }, 'a cyber spy in an office')).toBe('a fishing harbour at dusk')
+    expect(sampleScene({ sample_scene: '  ' }, 'a cyber spy in an office')).toBe('a cyber spy in an office')
+    expect(sampleScene(null, '')).toBeNull()
     expect(styleGroupName('Ink wash')).toBe('Style · Ink wash')
   })
 

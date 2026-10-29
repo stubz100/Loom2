@@ -105,6 +105,7 @@ class World(BaseModel):
     synopsis: str = ""
     styles: list[StoryStyle] = Field(default_factory=list)
     default_style: str | None = None                # a style id Generate preselects (none = no style)
+    sample_scene: str = ""                          # U2 (D157, G2): the Look's sample scene — the project's own (F3: a harbour story's styles were judged on an office); "" = Settings › Samples
     spine: list[StoryBeat] = Field(default_factory=list)
     variables: list[StoryVariable] = Field(default_factory=list)
     revision: int = 0
@@ -2042,7 +2043,7 @@ class StoryStore(_ShotMixin, _FlowMixin):
         base = data.get("revision")
         if base is not None and int(base) != cur.revision:
             raise StaleWorld(f"the world is at revision {cur.revision}, the change is based on {base} — reload it first")
-        keep = ("logline", "synopsis", "styles", "default_style", "spine", "variables")
+        keep = ("logline", "synopsis", "styles", "default_style", "spine", "variables", "sample_scene")   # U2 (G2): the Look's sample scene
         merged = {**cur.model_dump(), **{k: v for k, v in data.items() if k in keep}, "schema_version": WORLD_SCHEMA_VERSION,
                   "revision": cur.revision + 1, "created_at": cur.created_at, "updated_at": utc_now()}
         w = World.model_validate(merged)

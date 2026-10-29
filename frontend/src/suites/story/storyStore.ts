@@ -189,7 +189,7 @@ export interface StoryState {
   setSection: (s: Section) => void
   select: (s: Selection) => void
   /** A change to the world: applied at once, saved after 300 ms with the document's revision. */
-  edit: (patch: Partial<Pick<World, 'logline' | 'synopsis' | 'styles' | 'default_style' | 'spine' | 'variables'>>) => void
+  edit: (patch: Partial<Pick<World, 'logline' | 'synopsis' | 'styles' | 'default_style' | 'spine' | 'variables' | 'sample_scene'>>) => void
   addStyle: (name?: string) => string
   setStyle: (id: string, patch: Partial<WorldStyle>) => void
   removeStyle: (id: string) => void
@@ -318,7 +318,7 @@ export interface StoryState {
 }
 
 const uid = (prefix: string) => `${prefix}_${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}`
-const EMPTY: World = { schema_version: 1, logline: '', synopsis: '', styles: [], default_style: null, spine: [], variables: [], revision: 0, created_at: '', updated_at: '' }
+const EMPTY: World = { schema_version: 1, logline: '', synopsis: '', styles: [], default_style: null, spine: [], variables: [], sample_scene: '', revision: 0, created_at: '', updated_at: '' }
 const toast = (text: string, kind: 'error' | 'info' = 'error') => useSession.getState().toast(text, kind)
 const detail = (e: unknown) => (e as ApiError).detail ?? String(e)
 

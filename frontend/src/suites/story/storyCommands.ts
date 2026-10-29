@@ -12,7 +12,7 @@ import { CLASS_LABEL, latestModelJob, latestTrainJob, modelSource, nodesAfterWit
 import { forShot, makeClipFor, makeFrameFor, makeTarget, speakersOf } from './makeFor'
 import { runStale, staleOf } from './runStale'
 import type { FlowNode, Profile, SceneOut, Shot, ShotVersion } from '../../api/types'
-import { findNode, pickSampleModel, sampleJob, sampleRecipe, styleGroupName } from './styleSamples'
+import { findNode, pickSampleModel, sampleJob, sampleRecipe, sampleScene, styleGroupName } from './styleSamples'
 import { useLibrary } from './libraryStore'
 import { FIELD_LABEL, type FieldKey } from '../generate/fieldPresets'
 import { needsPicture, swatchJob, useSwatches } from '../generate/swatches'
@@ -230,7 +230,8 @@ export async function makeStyleSample(id: string): Promise<void> {
     await sy().flush()
     const s = sy().world?.styles.find((x) => x.id === id)
     const first = !(findNode(useAlbum.getState().tree, gid)?.total)
-    await ss.submitJob(sampleRecipe(id, model.id, first, ss.settings?.samples?.style_prompt, model.style_px), {   // D90: the scene of Settings › Samples; D91: its model
+    const scene = sampleScene(sy().world, ss.settings?.samples?.style_prompt)   // U2 (G2): the project's own sample scene, else Settings › Samples'
+    await ss.submitJob(sampleRecipe(id, model.id, first, scene, model.style_px), {   // D91: the sample model
       suite: 'story', surface: 'style', ref: id, payload: { group_id: gid } })
     ss.toast(`Sample queued for ${s?.name ?? 'the style'} — it lands in "${findNode(useAlbum.getState().tree, gid)?.name ?? styleGroupName(s?.name ?? '')}"`, 'info')
   } catch (e) { ss.toast(`Sample not queued: ${(e as { detail?: string }).detail ?? String(e)}`) }

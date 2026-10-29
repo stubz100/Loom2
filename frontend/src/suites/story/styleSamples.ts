@@ -62,6 +62,9 @@ export function sampleValue(settingId: string | null | undefined, list: Pick<Sam
 }
 
 /** The one-image t2i a sample runs: text mode, the sample model, a square size (the model's, D91), the style id (its fragment appended at submit). */
+/** U2 (D157, G2): the scene a style's sample is rendered on — the project's own (the Look's `sample_scene`), else Settings › Samples'. */
+export const sampleScene = (world: { sample_scene?: string } | null | undefined, settingsPrompt?: string | null): string | null => world?.sample_scene?.trim() || settingsPrompt?.trim() || null
+
 export function sampleRecipe(styleId: string, modelId: string, first: boolean, prompt?: string | null, px: number = SAMPLE_PX): Record<string, unknown> {
   return { kind: 't2i', model_id: modelId, prompt_mode: 'text', prompt_text: prompt?.trim() || SAMPLE_PROMPT, width: px, height: px, seeds: [first ? SAMPLE_SEED : 0], style_id: styleId }
 }

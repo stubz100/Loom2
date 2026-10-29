@@ -11531,3 +11531,19 @@ beside `after` and put between it and the node it led to.
 `agents_check`, `model_literals_check` and `settings_audit` (319, 0) clean; the API contract regenerated.
 
 No visible change in the current UI: a second link to a taken camera now gets a camera of its own.
+
+## 2026-10-29 01:36 — U2c (G2): the Look's sample scene is the project's own (D157, proto01_UI2 03 §6, F3)
+
+The walkthrough judged a harbour story's styles on "a cyber spy in an office", the app-wide scene of Settings › Samples.
+
+- **The record:** `World.sample_scene` (the Look's record stays in `story/world.json`: its styles, the default, and now its scene), kept by
+  `put_world`.
+- **The sample:** a style's sample is rendered on that scene (`styleSamples.sampleScene`: the project's, else Settings › Samples', else
+  the default).
+- **The current UI:** the World page's Styles section has the field, its why behind a ?.
+- **Unchanged:** a world written before keeps the app's scene, and a changed scene does not remake the samples already made.
+
+**Tests:** `test_look_u2.py` (1); `styleSamples.test.ts` + 3 expectations.
+
+**Checks:** the Story backend tests (31) and Vitest 611 + 3 skipped pass; typecheck, build, lint and `settings_audit` (319, 0) are clean;
+the API contract was regenerated. U2's e2e runs with U2d.

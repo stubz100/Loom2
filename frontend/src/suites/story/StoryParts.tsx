@@ -464,6 +464,8 @@ function WorldEditor() {
         <h3>Styles<Help text={"One per generation; click a style to edit it, drop a Catalogue image on it to make its sample; ★ marks the default Generate preselects."} /></h3>
         <StyleGrid />
         <div className="adder"><CommandButton id="story.world.addStyle" text /></div>
+        <div className="kv sample-scene"><span>sample scene<Help text={"U2 (D157): the scene every style's sample is rendered on — this project's own (a harbour story's looks judged on a harbour), so the samples compare. Empty: the scene in Settings › Samples. A changed scene does not remake the samples already made."} /></span>
+          <textarea rows={2} value={world.sample_scene} aria-label="sample scene" placeholder="e.g. a fishing harbour at dusk, a ferry at the pier" onChange={(e) => sy().edit({ sample_scene: e.target.value })} /></div>
       </section>
       <section id="story-sec-variables">
         <h3>Variables<Help text={"Bool or enum flags the Flow's conditions read."} /></h3>

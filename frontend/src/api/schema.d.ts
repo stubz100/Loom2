@@ -14380,6 +14380,11 @@ export interface components {
              */
             revision: number;
             /**
+             * Sample Scene
+             * @default
+             */
+            sample_scene: string;
+            /**
              * Schema Version
              * @default 1
              */

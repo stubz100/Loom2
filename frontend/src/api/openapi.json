@@ -24208,6 +24208,11 @@
             "title": "Revision",
             "type": "integer"
           },
+          "sample_scene": {
+            "default": "",
+            "title": "Sample Scene",
+            "type": "string"
+          },
           "schema_version": {
             "default": 1,
             "title": "Schema Version",
@@ -24250,6 +24255,7 @@
           "synopsis",
           "styles",
           "default_style",
+          "sample_scene",
           "spine",
           "variables",
           "revision",

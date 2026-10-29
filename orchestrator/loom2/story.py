@@ -25,7 +25,7 @@ import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .fsio import atomic_move, atomic_write_json, new_id, plain_name, read_json, read_json_or, unlink, utc_now
 from .models import registry
@@ -379,10 +379,21 @@ def finalize_reason(v: ShotVersion, clip_w: int | None, clip_h: int | None, fmt_
 
 
 # ---- the flow (SY3, 17 §3d) ----------------------------------------------------------------------------------------------------------
-NodeType = Literal["start", "hub", "dialogue", "choice", "condition", "action", "shot", "jump", "comment"]
-NODE_TYPES: tuple[str, ...] = ("start", "hub", "dialogue", "choice", "condition", "action", "shot", "jump", "comment")
-VISUAL_TYPES = ("dialogue", "shot")                # the nodes that bind a shot (loom R134)
-VISUAL_LABEL = {"dialogue": "Dialogue", "shot": "Shot"}   # D125 (#4): the name of an untitled visual node's shot
+# U2 (D157, G5): one Shot node type — a Dialogue is a Shot with lines. A file or a client naming `dialogue` reads as `shot` (node_type).
+NodeType = Literal["start", "hub", "choice", "condition", "action", "shot", "jump", "comment"]
+NODE_TYPES: tuple[str, ...] = ("start", "hub", "choice", "condition", "action", "shot", "jump", "comment")
+VISUAL_TYPES = ("shot",)                           # the nodes that bind a shot (loom R134)
+VISUAL_LABEL = {"shot": "Shot"}                    # D125 (#4): the name of an untitled visual node's shot
+
+
+def node_type(t: str) -> str:
+    """U2 (G5): a node type as loom2 keeps it — the Dialogue of before D157 is a Shot (its lines kept)."""
+    return "shot" if t == "dialogue" else t
+
+
+def has_lines(n: Any) -> bool:
+    """U2 (G5): a Shot with words to speak — what "a Dialogue node" meant before (voicing, lip-sync, the speakers, the board's Lines)."""
+    return n is not None and n.type == "shot" and any(ln.text.strip() for ln in n.lines)
 FLOW_PORTS = ("out", "then", "else")               # plus "opt:<option id>" on a Choice
 
 
@@ -418,7 +429,7 @@ class FlowNode(BaseModel):
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
     schema_version: int = FLOW_SCHEMA_VERSION
     id: str = Field(default_factory=lambda: new_id("node"))
-    type: NodeType = "dialogue"
+    type: NodeType = "shot"
     title: str = ""
     lines: list[FlowLine] = Field(default_factory=list)
     options: list[FlowOption] = Field(default_factory=list)
@@ -438,6 +449,11 @@ class FlowNode(BaseModel):
     revision: int = 0
     created_at: str = Field(default_factory=utc_now)
     updated_at: str = Field(default_factory=utc_now)
+
+    @field_validator("type", mode="before")
+    @classmethod
+    def _one_shot_type(cls, v: Any) -> Any:
+        return node_type(v) if isinstance(v, str) else v
 
 
 class FlowEdge(BaseModel):
@@ -575,7 +591,12 @@ class ShotTemplate(BaseModel):
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
     id: str = Field(default_factory=lambda: new_id("stp"))
     name: str
-    node_type: Literal["dialogue", "shot"]
+    node_type: Literal["shot"] = "shot"              # U2 (G5): one Shot node type (a template of a Dialogue keeps its lines)
+
+    @field_validator("node_type", mode="before")
+    @classmethod
+    def _one_shot_type(cls, v: Any) -> Any:
+        return node_type(v) if isinstance(v, str) else v
     lines: list[TemplateLine] = Field(default_factory=list)
     text: str = ""
     route: str | None = None
@@ -1296,6 +1317,7 @@ class _FlowMixin:
 
     def create_node(self, type_: str, title: str = "", x: float = 0.0, y: float = 0.0, *, with_shot: bool = True, **fields: Any) -> FlowNode:
         """A node and its placement. D125 (#4) / RC2a: a Dialogue or Shot node is made with its shot inside it (`with_shot` False: none)."""
+        type_ = node_type(type_)
         if type_ not in NODE_TYPES:
             raise ValueError(f"unknown node type {type_!r}; one of {', '.join(NODE_TYPES)}")
         fields = {k: v for k, v in fields.items() if k in ("lines", "options", "cond", "set", "target", "text", "colour", "beat_id")}
@@ -1843,8 +1865,8 @@ class _FlowMixin:
                     continue
                 if r.id in by_node:
                     s = shots[by_node[r.id]]
-                    label = VISUAL_LABEL.get(r.type, "")
-                    title = r.title if r.title.strip() and r.title.strip() != label else (s.name.strip() or r.title)
+                    defaults = {VISUAL_LABEL.get(r.type, ""), "Dialogue"}                   # U2 (G5): a Dialogue's untitled name, of before
+                    title = r.title if r.title.strip() and r.title.strip() not in defaults else (s.name.strip() or r.title)
                     current = r.shot_version if r.shot_version in [v.id for v in s.versions] else s.current
                     part = ShotPart(id=s.id, current=current, versions=s.versions, revision=s.revision, created_at=s.created_at, updated_at=s.updated_at)
                     self._save_record(r.model_copy(update={"shot": part, "title": title}))

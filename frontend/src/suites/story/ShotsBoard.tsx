@@ -98,7 +98,7 @@ export function ShotsBoard() {
               </Fragment>
             )
           })}
-          {!shown.length && <tr className="empty"><td colSpan={STEPS.length + 1}>{rows.length ? 'No shot matches the filter.' : 'No shots yet — every Dialogue or Shot node in Flow has one.'}</td></tr>}
+          {!shown.length && <tr className="empty"><td colSpan={STEPS.length + 1}>{rows.length ? 'No shot matches the filter.' : 'No shots yet — every Shot node in Flow has one.'}</td></tr>}
         </tbody>
       </table>
     </div>
@@ -140,7 +140,7 @@ export function BoardPanel() {
   )
 }
 
-/** D125 (S8): *Voice all lines (N)* — N counts the episode's Dialogue lines not voiced yet or changed since (the Flow strip, the Shots panel). */
+/** D125 (S8): *Voice all lines (N)* — N counts the episode's lines (its Shots', U2) not voiced yet or changed since (the Flow strip, the Shots panel). */
 export function VoiceAllButton() {
   const nodes = useStory((s) => s.flowNodes)
   useStory((s) => s.play)

@@ -2,6 +2,7 @@
 // records that exist (the shot version, its node, its clips, the finals made for it, the cuts). Pure: board.test.ts.
 import type { Final, FlowGraph, FlowNode, SceneOut, Shot, ShotCard, ShotVersion } from '../../api/types'
 import { binVersion } from './episode/bin'
+import { hasLines } from './flow/types'
 
 export type Step = 'lines' | 'voice' | 'frame' | 'stage' | 'clip' | 'final' | 'lipsync' | 'approved' | 'cut'
 export const STEPS: { id: Step; label: string }[] = [
@@ -17,10 +18,10 @@ export const routeOf = (v: Pick<ShotVersion, 'recipe' | 'stage_id'>, madeFinal =
 /** RC1: a final shot made for the shot puts a version without a template on the clay route (a final made before RC1 did not set it). */
 export const madeFinal = (shotId: string, finals: Pick<Final, 'shot_id'>[]): boolean => finals.some((f) => f.shot_id === shotId)
 export const ROUTE_LABEL: Record<string, string> = { i2v: 'image to video', stage: 'stage clip', clay1: 'clay final shot', clay2: 'clay final shot', dialogue: 'dialogue + lip-sync' }
-/** The steps a route owes (04 §2.4); every route also owes Approved and In cut, a Dialogue node's shot its Lines and Voice. */
+/** The steps a route owes (04 §2.4); every route also owes Approved and In cut, a Shot with lines (U2: a Dialogue before) its Lines and Voice. */
 const OWED: Record<string, Step[]> = { i2v: ['frame', 'clip'], stage: ['stage', 'frame', 'clip'], clay1: ['stage', 'final'], clay2: ['stage', 'final'], dialogue: ['voice', 'frame', 'clip', 'lipsync'] }
-export const owes = (route: string, node: Pick<FlowNode, 'type'> | null, step: Step): boolean =>
-  step === 'approved' || step === 'cut' || ((step === 'lines' || step === 'voice') && node?.type === 'dialogue') || (OWED[route] ?? OWED.i2v).includes(step)
+export const owes = (route: string, node: Pick<FlowNode, 'type' | 'lines'> | null, step: Step): boolean =>
+  step === 'approved' || step === 'cut' || ((step === 'lines' || step === 'voice') && hasLines(node)) || (OWED[route] ?? OWED.i2v).includes(step)
 
 export interface Row { shot: Shot; node: FlowNode | null; group: string | null }
 
@@ -60,7 +61,7 @@ export function flowOrder(graph: Pick<FlowGraph, 'start' | 'edges'> | null, node
     const n = nodes[id]
     if (!n) return
     const s = n.shot_id ? byShot.get(n.shot_id) : undefined
-    if (s && (n.type === 'dialogue' || n.type === 'shot') && !placed.has(s.id)) { out.push({ shot: s, node: n, group }); placed.add(s.id) }
+    if (s && n.type === 'shot' && !placed.has(s.id)) { out.push({ shot: s, node: n, group }); placed.add(s.id) }
     const next = (graph?.edges ?? []).filter((e) => e.from === id).sort((a, b) => portRank(n, a.port) - portRank(n, b.port))
     for (const e of next) visit(e.to, branchName(n, e.port) ?? group)
     if (n.type === 'jump' && n.target) visit(n.target, group)
@@ -92,8 +93,8 @@ export function cellsOf(s: Shot, v: ShotVersion, node: FlowNode | null, x: CellI
   const busy = x.busy(s.id)
   const owed = (step: Step): Cell => (busy.has(step) ? { state: 'running' } : owes(route, node, step) ? { state: 'owed' } : { state: 'na' })
   const cells = {} as Record<Step, Cell>
-  // lines and voice: a Dialogue node's
-  if (node?.type === 'dialogue') {
+  // lines and voice: a Shot's with lines (U2, G5: a Dialogue's before)
+  if (node?.type === 'shot' && node.lines.length) {
     const lines = node.lines.filter((l) => l.text.trim())
     cells.lines = lines.length ? { state: 'done', text: String(lines.length) } : { state: 'owed', text: 'none' }
     const voiced = lines.filter((l) => l.audio_asset_id), changed = voiced.filter((l) => l.audio_text !== l.text)

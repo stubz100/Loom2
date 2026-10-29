@@ -22,7 +22,7 @@ from ..schemas import Deleted, ProfileAdded, LibraryChange, LibraryRemoved, Expa
 from ..stages import PlaceSet, Pose, SetFace, StageStore, encode_guide
 from ..shot_recipe import TEMPLATES, StampReader, Template, recipe_state, rerun_recipe, stale_plan, used_run
 from ..shot_graph import ShotGraph, clay_rows, final_for, shot_graph
-from ..story import FOR_SHOT, NODE_TYPES, VISUAL_TYPES, StaleScenes, CastUse, cast_uses, body_fit_origin, model_source, prop_model_origin, shell_origin, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
+from ..story import FOR_SHOT, NODE_TYPES, VISUAL_TYPES, has_lines, node_type, StaleScenes, CastUse, cast_uses, body_fit_origin, model_source, prop_model_origin, shell_origin, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
 from ..voices import VoiceRecord, VoiceStore, check_voice
 from .deps import Svc
 
@@ -1584,7 +1584,7 @@ async def shot_finalize(svc: Svc, sid: str, vid: str):
 
 # ---- the flow (SY3, 17 §3d) ---------------------------------------------------------------------------------------------------------
 class NodeCreate(BaseModel):
-    type: str = "dialogue"
+    type: str = "shot"
     title: str = ""
     x: float = 0.0
     y: float = 0.0
@@ -1853,7 +1853,7 @@ async def flow_get(svc: Svc):
 @router.post("/story/flow/nodes", response_model=FlowNode)
 async def flow_node_create(svc: Svc, body: NodeCreate):
     ws, _, _ = svc.require_project()
-    if body.type not in NODE_TYPES:
+    if node_type(body.type) not in NODE_TYPES:
         raise HTTPException(422, f"unknown node type {body.type!r}; one of {', '.join(NODE_TYPES)}")
     n = await asyncio.to_thread(StoryStore(ws).create_node, body.type, body.title, body.x, body.y, with_shot=body.shot, text=body.text, target=body.target, beat_id=body.beat_id)
     if n.shot_id:
@@ -2122,13 +2122,13 @@ def lines_to_voice(n: FlowNode) -> list[int]:
 
 @router.post("/story/flow/voice", response_model=TtsQueued)
 async def flow_voice(svc: Svc, body: LineVoiceBody):
-    """D125 (S8): Voice all lines of the episode — every Dialogue node's lines not voiced yet or changed since, one job per voice and node.
+    """D125 (S8): Voice all lines of the episode — every Shot's lines (U2: a Shot with lines, the Dialogue of before) not voiced yet or changed since, one job per voice and node.
     A line without a voice (its speaker has none and none is picked) is named first; nothing is queued then."""
     ws, _, q = svc.require_project()
     store = StoryStore(ws)
 
     def run() -> dict:
-        nodes = [n for n in store.flow_nodes().values() if n.type == "dialogue"]
+        nodes = [n for n in store.flow_nodes().values() if has_lines(n)]
         profiles = {p.id: p for p in store.profiles()}
         todo = [(n, lines_to_voice(n)) for n in nodes]
         todo = [(n, ix) for n, ix in todo if ix]

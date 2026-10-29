@@ -2871,7 +2871,7 @@ export interface paths {
         put?: never;
         /**
          * Flow Voice
-         * @description D125 (S8): Voice all lines of the episode — every Dialogue node's lines not voiced yet or changed since, one job per voice and node.
+         * @description D125 (S8): Voice all lines of the episode — every Shot's lines (U2: a Shot with lines, the Dialogue of before) not voiced yet or changed since, one job per voice and node.
          *     A line without a voice (its speaker has none and none is picked) is named first; nothing is queued then.
          */
         post: operations["flow_voice_story_flow_voice_post"];
@@ -7587,10 +7587,10 @@ export interface components {
             title: string;
             /**
              * Type
-             * @default dialogue
+             * @default shot
              * @enum {string}
              */
-            type: "start" | "hub" | "dialogue" | "choice" | "condition" | "action" | "shot" | "jump" | "comment";
+            type: "start" | "hub" | "choice" | "condition" | "action" | "shot" | "jump" | "comment";
             /** Updated At */
             updated_at: string;
         };
@@ -10136,7 +10136,7 @@ export interface components {
             title?: string;
             /**
              * Type
-             * @default dialogue
+             * @default shot
              */
             type?: string;
             /**
@@ -12276,9 +12276,10 @@ export interface components {
             name: string;
             /**
              * Node Type
-             * @enum {string}
+             * @default shot
+             * @constant
              */
-            node_type: "dialogue" | "shot";
+            node_type: "shot";
             /** Route */
             route: string | null;
             /**

@@ -11453,3 +11453,38 @@ Make panel's slot over the real store, the key hosts).
 
 Next is U2, the records (07 §2): one Shot node type, the scene owning its stage, a shot as a camera and a range, the bin tree with
 homes and roles, and the Look as a record.
+
+## 2026-10-29 01:04 — U2a (G5): one Shot node type — a Dialogue is a Shot with lines (D157 Q3, proto01_UI2 06 §2.1)
+
+**Backend:**
+
+- `story.py`: the node types lose `dialogue` (`NodeType`, `NODE_TYPES`; `VISUAL_TYPES = ("shot",)`). `node_type()` reads `dialogue` as
+  `shot` wherever a type arrives: `FlowNode`'s and `ShotTemplate`'s validators (old files and templates), `create_node`, and
+  `POST /story/flow/nodes` (an old client). No file is rewritten.
+- `has_lines(n)` is what "a Dialogue node" meant. It replaces the type filters in *Voice all lines*, a final's lines (`routes/finals.py`)
+  and the recipe graph's speakers and lines (`shot_graph.py`).
+- The RC2 migration still takes an untitled old Dialogue's shot name (its default label "Dialogue" counts as no title).
+- The recipe templates keep their ids; G7 makes one `clay` template in U4.
+
+**Frontend:**
+
+- `flow/types.ts` has `hasLines`, and `NODE_LABEL` and the add commands lose Dialogue.
+- The Shot node shows its lines on the card and edits them in the Inspector under its action (the old "line" field, now labelled
+  *action*).
+- The board owes Lines and Voice for a Shot with lines.
+- Make frame takes a Shot's speakers as subjects and its action, else its title, as the text.
+- Play shows a Shot's lines. The empty-state words say "every Shot node".
+
+**Tests:**
+
+- `test_one_shot_node_u2.py` (2);
+- `test_scenes_rc2c`, `test_shot_templates_rc2e`, `test_story_shots_d85` (a speaking Shot is not bare) and `test_used_by_d92` read `shot`;
+- seven Vitest files' node fixtures read `shot`: a Shot that only speaks has no motion line; *Voice all lines* counts a Shot's lines and
+  never a Note's;
+- the Flow e2e adds a Shot and gives it lines.
+
+**Checks:** offline 698 passed; Vitest 611 + 3 skipped; typecheck, build and lint clean; e2e 79/79 (alone); `agents_check`,
+`model_literals_check` and `settings_audit` (319, 0) clean; the API contract regenerated.
+
+**Looked at** in headless Edge on the production preview: a node posted as `dialogue` comes back a Shot. Its card shows the line and the
+action, the Inspector has the action and the Lines, its pills owe voice, and the strip offers no Dialogue.

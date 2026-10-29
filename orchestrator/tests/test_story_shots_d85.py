@@ -73,7 +73,7 @@ def test_store_create_take_copy_finalize_delete(tmp_path: Path):
     # node (its bare node goes, the receiving node's empty shot is dropped), and the name is the node's title
     bare = s.owner_node
     assert st.flow_node(bare).type == "shot" and st.flow_node(bare).title == "Gate"
-    d = st.create_node("dialogue", "Reunion")
+    d = st.create_node("shot", "Reunion", lines=[{"speaker": None, "text": "You came back."}])          # U2 (G5): a Shot with lines (not bare)
     s2 = st.patch_shot(s.id, {"revision": s.revision, "name": "Gate at dawn", "owner_node": d.id})
     assert s2.name == "Gate at dawn" and s2.owner_node == d.id and s2.revision == s.revision + 2          # moved, then patched
     assert st.flow_node(bare) is None and st.flow_node(d.id).title == "Gate at dawn" and st.flow_node(d.id).shot_id == s.id

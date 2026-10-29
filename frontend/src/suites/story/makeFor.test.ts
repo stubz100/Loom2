@@ -35,14 +35,14 @@ describe('framePrefill / clipPrefill', () => {
     expect(framePrefill(node('shot', { text: 'Mara opens the gate.', title: 'Gate' }), cast)).toEqual({ text: 'Mara opens the gate', subjects: [], place: null })
     expect(framePrefill(node('shot', { title: 'Gate' }), cast).text).toBe('Gate')
     expect(framePrefill(node('shot', { title: 'Gate', place_id: 'prf_h' }), cast).place).toBe('prf_h')                       // a Shot node's place too
-    const d = node('dialogue', { title: 'At the gate', place_id: 'prf_h', lines: [line(null, 'Wind.'), line('prf_m', '"Hi there."'), line('prf_j', 'Hey.'), line('prf_m', 'Bye.'), line('prf_k', 'clink')] })
+    const d = node('shot', { title: 'At the gate', place_id: 'prf_h', lines: [line(null, 'Wind.'), line('prf_m', '"Hi there."'), line('prf_j', 'Hey.'), line('prf_m', 'Bye.'), line('prf_k', 'clink')] })
     expect(framePrefill(d, cast)).toEqual({ text: 'At the gate', place: 'prf_h', subjects: [{ profile_id: 'prf_m', action: 'saying Hi there' }, { profile_id: 'prf_j' }] })   // a prop never speaks as a subject
-    expect(framePrefill(node('dialogue', { lines: [line('prf_m', 'x')], place_id: 'prf_m' }), cast).place).toBeNull()       // a character is not a place
+    expect(framePrefill(node('shot', { lines: [line('prf_m', 'x')], place_id: 'prf_m' }), cast).place).toBeNull()       // a character is not a place
     expect(lineAction('  “Run!”  ')).toBe('saying Run!'); expect(lineAction(' ')).toBe('')
   })
   it('D93 (C7, C8): the stage of the shot gives each speaker the version and the pose its figure has', () => {
     const two = [{ ...profile('prf_m', 'Mara'), versions: [{ id: 'v1', group_id: 'g1' }, { id: 'v2', group_id: 'g2' }] } as unknown as Profile, profile('prf_j', 'Joe')]
-    const d = node('dialogue', { lines: [line('prf_j', 'Hey.'), line('prf_m', 'Hi.')] })
+    const d = node('shot', { lines: [line('prf_j', 'Hey.'), line('prf_m', 'Hi.')] })
     const figs = [{ profile_id: 'prf_m', version: 'v2', pose: { preset: 'point', joints: {}, extra: {}, ground: 0, pins: {}, contacts: {}, gaze: null } }, { profile_id: 'prf_j', version: null, pose: { preset: 'arms_crossed', joints: {}, extra: {}, ground: 0, pins: {}, contacts: {}, gaze: null } }, { profile_id: null, version: null, pose: null }]
     expect(framePrefill(d, two, figs).subjects).toEqual([{ profile_id: 'prf_j', action: 'saying Hey', pose: 'standing with arms crossed' }, { profile_id: 'prf_m', version: 'v2', pose: 'pointing' }])
     expect(framePrefill(d, two, [{ profile_id: 'prf_m', version: 'v9', pose: null }]).subjects[1]).toEqual({ profile_id: 'prf_m' })   // a version it no longer has: the current one
@@ -50,14 +50,14 @@ describe('framePrefill / clipPrefill', () => {
   it('D93 follow-up: a node pins a version per speaker — used unless the stage binds the character to another (the Stage wins, said)', () => {
     const three = { ...profile('prf_m', 'Mara'), versions: [{ id: 'v1', group_id: 'g1' }, { id: 'v2', group_id: 'g2' }, { id: 'v3', group_id: 'g3' }] } as unknown as Profile
     const cast = [three, profile('prf_j', 'Joe')]
-    const d = node('dialogue', { lines: [line('prf_m', 'Hi.'), line('prf_j', 'Hey.')], speaker_versions: { prf_m: 'v3', prf_j: 'v7' } })
+    const d = node('shot', { lines: [line('prf_m', 'Hi.'), line('prf_j', 'Hey.')], speaker_versions: { prf_m: 'v3', prf_j: 'v7' } })
     expect(speakerVersion(three, d)).toEqual({ version: 'v3', from: 'node', overrides: null })
     expect(framePrefill(d, cast).subjects).toEqual([{ profile_id: 'prf_m', version: 'v3', action: 'saying Hi' }, { profile_id: 'prf_j' }])   // Joe's pin names a version he lacks: current
     const figs = [{ profile_id: 'prf_m', version: 'v2', pose: null }]
     expect(speakerVersion(three, d, figs)).toEqual({ version: 'v2', from: 'stage', overrides: 'v3' })
     expect(framePrefill(d, cast, figs).subjects[0]).toEqual({ profile_id: 'prf_m', version: 'v2', action: 'saying Hi' })
     expect(speakerVersion(three, d, [{ profile_id: 'prf_m', version: null, pose: null }]).from).toBe('node')   // a figure bound without a version pins none
-    expect(speakerVersion(three, node('dialogue'), [])).toEqual({ version: 'v1', from: 'current', overrides: null })
+    expect(speakerVersion(three, node('shot'), [])).toEqual({ version: 'v1', from: 'current', overrides: null })
     expect(speakerVersion(three, { speaker_versions: { prf_m: 'v2' } }, figs).overrides).toBeNull()             // the same version: nothing to say
   })
   it('nothing to say leaves the prompt alone', () => {
@@ -65,7 +65,7 @@ describe('framePrefill / clipPrefill', () => {
     expect(framePrefill(node('shot'), cast).text).toBeNull()
     expect(framePrefill(node('hub', { title: 'Crossroads' }), cast).text).toBeNull()
     expect(clipPrefill(node('shot', { text: ' the gate swings open ' }))).toBe('the gate swings open')
-    expect(clipPrefill(node('dialogue', { text: 'x' }))).toBeNull()
+    expect(clipPrefill(node('shot', { text: ' ', lines: [line('prf_m', 'x')] }))).toBeNull()                      // U2: a Shot that only speaks has no motion line
     expect(clipPrefill(undefined)).toBeNull()
   })
 })
@@ -94,7 +94,7 @@ describe('U0 (F29, FE#1) Make clip ▸ starts from the shot, not from the last o
     const p = useAnimate.getState().panel
     useAnimate.setState({ panel: { ...p, model_id: 'test-camera-model', start: 'ast_departure', end: 'ast_end', prompt: 'the ferry pulls away', beats: [{ frame: 40, asset_id: 'ast_b', strength: 0.6 }],
       camera: { move: 'zoom_out', speed: 1 } as never } })
-    useStory.setState({ flowNodes: { node_7: node('dialogue', { id: 'node_7', text: 'x' }) } })
+    useStory.setState({ flowNodes: { node_7: node('shot', { id: 'node_7', lines: [{ speaker: 'prf_m', text: 'Not now.', audio_asset_id: null, audio_text: null }] }) } })
     await makeClipFor(shot('v1', [version('v1')], 'node_7'), version('v1'), 'node_7')
     expect(useAnimate.getState().panel).toMatchObject({ start: null, end: null, prompt: '', beats: [], camera: null, model_id: 'test-camera-model' })
     useStory.setState({ flowNodes: { node_8: node('shot', { id: 'node_8', text: 'the seal breaks' }) } })

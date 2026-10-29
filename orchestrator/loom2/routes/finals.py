@@ -1132,7 +1132,7 @@ async def composition_mask_from_content(svc: Svc, fid: str, lid: str, body: Mask
 async def final_lines(svc: Svc, fid: str):
     """D118 (AE4b): the voiced lines of the Dialogue nodes bound to the final's Story shot, each with the layer its speaker performs. D125
     (A1): a final made without one reads the shots whose current version points at its stage and camera (where its takes go)."""
-    from ..story import StoryStore
+    from ..story import StoryStore, has_lines
     ws, cat, _ = svc.require_project()
     f = await asyncio.to_thread(FinalStore(ws).get, fid)
     if f is None:
@@ -1147,7 +1147,7 @@ async def final_lines(svc: Svc, fid: str):
     nodes = await asyncio.to_thread(store.flow_nodes)
     items = []
     for n in sorted(nodes.values(), key=lambda x: x.id):
-        if n.type != "dialogue" or n.shot_id not in shots:
+        if not has_lines(n) or n.shot_id not in shots:                 # U2 (G5): a Shot with lines
             continue
         for i, ln in enumerate(n.lines):
             if not ln.audio_asset_id:

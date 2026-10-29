@@ -26,9 +26,9 @@ export function makeTarget(s: Shot | undefined, want?: string | null): ShotVersi
 /** The For context of a shot version (the node: the one Make came from, else the shot's owner). */
 export const forShot = (s: Shot, v: ShotVersion, nodeId?: string | null): MakeFor => ({ kind: 'shot', shot_id: s.id, version: v.id, name: s.name, node_id: nodeId ?? s.owner_node ?? null })
 
-/** A Dialogue node's speakers in the order they first speak (Cast characters only; a speaker deleted from the Cast is skipped). */
+/** A Shot's speakers (its lines', U2) in the order they first speak (Cast characters only; a speaker deleted from the Cast is skipped). */
 export function speakersOf(node: FlowNode | undefined, profiles: Profile[]): Profile[] {
-  const ids = node?.type === 'dialogue' ? [...new Set(node.lines.map((l) => l.speaker).filter((x): x is string => !!x))] : []
+  const ids = node?.type === 'shot' ? [...new Set(node.lines.map((l) => l.speaker).filter((x): x is string => !!x))] : []
   return ids.map((id) => profiles.find((p) => p.id === id && p.cls === 'character')).filter((p): p is Profile => !!p)
 }
 
@@ -55,7 +55,7 @@ export const lineAction = (text: string): string => { const t = text.trim().repl
  *  links the scene. `text` null: the lead text is left as it is. */
 export function framePrefill(node: FlowNode | undefined, profiles: Profile[], figures: Figure[] = []): FramePrefill {
   if (!node) return { text: null, subjects: [], place: null }
-  const first = node.type === 'dialogue' ? node.lines.find((l) => l.speaker && l.text.trim()) : undefined
+  const first = node.type === 'shot' ? node.lines.find((l) => l.speaker && l.text.trim()) : undefined
   const subjects = speakersOf(node, profiles).map((p) => {
     const fig = figures.find((f) => f.profile_id === p.id)
     const sv = speakerVersion(p, node, figures).version
@@ -64,7 +64,7 @@ export function framePrefill(node: FlowNode | undefined, profiles: Profile[], fi
     return { profile_id: p.id, ...(version ? { version } : {}), ...(action ? { action } : {}), ...(fig?.pose ? { pose: poseWords(fig.pose) } : {}) }
   })
   const place = node.place_id && profiles.some((p) => p.id === node.place_id && p.cls === 'place') ? node.place_id : null
-  const words = (node.type === 'shot' ? node.text.trim() || node.title.trim() : node.type === 'dialogue' ? node.title.trim() : '').replace(/[\s.]+$/, '')
+  const words = (node.type === 'shot' ? node.text.trim() || node.title.trim() : '').replace(/[\s.]+$/, '')
   return { text: words || null, subjects, place }
 }
 

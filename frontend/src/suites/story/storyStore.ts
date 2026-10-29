@@ -29,7 +29,7 @@ export const CLASS_LABEL: Record<ProfileClass, string> = { character: 'character
 /** D110 (PS1) → D125 (#2): props are the third class of Cast (Characters · Places · Props) — every profile lives on Cast, and the class
  *  switch shows them. When a profile of a class the switch hides is opened (a new prop, "Open in Story · Cast"), the switch moves to it. */
 type Edge = { from: string; to: string }
-const VISUAL = (n: FlowNode | undefined): boolean => !!n && (n.type === 'dialogue' || n.type === 'shot')
+const VISUAL = (n: FlowNode | undefined): boolean => n?.type === 'shot'
 /** D125 (S7): the visual nodes after `id` (along the edges) that have no place, up to the next node that has one of its own. */
 export function nodesAfterWithoutPlace(id: string, edges: Edge[], nodes: Record<string, FlowNode>): string[] {
   const out: string[] = [], seen = new Set([id]), queue = edges.filter((e) => e.from === id).map((e) => e.to)
@@ -1132,7 +1132,7 @@ export const useStory = create<StoryState>()((set, get) => {
       set({ flowGraph: { ...g, edges } })
       saveGraph(get, set, { edges })
       const target = get().flowNodes[to]                                                            // D125 (S7): a node connected without a place takes the one before it
-      if (target && (target.type === 'dialogue' || target.type === 'shot') && !target.place_id) {
+      if (target?.type === 'shot' && !target.place_id) {
         const place = placeBefore(from, edges, get().flowNodes)
         if (place) void get().patchNode(to, { place_id: place })
       }

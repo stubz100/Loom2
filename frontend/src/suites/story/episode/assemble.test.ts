@@ -12,9 +12,9 @@ const shot = (id: string, versions: Partial<ShotVersion>[], current = 'v1'): Sho
   ({ id, name: id, owner_node: null, current, versions: versions.map((v) => ver(v)), revision: 0, schema_version: 1, created_at: '', updated_at: '' }) as Shot
 
 const nodes = {
-  start: node('start', 'start'), arrival: node('arrival', 'shot', { shot_id: 's_arr' }), reunion: node('reunion', 'dialogue', { shot_id: 's_reu' }),
+  start: node('start', 'start'), arrival: node('arrival', 'shot', { shot_id: 's_arr' }), reunion: node('reunion', 'shot', { shot_id: 's_reu' }),
   choice: node('choice', 'choice', { title: 'Stay or go', options: [{ id: 'stay', label: 'Stay', require: null, set: [] }, { id: 'leave', label: 'Leave', require: null, set: [] }] }),
-  talk: node('talk', 'dialogue', { shot_id: 's_talk' }), door: node('door', 'shot', { shot_id: 's_door' }),
+  talk: node('talk', 'shot', { shot_id: 's_talk' }), door: node('door', 'shot', { shot_id: 's_door' }),
 }
 const graph = { start: 'start', edges: [{ from: 'start', port: 'out', to: 'arrival' }, { from: 'arrival', port: 'out', to: 'reunion' }, { from: 'reunion', port: 'out', to: 'choice' },
   { from: 'choice', port: 'opt:stay', to: 'talk' }, { from: 'choice', port: 'opt:leave', to: 'door' }, { from: 'talk', port: 'out', to: 'arrival' }] } as unknown as FlowGraph

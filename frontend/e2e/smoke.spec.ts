@@ -1868,7 +1868,7 @@ test('a shot (17 / SY2, D85): "New shot from this camera" in Stage makes a Story
   await expect(page.locator('.story-strip .stale-badge')).toBeVisible()
 })
 
-test('a flow (17 / SY3, D85): the Strip adds Start, Dialogue and Choice nodes, handle drags connect them, the Inspector edits the line and the options and spawns a shot, Validate lists the advisory problem, and Play walks both branches without queuing a job', async ({ page }) => {
+test('a flow (17 / SY3, D85; U2 G5: a Shot with lines): the Strip adds Start, Shot and Choice nodes, handle drags connect them, the Inspector edits the line and the options and spawns a shot, Validate lists the advisory problem, and Play walks both branches without queuing a job', async ({ page }) => {
   test.setTimeout(120_000)
   await openApp(page, { suite: 'story', tab: 'flow' })
   await expect(page.locator('[data-testid="flow-canvas"]')).toBeVisible()
@@ -1881,14 +1881,16 @@ test('a flow (17 / SY3, D85): the Strip adds Start, Dialogue and Choice nodes, h
   // the palette on the Strip (D32): three nodes, laid out in a row
   await page.locator('.story-strip button[aria-label="Add Start"]').click()
   await expect(page.locator('.flow-node.t-start')).toHaveCount(1)
-  await page.locator('.story-strip button[aria-label="Add Dialogue"]').click()
+  await page.locator('.story-strip button[aria-label="Add Shot"]').click()                          // U2 (G5): a Dialogue is a Shot with lines
   await page.locator('.story-strip button[aria-label="Add Choice"]').click()
   await expect(page.locator('.flow-node')).toHaveCount(3)
-  const start = page.locator('.flow-node.t-start'), dlg = page.locator('.flow-node.t-dialogue'), choice = page.locator('.flow-node.t-choice')
+  const start = page.locator('.flow-node.t-start'), choice = page.locator('.flow-node.t-choice')
+  let dlg = page.locator('.flow-node.t-shot')
   // the nodes landed stepped at the view's centre (they overlap on a small window): lay them out through the index, then one mouse drag
   type Graph = { graph: { revision: number; nodes: { id: string; x: number; y: number }[]; edges: unknown[]; start: string | null } }
   const g0 = (await api<Graph>('GET', '/story/flow')).graph
   const ids = { start: (await start.getAttribute('data-id'))!, dlg: (await dlg.getAttribute('data-id'))!, choice: (await choice.getAttribute('data-id'))! }
+  dlg = page.locator(`.flow-node[data-id="${ids.dlg}"]`)                                         // the speaking Shot by its id: a shot made below is a Shot node too
   await api('PUT', '/story/flow/graph', { revision: g0.revision, nodes: [{ id: ids.start, x: 0, y: 0 }, { id: ids.dlg, x: 340, y: 0 }, { id: ids.choice, x: 680, y: 0 }], edges: g0.edges, start: g0.start })
   await page.evaluate(() => (window as unknown as { __loom2Story: Hook }).__loom2Story.loadFlow())
   await page.locator('.story-strip button[aria-label="Fit the graph"]').click()
@@ -1896,7 +1898,7 @@ test('a flow (17 / SY3, D85): the Strip adds Start, Dialogue and Choice nodes, h
   const before = await centre(choice.locator('.head'))
   await page.mouse.move(before.x, before.y); await page.mouse.down(); await page.mouse.move(before.x + 10, before.y + 6, { steps: 3 }); await page.mouse.move(before.x + 10, before.y + 90, { steps: 10 }); await page.mouse.up()   // a drag saves on drop
   await expect.poll(async () => (await api<Graph>('GET', '/story/flow')).graph.nodes.find((n) => n.id === ids.choice)?.y ?? 0, { timeout: 10_000 }).toBeGreaterThan(40)
-  // the Inspector: the Dialogue's title and line, the Choice's two options (each an out-port)
+  // the Inspector: the Shot's title and line, the Choice's two options (each an out-port)
   await dlg.locator('.head').click()
   await page.locator('.inspector input[aria-label="node title"]').fill('Hello')
   await page.locator('.inspector button', { hasText: '+ line' }).click()
@@ -1929,7 +1931,7 @@ test('a flow (17 / SY3, D85): the Strip adds Start, Dialogue and Choice nodes, h
   const f = await api<FlowLite>('GET', '/story/flow')
   expect(f.graph.start).toBe(f.nodes.find((n) => n.type === 'start')!.id)
   expect(f.graph.edges.map((e) => (e.port.startsWith('opt:') ? 'opt' : e.port)).sort()).toEqual(['opt', 'out', 'out'])
-  // D125 (#4): the Dialogue was made with its own shot (loom R146), which took the title "Hello" with it; the panel shows the node, then the
+  // D125 (#4): the Shot was made with its own shot (loom R146), which took the title "Hello" with it; the panel shows the node, then the
   // shot; no "New shot for this node…" any more. Validate: the shot is not final yet — one advisory problem
   await dlg.locator('.head').click()
   await expect(page.locator('.inspector [data-testid="node-shot-panel"] .shot-head')).toHaveText('Shot · Hello')
@@ -1955,19 +1957,19 @@ test('a flow (17 / SY3, D85): the Strip adds Start, Dialogue and Choice nodes, h
   // the files are the truth: after a reload the nodes, the edges and the bound shot come back
   await page.reload()
   await expect(page.locator('.flow-node')).toHaveCount(3)
-  await expect(page.locator('.flow-node.t-dialogue .shot img, .flow-node.t-dialogue .shot span')).toHaveCount(1)
-  expect((await api<FlowLite>('GET', '/story/flow')).nodes.find((n) => n.type === 'dialogue')!.shot_id).toBeTruthy()
-  // RC2a (proto01_animate 31 §3b): one record — a shot made elsewhere is a Shot node outside the routes; the Dialogue takes it from its panel,
-  // the bare node goes (the Dialogue's own shot was empty: it is dropped), and the shot's name is the node's title
+  await expect(dlg.locator('.shot img, .shot span')).toHaveCount(1)
+  expect((await api<FlowLite>('GET', '/story/flow')).nodes.find((n) => n.id === ids.dlg)!.shot_id).toBeTruthy()
+  // RC2a (proto01_animate 31 §3b): one record — a shot made elsewhere is a Shot node outside the routes; the speaking Shot takes it from its panel,
+  // the bare node goes (the speaking Shot's own shot was empty: it is dropped), and the shot's name is the node's title
   const made = await api<{ id: string; owner_node: string }>('POST', '/story/shots', { name: 'From the camera' })
   await expect(page.locator('.flow-node')).toHaveCount(4)
-  await page.locator('.flow-node.t-dialogue .head').click()
+  await dlg.locator('.head').click()
   await page.locator('.inspector select[aria-label="bind shot"]').selectOption({ label: 'From the camera' })
   await expect(page.locator('.flow-node')).toHaveCount(3)
   await expect(page.locator('.inspector [data-testid="node-shot-panel"] .shot-head')).toHaveText('Shot · Hello')
-  expect((await api<FlowLite>('GET', '/story/flow')).nodes.find((n) => n.type === 'dialogue')!.shot_id).toBe(made.id)
-  // RC2c: a scene of the Dialogue from its right-click, its frame on the canvas; New Shot from this Shot puts a sibling in it
-  const dlgNode = page.locator('.flow-node.t-dialogue', { hasText: 'Hello' }).first()
+  expect((await api<FlowLite>('GET', '/story/flow')).nodes.find((n) => n.id === ids.dlg)!.shot_id).toBe(made.id)
+  // RC2c: a scene of the speaking Shot from its right-click, its frame on the canvas; New Shot from this Shot puts a sibling in it
+  const dlgNode = dlg
   await dlgNode.locator('.head').click({ button: 'right' })
   await page.locator('.ctx-menu button.item', { hasText: /^Make a scene of it…$/ }).click()
   await page.locator('.modal.ask input').fill('At the gate')

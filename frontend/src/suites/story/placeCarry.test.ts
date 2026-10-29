@@ -5,7 +5,7 @@ import type { FlowNode } from '../../api/types'
 import { nodesAfterWithoutPlace, placeBefore } from './storyStore'
 
 const node = (id: string, type: FlowNode['type'], place_id: string | null = null): FlowNode => ({ id, type, place_id }) as unknown as FlowNode
-const nodes = Object.fromEntries([node('a', 'shot', 'tavern'), node('b', 'dialogue'), node('c', 'choice'), node('d', 'dialogue'), node('e', 'shot', 'street'), node('f', 'shot')].map((n) => [n.id, n]))
+const nodes = Object.fromEntries([node('a', 'shot', 'tavern'), node('b', 'shot'), node('c', 'choice'), node('d', 'shot'), node('e', 'shot', 'street'), node('f', 'shot')].map((n) => [n.id, n]))
 const edges = [{ from: 'a', to: 'b' }, { from: 'b', to: 'c' }, { from: 'c', to: 'd' }, { from: 'c', to: 'e' }, { from: 'e', to: 'f' }]
 
 describe('the place carried along the Flow (D125 S7)', () => {

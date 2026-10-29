@@ -62,13 +62,13 @@ function StoryNode({ id, data, selected }: NodeProps<StoryNodeT>) {
   return (
     <div ref={ref} className={`flow-node t-${n.type}${selected ? ' selected' : ''}${data.problem ? ' problem' : ''}${over ? ' drop-over' : ''}`} data-id={id} style={{ width: NODE_W }} title={data.problem ?? undefined}>
       {n.type !== 'start' && <Handle type="target" position={Position.Left} />}
-      <div className="head"><span className="type">{NODE_LABEL[n.type]}</span><span className="title">{n.title || (n.type === 'dialogue' ? n.lines[0]?.text?.slice(0, 24) : '')}</span></div>
-      {n.type === 'dialogue' && n.lines.length > 0 && <div className="line">{data.speaker && <b>{data.speaker}: </b>}{n.lines[0].text}</div>}
+      <div className="head"><span className="type">{NODE_LABEL[n.type]}</span><span className="title">{n.title || (n.type === 'shot' ? n.lines[0]?.text?.slice(0, 24) ?? '' : '')}</span></div>
+      {n.type === 'shot' && n.lines.length > 0 && <div className="line">{data.speaker && <b>{data.speaker}: </b>}{n.lines[0].text}</div>}
       {(n.type === 'comment' || n.type === 'shot') && n.text && <div className="line">{n.text}</div>}
       {n.type === 'jump' && <div className="line">→ {n.target ?? '…'}</div>}
       {n.type === 'condition' && n.cond && <div className="line">{n.cond.var || '?'} {n.cond.op === 'ne' ? '≠' : '='} {String(n.cond.value)}</div>}
       {n.type === 'action' && <div className="line">{n.set.map((s) => `${String(s.var)} = ${String(s.value)}`).join(', ') || 'sets nothing'}</div>}
-      {(n.type === 'dialogue' || n.type === 'shot') && (
+      {n.type === 'shot' && (
         <div className={`shot${n.shot_id ? '' : ' none'}`}>{data.thumb ? <img src={api.thumbUrl(data.thumb, 256)} alt="" /> : <span>{n.shot_id ? 'shot' : 'no shot'}</span>}{data.shotState && <i className={`dot ${data.shotState === 'final' ? 'ok' : 'tight'}`} title={data.shotState} />}
           {(data.length || data.stale > 0) && <span className="facts">{/* RC2b (D96): the length (a warning past the guide) and the stale count */}
             {data.length && <span className={`len${data.length.over ? ' over' : ''}`} title={data.length.title} data-length>{data.length.over && <TriangleAlert size={11} aria-hidden />}{data.length.text}</span>}
@@ -187,7 +187,7 @@ export function FlowCanvas() {
         onEdgeContextMenu={(e, ed) => { e.preventDefault(); sy().selectEdge({ from: ed.source, port: ed.sourceHandle ?? 'out' }); showMenu(e, edgeMenu()) }}
         onNodeContextMenu={(e, n) => { e.preventDefault(); sy().selectScene(null); sy().selectNode(n.id); showMenu(e, nodeMenu() as MenuItem[]) }}
         onPaneContextMenu={(e) => { e.preventDefault(); sy().setAddAt(flowView.toFlow?.(e.clientX, e.clientY) ?? null)
-          showMenu(e, [{ heading: 'Add a node here' }, ...(['start', 'hub', 'dialogue', 'choice', 'condition', 'action', 'shot', 'jump', 'comment'] as const).map((t) => ({ cmd: `story.flow.add.${t}` })),
+          showMenu(e, [{ heading: 'Add a node here' }, ...(['start', 'hub', 'choice', 'condition', 'action', 'shot', 'jump', 'comment'] as const).map((t) => ({ cmd: `story.flow.add.${t}` })),
             ...templateItems(null, flowView.toFlow?.(e.clientX, e.clientY) ?? null), sep, { cmd: 'story.flow.voiceEpisode' }, { cmd: 'story.flow.validate' }, { cmd: 'story.flow.play' }, { cmd: 'story.flow.fit' }]) }}>
         <Background gap={24} />
         <MiniMap pannable zoomable />

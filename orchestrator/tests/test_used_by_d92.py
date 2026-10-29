@@ -47,7 +47,7 @@ def test_every_kind_of_user_is_found(tmp_path: Path):
     assert [(u.kind, u.extra) for u in users[v1.candidates_group_id]] == [("profile_candidates", "v1")]
     assert [(u.kind, u.extra, u.version) for u in users[v2.group_id]] == [("profile_ref", "rain gear", "v2")]   # the label when it has one
     assert [(u.kind, u.id, u.name) for u in users[ink.id]] == [("style", "sty_ink", "Ink wash")]
-    assert [(u.kind, u.id, u.name, u.extra) for u in users[board.id]] == [("flow_board", node.id, "Arrival", "dialogue")]
+    assert [(u.kind, u.id, u.name, u.extra) for u in users[board.id]] == [("flow_board", node.id, "Arrival", "shot")]
     assert [(u.kind, u.id, u.name) for u in users[stg.group_id]] == [("stage", stg.id, "Pier")]
     assert all(u.group_id == gid for gid, us in users.items() for u in us)
 

@@ -25,9 +25,9 @@ describe('Make the Flow from the spine (D125 S4)', () => {
 })
 
 describe('Voice all lines (D125 S8)', () => {
-  it('counts the Dialogue lines not voiced yet or changed since', () => {
+  it("counts the Shots' lines not voiced yet or changed since (U2: a Dialogue is a Shot with lines; a Note's never count)", () => {
     const l = (text: string, audio: string | null = null, said: string | null = null) => ({ speaker: null, text, audio_asset_id: audio, audio_text: said })
-    const nodes = [node('d', { type: 'dialogue', lines: [l('Hi.'), l('Done.', 'ast_1', 'Done.'), l('Now. ', 'ast_2', 'Now.'), l('Changed.', 'ast_3', 'Before.'), l('  ')] }), node('s', { lines: [l('Not a dialogue.')] })]
-    expect(linesToVoice(nodes)).toBe(2)
+    const nodes = [node('d', { type: 'shot', lines: [l('Hi.'), l('Done.', 'ast_1', 'Done.'), l('Now. ', 'ast_2', 'Now.'), l('Changed.', 'ast_3', 'Before.'), l('  ')] }), node('s', { lines: [l('A Shot speaks too.')] }), node('c', { type: 'comment', lines: [l('A note never.')] })]
+    expect(linesToVoice(nodes)).toBe(3)
   })
 })

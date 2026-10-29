@@ -111,7 +111,7 @@ def shot_graph(shot: Any, version: Any, *, rc0: dict[str, Any], node: Any | None
     # ---- the elements: characters (the node's speakers, the stage's bound figures), props, the place ----
     figures = [o for o in (stage.objects if stage else []) if o.kind == "mannequin" and o.visible]
     bound = {o.profile_id: o.version for o in (stage.objects if stage else []) if o.profile_id and o.visible}
-    speakers = [ln.speaker for ln in (node.lines if node and node.type == "dialogue" else []) if ln.speaker]
+    speakers = [ln.speaker for ln in (node.lines if node else []) if ln.speaker]   # U2 (G5): a Shot's lines
     for pid in list(dict.fromkeys([*speakers, *bound])):
         p = profiles.get(pid)
         if p is None or p.cls not in ("character", "prop"):
@@ -132,7 +132,7 @@ def shot_graph(shot: Any, version: Any, *, rc0: dict[str, Any], node: Any | None
         v = version_of(place, None)
         add(GraphNode(id=f"place:{place}", kind="place", label=p.name, sub="place", state="done" if v and v.hero_asset_id else "owed",
                       thumb=v.hero_asset_id if v else None, ref={"profile_id": place, "version": v.id if v else ""}))
-    lines = [ln for ln in (node.lines if node and node.type == "dialogue" else []) if ln.text.strip()]
+    lines = [ln for ln in (node.lines if node else []) if ln.text.strip()]
     if lines:
         voiced = [ln for ln in lines if ln.audio_asset_id and ln.audio_text == ln.text.strip()]
         changed = [ln for ln in lines if ln.audio_asset_id and ln.audio_text != ln.text.strip()]

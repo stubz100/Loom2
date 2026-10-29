@@ -52,7 +52,7 @@ def test_new_shot_from_this_shot(tmp_path: Path):
     st.add_take(src.shot_id, "v1", "image", "ast_frame")
     st.patch_node(src.id, {"speaker_versions": {"prf_mara": "v2"}})
     sib = st.new_shot_from(src.id)
-    assert sib.type == "dialogue" and sib.title == "Talk · 2" and sib.lines[0].text == "Hi." and sib.lines[0].audio_asset_id == "ast_line"
+    assert sib.type == "shot" and sib.title == "Talk · 2" and sib.lines[0].text == "Hi." and sib.lines[0].audio_asset_id == "ast_line"
     assert sib.speaker_versions == {"prf_mara": "v2"} and sib.shot_id and sib.shot_id != src.shot_id
     v = st.shot(sib.shot_id).version()
     assert v.stage_id == stg.id and v.camera_id not in (None, cam.id) and v.takes == [] and v.frame_asset_id is None   # the stage shared, its own camera

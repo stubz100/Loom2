@@ -7751,11 +7751,10 @@
             "type": "string"
           },
           "type": {
-            "default": "dialogue",
+            "default": "shot",
             "enum": [
               "start",
               "hub",
-              "dialogue",
               "choice",
               "condition",
               "action",
@@ -13964,7 +13963,7 @@
             "type": "string"
           },
           "type": {
-            "default": "dialogue",
+            "default": "shot",
             "title": "Type",
             "type": "string"
           },
@@ -19276,10 +19275,8 @@
             "type": "string"
           },
           "node_type": {
-            "enum": [
-              "dialogue",
-              "shot"
-            ],
+            "const": "shot",
+            "default": "shot",
             "title": "Node Type",
             "type": "string"
           },
@@ -32743,7 +32740,7 @@
     },
     "/story/flow/voice": {
       "post": {
-        "description": "D125 (S8): Voice all lines of the episode — every Dialogue node's lines not voiced yet or changed since, one job per voice and node.\nA line without a voice (its speaker has none and none is picked) is named first; nothing is queued then.",
+        "description": "D125 (S8): Voice all lines of the episode — every Shot's lines (U2: a Shot with lines, the Dialogue of before) not voiced yet or changed since, one job per voice and node.\nA line without a voice (its speaker has none and none is picked) is named first; nothing is queued then.",
         "operationId": "flow_voice_story_flow_voice_post",
         "requestBody": {
           "content": {

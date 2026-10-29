@@ -4,7 +4,7 @@ import type { FlowNode } from '../../api/types'
 import { mergeProfileBody, voicedLines } from './storyStore'
 
 const node = (id: string, lines: FlowNode['lines']): FlowNode => ({
-  schema_version: 1, id, type: 'dialogue', title: id, lines, options: [], cond: null, set: [], target: null, text: '', shot_id: null, shot_version: null, board_group_id: null, place_id: null, speaker_versions: {}, colour: null, beat_id: null, scene_id: null, own: [],
+  schema_version: 1, id, type: 'shot', title: id, lines, options: [], cond: null, set: [], target: null, text: '', shot_id: null, shot_version: null, board_group_id: null, place_id: null, speaker_versions: {}, colour: null, beat_id: null, scene_id: null, own: [],
   revision: 0, created_at: '', updated_at: '',
 })
 const line = (text: string, audio: string | null) => ({ speaker: null, text, audio_asset_id: audio, audio_text: text })

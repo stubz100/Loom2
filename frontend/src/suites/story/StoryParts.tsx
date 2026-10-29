@@ -162,7 +162,7 @@ function CastTab() {
 
 // ------------------------------------------------------------------ Panel · Shots
 /** D90 (01 §11.6): a Flow node as the user knows it — its title, else its first line or its type; never the raw id. */
-const nodeName = (nodes: Record<string, FlowNode>, id: string): string => { const n = nodes[id]; return n ? n.title || (n.type === 'dialogue' ? n.lines[0]?.text?.slice(0, 30) : '') || `${NODE_LABEL[n.type]} node` : 'a Flow node' }
+const nodeName = (nodes: Record<string, FlowNode>, id: string): string => { const n = nodes[id]; return n ? n.title || (n.type === 'shot' ? n.lines[0]?.text?.slice(0, 30) : '') || `${NODE_LABEL[n.type]} node` : 'a Flow node' }
 // ------------------------------------------------------------------ Panel · Flow
 function FlowTab() {
   const flowNodes = useStory((s) => s.flowNodes)
@@ -181,8 +181,8 @@ function FlowTab() {
             <h4>{NODE_LABEL[t]}<span className="n"> · {list.filter((n) => n.type === t).length}</span></h4>
             {list.filter((n) => n.type === t).map((n) => (
               <button key={n.id} className={`story-row node-row${nodeId === n.id ? ' active' : ''}${play?.node === n.id ? ' playing' : ''}`} role="listitem" data-id={n.id} onClick={() => sy().selectNode(n.id)}>
-                <span className="pname">{n.title || (n.type === 'dialogue' ? n.lines[0]?.text?.slice(0, 30) : NODE_LABEL[n.type]) || NODE_LABEL[n.type]}</span>
-                {(n.type === 'dialogue' || n.type === 'shot') && <span className="n">{n.shot_id ? 'shot' : '—'}</span>}
+                <span className="pname">{n.title || (n.type === 'shot' ? n.lines[0]?.text?.slice(0, 30) : NODE_LABEL[n.type]) || NODE_LABEL[n.type]}</span>
+                {n.type === 'shot' && <span className="n">{n.shot_id ? 'shot' : '—'}</span>}
               </button>
             ))}
           </div>
@@ -676,7 +676,7 @@ function CastPage() {
         </div>
       </div>
       <section className="in-shots">
-        <h3>In {uses.length} shot{uses.length === 1 ? '' : 's'} <Help text={"The shots that use this profile — a Dialogue line's speaker, a node's place, a stage figure or a prop's mesh bound to it — with each shot's route and what it still needs from this version. A click opens the shot."} /></h3>
+        <h3>In {uses.length} shot{uses.length === 1 ? '' : 's'} <Help text={"The shots that use this profile — a line's speaker, a node's place, a stage figure or a prop's mesh bound to it — with each shot's route and what it still needs from this version. A click opens the shot."} /></h3>
         {uses.length ? <div className="use-list">{uses.map((u) => { const need = shotNeeds(u, cells, p.cls)
           return (
             <button key={u.shot_id} type="button" className="use-row" data-id={u.shot_id} onClick={() => openShotRow(u.shot_id)} title="Open the shot in Story · Shots">
@@ -742,7 +742,7 @@ function ShotBoard() {
   const clipsById = useStory((s) => s.clipsById)
   markUsed('story.shot.release'); markUsed('story.shot.delete')
   const s = shots.find((x) => x.id === shotId)
-  if (!s) return <div className="story-empty"><div>Pick a shot on the left — every Dialogue or Shot node in Flow has one.<div className="quick-cards"><CommandButton id="story.shot.new" text /></div></div></div>
+  if (!s) return <div className="story-empty"><div>Pick a shot on the left — every Shot node in Flow has one.<div className="quick-cards"><CommandButton id="story.shot.new" text /></div></div></div>
   const v = s.versions.find((x) => x.id === (shotVersionId ?? s.current))
   if (!v) return null
   const clip = v.clip_id ? clipsById[v.clip_id] : undefined
@@ -807,7 +807,7 @@ function PlayView() {
           : n && v?.frame_asset_id ? <img src={api.thumbUrl(v.frame_asset_id, 1024)} alt="" aria-label="the node's frame" />
           : <div className="play-card">{play.ended ? 'The end.' : n ? `${NODE_LABEL[n.type]} · ${n.title || ''}${n.shot_id ? '' : ' (no shot bound)'}` : ''}</div>}
       </div>
-      {n?.type === 'dialogue' && n.lines.length > 0 && <div className="play-lines">{n.lines.map((l, i) => <p key={i}>{speaker(l.speaker) && <b>{speaker(l.speaker)}: </b>}{l.text}</p>)}</div>}
+      {n?.type === 'shot' && n.lines.length > 0 && <div className="play-lines">{n.lines.map((l, i) => <p key={i}>{speaker(l.speaker) && <b>{speaker(l.speaker)}: </b>}{l.text}</p>)}</div>}
       <div className="play-controls">
         {play.ended ? <button className="primary restart" onClick={() => runCommand('story.flow.restart')}>Restart</button>
           : n?.type === 'choice' ? optionsAvailable(n, play.vars).map((o: FlowOption) => <button key={o.id} className="option primary" onClick={() => sy().playNext(o.id)}>{o.label || '…'}</button>)
@@ -900,7 +900,7 @@ function ShotInspector() {
 /** D125 (#4, S10): a node and its shot as one panel — the node's own fields, then its shot's (the selected shot: selecting a node selects
  *  its shot, and a shot its node, so the shot verbs and the node verbs both act on what is shown). */
 function NodeShotPanel({ n, s }: { n?: FlowNode; s?: Shot }) {
-  const visual = !!n && (n.type === 'dialogue' || n.type === 'shot')
+  const visual = n?.type === 'shot'
   const shotId = useStory((st) => st.shotId)
   useEffect(() => { if (s && shotId !== s.id) sy().selectShot(s.id, n?.shot_version) }, [s, shotId, n?.shot_version])   // the shot verbs act on the shot shown (a node picked before the shots loaded)
   return (
@@ -1195,7 +1195,7 @@ function NodeInspector() {
   markUsed('story.flow.openBoard'); markUsed('story.flow.clearBoard')
   markUsed('story.flow.delete'); markUsed('story.flow.duplicate'); markUsed('story.flow.newShot'); markUsed('story.flow.openShot'); markUsed('story.flow.validate'); markUsed('story.flow.fit'); markUsed('story.flow.voiceAll')
   markUsed('story.flow.placeForward')
-  for (const t of ['start', 'hub', 'dialogue', 'choice', 'condition', 'action', 'shot', 'jump', 'comment']) markUsed(`story.flow.add.${t}`)
+  for (const t of ['start', 'hub', 'choice', 'condition', 'action', 'shot', 'jump', 'comment']) markUsed(`story.flow.add.${t}`)
   const n = nodeId ? flowNodes[nodeId] : undefined
   if (!n) return (
     <div className="story-insp">
@@ -1229,7 +1229,7 @@ function NodeFields({ n }: { n: FlowNode }) {
   const world = useStory((s) => s.world)
   const vars = world?.variables ?? []                                                           // derived in render: a selector must not return a fresh array
   const mine = problems?.filter((p) => p.node_id === n.id) ?? []
-  const visual = n.type === 'dialogue' || n.type === 'shot'
+  const visual = n.type === 'shot'
   return (
     <>
       <h4>{NODE_LABEL[n.type]} · {n.title || n.id}</h4>
@@ -1238,7 +1238,7 @@ function NodeFields({ n }: { n: FlowNode }) {
         <select value={n.type} aria-label="node type" onChange={(e) => void sy().patchNode(n.id, { type: e.target.value as FlowNode['type'] })}>{(Object.keys(NODE_LABEL) as FlowNode['type'][]).map((t) => <option key={t} value={t}>{NODE_LABEL[t]}</option>)}</select>
         <span>title</span><input type="text" value={n.title} aria-label="node title" onChange={(e) => void sy().patchNode(n.id, { title: e.target.value })} />
         {n.type === 'comment' && <><span>text</span><textarea rows={3} value={n.text} aria-label="note text" onChange={(e) => void sy().patchNode(n.id, { text: e.target.value })} /></>}
-        {n.type === 'shot' && <><span>line</span><textarea rows={2} value={n.text} aria-label="shot line" placeholder="what happens (a beat's line lands here)" onChange={(e) => void sy().patchNode(n.id, { text: e.target.value })} /></>}
+        {n.type === 'shot' && <><span>action</span><textarea rows={2} value={n.text} aria-label="shot line" placeholder="what happens (a beat's line lands here)" onChange={(e) => void sy().patchNode(n.id, { text: e.target.value })} /></>}
         {n.type === 'jump' && <><span>target</span><select value={n.target ?? ''} aria-label="jump target" onChange={(e) => void sy().patchNode(n.id, { target: e.target.value || null })}><option value="">(none)</option>{Object.values(flowNodes).filter((x) => x.id !== n.id && x.type !== 'comment').map((x) => <option key={x.id} value={x.id}>{x.title || NODE_LABEL[x.type]}</option>)}</select></>}
         {n.type === 'condition' && <><span>condition</span><div className="cond-row">
           <select value={n.cond?.var ?? ''} aria-label="condition variable" onChange={(e) => void sy().patchNode(n.id, { cond: { var: e.target.value, op: n.cond?.op ?? 'eq', value: n.cond?.value ?? true } })}><option value="">variable</option>{vars.map((v) => <option key={v.name} value={v.name}>{v.name}</option>)}</select>
@@ -1247,7 +1247,7 @@ function NodeFields({ n }: { n: FlowNode }) {
             return <select value={String(n.cond?.value ?? 'true')} aria-label="condition value" onChange={(e) => void sy().patchNode(n.id, { cond: { var: n.cond?.var ?? '', op: n.cond?.op ?? 'eq', value: e.target.value === 'true' ? true : e.target.value === 'false' ? false : e.target.value } })}>{vals.map((val) => <option key={val} value={val}>{val}</option>)}</select> })()}
         </div></>}
       </div>
-      {n.type === 'dialogue' && <><h4>Lines</h4><LinesEditor n={n} /></>}
+      {n.type === 'shot' && <><h4>Lines</h4><LinesEditor n={n} /></>}{/* U2 (G5): a Shot speaks — a Dialogue was a Shot with lines */}
       {n.type === 'choice' && <><h4>Options <Help text={"Each is an out-port."} /></h4><OptionsEditor n={n} /></>}
       {n.type === 'action' && <><h4>Sets</h4><SetsEditor n={n} sets={n.set} onChange={(set) => void sy().patchNode(n.id, { set })} /></>}
       {visual && <PlaceField n={n} />}

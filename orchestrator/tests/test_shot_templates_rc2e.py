@@ -27,7 +27,7 @@ def test_templates_in_the_store(tmp_path: Path):
     src = st.create_node("dialogue", "Close-up", lines=[{"speaker": "prf_mara", "text": "Not now.", "audio_asset_id": "ast_v", "audio_text": "Not now."}])
     st.set_source(src.shot_id, "v1", stg.id, cam.id, stg.revision)
     t = st.save_shot_template(src.id, "Close-up from the wide")
-    assert t.node_type == "dialogue" and t.route == "stage" and [(ln.speaker, ln.text) for ln in t.lines] == [("prf_mara", "Not now.")]
+    assert t.node_type == "shot" and t.route == "stage" and [(ln.speaker, ln.text) for ln in t.lines] == [("prf_mara", "Not now.")]
     assert t.camera is not None and t.camera.focal_mm == 85.0 and t.camera.pos == [0.5, 1.6, 1.2] and len(t.camera.keys) == 1
     with pytest.raises(ValueError, match="needs a name"):
         st.save_shot_template(src.id, " ")
@@ -38,7 +38,7 @@ def test_templates_in_the_store(tmp_path: Path):
     st.set_source(wide.shot_id, "v1", stg.id, cam.id, stages.get(stg.id).revision)
     scene = st.create_scene("The quay", [wide.id])
     n = st.new_shot_from_template(t.id, near=wide.id)
-    assert n.type == "dialogue" and n.title == "Close-up from the wide" and n.lines[0].text == "Not now." and n.lines[0].audio_asset_id is None
+    assert n.type == "shot" and n.title == "Close-up from the wide" and n.lines[0].text == "Not now." and n.lines[0].audio_asset_id is None
     assert n.scene_id == scene.id
     v = st.shot(n.shot_id).version()
     after = stages.get(stg.id)

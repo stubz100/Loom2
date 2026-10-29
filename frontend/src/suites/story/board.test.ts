@@ -13,9 +13,9 @@ const none: CellInput = { clipAudio: () => false, finals: [], cuts: [], busy: ()
 
 describe('the board\'s order (D125 SP3)', () => {
   const nodes = {
-    start: node('start', 'start'), arrival: node('arrival', 'shot', { shot_id: 's_arr' }), reunion: node('reunion', 'dialogue', { shot_id: 's_reu' }),
+    start: node('start', 'start'), arrival: node('arrival', 'shot', { shot_id: 's_arr' }), reunion: node('reunion', 'shot', { shot_id: 's_reu' }),
     choice: node('choice', 'choice', { title: 'Stay or go', options: [{ id: 'stay', label: 'Stay', require: null, set: [] }, { id: 'leave', label: 'Leave', require: null, set: [] }] }),
-    talk: node('talk', 'dialogue', { shot_id: 's_talk' }), door: node('door', 'shot', { shot_id: 's_door' }), lone: node('lone', 'shot', { shot_id: 's_lone' }),
+    talk: node('talk', 'shot', { shot_id: 's_talk' }), door: node('door', 'shot', { shot_id: 's_door' }), lone: node('lone', 'shot', { shot_id: 's_lone' }),
   }
   const graph = { start: 'start', edges: [{ from: 'start', port: 'out', to: 'arrival' }, { from: 'arrival', port: 'out', to: 'reunion' }, { from: 'reunion', port: 'out', to: 'choice' },
     { from: 'choice', port: 'opt:leave', to: 'door' }, { from: 'choice', port: 'opt:stay', to: 'talk' }] } as unknown as FlowGraph
@@ -28,7 +28,7 @@ describe('the board\'s order (D125 SP3)', () => {
   it('RC2a: a bare Shot node is nothing but its shot, off the routes; a shot has work once it has a source, a take or a second version', () => {
     expect(bareNode(nodes.lone, graph)).toBe(true)
     expect(bareNode(nodes.door, graph)).toBe(false)                                         // on a route
-    expect(bareNode(node('x', 'dialogue'), graph)).toBe(false)                              // a Dialogue is in the story
+    expect(bareNode(node('x', 'shot', { lines: [{ speaker: null, text: 'Hi.', audio_asset_id: null, audio_text: null }] }), graph)).toBe(false)   // U2: a Shot with lines (a Dialogue) is in the story
     expect(bareNode(node('y', 'shot', { place_id: 'prf_quay' }), graph)).toBe(false)        // a place of its own
     expect(hasWork(shot('a', null))).toBe(false)
     expect(hasWork(shot('b', null, { takes: [{ kind: 'image', id: 'ast_1', at: '' }] }))).toBe(true)
@@ -47,7 +47,7 @@ describe('the board\'s cells (D125 SP3)', () => {
   })
   it('a dialogue: its lines, its voices (a changed line is stale), lip-sync owed on the dialogue route', () => {
     const s = shot('s', 'n', { recipe: { template: 'dialogue', steps: [] } })
-    const n = node('n', 'dialogue', { lines: [{ speaker: null, text: 'Hi.', audio_asset_id: 'ast_a', audio_text: 'Hi.' }, { speaker: null, text: 'Go, then.', audio_asset_id: 'ast_b', audio_text: 'Go.' }] })
+    const n = node('n', 'shot', { lines: [{ speaker: null, text: 'Hi.', audio_asset_id: 'ast_a', audio_text: 'Hi.' }, { speaker: null, text: 'Go, then.', audio_asset_id: 'ast_b', audio_text: 'Go.' }] })
     const c = cellsOf(s, s.versions[0], n, none)
     expect(c.lines).toEqual({ state: 'done', text: '2' })
     expect(c.voice).toEqual({ state: 'stale', text: '1 changed' })
@@ -58,7 +58,7 @@ describe('the board\'s cells (D125 SP3)', () => {
     const s = shot('s', 'n', { recipe: { template: 'clay2', steps: [] }, stage_id: 'stg', camera_id: 'cam', clip_id: 'clp_new' })
     const x: CellInput = { ...none, finals: [{ shot_id: null, stage_id: 'stg', camera_id: 'cam', clip_id: 'clp_asm', layers: [{ status: 'done' }, { status: 'done' }] as never }],
       cuts: [{ clips: [{ shot_id: 's', shot_version: 'v1', clip_id: 'clp_old' }] }], clipAudio: (id) => id === 'clp_new' }
-    const c = cellsOf(s, s.versions[0], node('n', 'dialogue'), x)
+    const c = cellsOf(s, s.versions[0], node('n', 'shot'), x)
     expect(c.stage.state).toBe('done')
     expect(c.final).toEqual({ state: 'done', text: 'assembled' })
     expect(c.lipsync.state).toBe('done')
@@ -102,7 +102,7 @@ describe('a Shot card\'s length (RC2b, D96)', () => {
 
 describe('the Shots list (RC2d)', () => {
   const sc = [{ id: 'scn_q', name: 'Quay' }, { id: 'scn_s', name: 'Shed' }]
-  const n1 = node('n1', 'dialogue', { scene_id: 'scn_s', lines: [{ speaker: null, text: 'Close the door.', audio_asset_id: null, audio_text: null }] })
+  const n1 = node('n1', 'shot', { scene_id: 'scn_s', lines: [{ speaker: null, text: 'Close the door.', audio_asset_id: null, audio_text: null }] })
   const n2 = node('n2', 'shot', { scene_id: 'scn_q', text: 'a boat comes in' }), n3 = node('n3', 'shot'), n4 = node('n4', 'shot', { scene_id: 'scn_s' })
   const rows = [n1, n2, n3, n4].map((n) => ({ shot: shot(`s_${n.id}`, n.id), node: n, group: 'Stay or go ▸ Stay' }))
   const cards = { s_n1: { length_s: 4, stale: 0 }, s_n2: { length_s: 31, stale: 2 }, s_n3: { length_s: null, stale: 1 }, s_n4: { length_s: 9, stale: 0 } }

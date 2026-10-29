@@ -47,7 +47,7 @@ function settle(state: PlayState, graph: FlowGraph, nodes: Record<string, FlowNo
     const n = nodes[cur]
     if (!n || steps++ > MAX_STEPS) return { node: null, vars, trail, ended: true, waiting: null, steps }
     trail.push(cur)
-    if (n.type === 'dialogue' || n.type === 'shot') return { node: cur, vars, trail, ended: false, waiting: 'next', steps }
+    if (n.type === 'shot') return { node: cur, vars, trail, ended: false, waiting: 'next', steps }
     if (n.type === 'choice') return { node: cur, vars, trail, ended: false, waiting: 'choice', steps }
     if (n.type === 'comment') return { node: null, vars, trail, ended: true, waiting: null, steps }
     if (n.type === 'jump') { cur = n.target && nodes[n.target] ? n.target : null; continue }

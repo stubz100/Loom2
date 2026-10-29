@@ -34,5 +34,5 @@ export function spineEdges(spine: StoryBeat[], todo: StoryBeat[], edges: FlowGra
 
 /** A line not voiced yet, or changed since (the stamp is the stripped text the job spoke). */
 export const lineOwesVoice = (l: FlowNode['lines'][number]): boolean => !!l.text.trim() && (!l.audio_asset_id || l.audio_text !== l.text.trim())
-/** *Voice all lines (N)*: the episode's Dialogue lines that owe their voice. */
-export const linesToVoice = (nodes: FlowNode[]): number => nodes.filter((n) => n.type === 'dialogue').reduce((k, n) => k + n.lines.filter(lineOwesVoice).length, 0)
+/** *Voice all lines (N)*: the episode's lines (its Shots', U2) that owe their voice. */
+export const linesToVoice = (nodes: FlowNode[]): number => nodes.filter((n) => n.type === 'shot').reduce((k, n) => k + n.lines.filter(lineOwesVoice).length, 0)

@@ -2731,7 +2731,10 @@ test('a group\'s "used by" (D92 §4.2): a Cast version\'s reference set says so 
   await openApp(page, { suite: 'catalogue' })
   // U2 (D157, G1): the reference set lives in the version's home in the Bin — World › Characters › <name> › v1 › "<name> · v1"
   const rowOf = (label: string, scope = page.locator('.places')) => scope.locator('.place-row').filter({ has: page.getByText(label, { exact: true }) })
-  const expand = async (r: ReturnType<typeof rowOf>) => { const chev = r.locator('button.chev[aria-label^="Expand"]'); if (await chev.count()) await chev.click() }
+  const expand = async (r: ReturnType<typeof rowOf>) => {                                       // the tree loads after the page: wait for the chevron
+    const chev = r.locator('button.chev'); await expect(chev).toBeVisible()
+    if ((await chev.getAttribute('aria-label'))?.startsWith('Expand')) await chev.click()
+  }
   await expand(rowOf('World')); await expand(rowOf('Characters'))
   const who = rowOf(name); await expand(who)
   const v1 = rowOf('v1', who.locator('xpath=..')); await expand(v1)
@@ -4237,8 +4240,9 @@ test('the recipe graph in Story and the Catalogue (RC1c): Open its recipe shows 
   await page.locator('nav.rail button[title^="Shots"]').click()
   await page.locator(`.shots-board tr.row[data-id="${n.shot_id}"] td.name`).click()
   await expect(page.locator('.shot-recipe .recipe-node[data-id="take"]')).toBeVisible()
-  // the Catalogue: the clip's Show its recipe opens its shot
+  // the Catalogue: the clip's Show its recipe opens its shot (U2e: the clip is in its shot's home; the Library lists every asset)
   await openCatalogue(page)
+  await page.locator('.places .place-row', { hasText: 'Library' }).locator('button.place-open').click()
   const tile = page.locator(`.cat-grid .tile[data-id="${clipAsset}"]`)
   await expect(tile).toBeVisible({ timeout: 15_000 })
   await contextChoose(page, tile, 'Show its recipe')

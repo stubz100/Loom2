@@ -11590,3 +11590,33 @@ the API contract was regenerated. U2's e2e runs with U2d.
 - `agents_check`, `model_literals_check` and `settings_audit` (319, 0) clean; the API contract regenerated.
 
 This entry also corrects the time in the U2c entry's header (01:36 → 01:31, the clock's).
+
+## 2026-10-29 02:08 — U2e (G1, part 2): every creation lands in its owner's home; U2 closed (D157, proto01_UI2 05 §2, 06 §1.2)
+
+**Placement.**
+
+- `bins.owner_home(origin)` names the owner of what a job made:
+  - a shot version: made for it (`for_shot`), its lip-sync, a line's voice (the node's shot), or a final made for it;
+  - a profile version: a Cast job — `suite: story`, `ref` the profile, `payload.version` (the set fit and its Fill, the anim test and its
+    guide, the body fit, the prop's model, the shell, a check);
+  - nothing for Image's free work, an import or a stage's own passes.
+- `bins.land` puts a finished job's assets that no page took into that home. It runs from the queue's one completion tail (`_complete`),
+  for engine and CPU jobs alike. A page a finisher chose (Expand's candidates, a style's group) keeps its assets.
+- Image's free results stay unplaced. Unprocessed goes with the old Catalogue in U8.
+
+**The migration**, bins schema 2: once, the Unprocessed assets whose recorded origin names an owner go to its home ("U2: N unprocessed
+assets went to the home of what they were made for"). It runs after U2d's pages on a project that had them, and with them on one that did
+not.
+
+**Tests:**
+
+- the two e2e scenarios above, adapted;
+- `test_homes_u2.py` (2): the owners of origins, landing, a placed asset staying put, the sort once;
+- `test_shot_recipe_rc0`: a real job made for a shot lands its take in `shots/<shot>/v1`.
+
+**Checks:** offline 706 passed; Vitest 611 + 3 skipped; typecheck, build and lint clean; e2e 77/79 in the first full run — the recipe-graph scenario looked for the clip made for a shot in the Catalogue's default view (it is in the shot's home now: the scenario opens the Library) and the "used by" scenario expanded the tree before it loaded (it waits for each chevron now) — then 79/79 (alone); `agents_check`,
+`model_literals_check` and `settings_audit` (319, 0) clean; the API contract unchanged.
+
+**U2 is closed.** G5 (one Shot node), G6 and G12 (the scene's stage, a shot's camera and range, *New shot*), G2 (the Look's sample scene)
+and G1 (the Bin's homes) are in, with two deferrals: the shared cameras and the stageless shots of old projects (U4), and retiring
+Unprocessed (U8). Next is U3, World (07 §2).

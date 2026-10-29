@@ -227,6 +227,7 @@ async def test_run_stale_runs_the_frame_then_the_clip(tmp_path: Path, object_inf
         frame = st.shot(shot.id).version().frame_asset_id
         seed = job.seed
         assert seed > 0 and st.shot(shot.id).version().recipe.step("frame").runs[-1].settings["seeds"] == [seed]   # U0 (BE#3): the job's own seed, not "random"
+        assert groups.groups[groups.parent[("asset", frame)]].path == f"shots/{shot.id}/v1"                   # U2e (G1): the take landed in the shot's home
         job = rig.queue.submit({"kind": "i2v", "model_id": WAN, "start_asset": frame, "prompt_text": "she turns", "frames": 9, "fps": 16, "width": 832, "height": 480},
                                origin=_origin(shot.id, suite="animate"))[0]
         assert (await rig.wait(job.id, timeout=60)).status == "done"

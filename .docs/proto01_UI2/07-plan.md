@@ -36,6 +36,8 @@
 
 **U1 is built** (2026-10-29 00:43): the router, the key hosts, the records' fan-out and the context slots; the empty `?ui=2` shell.
 
+**U2 is built** (2026-10-29 01:04 – 02:08): one Shot node (G5); the scene's stage, a shot's camera and range, *New shot* (G6, G12); the Look's sample scene (G2); the Bin's homes, its migration and every creation landing home (G1). Deferred: old projects' shared cameras and stageless shots to U4, retiring Unprocessed to U8.
+
 **The order.** U0 can start at once. U1 and U2 are the foundation. After them, U3 and U4 can run in either order: World first follows the work's order;
 Shots first answers the author's biggest change sooner. U5 and U6 follow U4. Most of U7 can run once U6 has the shot's final.
 

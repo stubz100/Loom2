@@ -699,7 +699,16 @@ class JobQueue:
         t.add_done_callback(tasks.discard)
 
     def _complete(self, job: JobRecord, engine: bool = True) -> None:
-        """The one completion tail (D64): done fields, the index, the queue file, the event, the warm group."""
+        """The one completion tail (D64): done fields, the index, the queue file, the event, the warm group. U2e (G1): the job's assets
+        that no page took land in their owner's home in the Bin."""
+        if self.groups is not None and self.ws is not None and job.result.get("asset_ids"):
+            try:
+                from .bins import land
+                h = land(self.groups, self.ws, job.origin, [str(a) for a in job.result["asset_ids"]])
+                if h is not None:
+                    self.hub.broadcast("group.changed", {"ids": [h.id]})
+            except Exception as e:  # noqa: BLE001 — a home that cannot be written leaves the assets unplaced; the job is done all the same
+                job.log_tail.append(f"assets not placed in their home: {e}")
         job.status, job.finished_at, job.progress, job.progress_text = "done", utc_now(), 1.0, "done"
         job.wall_s = self.wall_s()
         self.catalogue.record_job(job.model_dump())

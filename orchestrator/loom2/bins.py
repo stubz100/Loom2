@@ -7,7 +7,9 @@ display name follows the record's. A version's two pages — its reference set a
 and gains a role. The album stays as it is around them.
 
 `migrate_bins` runs once per project at open: each version's pages under its home, each style's samples under `world/look`, a Flow board
-used by one Shot under its shot's home. Sorting Unprocessed by origin and the finishers writing homes come in U2e.
+used by one Shot under its shot's home; then (U2e, bins schema 2) the Unprocessed assets whose origin names an owner go to its home.
+Every finished job's assets land in their owner's home (`land`, from the queue's completion tail). An asset without an owner stays
+unplaced until U8 retires Unprocessed with the old Catalogue.
 """
 from __future__ import annotations
 
@@ -17,7 +19,7 @@ from typing import Any
 from .fsio import atomic_write_json, read_json_or, utc_now
 from .groups import ROOT_ID, GroupRecord, GroupStore
 
-BINS_SCHEMA_VERSION = 1
+BINS_SCHEMA_VERSION = 2                            # U2e: 2 — the Unprocessed assets sorted by their origin
 CLASS_HOME = {"character": "Characters", "prop": "Props", "place": "Places"}
 NAMED = {"world": "World", "world/look": "Look", "world/sketches": "Sketches", "shots": "Shots", "episode": "Episode", "imports": "Imports",
          **{f"world/{c}": n for c, n in CLASS_HOME.items()}}
@@ -68,11 +70,66 @@ def as_role(groups: GroupStore, gid: str | None, under: GroupRecord, role: str) 
     return moved
 
 
+def owner_home(groups: GroupStore, ws: Any, origin: Any) -> GroupRecord | None:
+    """U2e (G1): the home of what an origin was made for — a shot version (made for it, its lip-sync, a line's voice, a final made for it)
+    or a profile version (a Cast job: the set fit and its Fill, the anim test, the body fit, the prop's model, a check …); None when it
+    names no owner (Image's free work, an import, a stage's own passes)."""
+    if origin is None:
+        return None
+    o = origin if isinstance(origin, dict) else origin.model_dump()
+    p = o.get("payload") or {}
+    ref, surface, suite = o.get("ref") or "", o.get("surface") or "", o.get("suite") or ""
+    from .story import FOR_SHOT, StoryStore
+    st = StoryStore(ws)
+    shot, version = None, None
+    if surface == FOR_SHOT and isinstance(p.get("shot_id"), str):
+        shot, version = p["shot_id"], p.get("version")
+    elif suite == "story" and surface == "lipsync" and ref.startswith("sht_"):
+        shot, version = ref, p.get("version")
+    elif suite == "story" and surface == "voice" and ref.startswith("node_"):
+        n = st.flow_node(ref)
+        shot = n.shot_id if n is not None else None
+    elif suite == "stage" and ref.startswith("fin_"):
+        from .finals import FinalStore
+        f = FinalStore(ws).get(ref)
+        shot, version = (f.shot_id, f.shot_version) if f is not None else (None, None)
+    elif suite == "story" and ref.startswith("prf_"):
+        prof = st.profile(ref)
+        if prof is None:
+            return None
+        vid = p.get("version") if isinstance(p.get("version"), str) and any(v.id == p.get("version") for v in prof.versions) else prof.current
+        return version_home(groups, prof, vid)
+    if not shot:
+        return None
+    s = st.shot(shot)
+    if s is None:
+        return None
+    vid = version if isinstance(version, str) and any(v.id == version for v in s.versions) else s.current
+    return home(groups, f"shots/{s.id}/{vid}", {f"shots/{s.id}": s.name, f"shots/{s.id}/{vid}": vid})
+
+
+def land(groups: GroupStore, ws: Any, origin: Any, asset_ids: list[str]) -> GroupRecord | None:
+    """U2e (G1): a finished job's assets that no page took yet go to their owner's home (a page a finisher chose — Expand's candidates,
+    a style's group — keeps them). The home, or None."""
+    loose = [a for a in asset_ids if ("asset", a) not in groups.parent and groups.cat.get(a) is not None]
+    if not loose:
+        return None
+    h = owner_home(groups, ws, origin)
+    if h is not None:
+        groups.move([("asset", a) for a in loose], h.id)
+    return h
+
+
 def migrate_bins(ws: Any, groups: GroupStore) -> list[str]:
     """Once per project (`groups/bins.json`): the versions' pages, the styles' samples and the one-shot boards into their homes. Notes."""
     marker = Path(groups.dir) / "bins.json"
-    if read_json_or(marker, None) is not None:
+    done = read_json_or(marker, None)
+    if isinstance(done, dict) and int(done.get("schema_version", 1)) >= BINS_SCHEMA_VERSION:
         return []
+    if isinstance(done, dict):                                              # U2d's pages are in: only the Unprocessed assets are left
+        notes = _sort_unprocessed(ws, groups)
+        atomic_write_json(marker, {**done, "schema_version": BINS_SCHEMA_VERSION, "sorted_at": utc_now()})
+        return notes
     from .story import StoryStore
     st = StoryStore(ws)
     pages = styles = boards = 0
@@ -96,9 +153,25 @@ def migrate_bins(ws: Any, groups: GroupStore) -> list[str]:
             n = users[0]
             h = home(groups, f"shots/{n.shot_id}", {f"shots/{n.shot_id}": n.title or "Shot"})
             boards += int(as_role(groups, gid, h, "board"))
+    sorted_notes = _sort_unprocessed(ws, groups)
     atomic_write_json(marker, {"schema_version": BINS_SCHEMA_VERSION, "migrated_at": utc_now(), "pages": pages, "styles": styles, "boards": boards})
     if not (pages or styles or boards):
-        return []
+        return sorted_notes
     parts = [f"{pages} version page{'s' if pages != 1 else ''}" if pages else "", f"{styles} style sample group{'s' if styles != 1 else ''}" if styles else "",
              f"{boards} board{'s' if boards != 1 else ''}" if boards else ""]
-    return [f"U2: the Bin — {', '.join(x for x in parts if x)} moved into their homes (World › …, Shots › …)"]
+    return [f"U2: the Bin — {', '.join(x for x in parts if x)} moved into their homes (World › …, Shots › …)", *sorted_notes]
+
+
+def _sort_unprocessed(ws: Any, groups: GroupStore) -> list[str]:
+    """U2e: the Unprocessed assets whose origin names an owner, into its home (the rest stay unplaced)."""
+    from .catalogue import AssetQuery
+    moved, cursor = 0, None
+    while True:
+        page = groups.cat.list(AssetQuery(folder="unprocessed", limit=500, cursor=cursor))
+        for a in page.items:
+            if a.origin is not None and land(groups, ws, a.origin, [a.id]) is not None:
+                moved += 1
+        cursor = page.next_cursor
+        if not cursor or not page.items:
+            break
+    return [f"U2: {moved} unprocessed asset{'s' if moved != 1 else ''} went to the home of what {'they were' if moved != 1 else 'it was'} made for"] if moved else []

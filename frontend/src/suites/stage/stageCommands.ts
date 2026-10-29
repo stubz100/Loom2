@@ -11,7 +11,7 @@ import { canHold, HAND_LABEL, holders } from './held'
 import { profilesForMentions, useStory } from '../story/storyStore'
 import { useMakeFor } from '../../store/origin'
 import { useMotion } from './motion/motionStore'
-import { navigate } from '../../frame/router'
+import { navigate, UI2 } from '../../frame/router'
 
 const hasStage = () => !!st().current
 const sel = () => st().object(st().selected)
@@ -138,8 +138,8 @@ registerCommands([
   { id: 'stage.lineup.send', scope: 'stage', label: 'Send to a new stage…', icon: Plus, placement: ['panel'], hint: "the line-up's figures and props, where they stand, in a stage of their own",
     when: () => st().current?.purpose === 'lineup', run: () => void st().sendLineup(null) },
   { id: 'stage.lineup.pose', scope: 'stage', label: 'Stand them all', icon: PersonStanding, placement: ['panel'], when: () => st().current?.purpose === 'lineup', run: () => st().poseAll('stand') },
-  { id: 'stage.object.prototype', scope: 'stage', label: 'Prototype ▸ a new idea', icon: FlaskConical, placement: ['inspector', 'context'],
-    hint: "a new idea in Cast from this free figure (its body and shell) or mesh (its model and height), with Clay's view of it as its picture",
+  { id: 'stage.object.prototype', scope: 'stage', label: UI2 ? 'Prototype ▸ a draft entity' : 'Prototype ▸ a new idea', icon: FlaskConical, placement: ['inspector', 'context'],
+    hint: UI2 ? "a draft character (its body and shell) or prop (its model and height) in World, with Clay's view of it as its hero" : "a new idea in Cast from this free figure (its body and shell) or mesh (its model and height), with Clay's view of it as its picture",
     when: () => { const o = sel(); return !!o && !o.profile_id && (o.kind === 'mannequin' || (o.kind === 'mesh' && !!o.asset_id)) && !!viewport.snapshot },
     run: () => void st().prototypeObject(st().selected!) },
   { id: 'stage.object.freeCopy', scope: 'stage', label: 'Make a free copy', icon: Copy, placement: ['inspector', 'context'], hint: "beside it, free of Cast: its body and shell (or its model and height, or a set's faces) as they are now, to experiment with",

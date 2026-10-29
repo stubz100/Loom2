@@ -13072,3 +13072,62 @@ U3e); Story › World's library (its words are the Look's, U3e); *Make frame ▸
 **Checks:** Vitest 646 + 3 skipped; typecheck, build and lint clean (92 warnings, as before); e2e 86/86 (alone). Three full runs before it each failed one scenario on an order effect that passing alone hid: the voice scenario's node among many on the Flow (it now selects the node through the story hook), Flatten opening a document an earlier scenario saved (it now opens a plain photo found through the API), the cut's tracks under load (it passed alone and in the next run).
 
 Next: B2a's Shots wave — the Flow's List view, Play, the recipe graph, a still from the stage, Clay's Prototype — and its scenarios.
+
+## 2026-10-29 16:53 — B2a, Shots' wave (part 1): the Flow's List view and Play, the recipe graph, a still from the stage, Clay's Prototype; 23 scenarios moved (D159; proto01_UI2 11 §7)
+
+**The Flow level** (`ui2/shots/ShotsFlow.tsx`): a strip over the view.
+
+- *Canvas* and *List* (D157 Q11): the List view is the Shots board, the shots in the Flow's order with their steps. Its filters, search and
+  order are in the column.
+- The problems, *Voice all lines (N)*, Validate, *Play* / *Stop*, Fit.
+- A node's recipe in place of the canvas, with *The Flow* back.
+- Story's Play view (exported from `StoryParts`) plays the Flow.
+- The *Link a stage camera* sheet is mounted, as in Story.
+
+**The recipe graph:** *Graph* in Shots' rail puts the shot's recipe over its Clay, Performance or Final (RC1b's `AnimateGraph`, the shot's
+version as its For).
+
+**A still from the stage:** in Sketches, with the column's source *From a stage*, the foot is the stage camera's *Render frame*
+(`FromStageFoot`), no longer *Make sketches*.
+
+**Clay's *Prototype ▸ a draft entity*:** a free figure or mesh becomes a draft character or prop in World — its body and shell, or its model
+and height, and Clay's view as its hero. The ideas store is folded straight away (D157 Q7). The toast's *Open* opens it in World.
+
+**The drawer:** a tile's right-click ends a pick and still lists every verb (D95).
+
+**Scenarios moved onto the new shell (23).** Helpers stand in for the old shell's navigation:
+
+- `clayShot` — a shot on a scene of its own, its Clay open, its stage named;
+- `clayOn` — a shot on a stage made through the API;
+- `section` — the column's section in view;
+- `toLevel` — the rail's level;
+- `perfCardOf` — Performance's card;
+- `fromStageIn` — Sketches *From a stage*;
+- `freeView` — Clay's free view.
+
+Shots opens Clay through the shot's camera, and the old shell opened the free view, so the helpers go to the free view first.
+
+The moved scenarios:
+
+- **Clay:** a stage, posing, a shot's passes and its frame, a clip, a pose-driven shot, figures bound to characters, a prop held in a hand,
+  the things of a picture set, the motion library, the Detailed level, a floor path, a set from an image, the one timeline, image planes from
+  the drawer, places in Clay, the animation editor.
+- **Performance:** the camera move.
+- **Final:** a final shot, a plate projected and filled, the skeleton changed.
+- **Episode:** the cut's tracks.
+- **Settings:** Settings › Audio.
+- **Sketches:** LoRA slots.
+
+**Found while moving them:**
+
+- A final in Shots is made through the shot's camera, not the stage's active one. The picture-set scenario points the shot at the picture's
+  camera first.
+- A final's assembly lands as a take of the shot itself; the old shell linked a second shot by its camera, which D157 retired.
+- The Final column is narrower, so a layer row is picked by its name.
+- Sketches land in Sketches, not in Unprocessed, so the LoRA scenario follows its jobs.
+
+**Checks:** Vitest 646 + 3 skipped; typecheck, build and lint clean (92 warnings, as before); e2e 86/86 (alone).
+
+Next: the last 13 old-shell scenarios — a sequence, the pose editor's bench, a 3D prop, a prop, a shot from the camera, the Flow, an episode,
+the extension and lip-sync, speakers and places, the Shots board, the cut from the Flow, the two recipe graphs. Then three are dropped: the
+three Animate modes (the Shots U4 and U6 scenarios cover the levels), the round trip (the For chip), *Make the Flow from the spine*.

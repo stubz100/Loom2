@@ -39,6 +39,8 @@ export function levelOf(p: Place): ShotLevel | null {
 interface ShotsState {
   level: ShotLevel
   setLevel: (level: ShotLevel) => void
+  flowView: 'canvas' | 'list'                // B2a (D157 Q11): the Flow's canvas or its List view (the Shots board)
+  setFlowView: (v: 'canvas' | 'list') => void
   open: (shotId: string, level?: ShotLevel) => void
   /** The shot's scene or camera changed: Clay opens on it again. */
   reopen: () => void
@@ -141,6 +143,8 @@ export async function flushClay(): Promise<void> {
 let opens = 0                                                            // the shots opened: the mount's place from the hash yields to a later one
 export const useShots = create<ShotsState>()((set, get) => ({
   level: placeOfHash(location.hash)?.level ?? 'flow',
+  flowView: 'canvas',
+  setFlowView: (flowView) => set({ flowView }),
   setLevel: (level) => {
     set({ level })
     navigate(suiteOf(level))

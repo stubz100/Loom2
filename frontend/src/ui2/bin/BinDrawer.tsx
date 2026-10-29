@@ -59,7 +59,7 @@ export default function BinDrawer() {
     const pv = picked(it.asset); if (pv) { pv.run(); endPick() } else verbsHere(it.asset, suite)[0]?.run()
   }
   const corner = (it: BinThing) => { const pv = picked(it.asset); return pv ? { icon: PickIcon ? <PickIcon size={13} /> : undefined, label: pv.label, run: () => { pv.run(); endPick() } } : undefined }
-  const menu = drawerMenu(suite)
+  const menu = (it: BinThing) => { if (pick) endPick(); return drawerMenu(suite)(it) }   // D95: a right-click ends a pick, and still lists every verb
   return (
     <div className="bin b-drawer">
       <BinTree compact />

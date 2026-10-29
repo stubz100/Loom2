@@ -1,7 +1,7 @@
 // U3d (D157, proto01_UI2 03 §7): World's Sketches — the brainstorm's pictures that belong to no one yet, in `bin/world/sketches`. Free
 // pictures are made with Image's whole column (the full prompt, the Library's words, here only) in a Make context of their own; a sketch's
 // *Prototype ▸* makes a draft entity of a class from it — the picture becomes its hero.
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { api } from '../../api/client'
 import { CommandButton } from '../../frame/CommandButton'
 import { showMenu } from '../../frame/ContextMenu'
@@ -13,15 +13,20 @@ import '../../suites/generate/generate.css'
 
 const MENU: MenuItem[] = [{ cmd: 'world.sketch.character' }, { cmd: 'world.sketch.prop' }, { cmd: 'world.sketch.place' }, { sep: true }, { cmd: 'world.sketch.trash' }]
 
+const FromStageFoot = lazy(() => import('../../suites/stage/FromStage').then((m) => ({ default: m.FromStageFoot })))   // B2a: a still from the stage
+
 export function SketchColumn() {
   const pv = useGenerate((s) => s.preview)
   const count = useGenerate((s) => s.panel.count)
+  const stage = useGenerate((s) => s.source === 'stage')
   useEffect(() => { makeContext.enter('world/sketches') }, [])
   const secs = pv?.estimate.seconds ? Math.round(pv.estimate.seconds * count) : null
   return (
     <div className="w-sketch-col" data-testid="world-sketches">
       <div className="w-sketch-gen"><GenerateColumn tab="prompt" /></div>
-      <div className="w-foot"><CommandButton id="world.sketch.make" text label={`Make ${count} sketch${count === 1 ? '' : 'es'} ▶${secs ? ` ≈ ${secs < 90 ? `${secs} s` : `${Math.round(secs / 60)} min`}` : ''}`} /></div>
+      {/* B2a: with From a stage, the foot is the stage camera's Render frame */}
+      <div className="w-foot">{stage ? <Suspense fallback={null}><FromStageFoot /></Suspense>
+        : <CommandButton id="world.sketch.make" text label={`Make ${count} sketch${count === 1 ? '' : 'es'} ▶${secs ? ` ≈ ${secs < 90 ? `${secs} s` : `${Math.round(secs / 60)} min`}` : ''}`} />}</div>
     </div>
   )
 }

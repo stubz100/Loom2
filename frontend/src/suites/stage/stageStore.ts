@@ -18,7 +18,7 @@ import { docFrames, mirrorContacts, portable, resolvePins, toContact, type Conta
 import { setShellPoints } from './proxy'
 import type { Keypoint, WholeBody } from './passes'
 import { profilesForMentions, useStory, versionPointsOfShell } from '../story/storyStore'
-import { navigate, type Layer } from '../../frame/router'
+import { navigate, UI2, type Layer } from '../../frame/router'
 import { contextSlot } from '../../store/contexts'
 import { blocksReady, type MotionBlock } from './blocks'
 
@@ -1106,6 +1106,15 @@ export const useStage = create<StageState>()((set, get) => ({
       const idea = await unwrap(http.POST('/story/ideas/from-clay', { body: { cls: fig ? 'character' : 'prop', name: o.name.slice(0, 80) || (fig ? 'figure' : 'prop'), blob: sha,
         clay: fig ? { kind: 'figure', body: o.body as never, shell_asset_id: o.shadow_proxy ?? null, model_asset_id: null, height_m: null }
           : { kind: 'model', body: null, shell_asset_id: null, model_asset_id: o.asset_id ?? null, height_m: o.height_m ?? null } } }))
+      if (UI2) {                                                                   // B2a (D157 Q7): the new shell keeps no ideas board — a draft entity in World
+        const folded = (await unwrap(http.POST('/story/ideas/fold'))).items.find((x) => x.idea_id === idea.id)
+        if (folded) {
+          const { useStory } = await import('../story/storyStore')
+          await useStory.getState().loadProfiles()
+          s.toast(`A draft ${folded.cls} “${folded.name}” in World`, 'success', { label: 'Open', run: () => { navigate({ suite: 'generate' }); void import('../../ui2/world/worldStore').then((m) => m.useWorld.getState().pick(folded.profile_id)) } })
+          return
+        }
+      }
       void import('../story/ideasStore').then((m) => { if (m.useIdeas.getState().loaded) void m.useIdeas.getState().load() })
       s.toast(`New ${fig ? 'character' : 'prop'} idea “${idea.name}” on Cast's Ideas board`, 'success', { label: 'Open', run: () => void import('../../store/origin').then((m) => m.goToIdea(idea.id)) })
     } catch (e) { s.toast(`Prototype: ${(e as ApiError).detail ?? e}`, 'error') }

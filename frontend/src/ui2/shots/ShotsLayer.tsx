@@ -17,7 +17,9 @@ import '../world/world.css'
 import './shots.css'
 
 // the reused parts load with their level (the Flow's canvas; Clay's three.js)
-const FlowCanvas = lazy(() => import('../../suites/story/flow/FlowCanvas').then((m) => ({ default: m.FlowCanvas })))
+const ShotsFlow = lazy(() => import('./ShotsFlow').then((m) => ({ default: m.ShotsFlow })))   // B2a: the canvas or its List view, Play, a node's recipe
+const BoardPanel = lazy(() => import('../../suites/story/ShotsBoard').then((m) => ({ default: m.BoardPanel })))
+const AnimateGraph = lazy(() => import('../../suites/story/recipe/AnimateGraph'))   // B2a (RC1b): the shot's recipe over its level
 const StoryInspector = lazy(() => import('../../suites/story/StoryParts').then((m) => ({ default: m.Inspector })))
 const ClayColumn = lazy(() => import('../../suites/stage/StageParts').then((m) => ({ default: () => <m.ClayColumn tab="scene" /> })))
 const ClayStrip = lazy(() => import('../../suites/stage/StageParts').then((m) => ({ default: m.Strip })))
@@ -65,20 +67,32 @@ function Rail() {
       <button className={`w-rail-btn${level === l.id ? ' active' : ''}`} title={c.hint ? `${c.label} — ${c.hint}` : c.label} aria-label={c.label} data-level={l.id}
         disabled={!isEnabled(c)} onClick={() => runCommand(c.id)}><Icon size={18} /></button>
     </div>
-  })}</nav>
+  })}<div className="w-rail-sep" /><GraphToggle /></nav>
+}
+
+/** B2a (RC1b): the shot's recipe graph over the level — on and off from the rail. */
+function GraphToggle() {
+  const on = useSession((s) => !!s.ui.graph)
+  useShots((s) => s.level)
+  const c = command('shots.graph')
+  if (!c) return null
+  const Icon = c.icon!
+  return <button className={`w-rail-btn${on ? ' active' : ''}`} title={`${c.label} — ${c.hint}`} aria-label={c.label} aria-pressed={on} data-level="graph"
+    disabled={!isEnabled(c)} onClick={() => runCommand(c.id)}><Icon size={18} /></button>
 }
 
 function Centre() {
   const level = useShots((s) => s.level)
+  const graph = useSession((s) => !!s.ui.graph)                                       // B2a: the Graph over the level (the rail's toggle)
   const v = useStory((st) => st.shotVersion())
-  if (level === 'flow') return <Suspense fallback={null}><div className="s-flow"><FlowCanvas onOpen={(id) => useShots.getState().open(id, 'clay')} paneItems={[...NEW_SHOT, { sep: true }]} /></div></Suspense>
+  if (level === 'flow') return <Suspense fallback={null}><ShotsFlow paneItems={[...NEW_SHOT, { sep: true }]} /></Suspense>
   if (level === 'clay') return v?.stage_id
-    ? <Suspense fallback={<div className="w-empty">Loading Clay…</div>}><div className="strip s-clay-strip"><ClayStrip /></div><div className="s-clay"><ClayStage /></div></Suspense>
+    ? <Suspense fallback={<div className="w-empty">Loading Clay…</div>}><div className="strip s-clay-strip"><ClayStrip /></div><div className="s-clay"><ClayStage />{graph && <AnimateGraph />}</div></Suspense>
     : <div className="w-empty">No scene yet <CommandButton id="shots.scene.new" text /></div>
   if (!v?.stage_id) return <div className="w-empty">No scene yet <CommandButton id="shots.scene.new" text /></div>
   const [Strip, Stage] = level === 'performance' ? [PerfStrip, PerfStage] : [FinalStrip, FinalStage]
   return <Suspense fallback={<div className="w-empty">Loading {level === 'performance' ? 'Performance' : 'Final'}…</div>}>
-    <div className="strip s-clay-strip" data-testid={`shots-${level}-strip`}><Strip /></div><div className="s-clay" data-testid={`shots-${level}`}><Stage /></div>
+    <div className="strip s-clay-strip" data-testid={`shots-${level}-strip`}><Strip /></div><div className="s-clay" data-testid={`shots-${level}`}><Stage />{graph && <AnimateGraph />}</div>
   </Suspense>
 }
 
@@ -87,7 +101,9 @@ function LevelColumn() {
   const level = useShots((s) => s.level)
   const owed = useShots((s) => s.owed)
   const staged = useStory((st) => !!st.shotVersion()?.stage_id)
-  if (!staged || level === 'flow') return <div className="w-panel" />
+  const list = useShots((s) => s.flowView === 'list')
+  if (level === 'flow') return <div className="w-panel">{list && <Suspense fallback={null}><BoardPanel /></Suspense>}</div>   // B2a: the List view's filters and order
+  if (!staged) return <div className="w-panel" />
   const [Col, Foot, next] = level === 'clay' ? [ClayColumn, ClayFoot, 'shots.toPerformance'] : level === 'performance' ? [PerfColumn, PerfFoot, 'shots.toFinal'] : [FinalColumn, FinalFoot, 'story.shot.finalize']
   return <>
     <div className="w-panel"><Suspense fallback={null}><Col /></Suspense></div>

@@ -1,6 +1,6 @@
 // U4 (D157, proto01_UI2 04 §8): Shots' commands (rule 3: every action a command with a mouse home; keys are accelerators). They act on the
 // shot the header shows (the Story store's selection) and the level the rail shows.
-import { Box, Clapperboard, GitBranch, MonitorPlay, Plus, SquarePlus, Text } from 'lucide-react'
+import { Box, Clapperboard, GitBranch, List, MonitorPlay, Plus, SquarePlus, Text, Workflow } from 'lucide-react'
 import { registerCommands } from '../../frame/commands'
 import { useSession } from '../../store/session'
 import { useStory } from '../../suites/story/storyStore'
@@ -12,6 +12,12 @@ const shot = () => useStory.getState().shot()
 const level = (id: ShotLevel) => () => useShots.getState().setLevel(id)
 
 registerCommands([
+  // B2a (D159, 11 §7): the Flow's two views; the shot's recipe graph over its level (Animate's Graph)
+  { id: 'shots.flow.canvas', scope: 'shots', label: 'The Flow as a canvas', icon: GitBranch, placement: ['strip'], when: open, run: () => useShots.getState().setFlowView('canvas') },
+  { id: 'shots.flow.list', scope: 'shots', label: 'The Flow as a list', icon: List, placement: ['strip'], hint: "the shots in the Flow's order with their steps, by scene, searched (the Shots board)", when: open,
+    run: () => useShots.getState().setFlowView('list') },
+  { id: 'shots.graph', scope: 'shots', label: 'Graph', icon: Workflow, placement: ['rail'], hint: "the shot's recipe — what it is made of, what is stale; a node opens where it is made",
+    when: () => !!shot() && useShots.getState().level !== 'flow', run: () => { const s = useSession.getState(); s.setUi({ graph: !s.ui.graph }) } },
   { id: 'shots.level.flow', scope: 'shots', label: 'Flow', icon: GitBranch, placement: ['rail'], when: open, run: level('flow'), hint: 'the story\'s graph — its shots, lines and choices' },
   { id: 'shots.level.clay', scope: 'shots', label: 'Clay', icon: Box, placement: ['rail'], when: () => !!shot(), run: level('clay'), hint: 'the shot\'s scene through its camera: blocking, poses, the camera\'s moves' },
   { id: 'shots.level.performance', scope: 'shots', label: 'Performance', icon: Clapperboard, placement: ['rail'], when: () => !!shot(), run: level('performance') },

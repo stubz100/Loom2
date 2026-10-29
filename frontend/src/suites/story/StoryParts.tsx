@@ -707,7 +707,7 @@ function ShotBoard() {
 }
 
 // ------------------------------------------------------------------ Stage: play mode (no model is ever invoked — loom R143)
-function PlayView() {
+export function PlayView() {
   markUsed('story.flow.next'); markUsed('story.flow.restart'); markUsed('story.flow.stop')
   const play = useStory((s) => s.play)
   const flowNodes = useStory((s) => s.flowNodes)

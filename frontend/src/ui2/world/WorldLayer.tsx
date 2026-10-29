@@ -7,7 +7,7 @@ import { api } from '../../api/client'
 import { CommandButton, MenuButton } from '../../frame/CommandButton'
 import { command, isEnabled, runCommand, type MenuItem } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
-import { Help } from '../../frame/Help'
+import { useSession } from '../../store/session'
 import { useStory, type ProfileClass } from '../../suites/story/storyStore'
 import { readiness } from './readiness'
 import { WorldMake } from './WorldMake'
@@ -19,6 +19,13 @@ import './world.css'
 const EditColumn = lazy(() => import('./WorldEdit').then((m) => ({ default: m.WorldEditColumn })))
 const EditCentre = lazy(() => import('./WorldEdit').then((m) => ({ default: m.WorldEditCentre })))
 const EditInspector = lazy(() => import('./WorldEdit').then((m) => ({ default: m.WorldEditInspector })))
+// U3d: Look and Sketches (the style editor and Image's whole column load with them)
+const LookColumn = lazy(() => import('./WorldLook').then((m) => ({ default: m.LookColumn })))
+const LookCentre = lazy(() => import('./WorldLook').then((m) => ({ default: m.LookCentre })))
+const LookInspector = lazy(() => import('./WorldLook').then((m) => ({ default: m.LookInspector })))
+const SketchColumn = lazy(() => import('./WorldSketches').then((m) => ({ default: m.SketchColumn })))
+const SketchCentre = lazy(() => import('./WorldSketches').then((m) => ({ default: m.SketchCentre })))
+const SketchInspector = lazy(() => import('./WorldSketches').then((m) => ({ default: m.SketchInspector })))
 
 const RAIL_ICON: Record<WorldRail, typeof User> = { character: User, prop: Box, place: MapPin, look: Palette, sketches: PenLine }
 /** 03 §2: an item is its verb — the Cast command that makes it (they act on the entity the header shows: the Story store's selection). */
@@ -139,11 +146,6 @@ function Inspector() {
   )
 }
 
-/** What Look and Sketches say until U3d builds them. */
-function Pending({ what }: { what: string }) {
-  return <div className="w-empty">{what} — not built yet <Help text="U3d (proto01_UI2 03 §6, §7): the project's styles with their sample scene, and the pictures that belong to no one yet." /></div>
-}
-
 function ModeSwitch() {
   const mode = useWorld((s) => s.mode)
   return <div className="w-mode segmented" role="group" aria-label="Make or Edit">
@@ -155,7 +157,9 @@ function ModeSwitch() {
 export function WorldLayer() {
   const rail = useWorld((s) => s.rail)
   const mode = useWorld((s) => s.mode)
+  const project = useSession((s) => s.project)
   useEffect(() => startWorld(), [])
+  if (!project?.open) return <div className="w-layer"><Rail /><section className="w-centre wide"><div className="w-empty">Open or create a project</div></section></div>   // nothing reads before there is one
   const classRail = rail !== 'look' && rail !== 'sketches'
   return (
     <div className="w-layer" data-testid="world-layer">
@@ -164,7 +168,10 @@ export function WorldLayer() {
         <section className="w-left"><Header /><ModeSwitch /><div className="w-panel">{mode === 'edit' ? <Suspense fallback={null}><EditColumn /></Suspense> : <WorldMake />}</div></section>
         <section className="w-centre">{mode === 'edit' ? <Suspense fallback={<div className="w-empty">Loading the editor…</div>}><EditCentre /></Suspense> : <Bin />}</section>
         {mode === 'edit' ? <Suspense fallback={<aside className="w-insp" />}><EditInspector /></Suspense> : <Inspector />}
-      </> : <section className="w-centre wide"><Pending what={rail === 'look' ? 'Look' : 'Sketches'} /></section>}
+      </> : <Suspense fallback={<section className="w-centre wide"><div className="w-empty">Loading…</div></section>}>
+        {rail === 'look' ? <><section className="w-left"><div className="w-panel"><LookColumn /></div></section><section className="w-centre"><LookCentre /></section><LookInspector /></>
+          : <><section className="w-left"><SketchColumn /></section><section className="w-centre"><SketchCentre /></section><SketchInspector /></>}
+      </Suspense>}
     </div>
   )
 }

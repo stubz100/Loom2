@@ -53,3 +53,8 @@ button.w-ready-item { background: transparent; border: 1px dashed var(--line2); 
 .w-edit-stage > * { flex: 1; min-width: 0; }
 .w-edit-foot { display: flex; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--line); align-items: center; }
 .w-insp.edit { padding: 0; }
+.w-h { margin: 0; display: flex; align-items: center; gap: 6px; }
+.w-look { padding: 12px; overflow: auto; }
+.w-sketch-col { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+.w-sketch-gen { flex: 1; min-height: 0; overflow: auto; padding: 0 12px; }
+.w-sketch-col > .w-foot { padding: 8px 12px; border-top: 1px solid var(--line); margin: 0; }

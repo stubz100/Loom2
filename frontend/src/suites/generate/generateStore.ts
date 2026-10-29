@@ -1,6 +1,7 @@
 // Generate suite state (09): the Panel (prompt tree / JSON / text, model, sampling, size, batch, references,
 // presets), the live preview from /recipes/preview, and the verbs other suites call (reference, re-run, variations).
 import { create } from 'zustand'
+import { DEV_HOOKS } from '../../devHooks'
 import { persist } from 'zustand/middleware'
 import { ApiError, http, unwrap } from '../../api/client'
 import { isDocumentPreview, isT2IPreview, type Asset, type Capabilities, type DocumentPreview, type Job, type JobOrigin, type T2IPreview, type T2IRecipe } from '../../api/types'
@@ -781,6 +782,8 @@ function schedulePreview(get: () => GenerateState) {
   if (previewTimer) window.clearTimeout(previewTimer)
   previewTimer = window.setTimeout(() => { previewTimer = null; void get().refreshPreview() }, 250)
 }
+
+if (DEV_HOOKS) (window as unknown as { __loom2Generate?: typeof useGenerate }).__loom2Generate = useGenerate   // dev: the e2e sets the panel (U3d)
 
 // V70: the capabilities arrive after the remembered panel — a model this build does not offer is settled then
 useSession.subscribe((s, prev) => { if (s.capabilities && s.capabilities !== prev.capabilities) settleModel(useGenerate.getState, useGenerate.setState) })

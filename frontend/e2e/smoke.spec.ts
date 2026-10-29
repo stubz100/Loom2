@@ -4375,3 +4375,31 @@ test('World\'s Edit (U3c, D157 · proto01_UI2 03 §4): the selected creation ope
   await expect(page.locator(`.w-tile[data-id="${made}"] .w-badge`)).toHaveText('ref')
   expect(new URL(page.url()).hash).toBe(`#world/character/${prof.id}/v1`)                             // World all along
 })
+
+test('World\'s Look and Sketches (U3d, D157 · proto01_UI2 03 §6–7): the Look keeps the project\'s sample scene; a sketch made with the whole column lands in Sketches and becomes a draft character\'s hero', async ({ page }) => {
+  test.setTimeout(120_000)
+  const tag = Date.now().toString(36)
+  await page.goto(`${appUrl({ ui: '2' })}#world/look`)
+  const look = page.locator('[data-testid="world-look"]')
+  await expect(look).toBeVisible()
+  await look.locator('textarea[aria-label="sample scene"]').fill(`a ferry at the pier ${tag}`)
+  await expect.poll(async () => (await api<{ sample_scene: string }>('GET', '/story/world')).sample_scene, { timeout: 10_000 }).toBe(`a ferry at the pier ${tag}`)
+  // Sketches: the whole column, a model the fixture has, one picture
+  await page.locator('.w-rail-btn[aria-label="Sketches"]').click()
+  await expect(page.locator('[data-testid="world-sketches"]')).toBeVisible()
+  const caps = await api<{ models: Record<string, { recipes?: { t2i?: unknown } }> }>('GET', '/capabilities')
+  const present = (await api<{ items: { id: string; health: string }[] }>('GET', '/models')).items.find((m) => m.health !== 'missing' && caps.models[m.id]?.recipes?.t2i)!
+  type Gen = { getState: () => { set: (p: Record<string, unknown>) => void } }
+  await page.evaluate(([m, t]) => (window as unknown as { __loom2Generate: Gen }).__loom2Generate.getState().set({ model_id: m, count: 1, prompt_mode: 'text', text: `an old lighthouse keeper ${t}` }), [present.id, tag])
+  await page.locator('[data-testid="world-sketches"] button', { hasText: /^Make 1 sketch/ }).click()
+  const tile = page.locator('.w-tile').first()
+  await expect.poll(async () => (await api<{ items: { status: string; origin: { surface: string } | null }[] }>('GET', '/jobs')).items.filter((j) => j.origin?.surface === 'sketch' && j.status === 'done').length, { timeout: 60_000 }).toBeGreaterThan(0)
+  await expect(tile).toBeVisible()
+  const sketch = await tile.getAttribute('data-id')
+  await tile.click()
+  await page.locator('[data-testid="world-sketch-inspector"] button', { hasText: 'Prototype a character' }).click()
+  await page.locator('.modal.ask input').fill(`Keeper ${tag}`)
+  await page.locator('.modal.ask button.primary').click()
+  await expect(page.locator('[data-testid="world-header"]')).toContainText(`Keeper ${tag}`)
+  await expect(page.locator(`.w-tile[data-id="${sketch}"] .w-badge`)).toHaveText('★')                 // the sketch is its hero
+})

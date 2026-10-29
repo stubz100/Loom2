@@ -37,3 +37,13 @@ describe('U3: the bin', () => {
     expect(placeOfHash('#shots/sht_1')).toBeNull()
   })
 })
+
+describe('U3d: a prototype\'s name from its sketch', () => {
+  it('takes the prompt\'s first words, a JSON prompt\'s subject, else the class', async () => {
+    const { nameFrom } = await import('./sketches')
+    expect(nameFrom('an old lighthouse keeper, weathered face, at dusk', 'character')).toBe('An old lighthouse keeper')
+    expect(nameFrom(JSON.stringify({ subjects: [{ description: 'a rusted ferry bell' }], scene: 'x' }), 'prop')).toBe('A rusted ferry bell')
+    expect(nameFrom('', 'place')).toBe('place')
+    expect(nameFrom('{broken', 'prop')).toBe('prop')
+  })
+})

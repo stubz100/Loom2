@@ -11744,3 +11744,40 @@ picture in the bin as a reference, back to Make, the hash World all along).
 **Checks:** Vitest 617 + 3 skipped; typecheck, build and lint clean; e2e 82/82 (alone); `agents_check` clean. Backend unchanged.
 
 Next is U3d: World's Look and Sketches.
+
+## 2026-10-29 03:18 — U3d: World's Look and Sketches (D157, proto01_UI2 03 §6–7)
+
+**Look** (`ui2/world/WorldLook.tsx`): the project's styles, made the way an entity's pictures are.
+
+- The left column holds the project's sample scene (U2c's `World.sample_scene`) and *Add style*.
+- The centre is the Story World page's style grid, mounted here.
+- The Inspector is its style editor (name, ★ default, the prompt fragment, *Make a sample image*, the samples' group).
+- Both act on the Story store's world record, as the old page does.
+
+**Sketches** (`WorldSketches.tsx`, `sketches.ts`): the pictures that belong to no one yet, in `bin/world/sketches`.
+
+- They are made with Image's whole column (the full prompt and the Library's words, here only) in a Make context of its own.
+  *Make N sketches ▶* (`world.sketch.make`) runs it with the home as the results' page.
+- *Prototype a character / prop / place* (`world.sketch.*`) makes a draft entity from a sketch: the picture becomes its hero, and the
+  name is offered from the prompt's first words (`nameFrom`; a JSON prompt's subject). World then shows the draft.
+- *Trash.*
+- The grid reloads on the records' group and delete events.
+
+**World waits for an open project** before it mounts anything that reads. The Look's style grid had loaded the album before the
+backend was found.
+
+**The Generate store** gains its dev hook (`window.__loom2Generate`, dev and e2e builds only), so the e2e can set the panel.
+
+**Looked at** on the copy of "The Last Ferry": the Look with Harbour noir ★ and its editor; Sketches with Image's column (padded now)
+and its empty home.
+
+**Tests:**
+
+- `world.test.ts` + 1 (`nameFrom`);
+- an e2e scenario: the Look's sample scene is saved to the world; a sketch made with the whole column on the fake engine lands in
+  Sketches; *Prototype a character* makes a draft whose hero is that sketch.
+
+**Checks:** Vitest 618 + 3 skipped; typecheck, build and lint clean; e2e 83/83 (alone); `agents_check` and `model_literals_check`
+clean. Backend unchanged.
+
+Next is U3e: the Library's look words in the Look (G3, the part that belongs to World), and the ideas folded into draft entities (G4).

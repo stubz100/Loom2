@@ -13587,3 +13587,110 @@ its 4.8 s limit.
 Fixed since the first walkthrough: F3, F27, F37, F39, F40, F41, F42; the For-trip findings are gone with the old shell.
 
 Nothing was fixed in this run; the author has not asked yet. The full report with screenshots went to the author as an artifact.
+
+## 2026-10-30 18:26 — E43 set up: a character layer performed in its own window — the bars before the run (proto01_UI2 12; W46, W58)
+
+**The author, 2026-10-30:** asked whether the face pass's crop (D118: the head cropped, worked at the model's size, pasted back) would fix
+the walkthrough's small figure (W46) and cut figure (W58), and to go on as recommended: a spike first, then a decision.
+
+**What the code shows:** a character layer is performed at the final's size (848×480). The pose guide is drawn there at the figure's size,
+and the A-pose is placed where the figure starts at that size, or padded and centred when the figure is not whole in the first frame
+(`routes/finals.final_layer_run`, `finals.place_reference`). Tomas in Arrival is 50 px tall. Ines in The seal is cut at the knees and at
+the left edge.
+
+**The baseline, measured offline** on the stored passes: the matte against the figure's Stage silhouette (the depth pass against the plate's,
+as the assembly), IoU per frame against the silhouette grown 3 px.
+
+| Layer | Figure | IoU | Frames ≥ 0.5 | Matte ÷ figure (worst) |
+| --- | --- | --- | --- | --- |
+| Arrival · Tomas (W46) | 50 px | 0.24 | 39 % | 319× |
+| The seal · Ines (W58), the first 77 frames | 262–273 px in the frame | 0.11 | 0 % | 11× |
+| The ferryman · Tomas (it worked) | 340 px | 0.75 | 100 % | 1.5× |
+| Stay · Ines (it worked) | 105–171 px | 0.77 | 100 % | 1.4× |
+
+**The spike** (`engine/spikes/e43_window.py`) runs on a copy of the walkthrough's project (`F:/loom2-projects/_e43/last-ferry-copy`).
+
+- **The window:** 480×848 (Wan's portrait at the final's pixel count), tracked over the shot round all 18 of the figure's keypoints, in
+  the frame or not, with the skull and the soles and a margin added; its centre and its height are smoothed over 9 frames. The dry run found
+  the whole figure in the window on every frame of both cases.
+- **Each case runs three ways**, on the app's Wan Animate graph (`build_i2v`, Draft, the layer's own seed and prompt) and its SAM 3 matte
+  graph:
+  - **B:** the walkthrough's take (no GPU);
+  - **F:** the control: the 18-point guide redrawn at the frame from the stored keypoints, with no hands (Stage's has them, and they
+    are not stored), and the layer's own reference;
+  - **W:** the guide and the reference (`place_reference` in the window) in the window, the take and its matte pasted back into the frame.
+- **Measured for each run:** the app's assembly (`assemble_frames`) on a scratch copy of the final; the matte measure above; the app's
+  identity (`clip_identity` against the run's reference); the seconds; the peak VRAM.
+
+**Bars, set before the run:**
+
+- every run is done, with a peak ≤ 15.5 GB;
+- W fixes a case when its pasted-back matte has an IoU ≥ 0.6, is ≥ 0.5 on ≥ 90 % of the frames, and is ≤ 2.5× the figure on every frame;
+- Tomas (facing the camera): W finds a face on ≥ 50 % of the sampled frames, with an identity ≥ 0.35 (The ferryman's Tomas: 0.49);
+- W's GPU seconds ≤ 1.25 × F's (the same pixels);
+- F is reported against W: if F passes too, the fix is not the window.
+
+**Known before the run:** Ines's back A-pose loses her head in `place_reference`'s cut-out, in the window as in the frame (W47). The spike
+keeps the reference as the app makes it.
+
+## 2026-10-30 18:38 — E43: one run more, set after the first result — Ines in the window with a reference that has its head
+
+The first result (written up with the rest, below):
+
+- the window fixed both mattes;
+- Tomas was performed whole, with identity 0.63;
+- but Ines, her back to the camera in every frame, was performed turned to the camera: a frontal face on 20 of 20 sampled frames.
+
+Her reference had no head. `finals.cutout` keys the A-pose off its ground at ΔE > 14 and keeps the central blob. Her grey knit collar at the
+nape is ΔE 10–12 from the grey studio ground, so the key parts the head from the body there (W47). Grown by 2 px before the blob is taken,
+and cut back to the key, it keeps all of her.
+
+**Run H:** The seal's Ines in the window, with the reference placed from the bridged cut-out; nothing else changed.
+
+**Its bars:** the matte bar as for W, and from behind as D158 asks: a frontal face on ≤ 20 % of the sampled frames.
+
+## 2026-10-30 18:44 — E43's result: a character layer performed in its own window fixes the small and the cut figure (W46, W58) → D163; a head in profile is a question of its own (Q32)
+
+`engine/spikes/e43_window.py` ran alone on the GPU against the copy of the walkthrough's project. Results are in
+`engine/spikes/out/e43`: `results_1.json`, `results.json` (run H), the sheets.
+
+| Case · run | Matte IoU | Frames ≥ 0.5 | Matte ÷ figure, worst | Identity | Frontal face | Wan s · peak |
+| --- | --- | --- | --- | --- | --- | --- |
+| Tomas (W46) · B, the walkthrough's | 0.24 | 39 % | 319× | no face | — | — |
+| Tomas · F, the frame guide redrawn | 0.01 | 0 % | 198× | no face | — | 76 s · 9.3 GB |
+| **Tomas · W, the window** | **0.53** | **100 %** | **1.3×** | **0.63 (12 of 12)** | — | 72 s · 9.6 GB |
+| Ines (W58) · B | 0.11 | 0 % | 11× | — | — | — |
+| Ines · F | 0.00 | 0 % | 2.6× | — | 3 of 20 | 122 s · 9.7 GB |
+| **Ines · W, the window** | **0.80** | **100 %** | **1.2×** | — | **20 of 20** | 122 s · 8.4 GB |
+| Ines · H, the window, a reference with its head | 0.72 | 100 % | 1.5× | — | 20 of 20 | 123 s · 9.5 GB |
+
+SAM 3's matte took 18–28 s at ≤ 3 GB.
+
+**Against the bars:**
+
+- every run was done, with a peak ≤ 9.7 GB;
+- Ines's W and H fix the matte;
+- Tomas's W failed the matte bar as written: a mean IoU of 0.53 < 0.6. Every one of its frames is ≥ 0.5 and the matte is ≤ 1.3× the figure.
+  At 50 px, the measure's 3 px band round the clay silhouette is a large part of a figure in a coat and cap. The sheet shows him whole in the
+  shot, with no box;
+- Tomas keeps his face: 12 of 12 sampled frames, identity 0.63 (The ferryman's medium shot: 0.49);
+- the window costs nothing: W's seconds are 94–100 % of F's;
+- F, the control, fails both cases, so the window is what fixes them, not the redrawn guide without the hands. Tomas's F still paints the
+  ghost face. Ines's F follows its centred reference and leaves the guide: she lands in the middle of the frame, away from where she stands.
+
+**What is not fixed: Ines faces the camera** in W and in H, though the frame calls her away: a frontal face on 20 of 20 sampled frames,
+against D158's ≤ 20 %. Her head in the first frame is near profile:
+
+- the nose (163, 254) lies at the right ear (164, 245);
+- the eyes are 9 px apart, mirrored, which is what D158's eye order reads as away;
+- so the guide drops the nose and the eyes, and the head is two ear dots.
+
+Stage's keypoints have no occlusion, so both ears are drawn, where DWPose on a real profile would see one ear, one eye and the nose. H
+rules out the headless reference (W47): its reference has her head. This is D158's rule on a profile head, a question of its own (Q32), not
+the window's.
+
+**W47:** `finals.cutout` keeps the central blob of a ΔE > 14 key. Ines's grey collar at the nape (ΔE 10–12 from the grey ground) parts her
+head from her body. Grown by 2 px before the blob is taken, and cut back to the key, it keeps every pixel of the figure.
+
+**D163** is recorded in the decision log: the window, the guide drawn there, the reference placed there, the take and its matte pasted back,
+W47's bridge, and the checks.

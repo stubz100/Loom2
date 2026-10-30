@@ -33,11 +33,11 @@ def head_stats(kps: list, w: int, h: int) -> dict[str, float]:
 
     - `px`: the median head-box side in the frame, without heads.MIN_SIDE's floor;
     - `in_frame`: the share of frames whose head centre lies inside the frame;
-    - `facing`: the share of frames facing the camera (finals.faces_away).
+    - `facing`: the share of frames not facing away (finals.head_facing: D166 counts a side profile as facing).
 
     Stage projects every point, in the frame or not, so the coordinates are read whatever the flags say.
     """
-    from .finals import faces_away
+    from .finals import head_facing
     sides, inside, facing, n = [], 0, 0, 0
     for k in kps or []:
         a = np.asarray(k, dtype=float).reshape(-1, 3) if k else None
@@ -48,7 +48,7 @@ def head_stats(kps: list, w: int, h: int) -> dict[str, float]:
         if 0 <= c[0] < w and 0 <= c[1] < h:
             inside += 1
             sides.append(max(2.6 * float(np.hypot(*(a[0, :2] - a[1, :2]))), 1.8 * float(np.hypot(*(a[16, :2] - a[17, :2])))))
-        facing += not faces_away(k)
+        facing += head_facing(k)[0] not in ("away", "away_profile")
     return {"px": round(float(np.median(sides)), 1) if sides else 0.0, "in_frame": round(inside / max(1, n), 3), "facing": round(facing / max(1, n), 3)}
 
 

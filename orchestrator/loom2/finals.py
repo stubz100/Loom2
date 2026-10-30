@@ -272,9 +272,42 @@ def faces_away(kp: list[list[float]] | None) -> bool:
     return bool(rs[2] and ls[2] and rs[0] > ls[0])
 
 
+SIDE_PROFILE, AWAY_PROFILE = 0.25, 0.6                                  # D166 (E44): the ears' spread against the nose–neck length
+
+
+def head_facing(kp: list[list[float]] | None) -> tuple[str, str]:
+    """D166 (E44): a head read by its ears before its eyes — `side` (a profile: under SIDE_PROFILE, neither front nor away), `away_profile`
+    (turned away past the side: under AWAY_PROFILE with the eyes mirrored), else D158's `away` / `front`; and the near side, the one the
+    nose points to (facing the image's right shows the figure's right). Without the nose, the neck and both ears, D158 decides. The
+    client's twin is passes.ts `headFacing`."""
+    import math
+    mirrored = faces_away(kp)
+    if not kp or len(kp) < 18 or not all(kp[i][2] for i in (0, 1, 16, 17)):
+        return ("away" if mirrored else "front"), "right"
+    nose, neck, er, el = kp[0], kp[1], kp[16], kp[17]
+    r = abs(er[0] - el[0]) / max(1e-6, math.hypot(nose[0] - neck[0], nose[1] - neck[1]))
+    near = "right" if nose[0] > (er[0] + el[0]) / 2 else "left"
+    if r < SIDE_PROFILE:
+        return "side", near
+    if r < AWAY_PROFILE and mirrored:
+        return "away_profile", near
+    return ("away" if mirrored else "front"), near
+
+
+def drawn_points(kp: list) -> list:
+    """D158 / D166: the points the pose guide draws — only the head points a camera would see. Away: no nose, no eyes (the ears and the
+    shoulders stay); a side profile: the nose, the near eye and the near ear; a profile turned away: the nose and the near ear. The client's
+    twin is passes.ts `drawnPoints`."""
+    kind, near = head_facing(kp)
+    far_eye, far_ear = (15, 17) if near == "right" else (14, 16)
+    hide = {"away": (0, 14, 15), "side": (far_eye, far_ear), "away_profile": (14, 15, far_ear)}.get(kind, ())
+    return [[p[0], p[1], 0.0] if i in hide else list(p) for i, p in enumerate(kp)]
+
+
 def mostly_away(kps: list) -> bool:
-    """D158: a layer performed from behind — more than half of its frames face away (one reference and one prompt serve the layer)."""
-    frames = [faces_away(k) for k in kps if k]
+    """D158: a layer performed from behind — more than half of its frames face away (one reference and one prompt serve the layer). D166: a
+    side profile faces neither way, so it does not count; a profile turned away does."""
+    frames = [head_facing(k)[0] in ("away", "away_profile") for k in kps if k]
     return bool(frames) and sum(frames) * 2 > len(frames)
 
 
@@ -388,12 +421,11 @@ def _hue(h: float) -> tuple[int, int, int]:
 def draw_pose(kp: list, w: int, h: int, wholebody: dict[str, Any] | None = None) -> "Image.Image":
     """D163: passes.ts `drawPose` on the server — a pose pass is a 2D drawing of projected points, so the guide in a window is these points
     cropped and scaled. Limbs as ellipses at 0.6 alpha, the points as discs, the stroke scaled to the picture; D158: a figure facing away
-    shows no nose and no eyes; D101: a Detailed figure's feet (discs) and hands (hue edges, blue discs)."""
+    shows no nose and no eyes, D166 a profile its near side only; D101: a Detailed figure's feet (discs) and hands (hue edges, blue discs)."""
     import numpy as np
     from PIL import Image, ImageDraw
     r = max(3, round(min(w, h) / 180))
-    away = faces_away(kp)
-    pts = [[p[0], p[1], 0.0] if away and i in (0, 14, 15) else list(p) for i, p in enumerate(kp)]
+    pts = drawn_points(kp)                                                  # D158 / D166: the head points a camera would see
     base = np.zeros((h, w, 3), dtype=np.float32)
     t = np.linspace(0, 2 * np.pi, 36, endpoint=False)
     for k, (a, b) in enumerate(LIMBS):

@@ -14039,3 +14039,107 @@ boxes. That is **D165** (decision log).
 - the e2e: 83 / 84 in the run after the offline suite. The Flow scenario (17 / SY3) failed there and passed alone (20.6 s); it is
   untouched by D165 and passed in both of D164's runs. The full rerun alone follows.
 - the e2e rerun alone: 84 / 84 (5.9 min).
+
+## 2026-10-30 23:00 — E44 set up (Q32): a head in profile drawn as a real one is seen; the bars before the run
+
+The author asked for a new build from scratch: a character walking through a busy fish market, the camera tracking beside her and
+holding her face from the side. Their answers: a painted crowd plus two performed extras, E44 before the walker is performed, about 10 s.
+The build (`F:/loom2-projects/market-walk`) has reached its final (`fin_3a18423e`: 161 frames, Mira, Hanne, Bram), with nothing
+performed yet. Its findings go in a register of their own (M1–M12 so far).
+
+**What the final shows for Q32.** Mira's head is a true profile: her ears overlap, the ear spread at 0.04 of the nose–neck length, against
+about 1.0 face-on. D158's eye-order rule reads her as facing away on 159 of 161 frames, because in profile the eyes overlap and their order
+is a coin toss.
+
+So today's run would perform her **from behind**: the back-view reference, "from behind" in the prompt, and a guide with no nose and no
+eyes, the head drawn as two ear dots. That is the opposite of the shot asked for.
+
+The Seal's Ines (E43 copy) is the other case: a head turned three-quarters away (ear spread 0.51, the eyes mirrored), sometimes performed
+facing the camera.
+
+**Arms** (the spike patches the drawing rule only; the product is untouched until a result):
+
+- **C:** today's guide, reference and prompt.
+- **N:** a head read by its ears' spread against its nose–neck length.
+  - **A side profile** (< 0.25) is *side*, not away: the guide draws the nose, the near eye and the near ear; the far eye and ear are
+    hidden, as DWPose sees a real head. The near side is the one the nose points to: facing the image's right, the figure's right.
+  - **A turned-away profile** (0.25–0.6, the eyes mirrored) keeps the nose and the near ear, without the eyes.
+  - The reference and the "from behind" words count side frames as not away. Mira gets her front reference; Ines keeps the back view.
+- **NP:** N, plus "seen from the side, in profile" in the prompt (Mira only).
+
+**Cases:**
+
+| Case | Frames | Window | Arms × seeds |
+| --- | --- | --- | --- |
+| M: Mira, the market walk | the first 77 | ×1.73 | C, N, NP × 3 |
+| I: Ines, The seal (E43 copy) | the first 77 | ×1.78 | C, N × 3 |
+
+Measured on 12 sampled frames: a face found (SCRFD, score ≥ 0.5) and frontal (the eyes ≥ 0.3 of the box apart, the nose between them),
+plus a sheet per case.
+
+**Bars:**
+
+- **M:** an arm passes when, on each of its three seeds, a frontal face shows on ≤ 20 % of the frames and the sheet shows her face in
+  profile toward where she walks, not the back of her head.
+- **I:** N passes when it holds D158's ≤ 20 % frontal on every seed.
+- **The decision:** the arm that passes goes into the product (`draw_pose` and `passes.ts drawPose`, `faces_away` and `mostly_away`)
+  before the market walk is performed. If none passes, Q32 stays open, and the walk is performed as it is, with the result recorded.
+
+## 2026-10-30 23:34 — E44 ran: a head in profile drawn as a real one is seen and performed as it stands, on every seed → D166; Q32 answered
+
+`engine/spikes/e44_profile.py` ran alone on the GPU, 15 takes of 77 frames, 116–195 s each, ≤ 9.6 GB. Results and sheets:
+`engine/spikes/out/e44`.
+
+| Case · arm | Seed 0 | Seed 1 | Seed 2 | To the eye |
+| --- | --- | --- | --- | --- |
+| Mira (a side profile) · C, today | no face (1 of 12) | 11 faces, nose left | none | **her face turned away**: the back of her head and her braid toward the camera, on all three (the back-view reference, "from behind") |
+| Mira · N | 12 of 12, nose left, 0 frontal | the same | the same | **a clean side profile**, her face leading where she walks |
+| Mira · NP (N with the words) | the same as N | the same | the same | as N: the words add nothing |
+| Ines (turned three-quarters away) · C | frontal 12 of 12 | 11 of 12 | 12 of 12 | **she turns her face to the camera**: Q32, now on every seed |
+| Ines · N | frontal 0 (a face on 1 of 12) | 0 (none) | 0 (none) | the back of her head, as her pose stands |
+
+**Against the bars:**
+
+- **M:** N and NP pass on every seed (no frontal face; the face found in profile on 12 of 12, pointing where she walks).
+- **I:** N holds D158's ≤ 20 % frontal on every seed. The control fails it on every seed, so Q32 is not intermittent under this guide:
+  the two ear dots alone invite a face.
+
+**Not related:** on seed 1 both of Ines's arms (C and N) hold a grey coat over her arm. It is seed-borne, a thing Wan adds, not the
+guide's.
+
+**→ D166:** N goes into the product. The words (NP) add nothing, so they are left out.
+
+## 2026-10-31 00:04 — D166 built; the market walk built from scratch and finished: a walker in profile through a fish market, M1–M16
+
+**D166 built:**
+
+- **Server:** `finals.head_facing` and `drawn_points` (the guide draws only the head points a camera would see), used by `draw_pose`;
+  `mostly_away` counts a turned-away profile but not a side profile; `owed.head_stats` counts a side profile as facing.
+- **Client:** the twin, `passes.ts headFacing` / `drawnPoints`.
+- **Tests:** `test_profile_d166` (3: the reading, the guide, the side profile not from behind) and the Vitest twin. D158's, D163's,
+  D164's and D165's suites still pass (36).
+
+**The market walk** (`F:/loom2-projects/market-walk`, register and timings in `proto01_UI2/13-market-walk.md`):
+
+- **The build:** World built, then the shot blocked in Clay. Mira walks 8 m in 10 s with the camera tracking 2.4 m to her side, Hanne
+  crosses behind her, and Bram works his counter. The final was made, the owed layers performed in one click under D166, the shot
+  assembled, composed, rendered and marked final.
+- **The app's GPU time:** ≈ 48 min over 58 jobs, plus E44's ≈ 33 min.
+
+**The shot** (`clp_4d72b989`):
+
+- Mira walks in clean side profile from the first frame to the last, her face leading. Under D158 she would have been performed from
+  behind (E44 C).
+- Hanne crosses behind her, and the mattes hold: Mira 0 of 161 strays; Hanne 1 of 66 and Bram 4 of 120, the BiRefNet retry no better,
+  the first kept.
+
+**Not good yet:**
+
+- the stall fronts behind her are a smear (M12): the set picture looks down the hall whatever the words say (M5, M7);
+- the "busy" market is a few painted people (M6);
+- Mira's braid is gone in profile (M13);
+- white lamp ovals slide over the floor (M14);
+- every body was fitted as "female 1.75 m" until set by hand (M9).
+
+**On the way:** `PUT /stages/{id}` placed the cast and keyed the camera after Clay's figure buttons re-bound one figure three times (M8).
+The bodies were set in Build › Body.

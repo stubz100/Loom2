@@ -71,11 +71,30 @@ export function facesAway(kp: Keypoint[]): boolean {
   const rs = kp[2], ls = kp[5]
   return !!(rs?.[2] && ls?.[2] && rs[0] > ls[0])
 }
-/** D158: the points the pose pass draws — a figure facing away shows no nose and no eyes (nor their limbs), as DWPose sees a real back;
- *  the neck, the shoulders and the ears stay. Wan Animate drew a face on the back of a head from them (E42). */
+/** D166 (E44): a head read by its ears before its eyes — the ears' spread against the nose–neck length: under 0.25 a side profile (neither
+ *  front nor away), under 0.6 with the eyes mirrored a profile turned away, else D158's away / front; the near side is the one the nose
+ *  points to (facing the image's right shows the figure's right). Without the nose, the neck and both ears, D158 decides. The server's twin
+ *  is finals.head_facing. */
+export type HeadFacing = 'front' | 'away' | 'side' | 'away_profile'
+export function headFacing(kp: Keypoint[]): { kind: HeadFacing; near: 'right' | 'left' } {
+  const mirrored = facesAway(kp)
+  const [nose, neck, er, el] = [kp[0], kp[1], kp[16], kp[17]]
+  if (!(nose?.[2] && neck?.[2] && er?.[2] && el?.[2])) return { kind: mirrored ? 'away' : 'front', near: 'right' }
+  const r = Math.abs(er[0] - el[0]) / Math.max(1e-6, Math.hypot(nose[0] - neck[0], nose[1] - neck[1]))
+  const near = nose[0] > (er[0] + el[0]) / 2 ? 'right' : 'left'
+  if (r < 0.25) return { kind: 'side', near }
+  if (r < 0.6 && mirrored) return { kind: 'away_profile', near }
+  return { kind: mirrored ? 'away' : 'front', near }
+}
+/** D158 / D166: the points the pose pass draws — only the head points a camera would see, as DWPose finds them on a real head. Away: no
+ *  nose and no eyes (nor their limbs), the neck, the shoulders and the ears stay (Wan drew a face on the back of a head, E42); a side
+ *  profile: the nose, the near eye and the near ear; a profile turned away: the nose and the near ear (two ear dots invited a face, E44). */
 export function drawnPoints(kp: Keypoint[]): Keypoint[] {
-  if (!facesAway(kp)) return kp
-  return kp.map((p, i) => (i === 0 || i === 14 || i === 15 ? [p[0], p[1], 0] : p))
+  const { kind, near } = headFacing(kp)
+  const [farEye, farEar] = near === 'right' ? [15, 17] : [14, 16]
+  const hide = kind === 'away' ? [0, 14, 15] : kind === 'side' ? [farEye, farEar] : kind === 'away_profile' ? [14, 15, farEar] : []
+  if (!hide.length) return kp
+  return kp.map((p, i) => (hide.includes(i) ? [p[0], p[1], 0] : p))
 }
 
 export function drawPose(keypoints: Keypoint[][], w: number, h: number, wholebody?: (WholeBody | null)[]): HTMLCanvasElement {

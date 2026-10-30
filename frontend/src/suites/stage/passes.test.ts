@@ -1,7 +1,7 @@
 // ST3: the pass maths (16 §12: "keypoint projection, depth normalisation … are modules with Vitest tests").
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
-import { COCO, COLOURS, depthRange, drawnPoints, facesAway, hslToHex, LIMBS, maskColour, projectPoints, type Keypoint } from './passes'
+import { COCO, COLOURS, depthRange, drawnPoints, facesAway, headFacing, hslToHex, LIMBS, maskColour, projectPoints, type Keypoint } from './passes'
 
 const cam = () => { const c = new THREE.PerspectiveCamera(40, 16 / 9, 0.05, 500); c.position.set(0, 1, 4); c.lookAt(0, 1, 0); c.updateProjectionMatrix(); c.updateMatrixWorld(); return c }
 
@@ -48,5 +48,27 @@ describe('the pose pass of a figure facing away (D158, E42)', () => {
     expect([0, 14, 15].map((i) => drawn[i][2])).toEqual([0, 0, 0])
     expect([2, 5, 16, 17].map((i) => drawn[i][2])).toEqual([1, 1, 1, 1])
     expect(drawnPoints(kp(false))).toEqual(kp(false))                                      // facing the camera: as before
+  })
+})
+
+describe('a head read by its ears (D166, E44): the twin of finals.head_facing / drawn_points', () => {
+  const head = (nose: number, earR: number, earL: number, eyeR: number, eyeL: number): Keypoint[] => {
+    const k: Keypoint[] = Array.from({ length: 18 }, () => [64, 60, 1] as Keypoint)
+    k[0] = [nose, 20, 1]; k[1] = [64, 40, 1]; k[2] = [56, 42, 1]; k[5] = [72, 42, 1]
+    k[14] = [eyeR, 17, 1]; k[15] = [eyeL, 17, 1]; k[16] = [earR, 19, 1]; k[17] = [earL, 19, 1]
+    return k
+  }
+  it('a side profile is neither front nor away and shows its near side; a profile turned away keeps the nose and the near ear', () => {
+    expect(headFacing(head(56, 66, 67, 59, 58))).toEqual({ kind: 'side', near: 'left' })
+    expect(headFacing(head(72, 62, 61, 69, 70))).toEqual({ kind: 'side', near: 'right' })
+    expect(headFacing(head(72, 74, 64, 66, 62))).toEqual({ kind: 'away_profile', near: 'right' })
+    expect(headFacing(head(64, 52, 76, 58, 70)).kind).toBe('front')
+    expect(headFacing(head(64, 52, 76, 70, 58)).kind).toBe('away')
+    const side = drawnPoints(head(56, 66, 67, 59, 58))
+    expect([0, 15, 17].map((i) => side[i][2])).toEqual([1, 1, 1]); expect([14, 16].map((i) => side[i][2])).toEqual([0, 0])
+    const turned = drawnPoints(head(72, 74, 64, 66, 62))
+    expect([0, 16].map((i) => turned[i][2])).toEqual([1, 1]); expect([14, 15, 17].map((i) => turned[i][2])).toEqual([0, 0, 0])
+    const blind = head(56, 66, 67, 59, 58); blind[1] = [64, 40, 0]
+    expect(headFacing(blind).kind).toBe('away')                                                // no neck in view: D158 decides
   })
 })

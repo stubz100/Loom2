@@ -241,6 +241,7 @@ def test_v44_the_launch_entry_point_is_the_supervisors(tmp_path: Path):
     from loom2.config import AppState
     from loom2.engine.supervisor import ENGINE_ENV, EngineSupervisor
     state = tmp_path / "state"
+    AppState(state).update_settings({"engine": {"port": AppState(state).settings.engine.port}})   # the test's port on disk (conftest: never 8188) for the subprocess too
     out = subprocess.run([sys.executable, "-m", "loom2.engine.supervisor", "--argv", "--state", str(state)], capture_output=True, text=True, check=True,
                          cwd=str(Path(__file__).resolve().parents[1]))
     launch = json.loads(out.stdout.strip().splitlines()[-1])

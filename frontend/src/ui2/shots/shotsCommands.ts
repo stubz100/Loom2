@@ -29,13 +29,10 @@ registerCommands([
   { id: 'shots.words.toggle', scope: 'shots', label: 'Show the words', icon: Text, placement: ['panel'], when: () => !!shot(),
     hint: "what the shot's pictures are told, part by part, with where each part comes from", run: () => useShots.getState().toggleWords() },
   { id: 'shots.toPerformance', scope: 'shots', label: 'To Performance ▸', icon: Clapperboard, placement: ['panel'], when: () => !!shot(), run: level('performance') },
-  { id: 'shots.performOwed', scope: 'shots', label: 'Perform the owed layers ▶', icon: Clapperboard, placement: ['panel'], when: () => !!useShots.getState().owed,
-    hint: "the shot's final's plate and every character layer not performed yet, queued in turn (one GPU job at a time)",
+  { id: 'shots.performOwed', scope: 'shots', label: 'Perform the owed layers ▶', icon: Clapperboard, placement: ['panel'], when: () => !!useShots.getState().owed?.queued,
+    hint: "the shot's final's plate, every character layer not performed yet and their face work (D164: the face pass for a small head, lip-sync for a speaking character), queued in turn (one GPU job at a time)",
     run: () => { const o = useShots.getState().owed; if (!o) return
-      void import('../../suites/stage/finalShot').then(async ({ useFinals }) => {
-        if (o.plate) await useFinals.getState().plate(o.fid)
-        for (const lid of o.figures) await useFinals.getState().perform(o.fid, lid)
-      }) } },
+      void import('../../suites/stage/finalShot').then(({ useFinals }) => useFinals.getState().performOwed(o.fid)) } },
   { id: 'shots.toFinal', scope: 'shots', label: 'To Final ▸', icon: MonitorPlay, placement: ['panel'], when: () => !!shot(), run: level('final') },
   // G12 (04 §7): a new shot after the open one
   { id: 'shots.new.scene', scope: 'shots', label: 'New shot in a new scene', icon: SquarePlus, placement: ['strip', 'context'], when: open,

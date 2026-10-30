@@ -916,7 +916,9 @@ def _body_fit_result(q: JobQueue, job: JobRecord, recipe: Keypoints, people: lis
 class MatteFinisher:
     """D111 (PS5d): SAM 3's masks become the character layer's `matte/` (one per frame, at the final's size); the layer is done. D163: a
     layer performed in its window is matted there (`window/matte/`), then its take and matte are pasted back into `frames/` and `matte/`
-    at the final's size; every character layer's matte is checked against its Stage silhouette (`matte_check`)."""
+    at the final's size; every character layer's matte is checked against its Stage silhouette (`matte_check`). D164: a matte that strays
+    is made once more by the other model (SAM 3 by text ↔ the subject matte) into `matte_retry/` — SAM 3 again on the same frames would
+    give the same masks — and the one that strays less is kept; then the face work an owed run asked for is queued (owed.follow_up)."""
     frees_cache = True
     free_force = False
 
@@ -933,6 +935,8 @@ class MatteFinisher:
         layer = next((x for x in f.layers if x.id == recipe.layer_id), None)
         wins = layer.window if layer is not None and layer.window else None
         w, h = WINDOW if wins else (f.size["w"], f.size["h"])
+        retry = bool(job.origin and (job.origin.payload or {}).get("retry"))  # D164: the other model's matte, beside the first
+        name = "matte_retry" if retry else "matte"
 
         def fresh(name: str) -> Path:
             d = store.pass_dir(f.id, recipe.layer_id, name)
@@ -943,7 +947,7 @@ class MatteFinisher:
             return d
 
         def write() -> dict | None:
-            d = fresh("window/matte" if wins else "matte")
+            d = fresh(f"window/{name}" if wins else name)
             for i, src in enumerate(paths):
                 with Image.open(src) as im:
                     im = im.convert("L")
@@ -952,19 +956,68 @@ class MatteFinisher:
                     im.save(d / f"{i:04d}.png")
             if wins:                                                         # D163: the take and its matte back in the frame
                 fw, fh = f.size["w"], f.size["h"]
-                take, frames, matte = store.pass_dir(f.id, recipe.layer_id, "window/frames"), fresh("frames"), fresh("matte")
+                take, matte = store.pass_dir(f.id, recipe.layer_id, "window/frames"), fresh(name)
+                frames = None if retry else fresh("frames")                  # a retry's take is the one already pasted back
                 for i, win in enumerate(wins[:f.frames]):
-                    with Image.open(take / f"{i:04d}.png") as im:
-                        paste_back(im.convert("RGB"), win, fw, fh, (128, 128, 128)).save(frames / f"{i:04d}.png")
+                    if frames is not None:
+                        with Image.open(take / f"{i:04d}.png") as im:
+                            paste_back(im.convert("RGB"), win, fw, fh, (128, 128, 128)).save(frames / f"{i:04d}.png")
                     with Image.open(d / f"{i:04d}.png") as im:
                         paste_back(im, win, fw, fh, 0).save(matte / f"{i:04d}.png")
-            return matte_check(store, store.get(f.id) or f, recipe.layer_id)
+            return matte_check(store, store.get(f.id) or f, recipe.layer_id, name)
         check = await asyncio.to_thread(write)
+        note = ""
+        if retry:                                                            # D164: the matte that strays less is kept
+            first = (layer.matte_check if layer is not None else None) or {}
+            n0, n1 = len(first.get("strays") or []), len(check["strays"]) if check else None
+            better = n1 is not None and n1 < n0
+
+            def settle() -> None:
+                for part in (["window/"] if wins else []) + [""]:
+                    kept, other = store.pass_dir(f.id, recipe.layer_id, f"{part}matte"), store.pass_dir(f.id, recipe.layer_id, f"{part}matte_retry")
+                    if better:
+                        shutil.rmtree(kept, ignore_errors=True)
+                        other.rename(kept)
+                    else:
+                        shutil.rmtree(other, ignore_errors=True)
+            await asyncio.to_thread(settle)
+            spec = registry.get(recipe.model_id)
+            label = spec.label if spec else recipe.model_id
+            note = f"; made again by {label}: strays {n0} → {n1}, " + ("kept" if better else "the first kept")
+            check = {**((check or {}) if better else first), "retried": f"{label}: strays {n0} → {n1}" + ("" if better else " — the first kept")}
         f = await asyncio.to_thread(store.update_layer, f.id, recipe.layer_id, status="done", error=None, matte_check=check)
         job.result["final_id"], job.result["layer_id"] = f.id, recipe.layer_id
         job.log_tail.append(f"matte: {len(paths)} masks for {recipe.layer_id}" + (" in its window, pasted back" if wins else "")
-                            + (f"; it strays from the figure on {len(check['strays'])} of {check['frames']} frames" if check and check["strays"] else ""))
+                            + (f"; it strays from the figure on {len(check['strays'])} of {check['frames']} frames" if check and check.get("strays") and not retry else "") + note)
         q.hub.broadcast("final.updated", {"id": f.id, "revision": f.revision})
+        if not retry and check and check["strays"] and layer is not None and not layer.matte_retry and await self._again(q, job, recipe, f, check):
+            return                                                           # the retry's finisher follows up
+        from ..owed import follow_up
+        try:
+            said = await follow_up(q, f.id, recipe.layer_id, job.id)
+        except Exception as e:  # noqa: BLE001 — the layer is done; its face work stays owed
+            said = f"the face work not queued: {e}"
+        if said:
+            job.log_tail.append(said)
+
+    async def _again(self, q: JobQueue, job: JobRecord, recipe: MatteSequence, f: Any, check: dict) -> bool:
+        """D164: the stray matte made once more by the other model, when this build offers it; True when it is queued."""
+        from ..finals import FinalStore
+        other = "subject" if recipe.mode == "text" else "text"
+        spec = registry.get(registry.segment_model(other))
+        if spec is None or not registry.offered(spec, q.app.settings.variant):
+            return False
+        try:
+            mj = q.submit({"kind": "matte_sequence", "final_id": f.id, "layer_id": recipe.layer_id, "mode": other, "text": recipe.text},
+                          origin=JobOrigin(suite="stage", surface=job.origin.surface if job.origin else "final_layer", ref=f.id,
+                                           payload={"layer": recipe.layer_id, "matte": True, "retry": True}))[0]
+        except ValueError as e:
+            job.log_tail.append(f"the matte is not made again by {spec.label}: {e}")
+            return False
+        f = await asyncio.to_thread(FinalStore(q.ws).add_job, f.id, recipe.layer_id, mj.id, matte_retry=True)
+        job.log_tail.append(f"the matte strays on {len(check['strays'])} of {check['frames']} frames — made again by {spec.label} ({mj.id}); the one that strays less is kept")
+        q.hub.broadcast("final.updated", {"id": f.id, "revision": f.revision})
+        return True
 
 
 class LayerPassFinisher:

@@ -13771,3 +13771,183 @@ through Stage, so it sends the hands and feet with the keypoints.
 
 The minutes are shown first. A stray matte is matted again once by itself. Not a processing layer: a pass over the flattened stack comes
 after the take it would have to repair. The band is measured first: spike E45.
+
+## 2026-10-30 19:44 — E45 set up: the head sizes where the face pass gains identity (D164's band); the bars before the run
+
+**Question (D164):** for which head sizes does D118's face pass (the head at 512², pasted back) give a character's face that a D163 take
+in its window does not? *Perform the owed layers ▶* queues it only there.
+
+**Material:** the E43 copy of the walkthrough's project (`F:/loom2-projects/_e43/last-ferry-copy`, scratch). Five heads, by the head box's
+side in the frame (848×480, without the box's 48 px floor):
+
+| Case | Final · layer | Head in the frame | Window (D163) | Steps |
+| --- | --- | --- | --- | --- |
+| A | Arrival · Tomas | 11 px | ×15.1 (D163's rig take) | face pass |
+| B | Departure · Ines | 27 px | ×4.4 | the window take (`/run`), then the face pass |
+| C | The seal (E43's 77-frame copy `-e43ib`) · Tomas | 55 px | ×3.5 | the same |
+| D | The ferryman · Tomas | 110 px | ×1.6 | the same |
+| E | The ferryman · Ines | ≈ 500 px (a close shot cut by the frame) | none (at the frame) | face pass |
+
+**Method:** everything runs through the app's own routes (`/run`, then `/pass {"preset": "face"}` and its chain of jobs), alone on the GPU
+(`engine/spikes/e45_band.py`). The face is measured three ways, on 12 evenly spaced frames:
+
+- on the layer's shown frames before (the walkthrough's take at the frame);
+- on the window take;
+- on the face pass's pasted take.
+
+Each frame is the head box cropped from the frame and resized to 512². Its FaceSim is taken against the character's animation reference
+(the largest face, cosine), along with the share of frames where a face is found. The pass's own 512² head is measured too (an upper
+bound), with each step's seconds.
+
+**Also fixed before the run** (found reading the face pass for D164): a layer performed in its window has its reference placed in the
+window's pixels, but the face pass cropped the reference's head with the frame's box. It now crops with the window's box
+(`prepare_face_pass`). Case A runs through the fix.
+
+**Bars (set before the run):**
+
+- **The lower edge `lo`:** the smallest measured head at which the pass's pasted face is found on ≥ half the sampled frames *and* gains
+  ≥ +0.10 mean FaceSim over the window take. Below it, the pass cannot show a face, and lip-sync cannot show a mouth: listed as too
+  small, not queued.
+- **The upper edge `hi`:** the largest measured head at which the pass still gains ≥ +0.10. Where `hi` and the next measured size leave a
+  gap (110 → 500), the edge goes at their geometric mean, recorded as an estimate.
+- **No harm:** the pass never loses more than 0.05 mean FaceSim against the take it ran on, in any case. If it does above `hi`, the
+  edge is binding; if not, a pass queued above `hi` costs only its minutes.
+- **Time:** each case's face pass seconds per 77-frame batch, for the minutes D164 shows first.
+
+## 2026-10-30 19:49 — E45's cases changed at the set-up, before the GPU run (the shown frames measured on the CPU)
+
+Three of the planned heads are no use for the band:
+
+- **Departure · Ines (27 px)** and **Stay**'s layer (bound to Ines too) are seen from behind;
+- **The ferryman · Ines** has her head outside the frame (x ≈ −130 at frame 0: the layer is her shoulder).
+
+The last one shows a D118 fault the build must keep away from. The head box needs the neck *visible* to use the nose–neck distance;
+without it, it falls back to 40 px (a 104 px box), clamped to the picture. A face pass there would paint a head into a patch of a
+shoulder. D164's band must ask for the head inside the frame, not only its size.
+
+**Cases now:**
+
+| Case | Final · layer | Head in the frame | Window |
+| --- | --- | --- | --- |
+| A | Arrival · Tomas | 11 px | ×15.1 |
+| B2 | Arrival · Ines | 13–45 px (from behind, turning to the camera at ≈ 40 px in the last third) | ×4.3 |
+| C | The seal · Tomas | 55 px (a three-quarter face) | ×3.5 |
+| D | The ferryman · Tomas | 110 px | ×1.6 |
+
+FaceSim of the shown frames (the walkthrough's takes at the frame, against the bound character's animation reference): A 0.16 (12 of 12
+found), B2 a face on 4 of 12 (≈ 0), C 0.17, D 0.48.
+
+**Bars amended** (no measured head above 110 px is left): if D still gains ≥ +0.10, `hi` is estimated at 2 × 110 = 220 px, where the
+512² crop upscales the head less than 2.3×. That is recorded as an estimate; above it the Face pass stays the author's button.
+
+## 2026-10-30 20:18 — E45 ran: the face pass gains a face for a head of about 48–78 px, facing the camera; D164's band set
+
+`engine/spikes/e45_band.py` ran alone on the GPU, through the app's routes. Results, sheets and the kept crops are in
+`engine/spikes/out/e45` (`results.json`, `sheet_<case>.jpg`, `face_sizes.json`).
+
+FaceSim is measured against the character's animation reference, on 12 frames, each the head box resized to 512²:
+
+| Case | Head | Shown before (at the frame) | Window take (D163) | Face pass | Its 512² head | Face size, pass ÷ before | Head batch |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| A · Arrival · Tomas | 11 px | 0.16 | (the same: D163's rig take, ×15.1) | 0.29 | 0.58 | **2.6×** | 49 frames, 177 s |
+| B2 · Arrival · Ines | 13–45 px, from behind | a face on 4 of 12 | a face on 1 of 12 (performed from the back view) | 0.05 (a face on 11 of 12) | 0.07 | — | 49 frames, 141 s |
+| C · The seal · Tomas | 55 px | 0.17 | **0.45** | **0.69** | 0.77 | 1.25× | 77 frames, 252 s |
+| D · The ferryman · Tomas | 110 px | 0.48 | **0.61** | 0.66 | 0.68 | 1.13× | 65 frames, 205 s |
+
+**To the eye** (the sheets):
+
+- **A:** the pass pastes a head-and-shoulders bust over the 11 px figure. The 0.29 is a giant face, not a better one. The cause is the
+  pose crop: at the frame's resolution the guide's discs are as large as the head. The same on the rerun with the reference cropped from
+  the same region as the pose (below).
+- **B2:** the pass paints a frontal face of a stranger (0.05) onto a head seen from behind, with a stray hand.
+- **C:** a sharper, recognisable face at the same size and pose. Through the take's matte it is clean. The raw frames' fuzz and the
+  coloured dots at the cap sit where the matte cuts: Pillow's premultiplied RGBA resize, inside the colour paste's 2 % margin.
+- **D:** the window take already holds his face. The pass adds +0.05, a grey halo outside the matte, and closed eyes.
+
+D163's window alone is a face gain: C 0.17 → 0.45, D 0.48 → 0.61, with no stray matte in any case.
+
+**Against the bars (19:44, amended 19:49):**
+
+- **`lo`:** A gains +0.12 but fails to the eye; its face is 2.6× its size before. The size check (the face within 0.7–1.4× the face of
+  the take it ran on) was added at 19:58, after A's first run showed the giant bust; it rules A out. The smallest measured head that
+  passes is C (55 px).
+  - I set `lo` at **48 px**, `heads.MIN_SIDE`, instead of the bar's 55, and record that as a deviation. From 48 px up the head box is
+    the head itself (C's regime); below it the head shrinks inside a 48 px crop while the guide's discs keep their size (A's).
+  - Heads of 48–55 px are unmeasured.
+- **`hi`:** C gains +0.24, D only +0.05. The gap from 55 to 110 px puts the edge at their geometric mean: **78 px**, an estimate.
+- **No harm:** no case loses FaceSim against the take it ran on. A and B2 are broken to the eye, but they fall outside the band
+  (`small`, `away`), and the band keeps them out.
+- **Time:** about 3.3 s a frame. The face pass's estimate is now E45's 252 s a 77-frame batch (E29b's was 306 s).
+
+**Reruns and faults:**
+
+- **The reference crop**, found reading the code before the run: a windowed layer's reference is placed in its window. My first fix
+  cropped the head alone there, while the pose crop holds the 48 px box (4.4 heads at 11 px). It now crops the frame box's region, at
+  the window's scale. A, rerun on it, is the same verdict: 0.36 → 0.29, a 2.6× face. For C and D, above the box's floor, the two crops
+  are the same region.
+- **D's first face pass was cancelled at 189 s, by me.** The offline tests ran beside the spike (the D163 route test). Their test apps
+  leave the engine port at 8188, the supervisor adopts an engine that is already listening (V19), so a test job went to the rig's engine
+  and its shutdown's global interrupt stopped the face pass.
+  - `tests/conftest.py` now gives every test app an engine port that nothing listens on (the fake engine's rig sets its own).
+  - D was rerun alone.
+
+**D164's band:** `owed.FACE_BAND = (48, 78)` px, the head inside the frame on ≥ 80 % of the frames, and facing the camera on ≥ half.
+- Under 48 px, the face pass is not owed (D163's window is the gain there); from behind, never.
+- A character who speaks gets lip-sync instead: from 48 px up, at any size above, from the front.
+
+## 2026-10-30 20:33 — D164 built: Perform the owed layers ▶ takes the face work, by E45's band, with the minutes shown first
+
+**Server**
+
+- **`loom2/owed.py` (new): the owed work per final.**
+  - The list:
+    - the plate;
+    - each character layer not performed yet, with its cost from CA4's plan;
+    - per character layer, its face work. The face pass is owed for a head in `FACE_BAND` (48–78 px, inside the frame on ≥ 80 % of
+      its frames, facing the camera on ≥ half). Lip-sync is owed instead when its character speaks in the shot (the story's voiced
+      lines), from 48 px up and from the front.
+  - A lip-sync item is listed, not queued, while its lines are not yet on the lanes, when a line is longer than one talking head's
+    window (77 frames: 4.8 s at 16 fps), and from behind.
+  - Each item's cost is the queue's estimate of its steps.
+  - `face_recipe` is the face pass's first step, shared by the route and the follow-up.
+- **Routes**
+  - `GET /finals/{fid}/owed`: the items, each queued or listed with why, the total and the band.
+  - `POST /finals/{fid}/owed`: performs each layer not performed yet with `then_owed`, and queues the face work of the layers
+    already done.
+  - The pass route builds the face pass through `face_recipe`.
+- **A re-take** (`/run`, also from a batch) retires the layer's takes (`stale`). The layer shows its own frames again (the
+  composition swaps them), so its face work is owed again.
+- **The matte finisher**
+  - A matte that strays is made once more by the other model, SAM 3 by text ↔ the subject matte (BiRefNet), into `matte_retry/`:
+    SAM 3 again on the same frames would give the same masks. The one that strays less is kept, and the card's check says so.
+  - Then `follow_up` queues the face work an owed run asked for.
+- **Fix:** the face pass crops a windowed layer's reference from the same region as its pose crop, at the window's scale (D163
+  placed the reference in the window's pixels).
+- **The face pass's estimate** is E45's 252 s a 77-frame batch.
+- **`tests/conftest.py`:** every test app's engine port is one nothing listens on, so a route test never adopts a running engine.
+  That is what cancelled E45's first D run.
+
+**Client**
+
+- `useFinals.owed` / `loadOwed` / `performOwed`: the plate first (Stage renders a picture plate here), then the server's owed run.
+  Its toast counts what was queued now and after a matte, and names what was refused.
+- Shots' foot shows *Perform the owed layers ▶ · ≈ N min on the GPU* on Performance and Final, and *N not queued* when something is
+  only listed. Both hover over the items with their minutes or their why (rule 11).
+- Final's passes mark a take made on an earlier performance.
+
+**On the E43 copy** (the screenshots):
+
+- The seal at 169 frames owes its two lip-syncs, both listed: Tomas has a line longer than 4.8 s, and Ines is seen from behind.
+- Its 77-frame copy queues Tomas's lip-sync, ≈ 14 min.
+- No final owes a face pass: E45's heads either have one now (D), are too small (A), are seen from behind (B2), or speak (C, Tomas in
+  The seal).
+
+**Checks**
+
+- offline: 751 passed and 2 failed in the full run, then those 2 fixed and passing (753; `test_owed_d164` + 4: the band, the owed list and its run, the re-take's retired takes, lip-sync's listings,
+  the stray matte made again and the face pass after it; the route snapshot + 2 routes; V44's test writes its port for the
+  subprocess);
+- Vitest 603 + 3 skipped (the owed count, its tooltip, the run's toast);
+- typecheck, build and lint clean;
+- the settings audit (321, 0 problems), the agent docs and the model literals clean;
+- e2e 84/84 alone.

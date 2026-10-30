@@ -92,6 +92,8 @@ class FinalLayer(BaseModel):
     body_hashes: list[str] = Field(default_factory=list)   # CS3: per frame, the body the guide was drawn with (skeleton keys sampled) — Stage says *the skeleton changed* where they differ
     window: list[list[float]] | None = None        # D163 (E43): per frame [x0, y0, scale] of the window the figure is performed in (the whole figure at WINDOW); [] at the frame; None not decided yet (a final made before D163: its next run decides)
     matte_check: dict[str, Any] | None = None      # D163: the matte against the figure's Stage silhouette — {frames, strays (frame indices), cover_min, ratio_max}
+    then_owed: bool = False                        # D164: its face work (the face pass or lip-sync, as owed.py finds it) is queued after its matte
+    matte_retry: bool = False                      # D164: its matte strayed and was made once more by the other model (the better one kept)
 
 
 class ProcessingLayer(BaseModel):
@@ -440,14 +442,14 @@ def paste_back(img: "Image.Image", win: list[float], fw: int, fh: int, fill: Any
     return canvas
 
 
-def matte_check(store: "FinalStore", f: "Final", lid: str) -> dict[str, Any] | None:
+def matte_check(store: "FinalStore", f: "Final", lid: str, name: str = "matte") -> dict[str, Any] | None:
     """D163: a character layer's matte against its figure's Stage silhouette (|layer depth − plate depth| > eps, as the assembly) frame by
     frame — a frame *strays* when the matte covers < STRAY_COVER of the silhouette or is > STRAY_RATIO × it (W46's matte was 319× its
-    figure, W58's 11×). None when the passes to measure with are missing."""
+    figure, W58's 11×). None when the passes to measure with are missing. `name`: the folder (D164: `matte_retry`, the other model's)."""
     import numpy as np
     from PIL import Image
     from .final_assembly import DEPTH_EPS
-    dep, bare, mat = store.pass_dir(f.id, lid, "depth"), store.pass_dir(f.id, "plate", "depth"), store.pass_dir(f.id, lid, "matte")
+    dep, bare, mat = store.pass_dir(f.id, lid, "depth"), store.pass_dir(f.id, "plate", "depth"), store.pass_dir(f.id, lid, name)
     if not (dep.is_dir() and bare.is_dir() and mat.is_dir()):
         return None
     gray = lambda p: np.asarray(Image.open(p).convert("L"), dtype=np.float32) / 255.0  # noqa: E731
@@ -653,6 +655,19 @@ class FinalStore:
             if len(list(self.pass_dir(fid, lid, f"passes/{take_id}").glob("*.png"))) != f.frames:
                 raise ValueError(f"the take {take_id} has no frames on disk")
         return self.update_layer(fid, lid, source=take_id)
+
+    @_locked
+    def retire_takes(self, fid: str, lid: str, **patch: Any) -> tuple[Final, str | None]:
+        """D164: a layer performed again — the takes made on its earlier performance stay but are retired (`stale`: its face work is owed
+        again) and the layer shows its own frames; with the take it showed, if any."""
+        f = self.get(fid)
+        if f is None:
+            raise KeyError(fid)
+        layer = next((x for x in f.layers if x.id == lid), None)
+        if layer is None:
+            raise KeyError(f"{fid} has no layer {lid}")
+        was = layer.source
+        return self.update_layer(fid, lid, takes=[{**t, "stale": True} for t in layer.takes], source=None, **patch), was
 
     @_locked
     def remove_take(self, fid: str, lid: str, take_id: str) -> Final:

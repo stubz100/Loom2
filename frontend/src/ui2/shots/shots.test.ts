@@ -61,18 +61,30 @@ describe("the header's scene (U4c)", () => {
   })
 })
 
-describe('the owed layers (U6c)', () => {
-  it('the newest final of the shot version, its plate and the character layers not performed yet, the GPU minutes by their batches', async () => {
-    const { batchesOf, owedOf } = await import('./shotsStore')
-    expect([batchesOf(65), batchesOf(77), batchesOf(100), batchesOf(149)]).toEqual([1, 1, 2, 2])
-    const fin = (id: string, at: string, statuses: [string, string][], extra = {}) => ({ id, shot_id: 'sht_a', shot_version: 'v1', created_at: at, frames: 65,
-      layers: statuses.map(([kind, status], i) => ({ id: `${kind}${i}`, kind, status })), ...extra })
-    const finals = [fin('f_old', '1', [['plate', 'passes'], ['figure', 'passes']]), fin('f_new', '2', [['plate', 'done'], ['figure', 'passes'], ['figure', 'done'], ['prop', 'passes']]),
-      fin('f_other', '3', [['figure', 'passes']], { shot_id: 'sht_b' })]
-    expect(owedOf(finals, 'sht_a', 'v1')).toEqual({ fid: 'f_new', plate: false, figures: ['figure1'], minutes: 3 })
-    expect(owedOf([fin('f', '1', [['plate', 'failed'], ['figure', 'passes'], ['figure', 'failed']])], 'sht_a', 'v1')!.minutes).toBe(8)   // 2 × 3.3 + 1
-    expect(owedOf([fin('f', '1', [['plate', 'done'], ['figure', 'done']])], 'sht_a', 'v1')).toBeNull()
-    expect(owedOf(finals, 'sht_a', 'v2')).toBeNull()                                                                  // v1's finals are not v2's
-    expect(owedOf([fin('f_a1', '1', [['figure', 'passes']], { shot_version: null })], 'sht_a', 'v2')).toEqual(expect.objectContaining({ fid: 'f_a1' }))   // one made before A1 names no version: it counts
+describe('the owed work (U6c, D164)', () => {
+  it("the newest final of the shot version and the server's count of what it owes: the queued items' minutes, the listed ones' why", async () => {
+    const { owedOf, owedTitle } = await import('./shotsStore')
+    const fin = (id: string, at: string, extra = {}) => ({ id, shot_id: 'sht_a', shot_version: 'v1', created_at: at, ...extra })
+    const item = (kind: string, layer: string, name: string, extra = {}) => ({ kind, layer, name, queue: true, after: false, why: null, seconds: 200, ...extra }) as never
+    const owed = {
+      f_old: { final_id: 'f_old', items: [item('perform', 'fig', 'Tomas')], seconds: 200, band: [48, 220] },
+      f_new: { final_id: 'f_new', band: [48, 220], seconds: 660, items: [item('plate', 'plate', 'Pier', { seconds: 60 }), item('perform', 'fig', 'Tomas'), item('face', 'fig', 'Tomas', { after: true, seconds: 400 }),
+        item('lipsync', 'ines', 'Ines', { queue: false, why: 'it is seen from behind', seconds: null })] },
+    }
+    const finals = [fin('f_old', '1'), fin('f_new', '2'), fin('f_other', '3', { shot_id: 'sht_b' })]
+    const o = owedOf(finals, owed as never, 'sht_a', 'v1')!
+    expect([o.fid, o.queued, o.minutes]).toEqual(['f_new', 3, 11])                                           // 660 s
+    expect(owedTitle(o).split('\n')).toEqual(['The plate · ≈ 1 min', 'Tomas: performance · ≈ 3 min', 'Tomas: face pass (after its performance) · ≈ 7 min',
+      'Ines: lip-sync — not queued: it is seen from behind'])
+    expect(owedOf(finals, { f_new: { ...owed.f_new, items: [] } } as never, 'sht_a', 'v1')).toBeNull()                 // nothing owed
+    expect(owedOf(finals, {} as never, 'sht_a', 'v1')).toBeNull()                                                     // not counted yet
+    expect(owedOf(finals, owed as never, 'sht_a', 'v2')).toBeNull()                                                   // v1's finals are not v2's
+    expect(owedOf([fin('f_a1', '1', { shot_version: null })], { f_a1: owed.f_old } as never, 'sht_a', 'v2')).toEqual(expect.objectContaining({ fid: 'f_a1' }))   // one made before A1 names no version
+  })
+  it("an owed run's toast counts what it queued now and after a matte, and names what was refused", async () => {
+    const { owedRunText } = await import('../../suites/stage/finalShot')
+    expect(owedRunText([{ kind: 'perform', job_id: 'j1' }, { kind: 'perform', job_id: 'j2' }, { kind: 'face', job_id: null }, { kind: 'lipsync', job_id: 'j3' }], []))
+      .toBe('Queued: 2 performances, 1 face pass after its matte, 1 lip-sync')
+    expect(owedRunText([], [{ kind: 'face', layer: 'fig', why: 'Tomas has no matte yet — matte it first' }])).toBe('Nothing queued · face pass of fig refused: Tomas has no matte yet — matte it first')
   })
 })

@@ -426,6 +426,7 @@ class RunBody(BaseModel):
     seed: int | None = None                        # None: the layer's seed (the first run 0; a re-take passes another)
     from_batch: int = Field(0, ge=0)               # CA5: re-take from this batch on (the batches before it kept; a new seed unless one is given)
     stage: bool = False                            # CA4: staged in the queue (released by Run staged — an overnight start), not queued
+    then_owed: bool = False                        # D164: its face work (the face pass or lip-sync, as owed) queued after its matte
 
 
 class RunQueued(BaseModel):
@@ -514,6 +515,7 @@ async def final_layer_run(svc: Svc, fid: str, lid: str, body: RunBody):
     await svc.queue.flush()
     f = await asyncio.to_thread(store.add_job, fid, lid, jobs[0].id, status="queued", error=None, seed=seed, reference_asset_id=ref_id, guide_asset_id=g.id,
                                 batches=[{"k": 0, "job_id": jobs[0].id, "clip_id": None}], frames_done=0)
+    f = await _retire(svc, store, fid, lid, body.then_owed)
     svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
     return {"job_id": jobs[0].id, "batches": len(plan), "reference_asset_id": ref_id, "placed": placed, "from_behind": behind,
             "back_view": behind and anim_ref == v.anim_ref_back_asset_id, "window": round(min(x[2] for x in layer.window), 2) if layer.window else None}
@@ -583,6 +585,22 @@ async def final_layer_passes(svc: Svc, fid: str, lid: str, body: PassesBody):
     return f.model_dump()
 
 
+async def _retire(svc, store: FinalStore, fid: str, lid: str, then_owed: bool) -> Final:
+    """D164: a layer performed again — its takes retired (its face work is owed again), it shows its own frames (the composition swaps
+    them when it showed a take), and an owed run's face work waits for its matte."""
+    ws, _, _ = svc.require_project()
+    f, was = await asyncio.to_thread(store.retire_takes, fid, lid, then_owed=then_owed, matte_retry=False)
+    if was:
+        cs = CompositionStore(ws)
+        c = await asyncio.to_thread(cs.get, f)
+        if c is not None and any(x.id == lid for x in c.layers):
+            try:
+                await asyncio.to_thread(cs.set_source, f, svc.effectcraft, lid, None)
+            except (EffectCraftError, KeyError, ValueError):                 # the composition swaps it at its next sync
+                pass
+    return f
+
+
 async def _retake_from(svc, store: FinalStore, f: Final, layer: FinalLayer, body: RunBody, model_id: str, prompt: str, anim_ref: str | None) -> dict:
     """CA5 (02 §3): batch k and the ones after it again with a new seed — batch k continues the kept batch k−1's clip (its last frames
     carried, W1) on the layer's placed reference and pose guide; each finisher queues the next, the last stitches every batch and mattes."""
@@ -605,6 +623,7 @@ async def _retake_from(svc, store: FinalStore, f: Final, layer: FinalLayer, body
     await svc.queue.flush()
     f2 = await asyncio.to_thread(store.add_job, f.id, layer.id, jobs[0].id, status="queued", error=None, seed=seed, frames_done=0,
                                  batches=[*kept, {"k": k, "job_id": jobs[0].id, "clip_id": None}])
+    f2 = await _retire(svc, store, f.id, layer.id, body.then_owed)
     svc.hub.broadcast("final.updated", {"id": f.id, "revision": f2.revision})
     return {"job_id": jobs[0].id, "batches": len(plan), "reference_asset_id": layer.reference_asset_id, "placed": layer.reference_asset_id != anim_ref,
             "from_behind": BACK_WORDS in prompt, "back_view": False}
@@ -685,6 +704,96 @@ async def final_plan(svc: Svc, fid: str):
         owed_all += owed
     src = f"measured: {len(measured)} batch{'es' if len(measured) != 1 else ''} of this final" if per_frame is not None else "the queue's estimate"
     return FinalPlan(final_id=fid, layers=out, seconds_owed=round(owed_all, 1), source=src).model_dump()
+
+
+class OwedItem(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    kind: Literal["plate", "perform", "face", "lipsync"]
+    layer: str
+    name: str
+    queue: bool                                    # Perform the owed layers ▶ queues it; False: listed, `why` says why not
+    after: bool = False                            # queued after the layer's performance (its matte), not now
+    why: str | None = None
+    seconds: float | None = None                   # its cost: this final's measured batches, else the queue's estimate (D60)
+
+
+class FinalOwed(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    final_id: str
+    items: list[OwedItem]
+    seconds: float                                 # what the queued items cost together
+    band: list[float]                              # D164 (E45): the head sizes the face pass is owed for — the head box's side in the frame, px
+
+
+@router.get("/finals/{fid}/owed", response_model=FinalOwed)
+async def final_owed(svc: Svc, fid: str):
+    """D164 (E45): what the final still owes, in the order *Perform the owed layers ▶* queues it: its plate, the character layers not
+    performed yet, then each character layer's face work (the face pass for a head in the band, lip-sync for a character with voiced
+    lines). Each item has its cost, or is listed with why it is not queued."""
+    from ..owed import FACE_BAND, owed_work
+    ws, _, _ = svc.require_project()
+    f = await asyncio.to_thread(FinalStore(ws).get, fid)
+    if f is None:
+        raise HTTPException(404, "final not found")
+    plan = await final_plan(svc, fid)
+    items = await asyncio.to_thread(owed_work, ws, svc.queue, f, {x["id"]: x["seconds_owed"] for x in plan["layers"]})
+    return FinalOwed(final_id=fid, items=items, seconds=round(sum(float(i["seconds"] or 0.0) for i in items if i["queue"]), 1), band=list(FACE_BAND)).model_dump()
+
+
+class OwedQueued(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    kind: str
+    layer: str
+    job_id: str | None = None                      # None: queued after the layer's performance (its matte)
+
+
+class OwedRefused(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    kind: str
+    layer: str
+    why: str
+
+
+class OwedRun(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    queued: list[OwedQueued]
+    refused: list[OwedRefused]
+    owed: FinalOwed
+
+
+@router.post("/finals/{fid}/owed", response_model=OwedRun)
+async def final_owed_run(svc: Svc, fid: str):
+    """D164: *Perform the owed layers ▶*. Each character layer not performed yet is performed, with its face work asked for after its
+    matte; the face work of the layers already performed is queued now. They run in turn (one GPU job at a time). The plate is the
+    client's to queue first: Stage renders a picture plate in the browser."""
+    from ..owed import queue_face_work
+    ws, _, _ = svc.require_project()
+    if svc.queue is None:
+        raise HTTPException(409, "no queue")
+    store = FinalStore(ws)
+    before = await final_owed(svc, fid)
+    queued: list[dict[str, Any]] = []
+    refused: list[dict[str, Any]] = []
+    for it in before["items"]:
+        if it["kind"] == "plate" or not it["queue"]:
+            continue
+        try:
+            if it["kind"] == "perform":
+                then = any(x["layer"] == it["layer"] and x["kind"] in ("face", "lipsync") and x["queue"] for x in before["items"])
+                r = await final_layer_run(svc, fid, it["layer"], RunBody(then_owed=then))
+                queued.append({"kind": "perform", "layer": it["layer"], "job_id": r["job_id"]})
+            elif it["after"]:                                                # under way, or just queued: its face work waits for its matte
+                await asyncio.to_thread(store.update_layer, fid, it["layer"], then_owed=True)
+                queued.append({"kind": it["kind"], "layer": it["layer"], "job_id": None})
+            else:
+                f = await asyncio.to_thread(store.get, fid)
+                layer = next(x for x in f.layers if x.id == it["layer"])
+                queued.append({"kind": it["kind"], "layer": it["layer"], "job_id": await queue_face_work(svc.queue, f, layer, it["kind"])})
+        except HTTPException as e:
+            refused.append({"kind": it["kind"], "layer": it["layer"], "why": str(e.detail)})
+        except ValueError as e:
+            refused.append({"kind": it["kind"], "layer": it["layer"], "why": str(e)})
+    return {"queued": queued, "refused": refused, "owed": await final_owed(svc, fid)}
 
 
 class MatteBody(BaseModel):
@@ -796,38 +905,14 @@ async def final_layer_pass(svc: Svc, fid: str, lid: str, body: PassBody):
     seed = layer.seed if body.seed is None else body.seed
     recipe: dict[str, Any] = {"kind": "layer_pass", "final_id": fid, "layer_id": lid, "preset": body.preset, "strength": body.strength, "seeds": [seed], "scope": body.scope}
     payload: dict[str, Any] = {"layer": lid, "pass": body.preset, "strength": body.strength, "scope": body.scope}
-    if body.preset in ("face", "lipsync"):                                # AE4c (E29b): the head as its own layer, in steps
-        from ..fsio import new_id
-        if layer.kind != "figure":
-            raise HTTPException(422, "the face pass renders a character's head: run it on a character layer")
-        if not layer.keypoints:
-            raise HTTPException(422, f"{layer.name} has no keypoints — the face pass tracks the head from the Stage's")
-        if len(list(store.pass_dir(fid, lid, "matte").glob("*.png"))) != f.frames:
-            raise HTTPException(422, f"{layer.name} has no matte yet — matte it first")
-        animate = next((s for s in registry.animate_specs() if registry.offered(s, variant)), None)
-        if animate is None:
-            raise HTTPException(422, "no pose-driven model in this build")
-        model_id, stage = animate.id, "head"
-        if body.preset == "lipsync":
-            cs = CompositionStore(ws)
-            c = await asyncio.to_thread(cs.get, f)
-            lines = [t for t in (await asyncio.to_thread(cs.audio_timing, f, c) if c else []) if t.get("final_layer") == lid]
-            if not lines:
-                raise HTTPException(422, f"attach a line to {layer.name} first (Layers › Attach a line…) — Lip-sync follows the lines on the layer")
-            if body.mouth == "model":                                     # AE4d: the lip-sync model on the rendered heads — no talking head first
-                from ..lipsync import lipsync_available
-                why = lipsync_available(svc.app.settings)
-                if why:
-                    raise HTTPException(422, why)
-            else:
-                s2v = next((s for s in registry.lipsync_specs() if registry.offered(s, variant)), None)
-                if s2v is None:
-                    raise HTTPException(422, "no lip-sync model in this build")
-                model_id, stage = s2v.id, "face_video"
-        await asyncio.to_thread(store.sweep_unfinished, fid, lid)
-        take_id = new_id("take")
-        recipe |= {"model_id": model_id, "step": {"take_id": take_id, "stage": stage, "k": 0}, "mouth": body.mouth if body.preset == "lipsync" else "head"}
-        payload["take"], payload["mouth"] = take_id, body.mouth
+    if body.preset in ("face", "lipsync"):                                # AE4c (E29b): the head as its own layer, in steps (D164: owed.py's, shared)
+        from ..owed import face_recipe
+        try:
+            fr, fp = await asyncio.to_thread(face_recipe, ws, svc.app.settings, store, f, layer, body.preset, body.mouth, seed)
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+        recipe |= {"model_id": fr["model_id"], "step": fr["step"], "mouth": fr["mouth"]}
+        payload["take"], payload["mouth"] = fp["take"], body.mouth
     else:
         graph = "wan22" if body.preset == "cleanup" else "ltx23"
         spec = next((s for s in registry.video_specs() if s.graph == graph and registry.offered(s, variant) and (graph != "ltx23" or s.recipes.guide_lora)), None)

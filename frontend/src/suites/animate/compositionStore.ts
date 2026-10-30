@@ -38,7 +38,7 @@ export type PassMouth = 'head' | 'model'
 /** AE4e: a pass on the layer's own frames, or over the stack from the selected layer down — a processing layer above it. */
 export type PassScope = 'layer' | 'below'
 export type ProcessingRec = NonNullable<Final['processing']>[number]
-export interface Take { id: string; preset: string; strength: number; model_id?: string; job_id?: string; frames?: number; seed?: number; made_at?: string; head?: boolean; mouth?: PassMouth; lines?: { layer: number | null; text: string | null; f0: number; f1: number }[] }
+export interface Take { id: string; preset: string; strength: number; model_id?: string; job_id?: string; frames?: number; seed?: number; made_at?: string; head?: boolean; mouth?: PassMouth; stale?: boolean; lines?: { layer: number | null; text: string | null; f0: number; f1: number }[] }
 /** D118 (AE4b): a voiced line of the shot, as GET /finals/{fid}/lines reports it. */
 export interface FinalLine { node_id: string; index: number; speaker: string | null; speaker_name: string | null; text: string; audio_asset_id: string; duration_s: number | null; layer_id: string | null }
 export type AudioLayer = Composition['audio'][number]

@@ -7,7 +7,7 @@ import { blocksReady } from './blocks'
 import { useEffect } from 'react'
 import { create } from 'zustand'
 import { api, http, sha256Hex, unwrap, type ApiError } from '../../api/client'
-import type { BatchPlan, Composition, Final, RenderSettings, StageDoc, StageObject } from '../../api/types'
+import type { BatchPlan, Composition, Final, FinalOwed, RenderSettings, StageDoc, StageObject } from '../../api/types'
 import { useComposition } from '../animate/compositionStore'
 import { askConfirm, useSession } from '../../store/session'
 import { forLabel, useMakeFor } from '../../store/origin'
@@ -187,6 +187,18 @@ export function performedText(name: string, r: { batches: number; placed: boolea
   return `${name}: ${batches}${r.placed ? ' — the reference stands where the figure starts' : ' — the figure is not whole at the start: the reference is centred'}`
 }
 
+const OWED_NAME: Record<string, string> = { plate: 'the plate', perform: 'performance', face: 'face pass', lipsync: 'lip-sync' }
+/** D164: what an owed run queued, for its toast — "2 performances, 1 face pass after its matte · Tomas: refused, …". */
+export function owedRunText(queued: { kind: string; job_id?: string | null }[], refused: { kind: string; layer: string; why: string }[]): string {
+  const n = (k: string, after: boolean) => queued.filter((q) => q.kind === k && !q.job_id === after).length
+  const parts = (['perform', 'face', 'lipsync'] as const).flatMap((k) => [[k, false], [k, true]] as const).filter(([k, a]) => n(k, a)).map(([k, a]) => {
+    const c = n(k, a), word = k === 'perform' ? `performance${c === 1 ? '' : 's'}` : k === 'face' ? `face pass${c === 1 ? '' : 'es'}` : 'lip-sync'
+    return `${c} ${word}${a ? ' after its matte' : ''}`
+  })
+  const refusedText = refused.map((r) => `${OWED_NAME[r.kind] ?? r.kind} of ${r.layer} refused: ${r.why}`)
+  return [parts.length ? `Queued: ${parts.join(', ')}` : 'Nothing queued', ...refusedText].join(' · ')
+}
+
 /** D163: a character layer's matte against its figure (the server's matte_check) — a short line, or null when it holds. */
 export function matteWarning(check: { frames: number; strays: number[] } | null | undefined): string | null {
   if (!check || !check.strays.length) return null
@@ -346,6 +358,11 @@ interface FinalsState {
   skeletonFrom: (id: string, layer: string, frame: number) => Promise<void>
   /** CA4: each final's batch plan (its states and costs), loaded with the finals. */
   plans: Record<string, BatchPlan>
+  /** D164: each final's owed work (GET /finals/{fid}/owed) — the plate, the performances and the face work, with their costs. */
+  owed: Record<string, FinalOwed>
+  loadOwed: (id: string) => Promise<FinalOwed | null>
+  /** D164: *Perform the owed layers ▶* — the plate first (Stage renders a picture plate here), then the server queues the rest in turn. */
+  performOwed: (id: string) => Promise<void>
   loadPlan: (id: string) => Promise<void>
   /** CA4: every character layer not performed yet, staged in the queue (Run staged releases them — an overnight start). */
   stagePerformances: (id: string) => Promise<void>
@@ -484,6 +501,22 @@ export const useFinals = create<FinalsState>((set, get) => ({
     } catch (e) { useSession.getState().toast(`Perform ${l.name}: ${(e as ApiError).detail ?? (e as Error).message ?? e}`, 'error') }
   },
   plans: {},
+  owed: {},
+  loadOwed: async (id) => {
+    try { const o = await unwrap(http.GET('/finals/{fid}/owed', { params: { path: { fid: id } } })); set({ owed: { ...get().owed, [id]: o } }); return o } catch { return null }   // advice
+  },
+  performOwed: async (id) => {
+    const o = get().owed[id] ?? await get().loadOwed(id)
+    if (!o) return
+    if (o.items.some((x) => x.kind === 'plate' && x.queue)) await get().plate(id)
+    try {
+      const r = await unwrap(http.POST('/finals/{fid}/owed', { params: { path: { fid: id } } }))
+      set({ owed: { ...get().owed, [id]: r.owed } })
+      if (r.queued.length || r.refused.length) useSession.getState().toast(owedRunText(r.queued, r.refused), r.refused.length ? 'error' : 'info')
+      await get().load()
+      void get().loadPlan(id)
+    } catch (e) { useSession.getState().toast(`Perform the owed layers: ${(e as ApiError).detail ?? (e as Error).message ?? e}`, 'error') }
+  },
   loadPlan: async (id) => {
     try { const p = await unwrap(http.GET('/finals/{fid}/plan', { params: { path: { fid: id } } })); set({ plans: { ...get().plans, [id]: p } }) } catch { /* a plan is advice */ }
   },

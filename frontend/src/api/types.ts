@@ -14,6 +14,7 @@ export type Capabilities = S['Capabilities']
 export type Final = S['Final']                          // D111 (PS5): the final shot
 export type RenderSettings = S['RenderSettings']        // AE5: the finished shot's render settings and output modules
 export type BatchPlan = S['FinalPlan']                  // CA4: the character layers' batches, their states and costs (the server's FinalPlan)
+export type FinalOwed = S['FinalOwed']                  // D164: what a final still owes — the plate, the performances, the face work — with the costs
 export type FinalLayer = S['FinalLayer']
 export type Composition = S['Composition']              // AE1 (D114): the final's EffectCraft composition
 export type TeOption = S['TeOption']                    // D31

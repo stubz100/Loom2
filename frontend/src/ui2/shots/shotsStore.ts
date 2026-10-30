@@ -7,6 +7,7 @@ import { http, unwrap } from '../../api/client'
 import { navigate, onNavigate, type Place } from '../../frame/router'
 import { useSession } from '../../store/session'
 import { useStory } from '../../suites/story/storyStore'
+import type { FinalOwed } from '../../api/types'
 
 export type ShotLevel = 'flow' | 'clay' | 'performance' | 'final'
 /** U4d (G13): the picture the header's words are shown for. */
@@ -46,7 +47,8 @@ interface ShotsState {
   reopen: () => void
   wordsOpen: boolean
   wordsFor: WordsFor
-  /** U6c (04 §4): what the shot's newest final still owes — its plate, the character layers not performed yet — and the GPU minutes. */
+  /** U6c (04 §4): what the shot's newest final still owes — its plate, the character layers not performed yet, D164 their face work —
+   *  and the GPU minutes. */
   owed: Owed | null
   toggleWords: () => void
   setWordsFor: (w: WordsFor) => void
@@ -59,26 +61,42 @@ type Method = 'layered' | 'one_pass' | 'start_still' | 'speaking'
 const CARD: Record<Method, Card> = { layered: 'final', one_pass: 'clip', start_still: 'i2v', speaking: 'i2v' }
 const METHOD: Record<Card, Method> = { final: 'layered', clip: 'one_pass', i2v: 'start_still' }
 
-/** U6c: the shot's final's owed layers (the D158 rig: one 65-frame batch ≈ 3.3 min; the plate's still ≈ 1 min). */
-export interface Owed { fid: string; plate: boolean; figures: string[]; minutes: number }
-export const BATCH_MINUTES = 3.3
-/** The batches a layer of n frames is performed in (finals.plan_batches): one when it fits 77, else 72 new frames a batch after the first. */
-export const batchesOf = (n: number): number => (n <= 77 ? 1 : 1 + Math.ceil((n - 77) / 72))
-type FinalLite = { id: string; shot_id?: string | null; shot_version?: string | null; created_at: string; frames: number; layers: { id: string; kind: string; status: string }[] }
-/** The newest final made for the shot version and what it owes, or null. */
-export function owedOf(finals: FinalLite[], shotId: string, version: string): Owed | null {
-  const f = finals.filter((x) => x.shot_id === shotId && (!x.shot_version || x.shot_version === version)).sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0]
-  if (!f) return null
-  const owes = (st: string) => st === 'passes' || st === 'failed'
-  const plate = f.layers.some((l) => l.kind === 'plate' && owes(l.status))
-  const figures = f.layers.filter((l) => l.kind === 'figure' && owes(l.status)).map((l) => l.id)
-  if (!plate && !figures.length) return null
-  return { fid: f.id, plate, figures, minutes: Math.max(1, Math.round(figures.length * batchesOf(f.frames) * BATCH_MINUTES + (plate ? 1 : 0))) }
+/** U6c → D164: the shot's final's owed work as the server counts it (GET /finals/{fid}/owed): what *Perform the owed layers ▶* queues,
+ *  with the GPU minutes, and what it only lists (why). */
+export interface Owed { fid: string; items: FinalOwed['items']; queued: number; minutes: number }
+type FinalLite = { id: string; shot_id?: string | null; shot_version?: string | null; created_at: string; revision?: number }
+/** The newest final made for the shot version, or null. */
+export function newestFinal<T extends FinalLite>(finals: T[], shotId: string, version: string): T | null {
+  return finals.filter((x) => x.shot_id === shotId && (!x.shot_version || x.shot_version === version)).sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0] ?? null
+}
+/** What the newest final owes, from its server count — null when nothing is queued or listed. */
+export function owedOf(finals: FinalLite[], owed: Record<string, FinalOwed>, shotId: string, version: string): Owed | null {
+  const f = newestFinal(finals, shotId, version)
+  const o = f ? owed[f.id] : undefined
+  if (!f || !o || !o.items.length) return null
+  const queued = o.items.filter((x) => x.queue).length
+  return { fid: f.id, items: o.items, queued, minutes: queued ? Math.max(1, Math.round(o.seconds / 60)) : 0 }
+}
+const OWED_WORD: Record<string, string> = { perform: 'performance', face: 'face pass', lipsync: 'lip-sync' }
+/** D164: the owed items, one a line, for the foot's tooltip (rule 11: no block of text on the screen) — what is queued with its minutes,
+ *  what is only listed and why. */
+export function owedTitle(o: Owed): string {
+  return o.items.map((it) => {
+    const who = it.kind === 'plate' ? 'The plate' : `${it.name}: ${OWED_WORD[it.kind] ?? it.kind}`
+    return it.queue ? `${who}${it.after ? ' (after its performance)' : ''}${it.seconds ? ` · ≈ ${Math.max(1, Math.round(it.seconds / 60))} min` : ''}` : `${who} — not queued: ${it.why}`
+  }).join('\n')
 }
 let unOwed: (() => void) | null = null
 async function followOwed(): Promise<void> {
   const { useFinals } = await import('../../suites/stage/finalShot')
-  const calc = () => { const st = useStory.getState(), s = st.shot(), v = st.shotVersion(); useShots.setState({ owed: s && v ? owedOf(useFinals.getState().finals as unknown as FinalLite[], s.id, v.id) : null }) }
+  let asked = ''
+  const calc = () => {
+    const st = useStory.getState(), s = st.shot(), v = st.shotVersion(), fs = useFinals.getState()
+    const f = s && v ? newestFinal(fs.finals as unknown as FinalLite[], s.id, v.id) : null
+    const key = f ? `${f.id}:${f.revision ?? 0}` : ''
+    if (f && key !== asked) { asked = key; void fs.loadOwed(f.id) }          // the server counts it again when the final moves
+    useShots.setState({ owed: s && v ? owedOf(fs.finals as unknown as FinalLite[], fs.owed, s.id, v.id) : null })
+  }
   calc()
   unOwed?.()
   unOwed = useFinals.subscribe(calc)

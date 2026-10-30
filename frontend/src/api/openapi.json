@@ -7894,6 +7894,11 @@
             ],
             "title": "Matte Check"
           },
+          "matte_retry": {
+            "default": false,
+            "title": "Matte Retry",
+            "type": "boolean"
+          },
           "method": {
             "enum": [
               "projected",
@@ -8011,6 +8016,11 @@
             "title": "Takes",
             "type": "array"
           },
+          "then_owed": {
+            "default": false,
+            "title": "Then Owed",
+            "type": "boolean"
+          },
           "version": {
             "anyOf": [
               {
@@ -8068,7 +8078,9 @@
           "body",
           "body_hashes",
           "window",
-          "matte_check"
+          "matte_check",
+          "then_owed",
+          "matte_retry"
         ],
         "title": "FinalLayer",
         "type": "object"
@@ -8297,6 +8309,40 @@
           "items"
         ],
         "title": "FinalList",
+        "type": "object"
+      },
+      "FinalOwed": {
+        "properties": {
+          "band": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Band",
+            "type": "array"
+          },
+          "final_id": {
+            "title": "Final Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OwedItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "seconds": {
+            "title": "Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "final_id",
+          "items",
+          "seconds",
+          "band"
+        ],
+        "title": "FinalOwed",
         "type": "object"
       },
       "FinalPlan": {
@@ -15245,6 +15291,151 @@
         "title": "NodeShot",
         "type": "object"
       },
+      "OwedItem": {
+        "properties": {
+          "after": {
+            "default": false,
+            "title": "After",
+            "type": "boolean"
+          },
+          "kind": {
+            "enum": [
+              "plate",
+              "perform",
+              "face",
+              "lipsync"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "layer": {
+            "title": "Layer",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "queue": {
+            "title": "Queue",
+            "type": "boolean"
+          },
+          "seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seconds"
+          },
+          "why": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why"
+          }
+        },
+        "required": [
+          "kind",
+          "layer",
+          "name",
+          "queue",
+          "after",
+          "why",
+          "seconds"
+        ],
+        "title": "OwedItem",
+        "type": "object"
+      },
+      "OwedQueued": {
+        "properties": {
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "layer": {
+            "title": "Layer",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "layer",
+          "job_id"
+        ],
+        "title": "OwedQueued",
+        "type": "object"
+      },
+      "OwedRefused": {
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "layer": {
+            "title": "Layer",
+            "type": "string"
+          },
+          "why": {
+            "title": "Why",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "layer",
+          "why"
+        ],
+        "title": "OwedRefused",
+        "type": "object"
+      },
+      "OwedRun": {
+        "properties": {
+          "owed": {
+            "$ref": "#/components/schemas/FinalOwed"
+          },
+          "queued": {
+            "items": {
+              "$ref": "#/components/schemas/OwedQueued"
+            },
+            "title": "Queued",
+            "type": "array"
+          },
+          "refused": {
+            "items": {
+              "$ref": "#/components/schemas/OwedRefused"
+            },
+            "title": "Refused",
+            "type": "array"
+          }
+        },
+        "required": [
+          "queued",
+          "refused",
+          "owed"
+        ],
+        "title": "OwedRun",
+        "type": "object"
+      },
       "OwnBody": {
         "properties": {
           "own": {
@@ -18707,6 +18898,11 @@
           "stage": {
             "default": false,
             "title": "Stage",
+            "type": "boolean"
+          },
+          "then_owed": {
+            "default": false,
+            "title": "Then Owed",
             "type": "boolean"
           }
         },
@@ -30987,6 +31183,90 @@
           }
         },
         "summary": "Final Lines",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
+    "/finals/{fid}/owed": {
+      "get": {
+        "description": "D164 (E45): what the final still owes, in the order *Perform the owed layers ▶* queues it: its plate, the character layers not\nperformed yet, then each character layer's face work (the face pass for a head in the band, lip-sync for a character with voiced\nlines). Each item has its cost, or is listed with why it is not queued.",
+        "operationId": "final_owed_finals__fid__owed_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinalOwed"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Final Owed",
+        "tags": [
+          "finals"
+        ]
+      },
+      "post": {
+        "description": "D164: *Perform the owed layers ▶*. Each character layer not performed yet is performed, with its face work asked for after its\nmatte; the face work of the layers already performed is queued now. They run in turn (one GPU job at a time). The plate is the\nclient's to queue first: Stage renders a picture plate in the browser.",
+        "operationId": "final_owed_run_finals__fid__owed_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwedRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Final Owed Run",
         "tags": [
           "finals"
         ]

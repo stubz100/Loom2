@@ -30,6 +30,8 @@
 .s-member.owed { border-style: dashed; }
 .s-owed { color: var(--warn); }
 .s-foot { display: flex; flex-direction: column; gap: 6px; }
+.s-owed-work { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; }   /* D164: the owed work — its button, and what is only listed */
+.s-owed-work .hint { white-space: nowrap; }
 .s-words > span:first-child { display: flex; align-items: center; gap: 6px; }
 .s-words-body { display: flex; flex-direction: column; gap: 6px; padding: 4px 0 2px; }
 .s-parts { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow: auto; }

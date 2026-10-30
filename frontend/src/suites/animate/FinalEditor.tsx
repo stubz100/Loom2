@@ -229,8 +229,9 @@ function PassesBody() {
           {source !== null ? <button type="button" className="quiet" title="Show the original frames" disabled={busy} onClick={() => void cp().useTake(null)}>✓ show</button> : <span className="hint">shown</span>}
         </li>
         {takes.map((t) => (
-          <li key={t.id} className={`take${source === t.id ? ' shown' : ''}`} data-take={t.id}>
-            <span className="name">{PASS_LABEL[t.preset as PassPreset] ?? t.preset} <span className="hint">· {t.head ? (t.lines?.length ? `${t.lines.length} line${t.lines.length === 1 ? '' : 's'}${(t.mouth as PassMouth | undefined) === 'model' ? ', the model' : ''}` : (t.mouth as PassMouth | undefined) === 'model' ? "the model's mouth" : 'the head') : t.strength} · {when(t.made_at)}</span></span>
+          <li key={t.id} className={`take${source === t.id ? ' shown' : ''}`} data-take={t.id} data-stale={t.stale ? 'true' : undefined}>
+            <span className="name">{PASS_LABEL[t.preset as PassPreset] ?? t.preset} <span className="hint">· {t.head ? (t.lines?.length ? `${t.lines.length} line${t.lines.length === 1 ? '' : 's'}${(t.mouth as PassMouth | undefined) === 'model' ? ', the model' : ''}` : (t.mouth as PassMouth | undefined) === 'model' ? "the model's mouth" : 'the head') : t.strength} · {when(t.made_at)}</span>
+              {t.stale && <span className="hint" title="Made on the layer's earlier performance: the layer was performed again since (D164)"> · an earlier performance</span>}</span>
             {source !== t.id ? <button type="button" className="quiet" title="Show this take" disabled={busy} onClick={() => void cp().useTake(t.id)}>✓ show</button> : <span className="hint">shown</span>}
             <button type="button" className="quiet danger" title="Drop this take (its frames too)" disabled={busy} onClick={() => void cp().dropTake(t.id)}>×</button>
           </li>))}

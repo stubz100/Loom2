@@ -1521,6 +1521,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/finals/{fid}/owed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Final Owed
+         * @description D164 (E45): what the final still owes, in the order *Perform the owed layers ▶* queues it: its plate, the character layers not
+         *     performed yet, then each character layer's face work (the face pass for a head in the band, lip-sync for a character with voiced
+         *     lines). Each item has its cost, or is listed with why it is not queued.
+         */
+        get: operations["final_owed_finals__fid__owed_get"];
+        put?: never;
+        /**
+         * Final Owed Run
+         * @description D164: *Perform the owed layers ▶*. Each character layer not performed yet is performed, with its face work asked for after its
+         *     matte; the face work of the layers already performed is queued now. They run in turn (one GPU job at a time). The plate is the
+         *     client's to queue first: Stage renders a picture plate in the browser.
+         */
+        post: operations["final_owed_run_finals__fid__owed_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/finals/{fid}/plan": {
         parameters: {
             query?: never;
@@ -8070,6 +8098,11 @@ export interface components {
                 [key: string]: unknown;
             } | null;
             /**
+             * Matte Retry
+             * @default false
+             */
+            matte_retry: boolean;
+            /**
              * Method
              * @enum {string}
              */
@@ -8107,6 +8140,11 @@ export interface components {
             takes: {
                 [key: string]: unknown;
             }[];
+            /**
+             * Then Owed
+             * @default false
+             */
+            then_owed: boolean;
             /** Version */
             version: string | null;
             /** Window */
@@ -8177,6 +8215,17 @@ export interface components {
         FinalList: {
             /** Items */
             items: components["schemas"]["Final"][];
+        };
+        /** FinalOwed */
+        FinalOwed: {
+            /** Band */
+            band: number[];
+            /** Final Id */
+            final_id: string;
+            /** Items */
+            items: components["schemas"]["OwedItem"][];
+            /** Seconds */
+            seconds: number;
         };
         /** FinalPlan */
         FinalPlan: {
@@ -11055,6 +11104,55 @@ export interface components {
             node: components["schemas"]["FlowNode"];
             shot: components["schemas"]["Shot"] | null;
         };
+        /** OwedItem */
+        OwedItem: {
+            /**
+             * After
+             * @default false
+             */
+            after: boolean;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "plate" | "perform" | "face" | "lipsync";
+            /** Layer */
+            layer: string;
+            /** Name */
+            name: string;
+            /** Queue */
+            queue: boolean;
+            /** Seconds */
+            seconds: number | null;
+            /** Why */
+            why: string | null;
+        };
+        /** OwedQueued */
+        OwedQueued: {
+            /** Job Id */
+            job_id: string | null;
+            /** Kind */
+            kind: string;
+            /** Layer */
+            layer: string;
+        };
+        /** OwedRefused */
+        OwedRefused: {
+            /** Kind */
+            kind: string;
+            /** Layer */
+            layer: string;
+            /** Why */
+            why: string;
+        };
+        /** OwedRun */
+        OwedRun: {
+            owed: components["schemas"]["FinalOwed"];
+            /** Queued */
+            queued: components["schemas"]["OwedQueued"][];
+            /** Refused */
+            refused: components["schemas"]["OwedRefused"][];
+        };
         /** OwnBody */
         OwnBody: {
             /**
@@ -12458,6 +12556,11 @@ export interface components {
              * @default false
              */
             stage?: boolean;
+            /**
+             * Then Owed
+             * @default false
+             */
+            then_owed?: boolean;
         };
         /** RunQueued */
         RunQueued: {
@@ -18273,6 +18376,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FinalLines"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    final_owed_finals__fid__owed_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinalOwed"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    final_owed_run_finals__fid__owed_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwedRun"];
                 };
             };
             /** @description Validation Error */

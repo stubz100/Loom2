@@ -177,6 +177,14 @@ takes stacked, so the one in use is visible.
 The **foot** offers *Perform the owed layers ▶ · ≈ 5 min on the GPU*, then *To Final ▸*. It acts on **this shot's** takes. Today the final shot's foot
 acted on the stage's oldest final (F41).
 
+**D164** (E45) adds each character layer's face work to the owed list:
+
+- the face pass, for a head of 48–78 px facing the camera;
+- lip-sync, for a character who speaks.
+
+The server counts the items (`GET /finals/{fid}/owed`), and the same button sits on Final's foot. Something that is only listed shows as
+*N not queued*: a line longer than 4.8 s, a head seen from behind. Its reasons are in the hover.
+
 ## 5. Final: the shot assembled as it was arranged
 
 Final is today's Final level: the EffectCraft composition, mattes, effects and the render. Two things are added: the shot's voice, and lip-sync as a

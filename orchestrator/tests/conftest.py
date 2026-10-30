@@ -35,6 +35,20 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _never_the_real_engine():
+    """E45 (journal 2026-10-30): a test app whose settings left the engine's port at 8188 adopted the rig's running engine (the supervisor
+    adopts one already listening, V19). A route test's job ran on the GPU, and its shutdown's interrupt cancelled the rig's face pass. A
+    test's engine port defaults to one nothing listens on; the fake engine's rig sets its own."""
+    from loom2.config import EngineSettings
+    field = EngineSettings.model_fields["port"]
+    was, field.default = field.default, 9
+    EngineSettings.model_rebuild(force=True)
+    yield
+    field.default = was
+    EngineSettings.model_rebuild(force=True)
+
+
+@pytest.fixture(autouse=True)
 def _authenticated_test_clients(monkeypatch):
     """D67: every route but /health needs the token. A TestClient built without `headers` sends the app's token by default, so a test
     reads like the frontend's typed client; the gate itself is tested with explicit `headers={}` (test_auth_d67.py)."""

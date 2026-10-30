@@ -11,7 +11,7 @@ import { useStory } from '../../suites/story/storyStore'
 import { DOT } from './route'
 import { useRouteRows } from './scene'
 import { ShotHeader } from './ShotHeader'
-import { LEVELS, startShots, useShots } from './shotsStore'
+import { LEVELS, owedTitle, startShots, useShots } from './shotsStore'
 import './shotsCommands'
 import '../world/world.css'
 import './shots.css'
@@ -108,7 +108,9 @@ function LevelColumn() {
   return <>
     <div className="w-panel"><Suspense fallback={null}><Col /></Suspense></div>
     <div className="s-foot"><Suspense fallback={null}><Foot /></Suspense>
-      {level === 'performance' && owed && <CommandButton id="shots.performOwed" text label={`Perform the owed layers ▶ · ≈ ${owed.minutes} min on the GPU`} />}
+      {(level === 'performance' || level === 'final') && owed && <span className="s-owed-work" data-owed={owed.queued} title={owedTitle(owed)}>
+        {!!owed.queued && <CommandButton id="shots.performOwed" text label={`Perform the owed layers ▶ · ≈ ${owed.minutes} min on the GPU`} />}
+        {owed.items.length > owed.queued && <span className="hint" data-owed-listed={owed.items.length - owed.queued}>{owed.items.length - owed.queued} not queued</span>}</span>}
       <CommandButton id={next} text label={level === 'final' ? 'Mark the shot final ✓' : undefined} /></div>
   </>
 }

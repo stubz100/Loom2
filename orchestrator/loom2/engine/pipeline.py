@@ -118,7 +118,7 @@ def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = 
             params["mouth"] = recipe.mouth
             est = ({"seconds": 560.0, "source": "E29 2026-10-21: S2V on a 512² head, 77 frames at 20 steps, 554 s"} if recipe.step and recipe.step.stage == "face_video"
                    else {"seconds": 120.0, "source": "E29b 2026-10-21: LatentSync 1.5 on 77 head frames (120 at 25 fps) in 104 s, the engine stopped"} if mouth
-                   else {"seconds": 310.0, "source": "E29b 2026-10-21: Wan Animate on the 512² head crop, 77 frames, 306 s; the matte and the paste after"})
+                   else {"seconds": 252.0, "source": "E45 2026-10-30: Wan Animate on the 512² head crop, 77 frames, 252 s (65 in 205 s, 49 in 177 s); the matte and the paste after"})
         else:
             est = ({"seconds": 950.0, "source": "E24 2026-10-21: the low-noise expert over 81 frames at 832×480 took 913–965 s whatever the strength"} if recipe.preset == "cleanup"
                    else {"seconds": 120.0, "source": "E24 2026-10-21: LTX-2.3 locked to the depth over 81 frames at 832×512 took 54–118 s"})
@@ -743,7 +743,11 @@ async def prepare_face_pass(job: JobRecord, recipe: LayerPass, q: JobQueue) -> d
             boxes = head_boxes(kps, f.frames, w, h)
             placed = root / layer.id / "reference.png"
             ref_src = placed if placed.is_file() else base[0]
-            box_crop(Image.open(ref_src).convert("RGB"), boxes[0]).save(work / "ref_head.png")
+            ref_box = boxes[0]
+            if placed.is_file() and layer.window:                           # D163: its reference is placed in its window — the same region there
+                wx, wy, ws_ = layer.window[0]
+                ref_box = (round((boxes[0][0] - wx) * ws_), round((boxes[0][1] - wy) * ws_), max(1, round(boxes[0][2] * ws_)))
+            box_crop(Image.open(ref_src).convert("RGB"), ref_box).save(work / "ref_head.png")
             pose = sorted(store.pass_dir(f.id, layer.id, "pose").glob("*.png"))
             if len(pose) != f.frames:
                 raise ValueError(f"{layer.name} has no pose pass for every frame")

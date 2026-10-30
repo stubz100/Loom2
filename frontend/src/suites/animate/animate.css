@@ -239,3 +239,31 @@
 .final-output .verbs { display: flex; gap: 6px; margin-top: 6px; }
 .final-output .render-settings h4 { margin: 10px 0 4px; }
 .final-output .render-settings .chk { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+
+/* D165: the Windows view — the final's frame, each character's window and head box */
+.win-view { display: flex; flex-direction: column; gap: 6px; height: 100%; min-height: 0; padding: 6px; }
+.win-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.win-who { display: inline-flex; gap: 2px; }
+.win-chip { padding: 1px 8px; border: 1px solid var(--line2); border-left-width: 4px; border-radius: 4px; background: transparent; color: var(--fg2); font-size: 12px; }
+.win-chip.active { background: var(--bg3, rgba(255, 255, 255, 0.08)); color: var(--fg); }
+.win-frame { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.win-pic { position: relative; max-width: 100%; max-height: 100%; height: 100%; }
+.win-pic { background: var(--bg0, #0b0b0c); }   /* outside the frame: where a window may reach */
+.win-pic img { position: absolute; object-fit: fill; user-select: none; pointer-events: none; }
+.win-edge { fill: none; stroke: var(--line2); stroke-width: 1; vector-effect: non-scaling-stroke; pointer-events: none; }
+.win-pic img.win-pose { mix-blend-mode: screen; opacity: 0.8; }
+.win-pic svg { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+.win-box rect { fill: transparent; stroke: currentColor; stroke-width: 2; vector-effect: non-scaling-stroke; cursor: move; }
+.win-box.head rect { stroke-width: 1.5; }
+.win-box.on rect { stroke-width: 3; fill: rgba(255, 255, 255, 0.04); }
+.win-box[data-missed] rect { stroke: var(--warn, #d29922); }
+.win-box .win-handle { fill: currentColor; stroke: none; cursor: nwse-resize; }
+.win-time { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.win-time input[type=range] { flex: 1 1 60%; min-width: 200px; }
+.win-warn { color: var(--warn, #d29922); font-size: 12px; }
+.win-keys { flex: 1 1 100%; display: flex; align-items: center; gap: 8px; }
+.win-keys .hint { min-width: 150px; font-size: 11px; }
+.win-track { position: relative; flex: 1; height: 16px; border-bottom: 1px solid var(--line); }
+.win-key { position: absolute; top: 0; transform: translateX(-50%); padding: 0; border: 0; background: none; color: var(--fg2); font-size: 11px; line-height: 14px; cursor: pointer; }
+.win-key.offer { opacity: 0.55; }
+.win-key.at { color: var(--accent); }

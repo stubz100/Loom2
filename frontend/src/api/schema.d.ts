@@ -1000,6 +1000,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/finals/{fid}/boxes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Final Boxes
+         * @description D165: the character layers' windows (D163) and head boxes (D118) as keyframed boxes — Performance's Windows view.
+         */
+        get: operations["final_boxes_finals__fid__boxes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/finals/{fid}/composition": {
         parameters: {
             query?: never;
@@ -1325,6 +1345,27 @@ export interface paths {
          *     queued now. Without a still the method waits for *Make the plate*.
          */
         put: operations["final_plate_method_finals__fid__layers_plate_method_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finals/{fid}/layers/{lid}/boxes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Final Layer Boxes
+         * @description D165: a character layer's window and head box set by hand (keys), removed (none) or given back to the automatic rule (auto); its
+         *     windows follow at once. Refused while the layer is being performed (its matte pastes back with the windows it was performed in).
+         */
+        put: operations["final_layer_boxes_finals__fid__layers__lid__boxes_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -6028,6 +6069,43 @@ export interface components {
             };
             profile: components["schemas"]["Profile"];
         };
+        /** BoxTrack */
+        BoxTrack: {
+            /** Changed */
+            changed: boolean;
+            /** Frames */
+            frames: number[][];
+            /** Keys */
+            keys: {
+                [key: string]: number;
+            }[];
+            /** Misses */
+            misses: number[];
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "auto" | "keys" | "none";
+            /** Offer */
+            offer: {
+                [key: string]: number;
+            }[];
+        };
+        /** BoxesBody */
+        BoxesBody: {
+            /** Head */
+            head?: ("auto" | "keys" | "none") | null;
+            /** Head Keys */
+            head_keys?: {
+                [key: string]: number;
+            }[];
+            /** Window */
+            window?: ("auto" | "keys" | "none") | null;
+            /** Window Keys */
+            window_keys?: {
+                [key: string]: number;
+            }[];
+        };
         /** BulkPatch */
         BulkPatch: {
             /** Changes */
@@ -8012,6 +8090,21 @@ export interface components {
             composition?: components["schemas"]["Composition"] | null;
             final: components["schemas"]["Final"];
         };
+        /** FinalBoxes */
+        FinalBoxes: {
+            /** Final Id */
+            final_id: string;
+            /** Frames */
+            frames: number;
+            /** H */
+            h: number;
+            /** Layers */
+            layers: components["schemas"]["LayerBoxes"][];
+            /** W */
+            w: number;
+            /** Window */
+            window: number[];
+        };
         /** FinalCreate */
         FinalCreate: {
             /** Camera Id */
@@ -8070,6 +8163,10 @@ export interface components {
             frames_done: number;
             /** Guide Asset Id */
             guide_asset_id: string | null;
+            /** Head Keys */
+            head_keys: {
+                [key: string]: number;
+            }[] | null;
             /**
              * Heal
              * @default false
@@ -8149,6 +8246,12 @@ export interface components {
             version: string | null;
             /** Window */
             window: number[][] | null;
+            /** Window Keys */
+            window_keys: {
+                [key: string]: number;
+            }[] | null;
+            /** Window Sig */
+            window_sig: string | null;
         };
         /** FinalLayerIn */
         FinalLayerIn: {
@@ -10111,6 +10214,19 @@ export interface components {
             image: string;
             /** Mask */
             mask: string;
+        };
+        /** LayerBoxes */
+        LayerBoxes: {
+            /** Fit */
+            fit: string;
+            head: components["schemas"]["BoxTrack"];
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Status */
+            status: string;
+            window: components["schemas"]["BoxTrack"];
         };
         /** LayoutReply */
         LayoutReply: {
@@ -17501,6 +17617,37 @@ export interface operations {
             };
         };
     };
+    final_boxes_finals__fid__boxes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinalBoxes"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     composition_get_finals__fid__composition_get: {
         parameters: {
             query?: never;
@@ -18062,6 +18209,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Final"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    final_layer_boxes_finals__fid__layers__lid__boxes_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+                lid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BoxesBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinalBoxes"];
                 };
             };
             /** @description Validation Error */

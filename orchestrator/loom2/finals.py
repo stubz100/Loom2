@@ -93,6 +93,9 @@ class FinalLayer(BaseModel):
     window: list[list[float]] | None = None        # D163 (E43): per frame [x0, y0, scale] of the window the figure is performed in (the whole figure at WINDOW); [] at the frame; None not decided yet (a final made before D163: its next run decides)
     matte_check: dict[str, Any] | None = None      # D163: the matte against the figure's Stage silhouette — {frames, strays (frame indices), cover_min, ratio_max}
     then_owed: bool = False                        # D164: its face work (the face pass or lip-sync, as owed.py finds it) is queued after its matte
+    window_keys: list[dict[str, float]] | None = None   # D165: the author's window keys {frame, cx, cy, h} in the frame's pixels; None automatic, [] none (at the frame)
+    head_keys: list[dict[str, float]] | None = None     # D165: the author's head-box keys {frame, cx, cy, side}; None tracked, [] none (no face work)
+    window_sig: str | None = None                  # D165: the windows its performance was made in (boxes.sig) — a window changed since says so
     matte_retry: bool = False                      # D164: its matte strayed and was made once more by the other model (the better one kept)
 
 
@@ -750,7 +753,8 @@ class FinalStore:
         if keypoints is not None:
             atomic_write_json(self.folder(fid) / lid / "keypoints.json", {"schema_version": 1, "frames": keypoints, "wholebody": wholebody or []})
             layer.keypoints = True
-            layer.window = layer_window(keypoints, f.frames)
+            from .boxes import layer_windows
+            layer.window = layer_windows(layer, keypoints, f.frames)       # D165: the author's keys survive the redraw
         layer.passes, layer.body, layer.body_hashes = counts, body, list(body_hashes)
         f.revision += 1
         f.updated_at = utc_now()

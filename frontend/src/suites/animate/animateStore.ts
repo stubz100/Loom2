@@ -30,7 +30,7 @@ export interface AnimPanel {
 }
 export type AnimPreview = I2VPreview                       // D38: the server's i2v preview reply
 export interface AnimPresetSaved { name: string; panel: AnimPanel; saved_at: string }
-export type AnimView = 'player' | 'compare'                            // D99 (UX0 #14): the filmstrip is a track of the timeline (`filmTrack`), not a view
+export type AnimView = 'player' | 'compare' | 'windows'                // D99 (UX0 #14): the filmstrip is a track of the timeline (`filmTrack`), not a view; D165: the windows
 
 /** 04 §9a / 11 §3c: native fps, Draft frame count, tier sizes, the frame rule and keyframe beats of a video model (the server snaps anyway). */
 export interface ModelRules { fps: number; frames: number; step: number; mult: number; draft: [number, number]; hd: [number, number]; portrait: [number, number]; square: [number, number]; short: string; beats: boolean; camera: boolean }

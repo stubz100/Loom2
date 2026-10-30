@@ -482,9 +482,13 @@ async def final_layer_run(svc: Svc, fid: str, lid: str, body: RunBody):
         raise HTTPException(422, "the animation reference is missing from the Catalogue")
     prompt = f"{p.name}, {compose_sheet(v, name=p.name)}, {BACK_WORDS + '. ' if behind else ''}{CHARACTER_TAIL}"
     if body.from_batch:                                                      # CA5: re-take from a batch on, the batches before it kept
+        from ..boxes import sig
+        if layer.window_sig and layer.window_sig != sig(layer.window or []):  # D165: the kept batches were made in the old window
+            raise HTTPException(422, f"{layer.name}'s window changed since it was performed — re-take the whole layer")
         return await _retake_from(svc, store, f, layer, body, spec.id, prompt, anim_ref)
-    if layer.window is None:                                                  # D163: a final made before it — its window found now
-        layer.window = layer_window(kps, f.frames)
+    if layer.window is None:                                                  # D163: a final made before it — its window found now (D165: or its keys')
+        from ..boxes import layer_windows
+        layer.window = layer_windows(layer, kps, f.frames)
         f = await asyncio.to_thread(store.update_layer, fid, lid, window=layer.window)
     win = layer.window[0] if layer.window else None                           # D163 (E43): the whole figure in a window of its own
     w, h = WINDOW if win else (f.size["w"], f.size["h"])
@@ -513,8 +517,9 @@ async def final_layer_run(svc: Svc, fid: str, lid: str, body: RunBody):
     except ValueError as e:
         raise HTTPException(422, str(e))
     await svc.queue.flush()
+    from ..boxes import sig
     f = await asyncio.to_thread(store.add_job, fid, lid, jobs[0].id, status="queued", error=None, seed=seed, reference_asset_id=ref_id, guide_asset_id=g.id,
-                                batches=[{"k": 0, "job_id": jobs[0].id, "clip_id": None}], frames_done=0)
+                                batches=[{"k": 0, "job_id": jobs[0].id, "clip_id": None}], frames_done=0, window_sig=sig(layer.window or []))
     f = await _retire(svc, store, fid, lid, body.then_owed)
     svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
     return {"job_id": jobs[0].id, "batches": len(plan), "reference_asset_id": ref_id, "placed": placed, "from_behind": behind,
@@ -794,6 +799,116 @@ async def final_owed_run(svc: Svc, fid: str):
         except ValueError as e:
             refused.append({"kind": it["kind"], "layer": it["layer"], "why": str(e)})
     return {"queued": queued, "refused": refused, "owed": await final_owed(svc, fid)}
+
+
+class BoxTrack(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    mode: Literal["auto", "keys", "none"]          # automatic, the author's keys, removed by hand
+    keys: list[dict[str, float]]                   # the keys in force — the author's, or (automatic) the track's offered as keys
+    offer: list[dict[str, float]]                  # the automatic track as keys (what a box added or reset by hand starts from)
+    frames: list[list[float]]                      # per frame [x, y, w, h] in the frame's pixels, as the run will use them; [] none
+    misses: list[int]                              # the frames where it leaves part of the figure (the head) out
+    changed: bool                                  # the layer was performed (its face take made) with other boxes since
+
+
+class LayerBoxes(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    id: str
+    name: str
+    status: str
+    window: BoxTrack
+    head: BoxTrack
+    fit: str                                       # D164: the tracked head against the band — band, small, large, away, out
+
+
+class FinalBoxes(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    final_id: str
+    frames: int
+    w: int
+    h: int
+    window: list[int]                              # D163: the window's own size (Wan's portrait) — its shape
+    layers: list[LayerBoxes]
+
+
+def _boxes(store: FinalStore, f: Final) -> dict:
+    """D165: every character layer's window and head box — keys, the automatic offer, the frames as they will run, the misses, the changes."""
+    from ..boxes import head_misses, head_track, layer_heads, layer_windows, sig, simplify, window_cuts, window_track
+    from ..finals import WINDOW
+    from ..owed import face_fit, head_stats
+    w, h, n = f.size["w"], f.size["h"], f.frames
+    out = []
+    for x in f.layers:
+        if x.kind != "figure" or not x.keypoints:
+            continue
+        kps = store.keypoints(f.id, x.id)
+        wins = x.window if x.window is not None else layer_windows(x, kps, n)
+        heads = layer_heads(x, kps, n, w, h)
+        w_offer, h_offer = simplify(window_track(kps, n), "h", h), simplify(head_track(kps, n, w, h), "side", h)
+        mode = lambda keys: "auto" if keys is None else "keys" if keys else "none"  # noqa: E731
+        shown = next((t for t in x.takes if t.get("id") == x.source), None)
+        performed = x.status == "done" and x.frames_done == n
+        out.append({"id": x.id, "name": x.name, "status": x.status, "fit": face_fit(head_stats(kps, w, h)),
+                    "window": {"mode": mode(x.window_keys), "keys": x.window_keys or (w_offer if x.window_keys is None and wins else []), "offer": w_offer,
+                               "frames": [[a, b, WINDOW[0] / s, WINDOW[1] / s] for a, b, s in wins], "misses": window_cuts(kps, wins),
+                               "changed": bool(performed and x.window_sig and x.window_sig != sig(wins))},
+                    "head": {"mode": mode(x.head_keys), "keys": x.head_keys or (h_offer if x.head_keys is None else []), "offer": h_offer,
+                             "frames": [[a, b, s, s] for a, b, s in heads] if heads else [], "misses": head_misses(kps, heads),
+                             "changed": bool(shown and shown.get("head_sig") and heads and shown["head_sig"] != sig(heads))}})
+    return FinalBoxes(final_id=f.id, frames=n, w=w, h=h, window=list(WINDOW), layers=out).model_dump()
+
+
+@router.get("/finals/{fid}/boxes", response_model=FinalBoxes)
+async def final_boxes(svc: Svc, fid: str):
+    """D165: the character layers' windows (D163) and head boxes (D118) as keyframed boxes — Performance's Windows view."""
+    ws, _, _ = svc.require_project()
+    store = FinalStore(ws)
+    f = await asyncio.to_thread(store.get, fid)
+    if f is None:
+        raise HTTPException(404, "final not found")
+    return await asyncio.to_thread(_boxes, store, f)
+
+
+class BoxesBody(BaseModel):
+    window: Literal["auto", "keys", "none"] | None = None     # None: the window unchanged
+    window_keys: list[dict[str, float]] = Field(default_factory=list)   # {frame, cx, cy, h} in the frame's pixels
+    head: Literal["auto", "keys", "none"] | None = None       # None: the head box unchanged
+    head_keys: list[dict[str, float]] = Field(default_factory=list)     # {frame, cx, cy, side}
+
+
+@router.put("/finals/{fid}/layers/{lid}/boxes", response_model=FinalBoxes)
+async def final_layer_boxes(svc: Svc, fid: str, lid: str, body: BoxesBody):
+    """D165: a character layer's window and head box set by hand (keys), removed (none) or given back to the automatic rule (auto); its
+    windows follow at once. Refused while the layer is being performed (its matte pastes back with the windows it was performed in)."""
+    from ..boxes import clean, layer_windows
+    ws, _, _ = svc.require_project()
+    store = FinalStore(ws)
+    f = await asyncio.to_thread(store.get, fid)
+    layer = next((x for x in f.layers if x.id == lid), None) if f else None
+    if f is None or layer is None:
+        raise HTTPException(404, "final or layer not found")
+    if layer.kind != "figure" or not layer.keypoints:
+        raise HTTPException(422, "a window and a head box belong to a character layer with Stage's keypoints")
+    patch: dict[str, Any] = {}
+    try:
+        if body.window is not None:
+            if layer.status in ("queued", "running"):
+                raise HTTPException(409, f"{layer.name} is being performed — its window changes after the performance (or cancel it)")
+            patch["window_keys"] = None if body.window == "auto" else [] if body.window == "none" else clean(body.window_keys, "h", f.frames)
+            if body.window == "keys" and not patch["window_keys"]:
+                raise ValueError("a window set by hand needs at least one key")
+        if body.head is not None:
+            patch["head_keys"] = None if body.head == "auto" else [] if body.head == "none" else clean(body.head_keys, "side", f.frames)
+            if body.head == "keys" and not patch["head_keys"]:
+                raise ValueError("a head box set by hand needs at least one key")
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    if "window_keys" in patch:
+        kps = await asyncio.to_thread(store.keypoints, fid, lid)
+        patch["window"] = layer_windows(layer.model_copy(update={"window_keys": patch["window_keys"]}), kps, f.frames)
+    f = await asyncio.to_thread(store.update_layer, fid, lid, **patch)
+    svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
+    return await asyncio.to_thread(_boxes, store, f)
 
 
 class MatteBody(BaseModel):

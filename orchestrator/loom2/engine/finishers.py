@@ -1080,6 +1080,7 @@ async def finish_face_take(job: JobRecord, recipe: LayerPass, q: JobQueue, store
     """D118 (AE4c): the face pass's last step — the rendered heads (RGBA, one per frame) pasted back onto the layer's shown frames at their
     boxes (heads.paste_take: the frames, head/, matte/, matte_comp/), the work dir dropped, the take recorded with `extra` (AE4d: the mouth
     by the model) and shown as the layer's source. Called by the head finisher, and by the mouth runner (lipsync.run_mouth)."""
+    from ..boxes import sig as head_sig
     from ..compositions import CompositionStore
     from ..heads import paste_take
     step = recipe.step
@@ -1096,7 +1097,7 @@ async def finish_face_take(job: JobRecord, recipe: LayerPass, q: JobQueue, store
         shutil.rmtree(work, ignore_errors=True)
     await asyncio.to_thread(paste_all)
     take = {"id": step.take_id, "preset": recipe.preset, "strength": recipe.strength, "model_id": recipe.model_id, "job_id": job.id, "frames": n, "seed": job.seed,
-            "made_at": utc_now(), "head": True, "matte": len(mattes) == n, "boxes": [list(boxes[0]), list(boxes[-1])], "ref": plan.get("ref"), "mouth": recipe.mouth,
+            "made_at": utc_now(), "head": True, "matte": len(mattes) == n, "boxes": [list(boxes[0]), list(boxes[-1])], "head_sig": head_sig(boxes), "ref": plan.get("ref"), "mouth": recipe.mouth,
             "lines": [{"layer": w_.get("layer"), "text": w_.get("text"), "f0": w_["f0"], "f1": w_["f1"]} for w_ in plan.get("windows") or []], **extra}
     f = await asyncio.to_thread(store.add_take, f.id, recipe.layer_id, take, True)
     job.result["final_id"], job.result["layer_id"], job.result["take_id"] = f.id, recipe.layer_id, step.take_id

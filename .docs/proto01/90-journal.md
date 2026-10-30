@@ -13951,3 +13951,91 @@ D163's window alone is a face gain: C 0.17 → 0.45, D 0.48 → 0.61, with no st
 - typecheck, build and lint clean;
 - the settings audit (321, 0 problems), the agent docs and the model literals clean;
 - e2e 84/84 alone.
+
+## 2026-10-30 21:14 — D165 recorded: the windows and head boxes become keyframed boxes the author adjusts on Performance's frames
+
+The author asked whether the windows could be adjusted by hand, as boxes on the first frame on a layer of their own, before the
+processing. Their answers: on Performance's frame 1; keyframes, pre-created from the automatic tracking; both the windows and the head
+boxes. That is **D165** (decision log).
+
+**The plan:**
+
+- **Server (`loom2/boxes.py`):**
+  - The keys: `{frame, cx, cy, h}` for a window (480×848's shape), `{frame, cx, cy, side}` for a head box, in the frame's pixels.
+  - The automatic track simplified into keys (a key where the straight line between keys strays from it), and keys interpolated back
+    into per-frame windows and boxes.
+  - Where a window leaves out part of the figure, or a head box the head.
+- **On the layer:** `window_keys` and `head_keys` (None: automatic, []: removed by hand).
+  - `layer.window` comes from the keys, including through Clay's redraws, and the face pass reads the head keys.
+  - The run stamps the window it performed in, and a face take stamps its head boxes, so a later change says so.
+- **Routes:** `GET /finals/{fid}/boxes` (per layer: the keys, the automatic keys, the per-frame boxes as they will run, the warnings, the
+  changes since performed) and `PUT /finals/{fid}/layers/{lid}/boxes`.
+- **The owed list:**
+  - a head box removed by hand: no face work;
+  - one set by hand: owed whatever the band says.
+- **Client:** Performance's *Windows* view.
+  - The final's frames (the plate's clay pass with the figures' pose passes over it) and a scrubber.
+  - Per character, its window and head box: drag to move, a corner to resize (the shape kept), a key set at the frame shown.
+  - The keys as diamonds under the frames, each deleted from its diamond.
+  - Commands with buttons and a right-click menu (rule 3); the explanation behind a ? (rule 11).
+- **Tests:** offline and Vitest; then the e2e and a rig: a layer performed in a window adjusted by hand and a face pass on a head box set
+  by hand, through the app's routes on the E43 copy.
+
+## 2026-10-30 21:39 — D165 built; its rig's bars before the run
+
+**Built:**
+
+- **`loom2/boxes.py`:**
+  - the window and head-box keys;
+  - the automatic track simplified into keys;
+  - the keys interpolated back;
+  - the misses (a window leaving a figure point out, a head box without the head);
+  - the signatures.
+- **On the layer:** `window_keys`, `head_keys` and `window_sig`.
+  - `layer.window` comes from the keys, including through Clay's redraws.
+  - The run stamps its window and refuses a re-take from a batch once the window has changed.
+  - The face pass crops the head keys' boxes and stamps its take (`head_sig`).
+  - A head box removed by hand takes the face work off the owed list; one set by hand puts it on, whatever the band says.
+- **Routes:** `GET /finals/{fid}/boxes`, and `PUT /finals/{fid}/layers/{lid}/boxes` (refused while the layer is being performed).
+- **Client:** Performance's *Windows* view (`anim.view.windows`), described with its screenshot below.
+
+**Checked:** the screenshot on the E43 copy (The seal) shows the view as designed.
+
+- The lit clay picture of the shot with the skeletons, and a dark margin round the frame as far as the boxes reach.
+- Tomas's window and head box; Ines's window reaching below the frame (cut by it, W58).
+- Dragging Tomas's window set a key by hand, and the warning said at once: "the window leaves part of 1.75 m for scale out on 19
+  frames" (his outstretched arm).
+
+**The rig** (`scripts/d165_rig.py`): The seal's 77-frame copy, Tomas, through the app's routes, alone on the GPU.
+
+- **W:** the window's automatic keys made 25 % taller and moved 15 px right, sent as the author's, then `/run`.
+  - **Bars:** the run's window is the keys' (its smallest scale within 1 %); the layer is done, its matte straying on ≤ 5 % of its
+    frames; the performance is stamped with that window; a key changed afterwards shows as changed.
+- **H:** the head box's automatic keys made 10 % larger, then the face pass.
+  - **Bars:** the take is made with the keys' boxes (its signature); its FaceSim is no worse than the take it ran on − 0.05.
+- At the end the layer's boxes are given back to the automatic rule.
+
+## 2026-10-30 21:48 — D165's rig: a window adjusted by hand and a head box set by hand, both used as set, every bar met
+
+`scripts/d165_rig.py` ran alone on the GPU. Results and sheet: `engine/spikes/out/d165`.
+
+| Part | What ran | Result |
+| --- | --- | --- |
+| W | The seal (77 frames) · Tomas, the window 25 % taller and 15 px right on every key, then `/run` | the run's window ×2.77, the keys' ×2.77 (the automatic one was ×3.45); done in 188 s, the matte straying on 0 of 77 frames; stamped, not changed; a key moved afterwards → changed |
+| H | His head box 10 % larger on every key, then the face pass | the take made with the keys' boxes (its signature) in 282 s; FaceSim 0.32 on the take it ran on → **0.73** |
+
+- **W's take scores lower** than E45's window take of the same layer (0.32 against 0.45). The larger window gives Tomas fewer pixels
+  (×2.77 against ×3.45), which shows what the automatic window buys.
+- **The sheet:** the face pass gives a clear, recognisable face, turning his head a little more toward the camera than the take's
+  three-quarter look. That is the choice D165 leaves to the author (both takes are kept).
+- **At the end** the layer's boxes were given back to the automatic rule.
+
+**Checks:**
+
+- offline: 756 passed in the full run; the route snapshot then took the two new routes, 757;
+- Vitest 607 + 3 skipped;
+- typecheck, build and lint clean (61 warnings, as before);
+- the settings audit and the agent docs clean;
+- the e2e: 83 / 84 in the run after the offline suite. The Flow scenario (17 / SY3) failed there and passed alone (20.6 s); it is
+  untouched by D165 and passed in both of D164's runs. The full rerun alone follows.
+- the e2e rerun alone: 84 / 84 (5.9 min).

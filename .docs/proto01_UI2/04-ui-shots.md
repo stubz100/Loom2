@@ -185,6 +185,13 @@ acted on the stage's oldest final (F41).
 The server counts the items (`GET /finals/{fid}/owed`), and the same button sits on Final's foot. Something that is only listed shows as
 *N not queued*: a line longer than 4.8 s, a head seen from behind. Its reasons are in the hover.
 
+**D165** adds a *Windows* view to Performance's centre, beside Player and Compare. It shows the final frame by frame (Clay's lit
+picture with the skeletons) and, per character, its window and head box, which start as keys taken from the automatic tracking.
+
+- Drag a box or its corner to set a key at the frame shown; delete a key from its diamond.
+- *Back to automatic*, *No window* (performed at the frame), *No face work*, *Add a window* / *Add a head box*.
+- A window that leaves part of the figure out, or one changed since the layer was performed, says so.
+
 ## 5. Final: the shot assembled as it was arranged
 
 Final is today's Final level: the EffectCraft composition, mattes, effects and the render. Two things are added: the shot's voice, and lip-sync as a

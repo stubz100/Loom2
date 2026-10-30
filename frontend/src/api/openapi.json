@@ -2614,6 +2614,128 @@
         "title": "BodyRefitted",
         "type": "object"
       },
+      "BoxTrack": {
+        "properties": {
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "frames": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "title": "Frames",
+            "type": "array"
+          },
+          "keys": {
+            "items": {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            "title": "Keys",
+            "type": "array"
+          },
+          "misses": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Misses",
+            "type": "array"
+          },
+          "mode": {
+            "enum": [
+              "auto",
+              "keys",
+              "none"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "offer": {
+            "items": {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            "title": "Offer",
+            "type": "array"
+          }
+        },
+        "required": [
+          "mode",
+          "keys",
+          "offer",
+          "frames",
+          "misses",
+          "changed"
+        ],
+        "title": "BoxTrack",
+        "type": "object"
+      },
+      "BoxesBody": {
+        "properties": {
+          "head": {
+            "anyOf": [
+              {
+                "enum": [
+                  "auto",
+                  "keys",
+                  "none"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Head"
+          },
+          "head_keys": {
+            "items": {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            "title": "Head Keys",
+            "type": "array"
+          },
+          "window": {
+            "anyOf": [
+              {
+                "enum": [
+                  "auto",
+                  "keys",
+                  "none"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window"
+          },
+          "window_keys": {
+            "items": {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            "title": "Window Keys",
+            "type": "array"
+          }
+        },
+        "title": "BoxesBody",
+        "type": "object"
+      },
       "BulkPatch": {
         "properties": {
           "changes": {
@@ -7693,6 +7815,50 @@
         "title": "FinalAndComposition",
         "type": "object"
       },
+      "FinalBoxes": {
+        "properties": {
+          "final_id": {
+            "title": "Final Id",
+            "type": "string"
+          },
+          "frames": {
+            "title": "Frames",
+            "type": "integer"
+          },
+          "h": {
+            "title": "H",
+            "type": "integer"
+          },
+          "layers": {
+            "items": {
+              "$ref": "#/components/schemas/LayerBoxes"
+            },
+            "title": "Layers",
+            "type": "array"
+          },
+          "w": {
+            "title": "W",
+            "type": "integer"
+          },
+          "window": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Window",
+            "type": "array"
+          }
+        },
+        "required": [
+          "final_id",
+          "frames",
+          "w",
+          "h",
+          "window",
+          "layers"
+        ],
+        "title": "FinalBoxes",
+        "type": "object"
+      },
       "FinalCreate": {
         "properties": {
           "camera_id": {
@@ -7842,6 +8008,23 @@
               }
             ],
             "title": "Guide Asset Id"
+          },
+          "head_keys": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": {
+                    "type": "number"
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Head Keys"
           },
           "heal": {
             "default": false,
@@ -8048,6 +8231,34 @@
               }
             ],
             "title": "Window"
+          },
+          "window_keys": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": {
+                    "type": "number"
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window Keys"
+          },
+          "window_sig": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window Sig"
           }
         },
         "required": [
@@ -8080,6 +8291,9 @@
           "window",
           "matte_check",
           "then_owed",
+          "window_keys",
+          "head_keys",
+          "window_sig",
           "matte_retry"
         ],
         "title": "FinalLayer",
@@ -12799,6 +13013,42 @@
           "mask"
         ],
         "title": "KeyBody",
+        "type": "object"
+      },
+      "LayerBoxes": {
+        "properties": {
+          "fit": {
+            "title": "Fit",
+            "type": "string"
+          },
+          "head": {
+            "$ref": "#/components/schemas/BoxTrack"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "window": {
+            "$ref": "#/components/schemas/BoxTrack"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status",
+          "window",
+          "head",
+          "fit"
+        ],
+        "title": "LayerBoxes",
         "type": "object"
       },
       "LayoutReply": {
@@ -29733,6 +29983,49 @@
         ]
       }
     },
+    "/finals/{fid}/boxes": {
+      "get": {
+        "description": "D165: the character layers' windows (D163) and head boxes (D118) as keyframed boxes — Performance's Windows view.",
+        "operationId": "final_boxes_finals__fid__boxes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinalBoxes"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Final Boxes",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
     "/finals/{fid}/composition": {
       "get": {
         "operationId": "composition_get_finals__fid__composition_get",
@@ -30639,6 +30932,68 @@
           }
         },
         "summary": "Final Plate Method",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
+    "/finals/{fid}/layers/{lid}/boxes": {
+      "put": {
+        "description": "D165: a character layer's window and head box set by hand (keys), removed (none) or given back to the automatic rule (auto); its\nwindows follow at once. Refused while the layer is being performed (its matte pastes back with the windows it was performed in).",
+        "operationId": "final_layer_boxes_finals__fid__layers__lid__boxes_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "lid",
+            "required": true,
+            "schema": {
+              "title": "Lid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BoxesBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinalBoxes"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Final Layer Boxes",
         "tags": [
           "finals"
         ]

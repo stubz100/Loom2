@@ -18,6 +18,7 @@ import { fieldGlyph } from '../../frame/presetGlyphs'
 import { handleKeysAt, markUsed, runCommand } from '../../frame/commands'
 import { inField, primaryInField } from '../../frame/fieldKeys'
 import { showMenu } from '../../frame/ContextMenu'
+import { WindowsView } from './WindowsView'
 import type { SuiteParts } from '../../frame/suiteParts'
 import { byOrder, shortName } from '../../store/modelCaps'
 import { useSession } from '../../store/session'
@@ -375,10 +376,10 @@ function Strip() {
   return (
     <>
       
-      <CommandRow ids={['anim.view.player', 'anim.view.compare']} active={`anim.view.${view}`} />
+      <CommandRow ids={['anim.view.player', 'anim.view.compare', 'anim.view.windows']} active={`anim.view.${view}`} />
       <CommandButton id="anim.view.filmstrip" active={filmTrack} />
       <span className="spacer" />
-      {clip && <span className="counter" style={{ fontFamily: 'var(--mono)' }}>frame {frame} / {clip.frames - 1} · {fmtTime(frame, clip.fps)} · {clip.frames} f · {clip.w}×{clip.h} @ {clip.fps} fps</span>}
+      {clip && view !== 'windows' && <span className="counter" style={{ fontFamily: 'var(--mono)' }}>frame {frame} / {clip.frames - 1} · {fmtTime(frame, clip.fps)} · {clip.frames} f · {clip.w}×{clip.h} @ {clip.fps} fps</span>}
       <span className="spacer" />
       <label>speed <select value={String(speed)} onChange={(e) => useAnimate.setState({ speed: Number(e.target.value) })}>{[-4, -2, -1, 0.25, 0.5, 1, 1.5, 2, 4].map((v) => <option key={v} value={String(v)}>{v < 0 ? `◀ ${-v}×` : `${v}×`}</option>)}</select></label>
       <CommandButton id="anim.loop" active={loop} />
@@ -531,6 +532,7 @@ function Stage() {
   useEffect(() => { const q = new URLSearchParams(location.search).get('clip'); if (q && clips.some((c) => c.id === q) && an().current !== q) an().select(q) }, [clips])
   usePlayback()
   if (!project?.open) return <div className="placeholder"><div><h2>Animate</h2>open or create a project to begin</div></div>
+  if (view === 'windows') return <div className="anim-stage"><WindowsView /></div>          // D165: the final's frames, not a clip
   return (
     <div className="anim-stage">
       <div className="anim-view" onContextMenu={(e) => { if (clip) showMenu(e, playerMenu()) }}>

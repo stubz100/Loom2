@@ -155,8 +155,10 @@ def layer_owed(ws: "Workspace", q: "JobQueue | None", store: "FinalStore", f: "F
     from .heads import windows
     if layer.kind != "figure" or not layer.keypoints or _busy(q, layer, skip):
         return None
+    if layer.head_keys == []:                                             # D165: its head box removed by hand — no face work
+        return None
     done = {t.get("preset") for t in current_takes(layer)}
-    fit = face_fit(head_stats(store.keypoints(f.id, layer.id), f.size["w"], f.size["h"]))
+    fit = "band" if layer.head_keys else face_fit(head_stats(store.keypoints(f.id, layer.id), f.size["w"], f.size["h"]))   # D165: set by hand, asked for
     after = layer.status != "done"
     item: dict[str, Any] = {"layer": layer.id, "name": layer.name, "after": after, "queue": True, "why": None, "seconds": None}
     if voiced or timing:                                                  # the character speaks in the shot: lip-sync makes its head (no face pass first)

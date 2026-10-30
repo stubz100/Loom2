@@ -1,6 +1,6 @@
 // Animate commands (11 §9, 07 §3c, D32): one definition each for the transport buttons, the strip, the inspector verbs,
 // the right-click menus and the keys. Keys are accelerators for buttons that exist anyway.
-import { Workflow, ArrowLeftRight, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, Columns2, Download, Eye, Film, Layers, Pause, Play, Repeat, RotateCcw, Scissors, Shuffle, SkipBack, SkipForward, Sparkles, SquareX, StepBack, StepForward, Trash, X } from 'lucide-react'
+import { Workflow, ArrowLeftRight, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, Columns2, Diamond, Download, Eye, Film, Frame, Layers, Pause, PersonStanding, Play, Repeat, RotateCcw, Scissors, Shuffle, SkipBack, SkipForward, Sparkles, SquarePlus, SquareX, StepBack, StepForward, Trash, X } from 'lucide-react'
 import { command, isEnabled, registerCommands, runCommand, sep, setReach, type Command, type MenuItem } from '../../frame/commands'
 import { http, unwrap, type ApiError } from '../../api/client'
 import { askText, useSession } from '../../store/session'
@@ -10,6 +10,11 @@ import { useAnimRoute } from './routeStore'
 import { useMakeFor } from '../../store/origin'
 import { useStory } from '../story/storyStore'
 import { neighbour, transport, TRANSPORT_IDS } from './transport'
+import { keyAt, trackOf, useWindows } from './windowsStore'
+
+const wn = () => useWindows.getState()
+/** D165: the Windows view's selected box — its layer's boxes and the kind. */
+const winSel = () => { const { sel, data } = wn(); const l = sel ? data?.layers.find((x) => x.id === sel.lid) : null; return sel && l ? { l, kind: sel.kind } : null }
 import { ArrowDown as ArrowDownIcon, ArrowUp as ArrowUpIcon, Circle as EllipseIcon, Crosshair as SoloIcon, Diamond as KeyIcon, EyeOff as HideIcon, Lock as LockIcon, Redo2 as RedoIcon,
   Square as RectIcon, Undo2 as UndoIcon, ArrowLeftToLine as TrimInIcon, ArrowRightToLine as TrimOutIcon, Columns2 as BeforeIcon, PenTool as PenIcon,
   Scan as FromLayerIcon, MousePointerClick as ObjectIcon, PaintBucket as FillIcon, Route as TrackIcon, Wand2 as PassIcon } from 'lucide-react'
@@ -120,6 +125,20 @@ registerCommands([
   { id: 'anim.view.player', scope: 'animate', label: 'Player view', icon: Film, placement: ['strip'], run: () => an().setView('player') },
   { id: 'anim.view.filmstrip', scope: 'animate', label: 'Frames track (thumbnails on the timeline)', icon: Layers, placement: ['strip'], run: () => useAnimate.setState({ filmTrack: !an().filmTrack }) },   // D99 (UX0 #14)
   { id: 'anim.view.compare', scope: 'animate', label: 'Compare view', icon: Columns2, keys: 'C', placement: ['strip', 'context'], when: hasClip, run: () => an().setView(an().view === 'compare' ? 'player' : 'compare') },
+  // D165: the Windows view — each character's window and head box, keyframed by hand before the GPU time is spent
+  { id: 'anim.view.windows', scope: 'animate', label: "Windows view (each character's window and head box, by hand)", icon: Frame, placement: ['strip'], when: () => useAnimRoute.getState().route === 'final',
+    run: () => an().setView(an().view === 'windows' ? 'player' : 'windows') },
+  { id: 'anim.windows.key', scope: 'animate', label: 'Key the box here', icon: Diamond, placement: ['panel', 'context'], when: () => !!winSel(), run: () => void wn().keyHere(),
+    hint: 'the box as it is at this frame becomes a key (the automatic keys become yours first)' },
+  { id: 'anim.windows.deleteKey', scope: 'animate', label: 'Delete the key here', icon: X, placement: ['panel', 'context'], when: () => { const s = winSel(); return !!s && keyAt(s.l, s.kind, wn().frame) }, run: () => void wn().deleteKey() },
+  { id: 'anim.windows.auto', scope: 'animate', label: 'Back to automatic', icon: RotateCcw, placement: ['panel', 'context'], when: () => { const s = winSel(); return !!s && trackOf(s.l, s.kind).mode !== 'auto' },
+    run: () => { const s = winSel(); if (s) void wn().setMode({ lid: s.l.id, kind: s.kind }, 'auto') } },
+  { id: 'anim.windows.remove', scope: 'animate', label: 'Remove the box', icon: SquareX, placement: ['panel', 'context'], when: () => { const s = winSel(); return !!s && trackOf(s.l, s.kind).mode !== 'none' },
+    run: () => { const s = winSel(); if (s) void wn().setMode({ lid: s.l.id, kind: s.kind }, 'none') } },
+  { id: 'anim.windows.add', scope: 'animate', label: 'Add the box', icon: SquarePlus, placement: ['panel', 'context'],
+    when: () => { const s = winSel(); return !!s && !trackOf(s.l, s.kind).frames.length && trackOf(s.l, s.kind).offer.length > 0 },
+    run: () => { const s = winSel(); if (s) void wn().add({ lid: s.l.id, kind: s.kind }) } },
+  { id: 'anim.windows.skeletons', scope: 'animate', label: 'Skeletons over the frame', icon: PersonStanding, placement: ['panel'], run: () => useWindows.setState({ skeletons: !wn().skeletons }) },
   // frames
   { id: 'anim.extractFrame', scope: 'animate', label: 'Extract frame to the Bin', icon: Download, keys: 'Alt+F', placement: ['inspector', 'context', 'toolbar'], when: hasClip, run: () => void an().extract([an().frame]) },
   { id: 'anim.extractRange', scope: 'animate', label: 'Extract range (every k-th frame between in and out)', icon: Download, keys: 'Alt+Shift+F', placement: ['inspector', 'context'], when: hasClip, run: () => void an().extractRange() },

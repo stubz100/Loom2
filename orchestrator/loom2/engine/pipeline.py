@@ -712,7 +712,7 @@ async def prepare_face_pass(job: JobRecord, recipe: LayerPass, q: JobQueue) -> d
     from ..compositions import CompositionStore
     from ..finals import CARRY, FinalStore, plan_batches
     from ..fsio import atomic_write_json, read_json
-    from ..heads import CROP, box_crop, head_boxes, slice_audio, windows
+    from ..heads import CROP, box_crop, slice_audio, windows
     from ..stages import encode_guide
     step = recipe.step
     if step is None:
@@ -740,7 +740,10 @@ async def prepare_face_pass(job: JobRecord, recipe: LayerPass, q: JobQueue) -> d
                 raise ValueError(f"{layer.name} has {len(base)} frames, the final {f.frames} — make it first")
             matte_dir = store.matte_dir(f.id, layer.id)
             w, h = f.size["w"], f.size["h"]
-            boxes = head_boxes(kps, f.frames, w, h)
+            from ..boxes import layer_heads
+            boxes = layer_heads(layer, kps, f.frames, w, h)                 # D165: the author's head keys, or the tracked boxes
+            if boxes is None:
+                raise ValueError(f"{layer.name}'s head box was removed by hand — add it back in Performance's Windows view")
             placed = root / layer.id / "reference.png"
             ref_src = placed if placed.is_file() else base[0]
             ref_box = boxes[0]

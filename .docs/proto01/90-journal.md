@@ -13541,3 +13541,49 @@ Build's run buttons stay for a make with the story model.
 
 **Checks:** offline 742 passed (the API contract re-exported: the references); Vitest 600 + 3 skipped; typecheck, build and lint clean
 (61 warnings, as before); the settings audit clean; e2e 84/84 (alone, 5.9 min).
+
+## 2026-10-30 17:43 — The walkthrough on the new UI ("The Last Ferry" again, every shot through Clay → Performance → Final; proto01_UI2 12)
+
+The author asked for the 2026-10-28 walkthrough to be run again on the new UI, without skipping the clay layer. "The Last Ferry" was built from
+an empty project on the shell at `f696d2b`:
+
+- the project `F:/loom2-projects/ux-walk2-last-ferry`, with its app state in `F:/loom2-projects/_ux-walk2-state`;
+- its own orchestrator on 8766 and `vite preview` on 1420, driven in a visible Edge over CDP;
+- the real engine, one job at a time (15:10–17:40).
+
+What was built:
+
+- **World:** the Look; Ines and Tomas to *Ready for Clay* (Sheet, casting, A-pose front and back picked in Build, bodies fitted, Kokoro
+  voices); The letter with a Pixal3D model; Harbour pier and Town street with built, filled sets.
+- **Shots:**
+  - the Flow, made by hand (a Choice, an Action, two voiced lines);
+  - the pier scene as three shots of one scene (coverage), and Departure and Stay in scenes of their own;
+  - Clay: clip blocks from the starter library, paths, numeric cameras, the letter parented to Ines;
+  - every shot's final split, performed (Wan Animate), matted, assembled, composed, rendered and marked final.
+- **Episode, Edit and the Bin:**
+  - Episode: *Assemble from the Flow* (the *Board the ferry* route), *Export for Resolve* and the movie;
+  - Edit: a text layer saved into the pier's bin;
+  - the Bin.
+
+86 jobs, one of them failed, about 63 min of job time. Lip-sync was not run: it is experimental at about 16 min a line, and Tomas's line is over
+its 4.8 s limit.
+
+65 findings, W1–W65, are in `.docs/proto01_UI2/12-walkthrough-2.md`, with the timings and the first walkthrough's findings as they are now.
+
+**What stood out:**
+
+- **W43:** the first final assembled clay mannequins. The set builder's picture camera aims 1 m ahead and `depthRange()` uses the distance to the
+  target (`passes.ts:35`, `engine.ts:1197`): near 0.6 m, far 3 m, so every depth pass was black and the comp mattes were empty. Moving the
+  target 10 m out fixed the shot.
+- **W40:** a final takes the stage's range, not the shot's (`finalShot.ts:92`, `:140`, `:590`). It was worked around by setting the stage's
+  range by hand, which stales the scene's other shots (W56).
+- **W46, W58:** Wan Animate fails on a 60 px figure (a giant ghost face as background, an inverted matte) and on a figure cut by the frame
+  (The seal's over-the-shoulder Ines as a giant hand and eye). The cards read "done".
+- **W21, W65:** the set pictures came out letterboxed, and the bars are projected into the plates. The pier's Fill gave four panels the same
+  picture (one seed).
+- **W9:** D162's A-pose through Make (FLUX.2 dev, 16:9) cut Ines at the thighs, so the body fit failed. Build's Klein make gave whole figures.
+- **W23, W2:** the variables and the synopsis have no place in the new shell.
+
+Fixed since the first walkthrough: F3, F27, F37, F39, F40, F41, F42; the For-trip findings are gone with the old shell.
+
+Nothing was fixed in this run; the author has not asked yet. The full report with screenshots went to the author as an artifact.

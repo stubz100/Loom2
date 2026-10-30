@@ -42,6 +42,7 @@ The author, 2026-10-28, after the walkthrough:
 | 09 | [The answers](09-answers.md) | **the author's answers (D157)** and what they change: no Expand and no LoRA; lights with templates and an editor; the synopsis as a note |
 | 10 | [Trying the new UI](10-trying-the-new-ui.md) | **the author's click-through** of the built UI (U0–U8): what to try in each layer, the checks, what is not there yet |
 | 11 | [Retiring the Catalogue](11-retiring-the-catalogue.md) | **a study** for the author's answers: what depends on the Catalogue, what the Bin lacks, R1–R10 (what is not robust in it), waves B0–B4 and Q1–Q6 |
+| 12 | [The walkthrough on the new UI](12-walkthrough-2.md) | "The Last Ferry" built again on the new shell, every shot through Clay → Performance → Final; the register W1–W65, the timings, the first walkthrough's findings now |
 
 `img/ui-*.jpg` are wireframes, rendered from `mock/ui2-mock.html` by `mock/render.cjs` (a static mock, not the app). Their pictures are the walkthrough's
 own (`img/src/`); their numbers (scores, times, counts) are examples. **Dashed orange marks what is new.**

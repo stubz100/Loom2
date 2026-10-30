@@ -334,6 +334,7 @@ class StoryCaps(Open):
     seconds: float | None = None
     presets: dict[str, StoryPresetCaps]
     coverage: CoverageCaps
+    references: dict[str, dict[str, str]] = {}       # D162: class → side → the reference sentence (an A-pose, a prop's view, a set picture)
 
 
 class MeshCaps(Open):

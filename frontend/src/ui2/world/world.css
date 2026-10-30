@@ -79,3 +79,6 @@ button.w-ready-item { background: transparent; border: 1px dashed var(--line2); 
 .anim-ref-cand-verbs button { min-height: 0; padding: 1px 6px; font-size: 11px; background: color-mix(in srgb, var(--bg1) 85%, transparent); }
 .w-build-body { margin-top: 12px; }
 .w-make-sheet { margin-bottom: 4px; }
+.w-framing { display: flex; flex-direction: column; gap: 6px; min-width: 0; }   /* D162: the chips, then the framing words */
+.w-framing textarea { resize: vertical; font: inherit; width: 100%; box-sizing: border-box; }
+.w-chips.left button.active { border-color: var(--accent); color: var(--fg); }

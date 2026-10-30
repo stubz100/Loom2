@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { ProfileVersion } from '../../api/types'
 import { readiness } from './readiness'
 import { passes, placeOfHash } from './worldStore'
+import { activeFraming, FRAMINGS, refTree, to169 } from './make'
 
 const v = (extra: Partial<ProfileVersion> = {}): ProfileVersion => ({ id: 'v1', label: 'v1', state: 'open', group_id: 'grp_r', candidates_group_id: null, hero_asset_id: null,
   appearance: '', outfit: '', colours: [], marks: '', body: null, anim_ref_asset_id: null, anim_ref_back_asset_id: null, body_fit_from: null, model_asset_id: null, height_m: null,
@@ -57,3 +58,23 @@ describe('U3e: the Look\'s words', () => {
     expect(withWords('a', '  ')).toBe('a')
   })
 })
+
+describe('D162: the framing row', () => {
+  const refs = { character: { front: 'Full-body character reference, facing the camera', back: 'Full-body character reference, seen from behind' }, place: { front: 'The place itself, empty' } }
+  it('knows which framing the words are — a class framing, a reference framing, or words of the author', () => {
+    expect(activeFraming('character', FRAMINGS.character[0].tree.composition!, refs)).toEqual({ id: 'portrait', ref: null })
+    expect(activeFraming('character', 'Full-body character reference, seen from behind', refs)?.ref).toMatchObject({ id: 'apose_back', side: 'back' })
+    expect(activeFraming('character', 'three-quarter view from below', refs)).toBeNull()                 // the author's own words
+    expect(activeFraming('character', '  ', refs)).toBeNull()
+    expect(activeFraming('prop', 'The object alone', {})).toBeNull()                                     // a build without the sentence
+  })
+  it('writes a reference framing as its sentence and its camera, and makes the frame 16:9', () => {
+    expect(refTree('character', 'A-pose words', { angle: 'low' })).toEqual({ composition: 'A-pose words', camera: { angle: 'low', distance: 'full shot' } })
+    expect(refTree('place', 'empty place', {}).camera).toEqual({ distance: 'wide shot', angle: 'eye level' })
+    const [w, h] = to169(1024, 1024)
+    expect(w % 16 + h % 16).toBe(0)
+    expect(Math.abs(w / h - 16 / 9)).toBeLessThan(0.02)
+    expect(Math.abs(w * h - 1024 * 1024) / (1024 * 1024)).toBeLessThan(0.03)                             // about the same pixels
+  })
+})
+

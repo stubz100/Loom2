@@ -22,6 +22,38 @@ export const FRAMINGS: Record<ProfileClass, { id: string; label: string; tree: P
   ],
 }
 
+/** D162: a class's reference framing — the words its reference is made with (the server's sentence, `/capabilities.story.references`):
+ *  a character's A-pose front and back, a prop's reference view, a place's set picture. With one on, the run is that reference's make. */
+export interface RefFraming { id: string; label: string; side: 'front' | 'back' }
+export const REF_FRAMINGS: Record<ProfileClass, RefFraming[]> = {
+  character: [{ id: 'apose_front', label: 'A-pose front', side: 'front' }, { id: 'apose_back', label: 'A-pose back', side: 'back' }],
+  prop: [{ id: 'reference', label: 'reference view', side: 'front' }],
+  place: [{ id: 'set_picture', label: 'set picture', side: 'front' }],
+}
+export type References = Partial<Record<string, Partial<Record<'front' | 'back', string>>>>
+
+/** The tree a reference framing writes: its sentence as the framing words, the camera's distance (a place: wide, at eye level). */
+export function refTree(cls: ProfileClass, sentence: string, camera: Tree['camera']): Partial<Tree> {
+  return { composition: sentence, camera: { ...camera, ...(cls === 'place' ? { distance: 'wide shot', angle: 'eye level' } : { distance: 'full shot' }) } }
+}
+
+/** The framing the words are now: a class framing or a reference framing whose words they are, else none (the author's own words). */
+export function activeFraming(cls: ProfileClass, words: string, refs: References | undefined): { id: string; ref: RefFraming | null } | null {
+  const w = words.trim()
+  if (!w) return null
+  const r = REF_FRAMINGS[cls].find((f) => refs?.[cls]?.[f.side]?.trim() === w)
+  if (r) return { id: r.id, ref: r }
+  const f = FRAMINGS[cls].find((x) => (x.tree.composition ?? '').trim() === w)
+  return f ? { id: f.id, ref: null } : null
+}
+
+/** The size at 16:9 with about the same pixels (a reference is 16:9), each side a multiple of 16. */
+export function to169(width: number, height: number): [number, number] {
+  const snap = (x: number) => Math.max(64, Math.round(x / 16) * 16)
+  const w = snap(Math.sqrt((width * height * 16) / 9))
+  return [w, snap((w * 9) / 16)]
+}
+
 /** The context key of an entity version's Make panel. */
 export const makeKey = (cls: string, pid: string, vid: string): string => `world/${cls}/${pid}/${vid}`
 

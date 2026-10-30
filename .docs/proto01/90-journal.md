@@ -13504,3 +13504,40 @@ Asked, the author chose *Make + Build* (D161).
 
 **Checks:** offline 744 passed (the API contract re-exported: the pick route's words); Vitest 598 + 3 skipped; typecheck, build and lint
 clean (61 warnings, as before); e2e 84/84 (alone, 6.1 min).
+
+## 2026-10-30 08:57 — D162: Make's framing row takes the A-pose back, and its words are the author's
+
+The author, after D161: Make's framing had three options and no field of its own. They asked for the A-pose front and back back, without
+queueing a job, and for a free-text field.
+
+**The framing row** (`ui2/world/WorldMake.tsx`, `make.ts`):
+
+- The class's framings, then its reference framings:
+  - a character's *A-pose front* and *A-pose back*;
+  - a prop's *reference view*;
+  - a place's *set picture*.
+- Then a field with the framing words the picture is made with (`tree.composition`). A chip fills it, and the author may write their own.
+- The chip whose words are in the field shows as pressed; words of the author's own press none.
+- A chip queues nothing.
+
+**A reference framing:**
+
+- It writes the server's own reference sentence. That sentence is `/capabilities.story.references`, the words Build's makes send
+  (`anim_ref_sentence`).
+- It sets the camera's distance (a place: wide, at eye level).
+- It makes the frame 16:9 at about the same pixels when it is not.
+- With one on, the foot reads *Make ‹entity›'s A-pose front ▶*. The run is that reference's make: the panel's model and settings, the
+  pictures landing as the version's candidates, which Build lists to pick from (D161). Nothing is picked for the author.
+
+Build's run buttons stay for a make with the story model.
+
+**Tests:**
+
+- Vitest (2): which framing the words are, a reference framing's tree, and 16:9.
+- The World's Make scenario, with the mouse:
+  - the A-pose chip fills the words and queues nothing;
+  - words of the author's own press no chip and turn the foot back to *Give … a look*;
+  - with *A-pose front* on, the run's picture lands in Build's strip, with no slot filled.
+
+**Checks:** offline 742 passed (the API contract re-exported: the references); Vitest 600 + 3 skipped; typecheck, build and lint clean
+(61 warnings, as before); the settings audit clean; e2e 84/84 (alone, 5.9 min).

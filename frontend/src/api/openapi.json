@@ -22082,6 +22082,17 @@
             "title": "Presets",
             "type": "object"
           },
+          "references": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "default": {},
+            "title": "References",
+            "type": "object"
+          },
           "seconds": {
             "anyOf": [
               {

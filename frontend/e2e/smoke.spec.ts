@@ -3567,7 +3567,19 @@ test('World\'s Make (U3b, D157 · proto01_UI2 03 §3): the panel is the entity\'
   await make.locator('#gen-sec-prompt .segmented button', { hasText: 'JSON' }).click()
   await expect(make.locator('textarea[aria-label="prompt JSON"]')).toHaveValue(/silver hair in a bun/)
   await make.locator('#gen-sec-prompt .segmented button', { hasText: 'Tree' }).click()
+  // D162: the framing row — a chip fills the framing words and queues nothing; the A-pose makes the run an A-pose; words of the author's own
+  const framing = make.locator('textarea[aria-label="framing words"]')
+  const jobsNow = (await api<{ items: unknown[] }>('GET', '/jobs')).items.length
+  await make.locator('.w-framing button', { hasText: 'A-pose front' }).click()
+  await expect(framing).toHaveValue(/neutral A-pose/)
+  await expect(make.locator('.w-framing button', { hasText: 'A-pose front' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(make.locator('.w-foot button.primary')).toContainText(`Make ${name}'s A-pose front ▶`)
+  expect((await api<{ items: unknown[] }>('GET', '/jobs')).items.length).toBe(jobsNow)                     // nothing queued by the chip
+  await framing.fill('three-quarter view from below')
+  await expect(make.locator('.w-framing button[aria-pressed="true"]')).toHaveCount(0)                      // the author's own framing
+  await expect(make.locator('.w-foot button.primary')).toContainText(`Give ${name} a look`)
   await make.locator('button', { hasText: 'full body' }).click()
+  await expect(framing).toHaveValue('full body, head to feet in frame')
   await make.locator('textarea[aria-label="this picture only"]').fill('a grey wool coat, wind in her hair')
   while ((await make.locator('#gen-sec-size b[aria-label="count"]').innerText()) !== '1') await make.locator('#gen-sec-size button[aria-label="fewer"]').click()
   const before = (await api<{ items: unknown[] }>('GET', '/jobs')).items.length
@@ -3579,6 +3591,14 @@ test('World\'s Make (U3b, D157 · proto01_UI2 03 §3): the panel is the entity\'
   await expect(page.locator('.w-tile')).toHaveCount(1)
   const job = (await api<{ items: { origin: { surface: string; ref: string } | null; recipe: { prompt_json?: unknown; prompt_text?: string } }[] }>('GET', '/jobs')).items.find((j) => j.origin?.surface === 'cast' && j.origin.ref === prof.id)!
   expect(JSON.stringify(job.recipe)).toContain('a grey wool coat, wind in her hair')                     // this picture's words went in
+  // D162: with A-pose front on, the run is the A-pose's make: its picture lands in Build's candidates, nothing picked
+  await page.locator('.w-chips button', { hasText: 'all' }).click()
+  await make.locator('.w-framing button', { hasText: 'A-pose front' }).click()
+  await make.locator('.w-foot button.primary', { hasText: `Make ${name}'s A-pose front` }).click()
+  await expect.poll(async () => (await api<{ items: { status: string; origin: { surface: string; ref: string } | null }[] }>('GET', '/jobs')).items.filter((j) => j.origin?.surface === 'anim_ref' && j.origin.ref === prof.id && j.status === 'done').length, { timeout: 60_000 }).toBe(1)
+  await page.locator('.w-mode button', { hasText: 'Build' }).click()
+  await expect(page.locator('[data-testid="anim-ref-candidates"] .anim-ref-cand')).toHaveCount(1)
+  expect((await api<{ versions: { anim_ref_asset_id: string | null }[] }>('GET', `/story/profiles/${prof.id}`)).versions[0].anim_ref_asset_id).toBeNull()
 })
 
 test('World\'s Edit (U3c, D157 · proto01_UI2 03 §4): the selected creation opens in the editor inside World; Save as a reference puts the edited picture into the bin', async ({ page }) => {

@@ -162,22 +162,27 @@ def _stage(svc: Services, variant: str) -> dict:
 def _story(svc: Services, variant: str) -> dict:
     """Story (17 §3b, D85): the model Expand runs on in this build (D78's clay model: it takes the hero as a reference), its health and warm
     seconds — the Cast tab says the cost before the jobs are queued — the presets with their cell counts and the coverage vocabulary."""
-    from .story import ANGLES, EXPRESSIONS, PRESETS, SHOTS, expand_spec, preset_cells
+    from .story import ANGLES, EXPRESSIONS, PRESETS, SHOTS, anim_ref_sentence, expand_spec, preset_cells
     presets = {k: {"label": v["label"], "hint": v["hint"], "cells": len(preset_cells(k)),
                    "plan": [{"shot": c["shot"], "angle": c["angle"], "expression": c["expression"]} for c in preset_cells(k) if c["take"] == 1]}   # D115: the cells, once each
                for k, v in PRESETS.items()}
     coverage = {"shots": [s for s, _ in SHOTS], "angles": [a for a, _ in ANGLES], "expressions": EXPRESSIONS,
                 "phrases": {"shots": dict(SHOTS), "angles": dict(ANGLES)}}                                              # D115: the words a cell puts in the prompt
+    # D162: the reference sentences an animation reference (a prop's reference, a place's set picture) is made with — Build's makes and
+    # Make's reference framings send the same words
+    references = {"character": {"front": anim_ref_sentence("character", "front"), "back": anim_ref_sentence("character", "back")},
+                  "prop": {"front": anim_ref_sentence("prop", "front")}, "place": {"front": anim_ref_sentence("place", "front")}}
     spec = expand_spec(variant)
     if spec is None:
-        return {"model_id": None, "label": None, "short": None, "health": "unavailable", "missing": [], "seconds": None, "presets": presets, "coverage": coverage}
+        return {"model_id": None, "label": None, "short": None, "health": "unavailable", "missing": [], "seconds": None, "presets": presets, "coverage": coverage,
+                "references": references}
     needs = spec.weights()
     healths = {x: svc.roster.resolve(x).health for x in needs}
     missing = [ROSTER_BY_ID[x].name for x, hh in healths.items() if hh in ("missing", "retired")]
     return {"model_id": spec.id, "label": spec.label, "short": spec.short or spec.label,
             "health": "missing" if missing else ("verified" if all(h == "verified" for h in healths.values()) else "present"), "missing": missing,
             "seconds": spec.recipes.stage_seconds if spec.recipes.stage_seconds is not None else spec.estimates.base_seconds,
-            "presets": presets, "coverage": coverage}
+            "presets": presets, "coverage": coverage, "references": references}
 
 
 def _train(svc: Services, variant: str) -> dict:

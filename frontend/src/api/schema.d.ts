@@ -13759,6 +13759,15 @@ export interface components {
             presets: {
                 [key: string]: components["schemas"]["StoryPresetCaps"];
             };
+            /**
+             * References
+             * @default {}
+             */
+            references?: {
+                [key: string]: {
+                    [key: string]: string;
+                };
+            };
             /** Seconds */
             seconds?: number | null;
             /** Short */

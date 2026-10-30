@@ -7882,6 +7882,18 @@
             "title": "Kind",
             "type": "string"
           },
+          "matte_check": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matte Check"
+          },
           "method": {
             "enum": [
               "projected",
@@ -8009,6 +8021,23 @@
               }
             ],
             "title": "Version"
+          },
+          "window": {
+            "anyOf": [
+              {
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window"
           }
         },
         "required": [
@@ -8037,7 +8066,9 @@
           "takes",
           "source",
           "body",
-          "body_hashes"
+          "body_hashes",
+          "window",
+          "matte_check"
         ],
         "title": "FinalLayer",
         "type": "object"
@@ -8140,6 +8171,18 @@
               }
             ],
             "title": "Version"
+          },
+          "wholebody": {
+            "anyOf": [
+              {
+                "items": {},
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wholebody"
           }
         },
         "required": [
@@ -15315,6 +15358,18 @@
             },
             "title": "Passes",
             "type": "object"
+          },
+          "wholebody": {
+            "anyOf": [
+              {
+                "items": {},
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wholebody"
           }
         },
         "required": [
@@ -18685,6 +18740,17 @@
           "reference_asset_id": {
             "title": "Reference Asset Id",
             "type": "string"
+          },
+          "window": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window"
           }
         },
         "required": [

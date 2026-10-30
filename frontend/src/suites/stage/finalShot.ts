@@ -125,7 +125,7 @@ export async function makeFinal(opts: MakeOptions): Promise<Final> {
   const actors = plan.layers.filter((l) => l.object_id).map((l) => l.object_id!)
   const todo = plan.layers.flatMap((l) => passesOf(l).map((p) => ({ l, p })))
   const uploaded = new Set<string>()
-  const layers: Record<string, { passes: Record<string, string[]>; keypoints?: unknown[] }> = {}
+  const layers: Record<string, { passes: Record<string, string[]>; keypoints?: unknown[]; wholebody?: unknown[] }> = {}
   let done = 0
   const total = todo.length * plan.times.length
   for (const { l, p } of todo) {
@@ -134,18 +134,19 @@ export async function makeFinal(opts: MakeOptions): Promise<Final> {
     done += plan.times.length
     const entry = layers[l.id] ??= { passes: {} }
     entry.passes[p.name] = out.shas
-    if (l.kind === 'figure' && p.kind === 'pose') entry.keypoints = out.keypoints
+    if (l.kind === 'figure' && p.kind === 'pose') { entry.keypoints = out.keypoints; entry.wholebody = out.wholebody }   // D163: the window's guide is drawn from them
   }
   return unwrap(http.POST('/finals', { body: {
     name: opts.name, stage_id: doc.id, camera_id: cam.id, stage_revision: doc.revision, range: { start: doc.range.start, end: doc.range.end }, rate: opts.rate,
     size: { w, h }, frames: plan.times.length, shot_id: opts.shotId ?? null, shot_version: opts.shotId ? opts.shotVersion ?? null : null,
     layers: plan.layers.map((l) => ({ id: l.id, kind: l.kind, name: l.name, object_id: l.object_id, profile_id: l.profile_id, version: l.version, method: l.kind === 'plate' ? plate : null,
-      passes: layers[l.id].passes, keypoints: (layers[l.id].keypoints ?? null) as never, ...(l.kind === 'figure' ? bodyStamp(doc, l.object_id!, plan.times) : {}) })) } }))
+      passes: layers[l.id].passes, keypoints: (layers[l.id].keypoints ?? null) as never, wholebody: (layers[l.id].wholebody ?? null) as never,
+      ...(l.kind === 'figure' ? bodyStamp(doc, l.object_id!, plan.times) : {}) })) } }))
 }
 
 /** One pass of a layer over the final's frames — rendered with only `keep`'s actors, each frame uploaded once (by its hash). */
 async function renderPass(render: SequenceRenderer, sampled: { cam: NonNullable<StageDoc['cameras'][number]>; doc: StageDoc }[], keep: string[], w: number, h: number,
-                          kind: 'depth' | 'clay' | 'pose' | 'beauty', doc: StageDoc, uploaded: Set<string>, onProgress?: (n: number) => void): Promise<{ shas: string[]; keypoints: unknown[] }> {
+                          kind: 'depth' | 'clay' | 'pose' | 'beauty', doc: StageDoc, uploaded: Set<string>, onProgress?: (n: number) => void): Promise<{ shas: string[]; keypoints: unknown[]; wholebody: unknown[] }> {
   const frames = sampled.map((f) => ({ cam: f.cam, doc: only(f.doc, keep) }))
   const out = await render(frames, w, h, kind, sampleDoc(doc, st().frame), onProgress)
   const shas: string[] = []
@@ -154,7 +155,7 @@ async function renderPass(render: SequenceRenderer, sampled: { cam: NonNullable<
     if (!uploaded.has(sha)) { await api.putBlob(sha, blob); uploaded.add(sha) }
     shas.push(sha)
   }
-  return { shas, keypoints: out.keypoints.map((perFigure) => perFigure[0] ?? []) }        // a figure alone: its own keypoints
+  return { shas, keypoints: out.keypoints.map((perFigure) => perFigure[0] ?? []), wholebody: (out.wholebody ?? []).map((perFigure) => perFigure[0] ?? null) }   // a figure alone: its own
 }
 
 // ---- CS3 (proto01_UIcast 06 §2.10, D136 U19): the skeleton changed under a rendered character ------------------------------------------
@@ -179,6 +180,20 @@ export function skeletonChange(f: Final, doc: StageDoc, lid: string): { index: n
 /** The batch a frame index of a performance falls in (finals.py plan_batches). */
 export const batchOf = (index: number): number => (index < 77 ? 0 : 1 + Math.floor((index - 77) / 72))
 
+/** What a run of a character layer says it queued — D163: performed in its own window (the figure that many times larger there). */
+export function performedText(name: string, r: { batches: number; placed: boolean; window?: number | null }, how: string): string {
+  const batches = `${r.batches} batch${r.batches === 1 ? '' : 'es'} of Wan Animate ${how}`
+  if (r.window) return `${name}: ${batches} in a window of its own — the figure ${r.window < 10 ? r.window.toFixed(1) : Math.round(r.window)}× larger there, pasted back after its matte`
+  return `${name}: ${batches}${r.placed ? ' — the reference stands where the figure starts' : ' — the figure is not whole at the start: the reference is centred'}`
+}
+
+/** D163: a character layer's matte against its figure (the server's matte_check) — a short line, or null when it holds. */
+export function matteWarning(check: { frames: number; strays: number[] } | null | undefined): string | null {
+  if (!check || !check.strays.length) return null
+  const first = check.strays[0]
+  return `the matte strays from the figure on ${check.strays.length} of ${check.frames} frames (first: ${first})`
+}
+
 /** CS3: a character layer's passes drawn again from the stage as it is now (its pose and depth, the figure alone with the set) and sent with
  *  the body they were drawn with; the server encodes a performed layer's guide again. */
 async function redrawLayer(f: Final, lid: string): Promise<Final> {
@@ -192,13 +207,13 @@ async function redrawLayer(f: Final, lid: string): Promise<Final> {
   await blocksReady(doc)                                                          // U5: the figures' clip blocks evaluated before a frame is sampled
   const sampled = times.map((t) => { const d = sampleDoc(doc, t); return { cam: d.cameras.find((c) => c.id === cam.id) ?? cam, doc: d } })
   const uploaded = new Set<string>(), passes: Record<string, string[]> = {}
-  let keypoints: unknown[] = []
+  let keypoints: unknown[] = [], wholebody: unknown[] = []
   for (const p of passesOf({ id: lid, kind: 'figure', name: l.name, object_id: l.object_id, profile_id: l.profile_id, version: l.version })) {
     const out = await renderPass(render, sampled, [l.object_id], f.size.w, f.size.h, p.kind, doc, uploaded)
     passes[p.name] = out.shas
-    if (p.kind === 'pose') keypoints = out.keypoints
+    if (p.kind === 'pose') { keypoints = out.keypoints; wholebody = out.wholebody }
   }
-  return unwrap(http.PUT('/finals/{fid}/layers/{lid}/passes', { params: { path: { fid: f.id, lid } }, body: { passes, keypoints: keypoints as never, ...bodyStamp(doc, l.object_id, times) } }))
+  return unwrap(http.PUT('/finals/{fid}/layers/{lid}/passes', { params: { path: { fid: f.id, lid } }, body: { passes, keypoints: keypoints as never, wholebody: wholebody as never, ...bodyStamp(doc, l.object_id, times) } }))
 }
 
 /** *Apply from a frame…*: the skeleton keys that keep every frame before `frame` as the layer was drawn — the figure's keys that took
@@ -463,8 +478,7 @@ export const useFinals = create<FinalsState>((set, get) => ({
     try {
       const r = await unwrap(http.POST('/finals/{fid}/layers/{lid}/run', { params: { path: { fid: id, lid: layer } }, body: { seed: seed ?? null, from_batch: opts?.fromBatch ?? 0, stage: !!opts?.stage } }))
       const how = opts?.stage ? 'staged' : 'queued'
-      useSession.getState().toast(opts?.fromBatch ? `${l.name}: from batch ${opts.fromBatch + 1} of ${r.batches} again with a new seed — ${how}`
-        : `${l.name}: ${r.batches} batch${r.batches === 1 ? '' : 'es'} of Wan Animate ${how}${r.placed ? ' — the reference stands where the figure starts' : ' — the figure is not whole at the start: the reference is centred'}`, 'info')
+      useSession.getState().toast(opts?.fromBatch ? `${l.name}: from batch ${opts.fromBatch + 1} of ${r.batches} again with a new seed — ${how}` : performedText(l.name, r, how), 'info')
       await get().load()
       void get().loadPlan(id)
     } catch (e) { useSession.getState().toast(`Perform ${l.name}: ${(e as ApiError).detail ?? (e as Error).message ?? e}`, 'error') }

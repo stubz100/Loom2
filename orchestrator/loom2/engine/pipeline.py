@@ -550,10 +550,11 @@ async def prepare_matte(job: JobRecord, recipe: MatteSequence, q: JobQueue) -> d
     from ..finals import FinalStore
     from ..stages import encode_guide
     store = FinalStore(q.ws)
-    frames = sorted(store.pass_dir(recipe.final_id, recipe.layer_id, "frames").glob("*.png"))
+    f = store.get(recipe.final_id)
+    layer = next((x for x in f.layers if x.id == recipe.layer_id), None) if f else None
+    frames = sorted(store.pass_dir(recipe.final_id, recipe.layer_id, "window/frames" if layer is not None and layer.window else "frames").glob("*.png"))   # D163: matted in its window
     if not frames:
         raise ValueError(f"the layer {recipe.layer_id} has no frames to matte — perform it first")
-    f = store.get(recipe.final_id)
     out = q.ws.temp_dir / "mattes" / f"{recipe.final_id}-{recipe.layer_id}-{job.id}.mp4"
     await asyncio.to_thread(encode_guide, frames, out, f.rate if f else 16)
     name = await q.engine.client.upload_image(out)

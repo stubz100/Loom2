@@ -90,6 +90,8 @@ class FinalLayer(BaseModel):
     source: str | None = None                                      # D118: the take the layer shows (its frames under passes/<id>/), None = the original frames
     body: dict[str, Any] | None = None             # CS3 (proto01_UIcast 06 §2.10): a figure layer's body as its guide was drawn (the figure's own: Cast's then)
     body_hashes: list[str] = Field(default_factory=list)   # CS3: per frame, the body the guide was drawn with (skeleton keys sampled) — Stage says *the skeleton changed* where they differ
+    window: list[list[float]] | None = None        # D163 (E43): per frame [x0, y0, scale] of the window the figure is performed in (the whole figure at WINDOW); [] at the frame; None not decided yet (a final made before D163: its next run decides)
+    matte_check: dict[str, Any] | None = None      # D163: the matte against the figure's Stage silhouette — {frames, strays (frame indices), cover_min, ratio_max}
 
 
 class ProcessingLayer(BaseModel):
@@ -230,14 +232,16 @@ def central_blob(m: "np.ndarray") -> "np.ndarray":
 
 def cutout(ref: Path) -> tuple["np.ndarray", "np.ndarray", tuple[int, int, int]]:
     """A character off its animation reference's plain ground (CA0 makes it on one): pixels ΔE > 14 from the border's median (Lab), the
-    largest blob, softened (E23c's key). Returns the cropped image, its alpha and the ground colour."""
+    largest blob, softened (E23c's key). Returns the cropped image, its alpha and the ground colour. D163 (W47): the blob is taken on the
+    key grown by 2 px and cut back to the key — a collar the colour of the ground (Ines's grey knit, ΔE 10–12) no longer parts the head."""
     import numpy as np
     from PIL import Image, ImageFilter
     a = np.asarray(Image.open(ref).convert("RGB"))
     lab = to_lab(a)
     border = np.concatenate([lab[0], lab[-1], lab[:, 0], lab[:, -1]])
     m = np.linalg.norm(lab - np.median(border, axis=0), axis=-1) > 14
-    m = central_blob(m)
+    grown = np.asarray(Image.fromarray((m * 255).astype(np.uint8)).filter(ImageFilter.MaxFilter(5)), dtype=np.uint8) > 127
+    m = central_blob(grown) & m
     if not m.any():
         raise ValueError("no figure stands out from the reference's ground")
     alpha = np.asarray(Image.fromarray((m * 255).astype(np.uint8)).filter(ImageFilter.MedianFilter(5)).filter(ImageFilter.GaussianBlur(0.8)), dtype=np.float32) / 255.0
@@ -303,6 +307,172 @@ def place_reference(ref: Path, kp: list[list[float]] | None, w: int, h: int, out
     return True
 
 
+# ---- D163 (E43): a character layer performed in its own window ----
+WINDOW = (480, 848)                               # Wan Animate's portrait at the final's pixel count (848 × 480); D146 measured full figures there
+WINDOW_SMOOTH = 9                                 # the window's centre and height smoothed over this many frames (heads.SMOOTH)
+WINDOW_TOP, WINDOW_BOTTOM, WINDOW_MARGIN = 0.10, 0.05, 1.15   # above the highest point (the skull over the eyes and ears), below the ankles, all round
+STRAY_COVER, STRAY_RATIO = 0.5, 2.5               # a matte strays from its figure when it covers < half its silhouette or is > 2.5× it (E43: working ≥ 0.8, ≤ 1.5×)
+LIMBS = [(1, 2), (1, 5), (2, 3), (3, 4), (5, 6), (6, 7), (1, 8), (8, 9), (9, 10), (1, 11), (11, 12), (12, 13), (1, 0), (0, 14), (14, 16), (0, 15), (15, 17)]
+POSE_COLOURS = [(255, 0, 0), (255, 85, 0), (255, 170, 0), (255, 255, 0), (170, 255, 0), (85, 255, 0), (0, 255, 0), (0, 255, 85), (0, 255, 170), (0, 255, 255),
+                (0, 170, 255), (0, 85, 255), (0, 0, 255), (85, 0, 255), (170, 0, 255), (255, 0, 255), (255, 0, 170), (255, 0, 85)]
+HAND_EDGES = [(0, 1), (1, 2), (2, 3), (3, 4), (0, 5), (5, 6), (6, 7), (7, 8), (0, 9), (9, 10), (10, 11), (11, 12), (0, 13), (13, 14), (14, 15), (15, 16),
+              (0, 17), (17, 18), (18, 19), (19, 20)]
+
+
+def figure_windows(kps: list, n: int) -> list[list[float]]:
+    """[x0, y0, scale] per frame: a WINDOW round all 18 of the figure's points (in the frame or not — Stage projects them all), the skull
+    and the soles added, a margin all round, widened for spread arms; its centre smoothed and its height the largest over WINDOW_SMOOTH
+    frames, so the smoothing never cuts the figure. `scale` is window pixels per frame pixel."""
+    import numpy as np
+    ww, wh = WINDOW
+    cs, hs, boxes = [], [], []
+    for i in range(n):
+        k = np.array(kps[min(i, len(kps) - 1)], dtype=float).reshape(-1, 3)[:18, :2]
+        (x0, y0), (x1, y1) = k.min(axis=0), k.max(axis=0)
+        tall = max(8.0, float(y1 - y0))
+        y0, y1 = y0 - WINDOW_TOP * tall, y1 + WINDOW_BOTTOM * tall
+        boxes.append((float(x0), float(y0), float(x1), float(y1)))
+        cs.append(((x0 + x1) / 2, (y0 + y1) / 2))
+        hs.append(max((y1 - y0) * WINDOW_MARGIN, (x1 - x0) * WINDOW_MARGIN * wh / ww))
+    c, hh = np.array(cs), np.array(hs)
+    pad, out = WINDOW_SMOOTH // 2, []
+    for i in range(n):
+        a, b = max(0, i - pad), min(n, i + pad + 1)
+        cx, cy = (float(v) for v in c[a:b].mean(axis=0))
+        h = float(hh[a:b].max())
+        w = h * ww / wh
+        e = 0.02 * h                                                        # a fast figure: the smoothed centre shifted just enough to hold it
+        bx0, by0, bx1, by1 = boxes[i][0] - e, boxes[i][1] - e, boxes[i][2] + e, boxes[i][3] + e
+        cx = min(max(cx, bx1 - w / 2), bx0 + w / 2)
+        cy = min(max(cy, by1 - h / 2), by0 + h / 2)
+        out.append([round(cx - w / 2, 2), round(cy - h / 2, 2), round(wh / h, 5)])
+    return out
+
+
+def layer_window(kps: list | None, n: int) -> list[list[float]]:
+    """D163: the window a figure layer is performed in — when it gives the figure at least the frame's pixels on every frame (every figure
+    but a close shot cut by the frame, which stays at the frame); else none."""
+    if not kps or n <= 0:
+        return []
+    wins = figure_windows(kps, n)
+    return wins if min(w[2] for w in wins) >= 1.0 else []
+
+
+def to_window(points: list | None, win: list[float]) -> list[list[float]]:
+    """Frame points ([x, y, visible]) in a window's pixels; a point is drawn when it lies in the window (in the frame or not)."""
+    x0, y0, s = win
+    ww, wh = WINDOW
+    out = []
+    for p in points or []:
+        u, v = (p[0] - x0) * s, (p[1] - y0) * s
+        out.append([u, v, 1.0 if (0 <= u < ww and 0 <= v < wh) else 0.0])
+    return out
+
+
+def window_wholebody(wb: dict[str, Any] | None, win: list[float]) -> dict[str, Any] | None:
+    """A Detailed figure's hands and feet (passes.ts WholeBody) in a window's pixels."""
+    return {k: to_window(wb.get(k), win) for k in ("feet", "left", "right")} if wb else None
+
+
+def _hue(h: float) -> tuple[int, int, int]:
+    i, f = int(h * 6), h * 6 - int(h * 6)
+    r, g, b = [(1, f, 0), (1 - f, 1, 0), (0, 1, f), (0, 1 - f, 1), (f, 0, 1), (1, 0, 1 - f)][i % 6]
+    return round(r * 255), round(g * 255), round(b * 255)
+
+
+def draw_pose(kp: list, w: int, h: int, wholebody: dict[str, Any] | None = None) -> "Image.Image":
+    """D163: passes.ts `drawPose` on the server — a pose pass is a 2D drawing of projected points, so the guide in a window is these points
+    cropped and scaled. Limbs as ellipses at 0.6 alpha, the points as discs, the stroke scaled to the picture; D158: a figure facing away
+    shows no nose and no eyes; D101: a Detailed figure's feet (discs) and hands (hue edges, blue discs)."""
+    import numpy as np
+    from PIL import Image, ImageDraw
+    r = max(3, round(min(w, h) / 180))
+    away = faces_away(kp)
+    pts = [[p[0], p[1], 0.0] if away and i in (0, 14, 15) else list(p) for i, p in enumerate(kp)]
+    base = np.zeros((h, w, 3), dtype=np.float32)
+    t = np.linspace(0, 2 * np.pi, 36, endpoint=False)
+    for k, (a, b) in enumerate(LIMBS):
+        if a >= len(pts) or b >= len(pts) or not (pts[a][2] and pts[b][2]):
+            continue
+        (x1, y1), (x2, y2) = pts[a][:2], pts[b][:2]
+        mx, my, half, ang = (x1 + x2) / 2, (y1 + y2) / 2, float(np.hypot(x2 - x1, y2 - y1)) / 2, float(np.arctan2(y2 - y1, x2 - x1))
+        poly = [(mx + half * np.cos(q) * np.cos(ang) - r * np.sin(q) * np.sin(ang), my + half * np.cos(q) * np.sin(ang) + r * np.sin(q) * np.cos(ang)) for q in t]
+        bx0, by0 = max(0, int(min(p[0] for p in poly)) - 1), max(0, int(min(p[1] for p in poly)) - 1)
+        bx1, by1 = min(w, int(max(p[0] for p in poly)) + 2), min(h, int(max(p[1] for p in poly)) + 2)
+        if bx1 <= bx0 or by1 <= by0:
+            continue
+        m = Image.new("L", (bx1 - bx0, by1 - by0), 0)
+        ImageDraw.Draw(m).polygon([(x - bx0, y - by0) for x, y in poly], fill=255)
+        a_ = np.asarray(m, dtype=np.float32)[..., None] / 255.0 * 0.6
+        reg = base[by0:by1, bx0:bx1]
+        base[by0:by1, bx0:bx1] = reg * (1 - a_) + np.array(POSE_COLOURS[k], dtype=np.float32) * a_
+    img = Image.fromarray(np.clip(base + 0.5, 0, 255).astype(np.uint8))
+    d = ImageDraw.Draw(img)
+    disc = lambda x, y, col: d.ellipse((x - r, y - r, x + r, y + r), fill=col)  # noqa: E731
+    for k, p in enumerate(pts[:18]):
+        if p[2]:
+            disc(p[0], p[1], POSE_COLOURS[k])
+    if wholebody:
+        for k, p in enumerate(wholebody.get("feet") or []):
+            if p[2]:
+                disc(p[0], p[1], POSE_COLOURS[k % len(POSE_COLOURS)])
+        line = max(1, round(r / 2))
+        for hand in (wholebody.get("right") or [], wholebody.get("left") or []):
+            for k, (a, b) in enumerate(HAND_EDGES):
+                if a < len(hand) and b < len(hand) and hand[a][2] and hand[b][2]:
+                    d.line([tuple(hand[a][:2]), tuple(hand[b][:2])], fill=_hue(k / len(HAND_EDGES)), width=line)
+            for p in hand:
+                if p[2]:
+                    disc(p[0], p[1], (0, 0, 255))
+    return img
+
+
+def paste_back(img: "Image.Image", win: list[float], fw: int, fh: int, fill: Any) -> "Image.Image":
+    """D163: a window's picture back into the frame — at the window's size, scaled by 1 / scale, placed at (x0, y0), what falls outside
+    the frame dropped."""
+    from PIL import Image
+    x0, y0, s = win
+    if img.size != WINDOW:
+        img = img.resize(WINDOW, Image.LANCZOS)
+    w, h = max(1, round(WINDOW[0] / s)), max(1, round(WINDOW[1] / s))
+    canvas = Image.new(img.mode, (fw, fh), fill)
+    canvas.paste(img.resize((w, h), Image.LANCZOS), (round(x0), round(y0)))
+    return canvas
+
+
+def matte_check(store: "FinalStore", f: "Final", lid: str) -> dict[str, Any] | None:
+    """D163: a character layer's matte against its figure's Stage silhouette (|layer depth − plate depth| > eps, as the assembly) frame by
+    frame — a frame *strays* when the matte covers < STRAY_COVER of the silhouette or is > STRAY_RATIO × it (W46's matte was 319× its
+    figure, W58's 11×). None when the passes to measure with are missing."""
+    import numpy as np
+    from PIL import Image
+    from .final_assembly import DEPTH_EPS
+    dep, bare, mat = store.pass_dir(f.id, lid, "depth"), store.pass_dir(f.id, "plate", "depth"), store.pass_dir(f.id, lid, "matte")
+    if not (dep.is_dir() and bare.is_dir() and mat.is_dir()):
+        return None
+    gray = lambda p: np.asarray(Image.open(p).convert("L"), dtype=np.float32) / 255.0  # noqa: E731
+    strays, covers, ratios, seen = [], [], [], 0
+    for i in range(f.frames):
+        a, b, m = dep / f"{i:04d}.png", bare / f"{i:04d}.png", mat / f"{i:04d}.png"
+        if not (a.is_file() and b.is_file() and m.is_file()):
+            continue
+        sil = np.abs(gray(a) - gray(b)) > DEPTH_EPS
+        if not sil.any():
+            continue
+        mm = gray(m) > 0.5
+        if mm.shape != sil.shape:
+            continue
+        seen += 1
+        cover, ratio = float((mm & sil).sum() / sil.sum()), float(mm.sum() / sil.sum())
+        covers.append(cover)
+        ratios.append(ratio)
+        if cover < STRAY_COVER or ratio > STRAY_RATIO:
+            strays.append(i)
+    if not seen:
+        return None
+    return {"frames": seen, "strays": strays, "cover_min": round(min(covers), 2), "ratio_max": round(max(ratios), 1)}
+
+
 def plate_fill_prompt(place: str | None) -> str:
     """PF1 (D135): a keyframe Fill's prompt — the lead (continue the surfaces, add nothing), then the place as the author wrote it."""
     return f"{FILL_LEAD} {(place or '').strip()}".strip()
@@ -353,9 +523,10 @@ def plate_path_recipe(f: "Final", model_id: str, still_id: str, guide_id: str, p
 
 def character_recipe(f: "Final", layer: "FinalLayer", model_id: str, prompt: str, batch: dict[str, int], clip_id: str | None) -> dict[str, Any]:
     """One batch of a character layer: Wan Animate Move (Draft) on the layer's pose guide, with its placed reference, at the final's size
-    and rate; a later batch continues the previous one (E23a W1)."""
+    and rate — D163: at the window's when the layer is performed in one; a later batch continues the previous one (E23a W1)."""
+    w, h = WINDOW if layer.window else (f.size["w"], f.size["h"])
     return {"kind": "i2v", "model_id": model_id, "start_asset": layer.reference_asset_id, "prompt_text": prompt, "frames": batch["frames"], "fps": f.rate,
-            "width": f.size["w"], "height": f.size["h"], "preset": "draft", "seeds": [layer.seed],
+            "width": w, "height": h, "preset": "draft", "seeds": [layer.seed],
             "guide": {"asset_id": layer.guide_asset_id, "kind": "pose", "strength": 1.0},
             "chain": {"clip_id": clip_id, "carry": CARRY, "offset": batch["offset"]}}
 
@@ -506,13 +677,17 @@ class FinalStore:
     def save(self, f: Final) -> None:
         atomic_write_json(self.path(f.id), f.model_dump())
 
-    def create(self, data: dict[str, Any], passes: dict[str, dict[str, list[Path]]], keypoints: dict[str, Any]) -> Final:
+    def create(self, data: dict[str, Any], passes: dict[str, dict[str, list[Path]]], keypoints: dict[str, Any], wholebody: dict[str, Any] | None = None) -> Final:
         """A final from its record and, per layer and pass, the frame files (blobs, in order; one file may stand for many frames — a still
-        camera's identical renders). The folders are written first, the record last: a failed copy leaves no record."""
+        camera's identical renders). The folders are written first, the record last: a failed copy leaves no record. D163: a figure's hands
+        and feet (Stage's WholeBody per frame) are kept with its keypoints, and its window is found from them."""
         f = Final.model_validate({**data, "id": new_id("fin"), "schema_version": FINAL_SCHEMA_VERSION, "revision": 0, "created_at": utc_now(), "updated_at": utc_now()})
+        wholebody = wholebody or {}
         for x in f.layers:
             x.passes = {name: len(files) for name, files in passes.get(x.id, {}).items()}
             x.keypoints = x.id in keypoints
+            if x.kind == "figure":
+                x.window = layer_window(keypoints.get(x.id), f.frames)
         check(f)
         try:
             for x in f.layers:
@@ -522,7 +697,7 @@ class FinalStore:
                     for i, src in enumerate(files):
                         shutil.copyfile(src, d / f"{i:04d}.png")
                 if x.id in keypoints:
-                    atomic_write_json(self.folder(f.id) / x.id / "keypoints.json", {"schema_version": 1, "frames": keypoints[x.id]})
+                    atomic_write_json(self.folder(f.id) / x.id / "keypoints.json", {"schema_version": 1, "frames": keypoints[x.id], "wholebody": wholebody.get(x.id) or []})
             self.save(f)
         except Exception:
             shutil.rmtree(self.folder(f.id), ignore_errors=True)
@@ -531,9 +706,9 @@ class FinalStore:
 
     @_locked
     def set_passes(self, fid: str, lid: str, passes: dict[str, list[Path]], keypoints: list[Any] | None, body: dict[str, Any] | None,
-                   body_hashes: list[str]) -> Final:
+                   body_hashes: list[str], wholebody: list[Any] | None = None) -> Final:
         """CS3: a character layer's passes drawn again (the skeleton changed) — its pass folders and keypoints replaced, the body they were
-        drawn with recorded. The frames it performed stay: a re-take from a batch replaces the ones after it."""
+        drawn with recorded. The frames it performed stay: a re-take from a batch replaces the ones after it. D163: its window found again."""
         f = self.get(fid)
         if f is None:
             raise KeyError(fid)
@@ -558,8 +733,9 @@ class FinalStore:
             shutil.rmtree(d, ignore_errors=True)
             new.rename(d)
         if keypoints is not None:
-            atomic_write_json(self.folder(fid) / lid / "keypoints.json", {"schema_version": 1, "frames": keypoints})
+            atomic_write_json(self.folder(fid) / lid / "keypoints.json", {"schema_version": 1, "frames": keypoints, "wholebody": wholebody or []})
             layer.keypoints = True
+            layer.window = layer_window(keypoints, f.frames)
         layer.passes, layer.body, layer.body_hashes = counts, body, list(body_hashes)
         f.revision += 1
         f.updated_at = utc_now()
@@ -594,15 +770,16 @@ class FinalStore:
             raise KeyError(f"{fid} has no layer {lid}")
         return self.update_layer(fid, lid, job_ids=[*layer.job_ids, job_id], **patch)
 
-    def set_frames(self, fid: str, lid: str, files: list[Path], status: str = "done", still_asset_id: str | None = None) -> Final:
+    def set_frames(self, fid: str, lid: str, files: list[Path], status: str = "done", still_asset_id: str | None = None, into: str = "frames") -> Final:
         """A layer's own sequence (`frames/`), one file per frame at the final's count; the layer is done (or runs on: a character's matte).
-        SC3e: `still_asset_id` names the picture the frames were rendered from (a picture set's plate)."""
+        SC3e: `still_asset_id` names the picture the frames were rendered from (a picture set's plate). D163: a character performed in its
+        window lands `into` "window/frames" at the window's size; its matte pastes it back into `frames/`."""
         f = self.get(fid)
         if f is None:
             raise KeyError(fid)
         if len(files) != f.frames:
             raise ValueError(f"the layer's frames are {len(files)}, the final has {f.frames}")
-        d = self.pass_dir(fid, lid, "frames")
+        d = self.pass_dir(fid, lid, into)
         shutil.rmtree(d, ignore_errors=True)
         d.mkdir(parents=True)
         for i, src in enumerate(files):
@@ -674,6 +851,11 @@ class FinalStore:
     def keypoints(self, fid: str, lid: str) -> list:
         p = self.folder(fid) / lid / "keypoints.json"
         return list(read_json(p).get("frames") or []) if p.is_file() else []
+
+    def wholebody(self, fid: str, lid: str) -> list:
+        """D163: a figure's hands and feet per frame (Stage's WholeBody, None for a figure without them), as its keypoints were stored."""
+        p = self.folder(fid) / lid / "keypoints.json"
+        return list(read_json(p).get("wholebody") or []) if p.is_file() else []
 
     def delete(self, fid: str) -> bool:
         d = self.folder(fid)

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setBackend } from '../../api/client'
 import type { Final, StageDoc, StageObject } from '../../api/types'
 import { useSession } from '../../store/session'
-import { batchCount, batchOf, bodyStamp, cameraTravel, framesAt, hasPictureSet, keysFrom, newestFinal, nextFinalStep, picturePlate, planFinal, plateChoice, skeletonChange, useFinals } from './finalShot'
+import { batchCount, batchOf, bodyStamp, cameraTravel, framesAt, hasPictureSet, keysFrom, matteWarning, newestFinal, nextFinalStep, performedText, picturePlate, planFinal, plateChoice, skeletonChange, useFinals } from './finalShot'
 import { useStage } from './stageStore'
 
 const obj = (id: string, kind: StageObject['kind'], extra: Partial<StageObject> = {}): StageObject => ({ id, kind, name: id, preset: null, asset_id: null, transform: { pos: [0, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] },
@@ -147,5 +147,18 @@ describe('CS3 (proto01_UIcast 06 §2.10): the skeleton changed under a drawn cha
     expect(ch.frame).toBe(150); expect(ch.index).toBe(100); expect(ch.batch).toBe(1)                // F16: frame 150 is the 101st; batch 2 of 3
     const earlier = keysFrom(stage(now, { fig_m: [{ frame: 0, transition: 0, body: null }, { frame: 200, transition: 0, body: { neck: 2 } }] }), 'fig_m', old as never, 150)
     expect(earlier).toEqual([{ frame: 0, transition: 0, body: old }, { frame: 150, transition: 0, body: null }, { frame: 200, transition: 0, body: { neck: 2 } }])   // a key that took Cast's before it holds the old body
+  })
+})
+
+describe('D163 (E43): a character layer performed in its own window', () => {
+  it('says the window and its scale when it queues the batches, else where the reference stands', () => {
+    expect(performedText('Tomas', { batches: 1, placed: true, window: 7.54 }, 'queued')).toBe('Tomas: 1 batch of Wan Animate queued in a window of its own — the figure 7.5× larger there, pasted back after its matte')
+    expect(performedText('Tomas', { batches: 3, placed: true, window: 12.4 }, 'staged')).toContain('3 batches of Wan Animate staged in a window of its own — the figure 12× larger')
+    expect(performedText('Ines', { batches: 1, placed: false, window: null }, 'queued')).toBe('Ines: 1 batch of Wan Animate queued — the figure is not whole at the start: the reference is centred')
+  })
+  it('warns of a matte that strays from its figure, and is quiet when it holds', () => {
+    expect(matteWarning({ frames: 49, strays: [9, 10, 11] })).toBe('the matte strays from the figure on 3 of 49 frames (first: 9)')
+    expect(matteWarning({ frames: 49, strays: [] })).toBeNull()
+    expect(matteWarning(null)).toBeNull()
   })
 })

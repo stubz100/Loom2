@@ -9,7 +9,7 @@ import { CommandButton } from '../../frame/CommandButton'
 import { markUsed, runCommand } from '../../frame/commands'
 import { useSession } from '../../store/session'
 import { showMenu } from '../../frame/ContextMenu'
-import { assembling, batchCount, nextFinalStep, PLATE_PATH_MAX, readyToAssemble, rendering, skeletonChange, useFinals, useFinalsPoll } from './finalShot'
+import { assembling, batchCount, matteWarning, nextFinalStep, PLATE_PATH_MAX, readyToAssemble, rendering, skeletonChange, useFinals, useFinalsPoll } from './finalShot'
 import { askConfirm } from '../../store/session'
 import { useStage } from './stageStore'
 
@@ -60,6 +60,9 @@ function Batches({ f, l }: { f: Final; l: FinalLayer }) {
     </span>
   )
 }
+
+/** D163: a window's scale as the chip shows it (×7.5, ×12). */
+const fmtScale = (x: number): string => (x < 10 ? x.toFixed(1) : String(Math.round(x)))
 
 /** U6b (04 §4): a character layer's identity — FaceSim across its batches' clips against its reference (each clip's own, after its proxy):
  *  the mean, under the "same person" band (0.45) marked; no face found (a figure seen from behind, D158) said so. Departure's take showed
@@ -122,6 +125,8 @@ function LayerRow({ f, l }: { f: Final; l: FinalLayer }) {
     : plate ? [{ label: l.still_asset_id ? 'Make the plate again' : 'Make the plate', run: () => void useFinals.getState().plate(f.id), disabled: l.status === 'queued' }, { sep: true as const }, ...methods]
     : l.kind === 'figure' ? [{ label: l.batches.length ? 'Re-take this layer (a new seed)' : 'Perform this layer', run: l.batches.length ? retake : () => void useFinals.getState().perform(f.id, l.id), disabled: working },
       { label: 'Matte it again', run: () => void useFinals.getState().matte(f.id, l.id), disabled: working || l.frames_done !== f.frames }, ...(skeleton.length ? [{ sep: true as const }, ...skeleton] : [])] : []
+  const mc = l.matte_check as { frames: number; strays: number[] } | null      // D163: the server's matte_check
+  const strays = l.kind === 'figure' ? matteWarning(mc) : null
   return (
     <li data-kind={l.kind} data-id={l.id} title={`${l.name} — ${KIND_LABEL[l.kind]}, ${METHOD_LABEL[l.method] ?? l.method}; passes: ${Object.entries(l.passes).map(([k, n]) => `${k} ${n}`).join(', ')}`}
       onContextMenu={menu.length ? (e) => { e.preventDefault(); e.stopPropagation(); showMenu(e, menu) } : undefined}>
@@ -130,6 +135,13 @@ function LayerRow({ f, l }: { f: Final; l: FinalLayer }) {
       <span className={`status s-${l.status}`}>{statusText(l, projecting, f.frames, filling)}</span>
       {l.kind === 'figure' && <Batches f={f} l={l} />}
       {l.kind === 'figure' && <LayerIdentity l={l} />}
+      {l.kind === 'figure' && !!l.window?.length && <span className="chip window" data-window={Math.min(...l.window.map((w) => w[2])).toFixed(2)}
+        title="Performed in a window of its own: the whole figure at Wan Animate's size (480×848), the take and its matte pasted back into the shot (D163)">
+        window ×{fmtScale(Math.min(...l.window.map((w) => w[2])))}</span>}
+      {l.kind === 'figure' && strays && <button className="chip matte-strays" data-strays={mc!.strays.length}
+        onClick={(e) => { e.stopPropagation(); showMenu(e, [{ label: 'Matte it again', run: () => void useFinals.getState().matte(f.id, l.id), disabled: working }, { label: 'Re-take this layer (a new seed)', run: retake, disabled: working }]) }}
+        title={`${strays} — the matte follows something else than the figure there (D163). Click to matte it again or re-take the layer`}>
+        matte strays {mc!.strays.length}/{mc!.frames} ▾</button>}
       {change && <button className="chip skeleton-changed" data-from={change.frame} onClick={(e) => { e.stopPropagation(); showMenu(e, skeleton) }}
         title={`The skeleton changed from frame ${change.frame} (batch ${change.batch + 1}): Cast's body is not the one this layer was drawn with. Nothing is done by itself — click to re-render it, or to apply the new skeleton from a frame`}>
         the skeleton changed ▾</button>}

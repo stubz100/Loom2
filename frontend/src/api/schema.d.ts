@@ -8065,6 +8065,10 @@ export interface components {
              * @enum {string}
              */
             kind: "plate" | "figure" | "prop" | "shadows";
+            /** Matte Check */
+            matte_check: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Method
              * @enum {string}
@@ -8105,6 +8109,8 @@ export interface components {
             }[];
             /** Version */
             version: string | null;
+            /** Window */
+            window: number[][] | null;
         };
         /** FinalLayerIn */
         FinalLayerIn: {
@@ -8134,6 +8140,8 @@ export interface components {
             profile_id?: string | null;
             /** Version */
             version?: string | null;
+            /** Wholebody */
+            wholebody?: unknown[] | null;
         };
         /**
          * FinalLine
@@ -11107,6 +11115,8 @@ export interface components {
             passes: {
                 [key: string]: string[];
             };
+            /** Wholebody */
+            wholebody?: unknown[] | null;
         };
         /**
          * PassesUpload
@@ -12469,6 +12479,8 @@ export interface components {
             placed: boolean;
             /** Reference Asset Id */
             reference_asset_id: string;
+            /** Window */
+            window?: number | null;
         };
         /** RunStaleBody */
         RunStaleBody: {

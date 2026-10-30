@@ -32,6 +32,7 @@ class FinalLayerIn(BaseModel):
     version: str | None = None
     passes: dict[str, list[str]]                   # pass name → the frames' blob ids (sha256), in order
     keypoints: list[Any] | None = None             # a figure's per-frame keypoints (Stage's COCO-18 for that figure)
+    wholebody: list[Any] | None = None             # D163: per frame, a Detailed figure's hands and feet (passes.ts WholeBody, None without them)
     body: dict[str, Any] | None = None             # CS3: a figure's body as its guide was drawn
     body_hashes: list[str] = Field(default_factory=list)   # CS3: per frame, the hash of the body the guide was drawn with
 
@@ -102,6 +103,7 @@ async def final_create(svc: Svc, body: FinalCreate):
         body = body.model_copy(update={"shot_version": v.id})
     passes = {x.id: {name: [_blob(ws, sha) for sha in shas] for name, shas in x.passes.items()} for x in body.layers}
     keypoints = {x.id: x.keypoints for x in body.layers if x.keypoints is not None}
+    wholebody = {x.id: x.wholebody for x in body.layers if x.wholebody is not None}
     method = DEFAULT_METHOD | ({"plate": "picture"} if picture_plate(st) else {"plate": "set"} if built_plate(st) else {})   # CW7: a built set's plate is the set
     pick = {x.id: method[x.kind] if x.kind == "plate" and method["plate"] in ("picture", "set") else x.method or method[x.kind] for x in body.layers}   # CA3: the client's plate method, a picture or built set's first
     data = body.model_dump(exclude={"layers"}) | {"layers": [FinalLayer(id=x.id, kind=x.kind, name=x.name, object_id=x.object_id, method=pick[x.id],  # type: ignore[arg-type]
@@ -109,7 +111,7 @@ async def final_create(svc: Svc, body: FinalCreate):
     from ..shot_graph import stage_stamps
     data["stamps"] = stage_stamps(st, body.camera_id)                        # RC1: an edit marks only the layers it touches
     try:
-        f = await asyncio.to_thread(FinalStore(ws).create, data, passes, keypoints)
+        f = await asyncio.to_thread(FinalStore(ws).create, data, passes, keypoints, wholebody)
     except ValueError as e:
         raise HTTPException(422, str(e))
     if f.shot_id and f.shot_version:                                     # RC1: a version made by a final shot is on the clay route
@@ -433,6 +435,7 @@ class RunQueued(BaseModel):
     placed: bool                                   # the reference stands where the figure starts (else padded, centred)
     from_behind: bool = False                      # D158: its frames mostly face away — performed with the words for it
     back_view: bool = False                        # D158: … and from the version's back A-pose (False: it has none, the front one served)
+    window: float | None = None                    # D163: performed in its own window — how many times larger the figure is there (the least over the shot)
 
 
 @router.post("/finals/{fid}/layers/{lid}/run", response_model=RunQueued)
@@ -441,7 +444,7 @@ async def final_layer_run(svc: Svc, fid: str, lid: str, body: RunBody):
     starts (E23c: no ghost), Wan Animate Move on the layer's pose sequence in 77-frame batches (E23a W1), each batch queuing the next.
     A run again is a re-take of this layer alone."""
     from ..catalogue import Catalogue  # noqa: F401  (typing)
-    from ..finals import BACK_WORDS, FINAL_LAYER_SURFACE, CHARACTER_TAIL, character_recipe, mostly_away, place_reference, plan_batches
+    from ..finals import BACK_WORDS, FINAL_LAYER_SURFACE, CHARACTER_TAIL, WINDOW, character_recipe, layer_window, mostly_away, place_reference, plan_batches, to_window
     from ..origin import JobOrigin
     from ..story import StoryStore, compose_sheet
     from ..models import registry
@@ -479,9 +482,13 @@ async def final_layer_run(svc: Svc, fid: str, lid: str, body: RunBody):
     prompt = f"{p.name}, {compose_sheet(v, name=p.name)}, {BACK_WORDS + '. ' if behind else ''}{CHARACTER_TAIL}"
     if body.from_batch:                                                      # CA5: re-take from a batch on, the batches before it kept
         return await _retake_from(svc, store, f, layer, body, spec.id, prompt, anim_ref)
-    w, h = f.size["w"], f.size["h"]
+    if layer.window is None:                                                  # D163: a final made before it — its window found now
+        layer.window = layer_window(kps, f.frames)
+        f = await asyncio.to_thread(store.update_layer, fid, lid, window=layer.window)
+    win = layer.window[0] if layer.window else None                           # D163 (E43): the whole figure in a window of its own
+    w, h = WINDOW if win else (f.size["w"], f.size["h"])
     folder = store.folder(fid) / lid
-    kp = (kps or [None])[0]
+    kp = to_window(kps[0], win) if win and kps else (kps or [None])[0]
     placed_png = folder / "reference.png"
     try:
         placed = await asyncio.to_thread(place_reference, cat.abs_path(ref), kp, w, h, placed_png)
@@ -509,26 +516,44 @@ async def final_layer_run(svc: Svc, fid: str, lid: str, body: RunBody):
                                 batches=[{"k": 0, "job_id": jobs[0].id, "clip_id": None}], frames_done=0)
     svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
     return {"job_id": jobs[0].id, "batches": len(plan), "reference_asset_id": ref_id, "placed": placed, "from_behind": behind,
-            "back_view": behind and anim_ref == v.anim_ref_back_asset_id}
+            "back_view": behind and anim_ref == v.anim_ref_back_asset_id, "window": round(min(x[2] for x in layer.window), 2) if layer.window else None}
 
 
 async def _guide_video(cat, store: FinalStore, f: Final, lid: str):
-    """PS5c: a character layer's pose pass as one video in the Catalogue (lineage stage-pass) — Wan Animate's guide."""
-    from ..finals import FINAL_LAYER_SURFACE
+    """PS5c: a character layer's pose pass as one video in the Catalogue (lineage stage-pass) — Wan Animate's guide. D163: a layer
+    performed in its window has its pose drawn there (`window/pose/`) from its keypoints, hands and feet as Stage stored them."""
+    from ..finals import FINAL_LAYER_SURFACE, WINDOW, draw_pose, to_window, window_wholebody
     from ..origin import JobOrigin
     from ..stages import encode_guide
-    pose = sorted(store.pass_dir(f.id, lid, "pose").glob("*.png"))
+    layer = next((x for x in f.layers if x.id == lid), None)
+    size = (f.size["w"], f.size["h"])
+    if layer is not None and layer.window:
+        kps, wbs, d = store.keypoints(f.id, lid), store.wholebody(f.id, lid), store.pass_dir(f.id, lid, "window/pose")
+
+        def draw() -> list:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+            d.mkdir(parents=True)
+            for i, win in enumerate(layer.window):
+                k = kps[min(i, len(kps) - 1)]
+                wb = wbs[i] if i < len(wbs) else None
+                draw_pose(to_window(k, win), *WINDOW, window_wholebody(wb, win)).save(d / f"{i:04d}.png")
+            return sorted(d.glob("*.png"))
+        pose, size = await asyncio.to_thread(draw), WINDOW
+    else:
+        pose = sorted(store.pass_dir(f.id, lid, "pose").glob("*.png"))
     guide_mp4 = store.folder(f.id) / lid / "pose.mp4"
     await asyncio.to_thread(encode_guide, pose, guide_mp4, f.rate)
     g = await asyncio.to_thread(cat.ingest_file, guide_mp4, kind="video", move=False, suite="stage", lineage_kind="stage-pass",
                                 origin=JobOrigin(suite="stage", surface=FINAL_LAYER_SURFACE, ref=f.id), params={"final_id": f.id, "layer": lid, "pass": "pose-sequence"},
-                                frames=len(pose), fps=float(f.rate), w=f.size["w"], h=f.size["h"])
+                                frames=len(pose), fps=float(f.rate), w=size[0], h=size[1])
     return await asyncio.to_thread(cat.make_thumbs, g, pose[0])
 
 
 class PassesBody(BaseModel):
     passes: dict[str, list[str]]                   # pass name → the frames' blob ids (sha256), in order: the pose and the depth
     keypoints: list[Any] | None = None
+    wholebody: list[Any] | None = None             # D163: the figure's hands and feet per frame
     body: dict[str, Any] | None = None             # the figure's body as the guide was drawn now
     body_hashes: list[str] = Field(default_factory=list)
 
@@ -548,7 +573,7 @@ async def final_layer_passes(svc: Svc, fid: str, lid: str, body: PassesBody):
         raise HTTPException(409, "the layer is being performed — wait for it, or cancel its job")
     files = {name: [_blob(ws, sha) for sha in shas] for name, shas in body.passes.items()}
     try:
-        f = await asyncio.to_thread(store.set_passes, fid, lid, files, body.keypoints, body.body, body.body_hashes)
+        f = await asyncio.to_thread(store.set_passes, fid, lid, files, body.keypoints, body.body, body.body_hashes, body.wholebody)
     except ValueError as e:
         raise HTTPException(422, str(e))
     if layer.guide_asset_id:

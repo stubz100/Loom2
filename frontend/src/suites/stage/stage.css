@@ -225,3 +225,5 @@
 .motion-lib .motion-clip.mine .verbs { display: flex; gap: 6px; }
 .final-section .chip.identity { font-size: 10px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--line2); color: var(--fg2); }   /* U6b */
 .final-section .chip.identity.low { border-color: var(--warn); color: var(--warn); }
+.final-section .chip.window { font-size: 10px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--line2); color: var(--fg2); }   /* D163: performed in its own window */
+.final-section .final-layers .matte-strays { padding: 0 6px; font-size: 11px; line-height: 16px; border-color: var(--warn, #d29922); color: var(--warn, #d29922); }   /* D163: the matte check */

@@ -492,11 +492,11 @@ async def _final_layer_batch(q: JobQueue, job: JobRecord, recipe: I2V, clip_id: 
         batches[k]["clip_id"] = clip_id
         return f, layer, batches, plan_batches(f.frames)
 
-    def stitched(batches: list[dict], frames: int) -> Any:
+    def stitched(batches: list[dict], frames: int, windowed: bool) -> Any:
         clips = ClipStore(q.ws)
         seqs = [[clips.frame_path(b["clip_id"], i) for i in range(clips.get(b["clip_id"]).frames)] for b in batches]
         store.update_layer(fid, lid, batches=batches)
-        return store.set_frames(fid, lid, stitch(seqs, frames), status="running")
+        return store.set_frames(fid, lid, stitch(seqs, frames), status="running", into="window/frames" if windowed else "frames")   # D163: its matte pastes it back
 
     try:
         got = await asyncio.to_thread(landed)
@@ -511,7 +511,7 @@ async def _final_layer_batch(q: JobQueue, job: JobRecord, recipe: I2V, clip_id: 
             f = await asyncio.to_thread(store.add_job, fid, lid, nxt.id, status="running", batches=batches)
             job.log_tail.append(f"layer {lid}: batch {k + 1} of {len(plan)} queued ({nxt.id})")
         else:
-            f = await asyncio.to_thread(stitched, batches, f.frames)
+            f = await asyncio.to_thread(stitched, batches, f.frames, bool(layer.window))
             from ..recipes import matte_mode
             mj = q.submit({"kind": "matte_sequence", "final_id": fid, "layer_id": lid, "mode": matte_mode(q.app.settings.variant)},
                           origin=JobOrigin(suite="stage", surface=job.origin.surface, ref=fid, payload={"layer": lid, "matte": True}))[0]
@@ -914,7 +914,9 @@ def _body_fit_result(q: JobQueue, job: JobRecord, recipe: Keypoints, people: lis
 
 
 class MatteFinisher:
-    """D111 (PS5d): SAM 3's masks become the character layer's `matte/` (one per frame, at the final's size); the layer is done."""
+    """D111 (PS5d): SAM 3's masks become the character layer's `matte/` (one per frame, at the final's size); the layer is done. D163: a
+    layer performed in its window is matted there (`window/matte/`), then its take and matte are pasted back into `frames/` and `matte/`
+    at the final's size; every character layer's matte is checked against its Stage silhouette (`matte_check`)."""
     frees_cache = True
     free_force = False
 
@@ -927,24 +929,41 @@ class MatteFinisher:
             raise ValueError(f"the final {recipe.final_id} is gone")
         if len(paths) != f.frames:
             raise ValueError(f"SAM 3 returned {len(paths)} masks for {f.frames} frames")
-        w, h = f.size["w"], f.size["h"]
+        from ..finals import WINDOW, matte_check, paste_back
+        layer = next((x for x in f.layers if x.id == recipe.layer_id), None)
+        wins = layer.window if layer is not None and layer.window else None
+        w, h = WINDOW if wins else (f.size["w"], f.size["h"])
 
-        def write() -> None:
-            d = store.pass_dir(f.id, recipe.layer_id, "matte")
+        def fresh(name: str) -> Path:
+            d = store.pass_dir(f.id, recipe.layer_id, name)
             if d.exists():
                 for old in d.glob("*.png"):
                     old.unlink()
             d.mkdir(parents=True, exist_ok=True)
+            return d
+
+        def write() -> dict | None:
+            d = fresh("window/matte" if wins else "matte")
             for i, src in enumerate(paths):
                 with Image.open(src) as im:
                     im = im.convert("L")
                     if im.size != (w, h):
                         im = im.resize((w, h), Image.BILINEAR)
                     im.save(d / f"{i:04d}.png")
-        await asyncio.to_thread(write)
-        f = await asyncio.to_thread(store.update_layer, f.id, recipe.layer_id, status="done", error=None)
+            if wins:                                                         # D163: the take and its matte back in the frame
+                fw, fh = f.size["w"], f.size["h"]
+                take, frames, matte = store.pass_dir(f.id, recipe.layer_id, "window/frames"), fresh("frames"), fresh("matte")
+                for i, win in enumerate(wins[:f.frames]):
+                    with Image.open(take / f"{i:04d}.png") as im:
+                        paste_back(im.convert("RGB"), win, fw, fh, (128, 128, 128)).save(frames / f"{i:04d}.png")
+                    with Image.open(d / f"{i:04d}.png") as im:
+                        paste_back(im, win, fw, fh, 0).save(matte / f"{i:04d}.png")
+            return matte_check(store, store.get(f.id) or f, recipe.layer_id)
+        check = await asyncio.to_thread(write)
+        f = await asyncio.to_thread(store.update_layer, f.id, recipe.layer_id, status="done", error=None, matte_check=check)
         job.result["final_id"], job.result["layer_id"] = f.id, recipe.layer_id
-        job.log_tail.append(f"matte: {len(paths)} masks for {recipe.layer_id}")
+        job.log_tail.append(f"matte: {len(paths)} masks for {recipe.layer_id}" + (" in its window, pasted back" if wins else "")
+                            + (f"; it strays from the figure on {len(check['strays'])} of {check['frames']} frames" if check and check["strays"] else ""))
         q.hub.broadcast("final.updated", {"id": f.id, "revision": f.revision})
 
 

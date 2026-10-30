@@ -113,8 +113,8 @@ Tomas's line is over its 4.8 s limit.
 | W43 | Performance | **The assembly showed clay mannequins:** all depth passes black from `depthRange(\|pos − target\|)` with the picture camera's 1 m target; empty comp mattes; nothing flagged |
 | W44 | Performance | A prop layer's beauty is the whole set, opaque |
 | W45 | Performance | (= F44) The composition poll logs a 404 per final |
-| W46 | Performance | **A small, far figure:** the reference at ~20 px, a giant ghost face as background, an inverted matte, a pale box with a hole in the shot; "done · 1✓" |
-| W47 | Performance | Ines's layer reference lost her head with the grey background |
+| W46 | Performance | **A small, far figure:** the reference at ~20 px, a giant ghost face as background, an inverted matte, a pale box with a hole in the shot; "done · 1✓" → E43, D163 (performed in its own window) |
+| W47 | Performance | Ines's layer reference lost her head with the grey background → D163 (the cut-out's bridge) |
 | W48 | Final | *Make the composition* leaves it closed; the toast says "Open in Final" while in Final |
 | W49 | Final | **The render becomes the shot's clip on the server, but the page keeps the old version:** *Mark the shot final ✓* stays locked with no reason; a reload unlocks it |
 | W50 | Performance | The Clips card opens on the oldest final, or on another shot's; a final offers *Variations* and *Try the other model* |
@@ -125,7 +125,7 @@ Tomas's line is over its 4.8 s limit.
 | W55 | Performance | The Open-ground floor is black from the coverage camera: a black band in The ferryman's plate |
 | W56 | Shots | Any edit to a shared stage stales every shot of the scene (Arrival ●●● → !●●) |
 | W57 | Bin | Imports fills with working files: layer references, pose guides, face bakes (61 after World and three finals) |
-| W58 | Performance | **A figure cut by the frame becomes a monster:** The seal's over-the-shoulder Ines as a giant hand and eye; "done · 1✓ 2✓ 3✓" |
+| W58 | Performance | **A figure cut by the frame becomes a monster:** The seal's over-the-shoulder Ines as a giant hand and eye; "done · 1✓ 2✓ 3✓" → E43, D163; its facing in profile: Q32 |
 | W59 | World › Edit | The mode switch's Edit stays greyed with a picture selected (the Inspector's Edit works); the save toast offers "Open … in World" while there |
 | W60 | Departure | The ferry is painted on the baked backdrop; nothing lets a part of a set move |
 | W61 | Episode | "2 of 4 clips not final shots" for four shots marked final (the stale ones) |

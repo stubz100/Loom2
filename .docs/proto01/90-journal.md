@@ -13694,3 +13694,80 @@ head from her body. Grown by 2 px before the blob is taken, and cut back to the 
 
 **D163** is recorded in the decision log: the window, the guide drawn there, the reference placed there, the take and its matte pasted back,
 W47's bridge, and the checks.
+
+## 2026-10-30 19:03 — D163 built; its rig set up (the bars before the run)
+
+**Built**, offline-tested, rig owed:
+
+- `finals.py`:
+  - `figure_windows` and `layer_window` (a window only when it gives the figure at least the frame's pixels on every frame);
+  - `draw_pose` (passes.ts `drawPose` on the server, with D158's away face and D101's hands and feet), `paste_back`, `matte_check`;
+  - the cut-out's 2 px bridge (W47);
+  - the layer's `window` (None until decided, so a final made before D163 is decided at its next run) and `matte_check`.
+- **The routes:**
+  - Stage's hands and feet are kept with the keypoints;
+  - the window is decided at create, at a redraw, or at the run;
+  - the guide is drawn in the window and the reference placed there;
+  - the reply's `window`.
+- **The finishers:**
+  - the stitch goes to `window/frames`, and SAM 3 runs there;
+  - the take and the matte are pasted back into `frames/` and `matte/`;
+  - every character layer's matte is checked.
+- **Client:** the hands and feet sent; the run's toast names the window; the layer card shows *window ×N* and *matte strays N/M ▾* (*Matte it
+  again*, *Re-take*).
+
+**The checks:**
+
+- offline 749 passed (`test_window_d163`: the window holds a small, a cut and a walking figure and refuses a close shot; the guide drawn as
+  Stage draws it; the paste-back; the cut-out's head; the run at 480×848; the fake engine's take and matte pasted back where the window is;
+  the matte check);
+- Vitest 602 + 3 skipped;
+- typecheck, build and lint clean (61 warnings, as before);
+- the settings audit and the agent docs clean;
+- e2e owed (port 1420 is held).
+
+The matte check on E43's outputs:
+
+- the broken mattes stray on 30 of 49 (Tomas), 49 of 49 (Tomas, F) and 77 of 77 frames (Ines);
+- the window runs, The ferryman and Stay on none: cover ≥ 0.87, ≤ 1.5× the figure.
+
+**The rig** (`scripts/d163_rig.py`) runs on the E43 copy, through the app's own route:
+
+- Arrival's Tomas: `POST …/layers/…/run`, then the assembly;
+- The seal's Ines: all 169 frames, 3 batches.
+
+**Bars:** each run replies a window (× ≥ 1); the layer is done with its matte checked, straying on ≤ 5 % of its frames; Tomas keeps his face
+(identity ≥ 0.35); both assemble.
+
+## 2026-10-30 19:14 — D163's rig: both layers performed in their windows through the app's own route, every bar met
+
+`scripts/d163_rig.py` ran alone on the GPU. Results and sheet: `engine/spikes/out/d163`.
+
+| Layer | Window | Wan batches | Matte check | Identity | Assembled |
+| --- | --- | --- | --- | --- | --- |
+| Arrival · Tomas (W46) | ×15.1 (decided at the run: a final from before D163) | 1 · 86 s | strays on 0 of 49 frames, cover ≥ 0.93, ≤ 1.3× | 0.68 | 18 s |
+| The seal · Ines (W58), all 169 frames | ×1.8, reaching below the frame | 3 · 121 / 119 / 58 s | 0 of 169, cover ≥ 0.86, ≤ 1.2× | — (from behind, the back view) | 60 s |
+
+The sheet:
+
+- Arrival: Ines runs, and Tomas stands whole at the far lamp, with no box;
+- The seal: Ines in the foreground from behind (the back of her head, her hood) beside Tomas, with no hand.
+
+**Q32** did not show here: no frontal face on any of 22 sampled frames. E43's W and H, with the same inputs within the window's edge clamp,
+turned her to the camera on 20 of 20. Her near-profile head is ambiguous for Wan, so Q32 stays open as intermittent (E44).
+
+Not covered by the rig: a final made by Stage with its hands and feet (the guide's WholeBody). The old finals carry none; the unit test
+draws them, and the e2e makes finals through Stage.
+
+## 2026-10-30 19:38 — D163's e2e; D164 recorded (the face pass and lip-sync in a shot's owed work)
+
+The e2e ran alone, with port 1420 freed (the walkthrough's preview was stopped at the author's word): 84 of 84, 6.1 min. It makes finals
+through Stage, so it sends the hands and feet with the keypoints.
+
+**D164**, the author's answer to "a processing layer for this purpose?": *Perform the owed layers ▶* also takes, per character layer:
+
+- the face pass, for a head in the band where it gains identity;
+- lip-sync, for each voiced line on the character's lane.
+
+The minutes are shown first. A stray matte is matted again once by itself. Not a processing layer: a pass over the flattened stack comes
+after the take it would have to repair. The band is measured first: spike E45.

@@ -14727,3 +14727,64 @@ serving behind it. It reads as a working market behind the walker.
 - **I am not overriding the bar myself.** Building a looping clip on a face (with the tone lock, and a short crossfade at the loop
   point) is put to the author with the loop video (`loop_L1_locked.mp4`, three cycles) and the shot's preview (`preview_L1.mp4`).
 - **The other way:** M6 goes on with the extras and the generated plate.
+
+## 2026-10-31 14:47 — M6: the author chose to compare first; E50, the three ways to a busy market on one shot, set up
+
+**The author's answer** to the looping crowd clip (E49c): "Compare first". M6's other two arms run on the same shot before anything is
+built, the crowd clip compared from its spike preview.
+
+**The shot:** the market walk's v2 (frames 48–144, 65 at 16 fps, 848 × 480) on E47's copy, Final 5 (the plate under D170 and D172).
+
+- **The shared base:** Final 5's three figures (Mira, Hanne, Bram) performed through *Perform the owed layers ▶* (`POST
+  /finals/{fid}/owed`: each figure in its D163 window, its matte, its face work as owed), once, used by every arm.
+- **(a) the extras:** Final 5 assembled as it is. The busy-ness is the performed extras' alone (Hanne crossing, Bram at his counter)
+  over the plate under D170 and D172. More extras cost a character each (casting, A-pose, body) and a performance each. None is added
+  here; the cost is reported.
+- **(b) the generated plate with a crowd:**
+  - a still of the plate's frame 0 with a crowd painted in by Klein (I2I 0.55: shoppers along the aisle and at the counters,
+    stallholders serving);
+  - then LTX-2.3 along the path from that still, on the plate's own depth pass through the IC-LoRA (D130's recipe, its words asking
+    for the crowd in place of "nobody");
+  - its 65 frames are the plate of a copy of Final 5, assembled with the same three performances.
+- **(c) the crowd clip:** E49c's L1 (tone-locked, a loop) mapped onto the facade band of Final 5's plate (E49's match) as the plate of
+  another copy of Final 5, assembled with the same performances.
+
+**Measured:**
+
+- the assembled clips side by side (frames 5, 32 and 60, and a video);
+- for (b), whether the set stays the set: the plate's upper band (the stall front) against Final 5's plate, normalised
+  cross-correlation, on frames 5, 32 and 60;
+- each arm's own GPU seconds beyond the shared performances.
+
+**Bars:**
+
+- **(b) keeps the set** when that correlation is ≥ 0.6 on all three frames and, to the eye, its people stay people through the 4 s and
+  none walks through the set's geometry.
+- **No bar picks the winner.** The author does, from the three clips. Each is reported with how busy it reads (the people in view at
+  once), what goes wrong, and what it costs.
+
+## 2026-10-31 15:04 — E50: the crowd clip makes the market busy and keeps the set; the generated plate loses the set; the extras alone leave it empty
+
+E50 ran on E47's copy, the GPU parts alone (`engine/spikes/out/e50/`: `sheet.jpg` and `compare.mp4`, the three stacked).
+
+- **The shared base:** *Perform the owed layers ▶* on Final 5 queued Mira, Hanne and Bram (nothing refused). It took 586 s: the three
+  performances 98 s, 99 s and 192 s, and five matte runs 25–54 s (two retried by the other model, D164).
+- **The assemblies:** 30 s each, on the CPU.
+
+| Arm | Its own GPU | To the eye (frames 5, 32, 60) |
+| --- | --- | --- |
+| (a) the extras | none beyond the base (a further extra: its character, ≈ 3–5 min of casting and A-pose, and ≈ 100–190 s of performance) | Mira in profile, Hanne crossing, Bram at the counter, all clean over the plate under D170 and D172. Behind them the market is empty |
+| (b) the generated plate with a crowd | 181 s (the still 40 s, LTX 141 s) | the set does not hold: the counters, crates and hall change from frame to frame, a yellow line appears on the floor, and by frame 60 it is another hall with green columns. One generated man walks by at the end. The stall front against Final 5's plate: NCC 0.179, 0.450, 0.251 |
+| (c) the crowd clip | ≈ 244 s (E49b's start 56 s, E49c's loop 188 s) for 11 m of stall front | stallholders serving and shoppers walking along the counters behind the three performed figures (3–5 in view); the set stays the set; the performed extras stand in front of the clip's people, as they should |
+
+**Against the bars set at 14:47:**
+
+- **(b) fails** to keep the set (NCC < 0.6 on all three frames, and to the eye).
+- **No bar picks the winner;** the author does.
+- **My reading:**
+  - (c) is the only arm that makes the market look busy, and it does so cheaply.
+  - (a) is what gives the shot people who cross in front and interact, at a cost per person.
+  - The two together fit the market: the crowd clip behind, a few performed extras in the aisle.
+  - (b) is not worth pursuing for a set the shot already has: LTX repaints the place.
+
+Sent to the author with the decision (what to build for M6).

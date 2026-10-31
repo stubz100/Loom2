@@ -14897,3 +14897,94 @@ Draft, 392 s and 392 s on Motion.
 **The odds, written down:** of the six Draft loops made with people so far (E49c L1, L2; the rig's; E51 C 41, C 42; E49b's open clips
 not counted), two moved with solid people (L1, C 41), two were nearly still and one had a ghost. A crowd is a roll the author may repeat
 (≈ 4 min each); keeping the better of two is not built (the motion measure would have picked C 42's ghost).
+
+## 2026-10-31 16:43 — The author: a static background and a crowd of people only on a layer; spike E52 set up, the bars before the run
+
+**The author, after D173:** "I wonder if it's worth separating the background and crowd: the background can be a static and wide image,
+while the crowd — as people and characters only on a layer — can be stitched together very easily, even by just leaving a blank space
+between two character animations. They will have to be masked on the background layer though." Then: "Yes, per your recommendation."
+
+**Why it should be better than D173 as built:**
+
+- **the face keeps its own picture** end to end (no refine shift, no seam at a stretch's edge);
+- **people-only segments stitch** with transparent gaps, along any length;
+- **a good loop can be reused** (shifted in time, mirrored) where only about two loops in six come out with solid walkers.
+
+**The way:** the crowd is still made on the real background (its light and scale match), then cut out with the matting the performed
+layers use (SAM 3 by "person"); the face's Fill already paints it with nobody in it. **The risks:**
+
+- matting people 100–200 px tall (halos, flicker);
+- cut-outs lose their contact shadows;
+- people at a segment's edge;
+- a clip with a mask (video has no alpha) for Clay and the plate.
+
+**E52** (E51's two good loops, C 41 and CM 42, their tone-locked frames; the GPU only for the mattes; `engine/spikes/out/e52/`):
+
+- **the mattes:** SAM 3 by "person" (threshold 0.4) on every frame of each loop, on the spike's engine through the app's own graph
+  (`build_matte_sequence`);
+- **the face:** E47's copy's static right stall front (the texture under D170) at the loops' density (97 px a metre), with the people
+  layered on it, each segment's alpha faded over its outer 0.3 m;
+- **S2 (two loops):** C 41's left half at 3.0–8.6 m, a 0.6 m gap, CM 42's right half at 9.2–14.8 m;
+- **S1 (one loop tiled):** C 41's left half at 3.0–8.6 m, then the same half mirrored and 40 frames later at 9.2–14.8 m;
+- **the preview:** each mapped onto Final 5's plate frames (E49's match: the shot's v2, 65 frames), as a played face would show it.
+
+**Measured:**
+
+- the mattes' flicker (the mean change of alpha between frames inside the segments);
+- the share of soft edge (alpha 0.1–0.9);
+- frames 5, 32, 60 and a video of each preview, beside E50's (c) (D173's whole-stretch clip).
+
+**Bars:**
+
+- **the edges:** at the shot's density, to the eye, the people sit on the static background with no halo and no flicker;
+- **the segments:** inside the shot nobody is cut off at a segment's edge (a gradual fade is fine);
+- **the repeat:** in S1, within the shot's 4 s, the tiled loop does not read as the same people twice.
+- **What goes in:**
+  - if the edges and the segments pass, D173 becomes a background with crowd layers (a new D);
+  - if the repeat passes too, the crowd's loops are a library that is tiled along a face;
+  - if not, one loop a segment.
+
+## 2026-10-31 16:55 — E52: people-only layers cut cleanly and stitch, but a cut-out has no depth — only walkers at the face's own depth can move; the author's call
+
+E52 ran its mattes alone on the GPU, then the layering on the CPU (`engine/spikes/out/e52/`: `sheet.jpg`, `sheet_S2_S1.jpg`,
+`compare.mp4`).
+
+**Three runs of the matte, and why:**
+
+- **SAM 3 "person" at 0.4:** kept one person of five on C 41 (the woman in green). At 0.2: the same, coverage unchanged.
+- **The cause** (the pinned ComfyUI, `comfy_extras/nodes_sam3.py`, `comfy/text_encoders/sam3_clip.py`): a plain text prompt keeps one
+  detection, and the words set how many ("person:20"). The app's matte asks for "person" because a performed layer is one figure; a crowd
+  needs a number.
+- **"person:20":** 4.9 % and 4.3 % of the frame (from 1.6 % and 2.0 %), 140 s and 137 s a loop of 81 frames. The edges are hard (no soft
+  alpha) and the flicker is 0.004 and 0.029 (the latter is CM 42's walkers moving).
+
+**A layout fix:** the first layout took each loop's left half, where C 41 has nobody (its people are all in its right half, CM 42's
+77 %). Each segment is now the half where the mask's columns hold the people.
+
+**The arms on Final 5's plate** (frames 5, 32, 60, and the video):
+
+- **S2** (two loops, every person cut out):
+  - the cut-outs sit cleanly on the static stall front at the shot's size, with no halo;
+  - but people who stood behind a counter or deep in the hall now stand on the crates in front of the static counter, or float on the
+    fish.
+  - A cut-out keeps no depth: off its own stretch it no longer meets the counters it was made with.
+- **S1** (one loop tiled, mirrored, 40 frames later): the same woman in green and the same stallholder appear twice, side by side.
+- **S2g** (the walkers only: the cut-outs whose feet reach the bottom tenth of the face, by a flood fill on the masks):
+  - the stallholders and the hall's people are gone, and the walkers stand in front of the counter plausibly;
+  - one to three people in view;
+  - CM 42's two walkers, whom Wan put close to its camera, are giants on the face beside the stalls.
+
+**Against the bars set at 16:43:**
+
+- **The edges pass.**
+- **The segments pass:** nobody is cut off at a segment's edge in the shot.
+- **The repeat fails:** S1 reads as twins.
+
+**What the bars did not cover, and the eye sees:**
+
+- **staging:** people behind or among the stalls cannot leave the stretch they were made on;
+- **scale:** a walker near Wan's camera is too large for the face's depth.
+
+By the letter of the bars, D173 would become a background with crowd layers. By what is on the plate, only walkers at the face's own
+depth can be cut out and moved. Life behind the counters needs the whole clip on its own stretch, which is D173 as built. Not decided
+here: put to the author with the comparison.

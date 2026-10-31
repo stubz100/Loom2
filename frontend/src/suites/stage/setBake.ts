@@ -13,17 +13,22 @@ export const COVERAGE_RATIO_SCALE = 8                                        // 
 /** D133's rule as E38 used it: a texel the picture saw at a cosine under 0.05, or through a pixel over two texels wide, is the Fill's. */
 export const UNSEEN_COS = 0.05
 export const COARSE_TEXELS = 2
+/** D170 (E46): a street's fronts stand out from their face (stalls, steps, awnings); seen more than 45° off square they lie on it sheared,
+ *  so a facade's texel under this cosine is the Fill's too (place_sets.FACADE_COS). */
+export const FACADE_COS = 0.7
+/** The cosine under which a face's texel counts as unseen (place_sets.unseen_cos). */
+export const unseenCos = (id: string): number => (id.split('_')[0] === 'facade' ? FACADE_COS : UNSEEN_COS)
 /** D143: the texel by kind — the picture's pixel on the faces measured 1.1–1.8 cm in rooms, 4.6 in corridors, 8–12 in streets. */
 export const TEXEL_BY_KIND: Record<PlaceSetDoc['kind'], number> = { room: 0.01, corridor: 0.02, street: 0.04, ground: 0.04 }
 
 /** A baked face's coverage read back (RGBA bytes): the share of texels the picture saw at all, and the share the Fill takes. */
-export function coverageShares(px: Uint8ClampedArray | Uint8Array): { seen: number; bad: number } {
+export function coverageShares(px: Uint8ClampedArray | Uint8Array, unseen = UNSEEN_COS): { seen: number; bad: number } {
   let seen = 0, bad = 0
   const n = px.length / 4
   for (let i = 0; i < px.length; i += 4) {
     const cos = px[i] / 255, ratio = (px[i + 1] / 255) * COVERAGE_RATIO_SCALE
     if (cos >= UNSEEN_COS) seen++
-    if (cos < UNSEEN_COS || ratio > COARSE_TEXELS) bad++
+    if (cos < unseen || ratio > COARSE_TEXELS) bad++
   }
   return { seen: n ? +(seen / n).toFixed(4) : 0, bad: n ? +(bad / n).toFixed(4) : 0 }
 }
@@ -76,7 +81,7 @@ export async function bakeSet(ps: PlaceSetDoc, plate: TexImageSource & { width: 
       const gl = r.getContext(), buf = new Uint8Array(W * H * 4)
       gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, buf)
       const coverage = await toBlob(r.domElement)
-      out.push({ id: f.id, w: f.w, h: f.h, px: [W, H], texel_m: +tx.toFixed(5), texture, coverage, ...coverageShares(buf) })
+      out.push({ id: f.id, w: f.w, h: f.h, px: [W, H], texel_m: +tx.toFixed(5), texture, coverage, ...coverageShares(buf, unseenCos(f.id)) })
       scene.remove(mesh); mesh.geometry.dispose()
     }
     return out

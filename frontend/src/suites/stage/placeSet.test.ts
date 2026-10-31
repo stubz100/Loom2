@@ -2,6 +2,7 @@
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 import { normalOf, placeSet, setFaces } from './placeSet'
+import { coverageShares, FACADE_COS, UNSEEN_COS, unseenCos } from './setBake'
 
 describe("a place's set (CW6)", () => {
   it("builds a room's faces looking in, the front wall off by default", () => {
@@ -35,5 +36,16 @@ describe("a place's set (CW6)", () => {
     expect(box.max.toArray().map((v) => +v.toFixed(3))).toEqual([2, 3, 2])
     const back = g.children.find((c) => c.userData.face === 'wall_back')!
     expect(new THREE.Vector3(0, 0, 1).applyQuaternion(back.quaternion).z).toBeCloseTo(1, 6)    // facing in (+Z)
+  })
+})
+
+describe("D170: a street's fronts seen off square are the Fill's (place_sets.unseen_cos's twin)", () => {
+  it('counts a facade texel under a cosine of 0.7 as unseen, every other face under 0.05', () => {
+    expect(unseenCos('facade_left')).toBe(FACADE_COS)
+    expect(FACADE_COS).toBe(0.7)
+    expect([unseenCos('road'), unseenCos('wall_left'), unseenCos('floor'), unseenCos('end')]).toEqual([UNSEEN_COS, UNSEEN_COS, UNSEEN_COS, UNSEEN_COS])
+    const px = new Uint8Array([10, 0, 0, 255, 100, 0, 0, 255, 160, 0, 0, 255, 230, 0, 0, 255])   // cosines 0.04, 0.39, 0.63, 0.90; every pixel fine
+    expect(coverageShares(px)).toEqual({ seen: 0.75, bad: 0.25 })
+    expect(coverageShares(px, unseenCos('facade_right'))).toEqual({ seen: 0.75, bad: 0.75 })    // the picture saw it, the Fill takes it
   })
 })

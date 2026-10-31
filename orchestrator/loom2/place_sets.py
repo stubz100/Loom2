@@ -31,6 +31,8 @@ UNSEEN_COS = 0.05                                # D133 / E38: a texel seen at a
 COARSE_TEXELS = 2.0                              # … or seen through a picture pixel over two texels wide
 RATIO_SCALE = 8.0                                # the coverage's green × this = the picture's pixel in texels (setBake.ts COVERAGE_RATIO_SCALE)
 FILL_MIN = 0.002                                 # PF1: a face with less to fill is left as baked
+FACADE_COS = 0.7                                 # D170 (E46): a street's fronts stand out from their face (stalls, steps, awnings); seen more
+                                                 # than 45° off square they lie on it sheared, so they go to Fill as unseen (stage/setBake.ts)
 ROOM_FACES = ("floor", "ceiling", "wall")        # a room's or a corridor's faces: filled plain (E38: a Fill invents windows on a wall)
 NOUN = {"floor": "the floor", "ceiling": "the ceiling", "wall": "a wall", "road": "the road's surface", "pavement": "the pavement",
         "facade": "the buildings' fronts", "end": "the far end of the street", "backdrop": "the land and the sky in the distance"}
@@ -99,6 +101,12 @@ def fill_prompt(fid: str, material: str, place: str, kind: str = "room") -> str:
     the backdrop are continued as the rest (an alley's walls are building fronts, their windows belong)."""
     named = (material or "").strip().rstrip(".")
     what = named or face_noun(fid)
+    if fid.split("_")[0] == "facade":                                       # D170 (E46): the elevation first, or Klein paints the place's view down it
+        what = what if what[1:2].isupper() else what[:1].lower() + what[1:]
+        lead = (f"A flat elevation of {what}, seen square on — no perspective, no vanishing point, no floor and no ceiling in view: continued "
+                "seamlessly as the rest of it, the same materials and pattern, the same light, no people.")
+        place = (place or "").strip().rstrip(".")
+        return f"{lead} The place: {place}." if place and not named else lead
     what = what[0].upper() + what[1:]
     if kind == "room" and fid.split("_")[0] in ROOM_FACES:
         lead = f"{what}, seen straight on: its surface continued plain and even, nothing on it and nothing in front of it — no window, no door, no picture, no furniture, no people — the same light."
@@ -108,10 +116,16 @@ def fill_prompt(fid: str, material: str, place: str, kind: str = "room") -> str:
     return f"{lead} The place: {place}." if place and not named else lead
 
 
-def fill_mask(cov: np.ndarray) -> np.ndarray:
-    """The texels a face's Fill takes, from its coverage (RGB bytes): unseen, or seen through a pixel over two texels wide."""
+def unseen_cos(fid: str) -> float:
+    """The cosine under which a face's texel counts as unseen: a facade's FACADE_COS (D170), any other face's UNSEEN_COS."""
+    return FACADE_COS if fid.split("_")[0] == "facade" else UNSEEN_COS
+
+
+def fill_mask(cov: np.ndarray, unseen: float = UNSEEN_COS) -> np.ndarray:
+    """The texels a face's Fill takes, from its coverage (RGB bytes): unseen (a cosine under `unseen`, unseen_cos), or seen through a pixel
+    over two texels wide."""
     c = cov.astype(np.float32) / 255.0
-    return (c[..., 0] < UNSEEN_COS) | (c[..., 1] * RATIO_SCALE > COARSE_TEXELS)
+    return (c[..., 0] < unseen) | (c[..., 1] * RATIO_SCALE > COARSE_TEXELS)
 
 
 def fill_order(ps: PlaceSet, only: list[str] | None = None) -> list[str]:
@@ -171,7 +185,7 @@ def prepare_fill(q: Any, pid: str, vid: str, order: list[str], seed: int | None 
         with Image.open(q.catalogue.abs_path(tex_rec)) as im:
             rgba = np.asarray(im.convert("RGBA")).copy()
         with Image.open(q.catalogue.abs_path(cov_rec)) as im:
-            mask = fill_mask(np.asarray(im.convert("RGB")))
+            mask = fill_mask(np.asarray(im.convert("RGB")), unseen_cos(fid))
         if mask.shape != rgba.shape[:2] or float(mask.mean()) < FILL_MIN:
             why.add("small")
             continue

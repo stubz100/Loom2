@@ -53,6 +53,7 @@ export interface Panel {
   loras: { model_id: string; strength: number }[]
   auto_lora: boolean                                        // LT3 (18 §3f): a profile mention adds its version's LoRA + trigger; off = this prompt without
   style_id?: string | null                                  // D85: a Story style id; null = none; absent = the world's default style
+  ref_framing?: string | null                               // D169: World's Make — the reference framing switched on (its words may be edited); null = none; absent = read from the words (D162)
 }
 
 /** Every prompt string of the panel (the Text field, the tree's fields, the JSON text) — where an @mention can be written. */

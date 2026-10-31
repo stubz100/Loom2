@@ -14242,3 +14242,206 @@ no figure, behind the camera) and `shotRange` (the version's range, the current 
 - the Vitest readiness chip.
 
 No rig: D168 changes no model's path (SDPose's keypoints, the GPU step, are untouched); the real path is the fake engine's.
+
+## 2026-10-31 07:21 — M12 → spike E46 set up: the side-on stall fronts, repainted straight on, then sharpened; the bars before the run
+
+**M12** (the market walk) is two problems:
+
+- **The smear:** the stall fronts were baked from a picture that saw them nearly edge-on, at a cosine of about 0.1–0.5. *Fill* takes
+  only a cosine under 0.05 or a picture pixel over two texels wide, so they count as seen.
+- **Resolution:** a street face is stored at 4 cm a texel (D143), while the tracking camera, about 4.8 m from the stalls, shows about 7 mm a
+  pixel. Even a clean face is magnified about 5×.
+
+**E46** runs on a copy of the market project (`F:/loom2-projects/_e46/market-copy`). The face is the right-hand stall fronts, the one
+behind Mira.
+
+| Arm | What |
+| --- | --- |
+| A | the face as it is (bake + fill) |
+| G | the texels the picture saw at a cosine under 0.35 also given to *Fill* (the app's own route, the face named: Klein repaints them straight on) |
+| AU | A through SeedVR2 3B ×4 (D153's upscaler; ×2 twice) |
+| GU | G through SeedVR2 3B ×4 |
+
+**Measured on the face's texture:**
+
+- **the stretch:** the mean horizontal gradient over the vertical one. A smear along the hall is ≪ 1, and a face seen straight on is
+  near 1.
+- **the sharpness:** the Laplacian variance at the shot's density, the face scaled to 7 mm a pixel.
+- the seconds of each step, and a sheet.
+
+**Bars:**
+
+- **G** (the angle) passes when the stretch is within 0.6–1.6 and, to the eye, the face reads as a row of stalls seen straight on (no
+  seam, no repeated person).
+- **GU** (the resolution) passes when its sharpness at the shot's density is ≥ 2× G's, with no invented pattern to the eye.
+- **The product:** whatever passes goes in. G as the grazing rule in *Fill* (`fill_mask` and `coverageShares`, twins), GU as an upscale
+  of a street's or open ground's faces after their fill.
+
+**E46, one arm added before the run.** A look at the face first showed more than the bars assumed. Of the right fronts (750 × 124 texels),
+the seen 56 % is the edge-on smear, which *Fill* keeps. The rest is *Fill*'s own paint, and there Klein drew a perspective view down a
+market hall onto the wall (as W21 found on the pier's floor).
+
+- **GM:** G with the face's material named, the author's lever in World's Build: "a flat front elevation of a row of fish market stalls
+  seen square on …". The bars are G's: the stretch, and to the eye a row of stalls with no hall painted on it.
+
+## 2026-10-31 07:29 — M7 → D169: a reference framing stays on while its words are edited
+
+M7 (the market walk): to aim the set picture, the author edits its framing words, and the run silently becomes an ordinary look. The
+foot changes to "Give Fish market a look ▶" and the pictures land in the bin, not among Build's candidates. The cause is D162's reading:
+the reference is on only while the framing words equal the server's sentence exactly (`activeFraming`).
+
+**D169:**
+
+- the reference chip is a switch, kept with the entity's panel (`ref_framing`);
+- a click turns it on, fills the sentence and makes the frame 16:9;
+- the words can be edited, and the reference keeps them; they are what is sent;
+- a second click on the chip, or a class framing chip, turns it off;
+- a panel from before D169 (no `ref_framing`) keeps D162's reading.
+
+D162's e2e asserted the old behaviour (editing the words turned the A-pose off). It now asserts D169's.
+
+M7's second half, the pictures still looking down the hall whatever the words say, is M5's: the picture model takes no direction from
+the words. That needs a spike, after this.
+
+## 2026-10-31 07:31 — E46's result: naming the face as a flat elevation ends the painted hall; 0.35 keeps a smeared band; the stretch metric failed; E46b's bars
+
+E46 ran three times, alone on the GPU, on the copy of the market project (`engine/spikes/out/e46/`):
+
+- **The first run** stopped after G: the material phrase was over the face's 200-character `material` field (a 422).
+- **The second run** rewrote it in 178 characters: "a flat elevation of fish market stalls seen square on: counters of fish on ice, crates below, lamps
+  above, no perspective, no floor or ceiling in view".
+- **Its arm A is void:** the copy kept the first run's G fill, so "A" (and AU) is another seed of G. A is measured again in E46b.
+
+| Arm | Stretch | Sharpness at the shot | Seconds | To the eye |
+| --- | --- | --- | --- | --- |
+| G (cosine under 0.35 to Fill) | 0.672 | 78.9 | 39 | two perspective market halls painted on the wall, people in them; a smeared band in the middle |
+| GM (G, the material named as an elevation) | 0.546 | 47.0 | 18 | a row of stalls seen square on: counters, fish on ice, crates, lamps, iron columns, white tiles, nobody; the same band |
+| GU (G, SeedVR2 ×4) | 0.66 | 1524.1 | 7 | G sharper; the band's smear turned to streaks |
+| GMU (GM, SeedVR2 ×4) | 0.563 | 658.4 | 7 | GM sharper (the lamp, the tiles, the fish); the band streaked |
+
+Against the bars set at 07:21:
+
+- **G fails:** to the eye it is a painted hall. Its stretch, 0.672, is inside the bar.
+- **GM passes to the eye, and fails the numeric bar** (0.546 < 0.6).
+- **The stretch metric did not measure what it was meant to.** A face seen square on is full of horizontal edges (the counters, the
+  shelves, the crate rims), so its ratio is low. The void A, a perspective hall, scored 0.722. The eye decides; the metric is dropped.
+- **GU and GMU pass the sharpness bar** (≥ 2×: 19× and 14×). To the eye they add no pattern to a clean surface, but they turn any smear
+  left on the face into streaks: upscaling is worth doing only on a face that was filled clean.
+
+**Two findings decide what comes next:**
+
+1. **0.35 is the wrong cut for a frontage, and the cause is relief, not resolution.** The texels seen at a cosine of 0.35–0.64 (10–12 %
+   of each facade) pass the footprint test (≤ 2 texels a picture pixel, ≤ 8 cm), yet they are a smear. A stall stands about a metre out
+   from the face, and a picture taken 50–70° off the face's normal lays it flat as a shear (depth × tan θ: 1.2–2.7 m). A floor has no
+   relief, so the footprint test is enough there.
+2. **Klein paints a street's frontage as a perspective view unless it is told it is an elevation.** The place's words ("a fish market
+   …") are a scene, and Klein paints the scene.
+
+On the market set (the original, cosines from its coverage), a facade's highest cosine is 0.639 (left) and 0.635 (right). The road and
+the pavements reach about 0.4 and are 39–40 % coarse by footprint anyway. The far end is seen square on (cosine 1.0).
+
+**E46b, a candidate rule tried through the app's own Fill route** (the code in the working tree, not committed; outputs
+`engine/spikes/out/e46b/`; a fresh copy of the market project):
+
+- a `facade` face's texels seen at a cosine under 0.7 (45°) go to Fill. The twins are `place_sets.fill_mask` and
+  `setBake.ts coverageShares`, by the face's id; every other face keeps 0.05;
+- a facade's default Fill lead names it an elevation: "…, a flat elevation seen square on — no perspective, no vanishing point, no
+  floor and no ceiling in view: continued seamlessly as the rest of it …". The place's words follow as before, and no material is
+  named;
+- the arms: **A** (the original face); **F** (both facades filled under the candidate rule); **AU** and **FU** (SeedVR2 3B ×4).
+
+**Bars:**
+
+- **F passes** when, to the eye on the sheet and in the shot's crop, both facades are a row of stalls seen square on: no perspective
+  hall, no smeared band, nobody painted standing in them.
+- **FU passes** when its sharpness at the shot is ≥ 2× F's and, to the eye, nothing is invented: no streaks, no repeated texture.
+- **What goes in:** if F passes, its rule is D170. If FU passes too, an upscale of a street's faces after their Fill is proposed
+  separately, with its cost (texture memory at ×4) measured first.
+
+## 2026-10-31 07:35 — E46b: the 0.7 cut ends the band, but the place's words still paint a hall; SeedVR2 passes on a clean face; E46c's bars
+
+E46b ran on a fresh copy of the market project (`engine/spikes/out/e46b/`; Fill 42 s and 12 s, SeedVR2 ×4 10 s and 7 s).
+
+| Arm | Sharpness at the shot | To the eye |
+| --- | --- | --- |
+| A, right fronts (as built) | 57.5 | a hall in perspective with its vanishing point on the right; the smeared band left of centre |
+| F, right fronts | 102.1 | no band: the face is painted whole. It is a perspective hall again, its vanishing point centred, shoppers walking down it |
+| F, left fronts | 98.3 | the same: a hall down the middle, people at the counters |
+| AU (A ×4) | 696.1 | A sharper; the band streaked |
+| FU (F ×4) | 1911.4 | F sharper, no streaks, no repeated texture; the figures a little waxy |
+
+The prompt F sent: "The buildings' fronts, a flat elevation seen square on — no perspective, no vanishing point, no floor and no ceiling
+in view: continued seamlessly … no people. The place: a long row of fish stalls in an old covered market hall, seen straight on from
+across a wide aisle: wooden counters heaped with fish …, busy stallholders and shoppers along the counters, a wet stone floor in the
+foreground."
+
+**Against the bars set at 07:31:**
+
+- **F fails.** The 0.7 cut did what it was for (no band on either facade), but the elevation lead loses to the place's words: Klein
+  paints the scene they describe (a hall, its floor, its shoppers). In E46, GM's material was named, and a named material drops the
+  place's words; that is the only arm that gave an elevation.
+- **FU passes:** 18.7× F's sharpness and nothing invented, on a face filled clean. AU shows the other side: an upscale streaks whatever
+  smear is left.
+
+**E46c, what an unnamed facade's Fill should name** (the same copy, the candidate rule in place, `engine/spikes/out/e46c/`). Each arm is
+simulated through the face's material, because a named material is the whole subject. Two seeds each, the right fronts:
+
+- **N, the place's name:** "The buildings' fronts along Fish market".
+- **S, the place's words without people, floor or camera:** "fish stalls in an old covered market hall: wooden counters heaped with
+  fish on crushed ice, crates and baskets, hanging lamps, iron roof columns".
+
+**Bars:**
+
+- an arm passes when both seeds are, to the eye, a row of fronts seen square on, with no hall down the middle and nobody standing in it.
+- If N passes, an unnamed facade's Fill names the place by its name, not its sheet (one rule, no word filter).
+- If only S passes, a word filter is too fragile to ship. The author's material is then the lever, and Build shows that a facade wants
+  one.
+
+## 2026-10-31 07:38 — E46c: neither the name nor the cleaned words make an unnamed facade an elevation; E46d's bars (the elevation first)
+
+E46c, the right fronts, two seeds an arm (Fill 12–39 s; `engine/spikes/out/e46c/`):
+
+- **N1** ("The buildings' fronts along Fish market"): square on, but it is the market building from outside: a roof, the sky, a few
+  people small at the counters.
+- **N2:** a long roof and the sky again, and a hall in perspective down the middle.
+- **S1, S2** (the place's words without people, floor or camera): perspective halls, as in F.
+
+**Against the bars:** neither arm passes. "Buildings' fronts" paints an exterior, and "market hall" paints a hall. An unnamed facade keeps
+its place's words: there is no better default, and a word filter is not shipped. The author's material is the lever, and Build should
+show that a facade wants one.
+
+**What GM did differently** (E46's one pass): the elevation was the head of the sentence ("a flat elevation of fish market stalls seen
+square on"), the contents were laid out as an elevation ("crates below, lamps above"), and no word named the room around them ("hall",
+"roof"). The candidate lead put the material first and the elevation after it.
+
+**E46d** (the same copy; the candidate lead reordered to "A flat elevation of {material}, seen square on — no perspective …"; outputs
+`engine/spikes/out/e46d/`): the right fronts with a material as an author would write it, without the elevation words, which the lead
+now adds: "fish market stalls: counters of fish on ice, crates below, lamps above". Two seeds.
+
+**Bar:** both seeds are, to the eye, a row of stalls seen square on, with no hall down the middle and nobody standing in it. If so,
+D170 is:
+
+- the 0.7 cut;
+- the reordered lead;
+- Build showing that a facade wants its material named.
+
+## 2026-10-31 07:40 — E46d: the elevation first, an author's plain material, two seeds — passes; M12 → D170
+
+E46d, the right fronts, two seeds (`engine/spikes/out/e46d/`). The prompt was "A flat elevation of fish market stalls: counters of fish
+on ice, crates below, lamps above, seen square on — no perspective, no vanishing point, no floor and no ceiling in view: continued
+seamlessly as the rest of it, the same materials and pattern, the same light, no people."
+
+- **M1:** a row of three stalls, square on: counters heaped with fish on ice, crates below, lamps hanging between iron columns, a tiled
+  wall. Nobody is in it. The counter tops are seen a little from above.
+- **M2:** a long run of counters with crates below, lamps and arches above, hazy. No hall, nobody.
+
+**The bar is met on both seeds.** M12 is decided as **D170**:
+
+- **the 0.7 cut:** a facade's texels seen more than 45° off square go to Fill (E46b: the band gone);
+- **the lead:** a facade's Fill names it as "a flat elevation of" its material, the elevation first (E46d). An unnamed facade keeps its
+  place's words; E46c found no better default;
+- **Build:** a facade with no material named is marked in the face rows, and the material's placeholder shows the kind of words that
+  work.
+
+SeedVR2 after a street's Fill (FU, 18.7× the sharpness, nothing invented) is left out of D170. It is proposed separately once its cost
+is measured: a facade at ×4 is 3000 × 496, and a set's largest face is capped at 2048 today.

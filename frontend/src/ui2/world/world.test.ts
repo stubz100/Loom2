@@ -71,6 +71,15 @@ describe('D162: the framing row', () => {
     expect(activeFraming('character', '  ', refs)).toBeNull()
     expect(activeFraming('prop', 'The object alone', {})).toBeNull()                                     // a build without the sentence
   })
+  it('D169: a reference framing switched on stays on while its words are edited; off is off; a panel from before reads the words', () => {
+    expect(activeFraming('place', 'a long row of stalls seen straight on from across the aisle', refs, 'set_picture')?.ref).toMatchObject({ id: 'set_picture', side: 'front' })
+    expect(activeFraming('place', '', refs, 'set_picture')?.id).toBe('set_picture')                     // even with the words cleared
+    expect(activeFraming('place', 'The place itself, empty', refs, null)).toBeNull()                    // turned off: the sentence is words
+    expect(activeFraming('place', 'The place itself, empty', refs)?.id).toBe('set_picture')             // absent: D162's reading
+    expect(activeFraming('character', FRAMINGS.character[0].tree.composition!, refs, null)).toEqual({ id: 'portrait', ref: null })
+    expect(activeFraming('character', 'x', refs, 'set_picture')).toBeNull()                             // another class's reference
+    expect(activeFraming('prop', 'x', refs, 'reference')).toBeNull()                                    // no sentence for it on this build
+  })
   it('writes a reference framing as its sentence and its camera, and makes the frame 16:9', () => {
     expect(refTree('character', 'A-pose words', { angle: 'low' })).toEqual({ composition: 'A-pose words', camera: { angle: 'low', distance: 'full shot' } })
     expect(refTree('place', 'empty place', {}).camera).toEqual({ distance: 'wide shot', angle: 'eye level' })

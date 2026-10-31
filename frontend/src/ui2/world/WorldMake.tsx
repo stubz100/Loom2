@@ -5,7 +5,8 @@
 // references, the Look, the camera, the model with its sampling, LoRAs and encoder, the size and count, the prompt as sent. The foot runs
 // the casting run: the pictures land as the version's candidates in its bin. D162: the framing row's chips (the class's framings and its
 // reference framings — a character's A-pose front and back) fill the framing words, which the author may write; with a reference framing
-// on, the run is that reference's make (its pictures land as Build's candidates to pick from). A chip queues nothing.
+// on, the run is that reference's make (its pictures land as Build's candidates to pick from). A chip queues nothing. D169: a reference
+// framing is a switch (`panel.ref_framing`) — its words may be edited and it stays on; a second click or a class framing turns it off.
 import { useEffect } from 'react'
 import { useSession } from '../../store/session'
 import { castOrigin } from '../../suites/generate/subjectCast'
@@ -35,10 +36,12 @@ export function WorldMake() {
   const setNote = (t: string) => (p.cls === 'place' ? g.setSceneLink({ note: t }) : i >= 0 && g.setSubject(i, { shot_note: t }))
   const open = v?.state === 'open'
   const words = panel.tree.composition ?? ''
-  const active = panel.prompt_mode === 'tree' ? activeFraming(p.cls, words, refs) : null
+  const active = panel.prompt_mode === 'tree' ? activeFraming(p.cls, words, refs, panel.ref_framing) : null
   const reference = active?.ref ?? null
   const refFramings = REF_FRAMINGS[p.cls].filter((f) => !!refs?.[p.cls]?.[f.side])
   const frameRef = (f: RefFraming) => {                                 // D162: the server's sentence, 16:9 — nothing is queued
+    if (active?.id === f.id) { g.set({ ref_framing: null }); return }  // D169: a second click turns it off, the words stay
+    g.set({ ref_framing: f.id })
     g.setTree(refTree(p.cls, refs?.[p.cls]?.[f.side] ?? '', panel.tree.camera))
     if (Math.abs(panel.width / panel.height - 16 / 9) > 0.02) { const [w, h] = to169(panel.width, panel.height); g.set({ width: w, height: h, tier: 'custom' }) }
   }
@@ -58,10 +61,11 @@ export function WorldMake() {
     <div className="w-make-tree">
       <label className="w-field"><span>this picture <Help text="Words for this run only, after the sheet above (soaked, hood up)." /></span>
         <textarea rows={2} value={note} aria-label="this picture only" placeholder="soaked, hood up" onChange={(e) => setNote(e.target.value)} /></label>
-      <div className="w-field"><span>framing <Help text="A chip fills the framing words; write your own instead. Nothing is queued here. An A-pose (or a prop's reference view, a place's set picture) makes the next run that reference, 16:9: its pictures land in Build to pick from." /></span>
+      <div className="w-field"><span>framing <Help text="A chip fills the framing words; write your own instead. Nothing is queued here. An A-pose (or a prop's reference view, a place's set picture) is a switch: on, the next run makes that reference, 16:9, its pictures landing in Build to pick from. Its words may be edited and it stays on; click it again to turn it off." /></span>
         <div className="w-framing"><div className="w-chips left">
-          {FRAMINGS[p.cls].map((f) => <button key={f.id} className={active?.id === f.id ? 'active' : ''} aria-pressed={active?.id === f.id} onClick={() => g.setTree({ ...f.tree, camera: { ...panel.tree.camera, ...(f.tree.camera ?? {}) } })}>{f.label}</button>)}
-          {refFramings.map((f) => <button key={f.id} className={active?.id === f.id ? 'active' : ''} aria-pressed={active?.id === f.id} onClick={() => frameRef(f)}>{f.label}</button>)}
+          {FRAMINGS[p.cls].map((f) => <button key={f.id} className={active?.id === f.id ? 'active' : ''} aria-pressed={active?.id === f.id} onClick={() => { g.set({ ref_framing: null }); g.setTree({ ...f.tree, camera: { ...panel.tree.camera, ...(f.tree.camera ?? {}) } }) }}>{f.label}</button>)}
+          {refFramings.map((f) => <button key={f.id} className={active?.id === f.id ? 'active' : ''} aria-pressed={active?.id === f.id} onClick={() => frameRef(f)}
+            title={active?.id === f.id ? `on: the run makes ${p.name}'s ${f.label} — click to turn it off` : `the run makes ${p.name}'s ${f.label}, 16:9; its pictures land in Build`}>{f.label}</button>)}
         </div>
         <textarea rows={2} value={words} aria-label="framing words" placeholder="your own framing — three-quarter view from below, the head turned away …" onChange={(e) => g.setTree({ composition: e.target.value })} /></div></div>
     </div>

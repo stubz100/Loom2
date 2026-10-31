@@ -37,11 +37,15 @@ export function refTree(cls: ProfileClass, sentence: string, camera: Tree['camer
   return { composition: sentence, camera: { ...camera, ...(cls === 'place' ? { distance: 'wide shot', angle: 'eye level' } : { distance: 'full shot' }) } }
 }
 
-/** The framing the words are now: a class framing or a reference framing whose words they are, else none (the author's own words). */
-export function activeFraming(cls: ProfileClass, words: string, refs: References | undefined): { id: string; ref: RefFraming | null } | null {
+/** The framing on now. D169: a reference framing the author switched on (`chosen`) stays on while its words are edited; `null` is none.
+ *  Otherwise the framing whose words these are — a class framing, or (a panel from before D169, `chosen` absent) a reference framing —
+ *  else none (the author's own words). */
+export function activeFraming(cls: ProfileClass, words: string, refs: References | undefined, chosen?: string | null): { id: string; ref: RefFraming | null } | null {
+  const on = chosen ? REF_FRAMINGS[cls].find((f) => f.id === chosen && !!refs?.[cls]?.[f.side]?.trim()) : undefined
+  if (on) return { id: on.id, ref: on }                                        // D169: switched on, whatever its words became
   const w = words.trim()
   if (!w) return null
-  const r = REF_FRAMINGS[cls].find((f) => refs?.[cls]?.[f.side]?.trim() === w)
+  const r = chosen === undefined ? REF_FRAMINGS[cls].find((f) => refs?.[cls]?.[f.side]?.trim() === w) : undefined   // a panel from before D169
   if (r) return { id: r.id, ref: r }
   const f = FRAMINGS[cls].find((x) => (x.tree.composition ?? '').trim() === w)
   return f ? { id: f.id, ref: null } : null

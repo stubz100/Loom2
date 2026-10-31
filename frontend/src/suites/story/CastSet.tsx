@@ -120,23 +120,27 @@ function SetOverlay({ pic, ps, cam, assumed, onEdit }: { pic: string; ps: PlaceS
   )
 }
 
-/** The baked faces: what the picture saw of each, filled or to fill, and the material each Fill names (D143). */
+/** The baked faces: what the picture saw of each, filled or to fill, and the material each Fill names (D143). D170: a facade is filled as a
+ *  flat elevation of its material; unnamed, the place's words paint a view down the street (E46c), so it is marked until named. */
 function FaceRows({ ps, onEdit }: { ps: PlaceSet; onEdit: (ps: PlaceSet) => void }) {
   const order = [...ps.faces].sort((a, b) => (a.bad ?? 0) - (b.bad ?? 0))
   return (
     <div className="set-faces" role="list" aria-label="the set's faces">
-      {order.map((f) => (
+      {order.map((f) => { const facade = f.id.split('_')[0] === 'facade'; return (
         <div key={f.id} role="listitem" className={`set-face${f.filled ? ' filled' : ''}`} data-face={f.id}
           onContextMenu={(e) => showMenu(e, [{ cmd: 'cast.place.fillFace', on: onStoryItem({ face: f.id }) }, { cmd: 'cast.place.fill' }, { cmd: 'cast.place.bake' }])}>
           {f.texture_asset_id ? <img src={api.thumbUrl(f.texture_asset_id, 256)} alt="" /> : <span className="thumb" />}
           <span className="name">{PART_LABEL[f.id.replace(/_\d+$/, '')] ?? f.id}</span>
           <span className="muted">{f.fill_job_id ? 'filling…' : f.filled ? 'filled' : (f.bad ?? 0) >= 0.002 ? `${Math.round((f.bad ?? 0) * 100)} % to fill` : 'seen'}</span>
-          <input type="text" defaultValue={f.material} key={`${f.id}${f.material}`} placeholder={faceNoun(f.id)} maxLength={200} aria-label={`${f.id}: its material for the Fill`}
-            title="The face's material, named for its Fill (pale ochre plaster, worn terracotta tiles)"
+          <input type="text" defaultValue={f.material} key={`${f.id}${f.material}`} maxLength={200} aria-label={`${f.id}: its material for the Fill`}
+            className={facade && !f.material.trim() ? 'want' : undefined}
+            placeholder={facade ? 'what stands along it: shop fronts, doors below, windows above' : faceNoun(f.id)}
+            title={facade ? "Filled as a flat elevation of what you name here, seen square on. Unnamed, the place's words paint a view down the street"
+              : "The face's material, named for its Fill (pale ochre plaster, worn terracotta tiles)"}
             onBlur={(e) => { const m = e.target.value.trim(); if (m !== f.material) onEdit({ ...ps, faces: ps.faces.map((x) => (x.id === f.id ? { ...x, material: m } : x)) }) }}
             onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
         </div>
-      ))}
+      ) })}
     </div>
   )
 }

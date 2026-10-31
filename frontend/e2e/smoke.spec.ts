@@ -3575,8 +3575,12 @@ test('World\'s Make (U3b, D157 · proto01_UI2 03 §3): the panel is the entity\'
   await expect(make.locator('.w-framing button', { hasText: 'A-pose front' })).toHaveAttribute('aria-pressed', 'true')
   await expect(make.locator('.w-foot button.primary')).toContainText(`Make ${name}'s A-pose front ▶`)
   expect((await api<{ items: unknown[] }>('GET', '/jobs')).items.length).toBe(jobsNow)                     // nothing queued by the chip
-  await framing.fill('three-quarter view from below')
+  await framing.fill('three-quarter view from below')                                                     // D169: its words edited, the A-pose stays on
+  await expect(make.locator('.w-framing button', { hasText: 'A-pose front' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(make.locator('.w-foot button.primary')).toContainText(`Make ${name}'s A-pose front ▶`)
+  await make.locator('.w-framing button', { hasText: 'A-pose front' }).click()                            // a second click turns it off
   await expect(make.locator('.w-framing button[aria-pressed="true"]')).toHaveCount(0)                      // the author's own framing
+  await expect(framing).toHaveValue('three-quarter view from below')
   await expect(make.locator('.w-foot button.primary')).toContainText(`Give ${name} a look`)
   await make.locator('button', { hasText: 'full body' }).click()
   await expect(framing).toHaveValue('full body, head to feet in frame')

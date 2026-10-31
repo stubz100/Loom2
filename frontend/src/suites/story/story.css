@@ -340,6 +340,7 @@
 .set-face .muted { font-size: 11px; }
 .set-face input { grid-column: 2 / span 2; min-width: 0; font-size: 12px; }
 .set-face.filled { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.set-face input.want { border-color: var(--warn); }                    /* D170: a facade with no material named */
 /* D125 (SP3): the Shots board — every shot × its steps; the selected shot's page under it */
 .shots-stage { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 .shots-stage > .shots-board { flex: 0 0 auto; max-height: 46%; overflow: auto; border-bottom: 1px solid var(--line); background: var(--bg0); }

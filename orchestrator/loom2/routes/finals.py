@@ -437,6 +437,8 @@ class RunQueued(BaseModel):
     placed: bool                                   # the reference stands where the figure starts (else padded, centred)
     from_behind: bool = False                      # D158: its frames mostly face away — performed with the words for it
     back_view: bool = False                        # D158: … and from the version's back A-pose (False: it has none, the front one served)
+    side_view: bool = False                        # D175: its frames mostly a side profile — performed from the version's side view
+    mirrored: bool = False                         # D175: … turned to face the way the layer faces (the side view is made facing left)
     window: float | None = None                    # D163: performed in its own window — how many times larger the figure is there (the least over the shot)
 
 
@@ -446,7 +448,7 @@ async def final_layer_run(svc: Svc, fid: str, lid: str, body: RunBody):
     starts (E23c: no ghost), Wan Animate Move on the layer's pose sequence in 77-frame batches (E23a W1), each batch queuing the next.
     A run again is a re-take of this layer alone."""
     from ..catalogue import Catalogue  # noqa: F401  (typing)
-    from ..finals import BACK_WORDS, FINAL_LAYER_SURFACE, CHARACTER_TAIL, WINDOW, character_recipe, layer_window, mostly_away, place_reference, plan_batches, to_window
+    from ..finals import BACK_WORDS, FINAL_LAYER_SURFACE, CHARACTER_TAIL, WINDOW, character_recipe, layer_window, place_reference, plan_batches, reference_for, to_window
     from ..origin import JobOrigin
     from ..story import StoryStore, compose_sheet
     from ..models import registry
@@ -474,10 +476,10 @@ async def final_layer_run(svc: Svc, fid: str, lid: str, body: RunBody):
     spec = next((s for s in registry.animate_specs() if registry.offered(s, svc.app.settings.variant)), None)
     if spec is None:
         raise HTTPException(422, "no pose-driven model in this build")
-    # D158 (E42): a layer whose frames mostly face away is performed from the back A-pose (when the version has one) with the words for it
+    # D158 (E42): a layer whose frames mostly face away is performed from the back A-pose (when the version has one) with the words for it;
+    # D175 (E54): one mostly in profile from the side view, mirrored to the way it faces
     kps = await asyncio.to_thread(store.keypoints, fid, lid)
-    behind = mostly_away(kps)
-    anim_ref = v.anim_ref_back_asset_id if behind and v.anim_ref_back_asset_id else v.anim_ref_asset_id
+    anim_ref, behind, facing, mirror = reference_for(v, kps)
     ref = cat.get(anim_ref)
     if ref is None:
         raise HTTPException(422, "the animation reference is missing from the Catalogue")
@@ -497,7 +499,7 @@ async def final_layer_run(svc: Svc, fid: str, lid: str, body: RunBody):
     kp = to_window(kps[0], win) if win and kps else (kps or [None])[0]
     placed_png = folder / "reference.png"
     try:
-        placed = await asyncio.to_thread(place_reference, cat.abs_path(ref), kp, w, h, placed_png)
+        placed = await asyncio.to_thread(place_reference, cat.abs_path(ref), kp, w, h, placed_png, mirror)
     except ValueError:                                                        # no plain ground to key the character off: CN4's padded reference
         placed = False
     if placed:
@@ -524,7 +526,8 @@ async def final_layer_run(svc: Svc, fid: str, lid: str, body: RunBody):
     f = await _retire(svc, store, fid, lid, body.then_owed)
     svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
     return {"job_id": jobs[0].id, "batches": len(plan), "reference_asset_id": ref_id, "placed": placed, "from_behind": behind,
-            "back_view": behind and anim_ref == v.anim_ref_back_asset_id, "window": round(min(x[2] for x in layer.window), 2) if layer.window else None}
+            "back_view": behind and anim_ref == v.anim_ref_back_asset_id, "side_view": bool(facing), "mirrored": mirror,
+            "window": round(min(x[2] for x in layer.window), 2) if layer.window else None}
 
 
 async def _guide_video(cat, store: FinalStore, f: Final, lid: str):

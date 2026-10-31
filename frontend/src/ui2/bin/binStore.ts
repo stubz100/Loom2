@@ -18,10 +18,10 @@ const KINDS: Record<Exclude<KindFilter, 'all'>, Kind[]> = { pictures: ['image', 
 export const kindsOf = (f: KindFilter): Kind[] => (f === 'all' ? [] : KINDS[f])
 export const passes = (it: BinThing, f: KindFilter): boolean => f === 'all' || KINDS[f].includes(it.asset.kind)
 /** The roles as a tile's badge and the Inspector say them. */
-export const ROLE_LABEL: Record<string, string> = { hero: '★ hero', reference: 'ref', a_pose_front: 'A-pose front', a_pose_back: 'A-pose back', set_picture: 'set picture',
+export const ROLE_LABEL: Record<string, string> = { hero: '★ hero', reference: 'ref', a_pose_front: 'A-pose front', a_pose_back: 'A-pose back', a_pose_side: 'A-pose side', set_picture: 'set picture',
   model: 'model', candidate: '', final: 'final', frame: 'frame', clip: 'clip', sample: 'sample', board: 'board' }
 /** A role in a sentence (Move's question). */
-export const ROLE_WORDS: Record<string, string> = { hero: 'the hero', reference: 'a reference', a_pose_front: 'the A-pose (front)', a_pose_back: 'the A-pose (back)',
+export const ROLE_WORDS: Record<string, string> = { hero: 'the hero', reference: 'a reference', a_pose_front: 'the A-pose (front)', a_pose_back: 'the A-pose (back)', a_pose_side: 'the A-pose (side)',
   set_picture: "the set's picture", model: 'the 3D model', final: 'the final', frame: "the shot's frame", clip: "the shot's clip", sample: "a style's sample", board: 'the board' }
 export const TRASH = 'trash'
 /** B1: the tree's headings — they hold no things (a move or an import into one is refused, or goes to Imports). */

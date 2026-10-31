@@ -3,16 +3,16 @@ import { describe, expect, it } from 'vitest'
 import type { ProfileVersion } from '../../api/types'
 import { readiness } from './readiness'
 import { passes, placeOfHash } from './worldStore'
-import { activeFraming, FRAMINGS, refTree, to169 } from './make'
+import { activeFraming, FRAMINGS, REF_FRAMINGS, refTree, to169 } from './make'
 
 const v = (extra: Partial<ProfileVersion> = {}): ProfileVersion => ({ id: 'v1', label: 'v1', state: 'open', group_id: 'grp_r', candidates_group_id: null, hero_asset_id: null,
-  appearance: '', outfit: '', colours: [], marks: '', body: null, anim_ref_asset_id: null, anim_ref_back_asset_id: null, body_fit_from: null, model_asset_id: null, height_m: null,
+  appearance: '', outfit: '', colours: [], marks: '', body: null, anim_ref_asset_id: null, anim_ref_back_asset_id: null, anim_ref_side_asset_id: null, body_fit_from: null, model_asset_id: null, height_m: null,
   place_set: null, ...extra }) as unknown as ProfileVersion
 
 describe('U3: the readiness line', () => {
-  it('a character owes its hero, references, A-pose front and body fit; the back view and the voice are optional', () => {
+  it('a character owes its hero, references, A-pose front and body fit; the back and side views and the voice are optional', () => {
     const r = readiness({ cls: 'character', voice_id: null }, v(), 0)
-    expect(r.items.map((x) => `${x.id}:${x.state}`)).toEqual(['hero:owed', 'references:owed', 'a_pose_front:owed', 'a_pose_back:optional', 'body:owed', 'voice:optional'])
+    expect(r.items.map((x) => `${x.id}:${x.state}`)).toEqual(['hero:owed', 'references:owed', 'a_pose_front:owed', 'a_pose_back:optional', 'a_pose_side:optional', 'body:owed', 'voice:optional'])
     expect(r.line).toBe('4 to go')
     const done = readiness({ cls: 'character', voice_id: 'vce_1' }, v({ hero_asset_id: 'a', anim_ref_asset_id: 'b', body_fit_from: 'b' }), 3)
     expect([done.line, done.items.find((x) => x.id === 'references')!.detail]).toEqual(['Ready for Clay', '3'])
@@ -70,6 +70,10 @@ describe('D162: the framing row', () => {
     expect(activeFraming('character', 'three-quarter view from below', refs)).toBeNull()                 // the author's own words
     expect(activeFraming('character', '  ', refs)).toBeNull()
     expect(activeFraming('prop', 'The object alone', {})).toBeNull()                                     // a build without the sentence
+  })
+  it('D175: a character has a side view among its reference framings', () => {
+    expect(REF_FRAMINGS.character.map((f) => f.id)).toEqual(['apose_front', 'apose_back', 'apose_side'])
+    expect(activeFraming('character', 'in profile, facing left', { character: { side: 'in profile, facing left' } })?.ref).toMatchObject({ id: 'apose_side', side: 'side' })
   })
   it('D169: a reference framing switched on stays on while its words are edited; off is off; a panel from before reads the words', () => {
     expect(activeFraming('place', 'a long row of stalls seen straight on from across the aisle', refs, 'set_picture')?.ref).toMatchObject({ id: 'set_picture', side: 'front' })

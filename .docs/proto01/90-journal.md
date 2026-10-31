@@ -15155,3 +15155,88 @@ fragments and no ghost parts.
 - **this roll passes:** kept ≥ 1 and none too large, walkers on the floor in front of the counters on frames 5, 32 and 60, Clay plays
   them.
 - **The odds stay E53's** (about one roll in two), written in the caveat.
+
+## 2026-10-31 21:07 — M13: a character seen from the side has no reference for the side; spike E54 set up, the bars before the run
+
+**M13** (the market walk): Mira's long braid, the most distinctive thing in her casting, is gone in profile. She is performed from her
+front A-pose, which cannot show what hangs behind. D158 solved the same problem for a figure seen from behind: a layer whose frames
+mostly face away is performed from the back A-pose. M13 needs the side's twin, if a side reference brings the braid back.
+
+**E54** (E47's copy of the market walk, the app's routes, alone on the GPU; `engine/spikes/out/e54/`):
+
+- **the side A-pose:** Build's own A-pose recipe (`plan_anim_ref`: Klein, the sheet composed, the version mentioned so its references
+  ride along, 1280 × 720), two seeds, its sentence for the side: "Full-body character reference, seen from the side in profile, facing
+  left, … the hair and anything that hangs behind fully visible …". Mira walks to the image's left (E44);
+- **F:** Final 5's Mira, performed from the front A-pose in E50 (65 frames in her D163 window), as built;
+- **S:** a copy of Final 5, Mira's layer performed again through the layer's run route. The version's animation reference is set to
+  the side A-pose for the run and restored after, so the prompt, the guide, the window and the seed are F's and only the reference
+  differs.
+
+**Measured:** the performed frames 10, 32 and 60 of F and S, side by side; the seconds.
+
+**Bars:**
+
+- **the side reference:** at least one seed shows Mira whole in profile, the yellow oilskin, the braid hanging behind, on a plain ground;
+- **S:** the braid shows on at least two of the three frames where F shows none; the face and the clothes stay Mira's; the figure
+  follows the pose (no doubled limbs, no copy of the reference left standing).
+- **What goes in:** if S passes, D175: a character version's side view (optional, like the back), and a layer mostly in profile (D166's
+  side) is performed from it, mirrored to the way the layer faces.
+
+## 2026-10-31 21:14 — E54: a side reference brings the braid back on every frame, the face and clothes Mira's — M13 → D175
+
+E54 (`engine/spikes/out/e54/`; `e54_side.py make`, then `perform ast_42712eb0`) ran alone on the GPU:
+
+- **the side A-poses:** two seeds, 60 s and 32 s, both whole in profile facing left (as asked), in the yellow oilskin with the satchel,
+  the braid visible;
+- **S:** a copy of Final 5, Mira's layer run through the route with the side A-pose standing in for the front. The reference was placed
+  in her 1.73× window, one batch, 212 s.
+
+| Frame | F (front A-pose, E50) | S (side A-pose) |
+| --- | --- | --- |
+| 10 | hair drawn back, no braid | the long braid down her back |
+| 32 | hair drawn back, no braid | the braid down her back |
+| 60 | hair drawn back, no braid | the braid down her back |
+
+- **The rest is F's:** the oilskin, the satchel, the boots and the stride.
+- **S's face** is the weathered face of her hero and A-poses (her front A-pose and hero carry the braid over the near shoulder, which the
+  front-lit profile could not show). F's is the smoother of the two.
+- **No doubled limbs**, and no copy of the reference left standing.
+
+**Against the bars set at 21:07:** the side reference passes (both seeds), and S passes (the braid on 3 of 3 frames where F has none;
+the face and the clothes Mira's; the pose followed).
+
+**D175 (M13):**
+
+- **the record:** a character version takes an optional side view (`anim_ref_side_asset_id`), made in Build like the back, from the side
+  sentence (facing left);
+- **the rule:** a layer whose head reads as a side profile on most frames (D166's `side`) is performed from it, the placed reference
+  mirrored when the layer faces right;
+- **the rest:** the back view keeps its D158 rule first (a layer mostly away), and Make's framing row takes "A-pose side" as a reference
+  framing.
+
+## 2026-10-31 21:23 — D175 built: a character's side view, made and picked in Build, and a layer in profile performed from it; accepted on the rig
+
+**Built:**
+
+- **the server:**
+  - `ProfileVersion.anim_ref_side_asset_id`; `anim_ref_sentence(cls, "side")` (in profile facing left, the hair and what hangs behind
+    fully visible); `AnimRefSide` and the routes' bodies take "side"; `set_anim_ref` fills the side slot (a character only);
+  - `/capabilities.story.references.character.side`; the Bin's role `a_pose_side`;
+  - `finals.mostly_side` (D166's side on more than half the frames, facing the majority's way) and `reference_for` (the back first,
+    D158; then the side when the version has one, mirrored when the layer faces right; else the front); `place_reference(…, mirror)`;
+  - the layer's run reports `side_view` and `mirrored`.
+- **the client:** Build's side slot (optional) with *Make side-view candidates ▶*, *Use as the side view*, *Clear the side view*; the
+  candidates' *Side*; Make's framing row "A-pose side"; the readiness item (optional); the Bin's labels and badges.
+- **tests:** offline 4 new (the side rule, the reference chosen and mirrored, the placed reference mirrored, the slot and the words);
+  Vitest 1 new, plus the readiness line with the side.
+
+**On the rig, the product path** (`engine/spikes/d175_rig.py`, E47's copy, alone on the GPU):
+
+- **the make:** Build's make for the side (`POST …/anim-ref`, side "side", one picture) took 60 s, and the picture was picked through the
+  route;
+- **the run:** a copy of Final 5, Mira's layer run with nothing swapped. The route answered `side_view: true, mirrored: false` (she
+  faces left), one batch in 182 s;
+- **the frames:** 10, 32 and 60 show the long braid down her back where Final 5's front-performed Mira has none; the oilskin, the
+  satchel, the boots and the stride are the same, and no copy of the reference is left standing.
+
+**Against the bars set at 21:07, on the product path:** passed.

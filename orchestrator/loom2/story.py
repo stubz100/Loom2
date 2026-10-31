@@ -184,6 +184,7 @@ class ProfileVersion(BaseModel):
     body: Body | None = None                      # CA0: a character's body for its Stage dummy (None = the default adult); places and props have none
     anim_ref_asset_id: str | None = None          # CA0 (01 step 2): the animation reference — full body, A-pose, 16:9, plain ground (a prop: alone, ¾ view)
     anim_ref_back_asset_id: str | None = None     # CA0: its optional back view (a shot that starts with the character turned away)
+    anim_ref_side_asset_id: str | None = None     # D175 (E54): its optional side view, facing left (a character performed in profile)
     body_fit_from: str | None = None              # CA1b (D104): the animation reference the body was last fitted to (an asset id); None = by hand
     body_points: dict[str, Any] | None = None     # proto01_UIcast CS1: SDPose's person on that reference ({canvas, pose, hand_left, hand_right, feet}) —
                                                   # the turn test's stance (S4), the skeleton bench's points (CS2)
@@ -874,7 +875,7 @@ def model_source(v: ProfileVersion) -> str | None:
 
 
 ANIM_REF_SURFACE = "anim_ref"                    # CA0: origin.surface of an animation-reference job; payload {version, side, group_id}
-AnimRefSide = Literal["front", "back"]
+AnimRefSide = Literal["front", "back", "side"]
 
 
 def anim_ref_sentence(cls: str, side: str) -> str:
@@ -886,6 +887,11 @@ def anim_ref_sentence(cls: str, side: str) -> str:
         return ("The place itself, empty: a wide view from eye level, the camera level and about 1.6 m above the ground, the floor and the walls "
                 "(or the ground and the buildings' fronts) in view from side to side, nobody in it, no animals, nothing moving, nothing standing in "
                 "the middle of the floor, even light, no text.")
+    if side == "side":                                                      # D175 (E54): what hangs behind (a braid, a hood) is seen
+        return ("Full-body character reference, seen from the side in profile, facing left, standing in a neutral A-pose with both arms held "
+                "straight a little away from the body, the feet slightly apart, the whole figure from the top of the head to the feet visible and "
+                "centred with space around it, the hair and anything that hangs behind fully visible, on a plain light grey studio background, "
+                "soft even light, no props, no other people, no text.")
     if cls == "prop":
         return ("The object alone, a three-quarter view, the whole object visible and centred with space around it, "
                 "on a plain light grey studio background, soft even light, no other objects, no text.")
@@ -904,8 +910,8 @@ def plan_anim_ref(profile: Profile, version: ProfileVersion, side: str, variant:
     `open`), the version's sheet composed (its colours bound) and its reference set as an @mention (pinned to the version, so its LoRA rides
     along and RC0 stamps it), the reference sentence, one seed each. The results land on the version's candidates page; the first becomes
     the reference while the version has none (the finisher). CW6 (D143): a place's is its set picture, the empty place its set is fitted to."""
-    if side == "back" and profile.cls != "character":
-        raise ValueError("only a character has a back view")
+    if side in ("back", "side") and profile.cls != "character":
+        raise ValueError(f"only a character has a {side} view")
     spec = expand_spec(variant)
     if spec is None:
         raise ValueError("no model in this build makes an animation reference")
@@ -2297,17 +2303,17 @@ class StoryStore(_ShotMixin, _FlowMixin):
         cur = self.profile(pid)
         if cur is None:
             raise KeyError(pid)
-        field = "anim_ref_back_asset_id" if side == "back" else "anim_ref_asset_id"
+        field = {"back": "anim_ref_back_asset_id", "side": "anim_ref_side_asset_id"}.get(side, "anim_ref_asset_id")   # D175: the side view
         versions = [v.model_copy() for v in cur.versions]
         v = next((x for x in versions if x.id == vid), None)
         if v is None:
             raise KeyError(f"no version {vid!r}")
         if only_if_empty and getattr(v, field):
             return None
-        if side == "back" and cur.cls != "character":
-            raise ValueError("only a character has a back view")
+        if side in ("back", "side") and cur.cls != "character":
+            raise ValueError(f"only a character has a {side} view")
         setattr(v, field, asset_id)
-        if side != "back" and asset_id != v.body_fit_from:
+        if side == "front" and asset_id != v.body_fit_from:
             v.anim_ref_note = None                                   # S8: the note was about the reference it replaces
         p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
         self.save_profile(p)

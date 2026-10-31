@@ -222,7 +222,7 @@ export interface StoryState {
   renameProfile: (name: string) => void
   setHero: (assetId: string | null) => Promise<void>
   /** CA0 (01 step 2): make the version's animation reference (or its back view) — two candidates, the first used while none is set. */
-  makeAnimRef: (side: 'front' | 'back') => Promise<void>
+  makeAnimRef: (side: 'front' | 'back' | 'side') => Promise<void>
   /** CA1b (D104): fit the version's body to its animation reference (a short keypoints job; the profile updates when it lands). */
   fitBody: () => Promise<void>
   /** D110 (PS2): make the prop version's 3D model from its animation reference (else its hero) — image → mesh, stood upright, minutes. */
@@ -233,7 +233,7 @@ export interface StoryState {
   /** D128: a prop version's 3D model imported from a GLB file on this machine. */
   importModel: (path: string) => Promise<void>
   /** CA0: the author's pick (an image in the Catalogue) or null to clear it; a final version takes it too. */
-  setAnimRef: (side: 'front' | 'back', assetId: string | null) => Promise<void>
+  setAnimRef: (side: 'front' | 'back' | 'side', assetId: string | null) => Promise<void>
   newVersion: () => Promise<void>
   lockVersion: () => Promise<void>
   deleteProfile: () => Promise<void>
@@ -604,7 +604,7 @@ export const useStory = create<StoryState>()((set, get) => {
       const p = get().profile(); const v = get().version(); if (!p || !v) return
       try {
         const r = await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/anim-ref', { params: { path: { pid: p.id, vid: v.id } }, body: { side, count: 2 } }))
-        useSession.getState().toast(`${r.job_ids.length} ${side === 'back' ? 'back views' : p.cls === 'place' ? 'set pictures' : 'animation references'} queued for ${p.name} — they land among its candidates; pick the ${side === 'back' ? 'back' : p.cls === 'place' ? 'set picture' : 'front'} from them in Build`, 'info')   // D161: nothing is picked for the author
+        useSession.getState().toast(`${r.job_ids.length} ${side === 'back' ? 'back views' : side === 'side' ? 'side views' : p.cls === 'place' ? 'set pictures' : 'animation references'} queued for ${p.name} — they land among its candidates; pick the ${side === 'back' ? 'back' : side === 'side' ? 'side' : p.cls === 'place' ? 'set picture' : 'front'} from them in Build`, 'info')   // D161: nothing is picked for the author; D175: the side
         if (!v.candidates_group_id) await get().loadProfiles()
       } catch (e) { toast(`Animation reference: ${detail(e)}`) }
     },

@@ -5126,7 +5126,7 @@ export interface components {
              * @default front
              * @enum {string}
              */
-            side?: "front" | "back";
+            side?: "front" | "back" | "side";
             /**
              * Stage
              * @default false
@@ -5144,7 +5144,7 @@ export interface components {
              * @default front
              * @enum {string}
              */
-            side?: "front" | "back";
+            side?: "front" | "back" | "side";
         };
         /** AnimRefQueued */
         AnimRefQueued: {
@@ -11953,6 +11953,8 @@ export interface components {
             anim_ref_back_asset_id: string | null;
             /** Anim Ref Note */
             anim_ref_note: string | null;
+            /** Anim Ref Side Asset Id */
+            anim_ref_side_asset_id: string | null;
             /** Anim Test Clip Id */
             anim_test_clip_id: string | null;
             /**
@@ -12801,10 +12803,20 @@ export interface components {
             from_behind?: boolean;
             /** Job Id */
             job_id: string;
+            /**
+             * Mirrored
+             * @default false
+             */
+            mirrored?: boolean;
             /** Placed */
             placed: boolean;
             /** Reference Asset Id */
             reference_asset_id: string;
+            /**
+             * Side View
+             * @default false
+             */
+            side_view?: boolean;
             /** Window */
             window?: number | null;
         };

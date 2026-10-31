@@ -19,6 +19,7 @@ export function readiness(p: Pick<Profile, 'cls' | 'voice_id'>, v: ProfileVersio
       item('references', 'references', refs > 0, String(refs)),
       item('a_pose_front', 'A-pose front', !!v.anim_ref_asset_id),
       item('a_pose_back', 'A-pose back', !!v.anim_ref_back_asset_id, undefined, true),
+      item('a_pose_side', 'A-pose side', !!v.anim_ref_side_asset_id, undefined, true),   // D175: a character seen from the side
       item('body', 'body fitted', !!v.body_fit_from, v.body_fit_from && v.body ? bodyText(v.body) : undefined),   // D168: what the body is, so a wrong one shows
       item('voice', 'voice', !!p.voice_id, undefined, true),
     ]

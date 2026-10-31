@@ -54,7 +54,7 @@ describe("the header's scene (U4c)", () => {
     expect(cameraUsers('stg', [shot('Wide', null, { stage_id: 'stg', camera_id: 'c1' }), shot('Close', null, { stage_id: 'stg', camera_id: 'c2' }), shot('Away', null, { stage_id: 'other', camera_id: 'c9' })])).toEqual({ c1: 'Wide', c2: 'Close' })
   })
   it('the cast: the figures, bound or not, and the World props, each with what it lacks for Clay', () => {
-    const pv = (extra: object) => ({ id: 'v1', hero_asset_id: 'ast_h', anim_ref_asset_id: null, anim_ref_back_asset_id: null, body_fit_from: null, model_asset_id: null, height_m: null, place_set: null, ...extra })
+    const pv = (extra: object) => ({ id: 'v1', hero_asset_id: 'ast_h', anim_ref_asset_id: null, anim_ref_back_asset_id: null, anim_ref_side_asset_id: null, body_fit_from: null, model_asset_id: null, height_m: null, place_set: null, ...extra })
     const profiles = [{ id: 'prf_ines', name: 'Ines', cls: 'character', voice_id: null, current: 'v1', versions: [pv({ anim_ref_asset_id: 'ast_a', body_fit_from: 'ast_a' })] },
       { id: 'prf_lamp', name: 'Lantern', cls: 'prop', voice_id: null, current: 'v1', versions: [pv({})] }] as unknown as Profile[]
     expect(castOf(stage, profiles).map((m) => [m.name, m.cls, m.line])).toEqual([['Ines', 'character', 'Ready for Clay'], ['Figure 2', null, 'not bound to World'], ['Lantern', 'prop', '2 to go']])

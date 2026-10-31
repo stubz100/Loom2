@@ -374,14 +374,14 @@ async def profile_expand(svc: Svc, pid: str, body: ExpandBody):
 
 # ---- the animation reference (CA0, proto01_animate 01 step 2) ----------------------------------------------------------------------------
 class AnimRefBody(BaseModel):
-    side: Literal["front", "back"] = "front"
+    side: Literal["front", "back", "side"] = "front"
     count: int = Field(2, ge=1, le=4)
     stage: bool = False                           # queued staged (released from the Queue)
     style_id: str | None = None
 
 
 class AnimRefPick(BaseModel):
-    side: Literal["front", "back"] = "front"
+    side: Literal["front", "back", "side"] = "front"
     asset_id: str | None = None                   # None clears it
 
 

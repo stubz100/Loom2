@@ -43,8 +43,8 @@ const SkeletonParts = lazy(() => import('../../suites/stage/SkeletonBench').then
 const RAIL_ICON: Record<WorldRail, typeof User> = { character: User, prop: Box, place: MapPin, look: Palette, sketches: PenLine }
 /** 03 §2: an item is its verb — the Cast command that makes it (they act on the entity the header shows: the Story store's selection). */
 // D161: an item opens Build, where it is made (a click here queues nothing)
-const READY_VERB: Record<string, string> = Object.fromEntries(['a_pose_front', 'a_pose_back', 'body', 'model', 'set_picture', 'set', 'faces'].map((k) => [k, 'world.mode.build']))
-const BADGE: Record<string, string> = { hero: '★', reference: 'ref', a_pose_front: 'A·F', a_pose_back: 'A·B', set_picture: 'set', model: '3D' }
+const READY_VERB: Record<string, string> = Object.fromEntries(['a_pose_front', 'a_pose_back', 'a_pose_side', 'body', 'model', 'set_picture', 'set', 'faces'].map((k) => [k, 'world.mode.build']))
+const BADGE: Record<string, string> = { hero: '★', reference: 'ref', a_pose_front: 'A·F', a_pose_back: 'A·B', a_pose_side: 'A·S', set_picture: 'set', model: '3D' }
 const FILTERS: [RoleFilter, string][] = [['all', 'all'], ['hero', 'hero'], ['reference', 'references'], ['a_pose', 'A-pose'], ['set_picture', 'set'], ['model', 'model'], ['candidate', 'candidates']]
 
 function Rail() {
@@ -99,7 +99,7 @@ function Tile({ it }: { it: BinItem }) {
   const sel = useWorld((s) => s.selected === it.asset.id)
   const badge = it.roles.map((r) => BADGE[r]).find(Boolean)
   const menu = (): MenuItem[] => [{ cmd: 'world.mode.edit' }, { sep: true }, { cmd: 'world.creation.hero' }, { cmd: 'world.creation.reference' }, { cmd: 'world.creation.candidate' },
-    { cmd: 'world.creation.aposeFront' }, { cmd: 'world.creation.aposeBack' }, { cmd: 'world.creation.setPicture' }, { sep: true }, { cmd: 'world.creation.trash' }]
+    { cmd: 'world.creation.aposeFront' }, { cmd: 'world.creation.aposeBack' }, { cmd: 'world.creation.aposeSide' }, { cmd: 'world.creation.setPicture' }, { sep: true }, { cmd: 'world.creation.trash' }]
   return (
     <button className={`w-tile${sel ? ' selected' : ''}`} data-id={it.asset.id} title={it.asset.prompt_text ?? ''} onClick={() => useWorld.getState().select(it.asset.id)}
       onContextMenu={(e) => { useWorld.getState().select(it.asset.id); showMenu(e, menu()) }}>

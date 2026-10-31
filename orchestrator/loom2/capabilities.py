@@ -170,7 +170,8 @@ def _story(svc: Services, variant: str) -> dict:
                 "phrases": {"shots": dict(SHOTS), "angles": dict(ANGLES)}}                                              # D115: the words a cell puts in the prompt
     # D162: the reference sentences an animation reference (a prop's reference, a place's set picture) is made with — Build's makes and
     # Make's reference framings send the same words
-    references = {"character": {"front": anim_ref_sentence("character", "front"), "back": anim_ref_sentence("character", "back")},
+    references = {"character": {"front": anim_ref_sentence("character", "front"), "back": anim_ref_sentence("character", "back"),
+                                "side": anim_ref_sentence("character", "side")},                       # D175
                   "prop": {"front": anim_ref_sentence("prop", "front")}, "place": {"front": anim_ref_sentence("place", "front")}}
     spec = expand_spec(variant)
     if spec is None:

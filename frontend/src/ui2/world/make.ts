@@ -24,13 +24,13 @@ export const FRAMINGS: Record<ProfileClass, { id: string; label: string; tree: P
 
 /** D162: a class's reference framing — the words its reference is made with (the server's sentence, `/capabilities.story.references`):
  *  a character's A-pose front and back, a prop's reference view, a place's set picture. With one on, the run is that reference's make. */
-export interface RefFraming { id: string; label: string; side: 'front' | 'back' }
+export interface RefFraming { id: string; label: string; side: 'front' | 'back' | 'side' }
 export const REF_FRAMINGS: Record<ProfileClass, RefFraming[]> = {
-  character: [{ id: 'apose_front', label: 'A-pose front', side: 'front' }, { id: 'apose_back', label: 'A-pose back', side: 'back' }],
+  character: [{ id: 'apose_front', label: 'A-pose front', side: 'front' }, { id: 'apose_back', label: 'A-pose back', side: 'back' }, { id: 'apose_side', label: 'A-pose side', side: 'side' }],   // D175
   prop: [{ id: 'reference', label: 'reference view', side: 'front' }],
   place: [{ id: 'set_picture', label: 'set picture', side: 'front' }],
 }
-export type References = Partial<Record<string, Partial<Record<'front' | 'back', string>>>>
+export type References = Partial<Record<string, Partial<Record<'front' | 'back' | 'side', string>>>>
 
 /** The tree a reference framing writes: its sentence as the framing words, the camera's distance (a place: wide, at eye level). */
 export function refTree(cls: ProfileClass, sentence: string, camera: Tree['camera']): Partial<Tree> {

@@ -87,7 +87,8 @@ def version_bin(groups: GroupStore, profile: Any, vid: str) -> dict[str, Any]:
         pages[v.candidates_group_id] = "candidate"
     ranked: list[tuple[str | None, str]] = [(v.hero_asset_id, "hero")]                  # the roles by class, the first the tile's badge
     if profile.cls == "character":
-        ranked += [(v.anim_ref_asset_id, "a_pose_front"), (v.anim_ref_back_asset_id, "a_pose_back"), (v.shell_asset_id, "model")]
+        ranked += [(v.anim_ref_asset_id, "a_pose_front"), (v.anim_ref_back_asset_id, "a_pose_back"), (v.anim_ref_side_asset_id, "a_pose_side"),   # D175
+                   (v.shell_asset_id, "model")]
     elif profile.cls == "prop":
         ranked += [(v.model_asset_id, "model")]
     elif v.place_set is not None:
@@ -259,6 +260,7 @@ def _record_roles(ws: Any, path: str, rec: _Records | None = None) -> tuple[dict
         if prof.cls == "character":
             add(v.anim_ref_asset_id, "a_pose_front")
             add(v.anim_ref_back_asset_id, "a_pose_back")
+            add(v.anim_ref_side_asset_id, "a_pose_side")                       # D175
             add(v.shell_asset_id, "model")
         elif prof.cls == "prop":
             add(v.model_asset_id, "model")
@@ -436,7 +438,7 @@ def uses_of(ws: Any, aid: str) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for p in rec.st.profiles():
         for v in p.versions:
-            named = [("hero", v.hero_asset_id), ("a_pose_front", v.anim_ref_asset_id), ("a_pose_back", v.anim_ref_back_asset_id),
+            named = [("hero", v.hero_asset_id), ("a_pose_front", v.anim_ref_asset_id), ("a_pose_back", v.anim_ref_back_asset_id), ("a_pose_side", v.anim_ref_side_asset_id),
                      ("model", getattr(v, "shell_asset_id", None)), ("model", getattr(v, "model_asset_id", None)),
                      *[("set_picture", src.asset_id) for src in (v.place_set.sources if v.place_set is not None else [])]]
             for role, x in named:

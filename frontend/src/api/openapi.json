@@ -209,7 +209,8 @@
             "default": "front",
             "enum": [
               "front",
-              "back"
+              "back",
+              "side"
             ],
             "title": "Side",
             "type": "string"
@@ -251,7 +252,8 @@
             "default": "front",
             "enum": [
               "front",
-              "back"
+              "back",
+              "side"
             ],
             "title": "Side",
             "type": "string"
@@ -17159,6 +17161,17 @@
             ],
             "title": "Anim Ref Note"
           },
+          "anim_ref_side_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anim Ref Side Asset Id"
+          },
           "anim_test_clip_id": {
             "anyOf": [
               {
@@ -17423,6 +17436,7 @@
           "body",
           "anim_ref_asset_id",
           "anim_ref_back_asset_id",
+          "anim_ref_side_asset_id",
           "body_fit_from",
           "body_points",
           "anim_ref_note",
@@ -19243,6 +19257,11 @@
             "title": "Job Id",
             "type": "string"
           },
+          "mirrored": {
+            "default": false,
+            "title": "Mirrored",
+            "type": "boolean"
+          },
           "placed": {
             "title": "Placed",
             "type": "boolean"
@@ -19250,6 +19269,11 @@
           "reference_asset_id": {
             "title": "Reference Asset Id",
             "type": "string"
+          },
+          "side_view": {
+            "default": false,
+            "title": "Side View",
+            "type": "boolean"
           },
           "window": {
             "anyOf": [

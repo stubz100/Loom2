@@ -25,10 +25,10 @@ type Version = Profile['versions'][number]
  *  (its verbs are World's commands on the creation, which a button selects first). */
 function Candidates({ p, v }: { p: Profile; v: Version }) {
   const bin = useWorld((s) => s.bin)
-  const picked = new Set([v.anim_ref_asset_id, v.anim_ref_back_asset_id].filter(Boolean))
+  const picked = new Set([v.anim_ref_asset_id, v.anim_ref_back_asset_id, v.anim_ref_side_asset_id].filter(Boolean))
   const items = (bin?.items ?? []).filter((x) => x.asset.origin?.surface === 'anim_ref' && !picked.has(x.asset.id))
   const place = p.cls === 'place'
-  const verbs = place ? ['world.creation.setPicture'] : p.cls === 'character' ? ['world.creation.aposeFront', 'world.creation.aposeBack'] : ['world.creation.aposeFront']
+  const verbs = place ? ['world.creation.setPicture'] : p.cls === 'character' ? ['world.creation.aposeFront', 'world.creation.aposeBack', 'world.creation.aposeSide'] : ['world.creation.aposeFront']
   const run = (id: string, cmd: string) => { useWorld.getState().select(id); runCommand(cmd) }
   for (const c of [...verbs, 'world.creation.trash']) markUsed(c)
   return (
@@ -45,7 +45,8 @@ function Candidates({ p, v }: { p: Profile; v: Version }) {
             <span className="anim-ref-cand-verbs">
               {place ? <button type="button" onClick={() => run(it.asset.id, 'world.creation.setPicture')}>Use as the set picture</button> : <>
                 <button type="button" onClick={() => run(it.asset.id, 'world.creation.aposeFront')}>{p.cls === 'prop' ? 'Use' : 'Front'}</button>
-                {p.cls === 'character' && <button type="button" onClick={() => run(it.asset.id, 'world.creation.aposeBack')}>Back</button>}</>}
+                {p.cls === 'character' && <button type="button" onClick={() => run(it.asset.id, 'world.creation.aposeBack')}>Back</button>}
+                {p.cls === 'character' && <button type="button" onClick={() => run(it.asset.id, 'world.creation.aposeSide')}>Side</button>}</>}
               <button type="button" className="quiet danger" aria-label="Discard" title="Discard: to the Trash" onClick={() => run(it.asset.id, 'world.creation.trash')}><X size={12} /></button>
             </span>
           </div>

@@ -4,7 +4,7 @@ import type { CastUse, ProfileVersion } from '../../api/types'
 import { ITEMS_OF, needsOf, nextOwed, readinessOf, rowSummary, shotNeeds } from './castReady'
 
 const ver = (v: Partial<ProfileVersion>): ProfileVersion => ({ id: 'v1', label: 'v1', state: 'open', group_id: 'grp_1', candidates_group_id: null, hero_asset_id: null, body: null, anim_ref_asset_id: null,
-  anim_ref_back_asset_id: null, appearance: '', outfit: '', colours: [], marks: '', trigger: null, lora: null, derived_from: null, created_at: '', locked_at: null, ...v } as unknown as ProfileVersion)
+  anim_ref_back_asset_id: null, anim_ref_side_asset_id: null, appearance: '', outfit: '', colours: [], marks: '', trigger: null, lora: null, derived_from: null, created_at: '', locked_at: null, ...v } as unknown as ProfileVersion)
 const use = (name: string, route: string, how: CastUse['how']): CastUse => ({ shot_id: `sht_${name}`, name, version: 'v1', route, how })
 
 describe('Cast readiness (D125 S5)', () => {

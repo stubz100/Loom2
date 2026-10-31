@@ -312,7 +312,31 @@ def mostly_away(kps: list) -> bool:
     return bool(frames) and sum(frames) * 2 > len(frames)
 
 
-def place_reference(ref: Path, kp: list[list[float]] | None, w: int, h: int, out: Path) -> bool:
+def mostly_side(kps: list) -> str | None:
+    """D175 (E54): the way a layer faces when its head reads as a side profile (D166's `side`) on more than half of its frames — `left` or
+    `right` (the way the nose points, the majority) — else None."""
+    faced = [head_facing(k) for k in kps if k]
+    sides = [near for kind, near in faced if kind == "side"]
+    if not faced or len(sides) * 2 <= len(faced):
+        return None
+    return "right" if sides.count("right") > sides.count("left") else "left"
+
+
+def reference_for(v: Any, kps: list) -> tuple[str | None, bool, str | None, bool]:
+    """D158 / D175: the animation reference a character layer is performed from — the back view when most frames face away (D158), else
+    the side view when most read as a side profile and the version has one (D175; made facing left, so mirrored when the layer faces
+    right), else the front. (asset id, from behind, the side's facing or None, mirrored)."""
+    behind = mostly_away(kps)
+    if behind and v.anim_ref_back_asset_id:
+        return v.anim_ref_back_asset_id, True, None, False
+    facing = None if behind else mostly_side(kps)
+    side = getattr(v, "anim_ref_side_asset_id", None)
+    if facing and side:
+        return side, behind, facing, facing == "right"
+    return v.anim_ref_asset_id, behind, None, False
+
+
+def place_reference(ref: Path, kp: list[list[float]] | None, w: int, h: int, out: Path, mirror: bool = False) -> bool:
     """E23c (D105): the animation reference placed where the figure starts — its cut-out scaled to the figure's height in the first frame
     (nose to ankles is 0.86 of the reference's figure) with its feet on the figure's, on the reference's own ground — so Wan Animate leaves
     no standing copy of the reference behind (the ghost). False (nothing written) when the figure is not whole in the first frame."""
@@ -329,6 +353,8 @@ def place_reference(ref: Path, kp: list[list[float]] | None, w: int, h: int, out
     if tall < 24 or not (0 <= feet[0] < w and 0 <= feet[1] <= h * 1.05):
         return False
     img, alpha, ground = cutout(ref)
+    if mirror:                                                              # D175: the side view turned to face the way the layer walks
+        img, alpha = img[:, ::-1].copy(), alpha[:, ::-1].copy()
     hh = max(8, int(tall / 0.86))
     ww = max(4, int(img.shape[1] * hh / img.shape[0]))
     pi = np.asarray(Image.fromarray(img).resize((ww, hh), Image.LANCZOS), dtype=np.float32)

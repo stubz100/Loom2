@@ -139,6 +139,25 @@ class SetCrowd(BaseModel):
     fps: int = 16
 
 
+class SetWalkers(BaseModel):
+    """D174 (E52): walkers cut out of a loop made over a stretch of a vertical face — only the people walking on the ground line at the
+    face's depth — played over the face (and its crowd) as a packed clip, its colour and its mask side by side."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    id: str
+    from_m: float = Field(ge=0.0)
+    to_m: float = Field(gt=0.0)
+    words: str = Field("", max_length=400)
+    status: Literal["making", "done", "failed"] = "making"
+    job_id: str | None = None                      # the step running (the start's refine, the loop, the matte)
+    error: str | None = None
+    clip_id: str | None = None                     # the loop the walkers were cut from
+    asset_id: str | None = None                    # the packed clip's proxy: the colour on the left half, the mask on the right
+    frames: int = 0
+    fps: int = 16
+    kept: int = 0                                  # walkers kept on the busiest frame
+    dropped: int = 0                               # people dropped there (behind a counter, deep in the hall, too large)
+
+
 class SetFace(BaseModel):
     """CW6 (04 §2, §4): a built set's face — what it shows (a Catalogue image of the face straight on: its Fill once filled, else its bake),
     the bake and its coverage, its texel size, how much the picture saw, and the material its Fill names (D143)."""
@@ -154,6 +173,7 @@ class SetFace(BaseModel):
     material: str = Field("", max_length=200)      # D143: named for the face's Fill ("pale ochre plaster"); blank: the face's noun
     fill_job_id: str | None = None                 # the face's Fill while it runs
     crowd: SetCrowd | None = None                  # D173: people along the face, played over a stretch of it
+    walkers: list[SetWalkers] = Field(default_factory=list)   # D174: walkers cut out and laid over the face, a segment a stretch
 
 
 class SourceCamera(BaseModel):

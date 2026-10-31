@@ -13,6 +13,11 @@ export function clipFrame(stageFrame: number, fps: number, frames: number, stage
   return k % loop
 }
 
+/** D174: a walkers' packed clip — its colour on the left half, its mask on the right — as two textures' repeat and offset. */
+export const PACKED = { colour: { repeat: [0.5, 1], offset: [0, 0] }, mask: { repeat: [0.5, 1], offset: [0.5, 0] } } as const
+/** D173 / D174: how far off the face a layer's plane stands — the crowd's clip, then the walkers over it. */
+export const LIFT = { crowd: 0.002, walkers: 0.003 } as const
+
 /** Where the crowd's plane stands: over [from, to] along the face's u (clamped to the face), its whole height, `lift` metres off the face
  *  toward the inside (its normal `n`) so it draws over the face's texture. */
 export function crowdPlane(f: Face, n: THREE.Vector3, fromM: number, toM: number, lift = 0.002): { centre: THREE.Vector3; w: number; h: number } {

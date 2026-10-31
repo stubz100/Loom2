@@ -495,12 +495,19 @@ class MatteSequence(BaseModel):
     licence is gated, full only) BiRefNet's subject matte (MIT) — the layer is one character on a plain ground; the masks into the
     layer's `matte/` (the assembly keeps them inside the figure's Stage mask)."""
     kind: Literal["matte_sequence"] = "matte_sequence"
-    final_id: str
-    layer_id: str
+    final_id: str = ""
+    layer_id: str = ""
+    clip_id: str | None = None                     # D174: a clip's master instead of a final's layer (the masks into the clip's matte/)
     mode: Literal["text", "subject"] = "text"
     text: str = "person"
     threshold: float = Field(0.4, ge=0.05, le=0.95)
     seeds: list[int] = Field(default_factory=lambda: [0])
+
+    @model_validator(mode="after")
+    def _source(self) -> "MatteSequence":
+        if not self.clip_id and not (self.final_id and self.layer_id):
+            raise ValueError("a matte runs over a final's layer (final_id, layer_id) or a clip (clip_id)")
+        return self
 
     @property
     def model_id(self) -> str:

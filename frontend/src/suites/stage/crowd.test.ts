@@ -1,7 +1,7 @@
 // D173: a crowd on a set's face — its frame at a stage frame (looping), and its plane over the stretch.
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
-import { clipFrame, crowdPlane } from './crowd'
+import { clipFrame, crowdPlane, LIFT, PACKED } from './crowd'
 import { normalOf, setFaces } from './placeSet'
 
 describe('D173: a crowd on a face', () => {
@@ -24,5 +24,10 @@ describe('D173: a crowd on a face', () => {
     expect(crowdPlane(f, n, -2, 99).w).toBeCloseTo(f.w, 6)                     // clamped to the face
     expect(crowdPlane(f, n, 10, 4).w).toBe(0)
     expect(new THREE.Vector3().subVectors(p.centre, f.origin).dot(n)).toBeCloseTo(0.002, 6)
+  })
+  it("D174: a walkers' packed clip is its colour on the left half and its mask on the right, a millimetre over the crowd", () => {
+    expect(PACKED.colour).toEqual({ repeat: [0.5, 1], offset: [0, 0] })
+    expect(PACKED.mask).toEqual({ repeat: [0.5, 1], offset: [0.5, 0] })
+    expect(LIFT.walkers).toBeGreaterThan(LIFT.crowd)
   })
 })

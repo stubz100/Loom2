@@ -14988,3 +14988,170 @@ E52 ran its mattes alone on the GPU, then the layering on the CPU (`engine/spike
 By the letter of the bars, D173 would become a background with crowd layers. By what is on the plate, only walkers at the face's own
 depth can be cut out and moved. Life behind the counters needs the whole clip on its own stretch, which is D173 as built. Not decided
 here: put to the author with the comparison.
+
+## 2026-10-31 16:58 — The author chose the hybrid → D174: walkers on a layer of their own; the build and its acceptance
+
+**The author's answer** to E52: "Hybrid". D173's whole-stretch clip stays for life behind the counters, and walkers go on a layer of their
+own.
+
+**The build:**
+
+- **The record:** `SetFace.walkers` is a list of segments. Each has its stretch, words and state, the loop (its clip), the packed clip's
+  asset, its frames and rate, and how many walkers were kept or dropped.
+- **The routes:** `POST …/set/walkers` and `DELETE …/set/walkers/{face}/{wid}`.
+- **The chain** (D173's, its payload naming the layer):
+  1. the start's refine with the walkers' words;
+  2. the first/last-frame loop, tone-locked;
+  3. `MatteSequence` with the loop's clip, SAM 3 by "person:20" (origin `set_walkers_matte`);
+  4. the walkers' filter: the parts of the mask whose feet reach the bottom tenth, no taller than 1.3 × 1.8 m at the face's density,
+     kept on a frame while they overlap one kept on the frame before;
+  5. the packed clip (colour | mask, side by side) catalogued, and the segment done;
+  6. a failure marks the segment failed.
+- **Clay and the plate:** the segment's plane 3 mm off the face (the crowd's is 2 mm). One video drives two textures, its left half the
+  colour and its right half the mask (`alphaMap`), sought per frame like the crowd.
+- **Build:** a vertical face's row offers *Walkers ▶* (the stretch, the words); each segment is listed with its × to remove it.
+
+**Acceptance on the rig** (the market copy, alone on the GPU, the app's own routes): two segments on the right stall front, 3.2–8.8 m and
+8.8–14.4 m, two loops, over D173's crowd. Bars:
+
+- each segment lands with at least one walker kept, and no kept walker is taller than the face's person scale;
+- a final made in the app (no engine job) shows walkers in front of the counters on frames 5, 32 and 60, standing on the floor, none
+  floating or on the counters, no two the same person;
+- Clay plays them.
+
+## 2026-10-31 17:18 — D174 built; on the rig the chain works but the walkers are not walkers — the refine repaints the stall front instead of adding people; the author's call
+
+**Built** (in the working tree, not committed):
+
+- **the server:**
+  - `SetFace.walkers` and `MatteSequence.clip_id` (a clip's masks into its `matte/`);
+  - D173's chain made layer-aware (`_put_layer`, `_current`), going on to `queue_walkers_matte` → `walkers_matte_landed`;
+  - `walker_masks` (feet in the bottom 15 %, no taller than 1.3 × 1.8 m, kept while overlapping a kept part on the frame before);
+  - the packed clip, colour | mask;
+  - the routes `POST …/set/walkers` and `DELETE …/set/walkers/{face}/{wid}`.
+- **the client:** the walkers' planes (one video, the colour as the map and the mask as the alpha map, 3 mm off the face) and Build's
+  *Walkers ▶* with its segments.
+- **tests:** offline 4 new (the filter, the recipe, the routes, the chain on the fake engine through the matte and the packing), Vitest 1
+  new, an e2e step.
+
+**On the rig** (`engine/spikes/d174_rig.py`, the market copy's right stall front, alone on the GPU, the app's route; each segment ≈ 340 s:
+refine ≈ 52 s, loop ≈ 227 s, matte ≈ 54 s):
+
+| Segment | Kept · dropped | What the loop and its mask show |
+| --- | --- | --- |
+| 3.2–8.8 m | 18 · 8 | the refine kept the stall front; the only "walker" is a large translucent ghost at the left edge. Its mask comes in pieces, and the overlap rule carried the pieces from frame to frame |
+| 8.8–14.4 m | 3 · 5 | the refine repainted the stall front into a hall in perspective, two tiny people far down an aisle (rightly dropped: not on the ground line); the parts kept are fragments at the bottom, not people |
+
+**Against the bars set at 16:58:**
+
+- "at least one walker kept, none too large" passes in the numbers only;
+- "walkers in front of the counters, standing on the floor" fails to the eye, so a final was not made;
+- the chain and the packing work; the walkers' source does not.
+
+**Two causes:**
+
+- **The source:** refining the whole face at 0.6 with the walkers' words repaints the scene (a perspective hall on one segment) rather
+  than adding whole figures in front of it.
+- **The filter:** it judges a mask's parts, not people, so a person split into pieces passes piecewise.
+
+**The ways on, put to the author:**
+
+1. **E53, people inpainted into the strip in front of the counters only:** the rest of the face kept exactly, whole figures in profile
+   painted where they stand. Then the loop, the matte, and the filter judging closed shapes (the grid closed before it is labelled).
+2. **Walkers in front stay performed extras** (they cross in front with depth and scale right, at a performance each), and D174's
+   generation is shelved, its machinery kept.
+
+## 2026-10-31 17:21 — The author: spike E53 — walkers painted into person-sized places in front of the counters, the rest of the face kept; the bars
+
+**The author's answer** to D174's rig result: "Spike E53".
+
+**E53** (E47's copy, the right stall front 3.2–8.8 m: the crop at 752 × 672, 135.5 px a metre; the app's own routes; two seeds;
+`engine/spikes/out/e53/`):
+
+1. the crop as a document, its selection three boxes the size of a person: 1.9 m by 0.75 m, standing on the face's base, at 18 %, 50 %
+   and 82 % of the stretch;
+2. Klein's Fill (inpaint, `prompt_first`) paints a shopper in each box: "a shopper walking in profile, the whole figure from head to feet,
+   carrying a basket, standing on the floor in front of the fish counter";
+3. the document flattened into the start, then D174's loop (the plain Wan 2.2, first = last frame, the walkers' words);
+4. the matte through the app (`matte_sequence` on the clip, SAM 3 by "person:20");
+5. a candidate filter that judges whole people: the quarter grid closed by a cell before it is labelled, so a person's pieces join, then
+   D174's rules (feet in the bottom 15 %, no taller than 2.34 m, kept while overlapping);
+6. the walkers packed over the static face and mapped onto Final 5's plate (E49's match).
+
+**Bars:**
+
+- **The start:** in at least two of the three boxes a whole person (head to feet, in profile) to the eye, and the face outside the boxes
+  within 3 levels of the crop.
+- **The loop:** the camera holds (drift ≤ 4 px), and the people keep their shapes.
+- **The cut-out:** to the eye every kept part is a whole person, not a fragment or a ghost, two or more on most frames.
+- **The plate:** walkers standing on the floor in front of the counters on frames 5, 32 and 60, none floating.
+- **What goes in:**
+  - if both seeds pass, the strip-and-boxes start and the closed filter become D174's;
+  - if one passes, it ships with the odds written down;
+  - if none, generated walkers are shelved and walkers stay performed extras.
+
+## 2026-10-31 17:35 — E53: walkers painted into person-sized places — the face kept, whole people cut cleanly, real motion; neither seed passes every bar; the author's call
+
+E53 ran alone on the GPU through the app's routes (`engine/spikes/out/e53/`):
+
+| Seed | Paint · loop · matte | The start (3 boxes) | The loop | Walkers kept (min · median · max) | On Final 5's plate |
+| --- | --- | --- | --- | --- | --- |
+| 53 | 76 · 224 · 56 s | one whole woman in profile with a basket, on the floor; two boxes empty | drift 0 px; seam 4.89 → 0.32; largest step 3.43 (real movement), more people walk in | 1 · 2 · 3 | frame 5: the stretch has no walker in view yet; frames 32, 60: a group of solid shoppers in front of the counter |
+| 54 | 48 · 220 · 68 s | two whole shoppers, but standing on top of the crates | drift 0 px; seam 3.56 → 0.29; largest step 4.91; a third man walks across | 2 · 2 · 5 | frame 32: one of two figures translucent; frame 60: the two stand on the crates |
+
+On both seeds the face outside the boxes is within 0.01 levels of the crop. The closed filter's cut-outs are whole people, with no
+fragments and no ghost parts.
+
+**Against the bars set at 17:21:**
+
+- **the start:** seed 53 fails (one box of three) and seed 54 passes the count, but its figures stand on the crates;
+- **the loop:** both hold; seed 54 has one translucent figure;
+- **the cut-out:** passes on both;
+- **the plate:** seed 53 passes frames 32 and 60, but frame 5 has no walker in the stretch's visible part; seed 54 fails (on the
+  crates).
+- **Neither seed passes every bar.** By the bar, generated walkers are shelved.
+
+**Against D174's rig (17:18) it is a clear step:**
+
+- the face is untouched;
+- the people are whole;
+- the motion is real.
+
+**What is left:**
+
+- empty boxes;
+- the feet on the crates (Klein stands the figure on what it sees at the box's base);
+- an occasional translucent figure.
+
+**Put to the author:** shelve (as the bar says), ship as experimental with the odds, or one more spike on the feet and the empty boxes.
+
+## 2026-10-31 19:46 — D174 shipped experimental (the author: "Experimental" after E53): the walkers painted into places, faded at the segment's edges; accepted on the rig
+
+**The author's answer** to E53: "Experimental".
+
+**What changed since 17:18:**
+
+- **the walkers' start is E53's** (`walker_places`, `walker_prompt`): the crop's document, its selection person-sized places
+  (0.75 × 1.9 m, one each 1.9 m, on the base), Klein's Fill prompt first, the rest of the face kept;
+- **the filter** closes the quarter grid by a cell before it labels, so a person's pieces join (E53);
+- **the edge fade:** each segment's mask is faded over its outer 0.3 m (`edge_fade`, E52's). The rig's first Clay check showed a
+  walker cut by a hard line at a segment's edge;
+- **the caveat:** `/capabilities.experimental.walkers` (`ExperimentalWalkersCaps`) carries whether SAM 3 is in the build and E53's odds;
+  *Walkers ▶* carries the tag "experimental", the odds in its tooltip, and is disabled where SAM 3 is missing.
+
+**On the rig, the product path** (`engine/spikes/d174_rig.py --e53`, the market copy's right stall front 3.2–8.8 m, alone on the GPU):
+
+- the two failed segments were removed through the route, then one made: the Fill 60 s, the loop 184 s, the matte 87 s (331 s);
+- 5 walkers kept, 0 dropped: a woman with a basket and a figure in a white coat painted into the places, two people in patterned coats
+  walking across mid-loop, all whole and standing on the floor in front of the crates;
+- **the fade:** the segment was packed again with the fade on the CPU (`engine/spikes/d174_repack.py`: the same loop and matte, no
+  roll spent);
+- **in the app** (no engine job): Clay plays it over the face and D173's crowd (frames 60 and 100), the alpha clean, nothing boxed
+  in. Final 9's plate shows walkers in front of the counter on frames 5, 32 and 60 (a woman in a white coat; the woman with the basket,
+  the white coat and a woman in grey; the woman with the basket walking), standing on the floor, none floating.
+
+**Against the bars set at 16:58:**
+
+- **this roll passes:** kept ≥ 1 and none too large, walkers on the floor in front of the counters on frames 5, 32 and 60, Clay plays
+  them.
+- **The odds stay E53's** (about one roll in two), written in the caveat.

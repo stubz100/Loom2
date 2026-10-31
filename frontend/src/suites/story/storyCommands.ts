@@ -168,7 +168,7 @@ const NODE_LABEL = { start: 'Start', hub: 'Hub', dialogue: 'Dialogue', choice: '
 /** The viewport registers its fit, its centre and the screen → flow mapping (D90 B11) in flow coordinates (the canvas is not a store). */
 /** D90 (01 §11.2): the item a per-item command acts on — the take or the line whose button or menu ran it (commands take no
  *  arguments; the button sets this first). A run clears it, so the palette never acts on a stale one. */
-export const storyItem: { take?: { kind: 'image' | 'clip'; id: string }; line?: { node: string; index: number }; field?: string; face?: string } = {}   // D92: a library field's Add; CW6: a set's face
+export const storyItem: { take?: { kind: 'image' | 'clip'; id: string }; line?: { node: string; index: number }; field?: string; face?: string; walkers?: string } = {}   // D92: a library field's Add; CW6: a set's face; D174: its walkers
 /** Run `id` on an item (a take card's ✓ use, a line's 🎙). */
 export function runOnItem(item: Partial<typeof storyItem>, id: string): boolean {
   Object.assign(storyItem, item)
@@ -458,6 +458,11 @@ const cmds: Command[] = [
     run: () => { const f = storyItem.face; if (f) void import('./setBuilder').then((m) => m.useCrowdForm.setState({ face: f })) } },
   { id: 'cast.place.crowdRemove', scope: 'story', label: 'Remove the crowd', icon: X, placement: ['context'], when: () => isPlace() && !!crowdOf(storyItem.face),
     run: () => { const f = storyItem.face; if (f) void import('./setBuilder').then((m) => m.removeCrowd(f)) } },
+  { id: 'cast.place.walkers', scope: 'story', label: 'Walkers along this face ▶…', icon: PersonStanding, hint: 'shoppers walking in front of it, cut out of a loop and laid over the face and its crowd; set the stretch first (about 6 min)',
+    placement: ['context'], when: () => isPlace() && vertical(storyItem.face) && !!version()?.place_set?.faces.find((f) => f.id === storyItem.face)?.texture_asset_id,
+    run: () => { const f = storyItem.face; if (f) void import('./setBuilder').then((m) => m.useCrowdForm.setState({ face: f, walkers: true })) } },
+  { id: 'cast.place.walkersRemove', scope: 'story', label: 'Remove these walkers', icon: X, placement: ['context'], when: () => isPlace() && !!storyItem.face && !!storyItem.walkers,
+    run: () => { const f = storyItem.face, w = storyItem.walkers; if (f && w) void import('./setBuilder').then((m) => m.removeWalkers(f, w)) } },
   { id: 'cast.place.clear', scope: 'story', label: 'Clear the set…', icon: X, danger: true, placement: ['inspector', 'context'], when: () => isPlace() && !!version()?.place_set && !setBusy(),
     run: () => void askConfirm({ title: 'Clear the set?', okLabel: 'Clear', text: 'Its kind, sizes and faces go; the baked and filled faces stay in the Bin. Build the set ▶ fits it again.' })
       .then((ok) => { if (ok) void import('./setBuilder').then((m) => m.saveSet(null)) }) },

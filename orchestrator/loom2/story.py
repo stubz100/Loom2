@@ -2375,7 +2375,8 @@ class StoryStore(_ShotMixin, _FlowMixin):
             if ps is None:
                 raise ValueError("the set is gone — Build the set ▶ first")
             had = {f.id: f for f in ps.faces}
-            merged = [f.model_copy(update={"material": had[f.id].material, "fill_job_id": had[f.id].fill_job_id, "crowd": had[f.id].crowd})   # D173: the crowd stays
+            merged = [f.model_copy(update={"material": had[f.id].material, "fill_job_id": had[f.id].fill_job_id, "crowd": had[f.id].crowd,   # D173: the crowd stays
+                                           "walkers": had[f.id].walkers})                                                                   # D174: the walkers too
                       if f.id in had else f for f in faces]
             return self.set_place_set(pid, vid, ps.model_copy(update={"faces": merged, "baked_key": key}))
 

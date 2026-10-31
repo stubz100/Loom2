@@ -16,7 +16,7 @@ import { CHAINS, eulerDeg, figureChain, solveTwoBone, type Chain } from './ik'
 import { aimHead, chainOf, holdPins, type Pins } from './motion/contact'
 import { gazeTarget, resolvePins, type Contacts, type Frames, type Gaze } from './motion/contacts'
 import { normalOf, placeSet, setFaces, type Face, type PlaceSetDoc } from './placeSet'
-import { clipFrame, crowdPlane } from './crowd'
+import { clipFrame, crowdPlane, LIFT, PACKED } from './crowd'
 import { makeDetailed, type Detailed, type HandPreset } from './detailed'
 import { measure } from './motion/path'
 import { bindProxy, FACE_LANDMARKS, FEET_LANDMARKS, shellPoints, shellStance, type Landmark, type Proxy } from './proxy'
@@ -907,25 +907,40 @@ export class StageEngine {
       return new THREE.MeshBasicMaterial({ map: t, side: THREE.FrontSide })
     })
     for (const f of setFaces(ps as PlaceSetDoc)) {                                // D173: a face's crowd plays over its stretch
-      const c = ps.faces.find((x) => x.id === f.id)?.crowd
+      const face = ps.faces.find((x) => x.id === f.id)
+      const c = face?.crowd
       if (c?.status === 'done' && c.asset_id) g.add(this.crowdMesh(f, c.asset_id, c.from_m, c.to_m, c.frames, c.fps))
+      for (const w of face?.walkers ?? []) {                                       // D174: the walkers over it, each segment its packed clip
+        if (w.status === 'done' && w.asset_id) g.add(this.crowdMesh(f, w.asset_id, w.from_m, w.to_m, w.frames, w.fps, true))
+      }
     }
     return g
   }
-  /** D173: a crowd's plane over its stretch of the face, its clip (the proxy) as a video texture, sought to the viewport's frame. */
-  private crowdMesh(f: Face, assetId: string, fromM: number, toM: number, frames: number, fps: number): THREE.Mesh {
+  /** D173: a crowd's plane over its stretch of the face, its clip (the proxy) as a video texture, sought to the viewport's frame. D174:
+   *  `walkers` — a packed clip, its left half the colour and its right half the mask (the alpha map), a millimetre further off the face. */
+  private crowdMesh(f: Face, assetId: string, fromM: number, toM: number, frames: number, fps: number, walkers = false): THREE.Mesh {
     const n = normalOf(f)
-    const p = crowdPlane(f, n, fromM, toM)
+    const p = crowdPlane(f, n, fromM, toM, walkers ? LIFT.walkers : LIFT.crowd)
     const video = document.createElement('video')
     video.crossOrigin = 'anonymous'; video.muted = true; video.playsInline = true; video.preload = 'auto'
     video.src = api.assetUrl(assetId)
     const tex = new THREE.VideoTexture(video)
     tex.colorSpace = THREE.SRGBColorSpace
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(p.w, p.h), new THREE.MeshBasicMaterial({ map: tex, side: THREE.FrontSide }))
+    const texs: THREE.VideoTexture[] = [tex]
+    let mat: THREE.MeshBasicMaterial
+    if (walkers) {
+      tex.repeat.set(...PACKED.colour.repeat); tex.offset.set(...PACKED.colour.offset)
+      const mask = new THREE.VideoTexture(video)                                   // the same video, its right half: alphaMap reads its green
+      mask.repeat.set(...PACKED.mask.repeat); mask.offset.set(...PACKED.mask.offset)
+      texs.push(mask)
+      mat = new THREE.MeshBasicMaterial({ map: tex, alphaMap: mask, transparent: true, depthWrite: false, side: THREE.FrontSide })
+    } else mat = new THREE.MeshBasicMaterial({ map: tex, side: THREE.FrontSide })
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(p.w, p.h), mat)
     mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(f.u, f.v, n))
     mesh.position.copy(p.centre)
     mesh.userData.face = f.id
-    const c: Crowd = { video, tex, mesh, frames: Math.max(2, frames), fps: Math.max(1, fps) }
+    if (walkers) mesh.renderOrder = 1                                              // over the face and its crowd
+    const c: Crowd = { video, texs, mesh, frames: Math.max(2, frames), fps: Math.max(1, fps) }
     this.crowds.add(c)
     video.addEventListener('loadeddata', () => { void seekCrowd(c, this.viewFrame).then(() => { this.dirty = true }) }, { once: true })
     return mesh
@@ -1360,8 +1375,8 @@ export class StageEngine {
   }
 }
 
-/** D173: a face's crowd playing — its video, the texture fed from it, its plane, its clip's frames and rate. */
-interface Crowd { video: HTMLVideoElement; tex: THREE.VideoTexture; mesh: THREE.Mesh; frames: number; fps: number }
+/** D173: a face's crowd playing — its video, the textures fed from it (D174: a walkers' colour and mask), its plane, its frames and rate. */
+interface Crowd { video: HTMLVideoElement; texs: THREE.VideoTexture[]; mesh: THREE.Mesh; frames: number; fps: number }
 
 /** D173: a crowd at a stage frame — its clip's frame (looping), the video sought there and the texture told; at most 3 s a seek. */
 async function seekCrowd(c: Crowd, stageFrame: number): Promise<void> {
@@ -1375,11 +1390,11 @@ async function seekCrowd(c: Crowd, stageFrame: number): Promise<void> {
       v.currentTime = at
     })
   }
-  c.tex.needsUpdate = true
+  for (const t of c.texs) t.needsUpdate = true
 }
 
 /** D173: a crowd let go — its video emptied (the element stops fetching), its texture freed. */
 function dropCrowd(c: Crowd): void {
   c.video.removeAttribute('src'); c.video.load()
-  c.tex.dispose()
+  for (const t of c.texs) t.dispose()
 }

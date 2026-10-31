@@ -229,7 +229,7 @@ class DocumentFinisher:
             rest = await asyncio.to_thread(place_sets.fill_landed, q, job, od)
             if rest:
                 await place_sets.fill_next(q, job, rest)                                       # V22: the next face submitted on the loop
-        if isinstance(recipe, I2I) and getattr(job, "origin", None) and job.origin.surface == place_sets.CROWD_START_SURFACE:   # D173: a face's crowd, its start
+        if isinstance(recipe, (I2I, Inpaint)) and getattr(job, "origin", None) and job.origin.surface == place_sets.CROWD_START_SURFACE:   # D173: a crowd's start; D174: walkers painted in
             start = await asyncio.to_thread(place_sets.crowd_start_landed, q, job, od)
             if start:
                 await place_sets.queue_crowd_loop(q, job, start)                                # on the loop, as Fill's next face
@@ -345,8 +345,10 @@ class ClipFinisher:
             await _final_layer_batch(q, job, recipe, rec.id)
         if job.origin and job.origin.surface == FINAL_PLATE_PATH_SURFACE and job.origin.ref:   # CA3 (D130): the plate generated along the path
             await asyncio.to_thread(_final_plate_path, q, job, rec.id)
-        if job.origin and job.origin.surface == place_sets.CROWD_SURFACE and job.origin.ref:   # D173: the face plays it
+        if job.origin and job.origin.surface == place_sets.CROWD_SURFACE and job.origin.ref:   # D173: the face plays it; D174: walkers go to their matte
             await asyncio.to_thread(place_sets.crowd_landed, q, job, rec)
+            if job.result.get("walkers_clip_id"):
+                await place_sets.queue_walkers_matte(q, job, rec.id)
         if job.origin and job.origin.surface == "anim_test" and job.origin.ref:   # CA0: the reference's test animation → the version's
             await asyncio.to_thread(_anim_test_result, q, job.origin.ref, job.origin.payload or {}, rec.id)
         if job.origin and job.origin.surface == FOR_SHOT:                     # D90 (02 §5): Animate for a shot version → its takes
@@ -936,6 +938,13 @@ class MatteFinisher:
     async def finish(self, job: JobRecord, recipe: MatteSequence, files: list[dict], sub: Submission, q: JobQueue) -> None:
         from ..finals import FinalStore
         paths = [p for p in (output_path(q, f) for f in sorted(files, key=lambda x: x["filename"])) if p.is_file()]
+        if recipe.clip_id:                                                     # D174: a clip's masks, into its matte/; a face's walkers take them
+            rec = await asyncio.to_thread(_clip_matte, q, recipe.clip_id, paths)
+            job.result["clip_id"] = rec.id
+            job.log_tail.append(f"{len(paths)} masks of {rec.id}")
+            if job.origin and job.origin.surface == place_sets.WALKERS_MATTE_SURFACE:
+                await asyncio.to_thread(place_sets.walkers_matte_landed, q, job, rec)
+            return
         store = FinalStore(q.ws)
         f = store.get(recipe.final_id)
         if f is None:
@@ -1198,6 +1207,28 @@ async def _finish_face_step(job: JobRecord, recipe: LayerPass, paths: list[Path]
     except Exception:
         shutil.rmtree(take_dir, ignore_errors=True)
         raise
+
+
+def _clip_matte(q: JobQueue, clip_id: str, paths: list[Path]) -> Any:
+    """D174: SAM 3's masks of a clip at the clip's size, one a frame, into `clips/<id>/matte/`."""
+    from ..clips import ClipStore
+    clips = ClipStore(q.ws)
+    rec = clips.get(clip_id)
+    if rec is None:
+        raise ValueError(f"the clip {clip_id} is gone")
+    if len(paths) != rec.frames:
+        raise ValueError(f"SAM 3 returned {len(paths)} masks for {rec.frames} frames")
+    d = clips.dir(rec.id) / "matte"
+    d.mkdir(parents=True, exist_ok=True)
+    for old in d.glob("*.png"):
+        old.unlink()
+    for i, src in enumerate(paths):
+        with Image.open(src) as im:
+            im = im.convert("L")
+            if im.size != (rec.w, rec.h):
+                im = im.resize((rec.w, rec.h), Image.BILINEAR)
+            im.save(d / f"{i:06d}.png")
+    return rec
 
 
 def finisher_for(recipe: AnyRecipe) -> Finisher:

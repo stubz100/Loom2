@@ -7131,12 +7131,16 @@
           },
           "mouth_model": {
             "$ref": "#/components/schemas/ExperimentalMouthModelCaps"
+          },
+          "walkers": {
+            "$ref": "#/components/schemas/ExperimentalWalkersCaps"
           }
         },
         "required": [
           "extend",
           "lipsync",
-          "mouth_model"
+          "mouth_model",
+          "walkers"
         ],
         "title": "ExperimentalCaps",
         "type": "object"
@@ -7328,6 +7332,37 @@
           "licence"
         ],
         "title": "ExperimentalMouthModelCaps",
+        "type": "object"
+      },
+      "ExperimentalWalkersCaps": {
+        "additionalProperties": true,
+        "description": "D174 (E53): walkers cut out of a loop and laid over a set's face — whether SAM 3 is here to cut them, and E53's measured odds.",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "caveat": {
+            "title": "Caveat",
+            "type": "string"
+          },
+          "why": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why"
+          }
+        },
+        "required": [
+          "available",
+          "caveat"
+        ],
+        "title": "ExperimentalWalkersCaps",
         "type": "object"
       },
       "ExportRequest": {
@@ -20285,6 +20320,13 @@
               }
             ],
             "title": "Texture Asset Id"
+          },
+          "walkers": {
+            "items": {
+              "$ref": "#/components/schemas/SetWalkers-Input"
+            },
+            "title": "Walkers",
+            "type": "array"
           }
         },
         "required": [
@@ -20397,6 +20439,13 @@
               }
             ],
             "title": "Texture Asset Id"
+          },
+          "walkers": {
+            "items": {
+              "$ref": "#/components/schemas/SetWalkers-Output"
+            },
+            "title": "Walkers",
+            "type": "array"
           }
         },
         "required": [
@@ -20410,7 +20459,8 @@
           "filled",
           "material",
           "fill_job_id",
-          "crowd"
+          "crowd",
+          "walkers"
         ],
         "title": "SetFace",
         "type": "object"
@@ -20713,6 +20763,228 @@
           "placed"
         ],
         "title": "SetThing",
+        "type": "object"
+      },
+      "SetWalkers-Input": {
+        "description": "D174 (E52): walkers cut out of a loop made over a stretch of a vertical face — only the people walking on the ground line at the\nface's depth — played over the face (and its crowd) as a packed clip, its colour and its mask side by side.",
+        "properties": {
+          "asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Id"
+          },
+          "clip_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clip Id"
+          },
+          "dropped": {
+            "default": 0,
+            "title": "Dropped",
+            "type": "integer"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "fps": {
+            "default": 16,
+            "title": "Fps",
+            "type": "integer"
+          },
+          "frames": {
+            "default": 0,
+            "title": "Frames",
+            "type": "integer"
+          },
+          "from_m": {
+            "minimum": 0.0,
+            "title": "From M",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "kept": {
+            "default": 0,
+            "title": "Kept",
+            "type": "integer"
+          },
+          "status": {
+            "default": "making",
+            "enum": [
+              "making",
+              "done",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "to_m": {
+            "exclusiveMinimum": 0.0,
+            "title": "To M",
+            "type": "number"
+          },
+          "words": {
+            "default": "",
+            "maxLength": 400,
+            "title": "Words",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "from_m",
+          "to_m"
+        ],
+        "title": "SetWalkers",
+        "type": "object"
+      },
+      "SetWalkers-Output": {
+        "description": "D174 (E52): walkers cut out of a loop made over a stretch of a vertical face — only the people walking on the ground line at the\nface's depth — played over the face (and its crowd) as a packed clip, its colour and its mask side by side.",
+        "properties": {
+          "asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Id"
+          },
+          "clip_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clip Id"
+          },
+          "dropped": {
+            "default": 0,
+            "title": "Dropped",
+            "type": "integer"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "fps": {
+            "default": 16,
+            "title": "Fps",
+            "type": "integer"
+          },
+          "frames": {
+            "default": 0,
+            "title": "Frames",
+            "type": "integer"
+          },
+          "from_m": {
+            "minimum": 0.0,
+            "title": "From M",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "kept": {
+            "default": 0,
+            "title": "Kept",
+            "type": "integer"
+          },
+          "status": {
+            "default": "making",
+            "enum": [
+              "making",
+              "done",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "to_m": {
+            "exclusiveMinimum": 0.0,
+            "title": "To M",
+            "type": "number"
+          },
+          "words": {
+            "default": "",
+            "maxLength": 400,
+            "title": "Words",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "from_m",
+          "to_m",
+          "words",
+          "status",
+          "job_id",
+          "error",
+          "clip_id",
+          "asset_id",
+          "frames",
+          "fps",
+          "kept",
+          "dropped"
+        ],
+        "title": "SetWalkers",
         "type": "object"
       },
       "Settings": {
@@ -38473,6 +38745,138 @@
           }
         },
         "summary": "Profile Set Fit",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/profiles/{pid}/versions/{vid}/set/walkers": {
+      "post": {
+        "description": "D174: *Walkers ▶* — a segment of walkers over a stretch of a vertical face: D173's loop with whole figures walking in front of it,\nSAM 3 cuts the people out and only those walking on the ground line at the face's depth are kept; Clay and the plate play them over\nthe face and its crowd. Each segment is its own loop.",
+        "operationId": "profile_set_walkers_story_profiles__pid__versions__vid__set_walkers_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetCrowdBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetCrowdQueued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Set Walkers",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/profiles/{pid}/versions/{vid}/set/walkers/{fid}/{wid}": {
+      "delete": {
+        "description": "D174: a walkers' segment removed (a step still running is stopped; its clips stay in the Catalogue).",
+        "operationId": "profile_set_walkers_delete_story_profiles__pid__versions__vid__set_walkers__fid___wid__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "wid",
+            "required": true,
+            "schema": {
+              "title": "Wid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Set Walkers Delete",
         "tags": [
           "story"
         ]

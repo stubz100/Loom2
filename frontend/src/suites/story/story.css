@@ -343,6 +343,8 @@
 .set-face input.want { border-color: var(--warn); }                    /* D170: a facade with no material named */
 .set-face .crowd { grid-column: 2 / span 2; display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; font-size: 11px; min-width: 0; }   /* D173 */
 .set-face .crowd .failed { color: var(--error); }
+.set-face .walkers .seg { cursor: context-menu; }                      /* D174: a walkers' segment, right-click to remove */
+.set-face .walkers .exp { font-size: 10px; color: var(--warn); }       /* D174: experimental (E53's odds in the tooltip) */
 .set-face .crowd button { font-size: 11px; padding: 1px 6px; }
 .set-face .crowd-form { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; width: 100%; }
 .set-face .crowd-form input[type="number"] { width: 56px; }

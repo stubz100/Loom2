@@ -220,6 +220,11 @@ LIPSYNC_CAVEAT = ("experimental (E18): English lines only, up to 4.8 s; the lips
                   "≈ 16 min a line at Draft, ≈ 9 min at Fast — staged by default")
 
 
+WALKERS_CAVEAT = ("experimental (E53): Klein paints a shopper into each place in front of the face and Wan walks them, cut out by SAM 3; "
+                  "about one roll in two is usable — a place may stay empty, a shopper may stand on what is in front of the face, one may come "
+                  "out see-through; Walkers again ▶ makes another (≈ 6 min)")
+
+
 def _cut(svc: Services) -> dict:
     """U7c (06 §3, rule 5): the cut editor's facts and ranges — the editor kept its own copies of the strip's and the grade's."""
     from .config import STRIP_GAIN_DB, STRIP_PAN, STRIP_VOLUME_DB, STRIP_WIDTH
@@ -247,7 +252,10 @@ def _experimental(svc: Services, variant: str) -> dict:
                "missing": missing, "presets": presets, "frames_max": frames, "fps": fps, "seconds_max": round(frames / fps, 2),
                "languages": spec.recipes.lipsync_languages, "caveat": LIPSYNC_CAVEAT}
         break
-    return {"extend": {"models": models, "caveat": EXTEND_CAVEAT}, "lipsync": lip, "mouth_model": _mouth_model(svc)}
+    from .recipes import matte_mode
+    walkers = matte_mode(variant) == "text"                             # D174: the walkers are cut out by SAM 3 (full only)
+    return {"extend": {"models": models, "caveat": EXTEND_CAVEAT}, "lipsync": lip, "mouth_model": _mouth_model(svc),
+            "walkers": {"available": walkers, "why": None if walkers else "the walkers are cut out by SAM 3, which this build does not have", "caveat": WALKERS_CAVEAT}}
 
 
 def _mouth_model(svc: Services) -> dict:

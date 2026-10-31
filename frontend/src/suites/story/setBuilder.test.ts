@@ -9,7 +9,7 @@ import { bakedFresh, setStatus, unseenShare, type PlaceSet } from './setBuilder'
 type Version = Profile['versions'][number]
 const cam: SourceCam = { pos: [0.3, 1.6, 2], target: [0.1, 1.3, -3], roll: 0, focal_mm: 24, sensor_mm: 36 }
 const face = (id: string, bad: number, extra: Partial<PlaceSet['faces'][number]> = {}): PlaceSet['faces'][number] => ({ id, texture_asset_id: 'ast_t', baked_asset_id: 'ast_t', coverage_asset_id: 'ast_c',
-  texel_m: 0.01, seen: 1 - bad, bad, filled: false, material: '', fill_job_id: null, crowd: null, ...extra })
+  texel_m: 0.01, seen: 1 - bad, bad, filled: false, material: '', fill_job_id: null, crowd: null, walkers: [], ...extra })
 const set = (faces: PlaceSet['faces'], key: string | null = null): PlaceSet => ({ kind: 'room', sizes: { width: 5, depth: 6, height: 2.8 }, parts: {}, faces, baked_key: key,
   sources: [{ asset_id: 'ast_pic', camera: cam, relief_asset_id: null, assumed: [], lens_deg: 73.7, made_at: '2026-10-25T18:00:00Z' }] })
 const ver = (ps: PlaceSet | null): Version => ({ id: 'v1', anim_ref_asset_id: 'ast_pic', hero_asset_id: null, place_set: ps } as unknown as Version)

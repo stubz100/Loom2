@@ -84,7 +84,7 @@ def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = 
     if isinstance(recipe, (ImageToMesh, ImageToSet, Keypoints)):
         needs.append("source")
     if isinstance(recipe, (MatteSequence, AssembleFinal, CompRender, LayerPass)):
-        needs.append("final")
+        needs.append("clip" if isinstance(recipe, MatteSequence) and recipe.clip_id else "final")
     if isinstance(recipe, T2I):
         params = effective_params(recipe)
         est = estimate_seconds(recipe, history)
@@ -107,7 +107,8 @@ def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = 
         est = {"seconds": tts_seconds(recipe), "source": "E20 2026-10-14: the tier's real-time factor on this machine, plus the model's load"}
     elif isinstance(recipe, MatteSequence):                           # D111 (PS5d): SAM 3 over a layer's frames (E23b: ≈ 56 s for 161 frames)
         spec = registry.get(recipe.model_id)
-        params = {"model_id": recipe.model_id, "label": spec.label if spec else recipe.model_id, "final_id": recipe.final_id, "layer_id": recipe.layer_id, "text": recipe.text}
+        params = {"model_id": recipe.model_id, "label": spec.label if spec else recipe.model_id, "final_id": recipe.final_id, "layer_id": recipe.layer_id, "text": recipe.text,
+                  **({"clip_id": recipe.clip_id} if recipe.clip_id else {})}
         est = {"seconds": 60.0, "source": "E23b 2026-10-19: SAM 3 on 161 frames at 832×480, 56 s"}
     elif isinstance(recipe, LayerPass):                               # D118 (AE4a): a video model over a layer's frames (E24's measures)
         spec = registry.get(recipe.model_id)
@@ -546,9 +547,21 @@ async def prepare_stage_shot(job: JobRecord, recipe: StageShot, q: JobQueue) -> 
 
 
 async def prepare_matte(job: JobRecord, recipe: MatteSequence, q: JobQueue) -> dict[str, Any]:
-    """D111 (PS5d): the layer's frames as one near-lossless video (the guide encoding), uploaded for LoadVideo."""
+    """D111 (PS5d): the layer's frames as one near-lossless video (the guide encoding), uploaded for LoadVideo. D174: a clip's master."""
     from ..finals import FinalStore
     from ..stages import encode_guide
+    if recipe.clip_id:
+        from ..clips import ClipStore
+        clips = ClipStore(q.ws)
+        rec = clips.get(recipe.clip_id)
+        if rec is None:
+            raise ValueError(f"the clip {recipe.clip_id} is gone")
+        cframes = [clips.frame_path(rec.id, i) for i in range(rec.frames)]
+        out = q.ws.temp_dir / "mattes" / f"clip-{rec.id}-{job.id}.mp4"
+        await asyncio.to_thread(encode_guide, cframes, out, rec.fps)
+        name = await q.engine.client.upload_image(out)
+        job.log_tail.append(f"{len(cframes)} frames of {rec.id} uploaded for SAM 3 ({recipe.text!r})")
+        return {"video": name}
     store = FinalStore(q.ws)
     f = store.get(recipe.final_id)
     layer = next((x for x in f.layers if x.id == recipe.layer_id), None) if f else None

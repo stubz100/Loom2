@@ -84,8 +84,8 @@ export async function saveSet(ps: PlaceSet | null): Promise<boolean> {
 }
 
 export const useSetBuilder = create<{ baking: boolean }>(() => ({ baking: false }))
-/** D173: the face whose crowd form is open in Build's face rows (one at a time). */
-export const useCrowdForm = create<{ face: string | null }>(() => ({ face: null }))
+/** D173: the face whose crowd form is open in Build's face rows (one at a time); D174: or its walkers' form. */
+export const useCrowdForm = create<{ face: string | null; walkers?: boolean }>(() => ({ face: null }))
 
 /** D173: *Crowd ▶* — people along a face over a stretch of it (metres from the face's left end, as seen from inside): Klein puts them in,
  *  Wan 2.2 loops them; the face plays it in Clay and the plate. */
@@ -96,6 +96,25 @@ export async function makeCrowd(face: string, fromM: number, toM: number, words:
     toast(`A crowd along ${c.p.name}'s ${face}, ${fromM}–${toM} m: the picture, then its loop — about 4 min`, 'info')
     return true
   } catch (e) { toast(`Crowd: ${detail(e)}`); return false }
+}
+
+/** D174: *Walkers ▶* — walkers cut out of a loop over a stretch of the face, only those walking on the ground line at its depth, laid
+ *  over the face and its crowd. Each segment is its own loop. */
+export async function makeWalkers(face: string, fromM: number, toM: number, words: string): Promise<boolean> {
+  const c = current(); if (!c) return false
+  try {
+    await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/set/walkers', { params: { path: { pid: c.p.id, vid: c.v.id } }, body: { face, from_m: fromM, to_m: toM, words } }))
+    toast(`Walkers along ${c.p.name}'s ${face}, ${fromM}–${toM} m: the picture, its loop, then the walkers cut out — about 6 min`, 'info')
+    return true
+  } catch (e) { toast(`Walkers: ${detail(e)}`); return false }
+}
+
+/** D174: a walkers' segment removed (a step still running is stopped; its clips stay in the Bin). */
+export async function removeWalkers(face: string, id: string): Promise<void> {
+  const c = current(); if (!c) return
+  try {
+    await unwrap(http.DELETE('/story/profiles/{pid}/versions/{vid}/set/walkers/{fid}/{wid}', { params: { path: { pid: c.p.id, vid: c.v.id, fid: face, wid: id } } }))
+  } catch (e) { toast(`Remove the walkers: ${detail(e)}`) }
 }
 
 /** D173: the face's crowd removed (a step still running is stopped; its clip stays in the Bin). */

@@ -11,7 +11,7 @@ import { Help } from '../../frame/Help'
 import { useSession } from '../../store/session'
 import { CROWD_ASPECT, isGround, isVertical, setFaces, SET_KIND_PARTS, SET_KIND_SIZES, type PlaceSetDoc, type SetKind } from '../stage/placeSet'
 import { changeKind, dragTo, handles, outlines, rescale, type Handle, type SourceCam } from '../stage/setOverlay'
-import { autoBake, faceNoun, makeCrowd, saveSet, setCamera, setPicture, setStatus, useCrowdForm, useSetBuilder, type PlaceSet } from './setBuilder'
+import { autoBake, faceNoun, makeCrowd, makeWalkers, saveSet, setCamera, setPicture, setStatus, useCrowdForm, useSetBuilder, type PlaceSet } from './setBuilder'
 import { onStoryItem } from './storyCommands'
 
 type Version = Profile['versions'][number]
@@ -131,7 +131,8 @@ function FaceRows({ ps, onEdit }: { ps: PlaceSet; onEdit: (ps: PlaceSet) => void
       {order.map((f) => { const facade = f.id.split('_')[0] === 'facade', ground = isGround(f.id, ps.kind); return (
         <div key={f.id} role="listitem" className={`set-face${f.filled ? ' filled' : ''}`} data-face={f.id}
           onContextMenu={(e) => showMenu(e, [{ cmd: 'cast.place.fillFace', on: onStoryItem({ face: f.id }) }, { cmd: 'cast.place.crowd', on: onStoryItem({ face: f.id }) },
-            { cmd: 'cast.place.crowdRemove', on: onStoryItem({ face: f.id }) }, { cmd: 'cast.place.fill' }, { cmd: 'cast.place.bake' }])}>
+            { cmd: 'cast.place.crowdRemove', on: onStoryItem({ face: f.id }) }, { cmd: 'cast.place.walkers', on: onStoryItem({ face: f.id }) },
+            { cmd: 'cast.place.fill' }, { cmd: 'cast.place.bake' }])}>
           {f.texture_asset_id ? <img src={api.thumbUrl(f.texture_asset_id, 256)} alt="" /> : <span className="thumb" />}
           <span className="name">{PART_LABEL[f.id.replace(/_\d+$/, '')] ?? f.id}</span>
           <span className="muted">{f.fill_job_id ? 'filling…' : f.filled ? 'filled' : (f.bad ?? 0) >= 0.002 ? `${Math.round((f.bad ?? 0) * 100)} % to fill` : 'seen'}</span>
@@ -144,6 +145,7 @@ function FaceRows({ ps, onEdit }: { ps: PlaceSet; onEdit: (ps: PlaceSet) => void
             onBlur={(e) => { const m = e.target.value.trim(); if (m !== f.material) onEdit({ ...ps, faces: ps.faces.map((x) => (x.id === f.id ? { ...x, material: m } : x)) }) }}
             onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
           {isVertical(f.id) && f.texture_asset_id && <FaceCrowd face={f} w={size.get(f.id)?.w ?? 0} h={size.get(f.id)?.h ?? 0} />}
+          {isVertical(f.id) && f.texture_asset_id && <FaceWalkers face={f} w={size.get(f.id)?.w ?? 0} h={size.get(f.id)?.h ?? 0} />}
         </div>
       ) })}
     </div>
@@ -153,7 +155,7 @@ function FaceRows({ ps, onEdit }: { ps: PlaceSet; onEdit: (ps: PlaceSet) => void
 /** D173: a vertical face's crowd — its state, *Crowd ▶* and, open, the stretch (metres from the face's left end, as seen from inside the
  *  set) and who is there. A loop of the face's own texture with people along it, the camera held; Clay and the plate play it. */
 function FaceCrowd({ face, w, h }: { face: PlaceSet['faces'][number]; w: number; h: number }) {
-  const open = useCrowdForm((s) => s.face === face.id)
+  const open = useCrowdForm((s) => s.face === face.id && !s.walkers)
   const c = face.crowd
   const [from, setFrom] = useState(0)
   const [to, setTo] = useState(+Math.min(w, CROWD_ASPECT.usual * h).toFixed(1))
@@ -173,6 +175,42 @@ function FaceCrowd({ face, w, h }: { face: PlaceSet['faces'][number]; w: number;
           <input type="text" value={words} maxLength={400} aria-label={`${face.id}: who is there`} placeholder="who is there — shoppers with baskets at the counters" onChange={(e) => setWords(e.target.value)} />
           <button className="primary" disabled={!!why} title={why || `${len.toFixed(1)} m of ${face.id}: the picture, then its loop`}
             onClick={() => void makeCrowd(face.id, +from.toFixed(2), +to.toFixed(2), words.trim()).then((ok) => { if (ok) useCrowdForm.setState({ face: null }) })}>Make ▶ ≈ 4 min</button>
+          <button onClick={() => useCrowdForm.setState({ face: null })}>Cancel</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** D174: a vertical face's walkers — its segments (each a loop's walkers, cut out and laid over the face and its crowd), *Walkers ▶* and,
+ *  open, the stretch and who walks there. Right-click a segment to remove it. */
+function FaceWalkers({ face, w, h }: { face: PlaceSet['faces'][number]; w: number; h: number }) {
+  const open = useCrowdForm((s) => s.face === face.id && !!s.walkers)
+  const [from, setFrom] = useState(0)
+  const [to, setTo] = useState(+Math.min(w, CROWD_ASPECT.usual * h).toFixed(1))
+  const [words, setWords] = useState('')
+  const busy = face.walkers.some((x) => x.status === 'making')
+  const ex = useSession((s) => s.capabilities?.experimental?.walkers)    // D174: experimental, E53's odds
+  const len = to - from, max = +(CROWD_ASPECT.max * h).toFixed(1), min = +(CROWD_ASPECT.min * h).toFixed(1)
+  const why = from < 0 || to > w + 0.01 ? `the face is 0–${w.toFixed(1)} m` : len > max + 0.01 ? `at most ${max} m on this face — make two` : len < Math.max(0.5, min) - 0.01 ? `at least ${Math.max(0.5, min)} m` : ''
+  return (
+    <div className="crowd walkers" data-testid={`walkers-${face.id}`}>
+      {face.walkers.map((x) => (
+        <span key={x.id} className={`muted seg${x.status === 'failed' ? ' failed' : ''}`} data-walkers={x.id} title={x.error ?? (x.status === 'done' ? `${x.kept} walkers kept, ${x.dropped} people dropped` : undefined)}
+          onContextMenu={(e) => { e.stopPropagation(); showMenu(e, [{ cmd: 'cast.place.walkersRemove', on: onStoryItem({ face: face.id, walkers: x.id }) }]) }}>
+          {x.status === 'making' ? 'walkers · making…' : x.status === 'done' ? `walkers · ${x.from_m}–${x.to_m} m · ${x.kept}` : 'walkers failed'}
+        </span>
+      ))}
+      {!open && !busy && <button onClick={() => useCrowdForm.setState({ face: face.id, walkers: true })} disabled={ex ? !ex.available : false}
+        title={ex && !ex.available ? (ex.why ?? '') : `Shoppers walking in front of this face, laid over the face and its crowd. ${ex?.caveat ?? ''} Right-click a segment to remove it`}>
+        {face.walkers.length ? 'Walkers again ▶' : 'Walkers ▶'} <span className="exp">experimental</span></button>}
+      {open && (
+        <div className="crowd-form">
+          <label title="metres from the face's left end, as seen from inside the set">from <input type="number" step={0.1} min={0} max={w} value={from} aria-label={`${face.id}: the walkers from (m)`} onChange={(e) => setFrom(+e.target.value)} /></label>
+          <label>to <input type="number" step={0.1} min={0} max={w} value={to} aria-label={`${face.id}: the walkers to (m)`} onChange={(e) => setTo(+e.target.value)} /> m</label>
+          <input type="text" value={words} maxLength={400} aria-label={`${face.id}: who walks there`} placeholder="who walks there — shoppers with baskets, in profile" onChange={(e) => setWords(e.target.value)} />
+          <button className="primary" disabled={!!why} title={why || `${len.toFixed(1)} m of ${face.id}: the picture, its loop, the walkers cut out`}
+            onClick={() => void makeWalkers(face.id, +from.toFixed(2), +to.toFixed(2), words.trim()).then((ok) => { if (ok) useCrowdForm.setState({ face: null }) })}>Make ▶ ≈ 6 min</button>
           <button onClick={() => useCrowdForm.setState({ face: null })}>Cancel</button>
         </div>
       )}

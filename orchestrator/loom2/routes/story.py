@@ -934,6 +934,43 @@ async def profile_set_crowd_delete(svc: Svc, pid: str, vid: str, fid: str):
     return p.model_dump()
 
 
+@router.post("/story/profiles/{pid}/versions/{vid}/set/walkers", response_model=SetCrowdQueued)
+async def profile_set_walkers(svc: Svc, pid: str, vid: str, body: SetCrowdBody):
+    """D174: *Walkers ▶* — a segment of walkers over a stretch of a vertical face: D173's loop with whole figures walking in front of it,
+    SAM 3 cuts the people out and only those walking on the ground line at the face's depth are kept; Clay and the plate play them over
+    the face and its crowd. Each segment is its own loop."""
+    from ..fsio import new_id as _new
+    from ..place_sets import queue_crowd
+    if svc.queue is None:
+        raise HTTPException(409, "no queue")
+    svc.require_documents()
+    await _place(svc, pid, vid)
+    try:
+        job = await queue_crowd(svc.queue, pid, vid, body.face, body.from_m, body.to_m, body.words.strip(), body.seed, layer=_new("wlk"))
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0]))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await svc.queue.flush()
+    return {"job_id": job.id, "face": body.face, "size": list((job.origin.payload or {}).get("size") or [])}
+
+
+@router.delete("/story/profiles/{pid}/versions/{vid}/set/walkers/{fid}/{wid}", response_model=Profile)
+async def profile_set_walkers_delete(svc: Svc, pid: str, vid: str, fid: str, wid: str):
+    """D174: a walkers' segment removed (a step still running is stopped; its clips stay in the Catalogue)."""
+    ws, _, _ = svc.require_project()
+    _, v = await _place(svc, pid, vid)
+    face = next((f for f in (v.place_set.faces if v.place_set else []) if f.id == fid), None)
+    seg = next((w for w in face.walkers if w.id == wid), None) if face is not None else None
+    if face is None or seg is None:
+        raise HTTPException(404, f"the set's {fid} has no walkers {wid!r}")
+    if seg.job_id and svc.queue is not None and svc.queue.job_live(seg.job_id):
+        await svc.queue.cancel(seg.job_id)
+    p = await asyncio.to_thread(StoryStore(ws).update_face, pid, vid, fid, walkers=[w for w in face.walkers if w.id != wid])
+    _changed(svc, p)
+    return p.model_dump()
+
+
 class AnimTestUpload(BaseModel):
     """CA0: a turn on the spot rendered by the client from the version's body (the Stage's own pose renderer) — PNG frames put through
     `PUT /blobs/{sha}`, in order, with their COCO-18 keypoints."""

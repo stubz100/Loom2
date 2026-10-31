@@ -950,11 +950,19 @@ class ExperimentalMouthModelCaps(Open):
     licence: str
 
 
+class ExperimentalWalkersCaps(Open):
+    """D174 (E53): walkers cut out of a loop and laid over a set's face — whether SAM 3 is here to cut them, and E53's measured odds."""
+    available: bool
+    why: str | None = None
+    caveat: str
+
+
 class ExperimentalCaps(Open):
     """D88: features shipped before their bars are met — each with the caveat the UI shows beside its verb."""
     extend: ExperimentalExtendCaps
     lipsync: ExperimentalLipsyncCaps
     mouth_model: ExperimentalMouthModelCaps
+    walkers: ExperimentalWalkersCaps
 
 
 class JobsSubmitted(Out):

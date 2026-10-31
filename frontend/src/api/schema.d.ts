@@ -3972,6 +3972,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/profiles/{pid}/versions/{vid}/set/walkers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Profile Set Walkers
+         * @description D174: *Walkers ▶* — a segment of walkers over a stretch of a vertical face: D173's loop with whole figures walking in front of it,
+         *     SAM 3 cuts the people out and only those walking on the ground line at the face's depth are kept; Clay and the plate play them over
+         *     the face and its crowd. Each segment is its own loop.
+         */
+        post: operations["profile_set_walkers_story_profiles__pid__versions__vid__set_walkers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/profiles/{pid}/versions/{vid}/set/walkers/{fid}/{wid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Profile Set Walkers Delete
+         * @description D174: a walkers' segment removed (a step still running is stopped; its clips stay in the Catalogue).
+         */
+        delete: operations["profile_set_walkers_delete_story_profiles__pid__versions__vid__set_walkers__fid___wid__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/profiles/{pid}/versions/{vid}/shell": {
         parameters: {
             query?: never;
@@ -7827,6 +7869,7 @@ export interface components {
             extend: components["schemas"]["ExperimentalExtendCaps"];
             lipsync: components["schemas"]["ExperimentalLipsyncCaps"];
             mouth_model: components["schemas"]["ExperimentalMouthModelCaps"];
+            walkers: components["schemas"]["ExperimentalWalkersCaps"];
         } & {
             [key: string]: unknown;
         };
@@ -7898,6 +7941,20 @@ export interface components {
             seconds_per_77: number;
             /** Steps */
             steps: number;
+            /** Why */
+            why?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * ExperimentalWalkersCaps
+         * @description D174 (E53): walkers cut out of a loop and laid over a set's face — whether SAM 3 is here to cut them, and E53's measured odds.
+         */
+        ExperimentalWalkersCaps: {
+            /** Available */
+            available: boolean;
+            /** Caveat */
+            caveat: string;
             /** Why */
             why?: string | null;
         } & {
@@ -13194,6 +13251,8 @@ export interface components {
             texel_m?: number;
             /** Texture Asset Id */
             texture_asset_id?: string | null;
+            /** Walkers */
+            walkers?: components["schemas"]["SetWalkers-Input"][];
         };
         /**
          * SetFace
@@ -13231,6 +13290,8 @@ export interface components {
             texel_m: number;
             /** Texture Asset Id */
             texture_asset_id: string | null;
+            /** Walkers */
+            walkers: components["schemas"]["SetWalkers-Output"][];
         };
         /** SetFillBody */
         SetFillBody: {
@@ -13326,6 +13387,110 @@ export interface components {
             }[];
             /** Relief Asset Id */
             relief_asset_id: string | null;
+        };
+        /**
+         * SetWalkers
+         * @description D174 (E52): walkers cut out of a loop made over a stretch of a vertical face — only the people walking on the ground line at the
+         *     face's depth — played over the face (and its crowd) as a packed clip, its colour and its mask side by side.
+         */
+        "SetWalkers-Input": {
+            /** Asset Id */
+            asset_id?: string | null;
+            /** Clip Id */
+            clip_id?: string | null;
+            /**
+             * Dropped
+             * @default 0
+             */
+            dropped?: number;
+            /** Error */
+            error?: string | null;
+            /**
+             * Fps
+             * @default 16
+             */
+            fps?: number;
+            /**
+             * Frames
+             * @default 0
+             */
+            frames?: number;
+            /** From M */
+            from_m: number;
+            /** Id */
+            id: string;
+            /** Job Id */
+            job_id?: string | null;
+            /**
+             * Kept
+             * @default 0
+             */
+            kept?: number;
+            /**
+             * Status
+             * @default making
+             * @enum {string}
+             */
+            status?: "making" | "done" | "failed";
+            /** To M */
+            to_m: number;
+            /**
+             * Words
+             * @default
+             */
+            words?: string;
+        };
+        /**
+         * SetWalkers
+         * @description D174 (E52): walkers cut out of a loop made over a stretch of a vertical face — only the people walking on the ground line at the
+         *     face's depth — played over the face (and its crowd) as a packed clip, its colour and its mask side by side.
+         */
+        "SetWalkers-Output": {
+            /** Asset Id */
+            asset_id: string | null;
+            /** Clip Id */
+            clip_id: string | null;
+            /**
+             * Dropped
+             * @default 0
+             */
+            dropped: number;
+            /** Error */
+            error: string | null;
+            /**
+             * Fps
+             * @default 16
+             */
+            fps: number;
+            /**
+             * Frames
+             * @default 0
+             */
+            frames: number;
+            /** From M */
+            from_m: number;
+            /** Id */
+            id: string;
+            /** Job Id */
+            job_id: string | null;
+            /**
+             * Kept
+             * @default 0
+             */
+            kept: number;
+            /**
+             * Status
+             * @default making
+             * @enum {string}
+             */
+            status: "making" | "done" | "failed";
+            /** To M */
+            to_m: number;
+            /**
+             * Words
+             * @default
+             */
+            words: string;
         };
         /** Settings */
         Settings: {
@@ -23399,6 +23564,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SetFitQueued"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_set_walkers_story_profiles__pid__versions__vid__set_walkers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetCrowdBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetCrowdQueued"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_set_walkers_delete_story_profiles__pid__versions__vid__set_walkers__fid___wid__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+                fid: string;
+                wid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Profile"];
                 };
             };
             /** @description Validation Error */

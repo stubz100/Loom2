@@ -36,7 +36,7 @@ export function VersionChip({ v, pinned, onOpen }: { v: Pick<ProfileVersion, 'id
 /** D93 (B4): the character's sheet as Cast holds it, read-only — the appearance, the outfit (struck through when this shot wears another),
  *  the bound colours (a colour without an object is not sent, so not shown), the marks; Edit opens it in Story · Cast. */
 export function SheetView({ i, v, name, outfitOverridden, onEdit, cls = 'character', domId }: { i: number; v: ProfileVersion | undefined; name: string; outfitOverridden: boolean; onEdit: () => void; cls?: string; domId?: string }) {
-  const colours = (v?.colours ?? []).filter((c) => c.object.trim())
+  const colours = (v?.colours ?? []).filter((c) => c.hex && c.object.trim())   // M1: a colour not picked yet is not sent either
   return (
     <div className="subject-sheet" id={domId ?? `gen-subject-sheet-${i}`} tabIndex={-1} aria-label={`${name}'s sheet`}>
       <div className="sheet-head"><span>{name}'s sheet{v ? ` · ${versionName(v)}` : ''} — from World</span>

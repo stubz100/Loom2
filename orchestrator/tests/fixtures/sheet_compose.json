@@ -11,6 +11,8 @@
      "out": "a tall man, in a red tracksuit"},
     {"case": "a colour without an object is not sent", "sheet": {"appearance": "a girl", "colours": [{"hex": "#F2A93B", "object": ""}, {"hex": "#1E8449", "object": " scarf. "}]}, "shot": null, "name": "Lea",
      "out": "a girl, #1E8449 scarf"},
+    {"case": "a colour not picked yet is not sent (M1)", "sheet": {"appearance": "a girl", "colours": [{"hex": "", "object": "coat"}, {"hex": "#1E8449", "object": "scarf"}]}, "shot": null, "name": "Lea",
+     "out": "a girl, #1E8449 scarf"},
     {"case": "an empty sheet is the name", "sheet": {}, "shot": null, "name": "Noor", "out": "Noor"},
     {"case": "an empty sheet without a name is empty", "sheet": {"appearance": "  ", "colours": [{"hex": "#000000", "object": ""}]}, "shot": null, "name": "", "out": ""},
     {"case": "only this shot's words", "sheet": {}, "shot": {"outfit": "", "note": "laughing"}, "name": "Noor", "out": "laughing"},

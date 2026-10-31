@@ -6,6 +6,7 @@ import type { AnimationTemplate } from '../blocks'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { CommandButton } from '../../../frame/CommandButton'
+import { Help } from '../../../frame/Help'
 import { markUsed } from '../../../frame/commands'
 import { useSession } from '../../../store/session'
 import { applyPose, clay, mannequin, POSES } from '../builders'
@@ -13,6 +14,7 @@ import { useStage } from '../stageStore'
 import { retargetClip, type MotionClip, type MotionFile } from './library'
 import { singleClip, useMotion, type MotionFilter } from './motionStore'
 import type { Retargeted } from './retarget'
+import { azimuth, clipYaw, facingWords } from './facing'
 
 const secs = (s: number) => (s ? `${s.toFixed(1)} s` : '')
 
@@ -20,6 +22,8 @@ export function MotionLibrary() {
   const m = useMotion()
   const project = useSession((s) => s.project)
   const fig = useStage((s) => { const o = s.object(s.selected); return o && o.kind === 'mannequin' ? o : null })
+  const view = useStage((s) => { const d = s.sampledDoc(), o = d?.objects.find((x) => x.id === s.selected), cam = d?.cameras.find((c) => c.id === d.active_camera) ?? d?.cameras[0]
+    return o && o.kind === 'mannequin' && cam ? `${o.transform.rot[1] ?? 0},${azimuth(o.transform.pos, cam.pos)}` : '' })   // M15: its yaw at the playhead, the shot camera's side of it
   useEffect(() => { if (project?.open && !m.loaded) void m.refresh() }, [project?.path])   // eslint-disable-line react-hooks/exhaustive-deps
   markUsed('stage.motion.apply'); markUsed('stage.motion.refresh')
   const files = useMemo(() => m.files.filter((f) => (m.filter === 'all' || f.source === m.filter) && (!m.q || f.name.toLowerCase().includes(m.q.toLowerCase()) ||
@@ -43,7 +47,8 @@ export function MotionLibrary() {
       </div>}
       {p && (
         <div className="motion-picked">
-          <MotionPreview clip={p} start={m.start} end={m.end} speed={m.speed} inPlace={m.inPlace} />
+          <MotionPreview clip={p} start={m.start} end={m.end} speed={m.speed} inPlace={m.inPlace} who={fig?.name ?? null}
+            view={view ? view.split(',').map(Number) as [number, number] : null} pathYaw={m.alongPath && fig?.path && fig.path.length >= 2 ? pathYaw(fig.path) : null} />
           <div className="kv"><span>clip</span><span>{p.name}{p.duration ? ` · ${secs(p.duration)}` : ''} <span className="hint">({p.file.source === 'starter' ? 'CC0' : 'your file'})</span></span></div>
           <div className="kv"><span>trim</span><span>
             <input type="number" aria-label="trim start (s)" min={0} step={0.1} value={m.start} onChange={(e) => m.set({ start: Math.max(0, Number(e.target.value) || 0) })} /> –{' '}
@@ -114,10 +119,21 @@ function FileRow({ f }: { f: MotionFile }) {
   )
 }
 
-/** The picked clip on the default dummy, looping in a small canvas of its own (the stage's viewport is not touched until Apply). */
-function MotionPreview({ clip, start, end, speed, inPlace }: { clip: MotionClip; start: number; end: number | null; speed: number; inPlace: boolean }) {
+/** The yaw of a floor path's first leg (degrees, +Z = 0). */
+const pathYaw = (path: number[][]) => (Math.atan2(path[1][0] - path[0][0], path[1][1] - path[0][1]) * 180) / Math.PI
+/** The way a clip travels, degrees (+Z = 0; bake.ts turns a path's keys by it). */
+const travelYaw = (r: Retargeted) => { const a = r.frames[0].offset, b = r.frames[r.frames.length - 1].offset
+  return Math.hypot(b[0] - a[0], b[2] - a[2]) > 1e-6 ? (Math.atan2(b[0] - a[0], b[2] - a[2]) * 180) / Math.PI : 0 }
+
+/** The picked clip on the default dummy, looping in a small canvas of its own (the stage's viewport is not touched until Apply). M15: with
+ *  a figure selected it faces the figure's way at the playhead (or its path's) and is seen from the shot camera's side, its facing in words. */
+function MotionPreview({ clip, start, end, speed, inPlace, who, view, pathYaw: along }: { clip: MotionClip; start: number; end: number | null; speed: number; inPlace: boolean
+  who: string | null; view: [number, number] | null; pathYaw: number | null }) {
   const host = useRef<HTMLDivElement>(null)
   const [r, setR] = useState<Retargeted | { error: string } | null>(null)
+  const yaw = r && !('error' in r) && view ? (along != null ? along - travelYaw(r) : view[0]) : null
+  const seen = useRef<{ yaw: number; az: number } | null>(null)
+  useEffect(() => { seen.current = yaw != null && view ? { yaw, az: view[1] } : null }, [yaw, view?.[1]])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     let live = true
     retargetClip(clip, { fps: 24, start, end: end ?? undefined, speed, inPlace, hip: 0.91 }).then((x) => { if (live) setR(x) }).catch((e) => { if (live) setR({ error: e instanceof Error ? e.message : String(e) }) })
@@ -149,8 +165,17 @@ function MotionPreview({ clip, start, end, speed, inPlace }: { clip: MotionClip;
       const f = r.frames[i % r.frames.length]
       i++
       applyPose(fig.joints, POSES.stand, f.joints)
-      holder.position.set(f.offset[0], f.offset[1], f.offset[2])
-      cam.position.set(holder.position.x + 2.2, 1.4, holder.position.z + 3.6)          // a three-quarter view that follows the figure
+      const v = seen.current
+      if (v) {                                                                         // M15: the figure's way, seen from the shot camera's side
+        const y = (v.yaw * Math.PI) / 180, c = Math.cos(y), s = Math.sin(y), az = (v.az * Math.PI) / 180
+        holder.rotation.y = y
+        holder.position.set(f.offset[0] * c + f.offset[2] * s, f.offset[1], -f.offset[0] * s + f.offset[2] * c)
+        cam.position.set(holder.position.x + 4.2 * Math.sin(az), 1.4, holder.position.z + 4.2 * Math.cos(az))
+      } else {
+        holder.rotation.y = 0
+        holder.position.set(f.offset[0], f.offset[1], f.offset[2])
+        cam.position.set(holder.position.x + 2.2, 1.4, holder.position.z + 3.6)        // a three-quarter view that follows the figure
+      }
       cam.lookAt(holder.position.x, 0.9, holder.position.z)
       renderer.render(scene, cam)
     }
@@ -159,10 +184,12 @@ function MotionPreview({ clip, start, end, speed, inPlace }: { clip: MotionClip;
   }, [r])
   return (
     <div className="motion-preview">
-      <div ref={host} role="img" aria-label={`preview of ${clip.name}`} />
+      <div ref={host} role="img" aria-label={`preview of ${clip.name}${yaw != null ? ', as the shot camera sees it' : ''}`} />
       {!r && <span className="hint">retargeting…</span>}
       {r && 'error' in r && <span className="hint error">{r.error}</span>}
       {r && !('error' in r) && <span className="hint">{r.frames.length} frames at {r.fps} fps · {r.rig}{r.travel > 0.05 ? ` · ${r.travel.toFixed(2)} m` : ''}</span>}
+      {r && !('error' in r) && yaw != null && view && <span className="hint" data-facing>{who ?? 'the figure'} {facingWords(yaw + clipYaw(r.frames), view[1])}
+        <Help text="Once applied: the clip turned to the figure's way at the playhead (or its path's), seen here from the shot camera's side. Turn the figure first to change it." /></span>}
     </div>
   )
 }

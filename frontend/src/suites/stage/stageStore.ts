@@ -99,6 +99,12 @@ function withBody(o: StageObject, body: StageObject['body'] | undefined): StageO
 /** A figure bound to another character (or none): the last one's shell is not its shadow. */
 const rebound = (x: StageObject, profileId: string | null, version: string | null): StageObject =>
   ({ ...x, profile_id: profileId, version, ...(x.profile_id !== profileId ? { shadow_proxy: null } : {}) })
+/** M8 (W36): the name a figure takes when it is bound — the character's, unless the author named it (a name that is only a default, the
+ *  scale figure's or the character it was bound to before follows the binding; on unbinding, a character's name falls back to a default). */
+export function figureName(x: StageObject, was: string | null | undefined, now: string | null | undefined, n: number): string {
+  const plain = /^Figure \d+$/.test(x.name) || x.name === '1.75 m for scale' || (!!was && x.name === was)
+  return !plain ? x.name : now ?? (was && x.name === was ? `Figure ${n}` : x.name)
+}
 /** U18: the mannequin a new figure is — the Detailed ♀ unless the stage's figures are all ♂ (the Simple dummy is retired). */
 const newDetail = (objects: StageObject[]): 'male' | 'female' => { const f = objects.filter((o) => o.kind === 'mannequin'); return f.length && f.every((o) => o.detail === 'male') ? 'male' : 'female' }
 
@@ -1080,9 +1086,7 @@ export const useStage = create<StageState>()((set, get) => ({
     if (here) { get().select(here.id); return }
     const id = get().addObject('mannequin', 'adult', pos)
     if (!id) return
-    get().bindFigure(id, profileId)
-    const name = useStory.getState().profiles.find((p) => p.id === profileId)?.name
-    if (name) get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id ? { ...o, name } : o)) }), 'name')   // the character's name, not "Figure 3"
+    get().bindFigure(id, profileId)                                                       // M8: the character's name with it, not "Figure 3"
   },
   freeCopy: (id) => {
     const o = get().sampledDoc()?.objects.find((x) => x.id === id) ?? get().object(id)
@@ -1141,8 +1145,10 @@ export const useStage = create<StageState>()((set, get) => ({
   bindFigure: (id, profileId, version = null) => {
     const o = get().object(id)
     if (!o || o.kind !== 'mannequin') return
-    get().apply((d) => ({ ...d, objects: d.objects.map((x) => (x.id === id ? withBody(rebound(x, profileId, profileId ? version : null), castBody(profileId, version))
-      : profileId && x.profile_id === profileId ? { ...rebound(x, null, null), body: null } : x)) }), profileId ? 'bind figure' : 'unbind figure')   // one figure per character: it moves
+    const name = (pid: string | null | undefined) => (pid ? useStory.getState().profiles.find((p) => p.id === pid)?.name : undefined)
+    const n = (get().current?.objects.filter((x) => x.kind === 'mannequin').length ?? 0)
+    get().apply((d) => ({ ...d, objects: d.objects.map((x) => (x.id === id ? { ...withBody(rebound(x, profileId, profileId ? version : null), castBody(profileId, version)), name: figureName(x, name(x.profile_id), name(profileId), n) }
+      : profileId && x.profile_id === profileId ? { ...rebound(x, null, null), body: null, name: figureName(x, name(x.profile_id), null, n) } : x)) }), profileId ? 'bind figure' : 'unbind figure')   // one figure per character: it moves; M8: the name follows
     void get().refreshShotPreview()
   },
   placeProp: (profileId, pos) => {

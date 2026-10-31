@@ -15240,3 +15240,57 @@ the face and the clothes Mira's; the pose followed).
   satchel, the boots and the stride are the same, and no copy of the reference is left standing.
 
 **Against the bars set at 21:07, on the product path:** passed.
+
+## 2026-10-31 22:35 — The market walk's smaller items fixed: M1, M2, M3 (in part), M4, M8, M10, M11, M15, M16
+
+The author: "Let's continue" (after D175, the priority list done). None of these changes a direction, so no D-number.
+
+**Fixed:**
+
+- **M1 (a colour row starts red):** a new colour row has no colour until one is picked.
+  - Its swatch shows unset ("pick its colour — not sent until it has one").
+  - `SheetColour.hex` may be blank. `compose_sheet` / `sentColours` (twins, with a new shared case in `sheet_compose.json`) and the
+    subject card's chips skip a blank row.
+- **M2 (= W3, a 422 for `GET /loras?model_id=`):** the LoRA list is not asked for until the panel has a model, and an answer for a model
+  the panel has left is dropped.
+- **M3 (the hero and the A-pose disagree, and nothing says so), in part:**
+  - The race: Generate's submits, the candidates page, Build's A-pose makes and Expand first save a sheet edit that is still waiting out
+    its 400 ms debounce (`settleProfiles`). The server reads the sheet at a make, so it now gets the sheet as last edited.
+  - The warning: World's readiness line warns when the hero or the front A-pose was made with other bound colours than the sheet has now
+    ("⚠ hero ≠ sheet", the clause on hover). The colours are read from their prompts; the warning is said, not counted.
+  - **Not what happened to Bram:** his hero's prompt (E47's copy, `ast_8e6164c2`) did bind the sheet's white, "#E8E4DA rubber apron".
+    FLUX.2 painted it olive under the Look's market light ("early morning light under a market roof, steam …"), while the A-pose, on a
+    plain studio ground, is white. The register's reading ("the casting went out before it took") was wrong. Neither change catches a
+    picture that disagrees with its own words. That would need the colour measured on the picture (the bound object found by SAM 3,
+    on the GPU) — not built; the author's call.
+- **M4 (the basket dropped by the A-pose):** the A-pose asks for no props and open hands (D140), so a thing the words have a character
+  carry ("a wicker shopping basket on her arm", "carrying a lantern") is only in the words.
+  - The readiness line names it ("⚠ carried: wicker shopping basket").
+  - A click on it (*Make what it carries a prop…*) makes it a Cast prop, which Clay's Hold ▸ (D129) puts in the hand.
+  - Worn things (a ring, a watch, a tattoo) and the marks are not read.
+- **M8 (≈ W36, Figures + re-bound one figure):**
+  - A bound figure's Inspector says who it is and offers *Change ▾* (the other characters, Unbind). It no longer shows the same name
+    tiles as Figures +, where the second click had re-bound Mira's figure to Hanne.
+  - A figure takes its character's name when bound or re-bound, unless the author named it (`figureName`). A default name, the scale
+    figure's or the previous character's name follows the binding.
+- **M10 (= W34, a figure added in the air):** a thing added at the viewport's centre, dropped or clicked as a path point that hits a
+  wall, a backdrop or a ceiling now lands on the floor 0.4 m in front of it. In the app (the shot camera on the stall front), a figure
+  added from Figures + stood at (2.37, 0.12, −3.0), on the floor in front of the counter.
+- **M11:** Build › Body's ♀ / ♂ have a label and a tooltip.
+- **M15 (a clip's facing not shown before it is applied):** with a figure selected, the motion library's preview plays the clip turned
+  to the figure's way at the playhead (or along its path), seen from the shot camera's side. A line under it says which way the figure
+  will face (in the app: "Bram faces left in the shot"; `motion/facing.ts`).
+- **M16 (a red banner for housekeeping):** the Bin's notes at opening ("B4: 12 things on no page went to a home") are logged, not shown
+  as a recovery error.
+
+**Screenshots** (E47's copy; every change made there for a shot was put back): Hanne's "⚠ carried", Bram's "⚠ hero ≠ sheet" and
+"⚠ A-pose ≠ sheet" with his apron set to olive for the shot, the unset colour row, Bram's Inspector with *Change ▾*, and the motion
+preview with its facing line.
+
+**Tests:**
+
+- Offline 785 (with the shared sheet case); Vitest 622 + 3 skipped (new: the readiness warnings and carried things, the clip's facing,
+  the figure's name).
+- Typecheck, build and lint clean (61 warnings, as before); settings audit 322 / 0; agent docs and model literals clean.
+- The e2e at first failed 2 scenarios that assumed the old behaviour: a new colour row sent red, and the bound tag appeared twice. The
+  scenario now picks the colour, and the Inspector no longer repeats the row's tag. Then e2e 84/84 alone.

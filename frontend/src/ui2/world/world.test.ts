@@ -1,7 +1,7 @@
 // U3 (D157, proto01_UI2 03 §2, §5): World's pure parts — the readiness line per class, the role filter, the hash's place.
 import { describe, expect, it } from 'vitest'
 import type { ProfileVersion } from '../../api/types'
-import { readiness } from './readiness'
+import { carriedThings, readiness, sheetDrift } from './readiness'
 import { passes, placeOfHash } from './worldStore'
 import { activeFraming, FRAMINGS, REF_FRAMINGS, refTree, to169 } from './make'
 
@@ -94,3 +94,26 @@ describe('D162: the framing row', () => {
   })
 })
 
+
+describe('the market walk small items (M3, M4)', () => {
+  it('M3: a picture whose prompt bound another colour, or none, disagrees with the sheet — said as a warning, not counted', () => {
+    const bram = v({ colours: [{ hex: '#E8E4DA', object: 'rubber apron' }] })
+    const tree = '{"subjects":[{"description":"a heavy-set man, wearing a long white rubber apron, #C0392B rubber apron, a faded tattoo"}]}'
+    expect(sheetDrift(bram, tree)).toEqual(['rubber apron #C0392B, the sheet #E8E4DA'])
+    expect(sheetDrift(bram, 'a heavy-set man, #e8e4da rubber apron. Full-body character reference')).toEqual([])   // a sentence after it, any case
+    expect(sheetDrift(bram, 'a heavy-set man')).toEqual(['no rubber apron colour (the sheet #E8E4DA)'])
+    expect(sheetDrift(bram, null)).toEqual([])                                                                      // an import says nothing
+    expect(sheetDrift(v({ colours: [{ hex: '', object: 'coat' }] }), 'a man')).toEqual([])                         // M1: not picked, not sent
+    const r = readiness({ cls: 'character', voice_id: null }, { ...bram, hero_asset_id: 'h', anim_ref_asset_id: 'a', body_fit_from: 'a' } as ProfileVersion, 1,
+      { hero: tree, a_pose_front: 'a heavy-set man, #E8E4DA rubber apron' })
+    expect(r.items.filter((x) => x.state === 'warn').map((x) => x.label)).toEqual(['hero ≠ sheet'])
+    expect(r.line).toBe('Ready for Clay')
+  })
+  it('M4: the things the words have a character carry — not what it wears, not its marks', () => {
+    expect(carriedThings({ appearance: 'a small elderly woman in her seventies', outfit: 'a long dark-red wool coat, a wicker shopping basket on her arm' })).toEqual(['a wicker shopping basket'])
+    expect(carriedThings({ appearance: 'a lamplighter carrying a brass lantern', outfit: 'an umbrella in his left hand' })).toEqual(['a brass lantern'])   // "left" is not read
+    expect(carriedThings({ appearance: 'a man with a ring on his hand, a tattoo on his arm', outfit: 'a canvas shoulder bag' })).toEqual([])
+    const r = readiness({ cls: 'character', voice_id: null }, v({ outfit: 'a wicker shopping basket on her arm' }), 0)
+    expect(r.items.find((x) => x.id === 'carried')).toMatchObject({ label: 'carried: wicker shopping basket', state: 'warn' })
+  })
+})

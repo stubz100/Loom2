@@ -282,6 +282,7 @@
 .cast-sheet .sheet-colour { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 2px; border: 1px solid var(--line2); border-radius: 14px; background: var(--bg1); }
 .cast-sheet .sheet-colour.unbound { border-style: dashed; opacity: .75; }
 .cast-sheet .sheet-colour input[type="color"] { width: 22px; height: 22px; padding: 0; border: none; border-radius: 50%; background: none; cursor: pointer; }
+.cast-sheet .sheet-colour input[type="color"].unset { opacity: .35; outline: 1px dashed var(--line2); outline-offset: 1px; }   /* M1: no colour picked yet */
 .cast-sheet .sheet-colour input[type="text"] { width: 130px; border: none; background: transparent; font: inherit; color: var(--fg); padding: 2px; }
 .cast-sheet .sheet-colour .x { min-height: 0; padding: 0 3px; }
 .cast-sheet .sheet-sent { grid-column: 1 / -1; margin: 4px 0 0; padding: 6px 8px; border-left: 2px solid var(--accent); background: var(--bg1); color: var(--fg); }

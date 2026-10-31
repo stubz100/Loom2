@@ -12,7 +12,7 @@ const clause = (s: string | null | undefined) => (s ?? '').trim().replace(/^[,;\
 const WORN = /^(wearing|in|dressed|clad)\b/i
 
 /** The colours that go into the prompt: those bound to an object ("#C0392B rain jacket"); a colour alone stays on the sheet. */
-export const sentColours = (v: Partial<Sheet>): string[] => (v.colours ?? []).filter((c) => clause(c.object)).map((c) => `${c.hex.toUpperCase()} ${clause(c.object)}`)
+export const sentColours = (v: Partial<Sheet>): string[] => (v.colours ?? []).filter((c) => c.hex && clause(c.object)).map((c) => `${c.hex.toUpperCase()} ${clause(c.object)}`)   // M1: not picked, not sent
 
 /** D93 (B4) the composition rule: appearance, the outfit (this shot's, else the sheet's — "wearing …" unless it says how), the bound
  *  colours, the marks, this shot's line — joined by ", "; empty → the name. D93 (C6): a place or a prop wears nothing (no outfit sent). */

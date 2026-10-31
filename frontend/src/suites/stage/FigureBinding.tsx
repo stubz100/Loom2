@@ -43,8 +43,11 @@ export function FigureCharacter({ o }: { o: StageObject }) {
   return (
     <>
       <div className="kv"><span>character</span><span className="hint">{p ? p.name : chars.length ? 'pick who this figure is' : 'no characters in the Cast yet'}{p && <Help text="Its reference images and sheet go into the frame, figure by figure, left to right." />}</span></div>
-      <PresetIcons label="the figure's character" size={40} items={items} selected={o.profile_id ?? NONE} onPick={(id) => st().bindFigure(o.id, id === NONE ? null : id)}
-        onContext={(id, e) => { if (id === NONE) return; useStory.getState().selectProfile(id); showMenu(e, [{ cmd: 'story.cast.openInStory' }]) }} />
+      {p                                                                                   /* M8: a bound figure shows who it is — not the tiles Figures + shows, a second click there re-bound it */
+        ? <div className="verbs"><button type="button" className="quiet" data-verb="rebind" title={`Bind this figure to another character instead of ${p.name} (Figures + adds a figure)`}
+            onClick={(e) => showMenu(e, [...chars.filter((c) => c.id !== p.id).map((c) => ({ label: c.name, run: () => st().bindFigure(o.id, c.id) })), { cmd: 'stage.figure.unbind' }])}>Change ▾</button></div>
+        : <PresetIcons label="the figure's character" size={40} items={items} selected={NONE} onPick={(id) => st().bindFigure(o.id, id === NONE ? null : id)}
+            onContext={(id, e) => { if (id === NONE) return; useStory.getState().selectProfile(id); showMenu(e, [{ cmd: 'story.cast.openInStory' }]) }} />}
       {p && p.versions.length > 1 && <div className="kv"><span>version</span><select value={o.version ?? ''} aria-label="the character's version" onChange={(e) => st().bindFigure(o.id, p.id, e.target.value || null)}>
         <option value="">current ({p.current})</option>{p.versions.map((v) => <option key={v.id} value={v.id}>{v.label && v.label !== v.id ? `${v.id} · ${v.label}` : v.id}</option>)}</select></div>}
       {p && <div className="kv"><span>body</span><span className="hint">{o.body

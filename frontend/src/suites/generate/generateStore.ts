@@ -442,9 +442,10 @@ export const useGenerate = create<GenerateState>()(
       setPresetText: (section, on) => set({ presetText: { ...get().presetText, [section]: on } }),
 
       loadLoras: async (modelId) => {
+        if (!modelId) { set({ lorasAvailable: [] }); return }                                    // M2 (= W3): no model yet — nothing to ask (it was a 422)
         try {
           const r = await unwrap(http.GET('/loras', { params: { query: { model_id: modelId } } }))
-          if (get().panel.model_id !== modelId) return                                            // the model moved on while this answered
+          if (panelModel(get().panel) !== modelId) return                                         // the model moved on while this answered
           const fits = new Set(r.items.filter((o) => o.fits).map((o) => o.id))
           const kept = get().panel.loras.filter((l) => fits.has(l.model_id))
           set({ lorasAvailable: r.items })
@@ -629,6 +630,8 @@ export const useGenerate = create<GenerateState>()(
           if (!gid) return null
           origin = withIdea(castOrigin(prof.id, v.id, gid))                                  // CW2: the idea chip's stamp stays
         }
+        const { useStory: story } = await import('../story/storyStore')
+        await story.getState().settleProfiles()                                                // M3: a linked card's sheet as it was last edited
         const n = cells.length * p.count
         if (n > 8) {
           const secs = (st?.seconds ?? 0) * n
@@ -679,6 +682,7 @@ export const useGenerate = create<GenerateState>()(
         const origin = lp ? { ...base, payload: { ...(base.payload ?? {}), saved_panel: lp } } : base
         const f = origin.surface === FOR_SHOT ? useMakeFor.getState().generate : null
         try {
+          await (await import('../story/storyStore')).useStory.getState().settleProfiles()      // M3: the server composes a linked card from the sheet at submit
           const jobs = await unwrap(http.POST('/jobs', { body: { recipe: recipeFromPanel(get().panel), stage, origin } }))
           const batch = jobs.jobs[0] ? batchOf(jobs.jobs[0]) : null
           set({ lastBatch: batch, show: 'batch' })

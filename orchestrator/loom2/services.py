@@ -64,7 +64,8 @@ class Services:
             from .story import StoryStore
             catalogue.recovery.extend((await asyncio.to_thread(StoryStore, ws)).migrated)   # RC2a: the shots join their nodes, once
             from .bins import migrate_bins
-            catalogue.recovery.extend(await asyncio.to_thread(migrate_bins, ws, groups))     # U2 (G1): the pages into their homes, once
+            for note in await asyncio.to_thread(migrate_bins, ws, groups):            # U2 (G1): the pages into their homes, once; B4: strays at each open
+                log.info("bins: %s", note)                                        # M16: housekeeping, logged — the recovery banner is for errors
             await queue.start()
         except Exception:
             catalogue.close()

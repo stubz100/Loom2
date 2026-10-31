@@ -7,6 +7,7 @@ import { navigate } from '../../frame/router'
 import { askConfirm, askText, useSession } from '../../store/session'
 import { useStory } from '../../suites/story/storyStore'
 import { ONE, useWorld } from './worldStore'
+import { carriedThings } from './readiness'
 
 const sy = () => useStory.getState()
 const w = () => useWorld.getState()
@@ -59,6 +60,15 @@ registerCommands([
     run: () => void import('./editSave').then((m) => m.saveIntoBin('reference')) },
   { id: 'world.edit.saveHero', scope: 'world', label: 'Save as the hero', icon: Star, placement: ['panel'], when: () => w().mode === 'edit' && open(),
     run: () => void import('./editSave').then((m) => m.saveIntoBin('hero')) },
+  { id: 'world.carried.prop', scope: 'world', label: 'Make what it carries a prop…', icon: Box, placement: ['panel'],
+    hint: 'the A-pose leaves out what the words have it carry (its hands open, no props); a Cast prop held in Clay (Hold ▸) keeps it',
+    when: () => { const v = sy().version(); return sy().profile()?.cls === 'character' && !!v && carriedThings(v).length > 0 },
+    run: () => { const v = sy().version(), thing = v ? carriedThings(v)[0] : undefined; if (!thing) return       // M4
+      const plain = thing.replace(/^an?\s+/i, '')
+      void askText({ title: 'A prop from what it carries', placeholder: 'prop name', initial: plain.charAt(0).toUpperCase() + plain.slice(1) }).then(async (name) => {
+        if (!name?.trim()) return
+        const p = await sy().createProfile(name.trim(), 'prop', null, thing)
+        if (p) { w().pick(p.id); useSession.getState().toast(`${p.name} is a prop now — its pictures and 3D model next; in Clay, Hold ▸ puts it in the hand`, 'info') } }) } },
   { id: 'world.entity.new', scope: 'world', label: 'New entity…', icon: UserRoundPlus, placement: ['panel', 'rail'], when: () => !!cls() && !!useSession.getState().project?.open,
     hint: 'a new character, prop or place of the rail\'s class',
     run: () => { const c = cls(); if (!c) return

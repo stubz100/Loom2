@@ -39,3 +39,15 @@ describe('prebind (Make frame ▸ in Stage)', () => {
     expect(prebind([fig('a', 0), fig('h', 1, { visible: false })], CAM, [{ id: 'prf_m' }])).toEqual({ a: 'prf_m' })  // a hidden figure is not in the shot
   })
 })
+
+describe('M8 (W36): a figure takes its character\'s name when bound', () => {
+  const fig = (name: string) => ({ id: 'fig_1', kind: 'mannequin', name }) as unknown as StageObject
+  it('a default name, the scale figure\'s or the last character\'s follows the binding; a name the author gave stays', async () => {
+    const { figureName } = await import('./stageStore')
+    expect(figureName(fig('Figure 3'), null, 'Hanne', 3)).toBe('Hanne')
+    expect(figureName(fig('1.75 m for scale'), null, 'Tomas', 1)).toBe('Tomas')
+    expect(figureName(fig('Mira'), 'Mira', 'Hanne', 2)).toBe('Hanne')                    // re-bound: no "Mira" bound to Hanne
+    expect(figureName(fig('Mira'), 'Mira', null, 2)).toBe('Figure 2')                    // unbound: no longer Mira
+    expect(figureName(fig('the fishmonger'), 'Bram', 'Hanne', 2)).toBe('the fishmonger')
+  })
+})

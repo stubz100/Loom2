@@ -69,6 +69,10 @@ export function disposeObject(root: THREE.Object3D, keep: ReadonlySet<THREE.Mate
   return n
 }
 
+const STANDS_ON = 0.7                                                                // M10: a surface faces up enough to stand on
+const OFF_WALL = 0.4                                                                 // M10: metres out from a wall a thing lands
+const DOWN = new THREE.Vector3(0, -1, 0)
+
 export class StageEngine {
   readonly renderer: THREE.WebGLRenderer
   readonly scene = new THREE.Scene()
@@ -514,8 +518,20 @@ export class StageEngine {
   /** Where a client-space point lands: the first object surface hit, else the floor; null when the ray misses the floor too. */
   place(x: number, y: number): number[] | null {
     this.ray.setFromCamera(this.ndc(x, y), this.camera())
-    const hits = this.ray.intersectObjects([...this.entries.values()].filter((e) => e.doc.kind === 'set').map((e) => e.body), true)
-    if (hits.length) { const p = hits[0].point; return [+p.x.toFixed(3), +Math.max(0, p.y).toFixed(3), +p.z.toFixed(3)] }
+    const sets = [...this.entries.values()].filter((e) => e.doc.kind === 'set').map((e) => e.body)
+    const hits = this.ray.intersectObjects(sets, true)
+    if (hits.length) {
+      const h = hits[0], p = h.point.clone()
+      const n = h.face ? h.face.normal.clone().transformDirection(h.object.matrixWorld) : null
+      if (n && n.y < STANDS_ON) {                                                    // M10 (W34): a wall, a backdrop or a ceiling — not the air in front of it:
+        if (n.dot(this.ray.ray.direction) > 0) n.negate()                            // the side the camera sees
+        if (Math.abs(n.y) < STANDS_ON) p.addScaledVector(new THREE.Vector3(n.x, 0, n.z).normalize(), OFF_WALL)   // a step out from the wall,
+        this.ray.set(p.clone().setY(p.y + 0.01), DOWN)                               // then down onto the floor below it
+        const below = this.ray.intersectObjects(sets, true).find((d) => d.face && d.face.normal.clone().transformDirection(d.object.matrixWorld).y > STANDS_ON)
+        p.y = below ? below.point.y : 0
+      }
+      return [+p.x.toFixed(3), +Math.max(0, p.y).toFixed(3), +p.z.toFixed(3)]
+    }
     const p = new THREE.Vector3()
     if (this.ray.ray.intersectPlane(this.floor, p)) return [+p.x.toFixed(3), 0, +p.z.toFixed(3)]
     return null

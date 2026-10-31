@@ -2105,6 +2105,7 @@ test('a live character sheet (D93 · B4, B5): an outfit edited in Cast shows on 
   await expect(page.locator('[data-testid="world-header"]')).toContainText('v2 · winter')
   await page.locator('#cast-outfit').fill('a yellow oilskin')
   await page.locator('.cast-sheet button', { hasText: 'colour' }).click()
+  await page.locator('.cast-sheet input[aria-label="colour 1"]').fill('#c0392b')                       // M1: a new row has no colour until one is picked
   await page.locator('.cast-sheet input[aria-label="colour 1: what it colours"]').fill('oilskin')
   await expect(page.locator('.cast-sheet .sheet-sent')).toContainText('wearing a yellow oilskin, #C0392B oilskin')
   await expect.poll(async () => { const v = (await api<ProfileLite>('GET', `/story/profiles/${p1.id}`)).versions[1]; return `${v.outfit}|${v.colours.map((c) => `${c.hex} ${c.object}`).join()}` }).toBe('a yellow oilskin|#C0392B oilskin')

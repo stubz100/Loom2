@@ -149,7 +149,7 @@ class SheetColour(BaseModel):
     """D93 (B4): a colour bound to what it colours ("#C0392B" + "rain jacket") — the way Generate's Tree prompt binds colours (a hex code
     in front of its object); one without an object is kept on the sheet but not sent (a palette alone is weak)."""
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
-    hex: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
+    hex: str = Field("", pattern=r"^(#[0-9A-Fa-f]{6})?$")   # M1: blank until the author picks one (a new row used to start red) — not sent while blank
     object: str = Field("", max_length=80)
 
 
@@ -237,7 +237,7 @@ def compose_sheet(v: ProfileVersion, shot: Any = None, name: str = "", cls: str 
     wears nothing — its outfit (the sheet's or a shot's) is not sent; the appearance is its look, the colours and marks apply."""
     worn = cls == "character"
     outfit = (_clause(getattr(shot, "outfit", "") if shot is not None else "") or _clause(v.outfit)) if worn else ""
-    colours = ", ".join(f"{c.hex.upper()} {_clause(c.object)}" for c in v.colours if _clause(c.object))
+    colours = ", ".join(f"{c.hex.upper()} {_clause(c.object)}" for c in v.colours if c.hex and _clause(c.object))   # M1: a colour not picked yet is not sent
     parts = [_clause(v.appearance), outfit if not outfit or _WORN.match(outfit) else f"wearing {outfit}", colours, _clause(v.marks),
              _clause(getattr(shot, "note", "") if shot is not None else "")]
     return ", ".join(p for p in parts if p) or name.strip()

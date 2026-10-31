@@ -13578,8 +13578,11 @@ export interface components {
          *     in front of its object); one without an object is kept on the sheet but not sent (a palette alone is weak).
          */
         "SheetColour-Input": {
-            /** Hex */
-            hex: string;
+            /**
+             * Hex
+             * @default
+             */
+            hex?: string;
             /**
              * Object
              * @default
@@ -13592,7 +13595,10 @@ export interface components {
          *     in front of its object); one without an object is kept on the sheet but not sent (a palette alone is weak).
          */
         "SheetColour-Output": {
-            /** Hex */
+            /**
+             * Hex
+             * @default
+             */
             hex: string;
             /**
              * Object

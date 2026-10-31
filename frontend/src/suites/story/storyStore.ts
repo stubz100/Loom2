@@ -186,6 +186,7 @@ export interface StoryState {
   edge: { from: string; port: string } | null
   load: () => Promise<void>
   flush: () => Promise<void>
+  settleProfiles: () => Promise<void>                       // M3: a sheet edit still waiting out its debounce is saved first — the server reads the sheet at a make
   setSection: (s: Section) => void
   select: (s: Selection) => void
   /** A change to the world: applied at once, saved after 300 ms with the document's revision. */
@@ -455,6 +456,7 @@ export const useStory = create<StoryState>()((set, get) => {
       finally { set({ loading: false }) }
     },
     flush: async () => { if (saveTimer) { window.clearTimeout(saveTimer); saveTimer = null; await save(get, set) } },
+    settleProfiles: async () => { if (profPending) await patchWith({}, profPending.pid); await profChain },
     setSection: (section) => set({ section }),
     select: (selected) => set({ selected }),
     edit,
@@ -602,6 +604,7 @@ export const useStory = create<StoryState>()((set, get) => {
     },
     makeAnimRef: async (side) => {
       const p = get().profile(); const v = get().version(); if (!p || !v) return
+      await get().settleProfiles()                                                                  // M3: the A-pose reads the sheet as it is now
       try {
         const r = await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/anim-ref', { params: { path: { pid: p.id, vid: v.id } }, body: { side, count: 2 } }))
         useSession.getState().toast(`${r.job_ids.length} ${side === 'back' ? 'back views' : side === 'side' ? 'side views' : p.cls === 'place' ? 'set pictures' : 'animation references'} queued for ${p.name} — they land among its candidates; pick the ${side === 'back' ? 'back' : side === 'side' ? 'side' : p.cls === 'place' ? 'set picture' : 'front'} from them in Build`, 'info')   // D161: nothing is picked for the author; D175: the side
@@ -682,6 +685,7 @@ export const useStory = create<StoryState>()((set, get) => {
       } catch (e) { toast(`Make it the hero: ${detail(e)}`) }
     },
     ensureCandidates: async (pid, vid) => {
+      await get().settleProfiles()                                                                  // M3: its answer replaces the profile — a pending sheet edit goes first
       try {
         const next = await unwrap(http.POST('/story/profiles/{pid}/candidates', { params: { path: { pid } }, body: { version: vid } }))
         set({ profiles: get().profiles.some((x) => x.id === next.id) ? get().profiles.map((x) => (x.id === next.id ? next : x)) : [next, ...get().profiles] })
@@ -870,6 +874,7 @@ export const useStory = create<StoryState>()((set, get) => {
     expand: async (preset, seeds, tier) => {
       const p = get().profile(); const v = get().version(); if (!p || !v) return null
       set({ expanding: true })
+      await get().settleProfiles()                                                                  // M3
       try {
         const r = await unwrap(http.POST('/story/profiles/{pid}/expand', { params: { path: { pid: p.id } }, body: { version: v.id, preset, seeds_per_cell: seeds, tier, style_id: get().world?.default_style ?? null } }))
         await get().loadProfiles()

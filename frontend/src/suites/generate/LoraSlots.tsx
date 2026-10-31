@@ -3,7 +3,7 @@
 // fit stay visible but disabled with the sentence. The recipe carries loras[], the preview names the files, the manifest records them.
 import { useEffect } from 'react'
 import { Help } from '../../frame/Help'
-import { useGenerate } from './generateStore'
+import { panelModel, useGenerate } from './generateStore'
 
 const SLOTS = [0, 1, 2, 3]
 
@@ -11,7 +11,7 @@ export function LoraSlots() {
   const g = useGenerate()
   const p = g.panel
   const opts = g.lorasAvailable
-  const modelId = p.model_id
+  const modelId = panelModel(p)                                                     // M2: the model that runs (the panel's own id is blank for the default)
   useEffect(() => { void g.loadLoras(modelId) }, [modelId]) // eslint-disable-line react-hooks/exhaustive-deps
   const fitting = opts.filter((o) => o.fits)
   const others = opts.filter((o) => !o.fits)

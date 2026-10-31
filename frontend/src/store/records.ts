@@ -68,7 +68,7 @@ function route(f: RecordFrame): void {
     }
     case 'lora.changed':                                          // 18 (D86) LT2: a LoRA trained or deleted — the registry and the versions' slots moved
       void import('../suites/story/storyStore').then((m) => m.useStory.getState().onLoraChanged(f.data as never))
-      void import('../suites/generate/generateStore').then((m) => { const g = m.useGenerate.getState(); void g.loadLoras(g.panel.model_id) })
+      void import('../suites/generate/generateStore').then((m) => { const g = m.useGenerate.getState(); void g.loadLoras(m.panelModel(g.panel)) })
       return
     default: return
   }

@@ -10,7 +10,7 @@ import { composeSheet } from '../generate/sheet'
 import { useStory } from './storyStore'
 
 const MAX_COLOURS = 12
-const NEW_COLOUR = '#C0392B'
+const NEW_COLOUR = ''                                                         // M1: no colour until the author picks one (it used to start red)
 
 export function CastSheet({ p, v }: { p: Profile; v: ProfileVersion }) {
   const setSheet = useStory((s) => s.setSheet)
@@ -35,8 +35,10 @@ export function CastSheet({ p, v }: { p: Profile; v: ProfileVersion }) {
       <label>colours</label>
       <div className="sheet-colours" aria-label="bound colours">
         {colours.map((c, k) => (
-          <span key={k} className={`sheet-colour${c.object.trim() ? '' : ' unbound'}`} title={c.object.trim() ? `${c.hex.toUpperCase()} ${c.object.trim()}` : 'not sent until it names what it colours'}>
-            <input type="color" value={/^#[0-9a-f]{6}$/i.test(c.hex) ? c.hex.toLowerCase() : '#888888'} disabled={!open} aria-label={`colour ${k + 1}`} onChange={(e) => setColour(k, { hex: e.target.value.toUpperCase() })} />
+          <span key={k} className={`sheet-colour${c.object.trim() && c.hex ? '' : ' unbound'}`}
+            title={!c.hex ? 'pick its colour — not sent until it has one' : c.object.trim() ? `${c.hex.toUpperCase()} ${c.object.trim()}` : 'not sent until it names what it colours'}>
+            <input type="color" className={c.hex ? undefined : 'unset'} value={/^#[0-9a-f]{6}$/i.test(c.hex) ? c.hex.toLowerCase() : '#888888'} disabled={!open} aria-label={`colour ${k + 1}`}
+              title={c.hex ? undefined : 'pick its colour'} onChange={(e) => setColour(k, { hex: e.target.value.toUpperCase() })} />
             <input type="text" value={c.object} readOnly={!open} maxLength={80} aria-label={`colour ${k + 1}: what it colours`} placeholder="what it colours" onChange={(e) => setColour(k, { object: e.target.value })} />
             {open && <button type="button" className="quiet x" aria-label={`remove colour ${k + 1}`} title="Remove this colour" onClick={() => setSheet({ colours: colours.filter((_, j) => j !== k) })}><X size={11} /></button>}
           </span>

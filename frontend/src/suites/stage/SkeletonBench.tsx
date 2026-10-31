@@ -439,7 +439,8 @@ export function SkeletonParts() {
       <h4>{p.name}'s skeleton <Help text={"Each part as a length at the figure's height, the factor of the default adult in its tooltip. The grey band is an adult's range: outside it the row turns amber — a child or a creature is yours to decide. A lock keeps a part through Fit again."} /></h4>
       <div className="kv">
         <span>height</span><span className="mono">{b.height_m.toFixed(2)} m</span>
-        <span>figure</span><span className="segmented" role="group" aria-label="figure">{(['female', 'male'] as const).map((k) => <button key={k} type="button" disabled={!open} className={b.figure === k ? 'active' : ''} onClick={() => set({ figure: k })}>{k === 'female' ? '♀' : '♂'}</button>)}</span>
+        <span>figure</span><span className="segmented" role="group" aria-label="figure">{(['female', 'male'] as const).map((k) => <button key={k} type="button" disabled={!open} className={b.figure === k ? 'active' : ''} onClick={() => set({ figure: k })}
+          aria-label={`${k} figure`} title={`A ${k === 'female' ? 'woman' : 'man'}'s figure: the mannequin the skeleton is drawn on`}>{k === 'female' ? '♀' : '♂'}</button>)}</span>
       </div>
       {groups.map((g) => (
         <div key={g} className="skel-group">

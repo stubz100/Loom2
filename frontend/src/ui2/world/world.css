@@ -15,6 +15,7 @@
 .w-ready { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11px; color: var(--fg3); padding-top: 4px; }
 .w-ready-item.done { color: var(--keep); }
 .w-ready-item.owed { color: var(--fg2); }
+.w-ready-item.warn { color: var(--warn); }   /* M3: a picture made from an older sheet */
 .w-ready-line { margin-left: auto; color: var(--warn); font-weight: 600; }
 .w-ready-line.ok { color: var(--keep); }
 .w-panel { flex: 1; min-height: 0; overflow: auto; padding: 12px; }

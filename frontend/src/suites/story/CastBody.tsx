@@ -56,7 +56,8 @@ export function CastBody({ p, v }: { p: Profile; v: ProfileVersion }) {
           <div className="body-row">
             <span>figure <Help text={"The Detailed mannequin this character's figures are on every stage (the Simple dummy is retired, proto01_UIcast U18)."} /></span>
             <span className="segmented" role="group" aria-label="figure">
-              {(['female', 'male'] as const).map((k) => <button key={k} type="button" disabled={!open} className={(b.figure ?? 'female') === k ? 'active' : ''} aria-pressed={(b.figure ?? 'female') === k} onClick={() => set({ figure: k })}>{k === 'female' ? '♀' : '♂'}</button>)}
+              {(['female', 'male'] as const).map((k) => <button key={k} type="button" disabled={!open} className={(b.figure ?? 'female') === k ? 'active' : ''} aria-pressed={(b.figure ?? 'female') === k} onClick={() => set({ figure: k })}
+                aria-label={`${k} figure`} title={`A ${k === 'female' ? 'woman' : 'man'}'s figure: the mannequin the body is drawn on and the proportions its fit starts from (D168 seeds it from the sheet's words)`}>{k === 'female' ? '♀' : '♂'}</button>)}
             </span>
           </div>
           {PROPORTIONS.map(([k, label, lo, hi]) => (

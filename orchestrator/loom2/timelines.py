@@ -261,7 +261,9 @@ def story_lookup(ws, cat=None):
             if not ln.text.strip():
                 continue
             rec = cat.get(ln.audio_asset_id) if ln.audio_asset_id else None
-            out.append({"name": Path(rec.path).name, "src": (ws.path / rec.path).resolve().as_uri(), "path": str((ws.path / rec.path).resolve()),   # RC3: the movie reads the file
+            words = " ".join(ln.text.split())
+            label = f"{n.title or n.type} · line {k + 1} · {words[:40]}{'…' if len(words) > 40 else ''}"   # W63: the line by its shot and words, not its asset's file
+            out.append({"name": label, "src": (ws.path / rec.path).resolve().as_uri(), "path": str((ws.path / rec.path).resolve()),   # RC3: the movie reads the file
                         "duration_s": float(rec.duration_s), "asset": rec.id, "node": n.id, "line": k} if rec and rec.duration_s else None)   # CE1: the cut's A1 links
         return out
     return name_of, lines_of, audio_of

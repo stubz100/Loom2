@@ -238,13 +238,13 @@ export function PrimaryAction() {
   const flowStart = useStory((s) => !!s.flowGraph?.start)
   markUsed('story.cast.expand'); markUsed('story.shot.new'); markUsed('story.flow.play'); markUsed('story.flow.stop'); markUsed('story.episode.exportResolve'); markUsed('story.episode.assemble')
   if (tab === 'episode') {
-    const issues = seqLane ? laneChecklist().length : 0
+    const issues = seqLane ? laneChecklist().length : 0                           // W61: a stale or over-long shot too, not only one not final
     const n = seqLane?.clips.length ?? 0
     return (
       <div>
         {seqCurrent ? <button className="primary" disabled={!n} onClick={() => runCommand('story.episode.exportResolve')} title="The FCPXML with markers and the voice lane, the EDL, the SRT and markers.txt in one folder named after the cut; the checklist asks once, only when something is listed">Export for Resolve ▶</button>
           : <button className="primary" disabled={!flowStart} onClick={() => runCommand('story.episode.assemble')} title="A new cut of one route of the Flow, every shot at its approved take">Assemble from the Flow…</button>}
-        <div className="estimate">{!seqCurrent ? <span style={{ color: 'var(--fg3)' }}>no cut open</span> : !n ? <span style={{ color: 'var(--fg3)' }}>the lane is empty</span> : issues ? <span style={{ color: 'var(--fg3)' }}>{issues} of {n} clips not final shots</span> : <><span className="dot ok" />{n} clip{n === 1 ? '' : 's'} · every one a final shot</>}</div>
+        <div className="estimate">{!seqCurrent ? <span style={{ color: 'var(--fg3)' }}>no cut open</span> : !n ? <span style={{ color: 'var(--fg3)' }}>the lane is empty</span> : issues ? <span style={{ color: 'var(--fg3)' }} title={laneChecklist().map((x) => x.what).join('\n')}>{issues} to check before the export</span> : <><span className="dot ok" />{n} clip{n === 1 ? '' : 's'} · every one a final shot</>}</div>
       </div>
     )
   }

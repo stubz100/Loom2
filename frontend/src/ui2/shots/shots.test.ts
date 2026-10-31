@@ -35,6 +35,8 @@ describe('the storyboard (U4)', () => {
   it('numbers the route\'s shots in the Flow\'s order, named after the node, an unbound shot left out', () => {
     expect(rows.map((r) => [r.n, r.shot.id, r.label])).toEqual([[1, 's_a', 'The quay'], [2, 's_b', 's_b']])
     expect(rows[0].thumb).toBe('ast_f')
+    const withCards = routeRows({ flowGraph: graph, flowNodes: nodes, shots, finals: [], cuts: [], clipsById: {}, cards: { s_b: { take_asset_id: 'ast_take' } as never } })
+    expect(withCards[1].thumb).toBe('ast_take')                                                       // W52: its clips not loaded, the board's take
   })
   it('the dots: Clay the stage, Performance the clip (owed on a stage route), Final the assembled shot; a shot opens on what it owes', () => {
     expect(rows[0].dots).toEqual({ clay: 'done', performance: 'owed', final: 'na' })

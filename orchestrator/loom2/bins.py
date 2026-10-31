@@ -160,6 +160,20 @@ def owner_home(groups: GroupStore, ws: Any, origin: Any) -> GroupRecord | None:
     return home(groups, f"shots/{s.id}/{vid}", {f"shots/{s.id}": s.name, f"shots/{s.id}/{vid}": vid})
 
 
+def home_now(groups: GroupStore | None, ws: Any, *recs: Any) -> None:
+    """W57: a working file a route makes (a final's pass, a layer's reference, a pose guide, a set's bake) goes to its home now — its owner's,
+    else where B4 homes a free thing (`free_home`: the stage's shot, the place's version) — not on no page, where Imports showed it until
+    the project's next open."""
+    if groups is None:
+        return
+    for r in recs:
+        if r is not None and ("asset", r.id) not in groups.parent:
+            h = owner_home(groups, ws, r.origin) if r.origin is not None else None
+            h = h or free_home(groups, ws, r.origin, r)
+            if h is not None:
+                groups.move([("asset", r.id)], h.id)
+
+
 def land(groups: GroupStore, ws: Any, origin: Any, asset_ids: list[str], *, free: bool = True) -> GroupRecord | None:
     """U2e (G1): a finished job's assets that no page took yet go to their owner's home (a page a finisher chose — Expand's candidates,
     a style's group — keeps them); B4 (D159): with no owner, to where a free thing lives (`free_home`; `free=False`: they stay). The home,

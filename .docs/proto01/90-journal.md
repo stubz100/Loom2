@@ -15417,3 +15417,48 @@ None of these changes a direction.
 - Vitest 629 + 3 skipped: new are W24, W27, W31, W33, W38, W39, W42, W53 and W54.
 - Typecheck, build and lint clean (61 warnings, as before); settings audit 322 / 0; agent docs and model literals clean.
 - e2e 84/84 alone.
+
+## 2026-11-01 00:11 — The walkthrough-2 register, wave 4 (Episode, the Bin, Edit): W52, W57, W61–W64; what is left for the author
+
+None of these changes a direction.
+
+**Fixed:**
+
+- **W52:** a storyboard card whose shot's clips are not loaded (every shot but the open one) shows the board's take picture
+  (`take_asset_id`), not a black thumbnail.
+- **W57:** a working file a route makes goes to its home as it is made (`bins.home_now`), not on no page, where Imports showed it until
+  the next open (61 after World and three finals). That covers a final's plate pass and plate key, a layer's placed reference, its pose
+  guide, and a set's bake and coverage. The bakes carry their place version as their origin, since at ingest their faces are not on the
+  version yet and they would have gone to Sketches.
+- **W61:** Episode's foot says "N to check before the export", with the checklist on hover; it said "N of M clips not final shots" while
+  every shot was final and the issues were stale ones.
+- **W62:** Episode's Clips list names a clip by its shot and version, else by its words, with its length in seconds — not "composition ·
+  121f @ 24".
+- **W63:** the Resolve export (FCPXML, EDL) names a voiced line "The seal · line 1 · You knew my father…", not by its asset's file.
+- **W64:** Esc in Edit's text box keeps what was typed and leaves the editor (*Apply text*, Ctrl+Enter or Esc); the toolbar's ✕
+  (*Cancel text*) discards. Esc threw a new text layer away.
+
+**Left, each for a reason:**
+
+- **Owed a look or a rig run:**
+  - W44, a prop layer's beauty: the walkthrough's letter cut to nothing under W43's black depth; it needs a new final to check.
+  - W51, the player overflowing with the Bin drawer open: a layout to see in the app.
+  - W55, the open-ground floor black from the coverage camera: a bake and a fill to measure on the rig.
+- **The author's choice:**
+  - W2 and W23: where the synopsis (D157 Q1's *Notes*) and the Flow's variables live in the new shell.
+  - W5: the framing words are also the Look's composition.
+  - W8: a reference make sends the Look's style beside the studio ground, and each reference note repeats the whole sheet.
+  - W9's rest: D162 makes Make's A-pose 16:9 on the panel's model, which can cut a figure.
+  - W11: Klein A-poses with three figures, or a T-pose — flag them by their keypoints?
+  - W18: flat props from Pixal3D come out as thick blocks.
+  - W19 and W20: the fit's default kind, and the backdrop panels Fill queues.
+  - W22: the projected road's tone against the filled cobbles.
+  - W56: an edit to a shared stage stales every shot of the scene.
+  - W60: no part of a set can move.
+
+**Tests:**
+
+- Offline 793 (the first run caught the plate key's origin naming a surface that route had not imported: fixed, rerun): new are W57 (where a set's bakes land) and W63 (a line's name).
+- Vitest 629 + 3 skipped: new is W52 (the board's take).
+- Typecheck, build and lint clean (61 warnings, as before); settings audit 322 / 0; agent docs and model literals clean.
+- e2e 84/84 alone: the Episode foot's words changed in one scenario.

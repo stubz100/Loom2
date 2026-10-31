@@ -11,6 +11,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ..bins import home_now
 from ..compositions import Composition, CompositionStore
 from ..effectcraft import EffectCraftError
 from ..finals import LAYER_PASSES, Final, FinalLayer, FinalStore
@@ -227,6 +228,7 @@ async def final_plate(svc: Svc, fid: str, body: PlateBody):
     rec = await asyncio.to_thread(cat.ingest_file, src, kind="image", move=False, suite="stage", lineage_kind="stage-pass",
                                   origin=JobOrigin(suite="stage", surface=FINAL_PLATE_SURFACE, ref=fid), params={"final_id": fid, "pass": "clay", "stage_id": f.stage_id})
     rec = await asyncio.to_thread(cat.make_thumbs, rec, src)
+    await asyncio.to_thread(home_now, getattr(svc, "groups", None), getattr(svc, "ws", None), rec)                    # W57: not in Imports
     svc.hub.broadcast("asset.created", rec.model_dump())
     fmt = ws.load().format
     h = 720
@@ -354,8 +356,9 @@ async def final_plate_key(svc: Svc, fid: str, body: KeyBody):
 
     def prepare() -> tuple[Any, np.ndarray]:
         rec = cat.ingest_file(image, kind="image", move=False, suite="stage", lineage_kind="stage-pass", parents=[plate.still_asset_id],
-                              params={"final_id": fid, "pass": "plate-key", "frame": body.frame, "heal": body.heal})
+                              origin=JobOrigin(suite="stage", surface=FINAL_PLATE_KEY_SURFACE, ref=fid), params={"final_id": fid, "pass": "plate-key", "frame": body.frame, "heal": body.heal})
         rec = cat.make_thumbs(rec)
+        home_now(getattr(svc, "groups", None), getattr(svc, "ws", None), rec)                                         # W57
         with Image.open(mask_png) as m:
             mask = np.asarray(m.convert("L")) > 127
         return rec, mask
@@ -507,11 +510,13 @@ async def final_layer_run(svc: Svc, fid: str, lid: str, body: RunBody):
         rec = await asyncio.to_thread(cat.ingest_file, placed_png, kind="image", move=False, suite="stage", lineage_kind="stage-pass", parents=[ref.id],
                                       origin=JobOrigin(suite="stage", surface=FINAL_LAYER_SURFACE, ref=fid), params={"final_id": fid, "layer": lid, "pass": "reference"})
         rec = await asyncio.to_thread(cat.make_thumbs, rec, placed_png)
+        await asyncio.to_thread(home_now, getattr(svc, "groups", None), getattr(svc, "ws", None), rec)                # W57
         svc.hub.broadcast("asset.created", rec.model_dump())
         ref_id = rec.id
     else:
         ref_id = ref.id                                                       # the figure is not whole at the start: CN4's padded reference
     g = await _guide_video(cat, store, f, lid)
+    await asyncio.to_thread(home_now, getattr(svc, "groups", None), getattr(svc, "ws", None), g)   # W57: not in Imports
     seed = layer.seed if body.seed is None else body.seed
     layer.reference_asset_id, layer.guide_asset_id, layer.seed = ref_id, g.id, seed
     plan = plan_batches(f.frames)
@@ -590,6 +595,7 @@ async def final_layer_passes(svc: Svc, fid: str, lid: str, body: PassesBody):
         raise HTTPException(422, str(e))
     if layer.guide_asset_id:
         g = await _guide_video(cat, store, f, lid)
+        await asyncio.to_thread(home_now, getattr(svc, "groups", None), getattr(svc, "ws", None), g)   # W57: not in Imports
         f = await asyncio.to_thread(store.update_layer, fid, lid, guide_asset_id=g.id)
     svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
     return f.model_dump()

@@ -170,8 +170,8 @@ registerCommands([
   { id: 'edit.transform.cancel', scope: 'edit', label: 'Cancel transform', icon: X, keys: 'Escape', placement: ['strip', 'context'], when: () => !!ed().transform, run: () => ed().cancelTransform() },
   // D154: text layers — edit in place, apply / cancel the inline editor, drop the block
   { id: 'edit.text.edit', scope: 'edit', label: 'Edit text…', icon: Type, placement: ['panel', 'context'], when: () => !!textNode() && !ed().editingText, hint: 'or double-click the layer with the Move tool', run: () => { const n = textNode(); if (n) ed().beginTextEdit(n.id) } },
-  { id: 'edit.text.apply', scope: 'edit', label: 'Apply text', icon: Check, keys: 'Ctrl+Enter', placement: ['toolbar'], when: () => !!ed().editingText, run: () => ed().endTextEdit(true) },
-  { id: 'edit.text.cancel', scope: 'edit', label: 'Cancel text', icon: X, keys: 'Escape', placement: ['toolbar'], when: () => !!ed().editingText, run: () => ed().endTextEdit(false) },
+  { id: 'edit.text.apply', scope: 'edit', label: 'Apply text', icon: Check, keys: 'Ctrl+Enter', alt: ['Escape'], placement: ['toolbar'], when: () => !!ed().editingText, run: () => ed().endTextEdit(true) },   // W64: Esc keeps what was typed
+  { id: 'edit.text.cancel', scope: 'edit', label: 'Cancel text', icon: X, placement: ['toolbar'], hint: 'the typing since the editor opened is undone (a new text layer goes)', when: () => !!ed().editingText, run: () => ed().endTextEdit(false) },
   { id: 'edit.text.rasterize', scope: 'edit', label: 'Rasterize text', icon: Type, placement: ['panel', 'context'], when: () => !!textNode() && !ed().editingText, hint: 'the pixels stay; the text is no longer editable', run: () => { const n = textNode(); if (n) ed().rasterizeTextLayer(n.id) } },
   { id: 'edit.layer.flipH', scope: 'edit', label: 'Flip horizontal', icon: FlipHorizontal, placement: ['panel', 'context'], when: () => !ed().transform && (activeRaster)(), run: () => ed().flipLayer('h') },
   { id: 'edit.layer.flipV', scope: 'edit', label: 'Flip vertical', icon: FlipVertical, placement: ['panel', 'context'], when: () => !ed().transform && (activeRaster)(), run: () => ed().flipLayer('v') },

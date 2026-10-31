@@ -174,7 +174,7 @@ function TextEditOverlay() {
   return (
     <div className={`text-edit${t.box ? ' box' : ''}`} style={style} onPointerDown={(e) => e.stopPropagation()}>
       <textarea ref={ref} value={t.content} style={ta} spellCheck={false} placeholder="type…" onChange={(e) => ed().setText(id, { content: e.target.value }, 'move')}
-        onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); ed().endTextEdit(true) } else if (e.key === 'Escape') { e.preventDefault(); ed().endTextEdit(false) } e.stopPropagation() }} />
+        onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); ed().endTextEdit(true) } else if (e.key === 'Escape') { e.preventDefault(); ed().endTextEdit(true) } e.stopPropagation() }} />{/* W64: Esc leaves the editor keeping the text; ✕ discards */}
       <div className="text-edit-bar" style={{ transform: `scale(${1 / zoom})`, transformOrigin: '0 0' }}><CommandButton id="edit.text.apply" /><CommandButton id="edit.text.cancel" /><Help text={"✓ or Ctrl+Enter keeps the text; ✕ or Esc drops the change. The font, size, colour and outline live in the Properties tab; a new text layer takes the Text tool's options."} /></div>
     </div>
   )

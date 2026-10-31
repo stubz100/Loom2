@@ -129,6 +129,9 @@ def test_the_set_routes(tmp_path: Path):
         floor = next(f for f in ps["faces"] if f["id"] == "floor")
         assert ps["baked_key"] == "k1" and floor["texture_asset_id"] == floor["baked_asset_id"] and floor["coverage_asset_id"] and floor["bad"] == 0.5
         assert cat.get(floor["baked_asset_id"]).parents == [pic.id]                                       # lineage: set-bake ← the picture
+        gs = svc.require_groups()                                                                         # W57: the bakes in the place's home, not Imports
+        homes = {gs.groups[gs.parent[("asset", floor[k])]].path for k in ("baked_asset_id", "coverage_asset_id")}
+        assert all(h and h.startswith(f"world/place/{pid}") for h in homes), homes
         # Fill ▶: the floor (the wall has nothing to fill) on a document with its left half selected, the material named
         ps["faces"] = [{**f, "material": "worn terracotta tiles"} if f["id"] == "floor" else f for f in ps["faces"]]
         p = cl.get(f"/story/profiles/{pid}").json()

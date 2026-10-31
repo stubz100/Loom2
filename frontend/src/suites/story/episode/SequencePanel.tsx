@@ -34,6 +34,8 @@ export function SequencePanel() {
   const flowNodes = useStory((s) => s.flowNodes)
   const flowGraph = useStory((s) => s.flowGraph)
   const load = useSequence((s) => s.load)
+  const shotOf = new Map(shots.flatMap((s) => s.versions.flatMap((v) => [v.clip_id, ...v.takes.filter((t) => t.kind === 'clip').map((t) => t.id)]
+    .filter((id): id is string => !!id).map((id) => [id, `${s.name} ${v.id}`] as const))))   // W62: a clip is named by its shot, else its words
   useEffect(() => { if (project?.open) { void load(); void loadClips(); void useStory.getState().loadShots(); void useStory.getState().loadFlow() } }, [project?.path, load]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!project?.open) return <span className="hint">Open or create a project to begin.</span>
   markUsed('story.episode.addShot'); markUsed('story.episode.addClip')    // the bins' + run them on their entry
@@ -70,10 +72,10 @@ export function SequencePanel() {
         <div className="seq-list-head"><b>Clips</b><span className="hint">{current ? 'drag onto the lane, or +' : 'open a cut first'}</span></div>
         {!clips.length && <span className="hint">No clips in this project yet — Shots' Performance makes them.</span>}
         {clips.map((c) => (
-          <div key={c.id} className="seq-clip-card" title={`${c.frames} frames @ ${c.fps} fps · ${c.w}×${c.h}`}
+          <div key={c.id} className="seq-clip-card" title={`${c.prompt || c.id} · ${c.model_id} · ${c.frames} frames @ ${c.fps} fps · ${c.w}×${c.h}`}
             onPointerDown={(e) => beginDrag(e, () => ({ items: [{ kind: 'asset', id: c.asset_id ?? c.id, media: 'video' }], from: 'sequence-bin', thumb: c.asset_id ? api.thumbUrl(c.asset_id, 256) : undefined, label: c.id }))}>
             {c.asset_id ? <img src={api.thumbUrl(c.asset_id, 256)} alt="" draggable={false} /> : <span className="ph" />}
-            <span className="t">{c.model_id.split('-')[0]} · {c.frames}f @ {c.fps}</span>
+            <span className="t">{shotOf.get(c.id) ?? (c.prompt?.trim().slice(0, 40) || c.model_id.split('-')[0])} · {(c.frames / Math.max(1, c.fps)).toFixed(1)} s</span>
             <button className="quiet" disabled={!current} title={current ? 'Add to the end of the cut' : 'open a cut first'} aria-label={`add clip ${c.id}`} onClick={() => { binItem.clip = c; runCommand('story.episode.addClip'); binItem.clip = undefined }}><Plus size={14} /></button>
           </div>
         ))}

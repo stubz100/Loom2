@@ -75,3 +75,20 @@ def test_a_final_shot_puts_its_version_on_the_clay_route():
     v = lambda t, m=None: N(recipe=N(template=t) if t else None, method=m)  # noqa: E731
     assert clay_template(v("i2v"), one) == "clay1" and clay_template(v("stage"), two) == "clay2" and clay_template(v(None), one) == "clay1"
     assert clay_template(v("dialogue"), one) is None and clay_template(v("i2v", "one_pass"), one) is None and clay_template(v("i2v"), None) is None
+
+
+def test_an_exported_line_is_named_by_its_shot_and_words(tmp_path: Path):
+    """W63: the Resolve export named a voiced line by its asset's file ("ast_….wav"); it is the shot's line by its words now."""
+    from types import SimpleNamespace as N
+
+    from loom2.story import StoryStore
+    from loom2.timelines import TimelineClip, story_lookup
+    from loom2.workspace import Workspace
+    ws = Workspace.create(tmp_path / "p", name="P", size_cap_gb=10)
+    st = StoryStore(ws)
+    n = st.create_node("shot", "The seal", 0, 0)
+    st.patch_node(n.id, {"lines": [{"text": "You knew my father,  didn't you?", "audio_asset_id": "ast_v1"}]})
+    cat = N(get=lambda aid: N(id=aid, path="media/ast_v1.wav", duration_s=1.5) if aid == "ast_v1" else None)
+    _, _, audio_of = story_lookup(ws, cat)
+    cue = audio_of(TimelineClip(id="c1", clip_id="clp_1", out=24, node_id=n.id))[0]
+    assert cue["name"] == "The seal · line 1 · You knew my father, didn't you?" and cue["path"].endswith("ast_v1.wav")

@@ -843,12 +843,16 @@ async def profile_set_bake(svc: Svc, pid: str, vid: str, body: SetBake):
     files = [(f, _blob(ws, f.image), _blob(ws, f.coverage)) for f in body.faces]
     source = ps.sources[0].asset_id
 
+    from ..bins import home_now
+
     def ingest() -> list[SetFace]:
         out = []
         for f, img, cov in files:
             params = {"profile_id": pid, "version": vid, "face": f.id, "texel_m": f.texel_m}
-            t = cat.make_thumbs(cat.ingest_file(img, kind="image", move=False, suite="story", lineage_kind="set-bake", parents=[source], params=params))
-            c = cat.ingest_file(cov, kind="image", move=False, suite="story", lineage_kind="set-coverage", parents=[t.id], params=params)
+            mine = JobOrigin(suite="story", surface="set_bake", ref=pid, payload={"version": vid})   # W57: the place's version owns its bakes
+            t = cat.make_thumbs(cat.ingest_file(img, kind="image", move=False, suite="story", lineage_kind="set-bake", parents=[source], params=params, origin=mine))
+            c = cat.ingest_file(cov, kind="image", move=False, suite="story", lineage_kind="set-coverage", parents=[t.id], params=params, origin=mine)
+            home_now(getattr(svc, "groups", None), ws, t, c)                                         # W57: the place's version, not Imports
             out.append(SetFace(id=f.id, texture_asset_id=t.id, baked_asset_id=t.id, coverage_asset_id=c.id, texel_m=f.texel_m, seen=f.seen, bad=f.bad))
         return out
     faces = await asyncio.to_thread(ingest)

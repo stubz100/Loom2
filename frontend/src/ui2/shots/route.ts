@@ -26,7 +26,8 @@ export function routeRows(x: RouteInput): RouteRow[] {
   return flowOrder(x.flowGraph, x.flowNodes, x.shots).filter((r) => r.group !== 'Unbound').map((r, i) => {
     const v = r.shot.versions.find((y) => y.id === r.shot.current) ?? r.shot.versions[0]
     const c = cellsOf(r.shot, v, r.node, { clipAudio: (id) => (x.clipsById[id] ? !!x.clipsById[id].audio_asset_id : undefined), finals: x.finals, cuts: x.cuts, busy: () => new Set(), stale })
-    const thumb = v.frame_asset_id ?? (v.clip_id ? x.clipsById[v.clip_id]?.asset_id ?? null : null)
+    const clipThumb = v.clip_id ? x.clipsById[v.clip_id]?.asset_id : undefined
+    const thumb = v.frame_asset_id || clipThumb || x.cards[r.shot.id]?.take_asset_id || null   // W52: the board's take when this shot's clips are not loaded
     return { ...r, n: i + 1, label: r.node?.title || r.shot.name, v, thumb, dots: { clay: c.stage.state, performance: (c.clip.state !== 'na' ? c.clip : c.frame).state, final: c.final.state } }
   })
 }

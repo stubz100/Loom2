@@ -1849,7 +1849,7 @@ test("an episode (17 / SY4, D85): the Shots bin lists a final shot and adds it s
   expect(tl.clips[0]).toMatchObject({ clip_id: clipId, shot_id: shot.id, shot_version: 'v1', node_id: node.id })
   expect(tl.clips[1].shot_id).toBeNull()
   await expect(page.locator('.seq-insp .seq-check li.warn')).toHaveCount(1)                   // clip 2: a plain clip
-  await expect(page.locator('[data-testid="episode-layer"] .s-foot .estimate')).toContainText('1 of 2 clips not final shots')
+  await expect(page.locator('[data-testid="episode-layer"] .s-foot .estimate')).toContainText('1 to check before the export')
   // Export for Resolve ▶ (the panel foot, D125 S14): the checklist asks once, then one folder named after the cut holds the FCPXML with the
   // marker, the EDL, the SRT and markers.txt
   await page.locator('[data-testid="episode-layer"] .s-foot button.primary', { hasText: /^Export for Resolve/ }).click()

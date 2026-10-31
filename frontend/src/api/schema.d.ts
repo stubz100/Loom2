@@ -8032,6 +8032,10 @@ export interface components {
             clip_id: string | null;
             /** Created At */
             created_at: string;
+            /** Depth */
+            depth: {
+                [key: string]: number;
+            } | null;
             /** Frames */
             frames: number;
             /** Id */
@@ -8109,6 +8113,10 @@ export interface components {
         FinalCreate: {
             /** Camera Id */
             camera_id: string;
+            /** Depth */
+            depth?: {
+                [key: string]: number;
+            } | null;
             /** Frames */
             frames: number;
             /** Layers */

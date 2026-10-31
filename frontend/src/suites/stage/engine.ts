@@ -19,7 +19,7 @@ import { placeSet, type PlaceSetDoc } from './placeSet'
 import { makeDetailed, type Detailed, type HandPreset } from './detailed'
 import { measure } from './motion/path'
 import { bindProxy, FACE_LANDMARKS, FEET_LANDMARKS, shellPoints, shellStance, type Landmark, type Proxy } from './proxy'
-import { depthMaterial, depthRange, drawPose, maskColour, projectMarkers, toBlob, type Keypoint, type PassName, type WholeBody } from './passes'
+import { depthMaterial, depthRangeFor, drawPose, maskColour, projectMarkers, toBlob, type Keypoint, type PassName, type WholeBody } from './passes'
 import type { RenderedPasses, Tool, Transform, View } from './stageStore'
 
 export interface EngineHooks {
@@ -937,7 +937,7 @@ export class StageEngine {
       this.scene.updateMatrixWorld(true)
       const blobs: Partial<Record<PassName, Blob>> = {}
       blobs.clay = await this.shotWith(r, camera, this.passClay, 0xb8b8b8)
-      blobs.depth = await this.shotWith(r, camera, this.depthFor(cam), 0x000000)
+      blobs.depth = await this.shotWith(r, camera, this.depthFor(cam, camera), 0x000000)
       blobs.normal = await this.shotWith(r, camera, this.passNormal, 0x8080ff)
       // masks: one flat colour per object, swapped in by hand (an override material cannot differ per object)
       const legend: Record<string, string> = {}
@@ -979,8 +979,9 @@ export class StageEngine {
    *  the depth (the IC-LoRA guide, D76) or the pose sequence, with every frame's COCO-18 keypoints for the rig's scoring. The scene
    *  is left at `restoreDoc` (the frame the viewport shows). */
   async renderSequence(frames: { cam: StageCamera; doc: StageDoc }[], w: number, h: number, kind: 'depth' | 'pose' | 'clay' | 'proxy' | 'proxymask' | 'beauty', restoreDoc: StageDoc,
-                       onProgress?: (done: number, total: number) => void): Promise<{ blobs: Blob[]; keypoints: Keypoint[][][]; wholebody: (WholeBody | null)[][] }> {
+                       onProgress?: (done: number, total: number) => void, depth?: { near: number; far: number } | null): Promise<{ blobs: Blob[]; keypoints: Keypoint[][][]; wholebody: (WholeBody | null)[][] }> {
     if (frames.length) { this.sync(frames[0].doc); await this.settled() }          // SC3e: what the frames show, loaded
+    this.depthShared = depth ?? null                                                 // D167: the final's one range, every layer's depth alike
     const r = this.passRenderer(w, h)
     let restore = () => {}
     // D109: a mesh prop's PBR material (Pixal3D bakes metalness) reflects its surroundings — without an environment it renders near
@@ -1008,12 +1009,13 @@ export class StageEngine {
           blobs.push(await this.shotWith(r, camera, null, 0x000000, false, env))
           onProgress?.(i + 1, frames.length); continue
         }
-        blobs.push(kind === 'depth' ? await this.shotWith(r, camera, this.depthFor(cam), 0x000000) : kind === 'clay' || kind === 'proxy' ? await this.shotWith(r, camera, this.passClay, 0xb8b8b8, kind === 'proxy')   // E23c: the lit clay (the light object's shadows)
+        blobs.push(kind === 'depth' ? await this.shotWith(r, camera, this.depthFor(cam, camera), 0x000000) : kind === 'clay' || kind === 'proxy' ? await this.shotWith(r, camera, this.passClay, 0xb8b8b8, kind === 'proxy')   // E23c: the lit clay (the light object's shadows)
           : await toBlob(drawPose(kp, w, h, wb)))
         onProgress?.(i + 1, frames.length)
       }
       return { blobs, keypoints, wholebody }
     } finally {
+      this.depthShared = null
       restore()
       env?.dispose()
       r.dispose(); r.forceContextLoss()
@@ -1193,10 +1195,43 @@ export class StageEngine {
     this.scene.environment = viewEnv
     return toBlob(r.domElement)
   }
-  private depthFor(cam: StageCamera): THREE.ShaderMaterial {
-    const dr = depthRange(Math.hypot(cam.pos[0] - cam.target[0], cam.pos[1] - cam.target[1], cam.pos[2] - cam.target[2]))
+  /** D167: the range a sequence was given (the final's, shared by all its layers), else the figures in this frame (Clay's passes). */
+  private depthShared: { near: number; far: number } | null = null
+  private depthFor(cam: StageCamera, camera: THREE.Camera): THREE.ShaderMaterial {
+    const dr = this.depthShared ?? depthRangeFor(Math.hypot(cam.pos[0] - cam.target[0], cam.pos[1] - cam.target[1], cam.pos[2] - cam.target[2]), this.figureDistances(camera, true))
     this.passDepth.uniforms.near.value = dr.near; this.passDepth.uniforms.far.value = dr.far
     return this.passDepth
+  }
+  /** D167: how far each figure stands along the camera's view (its neck, its hips and its feet), in front of the camera; `visibleOnly` skips
+   *  a hidden one (Clay's passes), a final's measure counts them all. */
+  private figureDistances(camera: THREE.Camera, visibleOnly: boolean): number[] {
+    const at = new THREE.Vector3(), fwd = new THREE.Vector3()
+    camera.getWorldPosition(at); camera.getWorldDirection(fwd)
+    const out: number[] = []
+    for (const e of this.entries.values()) {
+      if (!e.figure || (visibleOnly && !e.doc.visible)) continue
+      for (const i of [1, 8, 11, 10, 13]) {
+        const m = e.figure.markers[i]
+        if (!m) continue
+        const d = m.getWorldPosition(new THREE.Vector3()).sub(at).dot(fwd)
+        if (d > 0.05) out.push(d)
+      }
+    }
+    return out
+  }
+  /** D167: a final's depth range — every figure (hidden or not) over all its frames, measured once before any pass is rendered. */
+  async depthRangeOf(frames: { cam: StageCamera; doc: StageDoc }[], restoreDoc: StageDoc): Promise<{ near: number; far: number }> {
+    const dists: number[] = []
+    try {
+      for (const { cam, doc } of frames) {
+        this.sync(doc)
+        if (this.loading.size) await this.settled()
+        this.scene.updateMatrixWorld(true)
+        dists.push(...this.figureDistances(this.shotCamera(cam, 16 / 9), false))
+      }
+    } finally { this.sync(restoreDoc); this.dirty = true }
+    const c = frames[0]?.cam
+    return depthRangeFor(c ? Math.hypot(c.pos[0] - c.target[0], c.pos[1] - c.target[1], c.pos[2] - c.target[2]) : 3, dists)
   }
   private keypoints(camera: THREE.Camera, w: number, h: number): Keypoint[][] {
     const figures = [...this.entries.values()].filter((e) => e.figure && e.doc.visible).map((e) => e.figure!.markers)

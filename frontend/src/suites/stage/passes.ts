@@ -36,6 +36,15 @@ export function depthRange(dist: number): { near: number; far: number } {
   return { near: Math.max(0.3, dist * 0.6), far: Math.max(1, dist * 3) }
 }
 
+/** D167 (W43): the depth range from where the figures stand along the camera's view — near 0.6× the nearest, far 3× the farthest; the
+ *  target's distance (depthRange) only without figures. A camera's target is a direction (the set builder's picture camera aims 1 m ahead,
+ *  which made every figure beyond 3 m black); a target on the figure gives the same range as before. */
+export function depthRangeFor(target: number, figures: number[]): { near: number; far: number } {
+  const ds = figures.filter((d) => Number.isFinite(d) && d > 0.05)
+  if (!ds.length) return depthRange(target)
+  return { near: Math.max(0.3, 0.6 * Math.min(...ds)), far: Math.max(1, 3 * Math.max(...ds)) }
+}
+
 /** World points → pass pixels through a camera; visible when in front of it and inside the frame. */
 export function projectPoints(points: THREE.Vector3[][], cam: THREE.Camera, w: number, h: number): Keypoint[][] {
   return points.map((ps) => ps.map((p) => {

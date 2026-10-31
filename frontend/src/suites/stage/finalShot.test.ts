@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setBackend } from '../../api/client'
 import type { Final, StageDoc, StageObject } from '../../api/types'
 import { useSession } from '../../store/session'
-import { batchCount, batchOf, bodyStamp, cameraTravel, framesAt, hasPictureSet, keysFrom, matteWarning, newestFinal, nextFinalStep, performedText, picturePlate, planFinal, plateChoice, skeletonChange, useFinals } from './finalShot'
+import { batchCount, batchOf, bodyStamp, cameraTravel, framesAt, hasPictureSet, keysFrom, matteWarning, newestFinal, nextFinalStep, performedText, picturePlate, planFinal, plateChoice, shotRange, skeletonChange, useFinals } from './finalShot'
 import { useStage } from './stageStore'
 
 const obj = (id: string, kind: StageObject['kind'], extra: Partial<StageObject> = {}): StageObject => ({ id, kind, name: id, preset: null, asset_id: null, transform: { pos: [0, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] },
@@ -27,6 +27,16 @@ describe('D111 (PS5a) planning the final', () => {
     expect(p.layers[0].name).toBe('Room')
     expect(p.layers[1]).toMatchObject({ object_id: 'fig_m', profile_id: 'prf_m' })
     expect(p.layers[2]).toMatchObject({ object_id: 'chest', profile_id: 'prf_c', version: 'v2' })
+  })
+  it("W40: a final covers its shot version's own range when it has one, else the stage's", async () => {
+    const { useStory } = await import('../story/storyStore')
+    const d = doc([obj('fig_m', 'mannequin', { name: 'Mara' })])
+    useStory.setState({ shots: [{ id: 'sht_a', current: 'v1', versions: [{ id: 'v1', range: { start: 48, end: 96 } }, { id: 'v2', range: null }] }] as never })
+    expect(shotRange(d, { shot_id: 'sht_a', version: 'v1' })).toEqual({ start: 48, end: 96 })
+    expect(shotRange(d, { shot_id: 'sht_a', version: null })).toEqual({ start: 48, end: 96 })     // the shot's current version
+    expect(shotRange(d, { shot_id: 'sht_a', version: 'v2' })).toEqual({ start: d.range.start, end: d.range.end })   // no range of its own: the stage's
+    expect(shotRange(d, null)).toEqual({ start: d.range.start, end: d.range.end })
+    expect(planFinal(d, 16, { start: 48, end: 96 }).times).toHaveLength(33)
   })
   it("counts a performance's batches as the server plans them (77 frames, 5 carried)", () => {
     expect([9, 77, 78, 149, 150, 161].map(batchCount)).toEqual([1, 1, 2, 2, 3, 3])

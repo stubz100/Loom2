@@ -7661,6 +7661,20 @@
             "title": "Created At",
             "type": "string"
           },
+          "depth": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Depth"
+          },
           "frames": {
             "title": "Frames",
             "type": "integer"
@@ -7777,6 +7791,7 @@
           "rate",
           "size",
           "frames",
+          "depth",
           "shot_id",
           "shot_version",
           "stamps",
@@ -7864,6 +7879,20 @@
           "camera_id": {
             "title": "Camera Id",
             "type": "string"
+          },
+          "depth": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Depth"
           },
           "frames": {
             "title": "Frames",

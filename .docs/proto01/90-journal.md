@@ -14143,3 +14143,78 @@ guide's.
 
 **On the way:** `PUT /stages/{id}` placed the cast and keyed the camera after Clay's figure buttons re-bound one figure three times (M8).
 The bodies were set in Build › Body.
+
+## 2026-10-31 06:47 — The priority problems, in the author's order; W43 → D167 recorded, W40's cause found
+
+The author: "Let's concentrate on the priority problems". Their answers:
+
+- W43 and W40 first, then the market list (M9, M12, M5/M7, M13);
+- for M6, both scenarios run on the same shot and compared before a choice: crowd extras, and an LTX-generated plate.
+
+**W43** (walkthrough 2: every depth pass black, the final turned to clay):
+
+- **The cause:** `engine.depthFor` normalises the depth by the camera's distance to its *target* (near 0.6×, far 3×, E10). The set
+  builder's picture camera aims 1 m ahead, so the far end sat at 3 m, every figure beyond it came out black, no figure mask was found,
+  and the comp mattes were empty.
+- **D167:**
+  - The range is read from where the figures are: near 0.6× the nearest, far 3× the farthest. The target is
+    used only with no figure.
+  - A final measures it once, over all its frames and every figure, and every depth pass of that final (the plate's, each layer's)
+    uses that one range. The assembly compares a layer's depth with the plate's, so they must share it, and one range keeps the
+    guides from flickering when figures come and go.
+  - Clay's single-camera passes measure the figures in their one frame.
+  - A scene whose target sits on its figure keeps today's range.
+
+**W40** (a final takes the stage's range, not the shot's):
+
+- **The cause:** `planFinal` and the final's record read `doc.range`. The shot version's own range (`v.range`, the shot header's field)
+  is never read.
+- **The fix:** a final made for a shot version takes that version's range when it has one, else the stage's. No decision is needed:
+  D157's coverage meant it so.
+- Setting the shot's range no longer bumps the stage's revision either, so W56's knock-on stale is gone for this case.
+
+## 2026-10-31 06:55 — D167 (W43) and W40 built and checked in the app
+
+**Built:**
+
+- `passes.ts depthRangeFor(target, figureDistances)`;
+- the engine:
+  - `figureDistances(camera)`: every figure's neck, hips and feet along the camera's view;
+  - `depthRangeOf(frames)`: a final's whole sequence, every figure, measured once;
+  - `renderSequence(…, depth)`: the shared range for every depth pass of a final;
+  - Clay's single-camera passes measure their one frame;
+- the stage store's `depthRanger` (the viewport and the headless engine register it);
+- `Final.depth` (and `FinalCreate.depth`), sent at the make, so a layer drawn again later uses the final's own range;
+- **W40:** `finalShot.shotRange` (the shot version's own range, else the stage's) for the plan, the confirm's frames and the final's
+  record.
+
+**Checked in the app, on the market walk** (nothing performed, no GPU):
+
+- the camera's target was set 1 m ahead (W43's condition);
+- a new version v2 of the shot was given the range 48–144 in its header, and its final made through Clay.
+
+**The result:**
+
+- **W40:** Final 2 covers 48–144, 65 frames at 16 fps; the stage's range is 0–240.
+- **W43:** its depth range came from the figures, near 1.37 m and far 13.5 m.
+  - Every figure stands out against the plate wherever it is in frame: Mira about 20 000 px a frame, Hanne and Bram 9 000–13 000.
+  - Under the old rule (far 3 m) Hanne at 3.6 m and Bram at about 4.5 m would have been black, and their layers clay.
+
+The camera's target was put back on Mira afterwards. The version v2 and its Final 2 stay in the scratch project.
+
+**Tests:** `test_depth_d167` (a final keeps its range); Vitest `depthRangeFor` (the figures decide, a target on the figure as before,
+no figure, behind the camera) and `shotRange` (the version's range, the current one, none, no shot).
+
+## 2026-10-31 06:57 — M9 → D168 recorded: a body nobody has set is seeded from the sheet's words before it is fitted
+
+**M9** (the market walk): every fitted body was "female · 1.75 m · average", Bram, "a heavy-set man in his fifties", included.
+
+- **The cause:** the fit (`finishers` after the front's keypoints job, `fit_body`) starts from `v.body or Body()`, Body's defaults. It
+  moves only the proportions; the height, the build and the figure stay the author's, and nothing ever set them.
+- **D168:** when a character's body has never been touched, the fit starts from what the sheet says.
+  - **The figure:** a man or a woman, from the appearance and the version's label (man, boy, beard; woman, girl, she; neither or both
+    wins: the default).
+  - **The build:** heavy-set, stout or burly → heavy; broad, stocky or muscular → broad; slim, slender or thin → slim.
+  - **The height:** a man 1.78 m, a woman 1.66 m, else 1.75 m; tall +0.12, small or short −0.10, elderly −0.03, a child 1.25 m.
+  - A body the author has set is never touched.
+  - World's readiness chip says what the body is ("body fitted · ♂ 1.80 m · heavy"), so a wrong one is seen.

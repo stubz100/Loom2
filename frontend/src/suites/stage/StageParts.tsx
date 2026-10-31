@@ -983,7 +983,7 @@ function Viewport() {
     })
     engineRef.current = engine
     viewport.centre = () => engine.centre(); viewport.freePose = () => engine.freePose(); viewport.frame = (ids) => engine.frame(ids); viewport.snapshot = (id) => engine.snapshotOf(id); useStage.setState({ worldOf: (id) => engine.worldOf(id) })
-    useStage.setState({ passRenderer: (cam, w, h) => { const s = st(); if (s.current) engine.sync(sampleDoc(s.current, s.frame)); return engine.renderPasses(cam, w, h) },   // U5: the document at the playhead, its blocks evaluated sequenceRenderer: (fr, w, h, kind, restore, on) => engine.renderSequence(fr, w, h, kind, restore, on),
+    useStage.setState({ passRenderer: (cam, w, h) => { const s = st(); if (s.current) engine.sync(sampleDoc(s.current, s.frame)); return engine.renderPasses(cam, w, h) },   // U5: the document at the playhead, its blocks evaluated sequenceRenderer: (fr, w, h, kind, restore, on, depth) => engine.renderSequence(fr, w, h, kind, restore, on, depth), depthRanger: (fr, restore) => engine.depthRangeOf(fr, restore),
       plateProjector: (fr, w, h, plate, proj, aspect, restore, on, coverage) => engine.renderProjected(fr, w, h, plate, proj, aspect, restore, on, coverage) })   // ST3 / ST4, D111; D132: coverage
     viewport.handPreset = (id, side, preset) => engine.handPreset(id, side, preset)                                   // CA1
     if (DEV_HOOKS) Object.assign(devHook(), { worldOf: (id: string) => engine.worldOf(id), heightOf: (id: string) => engine.heightOf(id), screenOf: (at: string) => engine.screenOf(at as Joint), cameraScreen: (id: string) => engine.cameraScreen(id), gizmoMode: () => engine.gizmoMode(), pipRect: () => engine.pipRect(), imageSetLayers: (id: string) => engine.imageSetLayers(id),
@@ -991,7 +991,7 @@ function Viewport() {
     const ro = new ResizeObserver(() => { const r = host.getBoundingClientRect(); engine.resize(Math.round(r.width), Math.round(r.height)); setRect({ ...engine.frameRect() }); setPipRect(engine.pipRect()) })
     ro.observe(host)
     engine.start()
-    return () => { ro.disconnect(); engine.dispose(); canvas.remove(); engineRef.current = null; viewport.centre = undefined; viewport.freePose = undefined; viewport.frame = undefined; viewport.handPreset = undefined; viewport.snapshot = undefined; useStage.setState({ worldOf: null }); useStage.setState({ passRenderer: null, sequenceRenderer: null, plateProjector: null }) }
+    return () => { ro.disconnect(); engine.dispose(); canvas.remove(); engineRef.current = null; viewport.centre = undefined; viewport.freePose = undefined; viewport.frame = undefined; viewport.handPreset = undefined; viewport.snapshot = undefined; useStage.setState({ worldOf: null }); useStage.setState({ passRenderer: null, sequenceRenderer: null, depthRanger: null, plateProjector: null }) }
   }, [])
   useEffect(() => { const e = engineRef.current; if (!e) return; if (active) e.start(); else e.stop() }, [active])
   const frame = useStage((s) => s.frame)

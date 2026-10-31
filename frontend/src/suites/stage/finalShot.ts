@@ -11,6 +11,7 @@ import type { BatchPlan, Composition, Final, FinalOwed, RenderSettings, StageDoc
 import { useComposition } from '../animate/compositionStore'
 import { askConfirm, useSession } from '../../store/session'
 import { forLabel, useMakeFor } from '../../store/origin'
+import { useStory } from '../story/storyStore'
 import { bodyHash, keyframesOf, sampleDoc, withKey, type SkeletonKey } from './anim'
 import { st, type SequenceRenderer } from './stageStore'
 import { navigate } from '../../frame/router'
@@ -81,15 +82,23 @@ export function plateChoice(travel: Travel): PlateChoice {
 }
 
 
+/** W40: the frames a final covers — its shot version's own range (the shot header's) when it has one, else the stage's. */
+export function shotRange(doc: StageDoc, shot: { shot_id?: string | null; version?: string | null } | null | undefined): { start: number; end: number } {
+  const s = shot?.shot_id ? useStory.getState().shots.find((x) => x.id === shot.shot_id) : null
+  const v = s?.versions.find((x) => x.id === (shot?.version ?? s.current))
+  const r = (v as { range?: { start: number; end: number } | null } | undefined)?.range
+  return r ? { start: r.start, end: r.end } : { start: doc.range.start, end: doc.range.end }
+}
+
 /** The layers of a scene: the plate (the sets), each visible figure, each visible prop (a 3D model, a stand-in or an image plane), the shadows. */
-export function planFinal(doc: StageDoc, rate: Rate): FinalPlan {
+export function planFinal(doc: StageDoc, rate: Rate, range: { start: number; end: number } = doc.range): FinalPlan {
   const sets = doc.objects.filter((o) => o.kind === 'set' && o.visible)
   const layers: PlanLayer[] = [{ id: 'plate', kind: 'plate', name: sets.map((o) => o.name).join(' + ') || 'the set', object_id: null, profile_id: null, version: null }]
   for (const o of doc.objects.filter(isActor)) {
     layers.push({ id: o.id, kind: o.kind === 'mannequin' ? 'figure' : 'prop', name: o.name, object_id: o.id, profile_id: o.profile_id ?? null, version: o.version ?? null })
   }
   layers.push({ id: 'shadows', kind: 'shadows', name: 'Shadows', object_id: null, profile_id: null, version: null })
-  return { times: framesAt(doc.range.start, doc.range.end, rate), layers }
+  return { times: framesAt(range.start, range.end, rate), layers }
 }
 
 /** The scene with only these actors visible (the sets and the lights stay). */
@@ -117,11 +126,13 @@ export async function makeFinal(opts: MakeOptions): Promise<Final> {
   await s.flush()
   const doc = st().current
   if (!doc) throw new Error('no stage open')
-  const plan = planFinal(doc, opts.rate)
+  const range = shotRange(doc, { shot_id: opts.shotId, version: opts.shotVersion })   // W40: the shot's frames, not the stage's
+  const plan = planFinal(doc, opts.rate, range)
   const [w, h] = opts.size ?? finalSize()
   const plate = opts.plate ?? (hasPictureSet(doc) || hasBuiltSet(doc) ? null : plateChoice(cameraTravel(doc, cam.id, plan.times)).method)
   await blocksReady(doc)                                                          // U5: the figures' clip blocks evaluated before a frame is sampled
   const sampled = plan.times.map((t) => { const d = sampleDoc(doc, t); return { cam: d.cameras.find((c) => c.id === cam.id) ?? cam, doc: d } })
+  const depth = (await st().depthRanger?.(sampled, sampleDoc(doc, st().frame))) ?? null   // D167: one range for every depth pass of the final
   const actors = plan.layers.filter((l) => l.object_id).map((l) => l.object_id!)
   const todo = plan.layers.flatMap((l) => passesOf(l).map((p) => ({ l, p })))
   const uploaded = new Set<string>()
@@ -130,14 +141,14 @@ export async function makeFinal(opts: MakeOptions): Promise<Final> {
   const total = todo.length * plan.times.length
   for (const { l, p } of todo) {
     const keep = p.keep === 'all' ? actors : p.keep === 'self' ? [l.object_id!] : []
-    const out = await renderPass(render, sampled, keep, w, h, p.kind, doc, uploaded, (n) => opts.onProgress?.(done + n, total, `${l.name} · ${p.name}`))
+    const out = await renderPass(render, sampled, keep, w, h, p.kind, doc, uploaded, (n) => opts.onProgress?.(done + n, total, `${l.name} · ${p.name}`), depth)
     done += plan.times.length
     const entry = layers[l.id] ??= { passes: {} }
     entry.passes[p.name] = out.shas
     if (l.kind === 'figure' && p.kind === 'pose') { entry.keypoints = out.keypoints; entry.wholebody = out.wholebody }   // D163: the window's guide is drawn from them
   }
   return unwrap(http.POST('/finals', { body: {
-    name: opts.name, stage_id: doc.id, camera_id: cam.id, stage_revision: doc.revision, range: { start: doc.range.start, end: doc.range.end }, rate: opts.rate,
+    name: opts.name, stage_id: doc.id, camera_id: cam.id, stage_revision: doc.revision, range, rate: opts.rate, depth,
     size: { w, h }, frames: plan.times.length, shot_id: opts.shotId ?? null, shot_version: opts.shotId ? opts.shotVersion ?? null : null,
     layers: plan.layers.map((l) => ({ id: l.id, kind: l.kind, name: l.name, object_id: l.object_id, profile_id: l.profile_id, version: l.version, method: l.kind === 'plate' ? plate : null,
       passes: layers[l.id].passes, keypoints: (layers[l.id].keypoints ?? null) as never, wholebody: (layers[l.id].wholebody ?? null) as never,
@@ -146,9 +157,10 @@ export async function makeFinal(opts: MakeOptions): Promise<Final> {
 
 /** One pass of a layer over the final's frames — rendered with only `keep`'s actors, each frame uploaded once (by its hash). */
 async function renderPass(render: SequenceRenderer, sampled: { cam: NonNullable<StageDoc['cameras'][number]>; doc: StageDoc }[], keep: string[], w: number, h: number,
-                          kind: 'depth' | 'clay' | 'pose' | 'beauty', doc: StageDoc, uploaded: Set<string>, onProgress?: (n: number) => void): Promise<{ shas: string[]; keypoints: unknown[]; wholebody: unknown[] }> {
+                          kind: 'depth' | 'clay' | 'pose' | 'beauty', doc: StageDoc, uploaded: Set<string>, onProgress?: (n: number) => void,
+                          depth?: { near: number; far: number } | null): Promise<{ shas: string[]; keypoints: unknown[]; wholebody: unknown[] }> {
   const frames = sampled.map((f) => ({ cam: f.cam, doc: only(f.doc, keep) }))
-  const out = await render(frames, w, h, kind, sampleDoc(doc, st().frame), onProgress)
+  const out = await render(frames, w, h, kind, sampleDoc(doc, st().frame), onProgress, depth)
   const shas: string[] = []
   for (const blob of out.blobs) {
     const sha = await sha256Hex(await blob.arrayBuffer())
@@ -221,7 +233,7 @@ async function redrawLayer(f: Final, lid: string): Promise<Final> {
   const uploaded = new Set<string>(), passes: Record<string, string[]> = {}
   let keypoints: unknown[] = [], wholebody: unknown[] = []
   for (const p of passesOf({ id: lid, kind: 'figure', name: l.name, object_id: l.object_id, profile_id: l.profile_id, version: l.version })) {
-    const out = await renderPass(render, sampled, [l.object_id], f.size.w, f.size.h, p.kind, doc, uploaded)
+    const out = await renderPass(render, sampled, [l.object_id], f.size.w, f.size.h, p.kind, doc, uploaded, undefined, (f as { depth?: { near: number; far: number } | null }).depth ?? null)   // D167: the final's own range
     passes[p.name] = out.shas
     if (p.kind === 'pose') { keypoints = out.keypoints; wholebody = out.wholebody }
   }
@@ -626,15 +638,16 @@ export const useFinals = create<FinalsState>((set, get) => ({
     const s = useSession.getState()
     const doc = st().current
     if (!doc || get().making) return null
-    const plan = planFinal(doc, rate)
+    const forShot = useMakeFor.getState().animate           // D125 (A1, WB1): made for the For chip's shot version, its takes land there
+    const range = shotRange(doc, forShot)                    // W40: the shot's own frames
+    const plan = planFinal(doc, rate, range)
     const figures = plan.layers.filter((l) => l.kind === 'figure').length, props = plan.layers.filter((l) => l.kind === 'prop').length
     const [w, h] = finalSize()
     const picture = hasPictureSet(doc), built = !picture && hasBuiltSet(doc)               // SC3e; CW7: a built set's plate is the set
     const cam = st().activeCamera()
     const plate = picture || built || !cam ? null : plateChoice(cameraTravel(doc, cam.id, plan.times))
-    const forShot = useMakeFor.getState().animate           // D125 (A1, WB1): made for the For chip's shot version, its takes land there
     const ok = await askConfirm({ title: 'Make the final shot?', okLabel: 'Split into layers',
-      text: `The scene through ${st().activeCamera()?.name ?? 'the camera'}, frames ${doc.range.start}–${doc.range.end} at ${rate} fps: ${plan.times.length} frames at ${w}×${h}. ` +
+      text: `The scene through ${st().activeCamera()?.name ?? 'the camera'}, frames ${range.start}–${range.end} at ${rate} fps: ${plan.times.length} frames at ${w}×${h}. ` +
         `${plan.layers.length} layers — the plate, ${figures} figure${figures === 1 ? '' : 's'}, ${props} prop${props === 1 ? '' : 's'} and the shadows. Stage renders their passes here (a minute or two)` +
         (picture ? ', and the plate from the picture set\'s picture; the other layers are made next.' : built ? ', and the plate from the built set (its baked and filled faces, no drift on any move); the other layers are made next.' : '; the layers are made from them next.') +
         (plate ? ` The plate is ${plate.method === 'filled' ? 'projected and filled (Klein fills what the still never saw at keyframes: a few minutes on the GPU)' : 'its still projected along the path'}: ${plate.why}.` : '') +

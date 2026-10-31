@@ -121,7 +121,9 @@ type ClipCaps = { model_id: string; label: string; health: string; seconds?: num
 export interface GuideEntry { asset_id: string; frames: number; fps: number; size: { w: number; h: number }; range: { start: number; end: number }; revision: number; rendered_at?: string }
 /** D111 (PS5b): the plate projected along the camera path (engine.renderProjected). */
 export type PlateProjector = (frames: { cam: StageCamera; doc: StageDoc }[], w: number, h: number, plate: TexImageSource, proj: StageCamera, projAspect: number, restoreDoc: StageDoc, onProgress?: (done: number, total: number) => void, coverage?: boolean) => Promise<Blob[]>
-export type SequenceRenderer = (frames: { cam: StageCamera; doc: StageDoc }[], w: number, h: number, kind: GuideKind | 'clay' | 'proxy' | 'proxymask' | 'beauty', restoreDoc: StageDoc, onProgress?: (done: number, total: number) => void) => Promise<{ blobs: Blob[]; keypoints: Keypoint[][][]; wholebody?: (WholeBody | null)[][] }>
+export type SequenceRenderer = (frames: { cam: StageCamera; doc: StageDoc }[], w: number, h: number, kind: GuideKind | 'clay' | 'proxy' | 'proxymask' | 'beauty', restoreDoc: StageDoc, onProgress?: (done: number, total: number) => void, depth?: { near: number; far: number } | null) => Promise<{ blobs: Blob[]; keypoints: Keypoint[][][]; wholebody?: (WholeBody | null)[][] }>
+/** D167 (W43): a final's one depth range, measured over its frames from where its figures stand. */
+export type DepthRanger = (frames: { cam: StageCamera; doc: StageDoc }[], restoreDoc: StageDoc) => Promise<{ near: number; far: number }>
 /** A result of this stage: a shot carries `stage_id` in its params, a clip (ST4) only its job's origin. */
 const ofStage = (a: Asset, stageId: string): boolean => (a.params as { stage_id?: string }).stage_id === stageId || (a.origin?.suite === 'stage' && a.origin?.ref === stageId)
 const withCameraKey = (d: StageDoc, camId: string, key: CameraKey): StageDoc => { const k = keyframesOf(d); return { ...d, keyframes: { ...k, camera: { ...k.camera, [camId]: withKey(k.camera[camId], key) } } } }
@@ -217,6 +219,7 @@ interface StageState {
   shotStart: string | null                                  // the shot (a stage-shot image) the clip starts from
   rendered: { done: number; total: number } | null         // sequence progress
   sequenceRenderer: SequenceRenderer | null                 // the mounted viewport registers it
+  depthRanger: DepthRanger | null                           // D167: so does it
   plateProjector: PlateProjector | null                     // D111 (PS5b): registered with the sequence renderer
   keys: () => Keyframes
   keyedFrames: () => number[]
@@ -448,7 +451,7 @@ export const useStage = create<StageState>()((set, get) => ({
   stages: [], current: null, selected: null, selectedCamera: null, stageSelected: false, posing: false, tool: 'select', snap: false, view: 'free', guides: true, pip: true, undo: [], redo: [], saving: false,
   frameRequest: { ids: null, n: 0 }, selectedJoint: null, userPoses: {}, posesRevision: 0, templates: [], pendingSet: null,
   shot: DEFAULT_SHOT, shotPreview: null, shotPreviewError: null, rendering: false, shots: [], passRenderer: null, worldOf: null,
-  frame: 0, playing: false, guideKind: 'depth', clipMethod: 'guided', shotStart: null, rendered: null, sequenceRenderer: null, plateProjector: null,
+  frame: 0, playing: false, guideKind: 'depth', clipMethod: 'guided', shotStart: null, rendered: null, sequenceRenderer: null, depthRanger: null, plateProjector: null,
   meshes: [],
 
   // ---- P18: mesh props ----

@@ -128,6 +128,7 @@ class Final(BaseModel):
     rate: Literal[16, 24] = 16                     # D102: F16 (RIFE to 24 at the end) or F24
     size: dict[str, int]                           # the layers' size: {w, h} (the pose-driven model's, Draft first, D18)
     frames: int                                    # frames per sequence at the rate
+    depth: dict[str, float] | None = None          # D167 (W43): the depth range every depth pass of it shares ({near, far}, metres); None: before D167
     shot_id: str | None = None                     # the Story shot it is made for (its take lands there, PS5e)
     shot_version: str | None = None                # D125 (A1): that shot's version (the For chip's); None in a final made before it — the current one
     stamps: dict[str, str] = Field(default_factory=dict)          # RC1: what it read of its stage, part by part (shot_graph.stage_stamps); empty before RC1

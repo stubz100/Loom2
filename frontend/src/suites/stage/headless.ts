@@ -17,7 +17,8 @@ export function ensureHeadless(): boolean {
   const e = engine
   useStage.setState({
     passRenderer: (cam, w, h) => { const s = useStage.getState(); if (s.current) e.sync(sampleDoc(s.current, s.frame)); return e.renderPasses(cam, w, h) },   // V80: the document at the playhead, as the viewport shows it
-    sequenceRenderer: (fr, w, h, kind, restore, on) => e.renderSequence(fr, w, h, kind, restore, on),
+    sequenceRenderer: (fr, w, h, kind, restore, on, depth) => e.renderSequence(fr, w, h, kind, restore, on, depth),
+    depthRanger: (fr, restore) => e.depthRangeOf(fr, restore),
     plateProjector: (fr, w, h, plate, proj, aspect, restore, on, coverage) => e.renderProjected(fr, w, h, plate, proj, aspect, restore, on, coverage),
   })
   return true

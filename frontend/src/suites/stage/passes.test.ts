@@ -1,7 +1,7 @@
 // ST3: the pass maths (16 §12: "keypoint projection, depth normalisation … are modules with Vitest tests").
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
-import { COCO, COLOURS, depthRange, drawnPoints, facesAway, headFacing, hslToHex, LIMBS, maskColour, projectPoints, type Keypoint } from './passes'
+import { COCO, COLOURS, depthRange, depthRangeFor, drawnPoints, facesAway, headFacing, hslToHex, LIMBS, maskColour, projectPoints, type Keypoint } from './passes'
 
 const cam = () => { const c = new THREE.PerspectiveCamera(40, 16 / 9, 0.05, 500); c.position.set(0, 1, 4); c.lookAt(0, 1, 0); c.updateProjectionMatrix(); c.updateMatrixWorld(); return c }
 
@@ -23,6 +23,11 @@ describe('passes', () => {
   it('normalises depth around the subject', () => {
     expect(depthRange(4)).toEqual({ near: 2.4, far: 12 })
     expect(depthRange(0.2)).toEqual({ near: 0.3, far: 1 })
+    // D167 (W43): the figures decide — the set builder's picture camera aims 1 m ahead, the figures stand 5–10 m off
+    expect(depthRangeFor(1, [5, 7, 10])).toEqual({ near: 3, far: 30 })
+    expect(depthRangeFor(4, [4])).toEqual(depthRange(4))                                    // a target on the figure: as before
+    expect(depthRangeFor(4, [])).toEqual(depthRange(4))                                     // no figure: the target
+    expect(depthRangeFor(4, [0.01, -2])).toEqual(depthRange(4))                             // behind the camera or on it: not counted
   })
   it('gives distinct hex mask colours', () => {
     const cs = Array.from({ length: 12 }, (_, i) => maskColour(i))

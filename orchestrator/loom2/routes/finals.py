@@ -48,6 +48,7 @@ class FinalCreate(BaseModel):
     frames: int
     shot_id: str | None = None
     shot_version: str | None = None                # D125 (A1): the version it is made for; None: the shot's current one
+    depth: dict[str, float] | None = None          # D167 (W43): the depth range Stage rendered every depth pass with ({near, far})
     layers: list[FinalLayerIn] = Field(default_factory=list)
 
 

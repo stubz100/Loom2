@@ -14557,3 +14557,173 @@ through the app's route, 6–9 s a face.
   frames 5, 32 and 60, where Finals 2 and 3 showed the hall's roof and lamps (M14's sliding white ovals are those lamps).
 - **What goes in:** the lead without the place's words, Build marking an unnamed ground face, and the grazing cut on the ground. All
   three are D172.
+
+## 2026-10-31 11:12 — M6, the author's idea first: a crowd clip played on the stall front; spike E49 set up, the bars before the run
+
+**The author, 2026-10-31:** "can we use animations as backgrounds? If we'd created an animation of a busy fish market, then project it
+onto a surface and use it as a background to the walking character — that could solve our crowd problem."
+
+**The plan:** M6 compares three ways to a busy market on the same shot, this one first:
+
+- (c) a crowd clip on the stall front;
+- (a) the performed extras;
+- (b) D130's plate generated along the path.
+
+In (c) a Wan 2.2 clip of the stall front itself, the camera held still, people walking past, is played on the facade face, frame by
+frame.
+
+- **Why it should hold:** for a camera tracking alongside, a face's content moves exactly as the set does.
+- **What it cannot do:** nobody crosses in front of the walker or comes down the aisle (that stays the extras' work), and from down the
+  street the clip is as flat as any face.
+- **Not built yet:** Clay and the plate cannot play a clip on a face (no video texture anywhere).
+
+**Where:** the stretch of `facade_right` the shot's v2 (frames 48–144, 65 at 16 fps) sees, found by matching Final 3's plate frames
+against the facade's texture (NCC 0.91, every frame). The upper three quarters of a plate frame is texture x 171 → 90 (frame 0 → 64)
+and rows 42–117, at 0.21 texels a plate pixel. The clip covers x 80–360 at the full height, 11.2 × 4.96 m, at 1088 × 480: about 97 px
+a metre against the shot's 119. The slice lasts 4 s, so one clip of 81 frames covers it.
+
+**E49** (on E47's copy, through the app's routes: an edit document from the crop, then `POST /jobs`; `engine/spikes/out/e49/`):
+
+- **SP:** the crop scaled up to 1088 × 480 and refined by Klein (I2I, strength 0.6) as the start image, with stallholders and shoppers;
+- **SE:** the same refined at strength 0.35, nobody in it;
+- **CP:** Wan 2.2 Fun-Camera, Static, Draft, from SP: "stallholders serve at the counters, shoppers walk slowly left and right past the
+  fish stalls; the camera does not move";
+- **CE:** the same from SE, the shoppers walking into view;
+- **CN:** the plain Wan 2.2 I2V from SP, the camera's stillness asked in words only;
+- **CP2:** a second clip continuing CP (`extend_from`, Wan's last frame), for a 10 s shot.
+
+**Measured:**
+
+- **drift:** phase correlation of the clip's upper 40 % (lamps, columns, wall: no people) between frame 0 and every fourth frame, and
+  the zoom from the first frame to the last;
+- **the join** (CP → CP2): the same between CP's last frame and CP2's first;
+- **the people and the stalls:** on sheets (frames 0, 40, 80) and in a preview of the plate. Final 3's plate frames get the clip mapped
+  onto their facade band by the match above, at 16 fps, as a video texture on the face would show it;
+- **the seconds** of each step.
+
+**Bars:**
+
+- **A clip holds the camera** when the upper band's drift is ≤ 4 px (0.4 % of the width) on every sampled frame, and the zoom is within
+  1.5 %.
+- **The crowd passes** when, to the eye in the preview, at least four people are in view at once, walking along the stalls (not toward
+  the camera or away from it), keeping their shapes through the clip, and the stalls do not change.
+- **The join passes** when the stalls jump ≤ 4 px and the people carry on, to the eye.
+- **What follows:**
+  - if a clip passes, playing a clip on a face is built (Clay's viewport and the plate, frame by frame), then the comparison with (a)
+    and (b);
+  - if none does, M6 goes on with (a) and (b) alone.
+
+## 2026-10-31 11:31 — E49: the plain Wan clip holds the camera on the stall front; Fun-Camera's Static zooms out; one walker comes forward; E49b's bars
+
+E49 ran alone on the GPU through the app's routes on E47's copy (`engine/spikes/out/e49/`).
+
+- **The first run** stopped after SP: a Refine's result is a layer of its document, not an asset. The rerun flattens the document to
+  the Catalogue.
+- **The start images:**
+  - SP (Klein I2I 0.6, 56 s) is sharper than the crop and adds small stallholders and shoppers in the hall behind the counters. It moves
+    the columns and lamps a little, so it no longer lines up with the facade outside the clip's stretch (the v2 slice stays inside it);
+  - SE (0.35, 32 s) is the crop made sharper.
+
+| Clip | Seconds | Upper band's drift (max, px) | Zoom first → last | The people |
+| --- | --- | --- | --- | --- |
+| CP (Fun-Camera Static, SP) | 220 | 10 (last: −10, +4) | 0.965 | a woman in an apron moves about the gap between counters, a man crosses right, small figures behind |
+| CE (Fun-Camera Static, SE) | 152 | 10 (−10, +6) | 0.958 | nearly nobody comes: one or two tiny figures at the back |
+| CN (plain Wan 2.2, SP, stillness in words) | 192 | 0 | 1.000 | six to eight in view; the woman in the apron walks out of the gap straight toward the camera, growing frame by frame; the rest keep their shapes, small moves behind the counters |
+| CP2 (Fun-Camera Static, from CP's last frame) | 208 | 0 | 1.000 | carries on from CP |
+
+The join CP → CP2: 0 px.
+
+**Against the bars set at 11:12:**
+
+- **The hold:** CN and CP2 pass. CP and CE fail: Fun-Camera's Static drifts 10 px and zooms out 3.5–4 % over 5 s at 1088 × 480. That
+  was within E41's own bar (3 % of scale on the alley board), but a face of the set cannot breathe. A clip for a face is made with the
+  plain model.
+- **The crowd:** no clip passes yet.
+  - CN has the count (≥ 4 at once), the shapes kept and the stalls unchanged, but its most visible figure walks toward the camera. On a
+    flat face that reads as a person growing in place.
+  - CE stays empty: Wan does not bring a crowd in from nobody.
+  - At the shot's density (CN projected onto the plate, frame 32) the background reads as a working market, the people small behind the
+    counters.
+- **The join:** passes (0 px), on CP → CP2.
+- **The extend route copies no camera, and a Fun-Camera clip cannot be extended at all** (its spec has no `extend_lead`). For a face's
+  10 s on the plain model, the extend route (lead 1) is the way.
+
+**E49b, people placed along the counters, nobody facing the camera** (the same copy and stretch; `engine/spikes/out/e49b/`):
+
+- **SA:** the crop refined (I2I 0.6) with "shoppers in profile walking left and right in front of the counters, stallholders behind the
+  counters, nobody facing the camera";
+- **N1, N2:** the plain Wan 2.2 I2V from SA, two seeds, "shoppers walk left and right along the counters, seen in profile; nobody walks
+  toward the camera; a static locked-off camera";
+- **N1x:** N1 continued through the app's extend route (lead 1), for the shot's 10 s.
+
+**Bars:** E49's, unchanged. Each clip is judged by the hold and the crowd, and N1x by the join. If N1 or N2 passes, a clip on a face is
+built; if neither does, a crowd clip is shelved and M6 goes on with the extras and the generated plate.
+
+## 2026-10-31 11:53 — E49b: the camera holds, but people walk out of the gap toward it; the open clip shelved; E49c (a loop) set up
+
+E49b (`engine/spikes/out/e49b/`): SA was refined in 56 s, the clips took 204 s (N1), 164 s (N2) and 168 s (N1x, through the app's
+extend route).
+
+| Clip | Drift (max, px) | Zoom | The people |
+| --- | --- | --- | --- |
+| N1 | 1 | 1.000 | a stallholder and shoppers at the counter; from frame 32 a man walks out of the gap between the counters straight toward the camera |
+| N2 | 0 | 1.000 | 4–5 in view, mostly at the counters; a woman crosses the gap in profile early on; from frame 60 a stallholder in a white apron comes out of the gap toward the camera |
+| N1x | 0 | 1.005 | N1's man keeps coming until his face fills the frame |
+
+The join N1 → N1x: 0 px.
+
+**Against E49's bars:**
+
+- **The hold:** passes on every clip, and on the join.
+- **The crowd:** fails on every clip. Three seeds out of three (CN, N1, N2) send a figure out of the gap between two counters toward
+  the camera. The gap is the hall's aisle running away from the face, and Wan uses it as a path. The words ("nobody walks toward the
+  camera", people in profile) did not stop it. A continuation compounds it.
+- **By the bar set at 11:31, the open clip is shelved.**
+
+**E49c, one different arm aimed at that failure: a loop.** The start image is given as both the first and the last frame (Wan's
+first/last-frame mode on the same weights). A figure cannot walk off toward the camera when the clip must come back to where it started,
+and a loop also covers a shot of any length without chaining.
+
+- **L1, L2:** SA → SA, the plain Wan 2.2, two seeds, E49b's words.
+- **Measured:** E49's hold and crowd. The loop's seam is the mean absolute difference between the last frame and the first.
+
+**Bars:**
+
+- E49's hold and crowd, unchanged.
+- **The seam:** ≤ 6 levels, and to the eye no jump when the clip repeats.
+- **The motion:** at least two people visibly moving through the loop, so the market is not a still with breathing figures.
+- **What follows:** if L1 or L2 passes, a looping clip on a face is built. If neither does, the crowd clip is shelved and M6 goes on with
+  the extras and the generated plate.
+
+## 2026-10-31 12:01 — E49c: the loop keeps everyone along the counters; L1 misses the seam bar as made (a brightness drift), passes with a tone lock; the author's call
+
+E49c ran alone on the GPU, SA → SA on the plain Wan 2.2, 81 frames at 1088 × 480 (`engine/spikes/out/e49c/`).
+
+| Loop | Seconds | Drift · zoom | Seam (last vs first) | To the eye |
+| --- | --- | --- | --- | --- |
+| L1 (seed 31) | 188 | 0 px · 1.000 | 6.93 | a man in a white shirt crosses in front of the counters left to right (frames 16–32), a second in a dark jacket with a bag later (64); the stallholder serves; 4–5 in view; nobody comes toward the camera |
+| L2 (seed 32) | 156 | 0 px · 1.000 | 7.02 | the same people barely move: a still with breathing figures |
+
+**Against the bars set at 11:53:**
+
+- **The hold:** passes on both.
+- **The crowd:** L1 passes (≥ 4 in view, walking along the stalls, shapes kept, stalls unchanged). The loop did what it was for: in
+  four seeds of the open clip someone came out of the gap, and here nobody does.
+- **The motion:** L1 passes (two walkers). L2 fails.
+- **The seam:** both fail as made (6.93 and 7.02 against ≤ 6).
+
+**What the seam is.** The last frame is 6.4–7.1 levels brighter than the first in every channel, and the first eight frames already
+differ from frame 0 by 5.5. It is Wan's tone drift (D156 found the same offset on camera clips), not the people. With the offset
+removed the seam is 3.3. With every frame's tone locked to frame 0 (a per-channel gain and offset fitted on the static upper band), L1's
+seam is 3.37 and L2's 3.54. The largest step inside L1 is 2.54, so the loop point would still be a slightly larger step than any inside
+it.
+
+**At the shot's density** (the plate preview, Final 5's paving): frame 32 shows a shopper walking along the counter and a stallholder
+serving behind it. It reads as a working market behind the walker.
+
+**Verdict:**
+
+- **By the bar as set, no loop passes:** L1 misses only the seam, by 0.93 levels, and the cause is measured and correctable.
+- **I am not overriding the bar myself.** Building a looping clip on a face (with the tone lock, and a short crossfade at the loop
+  point) is put to the author with the loop video (`loop_L1_locked.mp4`, three cycles) and the shot's preview (`preview_L1.mp4`).
+- **The other way:** M6 goes on with the extras and the generated plate.

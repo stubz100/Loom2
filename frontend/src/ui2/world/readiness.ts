@@ -51,7 +51,7 @@ export function readiness(p: Pick<Profile, 'cls' | 'voice_id'>, v: ProfileVersio
       item('a_pose_front', 'A-pose front', !!v.anim_ref_asset_id),
       item('a_pose_back', 'A-pose back', !!v.anim_ref_back_asset_id, undefined, true),
       item('a_pose_side', 'A-pose side', !!v.anim_ref_side_asset_id, undefined, true),   // D175: a character seen from the side
-      item('body', 'body fitted', !!v.body_fit_from, v.body_fit_from && v.body ? bodyText(v.body) : undefined),   // D168: what the body is, so a wrong one shows
+      item('body', 'body fitted', !!v.body_fit_from, v.body_fit_from && v.body ? bodyText(v.body) : v.anim_ref_note === 'not_whole' ? '— the A-pose is cut' : undefined),   // D168: what the body is; W9: why not
       item('voice', 'voice', !!p.voice_id, undefined, true),
       ...DRIFT_ROLES.flatMap(([role, label]) => { const d = sheetDrift(v, prompts[role])                // M3: made before the sheet's colours took — said, not counted
         return d.length ? [{ id: `drift_${role}`, label: `${label} ≠ sheet`, state: 'warn' as const, detail: d.join('; ') }] : [] }),

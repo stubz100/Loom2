@@ -10,6 +10,9 @@ import { composeSheet } from '../generate/sheet'
 import { useStory } from './storyStore'
 
 const MAX_COLOURS = 12
+/** W16: a prop's and a place's examples are their own, not a character's. */
+const LABEL_EG: Record<string, string> = { character: 'rain gear, winter, aged 60 …', prop: 'new, battered, lit …', place: 'at dusk, in rain, after the fire …' }
+const MARKS_EG: Record<string, string> = { character: 'a scar over the left eyebrow, round glasses', prop: 'a dent in the lid, initials scratched on the back', place: 'a broken window, a faded sign over the door' }
 const NEW_COLOUR = ''                                                         // M1: no colour until the author picks one (it used to start red)
 
 export function CastSheet({ p, v }: { p: Profile; v: ProfileVersion }) {
@@ -23,7 +26,7 @@ export function CastSheet({ p, v }: { p: Profile; v: ProfileVersion }) {
     <div className="cast-sheet" role="group" aria-label={`${p.name}'s sheet`}>
       <label htmlFor="cast-label">version</label>
       <div className="sheet-label"><span className="mono">{v.id}</span>
-        <input id="cast-label" type="text" value={v.label === v.id ? '' : v.label} maxLength={40} aria-label="version label" placeholder="a label — rain gear, winter, aged 60 …"
+        <input id="cast-label" type="text" value={v.label === v.id ? '' : v.label} maxLength={40} aria-label="version label" placeholder={`a label — ${LABEL_EG[p.cls] ?? LABEL_EG.character}`}
           title="Shown on Generate's version chip and in the version selector" onChange={(e) => setSheet({ label: e.target.value })} /></div>
       <label htmlFor="cast-appearance">appearance</label>
       <textarea id="cast-appearance" rows={3} value={v.appearance} readOnly={!open} aria-label="appearance" onChange={(e) => setSheet({ appearance: e.target.value })}
@@ -43,12 +46,12 @@ export function CastSheet({ p, v }: { p: Profile; v: ProfileVersion }) {
             {open && <button type="button" className="quiet x" aria-label={`remove colour ${k + 1}`} title="Remove this colour" onClick={() => setSheet({ colours: colours.filter((_, j) => j !== k) })}><X size={11} /></button>}
           </span>
         ))}
-        {open && colours.length < MAX_COLOURS && <button type="button" className="quiet" title="Bind a colour to something the character wears or carries (a hex code before its object in the prompt)"
+        {open && colours.length < MAX_COLOURS && <button type="button" className="quiet" title={`Bind a colour to ${p.cls === 'character' ? 'something the character wears or carries' : p.cls === 'prop' ? 'a part of it' : 'a part of the place'} (a hex code before its object in the prompt)`}
           onClick={() => setSheet({ colours: [...colours, { hex: NEW_COLOUR, object: '' }] })}><Plus size={12} /> colour</button>}
       </div>
       <label htmlFor="cast-marks">marks</label>
       <input id="cast-marks" type="text" value={v.marks} readOnly={!open} aria-label="marks" onChange={(e) => setSheet({ marks: e.target.value })}
-        placeholder="distinguishing features — a scar over the left eyebrow, round glasses" />
+        placeholder={`distinguishing features — ${MARKS_EG[p.cls] ?? MARKS_EG.character}`} />
       <p className="sheet-sent" aria-label="as sent"><span>a @mention and every linked subject carry</span> {sent || <i>nothing yet — the model would see only the name</i>}</p>
     </div>
   )

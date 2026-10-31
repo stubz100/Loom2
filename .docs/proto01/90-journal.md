@@ -15294,3 +15294,60 @@ preview with its facing line.
 - Typecheck, build and lint clean (61 warnings, as before); settings audit 322 / 0; agent docs and model literals clean.
 - The e2e at first failed 2 scenarios that assumed the old behaviour: a new colour row sent red, and the bound tag appeared twice. The
   scenario now picks the colour, and the Inspector no longer repeats the row's tag. Then e2e 84/84 alone.
+
+## 2026-10-31 23:12 — The walkthrough-2 register, wave 1 (World, and the high items): W1, W4, W6, W7, W9, W10, W12–W17, W21, W29, W30, W49, W59, W65
+
+The author: "Continue" (after the market walk's smaller items), so the walkthrough-2 register (`proto01_UI2/12`) is next. Already closed
+by earlier work: W3 (M2), W34 (M10), W36 (M8), W40 and W43 (D167), W46, W47 and W58 (D163). None of these changes a direction.
+
+**Fixed:**
+
+- **W1 (= F1):** with no project, the centre has *Open a project…* and *New project…* under its words (World, Shots, Episode, the Bin).
+- **W4, W17 (old names):** "the Look's style" for "the Story style"; *Back to World*, "Clay places it", "World's props" and *Open in
+  Performance* for *Back to Cast*, "Animate places it", "Cast props" and *Open in Animate*.
+- **W6 (≈ F23), W13 (the prompt in the Inspector):** a Tree prompt reads as labelled lines (the scene, each subject with its place and
+  action, the light, the look, the camera), not raw JSON; a long prompt is clamped with *more* / *less*. Shared by World's and the Bin's
+  Inspector (`ui2/PromptBlock.tsx`, `promptText.ts`).
+- **W7:** an empty Build slot is a line, not a 16:9 card, so the pictures to pick from stay in view.
+- **W9 (the cut A-pose):**
+  - A reference with no whole figure fails the body fit by name ("Ines's body fit: the animation reference does not show the whole
+    figure …").
+  - The version keeps the note (`anim_ref_note: "not_whole"`): Build's slot offers *Not the whole figure — make candidates?*, the readiness
+    line says "○ body fitted — the A-pose is cut", and the fit is refused until another reference is picked.
+  - A finished or failed job's toast names what it was (the body fit, a set fill, a layer's performance …), not only its id.
+  - Not changed: D162 makes Make's reference framing 16:9 on the panel's model, so FLUX.2 dev can still cut a figure. Changing the frame
+    or the model is a decision, not a fix — left to the author.
+- **W10:** Build's run buttons say what they queue: "Make reference candidates ▶ · ‹model› · 2 · ≈ ‹time›" (the warm time from
+  `/capabilities.story`).
+- **W12:** the picture Inspector has *Back to ‹entity›* (also in the tile's right-click); a click on the selected tile or around the
+  pictures clears the selection, and the entity's facts, versions, voice and *Delete* come back.
+- **W14:** the Inspector's forms fit its 300 px column (*New voice…*).
+- **W15:** a new entity's Make starts with its own count and words, Image's model and settings kept (D160), not the last entity's panel.
+- **W16:** a prop's and a place's sheet have their own examples (label, marks, the colour's tooltip), and a new entity's dialog names what
+  its class needs (a prop: pictures and a 3D model; a place: a set picture and a set).
+- **W21:** each face's Fill has its own seed, derived from the chain's (`face_seed`), so the pier's four backdrop panels no longer get the
+  identical picture; the chain's seed still reproduces a run. The second pier painted on each panel is the case D170 / D172 changed the
+  fill words for; not measured again on the pier.
+- **W29, W30 (the Flow's *New shot*):** from the Flow canvas's right-click, the new shot lands where the canvas was clicked and is not
+  wired in (`POST /story/flow/shots` takes `x`, `y`, `connect`). The shot before still gives the scene, and the Flow stays open with the
+  node selected. From the storyboard it still follows the open shot and opens in Clay.
+- **W49 (the render's clip):** when a final's render lands, the shots are reloaded, so *Mark the shot final ✓* unlocks without a reload.
+  A disabled command can now say why in its tooltip (`Command.why`): *Mark final* says "no clip yet — …".
+- **W59:** World's mode switch follows the selection, so *Edit* is on once a picture is picked; World's saves no longer offer "Open
+  ‹entity› in World" while the author is there.
+- **W65 (letterboxed set pictures):**
+  - *Build the set ▶* refuses a letterboxed set picture with the bar sizes. A bar is either near black and flat, or a darker band ending
+    in a straight edge across the whole width — the street's semi-transparent bars (`place_sets.letterbox`).
+  - The set picture's own words now ask for the frame filled edge to edge with no black bars.
+  - On the walkthrough's pictures (read-only): the pier and the street read 53 px at the top and the bottom; the market's set picture reads
+    none.
+  - Over every image of both projects (261), the hits outside the letterboxed Look are passes, bakes and strips on black, which never reach
+    a set fit.
+
+**Tests:**
+
+- Offline 789: new are W21 (the face seeds), W65 (the bars, a veiled bar, a dark sky not a bar, a picture's own pixels), W30 (the
+  click point, nothing rewired) and W9 (the cut figure's note).
+- Vitest 625 + 3 skipped: new are the readable prompt, the job's label, the disabled reason and a new entity's panel.
+- Typecheck, build and lint clean (61 warnings, as before); settings audit 322 / 0; agent docs and model literals clean.
+- e2e 84/84 alone.

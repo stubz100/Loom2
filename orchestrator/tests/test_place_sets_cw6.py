@@ -197,5 +197,6 @@ async def test_the_fill_runs_face_after_face(tmp_path: Path, object_info: dict, 
         got = {f.id: f for f in store.profile(p.id).version("v1").place_set.faces}
         assert all(f.filled and f.fill_job_id is None and f.texture_asset_id != f.baked_asset_id for f in got.values())
         assert rig.catalogue.get(got["floor"].texture_asset_id).parents == [got["floor"].baked_asset_id]
+        assert j.recipe["seeds"] != j2.recipe["seeds"] and j.origin.payload["seed"] == j2.origin.payload["seed"]   # W21: a face's own seed, the chain's carried
     finally:
         await rig.close()

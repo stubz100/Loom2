@@ -237,3 +237,30 @@ def test_the_stance_check():
     assert stance_note(down) == "arms_close"
     pts = body_points(down, [832, 480])
     assert pts["canvas"] == [832, 480] and len(pts["pose"]) == 18 and pts["pose"][4][0] == round(b[12], 2) and pts["feet"] == []
+
+
+@pytest.mark.asyncio
+async def test_a_cut_figure_says_so_on_the_version(tmp_path: Path, object_info: dict):
+    """W9: a reference with no whole figure (Make's 16:9 A-pose cut Ines at the thighs) fails the fit by name, and the version keeps the note,
+    so Build's slot and the readiness line say why the body is owed; the fit is refused until another reference is picked."""
+    from loom2.story import NOT_WHOLE, fit_blocked
+    rig = Rig(tmp_path, object_info)
+    try:
+        groups = rig.queue.groups = GroupStore(rig.ws, rig.catalogue)
+        st = StoryStore(rig.ws)
+        ref = rig.catalogue.ingest_file(_png(tmp_path / "ref.png")).id
+        p = st.create_profile("Ines", "character", groups, appearance="Ines")
+        st.set_anim_ref(p.id, "v1", "front", ref)
+        cut = fake_person({"head_neck": 0.167, "shoulders": 0.234, "torso": 0.334, "leg": 0.499, "arm": 0.344, "palm": 0.06})
+        for k in (10, 13):                                                                           # COCO-18's ankles: cut at the thighs
+            cut["pose_keypoints_2d"][3 * k + 2] = 0.0
+        rig.fake.people = [cut]
+        rig.queue.load()
+        await rig.queue.start()
+        job = rig.queue.submit({"kind": "keypoints", "asset_id": ref}, origin=body_fit_origin(p.id, "v1"))[0]
+        done = await rig.wait(job.id)
+        assert done.status == "failed" and done.error.startswith("Ines's body fit: the animation reference does not show the whole figure")
+        v = st.profile(p.id).version("v1")
+        assert v.anim_ref_note == "not_whole" and v.body_fit_from is None and fit_blocked(v) == NOT_WHOLE
+    finally:
+        await rig.close()

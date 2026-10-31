@@ -852,12 +852,16 @@ ARMS_DOWN = ("the animation reference holds its arms against the body: the body 
              "and spread (D140) — draw the reference again, then fit")
 
 
+NOT_WHOLE = ("the animation reference does not show the whole figure, head to feet (the fit needs the nose, the neck, the hips and the "
+             "ankles): pick or make one that does — Build's Make A-pose candidates ▶ frames the whole figure")
+
+
 def fit_blocked(v: ProfileVersion) -> str | None:
     """D140: why the body cannot be fitted to the version's animation reference now (None: it can) — only on an A-pose picture; an
-    arms-down one is known once a fit has read it (the note)."""
+    arms-down one is known once a fit has read it (the note). W9: so is one that is cut (no whole figure: "not_whole")."""
     if not v.anim_ref_asset_id:
         return "make the animation reference first: the body is fitted to it"
-    return ARMS_DOWN if v.anim_ref_note == "arms_close" else None
+    return ARMS_DOWN if v.anim_ref_note == "arms_close" else NOT_WHOLE if v.anim_ref_note == "not_whole" else None
 
 
 def shell_from_arms_down(v: ProfileVersion) -> bool:
@@ -886,7 +890,7 @@ def anim_ref_sentence(cls: str, side: str) -> str:
     if cls == "place":
         return ("The place itself, empty: a wide view from eye level, the camera level and about 1.6 m above the ground, the floor and the walls "
                 "(or the ground and the buildings' fronts) in view from side to side, nobody in it, no animals, nothing moving, nothing standing in "
-                "the middle of the floor, even light, no text.")
+                "the middle of the floor, even light, the picture filling the whole frame edge to edge with no black bars, no text.")   # W65
     if side == "side":                                                      # D175 (E54): what hangs behind (a braid, a hood) is seen
         return ("Full-body character reference, seen from the side in profile, facing left, standing in a neutral A-pose with both arms held "
                 "straight a little away from the body, the feet slightly apart, the whole figure from the top of the head to the feet visible and "
@@ -1842,11 +1846,13 @@ class _FlowMixin:
             notes.append(f"U4: {kept_final} final shot{'s' if kept_final != 1 else ''} without a stage kept {'their' if kept_final != 1 else 'its'} record — a new version can be blocked on one")
         return notes
 
-    def make_shot(self, title: str = "", *, after: str | None = None, scene: str = "new", place_id: str | None = None) -> FlowNode:
+    def make_shot(self, title: str = "", *, after: str | None = None, scene: str = "new", place_id: str | None = None,
+                  at: tuple[float, float] | None = None, connect: bool = True) -> FlowNode:
         """U2 (D157, G12; 04 §7 *New shot*): a Shot node with its scene, the scene's stage and a camera of its own, in one call, placed and
         connected after `after` (between it and the node it led to). `scene="same"`: coverage — a new camera on the scene of the shot
         before, its camera copied with its keys. `"new"`: a new scene and stage — the World place's set (`place_id`, else the shot before's
-        place) seen from its picture's camera, else an empty stage."""
+        place) seen from its picture's camera, else an empty stage. W30: `at` puts the node where the Flow's canvas was right-clicked, and
+        `connect=False` leaves it unconnected (the shot before still gives the scene, the place and the camera)."""
         from .stages import StageStore
         if scene not in ("new", "same"):
             raise ValueError("a new shot is in a new scene or the same scene as the shot before")
@@ -1855,10 +1861,13 @@ class _FlowMixin:
             if after and prev is None:
                 raise KeyError(after)
             g = self.flow_graph()
-            at = next((p for p in g.nodes if prev is not None and p.id == prev.id), None)
-            x, y = (at.x + 340.0, at.y) if at is not None else (40.0, 40.0)
-            while any(abs(p.x - x) < 120 and abs(p.y - y) < 120 for p in g.nodes):
-                y += 240.0
+            beside = next((p for p in g.nodes if prev is not None and p.id == prev.id), None)
+            if at is not None:
+                x, y = float(at[0]), float(at[1])
+            else:
+                x, y = (beside.x + 340.0, beside.y) if beside is not None else (40.0, 40.0)
+                while any(abs(p.x - x) < 120 and abs(p.y - y) < 120 for p in g.nodes):
+                    y += 240.0
             stages = StageStore(self.ws)                                      # type: ignore[attr-defined]
             if scene == "same":
                 pv = prev.shot.version() if prev is not None and prev.shot is not None else None
@@ -1882,7 +1891,7 @@ class _FlowMixin:
                 self._join([n.id], scene_id)
             self._scene_stage(scene_id, st.id, only_if_none=True)
             self.set_source(n.shot_id, "v1", st.id, cam.id, st.revision)    # type: ignore[attr-defined, arg-type]
-            if prev is not None and prev.type in ("start", "hub", "shot", "action"):
+            if connect and prev is not None and prev.type in ("start", "hub", "shot", "action"):
                 g = self.flow_graph()
                 nxt = [e for e in g.edges if e.from_ == prev.id and e.port == "out"]
                 keep = [e for e in g.edges if e not in nxt]

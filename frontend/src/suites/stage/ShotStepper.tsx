@@ -93,7 +93,7 @@ function BenchChip() {
   if (cur.purpose === 'bench') return (
     <div className="for-chip bench-chip" data-testid="bench-chip" title="Clay opened for a Cast version: its figure (or its prop) follows Cast; what you change here is the bench's own scene">
       <span className="for-what"><Hammer size={14} /> Bench: <b>{cur.name.replace(/^Bench · /, '')}</b></span>
-      <CommandButton id="stage.bench.back" text size={14} label="Back to Cast" />
+      <CommandButton id="stage.bench.back" text size={14} label="Back to World" />
     </div>
   )
   const figures = cur.objects.filter((o) => o.kind !== 'set').length

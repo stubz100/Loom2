@@ -21614,6 +21614,12 @@
             "description": "the node it follows: placed beside it and connected after it",
             "title": "After"
           },
+          "connect": {
+            "default": true,
+            "description": "W30: connected after `after` (between it and the node it led to); false: it stands alone",
+            "title": "Connect",
+            "type": "boolean"
+          },
           "place_id": {
             "anyOf": [
               {
@@ -21640,6 +21646,29 @@
             "default": "",
             "title": "Title",
             "type": "string"
+          },
+          "x": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "W30: where on the Flow it lands (the canvas's right-click); else beside the shot before",
+            "title": "X"
+          },
+          "y": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Y"
           }
         },
         "title": "ShotNodeCreate",

@@ -11,7 +11,7 @@ import { useLibrary } from './libraryStore'
 import { startPlay, stepPlay, type PlayState } from './flow/play'
 import { spineEdges, spineRow, spineTodo } from './episodeVerbs'
 import type { BoardSort } from './board'
-import { navigate, setRailTab } from '../../frame/router'
+import { currentPlace, layerOf, navigate, setRailTab } from '../../frame/router'
 
 export type Section = 'logline' | 'synopsis' | 'styles' | 'library' | 'panels' | 'templates' | 'spine' | 'variables'
 /** A variable's id is its name; D92: a library entry's id is its `lib_` id, a saved panel's its name. */
@@ -667,7 +667,7 @@ export const useStory = create<StoryState>()((set, get) => {
       const p = get().profile(); const v = get().version(); if (!p || !v) return
       try {
         replaceProfile(await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/model/import', { params: { path: { pid: p.id, vid: v.id } }, body: { path } })))
-        useSession.getState().toast(`${p.name}'s 3D model imported — Animate places it as it is`, 'success')
+        useSession.getState().toast(`${p.name}'s 3D model imported — Clay places it as it is`, 'success')
       } catch (e) { toast(`3D model: ${detail(e)}`) }
     },
     setAnimRef: async (side, assetId) => {
@@ -703,7 +703,7 @@ export const useStory = create<StoryState>()((set, get) => {
         const copies = Object.keys(r.copied).length
         const what = role === 'hero' ? `is ${p.name}'s hero` : role === 'reference' ? `${ids.length === 1 ? 'is' : 'are'} in ${p.name}'s reference set` : `${ids.length === 1 ? 'is a candidate' : 'are candidates'} of ${p.name}`
         useSession.getState().toast(`${ids.length === 1 ? 'The image' : `${ids.length} images`} ${what}${copies ? ` — ${copies === ids.length ? 'as a copy' : `${copies} as copies`}; the original${copies === 1 ? ' stays' : 's stay'} on ${copies === 1 ? 'its page' : 'their pages'}` : ''}`, 'success',
-          { label: `Open ${p.name} in World`, run: () => void import('../../store/origin').then((m) => m.goToStory({ tab: 'cast', id: pid, version: into })) })
+          inWorldOn(pid) ? undefined : { label: `Open ${p.name} in World`, run: () => void import('../../store/origin').then((m) => m.goToStory({ tab: 'cast', id: pid, version: into })) })   // W59: not while there
         return r
       } catch (e) { toast(`Add to ${p.name}: ${detail(e)}`); return null }
     },
@@ -1270,11 +1270,19 @@ export function shellBlocked(v: ShellVersion | undefined | null): string | null 
   if (!v.body_points || v.body_fit_from !== v.anim_ref_asset_id) return 'fit the body to the animation reference first: the fit reads its stance, and the shell needs the A-pose'
   return null
 }
+/** W59: World is showing this entity now (a toast's "Open … in World" would lead where the author is). */
+function inWorldOn(pid: string): boolean {
+  return layerOf(currentPlace()) === 'world' && useStory.getState().profileId === pid
+}
+
+/** W9 (story.py NOT_WHOLE): the fit found no whole figure in the reference. */
+export const NOT_WHOLE = "the animation reference does not show the whole figure, head to feet (the fit needs the nose, the neck, the hips and the ankles): pick or make one that does — Build's Make A-pose candidates ▶ frames the whole figure"
 /** D140 (story.py fit_blocked): why the body cannot be fitted to the version's reference now — only on an A-pose; an arms-down picture is
  *  known once a fit has read it. Null: it can. */
 export function fitBlocked(v: Pick<ShellVersion, 'anim_ref_asset_id' | 'anim_ref_note'> | undefined | null): string | null {
   if (!v?.anim_ref_asset_id) return 'make the animation reference first: the body is fitted to it'
-  return v.anim_ref_note === 'arms_close' ? 'the animation reference holds its arms against the body: the body is fitted only on an A-pose, with the fingers straight and spread — draw the reference again, then fit' : null
+  return v.anim_ref_note === 'arms_close' ? 'the animation reference holds its arms against the body: the body is fitted only on an A-pose, with the fingers straight and spread — draw the reference again, then fit'
+    : v.anim_ref_note === 'not_whole' ? NOT_WHOLE : null                                     // W9: a cut figure
 }
 /** D139: the version's shell was made from the reference it has now, and that reference holds its arms against the body (fused arms). */
 export const shellFromArmsDown = (v: ShellVersion | undefined | null): boolean =>

@@ -266,6 +266,15 @@ const fetchProject = (set: (p: Partial<SessionState>) => void) => {
   void unwrap(http.GET('/project')).then((project) => { if (n === projectFetch) set({ project }) }).catch(() => undefined)
 }
 
+/** W9: what a job is, as its toast says it — by the origin's surface (a body fit, a set fill …), else its id. */
+const SURFACE_LABEL: Record<string, string> = {
+  body_fit: 'The body fit', anim_ref: 'A reference make', character_shell: 'The shell', prop_model: 'The 3D model', set_fit: 'The set fit',
+  set_fill: 'A set fill', set_crowd_start: "The crowd's start", set_crowd: 'The crowd', set_walkers_matte: "The walkers' matte",
+  final_plate: 'The plate', final_layer: "A layer's performance",
+}
+export const jobLabel = (job: { id: string; origin?: { surface?: string | null } | null }): string =>
+  SURFACE_LABEL[job.origin?.surface ?? ''] ?? `Job ${job.id.slice(4)}`
+
 export function applyEvent(f: EventFrame, set: (p: Partial<SessionState>) => void, get: () => SessionState): void {
   const s = get()
   set({ events: [...s.events.slice(-199), f] })
@@ -278,7 +287,8 @@ export function applyEvent(f: EventFrame, set: (p: Partial<SessionState>) => voi
         URL.revokeObjectURL(s.previews[job.id]); const previews = { ...s.previews }; delete previews[job.id]; set({ previews })
       }
       if (f.type === 'job.updated' && (job.status === 'done' || job.status === 'failed')) {
-        s.toast(job.status === 'done' ? `Job ${job.id.slice(4)} done in ${job.wall_s} s` : `Job ${job.id.slice(4)} failed: ${job.error}`, job.status === 'done' ? 'success' : 'error')
+        const what = jobLabel(job)                                                              // W9: the body fit, not a job id
+        s.toast(job.status === 'done' ? `${what} done in ${job.wall_s} s` : `${what} failed: ${job.error}`, job.status === 'done' ? 'success' : 'error')
         fetchQueue(set)
         fetchProject(set)
       }

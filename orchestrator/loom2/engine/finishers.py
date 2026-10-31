@@ -901,16 +901,21 @@ def _body_fit_result(q: JobQueue, job: JobRecord, recipe: Keypoints, people: lis
     """CA1b: the version's body fitted to the reference's proportions (the height, build, head, feet and attachments stay). A reference that
     shows no whole figure fails the job, so the author sees why."""
     from ..body import body_points, fit_body, reference_ratios, seed_body, stance_note
-    from ..story import StoryStore
-    if not people:
-        raise ValueError("no figure found in the animation reference")
-    measured = reference_ratios(people[0])
+    from ..story import NOT_WHOLE, StoryStore
     store = StoryStore(q.ws)
     pid, vid = str(job.origin.ref or ""), str((job.origin.payload or {}).get("version") or "")
     cur = store.profile(pid)
     if cur is None:
         raise ValueError(f"the profile {pid} is gone")
     v = cur.version(vid)
+    try:
+        if not people:
+            raise ValueError("no figure found")
+        measured = reference_ratios(people[0])
+    except ValueError as e:                                                    # W9: a cut figure — said on the version, so the slot shows why
+        p = store.set_stance_note(pid, v.id, "not_whole")
+        q.hub.broadcast("story.changed", {"kind": "profile", "id": p.id, "revision": p.revision})
+        raise ValueError(f"{cur.name}'s body fit: {NOT_WHOLE} ({e})") from e
     note = stance_note(people[0])
     if note == "arms_close":                                                   # D140: fitted only on an A-pose — the note kept, the body as it was
         p = store.set_stance_note(pid, v.id, note)

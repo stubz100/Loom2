@@ -13,11 +13,13 @@ import type { Profile } from '../../api/types'
 import { navigate } from '../../frame/router'
 import { useStory, type ProfileClass } from '../../suites/story/storyStore'
 import { Part } from '../Part'
+import { PromptBlock } from '../PromptBlock'
 import { readiness, type ReadyItem } from './readiness'
 import { WorldMake } from './WorldMake'
 import { CLASSES, CLASS_LABEL, ONE, passes, startWorld, useWorld, type BinItem, type RoleFilter, type WorldRail } from './worldStore'
 import './worldCommands'
 import './world.css'
+import { NoProject } from '../NoProject'
 
 // U3c: the editor loads on the first Edit (its Pixi code stays out of World until then)
 // U3f: the bench's Clay parts and the voices block load with their use
@@ -107,9 +109,9 @@ function Tile({ it }: { it: BinItem }) {
   const sel = useWorld((s) => s.selected === it.asset.id)
   const badge = it.roles.map((r) => BADGE[r]).find(Boolean)
   const menu = (): MenuItem[] => [{ cmd: 'world.mode.edit' }, { sep: true }, { cmd: 'world.creation.hero' }, { cmd: 'world.creation.reference' }, { cmd: 'world.creation.candidate' },
-    { cmd: 'world.creation.aposeFront' }, { cmd: 'world.creation.aposeBack' }, { cmd: 'world.creation.aposeSide' }, { cmd: 'world.creation.setPicture' }, { sep: true }, { cmd: 'world.creation.trash' }]
+    { cmd: 'world.creation.aposeFront' }, { cmd: 'world.creation.aposeBack' }, { cmd: 'world.creation.aposeSide' }, { cmd: 'world.creation.setPicture' }, { sep: true }, { cmd: 'world.creation.trash' }, { cmd: 'world.creation.back' }]
   return (
-    <button className={`w-tile${sel ? ' selected' : ''}`} data-id={it.asset.id} title={it.asset.prompt_text ?? ''} onClick={() => useWorld.getState().select(it.asset.id)}
+    <button className={`w-tile${sel ? ' selected' : ''}`} data-id={it.asset.id} title={it.asset.prompt_text ?? ''} onClick={() => useWorld.getState().select(sel ? null : it.asset.id)}
       onContextMenu={(e) => { useWorld.getState().select(it.asset.id); showMenu(e, menu()) }}>
       <img src={api.thumbUrl(it.asset.id, 256)} alt="" draggable={false} />
       {badge && <span className="w-badge">{badge}</span>}
@@ -125,7 +127,7 @@ function Bin() {
   if (!p) return <div className="w-empty">Pick or make one in the header.</div>
   const items = (bin?.items ?? []).filter((x) => passes(x, filter))
   return (
-    <div className="w-bin" data-testid="world-bin">
+    <div className="w-bin" data-testid="world-bin" onClick={(e) => { const t = e.target as HTMLElement; if (t === e.currentTarget || t.classList.contains('w-grid')) useWorld.getState().select(null) }}>{/* W12: a click around the pictures */}
       <div className="w-bin-head">
         <span className="w-path" title={bin?.path ?? ''}>bin/world/{p.cls}/{p.name}/{useStory.getState().versionId}</span>
         <span className="w-chips">{FILTERS.map(([f, l]) => <button key={f} className={filter === f ? 'active' : ''} onClick={() => useWorld.getState().setFilter(f)}>{l}</button>)}</span>
@@ -166,9 +168,10 @@ function Inspector() {
   if (!it) return <EntityFacts p={p} binCount={bin?.items.length ?? 0} />
   return (
     <aside className="w-insp" data-testid="world-inspector">
+      <div className="w-verbs"><CommandButton id="world.creation.back" text label={`Back to ${p.name}`} /></div>{/* W12 */}
       <img className="w-preview" src={api.thumbUrl(it.asset.id, 512)} alt="" />
       <div className="kv"><span>roles</span><span>{it.roles.join(' · ') || '—'}</span></div>
-      {it.asset.prompt_text && <div className="w-prompt-block"><span>prompt</span><p className="w-prompt" title={it.asset.prompt_text}>{it.asset.prompt_text}</p></div>}
+      {it.asset.prompt_text && <PromptBlock text={it.asset.prompt_text} />}{/* W6, W13 */}
       <div className="w-verbs">
         <CommandButton id="world.mode.edit" text /><CommandButton id="world.creation.hero" text /><CommandButton id="world.creation.reference" text /><CommandButton id="world.creation.candidate" text /><CommandButton id="world.creation.trash" text />
       </div>
@@ -178,6 +181,7 @@ function Inspector() {
 
 function ModeSwitch() {
   const mode = useWorld((s) => s.mode)
+  useWorld((s) => s.selected)                                              // W59: Edit follows the picked picture
   return <div className="w-mode segmented" role="group" aria-label="Make, Edit or Clay">
     <button className={mode === 'make' ? 'active' : ''} onClick={() => runCommand('world.mode.make')}>Make</button>
     <button className={mode === 'edit' ? 'active' : ''} disabled={mode !== 'edit' && !isEnabled(command('world.mode.edit')!)} title="Edit the selected creation" onClick={() => runCommand('world.mode.edit')}>Edit</button>
@@ -192,7 +196,7 @@ export function WorldLayer() {
   const project = useSession((s) => s.project)
   const skeleton = useStory((s) => s.skeleton)
   useEffect(() => startWorld(), [])
-  if (!project?.open) return <div className="w-layer"><Rail /><section className="w-centre wide"><div className="w-empty">Open or create a project</div></section></div>   // nothing reads before there is one
+  if (!project?.open) return <div className="w-layer"><Rail /><section className="w-centre wide"><NoProject /></section></div>   // nothing reads before there is one
   const classRail = rail !== 'look' && rail !== 'sketches'
   const freeEdit = !classRail && mode === 'edit'                                    // B2a: a picture that is no entity's, in the editor
   const bench = classRail && rail === 'character' && skeleton                           // B2a (CS2): the skeleton bench in place of the bin

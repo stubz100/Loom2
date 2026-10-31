@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import secrets
+import zlib
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -63,6 +64,38 @@ NOUN = {"floor": "the floor", "ceiling": "the ceiling", "wall": "a wall", "road"
 
 def fit_origin(pid: str, vid: str, source: str, camera_height_m: float) -> JobOrigin:
     return JobOrigin(suite="story", surface=SET_FIT_SURFACE, ref=pid, payload={"version": vid, "from": source, "camera_height_m": camera_height_m})
+
+
+LETTERBOX_MIN = 0.03                             # W65: a band from the edge at least this share of the height counts as a bar
+LETTERBOX_MAX = 0.2                              # W65: … and at most this share (a bar's straight edge is looked for above it)
+EDGE_STEP = 8.0                                  # W65: the luminance step across a semi-transparent bar's edge, column by column
+EDGE_SHARE = 0.9                                 # W65: … in this share of the columns, on one row
+
+
+def _bar(lum: np.ndarray) -> int:
+    """W65: the rows of a bar from the top edge of a luminance image (rows × columns), 0 when there is none: near-black flat rows, or a
+    darker band ending in a straight edge on one row across nearly every column (a semi-transparent bar the picture shows through)."""
+    n = lum.shape[0]
+    dark = (lum.mean(axis=1) <= 14) & (np.percentile(lum, 98, axis=1) <= 28)
+    top = n if dark.all() else int(np.argmin(dark))
+    least = max(2, int(np.ceil(LETTERBOX_MIN * n)))
+    if top >= least:
+        return top
+    best, at = 0.0, 0
+    for r in range(least, int(LETTERBOX_MAX * n)):
+        above, below = lum[r - 2:r].mean(axis=0), lum[r:r + 2].mean(axis=0)
+        share = float(((below - above) >= EDGE_STEP).mean())
+        if share > best:
+            best, at = share, r
+    return at if best >= EDGE_SHARE and lum[:at].mean() < 0.8 * lum[at:at + max(2, at)].mean() else 0
+
+
+def letterbox(rgb: np.ndarray) -> tuple[int, int]:
+    """W65: the rows of black bars at the top and at the bottom of a picture — a letterboxed frame (the Look's "cinematic … film grain"
+    made the pier's and the street's set pictures so, and the bars were projected into every plate); 0 where there is none. A bar is a band
+    from the edge, LETTERBOX_MIN to LETTERBOX_MAX of the height, near black and flat or ending in a straight full-width edge."""
+    lum = rgb[..., :3].astype(np.float32).mean(axis=2)
+    return _bar(lum), _bar(lum[::-1])
 
 
 def set_picture(v: Any) -> str | None:
@@ -183,6 +216,12 @@ class FillPlan(NamedTuple):
     origin: JobOrigin
 
 
+def face_seed(seed: int, fid: str) -> int:
+    """W21: each face's own seed from the chain's — one seed for every face gave the pier's four backdrop panels the identical picture
+    (three straight from ComfyUI's cache); the chain's seed still reproduces the run."""
+    return (seed + zlib.crc32(fid.encode("utf-8"))) % (2**31 - 2) + 1
+
+
 def prepare_fill(q: Any, pid: str, vid: str, order: list[str], seed: int | None = None, again: bool = False) -> FillPlan | None:
     """The first face of `order` that still wants its Fill (its document made from the bake, its selection the bad texels), the rest carried
     in the origin; None when none does. `again`: a filled face is filled again from its bake. File and pixel work — a worker thread's."""
@@ -231,7 +270,7 @@ def prepare_fill(q: Any, pid: str, vid: str, order: list[str], seed: int | None 
         od.save()
         prompt = fill_prompt(fid, face.material, compose_sheet(v, name=p.name, cls=p.cls), ps.kind)
         recipe = {"kind": "inpaint", "mode": "fill", "model_id": registry.default_model("inpaint", q.app.settings.variant),   # Klein 4B under `open` (D26)
-                  "document_id": od.doc.id, "prompt_text": prompt, "seeds": [seed], "expand": 6, "feather": 8}
+                  "document_id": od.doc.id, "prompt_text": prompt, "seeds": [face_seed(seed, fid)], "expand": 6, "feather": 8}   # W21
         origin = JobOrigin(suite="story", surface=SET_FILL_SURFACE, ref=pid,
                            payload={"version": vid, "face": fid, "rest": order[k + 1:], "seed": seed, "document_id": od.doc.id, "again": again})
         return FillPlan(pid, vid, fid, recipe, origin)

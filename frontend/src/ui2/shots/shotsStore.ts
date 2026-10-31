@@ -189,6 +189,9 @@ export const useShots = create<ShotsState>()((set, get) => ({
 
 /** Mounted with the Shots layer: once a project is open, the Flow, the shots and the board's facts, then the place from the hash — unless a
  *  shot was opened meanwhile (Episode's Finals open one as they switch to Shots: the hash's place came after it and took it back to the Flow). */
+/** W49: the jobs that change a shot's record on the server when they land. */
+const RECORD_KINDS = new Set(['comp_render'])
+
 export function startShots(): () => void {
   let opened: string | null = null
   const go = () => {
@@ -205,7 +208,11 @@ export function startShots(): () => void {
       else sh.setLevel(from?.level === 'flow' || !useStory.getState().shotId ? 'flow' : from?.level ?? 'flow')
     })
   }
-  const off = useSession.subscribe((s, prev) => { if (s.project !== prev.project) go() })
+  const off = useSession.subscribe((s, prev) => {
+    if (s.project !== prev.project) go()
+    if (s.jobs !== prev.jobs && Object.values(s.jobs).some((j) => RECORD_KINDS.has(j.kind) && j.status === 'done' && prev.jobs[j.id]?.status !== 'done'))
+      void useStory.getState().loadShots()                             // W49: a final's render became the shot's clip on the server — the page follows
+  })
   const follow = onNavigate((p) => {                                   // the level follows a navigation that lands on Shots
     const lv = levelOf(p)
     if (lv && lv !== useShots.getState().level) { useShots.setState({ level: lv }); writeHash(useStory.getState().shotId, lv) }
@@ -218,11 +225,13 @@ export function startShots(): () => void {
 export async function newShot(scene: 'new' | 'same'): Promise<void> {
   const st = useStory.getState()
   const after = st.shot()?.owner_node ?? null
+  const at = useShots.getState().level === 'flow' ? st.addAt : null                 // W30: the Flow canvas's right-click point — read before the await (the menu's close clears it)
   if (scene === 'same') await flushClay()
   try {
-    const n = await unwrap(http.POST('/story/flow/shots', { body: { title: '', after, scene } }))
+    const n = await unwrap(http.POST('/story/flow/shots', { body: { title: '', after, scene, ...(at ? { x: at.x, y: at.y, connect: false } : {}) } }))
     await Promise.all([st.loadFlow(), st.loadShots()])
     void useStory.getState().loadBoard()
+    if (at) { useStory.getState().selectNode(n.id); return }                         // W29: it stays in the Flow, the new node selected, unwired
     if (n.shot_id) useShots.getState().open(n.shot_id, 'clay')
   } catch (e) { useSession.getState().toast(`New shot: ${(e as { detail?: string }).detail ?? e}`, 'error') }
 }

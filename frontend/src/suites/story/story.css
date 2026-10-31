@@ -254,7 +254,8 @@
 .anim-ref-row { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
 .anim-ref-slot { position: relative; width: 256px; aspect-ratio: 16 / 9; border: 1px solid var(--line2); border-radius: var(--radius); background: var(--bg2); display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .anim-ref-slot img { width: 100%; height: 100%; object-fit: contain; }
-.anim-ref-slot.empty { border-style: dashed; }
+.anim-ref-slot.empty { border-style: dashed; width: auto; aspect-ratio: auto; height: 30px; padding: 0 10px; }   /* W7: an empty slot is a line, not a card — the pictures to pick from stay in view */
+.anim-ref-slot.empty .cell { display: none; }
 .anim-ref-slot .cell { position: absolute; left: 4px; bottom: 3px; font-size: 11px; background: color-mix(in srgb, var(--bg) 70%, transparent); padding: 0 4px; border-radius: 3px; }
 .anim-ref-row .verbs { display: flex; flex-direction: column; gap: 4px; }
 /* CA0: the body on the sheet — fields beside a front-view silhouette (the default adult as a ghost) */

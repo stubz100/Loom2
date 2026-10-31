@@ -1206,7 +1206,7 @@ test('a prop (D110 PS1–PS2, D125): Cast\'s props class lists the props (the ol
   const mesh = await api<{ kind: string; params: { upright_deg: number[] | null } }>('GET', `/assets/${v.model_asset_id}`)
   expect(mesh.kind).toBe('mesh'); expect(mesh.params.upright_deg).toEqual([0, 0, 0])                         // the fake's flat triangle needs no turn
   await expect(section.locator('.model-view canvas.model-view-canvas')).toBeVisible({ timeout: 15_000 })
-  await expect(section.locator('[data-status]')).toContainText('Animate places it')
+  await expect(section.locator('[data-status]')).toContainText('Clay places it')
   await page.screenshot({ path: 'node_modules/.e2e/prop-model.png' })
   // PS3: Animate's library lists the prop; a click places its model bound to the prop; the viewport loads it; the Outliner names the prop
   await clayShot(page, 'Props scene')

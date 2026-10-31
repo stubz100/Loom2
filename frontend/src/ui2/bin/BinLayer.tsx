@@ -20,10 +20,12 @@ import { belongs, homeOf, moveThings } from './binCommands'
 import { BinGrid } from './BinGrid'
 import { BinCompare, BinLoupe } from './BinLoupe'
 import { BinTile } from './BinTile'
+import { PromptBlock } from '../PromptBlock'
 import { binMenu, gridKeys, useFileDrop } from './binMenus'
 import { FILTERS, HEADINGS, passes, pathLabel, ROLE_LABEL, ROLE_WORDS, selectedThings, startBin, TRASH, useBin } from './binStore'
 import '../world/world.css'
 import './bin.css'
+import { NoProject } from '../NoProject'
 
 /** B2 (D159): a home of the tree takes the tiles dropped on it (moved there, a role asked about first); a heading or a deleted record's
  *  home takes none. */
@@ -199,7 +201,7 @@ function Inspector() {
       {made && <div className="kv"><span>made</span><span>{made}</span></div>}
       {run !== null && run > 1 && <div className="kv"><span>same run</span><span>{run} {a.kind === 'video' ? 'clips' : 'pictures'}</span></div>}
       {a.tags.length > 0 && <div className="kv"><span>tags</span><span>{a.tags.join(', ')}</span></div>}
-      {a.prompt_text && <div className="w-prompt-block"><span>prompt</span><p className="w-prompt" title={a.prompt_text}>{a.prompt_text}</p></div>}
+      {a.prompt_text && <PromptBlock text={a.prompt_text} />}{/* W6, W13 */}
       <Lineage id={a.id} />
       <div className="w-verbs">
         {inTrash ? <><CommandButton id="bin.item.restore" text /><CommandButton id="bin.item.purge" text /></> : <>
@@ -223,7 +225,7 @@ function Inspector() {
 export function BinLayer() {
   const project = useSession((s) => s.project)
   useEffect(() => (project?.open ? startBin() : undefined), [project?.open])
-  if (!project?.open) return <div className="b-layer"><section className="w-centre wide"><div className="w-empty">Open or create a project</div></section></div>
+  if (!project?.open) return <div className="b-layer"><section className="w-centre wide"><NoProject /></section></div>
   return (
     <div className="b-layer" data-testid="bin-layer">
       <BinTree />

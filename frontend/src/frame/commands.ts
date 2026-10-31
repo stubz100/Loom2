@@ -27,6 +27,8 @@ export interface Command {
   danger?: boolean
   /** Short note shown in the help overlay (e.g. the gesture equivalent). */
   hint?: string
+  /** W49: why it is disabled now, added to its tooltip while it is ("no clip yet — …"). */
+  why?: () => string | null
   /** D72: the key belongs to the shared gesture vocabulary (Arrows, Esc, Space, Tab): listed in help and Settings, not remappable. */
   fixed?: boolean
 }
@@ -147,6 +149,8 @@ export function keyLabel(keys?: string): string {
   return keys.replace('Delete', 'Del').replace('Escape', 'Esc').replace('ArrowLeft', '←').replace('ArrowRight', '→').replace('ArrowUp', '↑').replace('ArrowDown', '↓')
 }
 export function titleFor(c: Command, label = c.label): string { return c.keys ? `${label} (${keyLabel(c.keys)})` : label }
+/** W49: the tooltip with the reason a disabled command gives. */
+export function whyTitle(c: Command, label = c.label): string { const why = !isEnabled(c) ? c.why?.() : null; return why ? `${titleFor(c, label)} — ${why}` : titleFor(c, label) }
 
 // ---- menus --------------------------------------------------------------------------------------------------
 /** D93 (A2): a per-item menu entry — `on` runs `f` with the entry's item set (the command's `when` and `run` read it), e.g. one profile of

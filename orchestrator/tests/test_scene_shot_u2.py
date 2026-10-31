@@ -99,3 +99,18 @@ def test_new_shot_in_one_call(tmp_path: Path):
         bare = cl.post("/story/flow/nodes", json={"type": "shot", "title": "No stage"}).json()
         assert cl.post("/story/flow/shots", json={"after": bare["id"], "scene": "same"}).status_code == 422   # no scene on a stage to share
         assert cl.post("/story/flow/shots", json={"place_id": first["id"]}).status_code == 422            # not a World place
+
+
+def test_a_new_shot_from_the_flow_canvas_lands_where_it_was_asked_and_stands_alone(tmp_path: Path):
+    """W30: the Flow canvas's *New shot* lands at the right-click point and rewires nothing (the shot before still gives the scene)."""
+    app, cl = _client(tmp_path)
+    with cl:
+        assert cl.post("/project", json={"path": str(tmp_path / "p"), "name": "p", "size_cap_gb": 10}).status_code == 200
+        first = cl.post("/story/flow/shots", json={"title": "The seal"}).json()
+        nxt = cl.post("/story/flow/shots", json={"title": "Choice", "after": first["id"]}).json()
+        before = {(e["from"], e["to"]) for e in cl.get("/story/flow").json()["graph"]["edges"]}
+        here = cl.post("/story/flow/shots", json={"after": first["id"], "scene": "same", "x": 900, "y": 620, "connect": False}).json()
+        g = cl.get("/story/flow").json()["graph"]
+        assert {(e["from"], e["to"]) for e in g["edges"]} == before == {(first["id"], nxt["id"])}   # The seal → Choice kept
+        node = next(n for n in g["nodes"] if n["id"] == here["id"])
+        assert (node["x"], node["y"]) == (900, 620) and here["scene_id"] == first["scene_id"]

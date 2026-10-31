@@ -737,6 +737,20 @@ async def _place(svc, pid: str, vid: str) -> tuple[Any, Any]:
     return p, v
 
 
+def _bars(path: Path) -> tuple[int, int]:
+    """W65: a picture's letterbox bars in its own pixels (measured on a 256-wide copy)."""
+    import numpy as np
+    from PIL import Image
+
+    from ..place_sets import letterbox
+    with Image.open(path) as im:
+        w, h = im.size
+        small = im.convert("RGB").resize((256, max(1, round(256 * h / w))), Image.Resampling.BOX)
+    top, bottom = letterbox(np.asarray(small))
+    k = h / small.height
+    return round(top * k), round(bottom * k)
+
+
 @router.post("/story/profiles/{pid}/versions/{vid}/set/fit", response_model=SetFitQueued)
 async def profile_set_fit(svc: Svc, pid: str, vid: str, body: SetFitBody):
     """CW6: *Build the set ▶* — MoGe-2 on the place's set picture (an `image_to_set` job, about a minute); its finisher fits a room, a
@@ -753,6 +767,10 @@ async def profile_set_fit(svc: Svc, pid: str, vid: str, body: SetFitBody):
     rec = await asyncio.to_thread(cat.get, source)
     if rec is None or rec.trashed_at is not None or rec.kind != "image":
         raise HTTPException(422, "the set picture must be an image in the Catalogue")
+    top, bottom = await asyncio.to_thread(_bars, cat.abs_path(rec))
+    if top or bottom:                                                     # W65: the bars would be projected into every plate
+        raise HTTPException(422, f"the set picture is letterboxed — black bars of {top} px at the top and {bottom} px at the bottom (a Look's "
+                                 "'cinematic' or 'widescreen' words do it); they would be projected into every plate: make it again, or pick another")
     try:
         jobs = svc.queue.submit({"kind": "image_to_set", "asset_id": source}, origin=fit_origin(p.id, v.id, source, body.camera_height_m))
     except ValueError as e:
@@ -1684,6 +1702,9 @@ class ShotNodeCreate(BaseModel):
     after: str | None = Field(None, description="the node it follows: placed beside it and connected after it")
     scene: Literal["new", "same"] = Field("new", description="a new scene (and stage), or the same scene as the shot before (a new camera)")
     place_id: str | None = Field(None, description="a new scene from this World place's set; else the shot before's place")
+    x: float | None = Field(None, description="W30: where on the Flow it lands (the canvas's right-click); else beside the shot before")
+    y: float | None = None
+    connect: bool = Field(True, description="W30: connected after `after` (between it and the node it led to); false: it stands alone")
 
 
 class NodeCreate(BaseModel):
@@ -2006,7 +2027,8 @@ async def flow_shot_create(svc: Svc, body: ShotNodeCreate):
     """U2 (D157, G12; proto01_UI2 04 §7): *New shot* — the node, its scene, the scene's stage and a camera of its own in one call."""
     ws, _, _ = svc.require_project()
     try:
-        n = await asyncio.to_thread(StoryStore(ws).make_shot, body.title, after=body.after, scene=body.scene, place_id=body.place_id)
+        n = await asyncio.to_thread(StoryStore(ws).make_shot, body.title, after=body.after, scene=body.scene, place_id=body.place_id,
+                                    at=(body.x, body.y) if body.x is not None and body.y is not None else None, connect=body.connect)
     except KeyError as e:
         raise HTTPException(404, f"node {e.args[0]} not found")
     except ValueError as e:

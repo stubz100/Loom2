@@ -8,6 +8,7 @@ import { useStory } from '../../suites/story/storyStore'
 import { useRouteRows } from '../shots/scene'
 import '../world/world.css'
 import './episode.css'
+import { NoProject } from '../NoProject'
 
 const Panel = lazy(() => import('../../suites/story/StoryParts').then((m) => ({ default: () => <m.Panel tab="episode" /> })))
 const Stage = lazy(() => import('../../suites/story/StoryParts').then((m) => ({ default: m.Stage })))
@@ -41,7 +42,7 @@ export function EpisodeLayer() {
   const project = useSession((s) => s.project)
   useEffect(() => { navigate({ suite: 'story', tab: 'episode' }) }, [])                  // the cut editor's keys and reads come alive with its tab
   useEffect(() => { if (project?.open) { const st = useStory.getState(); void Promise.all([st.loadFlow(), st.loadShots()]).then(() => void useStory.getState().loadBoard()) } }, [project?.path])   // eslint-disable-line react-hooks/exhaustive-deps
-  if (!project?.open) return <div className="e-layer"><section className="w-centre wide"><div className="w-empty">Open or create a project</div></section></div>
+  if (!project?.open) return <div className="e-layer"><section className="w-centre wide"><NoProject /></section></div>
   return (
     <div className="e-layer" data-testid="episode-layer">
       <section className="w-left"><div className="w-panel"><Finals /><Suspense fallback={null}><Panel /></Suspense></div>

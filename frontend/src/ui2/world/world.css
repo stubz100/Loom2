@@ -35,10 +35,15 @@
 .w-empty { margin: auto; color: var(--fg3); padding: 24px; text-align: center; }
 .w-insp { border-left: 1px solid var(--line); background: var(--bg1); padding: 12px; overflow: auto; display: flex; flex-direction: column; gap: 8px; font-size: 12px; }
 .w-insp h4 { margin: 0; }
+.w-insp .kv { grid-template-columns: minmax(0, 90px) minmax(0, 1fr); }   /* W14: a form fits the 300 px column */
+.w-insp .kv > select, .w-insp .kv > input, .w-insp .kv > textarea { min-width: 0; width: 100%; box-sizing: border-box; }
+.w-insp .verbs, .w-insp .w-verbs { flex-wrap: wrap; }
 .w-preview { width: 100%; border-radius: var(--radius); background: var(--bg2); }
 .w-prompt-block { display: flex; flex-direction: column; gap: 2px; }
 .w-prompt-block > span { color: var(--fg3); }
 .w-prompt { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 8; -webkit-box-orient: vertical; overflow: hidden; color: var(--fg2); }
+.w-prompt.open { display: block; overflow: visible; }   /* W13: more */
+.w-prompt-block > .link { align-self: flex-start; }
 .w-verbs { display: flex; flex-direction: column; gap: 4px; align-items: stretch; }
 button.w-ready-item { background: transparent; border: 1px dashed var(--line2); border-radius: 999px; padding: 0 6px; font-size: 11px; cursor: pointer; }
 .w-make { display: flex; flex-direction: column; gap: 8px; }

@@ -389,7 +389,7 @@ export function LookSection() {
         <div className="gen-form gen-tree">
           <Field section="look" field="lighting" value={t.lighting ?? ''} onChange={(v) => g.setTree({ lighting: v })} />
           <Field section="look" field="mood" value={t.mood ?? ''} onChange={(v) => g.setTree({ mood: v })} />
-          <Field section="look" label="art style" field="style" value={t.style ?? ''} onChange={(v) => g.setTree({ style: v })} placeholder="words for the look — the Story style above is separate" />
+          <Field section="look" label="art style" field="style" value={t.style ?? ''} onChange={(v) => g.setTree({ style: v })} placeholder="words for the look — the Look's style above is separate" />
           <Field section="look" field="background" value={t.background ?? ''} onChange={(v) => g.setTree({ background: v })} />
           <Field section="look" field="composition" value={t.composition ?? ''} onChange={(v) => g.setTree({ composition: v })} />
           <label>palette</label>

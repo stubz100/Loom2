@@ -1,6 +1,6 @@
 // Icon buttons bound to registry commands: label + shortcut in the tooltip, disabled from `when`, and the
 // command marked as mouse-reachable for the dev audit (07 §3c).
-import { command, isEnabled, markUsed, runCommand, titleFor, type IconType, type MenuItem } from './commands'
+import { command, isEnabled, markUsed, runCommand, titleFor, whyTitle, type IconType, type MenuItem } from './commands'
 import { openPressMenu } from './ContextMenu'
 import { useKeymap } from './keymap'
 
@@ -23,7 +23,7 @@ export function CommandButton({ id, active, text, size = 16, className = '', lab
   markUsed(id)
   const Icon = c.icon
   return (
-    <button type="button" className={`cmd-btn${active ? ' active' : ''}${c.danger ? ' danger' : ''} ${className}`} title={titleFor(c, label)} aria-label={label ?? c.label} disabled={!isEnabled(c)} data-drop={drop} onClick={() => runCommand(id)}>
+    <button type="button" className={`cmd-btn${active ? ' active' : ''}${c.danger ? ' danger' : ''} ${className}`} title={whyTitle(c, label)} aria-label={label ?? c.label} disabled={!isEnabled(c)} data-drop={drop} onClick={() => runCommand(id)}>
       {Icon ? <Icon size={size} /> : null}{(text || !Icon) && <span>{label ?? c.label}</span>}
     </button>
   )

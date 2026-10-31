@@ -1,6 +1,6 @@
 // U3b (D157, proto01_UI2 03 §3): Make's pure parts — the framings per class and an entity version's Make context (makeContext, U1): a
 // context never seen is seeded with the entity linked (a character or prop as the subject card, a place as the scene).
-import { makeContext, useGenerate, type Tree } from '../../suites/generate/generateStore'
+import { DEFAULT_PANEL, makeContext, useGenerate, type Tree } from '../../suites/generate/generateStore'
 import type { ProfileClass } from '../../suites/story/storyStore'
 
 /** A framing per class (03 §3): the words a picture of the entity needs, not a shot's — the camera and the light are Clay's. */
@@ -67,8 +67,9 @@ export function enterMake(cls: ProfileClass, pid: string, vid: string): void {
   const fresh = makeContext.saved(key) === undefined && makeContext.key !== key
   makeContext.enter(key)
   if (!fresh) return
+  const g = useGenerate.getState().panel                                  // W15: its own panel — Image's model and settings kept (D160), not the last
+  useGenerate.getState().set({ count: DEFAULT_PANEL.count, tree: { ...DEFAULT_PANEL.tree, style: g.tree.style }, json_text: '', text: '', refs: [], ref_framing: null })   // entity's words, references or count
   linkEntity(cls, pid, vid)
-  useGenerate.getState().set({ count: Math.min(useGenerate.getState().panel.count, 4) })
 }
 
 /** The entity as the panel's subject (a place: its scene) — on entering, and again back in Tree from JSON, which keeps no links (D93 B4). */

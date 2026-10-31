@@ -64,7 +64,7 @@ const sel = () => useSketches.getState().items.find((a) => a.id === useSketches.
 async function prototype(cls: ProfileClass): Promise<void> {
   const a = sel()
   if (!a) return
-  const name = await askText({ title: `A ${cls} from this sketch`, text: 'A draft: the sketch becomes its hero; its sheet, references, body and set come next.', initial: nameFrom(a.prompt_text, cls) })
+  const name = await askText({ title: `A ${cls} from this sketch`, text: `A draft: the sketch becomes its hero; its sheet and references come next, then ${cls === 'character' ? 'its A-pose and body' : cls === 'prop' ? 'its 3D model' : 'its set'}.`, initial: nameFrom(a.prompt_text, cls) })
   if (!name?.trim()) return
   const p = await useStory.getState().createProfile(name.trim(), cls, a.id)
   if (!p) return

@@ -1,6 +1,6 @@
 // U3 (D157, proto01_UI2 03 §8): World's commands (rule 3: every action a command with a mouse home; keys are accelerators). They act on the
 // entity and version the header shows (the Story store's selection) and on the creation selected in the bin.
-import { Box, CopyPlus, Hammer, ImagePlus, Lock, Pencil, PersonStanding, Plus, Sparkles, Star, Trash2, UserRoundPlus, Users } from 'lucide-react'
+import { ArrowLeft, Box, CopyPlus, Hammer, ImagePlus, Lock, Pencil, PersonStanding, Plus, Sparkles, Star, Trash2, UserRoundPlus, Users } from 'lucide-react'
 import { http, unwrap } from '../../api/client'
 import { registerCommands } from '../../frame/commands'
 import { navigate } from '../../frame/router'
@@ -20,6 +20,8 @@ const lineup = () => {
   return [...all.filter((p) => p.id === here), ...all.filter((p) => p.id !== here)].slice(0, 12)                  // the one open first
 }
 const cls = () => { const r = w().rail; return r === 'look' || r === 'sketches' ? null : r }
+/** W16: what a new entity of each class still needs (a prop has no body, a character no set). */
+const NEEDS: Record<string, string> = { character: 'its pictures, A-pose and body are made', prop: 'its pictures and 3D model are made', place: 'its set picture and set are made' }
 
 registerCommands([
   // U3c (03 §4): Make or Edit in the left column — Edit opens the selected creation in Image's editor (the World layer stays)
@@ -72,7 +74,7 @@ registerCommands([
   { id: 'world.entity.new', scope: 'world', label: 'New entity…', icon: UserRoundPlus, placement: ['panel', 'rail'], when: () => !!cls() && !!useSession.getState().project?.open,
     hint: 'a new character, prop or place of the rail\'s class',
     run: () => { const c = cls(); if (!c) return
-      void askText({ title: `New ${ONE[c]}`, placeholder: `${ONE[c]} name`, text: 'A draft until its pictures, body and set are made — the header says what it still needs.' }).then(async (name) => {
+      void askText({ title: `New ${ONE[c]}`, placeholder: `${ONE[c]} name`, text: `A draft until ${NEEDS[c]} — the header says what it still needs.` }).then(async (name) => {
         if (!name?.trim()) return
         const p = await sy().createProfile(name.trim(), c)
         if (p) w().pick(p.id)
@@ -90,6 +92,8 @@ registerCommands([
   { id: 'world.creation.candidate', scope: 'world', label: 'Back to the candidates', icon: Plus, placement: ['inspector', 'context'],
     when: () => open() && !!selected() && selected()!.roles.includes('reference'),
     run: () => { const s = selected(); const p = sy().profile(); if (s && p) void sy().addToProfile(p.id, [s.asset.id], 'candidate', sy().versionId ?? undefined) } },
+  { id: 'world.creation.back', scope: 'world', label: 'Back to the entity', icon: ArrowLeft, placement: ['inspector', 'context'], when: () => !!selected(),   // W12: its facts, versions, voice, Delete
+    hint: 'the Inspector shows the entity again (also: a click on the selected picture, or on the grid around the pictures)', run: () => w().select(null) },
   { id: 'world.creation.trash', scope: 'world', label: 'Trash', icon: Trash2, placement: ['inspector', 'context'], danger: true, when: () => !!selected() && !selected()!.roles.includes('hero'),
     run: () => { const s = selected(); if (!s) return
       void unwrap(http.POST('/assets/trash', { body: { ids: [s.asset.id] } })).then(() => { w().select(null); void w().loadBin() },

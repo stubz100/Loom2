@@ -10,9 +10,10 @@ describe('U3b: Make per entity', () => {
     const frame = vi.spyOn(useGenerate.getState(), 'applyFrame').mockImplementation(() => {})
     enterMake('character', 'prf_ines', 'v1')
     expect(frame).toHaveBeenLastCalledWith({ text: null, subjects: [{ profile_id: 'prf_ines', version: 'v1' }], place: null })
-    useGenerate.getState().set({ text: 'kept for Ines' })
+    useGenerate.getState().set({ text: 'kept for Ines', count: 2, model_id: 'model_x' })
     enterMake('place', 'prf_quay', 'v1')
     expect(frame).toHaveBeenLastCalledWith({ text: null, subjects: [], place: 'prf_quay' })
+    expect(useGenerate.getState().panel).toMatchObject({ text: '', count: 4, model_id: 'model_x' })      // W15: its own count and words; Image's model kept (D160)
     expect(frame).toHaveBeenCalledTimes(2)
     enterMake('character', 'prf_ines', 'v1')
     expect(frame).toHaveBeenCalledTimes(2)                                                     // known: restored, not seeded again

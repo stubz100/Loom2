@@ -15,6 +15,7 @@ import { LEVELS, owedTitle, startShots, useShots } from './shotsStore'
 import './shotsCommands'
 import '../world/world.css'
 import './shots.css'
+import { NoProject } from '../NoProject'
 
 // the reused parts load with their level (the Flow's canvas; Clay's three.js)
 const ShotsFlow = lazy(() => import('./ShotsFlow').then((m) => ({ default: m.ShotsFlow })))   // B2a: the canvas or its List view, Play, a node's recipe
@@ -101,6 +102,7 @@ function LevelColumn() {
   const level = useShots((s) => s.level)
   const owed = useShots((s) => s.owed)
   const staged = useStory((st) => !!st.shotVersion()?.stage_id)
+  useStory((st) => { const v = st.shotVersion(); return v ? `${v.state}|${v.clip_id ?? ''}|${!!(v.clip_id && st.clipsById[v.clip_id])}` : '' })   // W49: Mark final follows the clip landing
   const list = useShots((s) => s.flowView === 'list')
   if (level === 'flow') return <div className="w-panel">{list && <Suspense fallback={null}><BoardPanel /></Suspense>}</div>   // B2a: the List view's filters and order
   if (!staged) return <div className="w-panel" />
@@ -119,7 +121,7 @@ export function ShotsLayer() {
   const project = useSession((s) => s.project)
   const level = useShots((s) => s.level)
   useEffect(() => startShots(), [])
-  if (!project?.open) return <div className="w-layer"><nav className="w-rail" /><section className="w-centre wide"><div className="w-empty">Open or create a project</div></section></div>
+  if (!project?.open) return <div className="w-layer"><nav className="w-rail" /><section className="w-centre wide"><NoProject /></section></div>
   return (
     <div className="s-layer" data-testid="shots-layer" data-level={level}>
       <Storyboard />

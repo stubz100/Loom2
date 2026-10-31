@@ -4,11 +4,11 @@ import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import { api, http, unwrap } from '../../api/client'
 import type { Profile } from '../../api/types'
 import { CommandButton } from '../../frame/CommandButton'
-import { markUsed, runCommand } from '../../frame/commands'
+import { command, markUsed, runCommand } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import { Help } from '../../frame/Help'
 import { useSession } from '../../store/session'
-import { latestModelJob, modelSource, modelStale, sy } from './storyStore'
+import { latestModelJob, modelSource, modelStale, NOT_WHOLE, sy } from './storyStore'
 
 const ModelView = lazy(() => import('../stage/ModelView'))
 
@@ -21,14 +21,14 @@ export function PropModel({ p, v }: { p: Profile; v: Profile['versions'][number]
   const source = modelSource(v)
   const status = busy ? `making the model… ${Math.round((job!.progress ?? 0) * 100)} %${job!.progress_text ? ` · ${job!.progress_text}` : ''}`
     : job?.status === 'failed' && !v.model_asset_id ? `the last make failed: ${job.error ?? 'see the job'}`
-    : v.model_asset_id && !v.model_from ? 'imported · Animate places it as it is'
-    : !mc?.model_id ? (v.model_asset_id ? 'Animate places it in the scene' : 'import its model as a GLB — no image → 3D in this build')
+    : v.model_asset_id && !v.model_from ? 'imported · Clay places it as it is'
+    : !mc?.model_id ? (v.model_asset_id ? 'Clay places it in the scene' : 'import its model as a GLB — no image → 3D in this build')
     : !source ? 'give the prop an image first (its animation reference or a hero), or import a GLB'
     : modelStale(v) ? 'made from an older image — remake it from the current reference'
-    : v.model_asset_id ? 'stood upright · Animate places it in the scene' : 'none yet'
+    : v.model_asset_id ? 'stood upright · Clay places it in the scene' : 'none yet'
   return (
     <section className="prop-model">
-      <h3>3D model <Help text={`Every prop has a 3D model (D128): made once from ${v.anim_ref_asset_id ? 'the animation reference' : 'the hero'}, or imported as a GLB — Animate places it in the scene.`} /></h3>
+      <h3>3D model <Help text={`Every prop has a 3D model (D128): made once from ${v.anim_ref_asset_id ? 'the animation reference' : 'the hero'}, or imported as a GLB — Clay places it in the scene.`} /></h3>
       <div className="prop-model-row" onContextMenu={(e) => showMenu(e, [{ cmd: 'story.cast.makeModel' }, { cmd: 'story.cast.importModel' }, { cmd: 'story.cast.clearModel' }])}>
         {v.model_asset_id
           ? <Suspense fallback={<div className="model-view" />}><ModelView key={v.model_asset_id} assetId={v.model_asset_id} /></Suspense>
@@ -61,6 +61,8 @@ export function AnimRef({ p, v, children }: { p: Profile; v: Profile['versions']
       {side === 'front' && id && v.anim_ref_note === 'arms_close' && <button type="button" className="link ref-note" data-note="arms_close"
         title="The body is fitted and the shell made only on an A-pose — the arms clear of the body, the fingers straight and spread (D139, D140): draw the reference again, then fit the body"
         onClick={(e) => { e.stopPropagation(); runCommand('story.cast.makeAnimRef') }}>The arms touch the body — draw it again?</button>}   {/* proto01_UIcast S8 */}
+      {side === 'front' && id && v.anim_ref_note === 'not_whole' && <button type="button" className="link ref-note" data-note="not_whole" title={NOT_WHOLE}
+        onClick={(e) => { e.stopPropagation(); runCommand('story.cast.makeAnimRef') }}>Not the whole figure — make candidates?</button>}   {/* W9 */}
     </div>
   )
   return (
@@ -72,15 +74,23 @@ export function AnimRef({ p, v, children }: { p: Profile; v: Profile['versions']
         {p.cls === 'character' && slot('side', v.anim_ref_side_asset_id, 'side (optional)')}
         {p.cls === 'character' && <AnimTestSlot clipId={v.anim_test_clip_id ?? null} />}
         <div className="verbs">
-          <CommandButton id="story.cast.makeAnimRef" text />
-          {p.cls === 'character' && <CommandButton id="story.cast.makeAnimRefBack" text />}
-          {p.cls === 'character' && <CommandButton id="story.cast.makeAnimRefSide" text />}
+          <CommandButton id="story.cast.makeAnimRef" text label={withRun('story.cast.makeAnimRef', 2)} />
+          {p.cls === 'character' && <CommandButton id="story.cast.makeAnimRefBack" text label={withRun('story.cast.makeAnimRefBack', 2)} />}
+          {p.cls === 'character' && <CommandButton id="story.cast.makeAnimRefSide" text label={withRun('story.cast.makeAnimRefSide', 2)} />}
           {p.cls === 'character' && <CommandButton id="story.cast.testAnimRef" text />}
         </div>
       </div>
       {children}
     </section>
   )
+}
+
+/** W10: a run button says what it queues before it does — the model, how many, the time with the model warm. */
+function withRun(id: string, n: number): string | undefined {
+  const label = command(id)?.label, st = useSession.getState().capabilities?.story
+  if (!label || !st?.model_id) return undefined
+  const s = (st.seconds ?? 0) * n
+  return `${label} · ${st.short ?? st.label ?? st.model_id} · ${n} · ${s ? `≈ ${s < 90 ? `${Math.round(s)} s` : `${Math.round(s / 60)} min`}` : 'time unknown'}`
 }
 
 /** CA0: the version's latest test animation (a turn on the spot) — its first frame, played in Animate. */

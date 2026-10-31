@@ -518,6 +518,7 @@ const cmds: Command[] = [
         text: `${c?.label ?? 'S2V'} · ${o.preset} — ≈ ${Math.round((p?.seconds ?? 0) / 60)} min with the engine. ${c?.caveat ?? ''}. The talking clip lands as a take on the version.` })
         .then((ok) => { if (ok) void sy().lipsync() }) } },
   { id: 'story.shot.finalize', scope: 'story', label: 'Mark final', icon: Lock, hint: 'the clip becomes the one the Flow and the Episode bind; a retake is a new version', placement: ['strip', 'inspector', 'context'], when: () => { const v = shotVersion(); return !!v && v.state === 'open' && !sy().finalizeWhy(v) },
+    why: () => { const v = shotVersion(); return !v ? 'no shot open' : v.state === 'final' ? 'already final' : sy().finalizeWhy(v) },   // W49: locked, and says why
     run: () => { const s = shot(); const v = shotVersion(); if (!s || !v) return
       void askConfirm({ title: `Mark ${s.name} ${v.id} final?`, okLabel: 'Mark final', text: 'The clip becomes the one the Flow and the Episode bind; the frame and clip are fixed. A retake is a new version.' }).then((ok) => { if (ok) void sy().finalizeShot() }) } },
   // D90 (01 §11.2): a take becomes the version's frame or clip (the take card's ✓ use and its right-click)
@@ -569,7 +570,7 @@ const cmds: Command[] = [
   { id: 'anim.for.back', scope: 'animate', label: 'Back to the shot', icon: ArrowLeft, placement: ['panel'], hint: 'and stop making for it (D125)', when: () => !!useMakeFor.getState().animate, run: () => goBack('animate') },
   { id: 'anim.for.clear', scope: 'animate', label: 'Stop making for the shot (clips stay in the Bin only)', icon: X, placement: ['panel'], when: () => !!useMakeFor.getState().animate,
     run: () => useMakeFor.getState().set('animate', null) },
-  { id: 'story.shot.openAnimate', scope: 'story', label: 'Open in Animate', icon: Film, placement: ['strip', 'inspector', 'context'], when: () => !!shotVersion()?.clip_id,
+  { id: 'story.shot.openAnimate', scope: 'story', label: 'Open in Performance', icon: Film, placement: ['strip', 'inspector', 'context'], when: () => !!shotVersion()?.clip_id,
     run: () => { const v = shotVersion(); if (!v?.clip_id) return; const cid = v.clip_id
       navigate({ suite: 'animate' })
       void import('../animate/animateStore').then((m) => { const an = m.useAnimate.getState(); void an.loadClips().then(() => an.select(cid)) }) } },

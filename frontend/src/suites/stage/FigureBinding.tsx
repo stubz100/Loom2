@@ -81,7 +81,7 @@ export function LibraryProps({ centre }: { centre: () => number[] }) {
   const items: PresetIcon[] = props.map((p) => ({ id: p.id, label: p.name, icon: fieldGlyph('prop'), img: propThumb(p),
     hint: modelOf(p) ? "its 3D model at the viewport's centre, bound to the prop (its version's model follows)" : 'no 3D model yet — opens in World to make one', badge: modelOf(p) ? undefined : '!' }))
   const place = (id: string) => { const p = props.find((x) => x.id === id); if (!p) return; if (modelOf(p)) st().placeProp(p.id, centre()); else openProp(p.id) }
-  return <PresetPanel label="Cast props" items={items} showText onPick={place} empty="None yet — make one in World: its images first, then its 3D model." title="A Cast prop's 3D model at the viewport's centre, bound to the prop"
+  return <PresetPanel label="World's props" items={items} showText onPick={place} empty="None yet — make one in World: its images first, then its 3D model." title="A World prop's 3D model at the viewport's centre, bound to the prop"
     onContext={(id, e) => { e.preventDefault(); const p = props.find((x) => x.id === id); if (p) showMenu(e, [{ label: 'Place in the scene', run: () => place(id), disabled: !modelOf(p) }, { label: 'Open in World', run: () => openProp(id) }]) }} />
 }
 

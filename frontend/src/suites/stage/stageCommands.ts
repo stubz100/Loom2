@@ -133,7 +133,7 @@ registerCommands([
   { id: 'stage.figure.skeleton', scope: 'stage', label: 'Fine-tune the skeleton in Cast…', icon: PersonStanding, placement: ['inspector', 'context'], when: () => !!sel()?.profile_id,   // CS2
     run: () => { const o = sel(); if (o?.profile_id) void Promise.all([import('../../store/origin'), import('../story/storyStore')]).then(([m, s]) => { m.goToStory({ tab: 'cast', id: o.profile_id!, ...(o.version ? { version: o.version } : {}) }); s.useStory.getState().setSkeleton(true) }) } },
   // D142 / CW3–CW5: the way back from a bench or the line-up; the line-up's verbs; a free copy of a bound thing
-  { id: 'stage.bench.back', scope: 'stage', label: 'Back to Cast', icon: X, placement: ['panel'], hint: 'where the bench or the line-up was opened from',
+  { id: 'stage.bench.back', scope: 'stage', label: 'Back to World', icon: X, placement: ['panel'], hint: 'where the bench or the line-up was opened from',
     when: () => (st().current?.purpose ?? 'stage') !== 'stage', run: () => st().backFromBench() },
   { id: 'stage.lineup.send', scope: 'stage', label: 'Send to a new stage…', icon: Plus, placement: ['panel'], hint: "the line-up's figures and props, where they stand, in a stage of their own",
     when: () => st().current?.purpose === 'lineup', run: () => void st().sendLineup(null) },

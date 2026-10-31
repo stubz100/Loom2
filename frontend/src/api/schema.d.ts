@@ -13761,6 +13761,12 @@ export interface components {
              */
             after?: string | null;
             /**
+             * Connect
+             * @description W30: connected after `after` (between it and the node it led to); false: it stands alone
+             * @default true
+             */
+            connect?: boolean;
+            /**
              * Place Id
              * @description a new scene from this World place's set; else the shot before's place
              */
@@ -13777,6 +13783,13 @@ export interface components {
              * @default
              */
             title?: string;
+            /**
+             * X
+             * @description W30: where on the Flow it lands (the canvas's right-click); else beside the shot before
+             */
+            x?: number | null;
+            /** Y */
+            y?: number | null;
         };
         /** ShotPrompt */
         ShotPrompt: {

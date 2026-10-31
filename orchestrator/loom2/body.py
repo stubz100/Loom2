@@ -199,16 +199,35 @@ def reference_ratios(person: dict) -> dict[str, float]:
 ARMS_CLOSE = 0.10            # S8: a wrist nearer a hip than this share of the height (across the picture): the arms touch the body
 
 
+T_POSE_DEG = 70.0           # W11: both arms this far from hanging down (shoulder → wrist; an A-pose ≈ 30°, Klein's often 50–60°): a T-pose
+
+
 def stance_note(person: dict) -> str | None:
     """S8: what the reference's stance gets wrong for a fit and a test — "arms_close" when a wrist sits within ARMS_CLOSE of the height of
-    its hip, across the picture (A1's Mara 0.088, Ines 0.080: arms down, hands on the coat; an A-pose's are ≈ 0.15–0.2 out). None = fine."""
+    its hip, across the picture (A1's Mara 0.088, Ines 0.080: arms down, hands on the coat; an A-pose's are ≈ 0.15–0.2 out). W11: "t_pose"
+    when both arms are held level (each over T_POSE_DEG from hanging down) — fitted, but said. None = fine."""
+    import math
+
     import numpy as np
     b = np.array(person.get("pose_keypoints_2d") or [], float).reshape(-1, 3)
     if len(b) < 14:
         return None
     h = float(np.linalg.norm(b[0, :2] - (b[10, :2] + b[13, :2]) / 2))
     gaps = [abs(b[w, 0] - b[hp, 0]) / h for w, hp in ((4, 8), (7, 11)) if b[w, 2] >= 0.3 and b[hp, 2] >= 0.3 and h > 1]
-    return "arms_close" if gaps and min(gaps) < ARMS_CLOSE else None
+    if gaps and min(gaps) < ARMS_CLOSE:
+        return "arms_close"
+    angles = [math.degrees(math.atan2(abs(b[w, 0] - b[s, 0]), b[w, 1] - b[s, 1])) for s, w in ((2, 4), (5, 7)) if b[s, 2] >= 0.3 and b[w, 2] >= 0.3]
+    return "t_pose" if len(angles) == 2 and min(angles) > T_POSE_DEG else None
+
+
+SEVERAL_SHARE = 0.5          # W11: a second figure found with at least this share of the first's confidence: the picture shows several
+
+
+def figures_in(people: list[dict]) -> int:
+    """W11: how many comparable figures a reference shows (Klein drew three Ines side by side): the first, and each found with at least
+    SEVERAL_SHARE of its keypoints' summed confidence."""
+    conf = [sum((p.get("pose_keypoints_2d") or [])[2::3]) for p in people]
+    return sum(1 for c in conf if conf and c >= SEVERAL_SHARE * max(conf))
 
 
 def person_of(points: dict[str, Any]) -> dict[str, Any]:

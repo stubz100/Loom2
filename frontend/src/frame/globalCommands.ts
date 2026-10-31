@@ -1,8 +1,8 @@
 // Global commands (07 §4): the dock, settings, help, the command palette. The layer tabs (Ctrl+1–4) are registered here so the help
 // overlay lists them.
-import { Boxes, Clapperboard, FilePlus, Images, Menu, FolderOpen, FolderPlus, Info, Keyboard, LayoutGrid, PanelBottom, RefreshCw, Settings, Shapes } from 'lucide-react'
+import { Boxes, Clapperboard, FilePlus, Images, Menu, FolderOpen, FolderPlus, Info, Keyboard, LayoutGrid, NotebookPen, PanelBottom, RefreshCw, Settings, Shapes } from 'lucide-react'
 const CircleHelp = Info
-import { useSession } from '../store/session'
+import { askText, useSession } from '../store/session'
 import { registerCommands } from './commands'
 import { openWith } from './openWith'
 import { usePalette } from './CommandPalette'
@@ -32,6 +32,19 @@ registerCommands([
   { id: 'global.suite.models', scope: 'global', label: 'Models & engine…', icon: Boxes, placement: ['topbar'], run: () => s().openModels() },
   // D71 (P15): quick actions — the empty states' cards, the app menu and the palette
   { id: 'global.project.new', scope: 'global', label: 'New project…', icon: FolderPlus, placement: ['topbar', 'toolbar'], run: () => s().setProjectDialog('new') },
+  { id: 'global.project.notes', scope: 'global', label: 'Notes…', icon: NotebookPen, placement: ['topbar'], when: () => !!s().project?.open,   // W2 (D157 Q1): the synopsis
+    hint: "the project's synopsis — the story in a few paragraphs, for you (no picture reads it)",
+    run: () => void import('../suites/story/storyStore').then(async ({ useStory }) => {
+      const st = useStory.getState()
+      if (!st.world) await st.load()
+      const w = useStory.getState().world
+      if (!w) return
+      const text = await askText({ title: 'Notes · the synopsis', initial: w.synopsis, multiline: true, allowEmpty: true, okLabel: 'Keep',
+        placeholder: 'The story in a few paragraphs — who, what they want, what stands in the way, how it ends' })
+      if (text === null || text === w.synopsis) return
+      useStory.getState().edit({ synopsis: text })
+      await useStory.getState().flush()
+    }) },
   { id: 'global.project.open', scope: 'global', label: 'Open a project…', icon: FolderOpen, placement: ['topbar', 'toolbar'], run: () => s().setProjectDialog('open') },
   { id: 'global.start.newDocument', scope: 'global', label: 'New document', icon: FilePlus, placement: ['toolbar', 'topbar'], when: () => !!s().project?.open,   // D95 (UX0 #3): also in ☰
     run: () => void openWith(null, { suite: 'edit' }).then(() => import('../suites/edit/editorStore')).then((m) => m.useEditor.getState().newDocument(1920, 1080)) },

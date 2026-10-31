@@ -15462,3 +15462,34 @@ None of these changes a direction.
 - Vitest 629 + 3 skipped: new is W52 (the board's take).
 - Typecheck, build and lint clean (61 warnings, as before); settings audit 322 / 0; agent docs and model literals clean.
 - e2e 84/84 alone: the Episode foot's words changed in one scenario.
+
+## 2026-11-01 00:38 — The walkthrough-2 register, wave 5: W11, W2, W23
+
+The author: "Continue" (to "W11 and W2 / W23 next"). W2 and W23 build what D157 decided (Q1: the synopsis as the Project menu's *Notes*;
+04 §7: the variables a section of the Flow's left column). W11 adds two readings to the body fit D140 already runs on a picked A-pose. No
+new GPU job and no change of direction, so no D-number.
+
+**W11 (Klein's A-poses: three Ines side by side; T-pose arms; nothing flagged them):**
+
+- **More than one figure:** a picked reference showing more than one comparable figure (each found with at least half the first's
+  keypoint confidence; a faint one does not count) fails the body fit by name ("Ines's body fit: the animation reference shows more than
+  one figure … (3 found)"). The version keeps the note (`anim_ref_note: "several"`): Build's slot offers *More than one figure — make
+  candidates?*, the readiness line says "○ body fitted — the A-pose shows more than one figure", and the fit is refused until another
+  reference is picked (`fit_blocked`, its twin).
+- **A T-pose:** arms held level (both over 70° from hanging down, shoulder to wrist) are fitted but noted (`"t_pose"`). The readiness
+  line shows "⚠ A-pose is a T-pose" (a click opens Build), and Build's slot offers *Arms level (a T-pose) — make candidates?*.
+- **On the projects' picked A-poses** (read-only): Bram 57°, Mira 52°, Hanne 55°, Ines 61°, Tomas 64° — none flagged. A T-pose is
+  about 90°.
+
+**W2:** *Notes…* in the Project menu (`global.project.notes`) opens the synopsis (`world.json`'s `synopsis`, kept since D157) in the
+ask dialog, which now takes a multi-line text (Enter a new line, Ctrl+Enter keeps it).
+
+**W23:** the Flow's left column has the project's variables, each editable (name, bool or enum, values, default, ✕), with *Add
+variable* (`FlowVariables`, the old World editor's rows). The Inspector's "none" now points there.
+
+**Tests:**
+
+- Offline 795: new are the T-pose and the figure count, and the fit refused on three figures.
+- Vitest 632 + 3 skipped: new are the variables section, the multi-line ask, and the readiness items.
+- Typecheck, build and lint clean (61 warnings, as before); settings audit 322 / 0; agent docs and model literals clean.
+- e2e 84/84 alone.

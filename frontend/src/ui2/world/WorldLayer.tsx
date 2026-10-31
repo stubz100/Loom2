@@ -46,9 +46,11 @@ const RAIL_ICON: Record<WorldRail, typeof User> = { character: User, prop: Box, 
 /** 03 §2: an item is its verb — the Cast command that makes it (they act on the entity the header shows: the Story store's selection). */
 // D161: an item opens Build, where it is made (a click here queues nothing)
 const READY_VERB: Record<string, string> = { ...Object.fromEntries(['a_pose_front', 'a_pose_back', 'a_pose_side', 'body', 'model', 'set_picture', 'set', 'faces'].map((k) => [k, 'world.mode.build'])),
-  carried: 'world.carried.prop' }                                                      // M4
+  carried: 'world.carried.prop', tpose: 'world.mode.build' }                           // M4; W11
 /** M3, M4: what a warning chip says on hover. */
-const warnTitle = (x: ReadyItem) => (x.id === 'carried'
+const warnTitle = (x: ReadyItem) => (x.id === 'tpose'
+  ? 'The A-pose holds its arms level (a T-pose), not about 30° out: the fit took it, but the shell and Wan Animate follow the arms as drawn — a click opens Build to make candidates'
+  : x.id === 'carried'
   ? `${x.detail}: the A-pose leaves it out (its hands open, no props), so a performance has it only from the words and it comes and goes — a click makes it a Cast prop, which Clay's Hold ▸ puts in the hand`
   : `${x.detail} — made before the sheet said so: make it again, or set the colour back`)
 const BADGE: Record<string, string> = { hero: '★', reference: 'ref', a_pose_front: 'A·F', a_pose_back: 'A·B', a_pose_side: 'A·S', set_picture: 'set', model: '3D' }

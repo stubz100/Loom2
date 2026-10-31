@@ -78,7 +78,7 @@ export interface SessionState {
 /** D90 (02 §7): which tab of Models & engine opens, and whether the roster shows only the missing weights (every Fetch link does). */
 export interface ModelsSheetState { tab?: 'roster' | 'engine'; missing?: boolean }
 
-export interface AskOptions { title: string; text?: string; initial?: string; placeholder?: string; okLabel?: string; danger?: boolean; allowEmpty?: boolean; check?: string; checkOn?: boolean }   // allowEmpty: an empty answer is one (D123's lens: MoGe reads it); D125: a confirm's one checkbox
+export interface AskOptions { title: string; text?: string; initial?: string; placeholder?: string; okLabel?: string; danger?: boolean; allowEmpty?: boolean; check?: string; checkOn?: boolean; multiline?: boolean }   // W2: multiline — a long text (the synopsis), Ctrl+Enter confirms   // allowEmpty: an empty answer is one (D123's lens: MoGe reads it); D125: a confirm's one checkbox
 export interface AskRequest extends AskOptions { kind: 'confirm' | 'prompt'; resolve: (v: string | boolean | null) => void }
 
 let socket: EventsSocket | null = null

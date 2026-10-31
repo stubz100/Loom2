@@ -264,3 +264,44 @@ async def test_a_cut_figure_says_so_on_the_version(tmp_path: Path, object_info: 
         assert v.anim_ref_note == "not_whole" and v.body_fit_from is None and fit_blocked(v) == NOT_WHOLE
     finally:
         await rig.close()
+
+
+def test_a_t_pose_and_several_figures_are_read():
+    """W11: Klein's A-poses held the arms level (a T-pose) or drew three Ines side by side, and nothing said so. A T-pose is fitted but
+    noted; a second comparable figure is counted (a faint one is not)."""
+    from loom2.body import figures_in, stance_note
+    a_pose = fake_person()
+    assert stance_note(a_pose) is None
+    t = fake_person()
+    b = t["pose_keypoints_2d"]
+    for s, e, w in ((2, 3, 4), (5, 6, 7)):                                                          # the arms straight out, level
+        sx, sy = b[3 * s], b[3 * s + 1]
+        d = -1 if s == 2 else 1
+        b[3 * e], b[3 * e + 1], b[3 * w], b[3 * w + 1] = sx + d * 60, sy + 2, sx + d * 130, sy + 4
+    assert stance_note(t) == "t_pose"
+    faint = fake_person(cx=700)
+    faint["pose_keypoints_2d"] = [v * (0.2 if i % 3 == 2 else 1) for i, v in enumerate(faint["pose_keypoints_2d"])]
+    assert figures_in([a_pose]) == 1 and figures_in([a_pose, fake_person(cx=200), fake_person(cx=640)]) == 3 and figures_in([a_pose, faint]) == 1
+
+
+@pytest.mark.asyncio
+async def test_several_figures_say_so_on_the_version(tmp_path: Path, object_info: dict):
+    """W11: a reference with three comparable figures fails the fit by name and keeps the note (Build's slot, the readiness line)."""
+    from loom2.story import SEVERAL, fit_blocked
+    rig = Rig(tmp_path, object_info)
+    try:
+        groups = rig.queue.groups = GroupStore(rig.ws, rig.catalogue)
+        st = StoryStore(rig.ws)
+        ref = rig.catalogue.ingest_file(_png(tmp_path / "ref.png")).id
+        p = st.create_profile("Ines", "character", groups, appearance="Ines")
+        st.set_anim_ref(p.id, "v1", "front", ref)
+        rig.fake.people = [fake_person(cx=200), fake_person(cx=416), fake_person(cx=640)]
+        rig.queue.load()
+        await rig.queue.start()
+        job = rig.queue.submit({"kind": "keypoints", "asset_id": ref}, origin=body_fit_origin(p.id, "v1"))[0]
+        done = await rig.wait(job.id)
+        assert done.status == "failed" and "more than one figure" in done.error and "3 found" in done.error
+        v = st.profile(p.id).version("v1")
+        assert v.anim_ref_note == "several" and v.body_fit_from is None and fit_blocked(v) == SEVERAL
+    finally:
+        await rig.close()

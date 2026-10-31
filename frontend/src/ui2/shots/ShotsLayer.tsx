@@ -20,6 +20,7 @@ import { NoProject } from '../NoProject'
 // the reused parts load with their level (the Flow's canvas; Clay's three.js)
 const ShotsFlow = lazy(() => import('./ShotsFlow').then((m) => ({ default: m.ShotsFlow })))   // B2a: the canvas or its List view, Play, a node's recipe
 const BoardPanel = lazy(() => import('../../suites/story/ShotsBoard').then((m) => ({ default: m.BoardPanel })))
+const FlowVariables = lazy(() => import('../../suites/story/StoryParts').then((m) => ({ default: m.FlowVariables })))   // W23
 const AnimateGraph = lazy(() => import('../../suites/story/recipe/AnimateGraph'))   // B2a (RC1b): the shot's recipe over its level
 const StoryInspector = lazy(() => import('../../suites/story/StoryParts').then((m) => ({ default: m.Inspector })))
 const ClayColumn = lazy(() => import('../../suites/stage/StageParts').then((m) => ({ default: () => <m.ClayColumn tab="scene" /> })))
@@ -104,7 +105,7 @@ function LevelColumn() {
   const staged = useStory((st) => !!st.shotVersion()?.stage_id)
   useStory((st) => { const v = st.shotVersion(); return v ? `${v.state}|${v.clip_id ?? ''}|${!!(v.clip_id && st.clipsById[v.clip_id])}` : '' })   // W49: Mark final follows the clip landing
   const list = useShots((s) => s.flowView === 'list')
-  if (level === 'flow') return <div className="w-panel">{list && <Suspense fallback={null}><BoardPanel /></Suspense>}</div>   // B2a: the List view's filters and order
+  if (level === 'flow') return <div className="w-panel">{list && <Suspense fallback={null}><BoardPanel /></Suspense>}<Suspense fallback={null}><FlowVariables /></Suspense></div>   // B2a: the List view's filters and order; W23: the variables
   if (!staged) return <div className="w-panel" />
   const [Col, Foot, next] = level === 'clay' ? [ClayColumn, ClayFoot, 'shots.toPerformance'] : level === 'performance' ? [PerfColumn, PerfFoot, 'shots.toFinal'] : [FinalColumn, FinalFoot, 'story.shot.finalize']
   return <>

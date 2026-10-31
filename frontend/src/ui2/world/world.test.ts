@@ -116,4 +116,10 @@ describe('the market walk small items (M3, M4)', () => {
     const r = readiness({ cls: 'character', voice_id: null }, v({ outfit: 'a wicker shopping basket on her arm' }), 0)
     expect(r.items.find((x) => x.id === 'carried')).toMatchObject({ label: 'carried: wicker shopping basket', state: 'warn' })
   })
+  it('W11: a T-pose is fitted but said; more than one figure leaves the body owed and says why', () => {
+    const tp = readiness({ cls: 'character', voice_id: null }, v({ anim_ref_asset_id: 'a', body_fit_from: 'a', anim_ref_note: 't_pose' } as never), 1)
+    expect(tp.items.find((x) => x.id === 'tpose')).toMatchObject({ state: 'warn' })
+    const sev = readiness({ cls: 'character', voice_id: null }, v({ anim_ref_asset_id: 'a', anim_ref_note: 'several' } as never), 1)
+    expect(sev.items.find((x) => x.id === 'body')).toMatchObject({ state: 'owed', detail: '— the A-pose shows more than one figure' })
+  })
 })

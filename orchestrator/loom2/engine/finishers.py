@@ -900,14 +900,18 @@ class KeypointsFinisher:
 def _body_fit_result(q: JobQueue, job: JobRecord, recipe: Keypoints, people: list[dict]) -> None:
     """CA1b: the version's body fitted to the reference's proportions (the height, build, head, feet and attachments stay). A reference that
     shows no whole figure fails the job, so the author sees why."""
-    from ..body import body_points, fit_body, reference_ratios, seed_body, stance_note
-    from ..story import NOT_WHOLE, StoryStore
+    from ..body import body_points, figures_in, fit_body, reference_ratios, seed_body, stance_note
+    from ..story import NOT_WHOLE, SEVERAL, StoryStore
     store = StoryStore(q.ws)
     pid, vid = str(job.origin.ref or ""), str((job.origin.payload or {}).get("version") or "")
     cur = store.profile(pid)
     if cur is None:
         raise ValueError(f"the profile {pid} is gone")
     v = cur.version(vid)
+    if figures_in(people) > 1:                                                 # W11: three Ines side by side — said on the version, not fitted
+        p = store.set_stance_note(pid, v.id, "several")
+        q.hub.broadcast("story.changed", {"kind": "profile", "id": p.id, "revision": p.revision})
+        raise ValueError(f"{cur.name}'s body fit: {SEVERAL} ({figures_in(people)} found)")
     try:
         if not people:
             raise ValueError("no figure found")

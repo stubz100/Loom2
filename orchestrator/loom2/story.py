@@ -858,6 +858,8 @@ ARMS_DOWN = ("the animation reference holds its arms against the body: the body 
 
 NOT_WHOLE = ("the animation reference does not show the whole figure, head to feet (the fit needs the nose, the neck, the hips and the "
              "ankles): pick or make one that does — Build's Make A-pose candidates ▶ frames the whole figure")
+SEVERAL = ("the animation reference shows more than one figure (W11): Wan Animate would be given them all — pick or make one with the "
+           "character alone")
 
 
 def fit_blocked(v: ProfileVersion) -> str | None:
@@ -865,7 +867,7 @@ def fit_blocked(v: ProfileVersion) -> str | None:
     arms-down one is known once a fit has read it (the note). W9: so is one that is cut (no whole figure: "not_whole")."""
     if not v.anim_ref_asset_id:
         return "make the animation reference first: the body is fitted to it"
-    return ARMS_DOWN if v.anim_ref_note == "arms_close" else NOT_WHOLE if v.anim_ref_note == "not_whole" else None
+    return {"arms_close": ARMS_DOWN, "not_whole": NOT_WHOLE, "several": SEVERAL}.get(v.anim_ref_note or "")
 
 
 def shell_from_arms_down(v: ProfileVersion) -> bool:

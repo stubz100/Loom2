@@ -1288,12 +1288,14 @@ function inWorldOn(pid: string): boolean {
 
 /** W9 (story.py NOT_WHOLE): the fit found no whole figure in the reference. */
 export const NOT_WHOLE = "the animation reference does not show the whole figure, head to feet (the fit needs the nose, the neck, the hips and the ankles): pick or make one that does — Build's Make A-pose candidates ▶ frames the whole figure"
+/** W11 (story.py SEVERAL): the fit found more than one figure in the reference. */
+export const SEVERAL = 'the animation reference shows more than one figure (W11): Wan Animate would be given them all — pick or make one with the character alone'
 /** D140 (story.py fit_blocked): why the body cannot be fitted to the version's reference now — only on an A-pose; an arms-down picture is
  *  known once a fit has read it. Null: it can. */
 export function fitBlocked(v: Pick<ShellVersion, 'anim_ref_asset_id' | 'anim_ref_note'> | undefined | null): string | null {
   if (!v?.anim_ref_asset_id) return 'make the animation reference first: the body is fitted to it'
   return v.anim_ref_note === 'arms_close' ? 'the animation reference holds its arms against the body: the body is fitted only on an A-pose, with the fingers straight and spread — draw the reference again, then fit'
-    : v.anim_ref_note === 'not_whole' ? NOT_WHOLE : null                                     // W9: a cut figure
+    : v.anim_ref_note === 'not_whole' ? NOT_WHOLE : v.anim_ref_note === 'several' ? SEVERAL : null   // W9: a cut figure; W11: several
 }
 /** D139: the version's shell was made from the reference it has now, and that reference holds its arms against the body (fused arms). */
 export const shellFromArmsDown = (v: ShellVersion | undefined | null): boolean =>

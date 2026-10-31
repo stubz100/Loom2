@@ -51,6 +51,14 @@
 .style-tiles-empty { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--fg3); }
 .world-editor .beat-row { grid-template-columns: 28px 200px 1fr auto; }
 .world-editor .var-row { grid-template-columns: 180px 90px 1fr 110px auto; }
+/* W23: the variables in the Flow's left column — the same rows, two lines in the narrow column */
+.flow-vars { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.flow-vars h4 { margin: 0; }
+.flow-vars .rows { display: flex; flex-direction: column; gap: 4px; }
+.flow-vars .var-row { display: grid; grid-template-columns: 1fr 70px auto; gap: 4px; align-items: center; padding: 4px 6px; border: 1px solid var(--line2); border-radius: var(--radius); background: var(--bg1); }
+.flow-vars .var-row input[type=text], .flow-vars .var-row select { width: 100%; min-width: 0; box-sizing: border-box; }
+.flow-vars .var-row .k { color: var(--fg3); font-size: 11px; }
+.flow-vars .var-row.active { border-color: var(--accent); }
 .world-editor .row-item .k { color: var(--fg3); font-size: 11px; text-align: right; }
 .world-editor .row-item .tools { display: flex; gap: 2px; }
 .world-editor .row-item .quiet { padding: 0 4px; min-height: 20px; }

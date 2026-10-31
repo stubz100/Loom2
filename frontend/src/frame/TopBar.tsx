@@ -44,6 +44,7 @@ export function TopBar({ tabs }: { tabs: ReactNode }) {
         <div className="menu project-menu" style={{ left: 44 }}>
           <button onClick={() => { setMenu(null); s.setProjectDialog('new') }}>New project…</button>
           <button onClick={() => { setMenu(null); s.setProjectDialog('open') }}>Open project…</button>
+          {s.project?.open && <button onClick={() => { setMenu(null); runCommand('global.project.notes') }} title="The project's synopsis (D157 Q1)">Notes…</button>}{/* W2 */}
           {s.project?.open && <button onClick={() => { setMenu(null); void s.closeProject() }}>Close {s.project.name}</button>}
           {s.recents.length > 0 && <div className="sep" />}
           {s.recents.length > 0 && <div className="label">Recent</div>}

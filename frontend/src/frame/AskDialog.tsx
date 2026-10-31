@@ -14,16 +14,17 @@ export function AskDialog() {
   useEffect(() => { setValue(ask?.initial ?? ''); setChecked(!!ask?.checkOn); if (ask?.kind === 'confirm') okRef.current?.focus() }, [ask])
   if (!ask) return null
   const canOk = ask.kind === 'confirm' || !!ask.allowEmpty || value.trim().length > 0
-  const ok = () => { if (canOk) resolve(ask.kind === 'prompt' ? value.trim() : ask.check && checked ? 'checked' : true) }
+  const ok = () => { if (canOk) resolve(ask.kind === 'prompt' ? (ask.multiline ? value.replace(/\s+$/, '') : value.trim()) : ask.check && checked ? 'checked' : true) }
   const cancel = () => resolve(null)
   return (
     <div className="modal-backdrop" onClick={cancel}>
       <div className="modal ask" role="dialog" aria-modal="true" aria-label={ask.title} onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); cancel() } else if (e.key === 'Enter') { e.stopPropagation(); ok() } }}>
+        onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); cancel() } else if (e.key === 'Enter' && (!ask.multiline || e.ctrlKey || e.metaKey)) { e.stopPropagation(); e.preventDefault(); ok() } }}>
         <div className="head">{ask.title}</div>
         <div className="body">
           {ask.text && <p className="ask-text">{ask.text}</p>}
-          {ask.kind === 'prompt' && <input type="text" autoFocus value={value} placeholder={ask.placeholder} onChange={(e) => setValue(e.target.value)} onFocus={(e) => e.target.select()} />}
+          {ask.kind === 'prompt' && !ask.multiline && <input type="text" autoFocus value={value} placeholder={ask.placeholder} onChange={(e) => setValue(e.target.value)} onFocus={(e) => e.target.select()} />}
+          {ask.kind === 'prompt' && ask.multiline && <textarea autoFocus rows={10} value={value} placeholder={ask.placeholder} aria-label={ask.title} onChange={(e) => setValue(e.target.value)} />}{/* W2: Enter is a new line, Ctrl+Enter confirms */}
           {ask.kind === 'confirm' && ask.check && <label className="ask-check"><input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} /> {ask.check}</label>}
         </div>
         <div className="foot">

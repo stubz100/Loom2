@@ -196,7 +196,7 @@ function FlowTab() {
       <h4>Variables<span className="n"> · {world?.variables.length ?? 0}</span></h4>
       <div className="vars">
         {(world?.variables ?? []).map((v) => <div key={v.name} className="kv"><span>{v.name}</span><span>{play ? String(play.vars[v.name]) : `${v.type} · ${String(v.default)}`}</span></div>)}
-        {!world?.variables.length && <span className="hint">none <Help text={"Declare them in World."} /></span>}
+        {!world?.variables.length && <span className="hint">none <Help text={"Declare them in the Flow's left column (Shots › Flow › Variables)."} /></span>}
       </div>
     </div>
   )
@@ -435,6 +435,25 @@ function VarRow({ v, active }: { v: StoryVariable; active: boolean }) {
         : <select value={v.default ? 'true' : 'false'} aria-label="default value" onChange={(e) => sy().setVariable(v.name, { default: e.target.value === 'true' })}><option value="false">false</option><option value="true">true</option></select>}
       <span className="tools"><button className="quiet" title="Remove this variable" aria-label={`remove variable ${v.name}`} onClick={(e) => { e.stopPropagation(); sy().removeVariable(v.name) }}>✕</button></span>
     </div>
+  )
+}
+
+/** W23 (D157, proto01_UI2 04 §7): the project's variables, a section of the Flow's left column — the Choices, Conditions and Actions read and
+ *  set them (they were World's, and the new shell had no place for them). */
+export function FlowVariables() {
+  const world = useStory((s) => s.world)
+  const selected = useStory((s) => s.selected)
+  useEffect(() => { if (!useStory.getState().world) void sy().load() }, [])
+  if (!world) return null
+  return (
+    <section className="flow-vars" data-testid="flow-variables">
+      <h4>Variables <Help text={"Bool or enum flags: the Flow's Conditions read them, its Actions set them, Play shows their values."} /></h4>
+      <div className="rows">
+        {world.variables.map((v) => <VarRow key={v.name} v={v} active={selected?.kind === 'variable' && selected.id === v.name} />)}
+        {!world.variables.length && <span className="hint">none yet</span>}
+      </div>
+      <div className="adder"><CommandButton id="story.world.addVariable" text /></div>
+    </section>
   )
 }
 

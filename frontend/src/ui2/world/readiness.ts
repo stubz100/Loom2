@@ -51,7 +51,9 @@ export function readiness(p: Pick<Profile, 'cls' | 'voice_id'>, v: ProfileVersio
       item('a_pose_front', 'A-pose front', !!v.anim_ref_asset_id),
       item('a_pose_back', 'A-pose back', !!v.anim_ref_back_asset_id, undefined, true),
       item('a_pose_side', 'A-pose side', !!v.anim_ref_side_asset_id, undefined, true),   // D175: a character seen from the side
-      item('body', 'body fitted', !!v.body_fit_from, v.body_fit_from && v.body ? bodyText(v.body) : v.anim_ref_note === 'not_whole' ? '— the A-pose is cut' : undefined),   // D168: what the body is; W9: why not
+      item('body', 'body fitted', !!v.body_fit_from, v.body_fit_from && v.body ? bodyText(v.body) : v.anim_ref_note === 'not_whole' ? '— the A-pose is cut'
+        : v.anim_ref_note === 'several' ? '— the A-pose shows more than one figure' : undefined),   // D168: what the body is; W9, W11: why not
+      ...(v.anim_ref_note === 't_pose' ? [{ id: 'tpose', label: 'A-pose is a T-pose', state: 'warn' as const, detail: 'the arms are held level, not about 30° out' }] : []),   // W11
       item('voice', 'voice', !!p.voice_id, undefined, true),
       ...DRIFT_ROLES.flatMap(([role, label]) => { const d = sheetDrift(v, prompts[role])                // M3: made before the sheet's colours took — said, not counted
         return d.length ? [{ id: `drift_${role}`, label: `${label} ≠ sheet`, state: 'warn' as const, detail: d.join('; ') }] : [] }),

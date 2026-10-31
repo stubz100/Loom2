@@ -8,7 +8,7 @@ import { command, markUsed, runCommand } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import { Help } from '../../frame/Help'
 import { useSession } from '../../store/session'
-import { latestModelJob, modelSource, modelStale, NOT_WHOLE, sy } from './storyStore'
+import { latestModelJob, modelSource, modelStale, NOT_WHOLE, SEVERAL, sy } from './storyStore'
 
 const ModelView = lazy(() => import('../stage/ModelView'))
 
@@ -63,6 +63,11 @@ export function AnimRef({ p, v, children }: { p: Profile; v: Profile['versions']
         onClick={(e) => { e.stopPropagation(); runCommand('story.cast.makeAnimRef') }}>The arms touch the body — draw it again?</button>}   {/* proto01_UIcast S8 */}
       {side === 'front' && id && v.anim_ref_note === 'not_whole' && <button type="button" className="link ref-note" data-note="not_whole" title={NOT_WHOLE}
         onClick={(e) => { e.stopPropagation(); runCommand('story.cast.makeAnimRef') }}>Not the whole figure — make candidates?</button>}   {/* W9 */}
+      {side === 'front' && id && v.anim_ref_note === 'several' && <button type="button" className="link ref-note" data-note="several" title={SEVERAL}
+        onClick={(e) => { e.stopPropagation(); runCommand('story.cast.makeAnimRef') }}>More than one figure — make candidates?</button>}   {/* W11 */}
+      {side === 'front' && id && v.anim_ref_note === 't_pose' && <button type="button" className="link ref-note" data-note="t_pose"
+        title="The arms are held level (a T-pose); the A-pose holds them about 30° out — the fit took it, but the shell and Wan Animate follow the arms as drawn"
+        onClick={(e) => { e.stopPropagation(); runCommand('story.cast.makeAnimRef') }}>Arms level (a T-pose) — make candidates?</button>}   {/* W11 */}
     </div>
   )
   return (

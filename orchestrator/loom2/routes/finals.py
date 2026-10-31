@@ -120,8 +120,9 @@ async def final_create(svc: Svc, body: FinalCreate):
         store = StoryStore(ws)
         shot = await asyncio.to_thread(store.shot, f.shot_id)
         v = next((x for x in shot.versions if x.id == f.shot_version), None) if shot else None
-        if v is not None and not (v.recipe and v.recipe.template):
-            clay = "clay2" if sum(1 for x in f.layers if x.kind == "figure") > 1 else "clay1"
+        from ..shot_recipe import clay_template
+        clay = clay_template(v, f) if v is not None else None                # W39: an Image to video or stage template too
+        if clay is not None:
             await asyncio.to_thread(store.set_template, f.shot_id, f.shot_version, clay)
             svc.hub.broadcast("story.changed", {"kind": "shot", "id": f.shot_id, "revision": 0})
     svc.hub.broadcast("final.updated", {"id": f.id, "revision": f.revision})
@@ -1212,13 +1213,12 @@ async def composition_make(svc: Svc, fid: str):
         raise _ec_error(e)
 
 
-@router.get("/finals/{fid}/composition", response_model=Composition)
+@router.get("/finals/{fid}/composition", response_model=Composition | None)
 async def composition_get(svc: Svc, fid: str):
+    """The final's composition, or null when it has none yet (W45 = F44: a 404 per final was logged by every poll)."""
     cs, f = await _final_for_composition(svc, fid)
     c = await asyncio.to_thread(cs.get, f)
-    if c is None:
-        raise HTTPException(404, "the final has no composition yet")
-    return c.model_dump()
+    return c.model_dump() if c is not None else None
 
 
 @router.post("/finals/{fid}/composition/command", response_model=CompositionResult)

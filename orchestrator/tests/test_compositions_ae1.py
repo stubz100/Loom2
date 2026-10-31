@@ -97,7 +97,8 @@ def test_composition_routes(tmp_path: Path):
         st = cl.post("/stages", json={"name": "Room"}, headers=H).json()
         f, stats = _final_assembled(svc.ws, st["id"], st["cameras"][0]["id"], tmp_path / "src")
         url = f"/finals/{f.id}/composition"
-        assert cl.get(url, headers=H).status_code == 404
+        r0 = cl.get(url, headers=H)
+        assert r0.status_code == 200 and r0.json() is None                              # W45: none yet is null, not a 404 per poll
         assert cl.post(url, headers=H).status_code == 503                               # EffectCraft not built: said so
         svc.app.update_settings({"effectcraft": {"cli": str(FAKE)}})
         r = cl.post(url, headers=H)

@@ -10,6 +10,7 @@ import { api, http, sha256Hex, unwrap, type ApiError } from '../../api/client'
 import type { BatchPlan, Composition, Final, FinalOwed, RenderSettings, StageDoc, StageObject } from '../../api/types'
 import { useComposition } from '../animate/compositionStore'
 import { askConfirm, useSession } from '../../store/session'
+import type { Keypoint } from './passes'
 import { forLabel, useMakeFor } from '../../store/origin'
 import { useStory } from '../story/storyStore'
 import { bodyHash, keyframesOf, sampleDoc, withKey, type SkeletonKey } from './anim'
@@ -139,21 +140,28 @@ export async function makeFinal(opts: MakeOptions): Promise<Final> {
   const layers: Record<string, { passes: Record<string, string[]>; keypoints?: unknown[]; wholebody?: unknown[] }> = {}
   let done = 0
   const total = todo.length * plan.times.length
+  const unseen = new Set<string>()                                                // W54: a figure never in the frame gets no layer
   for (const { l, p } of todo) {
+    if (unseen.has(l.id)) { done += plan.times.length; continue }
     const keep = p.keep === 'all' ? actors : p.keep === 'self' ? [l.object_id!] : []
     const out = await renderPass(render, sampled, keep, w, h, p.kind, doc, uploaded, (n) => opts.onProgress?.(done + n, total, `${l.name} · ${p.name}`), depth)
     done += plan.times.length
     const entry = layers[l.id] ??= { passes: {} }
     entry.passes[p.name] = out.shas
     if (l.kind === 'figure' && p.kind === 'pose') { entry.keypoints = out.keypoints; entry.wholebody = out.wholebody }   // D163: the window's guide is drawn from them
+    if (l.kind === 'figure' && p.kind === 'pose' && neverSeen(out.keypoints as Keypoint[][])) unseen.add(l.id)
   }
+  if (unseen.size) useSession.getState().toast(`${plan.layers.filter((l) => unseen.has(l.id)).map((l) => l.name).join(', ')}: never in the frame — no layer`, 'info')
   return unwrap(http.POST('/finals', { body: {
     name: opts.name, stage_id: doc.id, camera_id: cam.id, stage_revision: doc.revision, range, rate: opts.rate, depth,
     size: { w, h }, frames: plan.times.length, shot_id: opts.shotId ?? null, shot_version: opts.shotId ? opts.shotVersion ?? null : null,
-    layers: plan.layers.map((l) => ({ id: l.id, kind: l.kind, name: l.name, object_id: l.object_id, profile_id: l.profile_id, version: l.version, method: l.kind === 'plate' ? plate : null,
+    layers: plan.layers.filter((l) => !unseen.has(l.id)).map((l) => ({ id: l.id, kind: l.kind, name: l.name, object_id: l.object_id, profile_id: l.profile_id, version: l.version, method: l.kind === 'plate' ? plate : null,
       passes: layers[l.id].passes, keypoints: (layers[l.id].keypoints ?? null) as never, wholebody: (layers[l.id].wholebody ?? null) as never,
       ...(l.kind === 'figure' ? bodyStamp(doc, l.object_id!, plan.times) : {}) })) } }))
 }
+
+/** W54: a figure's pose keypoints show it on no frame (no point in front of the camera and inside the frame). */
+export const neverSeen = (frames: Keypoint[][]): boolean => frames.every((k) => !k.some((p) => p[2] > 0))
 
 /** One pass of a layer over the final's frames — rendered with only `keep`'s actors, each frame uploaded once (by its hash). */
 async function renderPass(render: SequenceRenderer, sampled: { cam: NonNullable<StageDoc['cameras'][number]>; doc: StageDoc }[], keep: string[], w: number, h: number,
@@ -398,11 +406,15 @@ export const readyToAssemble = (f: Final): boolean => f.layers.every((l) => (l.k
 const replace = (list: Final[], f: Final) => list.map((x) => (x.id === f.id ? f : x))
 /** U0 (F41): a stage's newest final, by its creation time — the list is newest first from the server and a new final is prepended, so
  *  `.at(-1)` was the oldest (the walkthrough's foot performed and assembled Final 1 while Final 2 was the one being made). */
-export function newestFinal(finals: Final[], stageId: string | null | undefined): Final | undefined {
+export function newestFinal(finals: Final[], stageId: string | null | undefined, shotId?: string | null): Final | undefined {
   let best: Final | undefined
-  for (const f of finals) if (f.stage_id === stageId && (!best || f.created_at > best.created_at)) best = f
+  for (const f of finals) if (f.stage_id === stageId && ofShot(f, shotId) && (!best || f.created_at > best.created_at)) best = f
   return best
 }
+/** W53: a final of the open shot — in a shared scene (coverage) a stage holds every shot's finals; one made for no shot counts for each. */
+export const ofShot = (f: Pick<Final, 'shot_id'>, shotId?: string | null): boolean => !shotId || !f.shot_id || f.shot_id === shotId
+/** W53: the shot Shots has open (Performance and Final work for it), else null. */
+export const openShotId = (): string | null => useStory.getState().shotId
 
 export const useFinals = create<FinalsState>((set, get) => ({
   finals: [], making: null, projecting: null, filling: null, awaiting: {}, compositions: {},
@@ -428,8 +440,10 @@ export const useFinals = create<FinalsState>((set, get) => ({
     try {
       const c = await unwrap(http.POST('/finals/{fid}/composition', { params: { path: { fid: id } } }))
       set({ compositions: { ...get().compositions, [id]: c } })
-      useSession.getState().toast(`${f.name}: the composition is ready (${c.layers.length} layers) — Open in Final to scrub it`, 'success')
-      if (useComposition.getState().finalId === id) void useComposition.getState().reload()
+      const inFinal = useSession.getState().ui.suite === 'final'                       // W48: in Final it opens there; elsewhere the toast leads to it
+      if (inFinal || useComposition.getState().finalId === id) void (useComposition.getState().finalId === id ? useComposition.getState().reload() : useComposition.getState().open(id))
+      useSession.getState().toast(`${f.name}: the composition is ready (${c.layers.length} layers)${inFinal ? '' : ' — Open in Final to scrub it'}`, 'success',
+        inFinal ? undefined : { label: 'Open in Final ▸', run: () => get().openFinal(id) })
     } catch (e) { useSession.getState().toast(`Make the composition: ${(e as ApiError).detail ?? (e as Error).message ?? e}`, 'error') }
   },
   openFinal: (id) => { void useComposition.getState().open(id); navigate({ suite: 'final' }) },   // D121: the Final level is a suite of its own
@@ -441,7 +455,7 @@ export const useFinals = create<FinalsState>((set, get) => ({
       let stale: string[] = []
       try {
         const c = await unwrap(http.GET('/finals/{fid}/composition', { params: { path: { fid: id } } }))
-        stale = Object.entries((c as { processing_stale?: Record<string, boolean> }).processing_stale ?? {}).filter(([, v]) => v).map(([k]) => k)
+        stale = Object.entries((c as { processing_stale?: Record<string, boolean> } | null)?.processing_stale ?? {}).filter(([, v]) => v).map(([k]) => k)
       } catch { stale = [] }
       if (stale.length) {
         const ok = await askConfirm({ title: `${f.name}: ${stale.length} processing layer${stale.length === 1 ? ' is' : 's are'} stale — render anyway?`,
@@ -681,7 +695,7 @@ export interface FinalStep { label: string; run: (() => void) | null; why?: stri
 export function nextFinalStep(stageId: string | null): FinalStep {
   const fs = useFinals.getState()
   if (fs.making) return { label: 'Splitting…', run: null, why: `${fs.making.what} · ${fs.making.done} / ${fs.making.total}` }
-  const f = stageId ? newestFinal(fs.finals, stageId) : undefined
+  const f = stageId ? newestFinal(fs.finals, stageId, openShotId()) : undefined   // W53: this shot's, not another shot's of the scene
   if (!f) {
     const s = st()
     const why = !stageId || !s.current ? 'open a stage in Clay' : !s.activeCamera() ? 'the stage has no camera' : s.rendering ? 'rendering…' : undefined

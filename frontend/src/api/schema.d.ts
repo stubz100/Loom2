@@ -1027,7 +1027,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Composition Get */
+        /**
+         * Composition Get
+         * @description The final's composition, or null when it has none yet (W45 = F44: a 404 per final was logged by every poll).
+         */
         get: operations["composition_get_finals__fid__composition_get"];
         put?: never;
         /**
@@ -18018,7 +18021,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Composition"];
+                    "application/json": components["schemas"]["Composition"] | null;
                 };
             };
             /** @description Validation Error */

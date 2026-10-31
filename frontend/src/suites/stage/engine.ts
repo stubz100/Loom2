@@ -22,6 +22,7 @@ import { measure } from './motion/path'
 import { bindProxy, FACE_LANDMARKS, FEET_LANDMARKS, shellPoints, shellStance, type Landmark, type Proxy } from './proxy'
 import { depthMaterial, depthRangeFor, drawPose, maskColour, projectMarkers, toBlob, type Keypoint, type PassName, type WholeBody } from './passes'
 import type { RenderedPasses, Tool, Transform, View } from './stageStore'
+import { sizedExtent } from './meshSize'
 
 export interface EngineHooks {
   onPick: (id: string | null) => void
@@ -72,6 +73,7 @@ export function disposeObject(root: THREE.Object3D, keep: ReadonlySet<THREE.Mate
 const STANDS_ON = 0.7                                                                // M10: a surface faces up enough to stand on
 const OFF_WALL = 0.4                                                                 // M10: metres out from a wall a thing lands
 const DOWN = new THREE.Vector3(0, -1, 0)
+const NEAR_HIT = 0.3                                                                 // W37: metres from the camera a hit is not taken
 
 export class StageEngine {
   readonly renderer: THREE.WebGLRenderer
@@ -519,7 +521,7 @@ export class StageEngine {
   place(x: number, y: number): number[] | null {
     this.ray.setFromCamera(this.ndc(x, y), this.camera())
     const sets = [...this.entries.values()].filter((e) => e.doc.kind === 'set').map((e) => e.body)
-    const hits = this.ray.intersectObjects(sets, true)
+    const hits = this.ray.intersectObjects(sets, true).filter((h) => h.distance > NEAR_HIT)   // W37: a camera on or in a set's surface hit it at its own position
     if (hits.length) {
       const h = hits[0], p = h.point.clone()
       const n = h.face ? h.face.normal.clone().transformDirection(h.object.matrixWorld) : null
@@ -678,7 +680,8 @@ export class StageEngine {
         const model = gltf.scene
         const box = new THREE.Box3().setFromObject(model, true)                 // SC3d: its vertices, not its boxes turned (D109's upright turn inflates those)
         const c = box.getCenter(new THREE.Vector3())
-        const s = o.height_m ? o.height_m / Math.max(1e-6, box.max.y - box.min.y) : 1   // CW4: at its height (an image → 3D model is unit-sized)
+        const size = box.getSize(new THREE.Vector3())
+        const s = o.height_m ? o.height_m / Math.max(1e-6, sizedExtent(size.x, size.y, size.z)) : 1   // CW4: at its height (an image → 3D model is unit-sized); W38: a flat thing by its longest side
         model.scale.multiplyScalar(s)
         model.position.sub(new THREE.Vector3(c.x, box.min.y, c.z).multiplyScalar(s))   // centred on its footprint, standing on the floor
         model.traverse((m) => { m.userData.stageId = id; const mm = m as THREE.Mesh; if (mm.isMesh) { mm.castShadow = true; mm.receiveShadow = true } })   // D109: the model arrives after build() set the body's shadow flags

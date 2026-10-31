@@ -1335,7 +1335,7 @@ def _cards(svc, ws) -> dict:
     from ..clips import ClipStore
     from ..compositions import CompositionStore
     from ..finals import FinalStore
-    from ..shot_recipe import ShotRecipe
+    from ..shot_recipe import ShotRecipe, clay_template
     store = StoryStore(ws)
     finals = FinalStore(ws).list()
     nodes = store.flow_nodes()
@@ -1359,8 +1359,8 @@ def _cards(svc, ws) -> dict:
     for s in store.shots():
         v = s.version()
         fin = final_for(s.id, v, finals)
-        if fin is not None and fin.shot_id == s.id and not (v.recipe and v.recipe.template):          # RC1: a final shot puts it on the clay route
-            clay = "clay2" if sum(1 for x in fin.layers if x.kind == "figure") > 1 else "clay1"
+        clay = clay_template(v, fin) if fin is not None and fin.shot_id == s.id else None              # RC1, W39: a final shot puts it on the clay route
+        if clay is not None:
             v = v.model_copy(update={"recipe": (v.recipe or ShotRecipe()).model_copy(update={"template": clay})})
         rc0 = recipe_state(v, reader)
         node = nodes.get(s.owner_node) if s.owner_node else None
@@ -1567,17 +1567,15 @@ async def shot_recipe(svc: Svc, sid: str, version: str | None = None):
 
 
 def _clay_if_final(ws, s, v):
-    """RC1: a version with no template whose shot has a final shot made for it reads as the clay route (a final made before the final
-    shot set the template itself)."""
-    if v.recipe and v.recipe.template:
+    """RC1: a version whose shot has a final shot made for it reads as the clay route (a final made before the final shot set the
+    template itself); W39: an Image to video or stage template too (clay_template)."""
+    if v.recipe and v.recipe.template and v.recipe.template.startswith("clay"):
         return v
     from ..finals import FinalStore
-    from ..shot_recipe import ShotRecipe
+    from ..shot_recipe import ShotRecipe, clay_template
     f = final_for(s.id, v, FinalStore(ws).list())
-    if f is None or f.shot_id != s.id:
-        return v
-    clay = "clay2" if sum(1 for x in f.layers if x.kind == "figure") > 1 else "clay1"
-    return v.model_copy(update={"recipe": (v.recipe or ShotRecipe()).model_copy(update={"template": clay})})
+    clay = clay_template(v, f) if f is not None and f.shot_id == s.id else None
+    return v.model_copy(update={"recipe": (v.recipe or ShotRecipe()).model_copy(update={"template": clay})}) if clay else v
 
 
 def _graph(svc, ws, store: StoryStore, s, v, rc0: dict) -> ShotGraph:

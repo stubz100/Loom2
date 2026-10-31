@@ -40,7 +40,7 @@ import { ThingsSheet } from './ThingsSheet'
 import { useThings } from './thingsStore'
 import { StageEngine } from './engine'
 import { viewport, viewportMenu, cameraMenu } from './stageCommands'
-import { descendsFrom, HAND_LABEL } from './held'
+import { canHold, descendsFrom, HAND_LABEL, holders } from './held'
 import { meshLabel, propMeshes } from './meshes'
 import { castPoses, effectiveJoints, st, TEMPLATE_KINDS, useStage, type ShotState, imageSetBudget } from './stageStore'
 import { ENDS, type End } from './motion/contact'
@@ -313,7 +313,10 @@ function ObjectEditor({ o }: { o: StageObject }) {
       {o.kind === 'set' && o.preset === 'image' && <ImageSetFields key={`${o.id}:${o.lens_deg}`} o={o} />}
       {o.kind === 'mannequin' && <div className="kv"><span>pose</span><span><select value={o.pose?.preset ?? 'stand'} onChange={(e) => st().applyPose(o.id, e.target.value)}>{POSE_NAMES.map((p) => <option key={p} value={p}>{p}</option>)}</select> <span className="hint">(Pose, over the viewport, poses the joints)</span></span></div>}
       {o.kind === 'plane' && <div className="kv"><span>faces camera</span><input type="checkbox" checked={o.billboard} onChange={(e) => st().updateObject(o.id, { billboard: e.target.checked })} /></div>}
-      {!o.parent_joint && <div className="kv"><span>parent <Help text="It moves with its parent and stays where it stands when you pick one; its transform below is then its place on the parent." /></span><select value={o.parent ?? ''} onChange={(e) => st().setParent(o.id, e.target.value || null)}><option value="">— none —</option>{current.objects.filter((x) => x.id !== o.id && !descendsFrom(current.objects, x.id, o.id)).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></div>}
+      {!o.parent_joint && <div className="kv"><span>parent <Help text="It moves with its parent and stays where it stands when you pick one; its transform below is then its place on the parent." /></span><select value={o.parent ?? ''} onChange={(e) => { const [k, fid, hand] = e.target.value.split(':'); if (k === 'hand') st().hold(o.id, fid, hand as 'r_hand' | 'l_hand'); else st().setParent(o.id, e.target.value || null) }}>
+        <option value="">— none —</option>
+        {canHold(o) && holders(current.objects).flatMap((f) => (['r_hand', 'l_hand'] as const).map((h) => <option key={`${f.id}:${h}`} value={`hand:${f.id}:${h}`}>{`${f.name} · ${HAND_LABEL[h]}`}</option>))}{/* W37: a hand, not only the figure */}
+        {current.objects.filter((x) => x.id !== o.id && !descendsFrom(current.objects, x.id, o.id)).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></div>}
       <div className="verbs"><CommandRow ids={['stage.object.duplicate', 'stage.object.lock', 'stage.object.hide', 'stage.frameSel', 'stage.object.reset', 'stage.object.delete']} /></div>
     </div>
   )

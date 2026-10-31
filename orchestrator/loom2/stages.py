@@ -502,6 +502,7 @@ class StageStore:
         if v is None or v.place_set is None:
             return self.create(name)
         objects, _ = bench_objects(place, v)
+        objects = [o for o in objects if o.kind == "set"]                     # W35: the bench's 1.75 m figure is for the bench, not a shot's cast
         ps = v.place_set
         cam = StageCamera(id=new_id("cam"), name="Camera 1")
         if ps.sources:

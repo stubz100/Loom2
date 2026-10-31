@@ -47,3 +47,31 @@ def test_a_letterboxed_picture_is_found(tmp_path: Path):
     Image.fromarray(_picture(1080, 1920, top=138, bottom=138)).save(tmp_path / "set.jpg", quality=88)
     top, bottom = _bars(tmp_path / "set.jpg")
     assert abs(top - 138) <= 8 and abs(bottom - 138) <= 8                            # in the picture's own pixels
+
+
+def test_a_scene_at_a_place_starts_without_the_benchs_scale_figure(tmp_path: Path):
+    """W35: a new scene at a World place gets the place's built set, not the bench's unbound "1.75 m for scale" mannequin as cast."""
+    from loom2.catalogue import Catalogue
+    from loom2.groups import GroupStore
+    from loom2.stages import PlaceSet, StageStore
+    from loom2.story import StoryStore
+    from loom2.workspace import Workspace
+    ws = Workspace.create(tmp_path / "p", name="P", size_cap_gb=10)
+    store = StoryStore(ws)
+    pier = store.create_profile("Harbour pier", "place", GroupStore(ws, Catalogue(ws)))
+    store.set_place_set(pier.id, "v1", PlaceSet(kind="ground", sizes={}, faces=[]))
+    st = StageStore(ws).scene_stage("Arrival", store.profile(pier.id))
+    assert [o.kind for o in st.objects] == ["set"] and st.objects[0].profile_id == pier.id
+
+
+def test_a_final_shot_puts_its_version_on_the_clay_route():
+    """W39: the method card said Final shot while the Recipe said Image to video — a layered final moves an Image to video or stage
+    template to clay (by its figures); a Dialogue, a one-pass method or no final leaves it."""
+    from types import SimpleNamespace as N
+
+    from loom2.shot_recipe import clay_template
+    fig = N(kind="figure")
+    one, two = N(layers=[fig, N(kind="prop")]), N(layers=[fig, fig])
+    v = lambda t, m=None: N(recipe=N(template=t) if t else None, method=m)  # noqa: E731
+    assert clay_template(v("i2v"), one) == "clay1" and clay_template(v("stage"), two) == "clay2" and clay_template(v(None), one) == "clay1"
+    assert clay_template(v("dialogue"), one) is None and clay_template(v("i2v", "one_pass"), one) is None and clay_template(v("i2v"), None) is None

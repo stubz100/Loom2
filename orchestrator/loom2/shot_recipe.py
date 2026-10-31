@@ -99,6 +99,16 @@ def default_template(stage_id: str | None) -> str:
     return "stage" if stage_id else "i2v"
 
 
+def clay_template(version: Any, final: Any) -> str | None:
+    """RC1, W39: the clay route a version is put on by the final shot made for it — "clay2" with two figures or more, else "clay1" — when
+    its template is none, Image to video or From the stage and its method the layered one (the Final shot card); a Dialogue stays. None:
+    it stays as it is. (The walkthrough's method card said Final shot while the Recipe still said Image to video.)"""
+    t = version.recipe.template if version.recipe else None
+    if final is None or (t and t not in ("i2v", "stage")) or getattr(version, "method", None) not in (None, "layered"):
+        return None
+    return "clay2" if sum(1 for x in final.layers if x.kind == "figure") > 1 else "clay1"
+
+
 # ---- what a job is, as a step ------------------------------------------------------------------------------------------------------
 FRAME_KINDS = ("t2i", "i2i", "inpaint", "reangle", "stage_shot", "upscale")
 

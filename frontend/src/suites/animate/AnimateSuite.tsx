@@ -536,7 +536,7 @@ function Stage() {
   return (
     <div className="anim-stage">
       <div className="anim-view" onContextMenu={(e) => { if (clip) showMenu(e, playerMenu()) }}>
-        {!clip ? <div className="anim-empty"><h2>Animate</h2>{running ? 'rendering the first clip — it opens here when the proxy is ready' : route === 'clip' ? 'pick a frame of the stage, then Render clip ▶ — the clip opens here' : route === 'final' ? "the final shot's steps are in the column — Play ▶ shows the assembled shot here" : <>set a start frame (a picture's Set as the start frame in the Bin, or drop it on Performance's start slot), write the motion, Animate ▶
+        {!clip ? <div className="anim-empty"><h2>{route === 'final' ? 'Final shot' : route === 'clip' ? 'Stage clip' : 'Image to video'}</h2>{running ? 'rendering the first clip — it opens here when the proxy is ready' : route === 'clip' ? 'pick a frame of the stage, then Render clip ▶ — the clip opens here' : route === 'final' ? "the final shot's steps are in the column — Play ▶ shows the assembled shot here" : <>set a start frame (a picture's Set as the start frame in the Bin, or drop it on Performance's start slot), write the motion, Animate ▶
           {!startSet && <div className="quick-cards"><CommandCard id="global.start.animate" hint="pick a still in the Bin" /></div>}</>}</div>
           : view === 'compare' ? <Compare clip={clip} /> : <Player clip={clip} frame={frame} onion={onion} />}
       </div>

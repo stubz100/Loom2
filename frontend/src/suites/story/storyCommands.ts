@@ -747,10 +747,12 @@ export function edgeMenu(): { cmd: string }[] { return [{ cmd: 'story.flow.delet
 export function nodeMenu(): MenuItem[] {
   const n = node()
   const into = sy().scenes.filter((s) => s.id !== n?.scene_id)                                      // RC2c: join a scene by its name
-  return [{ cmd: 'story.flow.makeFrame' }, { cmd: 'story.flow.makeClip' }, sepItem, { cmd: 'story.flow.newShot' }, { cmd: 'story.flow.openShot' }, { cmd: 'story.flow.recipe' }, { cmd: 'story.flow.unbind' }, { cmd: 'story.flow.placeForward' }, sepItem,
-    { cmd: 'story.flow.sibling' }, { cmd: 'story.scene.make' }, ...(into.length && n ? [{ label: 'Into the scene', icon: Group, items: into.map((s) => ({ label: s.name, run: () => void sy().sceneMembers(s.id, sceneTargets(), []) })) }] : []),
-    { cmd: 'story.scene.leave' }, { cmd: 'story.flow.ownCast' }, { cmd: 'story.flow.linkCast' }, { cmd: 'story.flow.saveTemplate' }, ...templateItems(n?.id ?? null, null), sepItem,
-    { cmd: 'story.flow.openBoard' }, { cmd: 'story.flow.clearBoard' }, sepItem, { cmd: 'story.flow.voiceAll' }, sepItem, { cmd: 'story.flow.duplicate' }, { cmd: 'story.flow.delete' }]
+  const shot = !!n && (n.type === 'shot' || !!n.shot_id)                                            // W28 (= F19): a Choice, a Hub or a Jump is offered no shot's verbs
+  return [...(shot ? [{ cmd: 'story.flow.makeFrame' }, { cmd: 'story.flow.makeClip' }, sepItem, { cmd: 'story.flow.newShot' }, { cmd: 'story.flow.openShot' }, { cmd: 'story.flow.recipe' },
+      { cmd: 'story.flow.unbind' }, { cmd: 'story.flow.placeForward' }, { cmd: 'story.flow.sibling' }] : []),
+    { cmd: 'story.scene.make' }, ...(into.length && n ? [{ label: 'Into the scene', icon: Group, items: into.map((s) => ({ label: s.name, run: () => void sy().sceneMembers(s.id, sceneTargets(), []) })) }] : []),
+    { cmd: 'story.scene.leave' }, ...(shot ? [{ cmd: 'story.flow.ownCast' }, { cmd: 'story.flow.linkCast' }, { cmd: 'story.flow.saveTemplate' }, ...templateItems(n?.id ?? null, null), sepItem,
+      { cmd: 'story.flow.openBoard' }, { cmd: 'story.flow.clearBoard' }] : []), sepItem, { cmd: 'story.flow.voiceAll' }, sepItem, { cmd: 'story.flow.duplicate' }, { cmd: 'story.flow.delete' }]
 }
 /** RC2e: *New Shot from a template ▸* — beside a node (its scene, its stage) or at a point of the Flow. */
 export function templateItems(near: string | null, at: { x: number; y: number } | null): MenuItem[] {

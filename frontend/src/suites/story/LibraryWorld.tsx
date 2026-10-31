@@ -19,6 +19,7 @@ import { needsPicture, swatchJob, useSwatches } from '../generate/swatches'
 import { entriesOf, entryTile, useLibrary } from './libraryStore'
 import { rowMenu, runOnItem } from './storyCommands'
 import { sy, useStory } from './storyStore'
+import { localTime } from '../../frame/time'
 
 const menu = (kind: 'entry' | 'panel', id: string): MenuItem[] => rowMenu(kind, id).map((m) => (m === 'sep' ? sep : m))
 const tileOf = (e: LibraryEntry, url: (f: string, v: string) => string | null, jobs: ReturnType<typeof useSession.getState>['jobs']) => entryTile(e, url, (f, v) => !!swatchJob(jobs, f, v))
@@ -119,7 +120,7 @@ export function PanelEditor({ name }: { name: string }) {
         <span>model</span><span>{(pn.model_id && caps?.models[pn.model_id]?.label) ?? pn.model_id ?? '—'}</span>
         <span>size</span><span>{pn.width && pn.height ? `${pn.width}×${pn.height} · ${pn.count ?? 1} each` : '—'}</span>
         <span>prompt</span><span>{pn.prompt_mode ?? '—'}</span>
-        <span>saved</span><span>{p.saved_at.slice(0, 16).replace('T', ' ')}</span>
+        <span>saved</span><span>{localTime(p.saved_at)}</span>
       </div>
       <div className="verbs"><CommandButton id="story.world.applyPanel" text /><CommandButton id="story.world.renamePanel" text /><CommandButton id="story.world.remove" text /></div>
     </>

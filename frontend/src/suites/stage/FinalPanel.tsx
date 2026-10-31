@@ -9,9 +9,10 @@ import { CommandButton } from '../../frame/CommandButton'
 import { markUsed, runCommand } from '../../frame/commands'
 import { useSession } from '../../store/session'
 import { showMenu } from '../../frame/ContextMenu'
-import { assembling, batchCount, matteWarning, nextFinalStep, PLATE_PATH_MAX, readyToAssemble, rendering, skeletonChange, useFinals, useFinalsPoll } from './finalShot'
+import { assembling, batchCount, matteWarning, nextFinalStep, ofShot, PLATE_PATH_MAX, readyToAssemble, rendering, skeletonChange, useFinals, useFinalsPoll } from './finalShot'
 import { askConfirm } from '../../store/session'
 import { useStage } from './stageStore'
+import { useStory } from '../story/storyStore'
 
 const KIND_LABEL: Record<string, string> = { plate: 'plate', figure: 'character', prop: 'prop', shadows: 'shadows' }
 const METHOD_LABEL: Record<string, string> = { projected: 'the set, projected', filled: 'the set, projected and filled', generated: 'the set, generated along the path', picture: 'the picture, through its relief', set: 'the built set, rendered', move: 'Wan Animate', rendered: 'its 3D model', drawn: 'drawn on its model', stage: "Stage's" }
@@ -211,9 +212,10 @@ export function FinalSection() {
   const current = useStage((s) => s.current)
   const finals = useFinals((s) => s.finals)
   const making = useFinals((s) => s.making)
+  const shotId = useStory((s) => s.shotId)
   useFinalsPoll(current?.id)                                                    // D121: one poll for every view of the finals
   if (!current) return null
-  const mine = finals.filter((f) => f.stage_id === current.id)
+  const mine = finals.filter((f) => f.stage_id === current.id && ofShot(f, shotId))   // W53: in a shared scene, this shot's finals only
   return (
     <details className="step final-section" data-step="final" open>
       <summary><span className="tw" aria-hidden="true">▸</span><b>Final shot</b><Help text="The finished scene split into layers — the plate, each character, each prop, the shadows — performed, matted, assembled, then finished by hand at the Final level." />

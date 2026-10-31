@@ -44,7 +44,7 @@ export function targetOf(n: Pick<GraphNode, 'kind' | 'ref'>, g: Pick<ShotGraph, 
     case 'motion': return { kind: 'clay', section: 'motion', stageId: r.stage_id, objectId: r.object_id }
     case 'camera': return { kind: 'clay', section: 'camera', stageId: r.stage_id, cameraId: r.camera_id }
     case 'frame': return { kind: 'image' }
-    case 'clip': return { kind: 'performance', card: g.route === 'stage' ? 'clip' : 'i2v' }
+    case 'clip': return { kind: 'performance', card: g.final_id || g.route.startsWith('clay') ? 'final' : g.route === 'stage' ? 'clip' : 'i2v' }   // W39: a final shot's clip is the Final shot card's
     case 'plate': case 'layer': return { kind: 'performance', card: 'final' }
     case 'composition': case 'finish': return { kind: 'final', section: 'layers' }
     case 'take': return g.final_id ? { kind: 'final', section: 'output' } : { kind: 'shots' }

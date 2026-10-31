@@ -361,6 +361,14 @@ def check_shot(s: Shot) -> None:
             raise ValueError(f"version {v.id}: a range is {{start, end}} with 0 ≤ start ≤ end")
 
 
+def next_camera_name(name: str, names: list[str]) -> str:
+    """W32: a copy's name — the base with the next free number ("Camera 1" → "Camera 2"), not the name with a number added ("Camera 1 2",
+    then "Camera 1 2 2"); a name of its own keeps it ("Wide" → "Wide 2")."""
+    base = re.sub(r"\s+\d+$", "", name).strip() or "Camera"
+    taken = [int(m.group(1)) for n in names if (m := re.fullmatch(rf"{re.escape(base)}\s+(\d+)", n))]
+    return f"{base} {max([1, *taken]) + 1}"
+
+
 def copy_camera(ws: Any, stage_id: str, camera_id: str) -> tuple[Any, Any]:
     """A camera of the stage copied as a new one ("Camera 1 2"), its keys with it — a shot's own camera (U2, G6: a camera serves one shot).
     (the stage as saved, the copy)."""
@@ -370,11 +378,7 @@ def copy_camera(ws: Any, stage_id: str, camera_id: str) -> tuple[Any, Any]:
     cam = next((c for c in st.cameras if c.id == camera_id), None) if st is not None else None
     if st is None or cam is None:
         raise ValueError(f"the stage or its camera {camera_id} does not exist")
-    names = {c.name for c in st.cameras}
-    k = 2
-    while f"{cam.name} {k}" in names:
-        k += 1
-    copy = cam.model_copy(update={"id": new_id("cam"), "name": f"{cam.name} {k}"})
+    copy = cam.model_copy(update={"id": new_id("cam"), "name": next_camera_name(cam.name, [c.name for c in st.cameras])})
     keys = dict(st.keyframes or {})
     camkeys = dict(keys.get("camera") or {})
     if camera_id in camkeys:
@@ -1788,11 +1792,7 @@ class _FlowMixin:
                 cam = next(c for c in st.cameras if c.id == camera_id) if any(c.id == camera_id for c in st.cameras) else None
                 if cam is None:
                     break
-                names = {c.name for c in st.cameras}
-                k = 2
-                while f"{cam.name} {k}" in names:
-                    k += 1
-                copy = cam.model_copy(update={"id": new_id("cam"), "name": f"{cam.name} {k}"})
+                copy = cam.model_copy(update={"id": new_id("cam"), "name": next_camera_name(cam.name, [c.name for c in st.cameras])})   # W32
                 keys = dict(st.keyframes or {})
                 camkeys = dict(keys.get("camera") or {})
                 if camera_id in camkeys:
@@ -2108,10 +2108,8 @@ class _FlowMixin:
                 stages = StageStore(self.ws)                     # type: ignore[attr-defined]
                 st = stages.get(sv.stage_id)
                 if st is not None:
-                    names = {c.name for c in st.cameras}
-                    k, label = 2, t.camera.name
-                    while label in names:
-                        label, k = f"{t.camera.name} {k}", k + 1
+                    names = [c.name for c in st.cameras]
+                    label = t.camera.name if t.camera.name not in names else next_camera_name(t.camera.name, names)   # W32
                     cam = {"id": new_id("cam"), "name": label, "pos": t.camera.pos, "target": t.camera.target, "roll": t.camera.roll,
                            "focal_mm": t.camera.focal_mm, "sensor_mm": t.camera.sensor_mm}
                     keys = dict(st.keyframes or {})

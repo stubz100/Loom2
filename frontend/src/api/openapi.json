@@ -30661,6 +30661,7 @@
     },
     "/finals/{fid}/composition": {
       "get": {
+        "description": "The final's composition, or null when it has none yet (W45 = F44: a 404 per final was logged by every poll).",
         "operationId": "composition_get_finals__fid__composition_get",
         "parameters": [
           {
@@ -30678,7 +30679,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Composition"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Composition"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Composition Get Finals  Fid  Composition Get"
                 }
               }
             },

@@ -15,6 +15,7 @@ import { ForRecipe } from '../story/RecipeSteps'
 import { assembling, newestFinal, rendering, useFinals, useFinalsPoll } from './finalShot'
 import { st, useStage } from './stageStore'
 import { stageSteps, STATE_WORD, type StepInput } from './steps'
+import { useStory } from '../story/storyStore'
 
 const live = (j: Job) => j.status === 'queued' || j.status === 'running'
 
@@ -30,10 +31,11 @@ function useStepInput(): StepInput | null {
   const comps = useFinals((s) => s.compositions)
   const making = useFinals((s) => !!s.making)
   const jobs = useSession((s) => s.jobs)
+  const shotId = useStory((s) => s.shotId)
   useFinalsPoll(current?.id)                                           // the final's and its composition's states, whichever level is open
   if (!current) return null
   const mine = (surface: string) => Object.values(jobs).some((j) => live(j) && j.origin?.suite === 'stage' && j.origin.surface === surface && j.origin.ref === current.id)
-  const f = newestFinal(finals, current.id) ?? null
+  const f = newestFinal(finals, current.id, shotId) ?? null                     // W53: the open shot's
   const made = (l: { kind: string; status: string; frames_done: number }) => (l.kind === 'plate' || l.kind === 'figure' ? l.status === 'done' && l.frames_done === f!.frames : l.status !== 'failed')
   const c = f ? comps[f.id] ?? null : null
   return {

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setBackend } from '../../api/client'
 import type { Final, StageDoc, StageObject } from '../../api/types'
 import { useSession } from '../../store/session'
-import { batchCount, batchOf, bodyStamp, cameraTravel, framesAt, hasPictureSet, keysFrom, matteWarning, newestFinal, nextFinalStep, performedText, picturePlate, planFinal, plateChoice, shotRange, skeletonChange, useFinals } from './finalShot'
+import { batchCount, batchOf, bodyStamp, cameraTravel, framesAt, hasPictureSet, keysFrom, matteWarning, neverSeen, newestFinal, nextFinalStep, performedText, picturePlate, planFinal, plateChoice, shotRange, skeletonChange, useFinals } from './finalShot'
 import { useStage } from './stageStore'
 
 const obj = (id: string, kind: StageObject['kind'], extra: Partial<StageObject> = {}): StageObject => ({ id, kind, name: id, preset: null, asset_id: null, transform: { pos: [0, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] },
@@ -104,6 +104,11 @@ describe('SC3e the plate of a picture set', () => {
     expect(newestFinal([newer, older, elsewhere], 'stg_1')?.id).toBe('fin_2')
     expect(newestFinal([older, newer], 'stg_1')?.id).toBe('fin_2')
     expect(newestFinal([elsewhere], 'stg_1')).toBeUndefined()
+    const theirs = { ...newer, id: 'fin_3', shot_id: 'sht_other', created_at: '2026-10-28T13:00:00Z' } as unknown as Final
+    expect(newestFinal([theirs, newer, older], 'stg_1', 'sht_mine')?.id).toBe('fin_2')                // W53: another shot's final of a shared scene is not this shot's
+    expect(newestFinal([theirs, newer, older], 'stg_1')?.id).toBe('fin_3')                             // no shot open: the stage's newest
+    expect(neverSeen([[[0, 0, 0], [12, 40, 0]], [[0, 0, 0]]])).toBe(true)                                // W54: never in the frame — no layer
+    expect(neverSeen([[[0, 0, 0]], [[200, 100, 1]]])).toBe(false)
     useFinals.setState({ finals: [newer, older], making: null, projecting: null })
     expect(nextFinalStep('stg_1').label).toBe('Render the plate ▶')
   })

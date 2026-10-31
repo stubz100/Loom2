@@ -47,11 +47,13 @@ import { laneChecklist } from './episode/sequenceCommands'
 import { useSequence } from './episode/sequenceStore'
 import { NODE_LABEL } from './flow/types'
 import { optionsAvailable } from './flow/play'
-import type { FlowNode, FlowOption, StageObject } from '../../api/types'
+import type { BinNode, FlowNode, FlowOption, StageObject } from '../../api/types'
+import { boardPages } from './boardPages'
 import { speakersOf, speakerVersion } from './makeFor'
 import { CommandRow } from '../../frame/CommandButton'
 import './story.css'
 import { navigate, setRailTab } from '../../frame/router'
+import { localTime } from '../../frame/time'
 
 /** Dev hook (`window.__loom2Story`, DEV_HOOKS only): the smoke test and scripts/sy_acceptance.py drive the suite through the store. */
 // CS2: the skeleton bench loads with the stage's code (three.js), only when opened
@@ -795,7 +797,7 @@ function CastSheetInspector() {
           <span>reference set</span><span className="mono">{v.group_id}</span>
           <span>candidates</span><span className="mono">{v.candidates_group_id ?? '—'}</span>
           <span>from</span><span>{v.derived_from ?? '—'}</span>
-          <span>created</span><span>{v.created_at.slice(0, 16).replace('T', ' ')}</span>
+          <span>created</span><span>{localTime(v.created_at)}</span>
         </div>
         <div className="verbs"><CommandButton id="story.cast.useAsSubject" text /></div>
         <div className="verbs"><CommandButton id="story.cast.expand" text /><CommandButton id="story.cast.lock" text /><CommandButton id="story.cast.newVersion" text /></div>
@@ -910,8 +912,8 @@ function ShotVersionFields({ v, clip, stage }: { v: ShotVersion; clip?: { frames
         <span>clip</span><span>{clip ? `${clip.frames} f @ ${clip.fps} · ${clip.w}×${clip.h}` : v.clip_id ?? '—'}</span>
         <span>takes</span><span>{v.takes.length}</span>
         <span>from</span><span>{v.derived_from ?? '—'}</span>
-        <span>created</span><span>{v.created_at.slice(0, 16).replace('T', ' ')}</span>
-        {v.finalized_at && <><span>marked final</span><span>{v.finalized_at.slice(0, 16).replace('T', ' ')}</span></>}
+        <span>created</span><span>{localTime(v.created_at)}</span>
+        {v.finalized_at && <><span>marked final</span><span>{localTime(v.finalized_at)}</span></>}
       </div>
       <div className="verbs"><CommandButton id="story.shot.finalize" text /><CommandButton id="story.shot.newVersion" text /></div>
       <div className="verbs"><MakeMenus /></div>
@@ -1012,7 +1014,10 @@ function SetsEditor({ n, sets, onChange }: { n: FlowNode; sets: Record<string, u
  *  Shot node's board gives Make frame its references. */
 function BoardField({ n }: { n: FlowNode }) {
   const tree = useAlbum((a) => a.tree)
+  const [homes, setHomes] = useState<BinNode[] | null>(null)
   useEffect(() => { if (!useAlbum.getState().tree) void useAlbum.getState().load() }, [])
+  useEffect(() => { let live = true; void unwrap(http.GET('/bin/tree')).then((t) => { if (live) setHomes(t.homes) }).catch(() => undefined); return () => { live = false } }, [])
+  const pages = boardPages(homes, n.shot_id)                                       // W27: World's pages and this shot's, not every page
   const g = findNode(tree, n.board_group_id)
   return (
     <>
@@ -1022,7 +1027,7 @@ function BoardField({ n }: { n: FlowNode }) {
         <select value={n.board_group_id ?? ''} aria-label="board" onChange={(e) => void sy().patchNode(n.id, { board_group_id: e.target.value || null })}>
           <option value="">(no board)</option>
           {n.board_group_id && !g && <option value={n.board_group_id}>(a deleted group)</option>}
-          {flatGroups(tree).map(({ node, depth }) => <option key={node.id} value={node.id}>{`${'\u00a0\u00a0'.repeat(depth)}${node.name} · ${node.total}`}</option>)}
+          {flatGroups(tree).filter(({ node }) => !pages || pages.has(node.id) || node.id === n.board_group_id).map(({ node, depth }) => <option key={node.id} value={node.id}>{`${'\u00a0\u00a0'.repeat(depth)}${node.name} · ${node.total}`}</option>)}
         </select>
         {g && <><span>cover</span><span>{g.cover_ids[0] ? <img className="insp-thumb small" src={api.thumbUrl(g.cover_ids[0], 256)} alt="" /> : <span className="hint">an empty group</span>}</span></>}
       </div>
@@ -1154,13 +1159,13 @@ function NodeFields({ n }: { n: FlowNode }) {
   const visual = n.type === 'shot'
   return (
     <>
-      <h4>{NODE_LABEL[n.type]} · {n.title || n.id}</h4>
+      <h4>{n.title ? `${NODE_LABEL[n.type]} · ${n.title}` : `${NODE_LABEL[n.type]} (untitled)`}</h4>{/* W28: not its raw id */}
       <div className="kv">
         <span>type</span>
         <select value={n.type} aria-label="node type" onChange={(e) => void sy().patchNode(n.id, { type: e.target.value as FlowNode['type'] })}>{(Object.keys(NODE_LABEL) as FlowNode['type'][]).map((t) => <option key={t} value={t}>{NODE_LABEL[t]}</option>)}</select>
         <span>title</span><input type="text" value={n.title} aria-label="node title" onChange={(e) => void sy().patchNode(n.id, { title: e.target.value })} />
         {n.type === 'comment' && <><span>text</span><textarea rows={3} value={n.text} aria-label="note text" onChange={(e) => void sy().patchNode(n.id, { text: e.target.value })} /></>}
-        {n.type === 'shot' && <><span>action</span><textarea rows={2} value={n.text} aria-label="shot line" placeholder="what happens (a beat's line lands here)" onChange={(e) => void sy().patchNode(n.id, { text: e.target.value })} /></>}
+        {n.type === 'shot' && <><span>description</span><textarea rows={2} value={n.text} aria-label="shot line" placeholder="what happens (a beat's line lands here)" onChange={(e) => void sy().patchNode(n.id, { text: e.target.value })} /></>}
         {n.type === 'jump' && <><span>target</span><select value={n.target ?? ''} aria-label="jump target" onChange={(e) => void sy().patchNode(n.id, { target: e.target.value || null })}><option value="">(none)</option>{Object.values(flowNodes).filter((x) => x.id !== n.id && x.type !== 'comment').map((x) => <option key={x.id} value={x.id}>{x.title || NODE_LABEL[x.type]}</option>)}</select></>}
         {n.type === 'condition' && <><span>condition</span><div className="cond-row">
           <select value={n.cond?.var ?? ''} aria-label="condition variable" onChange={(e) => void sy().patchNode(n.id, { cond: { var: e.target.value, op: n.cond?.op ?? 'eq', value: n.cond?.value ?? true } })}><option value="">variable</option>{vars.map((v) => <option key={v.name} value={v.name}>{v.name}</option>)}</select>

@@ -58,7 +58,7 @@ def test_new_shot_from_this_shot(tmp_path: Path):
     assert v.stage_id == stg.id and v.camera_id not in (None, cam.id) and v.takes == [] and v.frame_asset_id is None   # the stage shared, its own camera
     stg2 = stages.get(stg.id)
     new_cam = next(c for c in stg2.cameras if c.id == v.camera_id)
-    assert new_cam.name == f"{cam.name} 2" and new_cam.pos == cam.pos and stg2.keyframes["camera"][new_cam.id] == stg2.keyframes["camera"][cam.id]
+    assert new_cam.name == "Camera 2" and new_cam.pos == cam.pos and stg2.keyframes["camera"][new_cam.id] == stg2.keyframes["camera"][cam.id]
     assert v.stage_revision == stg2.revision
     scenes = st.scenes()                                                                     # a scene was made around the two
     assert len(scenes) == 1 and scenes[0]["name"] == "Talk" and set(scenes[0]["node_ids"]) == {src.id, sib.id}

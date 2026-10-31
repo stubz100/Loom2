@@ -32,7 +32,7 @@ def test_a_camera_serves_one_shot(tmp_path: Path):
     sb = st.set_source(b.shot_id, "v1", stg.id, cam.id, stg.revision)
     after = stages.get(stg.id)
     assert sb.version().camera_id != cam.id and sb.version().camera_id in [c.id for c in after.cameras]   # taken: a copy for this one
-    assert [c.name for c in after.cameras] == ["Camera 1", "Camera 1 2"] and sb.version().stage_revision == after.revision
+    assert [c.name for c in after.cameras] == ["Camera 1", "Camera 2"] and sb.version().stage_revision == after.revision
     again = st.set_source(b.shot_id, "v1", stg.id, sb.version().camera_id, after.revision)        # its own camera again: no new copy
     assert again.version().camera_id == sb.version().camera_id and len(stages.get(stg.id).cameras) == 2
     made = st.create_shot("From the camera", stage_id=stg.id, camera_id=cam.id, stage_revision=after.revision)   # New shot from this camera

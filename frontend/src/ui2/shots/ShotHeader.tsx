@@ -47,6 +47,7 @@ export function ShotHeader() {
   const profiles = useStory((st) => st.profiles)
   const route = useRouteRows()
   const stage = useShotStage(v?.stage_id ?? null)
+  const scene = useStory((st) => (node?.scene_id ? st.scenes.find((x) => x.id === node.scene_id) : undefined))   // W26: the Flow's scene, the one the Inspector names
   const level = useShots((x) => x.level)
   const secs = useStory((st) => st.audioSecs)
   useEffect(() => { const ids = (node?.lines ?? []).map((l) => l.audio_asset_id).filter((x): x is string => !!x); if (ids.length) void useStory.getState().loadAudioSecs(ids) }, [node])
@@ -82,12 +83,12 @@ export function ShotHeader() {
       {node && <div className="w-field stack"><span>lines</span><div className="s-lines"><Suspense fallback={null}><LinesEditor n={node} /></Suspense></div></div>}
       <div className="w-field"><span>scene</span>
         {v.stage_id ? <span className="s-scene" data-testid="shots-scene">
-          <MenuButton label={stage?.name ?? 'the stage'} items={sceneMenu} text />
+          <span title={scene && stage && scene.name !== stage.name ? `the scene ${scene.name}, on the stage ${stage.name}` : undefined}><MenuButton label={scene?.name ?? stage?.name ?? 'the stage'} items={sceneMenu} text /></span>
           <MenuButton label={cam?.name ?? 'no camera'} items={camMenu} text />
           {range && stage && <RangeField start={range.start} end={range.end} fps={stage.fps} whole={!v.range} />}
           {need !== null && range && <span className="s-outlast" data-testid="shots-outlast">the lines run {((need - range.start + 1) / fps).toFixed(1)} s, the shot {((range.end - range.start + 1) / fps).toFixed(1)} s
             {open && <button className="link" onClick={() => void setRange({ start: range.start, end: need })}>Extend to the lines</button>}</span>}
-        </span> : <span className="w-val">no scene yet <MenuButton label="Give it a scene" items={sceneMenu} text /></span>}
+        </span> : <span className="w-val">{scene ? `${scene.name} — no stage yet` : 'no scene yet'} <MenuButton label={scene ? 'Give it a stage' : 'Give it a scene'} items={sceneMenu} text /></span>}
       </div>
       {stage && <div className="w-field"><span>cast <Help text="What stands on the shot's stage, from World: add a figure or a prop in Clay's Scene section. A member that is not ready for Clay says what it lacks; a click opens it in World." /></span>
         <span className="s-cast" data-testid="shots-cast">{cast.length ? cast.map((m) => (

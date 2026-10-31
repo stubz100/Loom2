@@ -97,7 +97,7 @@ const nodeTypes = { story: StoryNode }
 function FitBridge() {
   const rf = useReactFlow()
   useEffect(() => {
-    flowView.fit = () => void rf.fitView({ padding: 0.2 })
+    flowView.fit = () => void rf.fitView({ padding: 0.2, maxZoom: 1 })   // W24: one node is not zoomed to 2×
     flowView.centre = () => { const el = document.querySelector('.flow-host'); if (!el) return null; const r = el.getBoundingClientRect(); const p = rf.screenToFlowPosition({ x: r.left + r.width / 2, y: r.top + r.height / 2 }); return { x: Math.round(p.x), y: Math.round(p.y) } }
     flowView.toFlow = (x, y) => { const p = rf.screenToFlowPosition({ x, y }); return { x: Math.round(p.x), y: Math.round(p.y) } }
     return () => { flowView.fit = undefined; flowView.centre = undefined; flowView.toFlow = undefined }
@@ -188,7 +188,7 @@ export function FlowCanvas({ onOpen, paneItems }: { onOpen?: (shotId: string) =>
   }
   return (
     <div className="flow-host" data-testid="flow-canvas" tabIndex={0} onKeyDown={(e) => { storyKey('flow', e.nativeEvent) }}>
-      <ReactFlow<StoryNodeT, Edge> nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView minZoom={0.2} maxZoom={2} deleteKeyCode={null} proOptions={{ hideAttribution: true }}
+      <ReactFlow<StoryNodeT, Edge> nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView fitViewOptions={{ padding: 0.2, maxZoom: 1 }} minZoom={0.2} maxZoom={2} deleteKeyCode={null} proOptions={{ hideAttribution: true }}
         onNodesChange={onNodesChange}
         onSelectionChange={({ nodes: sel }) => sy().setFlowSel(sel.map((x) => x.id))}
         onNodeDragStop={(_e, _n, dragged) => sy().moveNodes(dragged.map((d) => ({ id: d.id, x: Math.round(d.position.x), y: Math.round(d.position.y) })))}
@@ -204,7 +204,7 @@ export function FlowCanvas({ onOpen, paneItems }: { onOpen?: (shotId: string) =>
           showMenu(e, [...(paneItems ?? []), { heading: 'Add a node here' }, ...(['start', 'hub', 'choice', 'condition', 'action', 'shot', 'jump', 'comment'] as const).map((t) => ({ cmd: `story.flow.add.${t}` })),
             ...templateItems(null, flowView.toFlow?.(e.clientX, e.clientY) ?? null), sep, { cmd: 'story.flow.voiceEpisode' }, { cmd: 'story.flow.validate' }, { cmd: 'story.flow.play' }, { cmd: 'story.flow.fit' }]) }}>
         <Background gap={24} />
-        <MiniMap pannable zoomable />
+        <MiniMap pannable zoomable className="flow-minimap" bgColor="var(--bg1)" maskColor="color-mix(in srgb, var(--bg) 55%, transparent)" nodeColor="var(--fg3)" />{/* W24: small, dark, out of the way */}
         <Controls showInteractive={false} />
         <FitBridge />
         <SceneFrames frames={frames} picked={sceneId} onMove={onFrameMove} onDrop={onFrameDrop} />

@@ -23,6 +23,8 @@ describe('the recipe graph (RC1)', () => {
     expect(targetOf(node('take', 'take'), clay)).toEqual({ kind: 'final', section: 'output' })
     expect(targetOf(node('take', 'take'), { route: 'i2v', final_id: null })).toEqual({ kind: 'shots' })
     expect(targetOf(node('step:clip', 'clip'), { route: 'stage', final_id: null })).toEqual({ kind: 'performance', card: 'clip' })
+    expect(targetOf(node('step:clip', 'clip'), clay)).toEqual({ kind: 'performance', card: 'final' })                 // W39: not Image to video
+    expect(targetOf(node('step:clip', 'clip'), { route: 'i2v', final_id: null })).toEqual({ kind: 'performance', card: 'i2v' })
     expect(targetOf(node('step:frame', 'frame'), { route: 'i2v', final_id: null })).toEqual({ kind: 'image' })
   })
 })

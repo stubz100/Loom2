@@ -125,7 +125,7 @@ def shot_graph(shot: Any, version: Any, *, rc0: dict[str, Any], node: Any | None
                       sub="character" if p.cls == "character" else "prop", state="done" if v and v.hero_asset_id else "owed",
                       reasons=[] if v and v.hero_asset_id else ["no hero yet"], thumb=v.hero_asset_id if v else None,
                       ref={"profile_id": pid, "version": v.id if v else ""}))
-        if clay and pid in bound:
+        if clay and pid in bound and p.cls == "character":                    # W41: a prop is placed from its 3D model, not performed from a reference
             ref_id = v.anim_ref_asset_id if v else None
             add(GraphNode(id=f"anim_ref:{pid}", kind="anim_ref", label="Animation reference", sub=p.name, state="done" if ref_id else "owed",
                           reasons=[] if ref_id else ["the clay route performs from it"], thumb=ref_id, ref={"profile_id": pid, "version": v.id if v else ""}))

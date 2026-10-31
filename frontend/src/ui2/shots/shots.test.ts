@@ -73,7 +73,7 @@ describe('the owed work (U6c, D164)', () => {
     }
     const finals = [fin('f_old', '1'), fin('f_new', '2'), fin('f_other', '3', { shot_id: 'sht_b' })]
     const o = owedOf(finals, owed as never, 'sht_a', 'v1')!
-    expect([o.fid, o.queued, o.minutes]).toEqual(['f_new', 3, 11])                                           // 660 s
+    expect([o.fid, o.queued, o.minutes, o.extra]).toEqual(['f_new', 3, 11, 'the plate and the face work'])  // 660 s; W42: what it adds to the card's performances (lip-sync not queued)
     expect(owedTitle(o).split('\n')).toEqual(['The plate · ≈ 1 min', 'Tomas: performance · ≈ 3 min', 'Tomas: face pass (after its performance) · ≈ 7 min',
       'Ines: lip-sync — not queued: it is seen from behind'])
     expect(owedOf(finals, { f_new: { ...owed.f_new, items: [] } } as never, 'sht_a', 'v1')).toBeNull()                 // nothing owed

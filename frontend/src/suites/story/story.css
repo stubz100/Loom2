@@ -150,6 +150,8 @@
 .flow-host { position: relative; width: 100%; height: 100%; min-height: 240px; background: var(--bg0); }
 .flow-host .react-flow { background: var(--bg0); }
 .flow-host .react-flow__minimap { background: var(--bg1); }
+.flow-host .react-flow__minimap.flow-minimap { width: 150px; height: 100px; opacity: 0.85; }   /* W24: it covered the node */
+.flow-host .react-flow__minimap.flow-minimap svg { width: 150px; height: 100px; }
 .flow-host .react-flow__controls button { background: var(--bg2); color: var(--fg); border-color: var(--line2); fill: var(--fg); }
 .flow-host .react-flow__edge-path { stroke: var(--fg3); stroke-width: 1.5; }
 .flow-host .react-flow__edge.selected .react-flow__edge-path { stroke: var(--accent); }

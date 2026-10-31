@@ -71,12 +71,12 @@ export type VoiceBody = { name: string; tier: 'draft' | 'cloning'; voice: string
 export function voiceLabel(v: { name: string; tier: string; language: string }): string {
   return `${v.name} · ${v.tier}${v.language !== 'English' ? ` · ${v.language}` : ''}`
 }
-/** D88 XL: the voiced Flow lines a lip-sync can follow — the owner node's first. D90 (B6): a line whose spoken audio (its asset's
+/** D88 XL: the voiced Flow lines a lip-sync can follow — the owner node's own (W33; every node's for a shot outside the Flow). D90 (B6): a line whose spoken audio (its asset's
  *  `duration_s`, `secs` by asset id) runs past the lip-sync window (`/capabilities.experimental.lipsync.seconds_max`) is `too_long`;
  *  a duration not known yet is offered (the server caps the frames). */
 export function voicedLines(nodes: Record<string, FlowNode>, ownerNode: string | null, secs: Record<string, number | null | undefined> = {}, max: number | null | undefined = null): { node_id: string; index: number; label: string; too_long: boolean; seconds: number | null }[] {
   const out: { node_id: string; index: number; label: string; too_long: boolean; seconds: number | null }[] = []
-  const order = Object.values(nodes).sort((a, b) => (a.id === ownerNode ? -1 : b.id === ownerNode ? 1 : 0))
+  const order = ownerNode && nodes[ownerNode] ? [nodes[ownerNode]] : Object.values(nodes)   // W33: a shot of the Flow lip-syncs its own lines, not another shot's
   for (const n of order) n.lines.forEach((l, i) => {
     if (!l.audio_asset_id || !l.text.trim()) return
     const d = secs[l.audio_asset_id] ?? null
@@ -1041,7 +1041,7 @@ export const useStory = create<StoryState>()((set, get) => {
       const g = get().flowGraph
       const n0 = g?.nodes.length ?? 0
       const c = pin ? null : (await import('./storyCommands')).flowView.centre?.()
-      const pos = pin ?? (c ? { x: c.x - 110 + (n0 % 4) * 40, y: c.y - 40 + (n0 % 4) * 40 } : { x: 60 + (n0 % 6) * 240, y: 60 + Math.floor(n0 / 6) * 160 })   // the view's centre, stepped so new nodes do not stack
+      const pos = pin ?? freeSpot(c ? { x: c.x - 110, y: c.y - 40 } : { x: 60 + (n0 % 6) * 240, y: 60 + Math.floor(n0 / 6) * 160 }, g?.nodes ?? [])   // W24 (= F20): the view's centre, or the nearest place beside it no node takes
       try {
         const n = await unwrap(http.POST('/story/flow/nodes', { body: { type, title: title ?? '', x: pos.x, y: pos.y, text: extra?.text ?? '', target: null, shot: true } }))
         await get().loadFlow()
@@ -1270,6 +1270,17 @@ export function shellBlocked(v: ShellVersion | undefined | null): string | null 
   if (!v.body_points || v.body_fit_from !== v.anim_ref_asset_id) return 'fit the body to the animation reference first: the fit reads its stance, and the shell needs the A-pose'
   return null
 }
+/** W24 (= F20): a place for a new Flow node at or near `at` that no node takes (a node is about 220 × 80; one more step right, then
+ *  down a row, until free) — a new node landed on the last one. */
+export function freeSpot(at: { x: number; y: number }, nodes: { x: number; y: number }[]): { x: number; y: number } {
+  const taken = (x: number, y: number) => nodes.some((n) => Math.abs(n.x - x) < 240 && Math.abs(n.y - y) < 110)
+  for (let row = 0; row < 12; row++) for (let col = 0; col < 6; col++) {
+    const x = at.x + col * 260, y = at.y + row * 130
+    if (!taken(x, y)) return { x, y }
+  }
+  return at
+}
+
 /** W59: World is showing this entity now (a toast's "Open … in World" would lead where the author is). */
 function inWorldOn(pid: string): boolean {
   return layerOf(currentPlace()) === 'world' && useStory.getState().profileId === pid

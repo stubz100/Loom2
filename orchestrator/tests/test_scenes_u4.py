@@ -72,7 +72,7 @@ def test_shots_sharing_a_camera_get_their_own(tmp_path: Path):
     assert again.migrated == ["U4: 1 shot sharing a camera got its own (a copy, keys and all)"]
     va, vb = again.shot(a.shot_id).version(), again.shot(b.shot_id).version()
     after = stages.get(stg.id)
-    assert va.camera_id == cam.id and vb.camera_id != cam.id and [c.name for c in after.cameras] == ["Camera 1", "Camera 1 2"]
+    assert va.camera_id == cam.id and vb.camera_id != cam.id and [c.name for c in after.cameras] == ["Camera 1", "Camera 2"]   # W32
     assert after.keyframes["camera"][vb.camera_id] == after.keyframes["camera"][cam.id]   # the keys with it
     assert after.revision == stg.revision and vb.stage_revision == stg.revision      # nothing goes stale
 

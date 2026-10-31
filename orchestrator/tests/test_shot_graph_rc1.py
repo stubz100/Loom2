@@ -187,3 +187,17 @@ def test_a_layer_goes_stale_only_with_its_own_parts():
     st = st0.model_copy(deep=True)
     st.objects[0].name = "Mara (hero)"; st.revision = 9                              # a name changes nothing rendered
     assert all(x.state != "stale" for x in graph(st).values())
+
+
+def test_a_cast_prop_has_no_animation_reference_on_the_clay_route():
+    """W41: the Recipe called the animation reference missing after it was made — a Cast prop bound on the stage (The letter) got an
+    anim_ref node it never needs (it is placed from its 3D model): only the characters have one."""
+    letter = _prof("prf_l", "The letter", cls="prop", hero_asset_id="ast_hl", model_asset_id="ast_ml")
+    st = _stage(5)
+    st = st.model_copy(update={"objects": [*st.objects, StageObject(id="mesh_l", kind="mesh", name="The letter", profile_id="prf_l")]})
+    v = ShotVersion(id="v1", stage_id="stg_1", camera_id="cam_1", clip_id="clp_render")
+    shot = Shot(id="sht_c", name="The seal", versions=[v], current="v1")
+    g = shot_graph(shot, v, rc0=_rc0("stage", frame=("missing", []), clip=("missing", [])), node=None, profiles={**PROFILES, "prf_l": letter},
+                   stage=st, final=_final(), composition=None, clip_asset=asset)
+    n = _by(g)
+    assert "character:prf_l" in n and "anim_ref:prf_l" not in n and "anim_ref:prf_m" in n

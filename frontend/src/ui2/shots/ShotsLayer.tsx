@@ -111,7 +111,7 @@ function LevelColumn() {
     <div className="w-panel"><Suspense fallback={null}><Col /></Suspense></div>
     <div className="s-foot"><Suspense fallback={null}><Foot /></Suspense>
       {(level === 'performance' || level === 'final') && owed && <span className="s-owed-work" data-owed={owed.queued} title={owedTitle(owed)}>
-        {!!owed.queued && <CommandButton id="shots.performOwed" text label={`Perform the owed layers ▶ · ≈ ${owed.minutes} min on the GPU`} />}
+        {!!owed.queued && <CommandButton id="shots.performOwed" text label={`Perform the owed layers ▶ · ≈ ${owed.minutes} min on the GPU${owed.extra ? ` with ${owed.extra}` : ''}`} />}
         {owed.items.length > owed.queued && <span className="hint" data-owed-listed={owed.items.length - owed.queued}>{owed.items.length - owed.queued} not queued</span>}</span>}
       <CommandButton id={next} text label={level === 'final' ? 'Mark the shot final ✓' : undefined} /></div>
   </>

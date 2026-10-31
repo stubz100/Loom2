@@ -15351,3 +15351,69 @@ by earlier work: W3 (M2), W34 (M10), W36 (M8), W40 and W43 (D167), W46, W47 and 
 - Vitest 625 + 3 skipped: new are the readable prompt, the job's label, the disabled reason and a new entity's panel.
 - Typecheck, build and lint clean (61 warnings, as before); settings audit 322 / 0; agent docs and model literals clean.
 - e2e 84/84 alone.
+
+## 2026-10-31 23:46 — The walkthrough-2 register, waves 2 and 3 (Shots, the Flow, Clay, Performance, Final): W24–W28, W31–W33, W35, W37–W39, W41, W42, W45, W48, W50, W53, W54
+
+None of these changes a direction.
+
+**Shots and the Flow:**
+
+- **W24 (= F20):** a new Flow node lands at the nearest free place beside the view's centre (`freeSpot`), not on the last node. *Fit*
+  stops at 1× (one node was zoomed to 2×), and the minimap is small and dark.
+- **W25:** the Inspector's shot text is "description", as in the header (it said "action").
+- **W26:** the header's scene is the Flow's scene by name, the one the Inspector names, with its stage on hover; a shot in a scene with no
+  stage yet says "Arrival — no stage yet" and offers *Give it a stage*.
+- **W27:**
+  - The Board picker lists World's pages and the shot's own, not every page of the project (`boardPages`).
+  - Not changed: the lines are edited in the header and in the Flow Inspector. Both are the same editor on the same record, so they never
+    disagree, and the Inspector's per-line voice controls are the ones the e2e and the author use.
+- **W28 (= F19):** a Choice, a Hub or a Jump is offered no shot verbs in its right-click; an untitled node is headed "Choice (untitled)",
+  not by its id.
+- **W31:** the shot's and the panel's times are shown in local time (`frame/time.ts localTime`); the server's UTC was sliced as local.
+- **W32:** a camera copy is named by the next free number — "Camera 2", "Camera 3", "Wide 2" — not "Camera 1 2", then "Camera 1 2 2"
+  (`next_camera_name`, shared by *New shot in the same scene*, the shared-camera migration and a template's camera).
+- **W33:** a shot's lip-sync offers its own node's voiced lines only (Departure offered The seal's).
+
+**Clay, Performance and Final:**
+
+- **W35:** a new scene at a World place gets the place's built set only, not the bench's unbound "1.75 m for scale" mannequin.
+- **W37:** a set's hit within 0.3 m of the camera is not taken (a camera on or in a set's surface placed things at its own position). The
+  parent picker lists each figure's hands (*Ines · right hand*), which hold the thing as Hold ▸ does.
+- **W38:** a flat prop (its height under 15 % of its longest side: a letter, a rug, a map) takes its size along its longest side, not
+  its thickness (`meshSize.ts`); World's height help says so.
+- **W39:**
+  - A layered final puts its shot version on the clay route whatever its earlier template (Image to video, the stage), not only when it had
+    none (`clay_template`; a Dialogue or a one-pass method stays).
+  - The Recipe's clip step opens the Final shot card for a final, and the empty centre is named after the open card ("Final shot", not
+    "Animate").
+- **W41:**
+  - The Recipe called the animation reference missing after it was made: the clay route gave a Cast prop bound on the stage (The letter)
+    an animation reference it never needs. Only characters have one now.
+  - Probed on the walkthrough's project (read-only): The seal, The ferryman and Arrival read "fresh". The plate reads "stale" because the
+    set changed after it, which is a real reason.
+- **W42:** the foot's minutes say what they add to the card's performances ("≈ 7 min on the GPU with the plate and the face work"); the
+  card counts the performances only.
+- **W45 (= F44):** `GET /finals/{fid}/composition` answers null when there is none yet, not a 404 per final per poll.
+- **W48:** *Make the composition* opens it when the author is in Final (the toast no longer says "Open in Final" there), and elsewhere the
+  toast has *Open in Final ▸*.
+- **W50:** Performance opens the Clips card on the shot's own clip. A final's, a composition's or a cut's render offers no *Variations*,
+  *Re-run* or *Try the other model*: those make model clips again.
+- **W53:** in a shared scene, Performance lists the open shot's finals only (and those made for no shot); its foot and the stepper follow
+  that shot's newest final, not the stage's.
+- **W54:** a figure whose pose pass shows it on no frame (no keypoint in front of the camera and inside the frame) gets no layer. Its
+  other passes are skipped, the final is made without it, and a toast names it, so *Assemble* no longer waits on an empty performance.
+
+**Left for later:**
+
+- **W44** (a prop layer's beauty, the whole set, opaque): the assembly cuts a prop out of its beauty by its depth. On the walkthrough's
+  finals the letter's composed footage is wholly transparent (alpha 0 on every pixel), which fits W43's black depth passes (fixed by
+  D167). It needs a new final on the rig to check, so it is owed, not fixed.
+- **W51, W52, W55** go with the next wave.
+
+**Tests:**
+
+- Offline 792 (W32's new names made one RC2c assertion read "Camera 2"; it was updated and rerun): new are W32 (the cameras' names), W35 (the scene stage), W39 (`clay_template`), W41 (a prop's graph) and W45 (the
+  null).
+- Vitest 629 + 3 skipped: new are W24, W27, W31, W33, W38, W39, W42, W53 and W54.
+- Typecheck, build and lint clean (61 warnings, as before); settings audit 322 / 0; agent docs and model literals clean.
+- e2e 84/84 alone.

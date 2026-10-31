@@ -23,6 +23,9 @@ import { navigate } from '../../frame/router'
 const an = () => useAnimate.getState()
 const cp = () => useComposition.getState()
 const hasClip = () => !!an().clip()
+/** W50: a clip a model made (not an assembly's, a composition's or a cut's render) — the only kind new seeds or the other model can make again. */
+const RENDERS = new Set(['final', 'composition', 'sequence'])
+const modelClip = () => { const c = an().clip(); return !!c && !RENDERS.has(c.model_id) }
 /** D125 (A4): the version Animate's For chip names (read from Story's shots), or undefined. */
 const forVersion = () => { const f = useMakeFor.getState().animate; return f ? useStory.getState().shots.find((x) => x.id === f.shot_id)?.versions.find((v) => v.id === f.version) : undefined }
 /** D125 (A4): the clip's Story verb for menus — Use it as the For chip's shot's clip, else Make a shot from it. */
@@ -148,9 +151,9 @@ registerCommands([
     run: () => void extendClip() },
   { id: 'anim.useAsStart', scope: 'animate', label: 'Use frame as next start', icon: Clapperboard, placement: ['inspector', 'context'], when: hasClip, run: () => void an().useFrameAsStart() },
   // clip verbs
-  { id: 'anim.variations', scope: 'animate', label: 'Variations (new seeds)', icon: Shuffle, keys: 'V', placement: ['inspector', 'context'], when: hasClip, run: () => void an().variations() },
-  { id: 'anim.rerun', scope: 'animate', label: 'Re-run (same seed)', icon: RotateCcw, keys: 'Ctrl+R', placement: ['inspector', 'context'], when: hasClip, run: () => void an().rerun() },
-  { id: 'anim.tryOther', scope: 'animate', label: 'Try the other model', icon: Shuffle, placement: ['inspector', 'context'], when: hasClip, run: () => void an().tryOther() },
+  { id: 'anim.variations', scope: 'animate', label: 'Variations (new seeds)', icon: Shuffle, keys: 'V', placement: ['inspector', 'context'], when: modelClip, run: () => void an().variations() },
+  { id: 'anim.rerun', scope: 'animate', label: 'Re-run (same seed)', icon: RotateCcw, keys: 'Ctrl+R', placement: ['inspector', 'context'], when: modelClip, run: () => void an().rerun() },
+  { id: 'anim.tryOther', scope: 'animate', label: 'Try the other model', icon: Shuffle, placement: ['inspector', 'context'], when: modelClip, run: () => void an().tryOther() },
   { id: 'anim.identity', scope: 'animate', label: 'Measure identity (FaceSim)', icon: Eye, placement: ['inspector', 'context'], when: () => hasClip() && !!useSession.getState().capabilities?.facesim?.available, run: () => void an().measureIdentity() },
   // D125 (A4): with the For chip the clip becomes that shot version's clip where it is played (no second shot)
   { id: 'anim.useClip', scope: 'animate', label: "Use as the shot's clip", icon: Clapperboard, placement: ['inspector', 'context', 'toolbar'], hint: "Animate is making for a shot (the For chip): this clip becomes that version's clip",

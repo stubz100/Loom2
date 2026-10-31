@@ -63,7 +63,7 @@ const METHOD: Record<Card, Method> = { final: 'layered', clip: 'one_pass', i2v: 
 
 /** U6c → D164: the shot's final's owed work as the server counts it (GET /finals/{fid}/owed): what *Perform the owed layers ▶* queues,
  *  with the GPU minutes, and what it only lists (why). */
-export interface Owed { fid: string; items: FinalOwed['items']; queued: number; minutes: number }
+export interface Owed { fid: string; items: FinalOwed['items']; queued: number; minutes: number; extra: string }   // W42: `extra` — what the minutes add to the performances
 type FinalLite = { id: string; shot_id?: string | null; shot_version?: string | null; created_at: string; revision?: number }
 /** The newest final made for the shot version, or null. */
 export function newestFinal<T extends FinalLite>(finals: T[], shotId: string, version: string): T | null {
@@ -75,7 +75,9 @@ export function owedOf(finals: FinalLite[], owed: Record<string, FinalOwed>, sho
   const o = f ? owed[f.id] : undefined
   if (!f || !o || !o.items.length) return null
   const queued = o.items.filter((x) => x.queue).length
-  return { fid: f.id, items: o.items, queued, minutes: queued ? Math.max(1, Math.round(o.seconds / 60)) : 0 }
+  const kinds = new Set(o.items.filter((x) => x.queue).map((x) => x.kind))
+  const extra = [kinds.has('plate') && 'the plate', kinds.has('face') && 'the face work', kinds.has('lipsync') && 'lip-sync'].filter(Boolean).join(' and ')   // W42: the card counts the performances only
+  return { fid: f.id, items: o.items, queued, minutes: queued ? Math.max(1, Math.round(o.seconds / 60)) : 0, extra }
 }
 const OWED_WORD: Record<string, string> = { perform: 'performance', face: 'face pass', lipsync: 'lip-sync' }
 /** D164: the owed items, one a line, for the foot's tooltip (rule 11: no block of text on the screen) — what is queued with its minutes,
@@ -123,6 +125,11 @@ async function enterPerformance(): Promise<void> {
   unfollow?.()
   unfollow = useAnimRoute.subscribe((r, prev) => { if (r.route !== prev.route && useShots.getState().level === 'performance') void keepMethod(r.route as Card) })
   void followOwed()
+  if (v.clip_id) {                                                       // W50: the Clips card opens on this shot's clip, not the oldest final's or another shot's
+    const { useAnimate } = await import('../../suites/animate/animateStore')
+    if (!useAnimate.getState().clips.some((c) => c.id === v.clip_id)) await useAnimate.getState().loadClips()
+    if (useAnimate.getState().clips.some((c) => c.id === v.clip_id) && useAnimate.getState().current !== v.clip_id) useAnimate.getState().select(v.clip_id)
+  }
 }
 let unfollow: (() => void) | null = null
 

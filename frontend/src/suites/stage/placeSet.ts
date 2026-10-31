@@ -5,6 +5,9 @@
 import * as THREE from 'three'
 
 export type SetKind = 'room' | 'street' | 'corridor' | 'ground'
+/** D172 (E48): the faces walked on — outside a room filled from above, their grazing part too (place_sets.GROUND_FACES). */
+export const GROUND_PARTS = ['floor', 'road', 'pavement']
+export const isGround = (id: string, kind: SetKind): boolean => kind !== 'room' && GROUND_PARTS.includes(id.split('_')[0])
 export interface PlaceSetDoc { kind: SetKind; sizes: Record<string, number>; parts?: Record<string, boolean>; faces?: { id: string; texture_asset_id?: string | null; texel_m?: number }[] }
 export interface Face { id: string; origin: THREE.Vector3; u: THREE.Vector3; v: THREE.Vector3; w: number; h: number }
 

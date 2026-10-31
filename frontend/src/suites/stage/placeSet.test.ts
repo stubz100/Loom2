@@ -1,8 +1,8 @@
 // proto01_UIcast CW6 (04 §2): a set's faces — each kind's parts, every face's normal looking into the space, a room's faces closing the box.
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
-import { normalOf, placeSet, setFaces } from './placeSet'
-import { coverageShares, FACADE_COS, UNSEEN_COS, unseenCos } from './setBake'
+import { isGround, normalOf, placeSet, setFaces } from './placeSet'
+import { coverageShares, FACADE_COS, GROUND_COS, UNSEEN_COS, unseenCos } from './setBake'
 
 describe("a place's set (CW6)", () => {
   it("builds a room's faces looking in, the front wall off by default", () => {
@@ -47,5 +47,18 @@ describe("D170: a street's fronts seen off square are the Fill's (place_sets.uns
     const px = new Uint8Array([10, 0, 0, 255, 100, 0, 0, 255, 160, 0, 0, 255, 230, 0, 0, 255])   // cosines 0.04, 0.39, 0.63, 0.90; every pixel fine
     expect(coverageShares(px)).toEqual({ seen: 0.75, bad: 0.25 })
     expect(coverageShares(px, unseenCos('facade_right'))).toEqual({ seen: 0.75, bad: 0.75 })    // the picture saw it, the Fill takes it
+  })
+})
+
+describe("D172: the ground outside a room is the Fill's when seen at a slant (place_sets.unseen_cos's twin)", () => {
+  it("cuts a road, a pavement and a non-room floor at 0.35, a room's floor at 0.05", () => {
+    expect(GROUND_COS).toBe(0.35)
+    expect([unseenCos('road', 'street'), unseenCos('pavement_left', 'street'), unseenCos('floor', 'corridor'), unseenCos('floor', 'ground')]).toEqual([GROUND_COS, GROUND_COS, GROUND_COS, GROUND_COS])
+    expect([unseenCos('floor', 'room'), unseenCos('floor'), unseenCos('end', 'street')]).toEqual([UNSEEN_COS, UNSEEN_COS, UNSEEN_COS])
+    expect(unseenCos('facade_left', 'street')).toBe(FACADE_COS)
+    expect([isGround('pavement_right', 'street'), isGround('floor', 'room'), isGround('facade_left', 'street')]).toEqual([true, false, false])
+    const px = new Uint8Array([10, 0, 0, 255, 51, 0, 0, 255, 100, 0, 0, 255, 230, 0, 0, 255])   // cosines 0.04, 0.20, 0.39, 0.90
+    expect(coverageShares(px, unseenCos('road', 'street'))).toEqual({ seen: 0.75, bad: 0.5 })
+    expect(coverageShares(px, unseenCos('floor', 'room'))).toEqual({ seen: 0.75, bad: 0.25 })
   })
 })

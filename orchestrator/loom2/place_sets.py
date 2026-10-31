@@ -34,6 +34,8 @@ FILL_MIN = 0.002                                 # PF1: a face with less to fill
 FACADE_COS = 0.7                                 # D170 (E46): a street's fronts stand out from their face (stalls, steps, awnings); seen more
                                                  # than 45° off square they lie on it sheared, so they go to Fill as unseen (stage/setBake.ts)
 ROOM_FACES = ("floor", "ceiling", "wall")        # a room's or a corridor's faces: filled plain (E38: a Fill invents windows on a wall)
+GROUND_FACES = ("floor", "road", "pavement")     # D172 (E48): what is walked on — outside a room, filled from above
+GROUND_COS = 0.35                                # D172: what stands on the ground lies on it as a smear when seen at a slant (stage/setBake.ts)
 NOUN = {"floor": "the floor", "ceiling": "the ceiling", "wall": "a wall", "road": "the road's surface", "pavement": "the pavement",
         "facade": "the buildings' fronts", "end": "the far end of the street", "backdrop": "the land and the sky in the distance"}
 
@@ -98,7 +100,9 @@ def fill_prompt(fid: str, material: str, place: str, kind: str = "room") -> str:
     """D143: a face's Fill prompt. A material named (the author's words) is the whole subject — E38's clean wall named its material and
     nothing else; CW6's rig: the place's words beside it ("a farmhouse kitchen") painted a window and pots onto the kitchen's floor. Without
     one, the face's noun and the place's words. A room's faces are plain (a Fill invents windows on a wall); a corridor's, a street's and
-    the backdrop are continued as the rest (an alley's walls are building fronts, their windows belong)."""
+    the backdrop are continued as the rest (an alley's walls are building fronts, their windows belong). Klein paints the scene its words
+    describe, so a facade is "a flat elevation of" its material (D170, E46) and the ground outside a room "a flat plan view of" it,
+    without the place's words (D172, E48)."""
     named = (material or "").strip().rstrip(".")
     what = named or face_noun(fid)
     if fid.split("_")[0] == "facade":                                       # D170 (E46): the elevation first, or Klein paints the place's view down it
@@ -107,6 +111,10 @@ def fill_prompt(fid: str, material: str, place: str, kind: str = "room") -> str:
                 "seamlessly as the rest of it, the same materials and pattern, the same light, no people.")
         place = (place or "").strip().rstrip(".")
         return f"{lead} The place: {place}." if place and not named else lead
+    if kind != "room" and fid.split("_")[0] in GROUND_FACES:              # D172 (E48): from above, the floor continued, never the place's view
+        what = what if what[1:2].isupper() else what[:1].lower() + what[1:]
+        return (f"A flat plan view of {what}, seen from directly above — no perspective, no walls, no ceiling, no people: continued seamlessly "
+                "as the rest of it, the same materials and pattern, the same light.")
     what = what[0].upper() + what[1:]
     if kind == "room" and fid.split("_")[0] in ROOM_FACES:
         lead = f"{what}, seen straight on: its surface continued plain and even, nothing on it and nothing in front of it — no window, no door, no picture, no furniture, no people — the same light."
@@ -116,9 +124,13 @@ def fill_prompt(fid: str, material: str, place: str, kind: str = "room") -> str:
     return f"{lead} The place: {place}." if place and not named else lead
 
 
-def unseen_cos(fid: str) -> float:
-    """The cosine under which a face's texel counts as unseen: a facade's FACADE_COS (D170), any other face's UNSEEN_COS."""
-    return FACADE_COS if fid.split("_")[0] == "facade" else UNSEEN_COS
+def unseen_cos(fid: str, kind: str = "room") -> float:
+    """The cosine under which a face's texel counts as unseen: a facade's FACADE_COS (D170), the ground's outside a room GROUND_COS (D172),
+    any other face's UNSEEN_COS."""
+    part = fid.split("_")[0]
+    if part == "facade":
+        return FACADE_COS
+    return GROUND_COS if kind != "room" and part in GROUND_FACES else UNSEEN_COS
 
 
 def fill_mask(cov: np.ndarray, unseen: float = UNSEEN_COS) -> np.ndarray:
@@ -185,7 +197,7 @@ def prepare_fill(q: Any, pid: str, vid: str, order: list[str], seed: int | None 
         with Image.open(q.catalogue.abs_path(tex_rec)) as im:
             rgba = np.asarray(im.convert("RGBA")).copy()
         with Image.open(q.catalogue.abs_path(cov_rec)) as im:
-            mask = fill_mask(np.asarray(im.convert("RGB")), unseen_cos(fid))
+            mask = fill_mask(np.asarray(im.convert("RGB")), unseen_cos(fid, ps.kind))
         if mask.shape != rgba.shape[:2] or float(mask.mean()) < FILL_MIN:
             why.add("small")
             continue

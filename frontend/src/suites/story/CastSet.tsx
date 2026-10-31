@@ -9,7 +9,7 @@ import { markUsed, sep } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import { Help } from '../../frame/Help'
 import { useSession } from '../../store/session'
-import { SET_KIND_PARTS, SET_KIND_SIZES, type PlaceSetDoc, type SetKind } from '../stage/placeSet'
+import { isGround, SET_KIND_PARTS, SET_KIND_SIZES, type PlaceSetDoc, type SetKind } from '../stage/placeSet'
 import { changeKind, dragTo, handles, outlines, rescale, type Handle, type SourceCam } from '../stage/setOverlay'
 import { autoBake, faceNoun, saveSet, setCamera, setPicture, setStatus, useSetBuilder, type PlaceSet } from './setBuilder'
 import { onStoryItem } from './storyCommands'
@@ -40,7 +40,7 @@ export function PlaceSetSection({ p, v }: { p: Profile; v: Version }) {
   const parts = ps ? { ...SET_KIND_PARTS[ps.kind], ...(ps.parts ?? {}) } : {}
   return (
     <section className="place-set">
-      <h3>The set <Help text={"A room, a corridor, a street or open ground fitted to the set picture (the place empty, from eye level): MoGe reads the picture's depth, the set's walls and the camera come from it, scaled by the camera's height. Drag a wall's foot or its top on the picture to fit it (the dashed ones were guessed). The picture is then baked onto the faces; Fill paints what it never saw, face by face, with each face's material."} /></h3>
+      <h3>The set <Help text={"A room, a corridor, a street or open ground fitted to the set picture (the place empty, from eye level): MoGe reads the picture's depth, the set's walls and the camera come from it, scaled by the camera's height. Drag a wall's foot or its top on the picture to fit it (the dashed ones were guessed). The picture is then baked onto the faces; Fill paints what it never saw, face by face, with each face's material. The picture looks down the place; the side a shot faces is painted square on here — name what stands along a street's fronts and what its ground is."} /></h3>
       <div className="place-set-row">
         {pic ? <SetOverlay key={pic} pic={pic} ps={ps} cam={cam} assumed={ps?.sources[0]?.assumed ?? []} onEdit={edit} />
           : <div className="set-view empty" onContextMenu={(e) => showMenu(e, [{ cmd: 'cast.place.picture' }])}><span className="hint">set picture: none yet</span></div>}
@@ -121,21 +121,23 @@ function SetOverlay({ pic, ps, cam, assumed, onEdit }: { pic: string; ps: PlaceS
 }
 
 /** The baked faces: what the picture saw of each, filled or to fill, and the material each Fill names (D143). D170: a facade is filled as a
- *  flat elevation of its material; unnamed, the place's words paint a view down the street (E46c), so it is marked until named. */
+ *  flat elevation of its material; unnamed, the place's words paint a view down the street (E46c), so it is marked until named. D172: the
+ *  ground outside a room is filled from above; unnamed, its noun paints the wrong ground (a road as asphalt, E48), so it is marked too. */
 function FaceRows({ ps, onEdit }: { ps: PlaceSet; onEdit: (ps: PlaceSet) => void }) {
   const order = [...ps.faces].sort((a, b) => (a.bad ?? 0) - (b.bad ?? 0))
   return (
     <div className="set-faces" role="list" aria-label="the set's faces">
-      {order.map((f) => { const facade = f.id.split('_')[0] === 'facade'; return (
+      {order.map((f) => { const facade = f.id.split('_')[0] === 'facade', ground = isGround(f.id, ps.kind); return (
         <div key={f.id} role="listitem" className={`set-face${f.filled ? ' filled' : ''}`} data-face={f.id}
           onContextMenu={(e) => showMenu(e, [{ cmd: 'cast.place.fillFace', on: onStoryItem({ face: f.id }) }, { cmd: 'cast.place.fill' }, { cmd: 'cast.place.bake' }])}>
           {f.texture_asset_id ? <img src={api.thumbUrl(f.texture_asset_id, 256)} alt="" /> : <span className="thumb" />}
           <span className="name">{PART_LABEL[f.id.replace(/_\d+$/, '')] ?? f.id}</span>
           <span className="muted">{f.fill_job_id ? 'filling…' : f.filled ? 'filled' : (f.bad ?? 0) >= 0.002 ? `${Math.round((f.bad ?? 0) * 100)} % to fill` : 'seen'}</span>
           <input type="text" defaultValue={f.material} key={`${f.id}${f.material}`} maxLength={200} aria-label={`${f.id}: its material for the Fill`}
-            className={facade && !f.material.trim() ? 'want' : undefined}
-            placeholder={facade ? 'what stands along it: shop fronts, doors below, windows above' : faceNoun(f.id)}
+            className={(facade || ground) && !f.material.trim() ? 'want' : undefined}
+            placeholder={facade ? 'what stands along it: shop fronts, doors below, windows above' : ground ? 'what it is: worn stone paving slabs' : faceNoun(f.id)}
             title={facade ? "Filled as a flat elevation of what you name here, seen square on. Unnamed, the place's words paint a view down the street"
+              : ground ? `Filled from above as what you name here. Unnamed, it is painted as ${faceNoun(f.id)}`
               : "The face's material, named for its Fill (pale ochre plaster, worn terracotta tiles)"}
             onBlur={(e) => { const m = e.target.value.trim(); if (m !== f.material) onEdit({ ...ps, faces: ps.faces.map((x) => (x.id === f.id ? { ...x, material: m } : x)) }) }}
             onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />

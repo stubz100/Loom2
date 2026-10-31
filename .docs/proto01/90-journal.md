@@ -14445,3 +14445,115 @@ seamlessly as the rest of it, the same materials and pattern, the same light, no
 
 SeedVR2 after a street's Fill (FU, 18.7× the sharpness, nothing invented) is left out of D170. It is proposed separately once its cost
 is measured: a facade at ×4 is 3000 × 496, and a set's largest face is capped at 2048 today.
+
+## 2026-10-31 10:06 — M5 read: a street's set picture surveys the street; the side-on background is the face, not the aim; spike E47 set up
+
+**M5:** asked for "a long row of fish stalls … seen straight on from across a wide aisle", all four set-picture candidates looked down
+the hall. Reading the fit (`set_fit.py`), that is what a street's set picture has to be:
+
+- the set is fitted from the floor and the walls receding (a street: no back wall within 25 m, façades at least 5 m apart);
+- a picture aimed across the aisle would show the stall fronts as a wall about 5 m ahead: a room's back wall, not a street;
+- a picture of one face square on is a Fill of that face, which D170 now makes an elevation, aligned to the set by construction.
+
+So the market doc's goal for M5 and M12 together, "a background the camera can look at side-on", is the face as the shot sees it, not
+the picture's aim. The market walk's plate (Final 1, frame 80, `finals/fin_3a18423e/plate/frames`) shows what is left:
+
+- the stall front behind Mira is a smeared figure and lamps over a blurred counter;
+- the floor below carries painted roof beams (M14's kind);
+- everything is soft: a street face's 4 cm texel spans about 5–6 plate pixels at 4.8 m on 24 mm (848 × 480).
+
+**E47, the side-on background at the shot, end to end** (a fresh copy, `F:/loom2-projects/_e47/market-copy`; outputs
+`engine/spikes/out/e47/`):
+
+- **O:** the market walk's own plate (Final 1), as built before D170;
+- **D:** both facades named ("fish market stalls: counters of fish on ice, crates below, lamps above") and filled again under D170. The
+  app then makes a final of the same shot (its plate rendered in the browser, no engine job);
+- **DU:** D's two facade textures through SeedVR2 3B ×4 (×2 twice, D153's weight), set as the faces' textures, and another final.
+
+**Measured** on the plates' frames 20, 80 and 140: the sharpness (the edge filter's variance) of the band the stall fronts fill behind
+the walker, and a sheet of the three arms.
+
+**Bars:**
+
+- **D passes** when, on all three frames, the band behind Mira reads to the eye as stalls seen side-on: no smeared figure, no hall.
+- **DU passes** when its band's sharpness is ≥ 1.5× D's and, to the eye, it is sharper with nothing invented.
+- **What goes in:**
+  - if D passes, M5 is answered by D170 (the set picture is a survey; the side the camera faces is painted square on), and the set
+    picture's ? says so;
+  - if DU passes too, a street's faces are upscaled after their Fill.
+
+## 2026-10-31 10:13 — E47: D170 gives the shot a side-on background; SeedVR2 ×4 invents; the floor band is a painted hall; M5 → D171; E48's bars
+
+E47 ran on a fresh copy of the market project (`F:/loom2-projects/_e47/market-copy`, outputs `engine/spikes/out/e47/`):
+
+- **the faces** (alone on the GPU): both facades named "fish market stalls: counters of fish on ice, crates below, lamps above" and filled
+  again under D170 (57 s and 12 s), then ×4 by SeedVR2 (11 s and 7 s). Both D textures are square-on rows of stalls with nobody in them;
+- **the finals** (in the app, a visible Edge, no engine job): Final 3 (D) and Final 4 (DU, the ×4 textures set as the faces'), each the
+  shot's v2 (frames 48–144, 65 at 16 fps, 848 × 480), beside Final 2 (O, the faces before D170).
+
+| Arm | Sharpness of the facade band (frames 5 · 32 · 60, mean) | To the eye |
+| --- | --- | --- |
+| O | 119 · 156 · 157 (144) | a smeared stallholder and lamps over a blurred counter on every frame |
+| D | 184 · 184 · 158 (176) | a counter seen side-on: fish on ice, crates below, lamps and iron columns, a second row hazy behind; soft but clear |
+| DU | 1093 · 1296 · 1394 (1261) | crisper crates and lamps, but the fish on the counter turned into flat, outlined, cartoon shapes |
+
+**Against the bars set at 10:06:**
+
+- **D passes** on all three frames: the stalls are seen side-on, with no smeared figure and no hall. M5 is answered by D170.
+- **DU fails.** It is 7.2× D's sharpness, but SeedVR2 invents: from a face 124 texels high, the fish come out as drawn shapes. A street's
+  faces are not upscaled. E46b's FU did not show this: its figures were large, and the fish here are a few texels each. A finer
+  texel for a filled street face (Fill painting at that size) is the other road to resolution, untried.
+- **Found in every arm:** the floor band at the bottom of the shot (the road and the right pavement, about the lowest fifth of the
+  frame) is the hall's roof, its lamps and its shoppers painted onto the ground. The ground faces' Fill paints the place's view, as the
+  facades' did before D170. Their textures show it plainly:
+  - the half near the picture's camera is the baked paving, which is fine;
+  - the middle is a smear of what stands on the floor (crates, the counters' feet);
+  - the far half is Fill's hall, laid flat.
+
+  This is M14's kind (W21 found the same on the pier's floor).
+
+**D171 (M5):** a set picture is not aimed. It surveys the place: the set is fitted to the floor and the walls receding, and a street
+picture aimed across the aisle would be read as a room's back wall. The side a shot faces is painted square on by Fill (D170). The set
+picture's ? in Make and the set's ? in Build say so.
+
+**E48, the ground faces** (on E47's copy, the facades set back to D's textures; outputs `engine/spikes/out/e48/`). A candidate lead is
+in the working tree: a road's, a pavement's or a non-room floor's Fill paints "A flat plan view of ‹material›, seen from directly
+above — no perspective, no walls, no ceiling, no people: continued seamlessly as the rest of it …", without the place's words (the floor
+continues its baked part).
+
+- **L:** the candidate lead, no material named;
+- **LM:** the candidate lead with a material named ("wet grey stone paving slabs");
+- **LMC:** LM, with the ground's texels seen at a cosine under 0.35 also given to Fill (the coverage edited, as E46's G was), so the
+  smear of what stands on the floor goes too.
+
+Each arm fills the road and both pavements.
+
+**Bars:**
+
+- **On the textures, to the eye:** an arm passes when every face is a floor seen from above that continues the baked paving, with no
+  roof, lamps, hall or people.
+- **The best passing arm then gets a final of the shot:** it passes when the floor band reads as paving on frames 5, 32 and 60.
+- **What goes in:**
+  - if L passes, the lead without the place's words;
+  - if only LM passes, the lead, and Build marks an unnamed ground face as it marks a facade;
+  - LMC decides whether the ground gets a grazing cut.
+
+## 2026-10-31 10:18 — E48: the ground filled from above, the grazing ground refilled — the floor band is paving; M14 → D172
+
+E48 ran on E47's copy (the facades back on D's textures, `engine/spikes/out/e48/`). Each arm filled the road and both pavements again
+through the app's route, 6–9 s a face.
+
+| Arm | To the eye |
+| --- | --- |
+| L (the plan lead, unnamed) | no hall and no roof anywhere. The road's unfilled half came out as asphalt with white lane dashes ("the road's surface"), which does not continue the baked paving. The pavements are slabs, with the smear of crates and counter feet left in their middle |
+| LM ("wet grey stone paving slabs") | slabs on every face, no hall, no roof, no lamps, nobody; the smear band is still in the pavements' middle |
+| LMC (LM, the ground under a cosine of 0.35 to Fill) | slabs from end to end on all three faces, the smear gone |
+
+**Against the bars set at 10:13:**
+
+- **L fails:** the noun alone paints the wrong ground.
+- **LM and LMC pass on the textures.**
+- **LMC also passes in the shot.** Final 5 (the shot's v2, made in the app, no engine job) shows grey paving slabs in the floor band on
+  frames 5, 32 and 60, where Finals 2 and 3 showed the hall's roof and lamps (M14's sliding white ovals are those lamps).
+- **What goes in:** the lead without the place's words, Build marking an unnamed ground face, and the grazing cut on the ground. All
+  three are D172.

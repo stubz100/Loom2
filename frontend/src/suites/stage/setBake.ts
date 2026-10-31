@@ -5,7 +5,7 @@
 // itself; what stands in a room is a prop (D108), and its pixels land on the wall behind it.
 import * as THREE from 'three'
 import { toBlob } from './passes'
-import { normalOf, setFaces, type PlaceSetDoc } from './placeSet'
+import { isGround, normalOf, setFaces, type PlaceSetDoc } from './placeSet'
 import { sourceCamera, type SourceCam } from './setOverlay'
 
 export interface BakedFace { id: string; w: number; h: number; px: [number, number]; texel_m: number; texture: Blob; coverage: Blob; seen: number; bad: number }
@@ -16,8 +16,14 @@ export const COARSE_TEXELS = 2
 /** D170 (E46): a street's fronts stand out from their face (stalls, steps, awnings); seen more than 45° off square they lie on it sheared,
  *  so a facade's texel under this cosine is the Fill's too (place_sets.FACADE_COS). */
 export const FACADE_COS = 0.7
-/** The cosine under which a face's texel counts as unseen (place_sets.unseen_cos). */
-export const unseenCos = (id: string): number => (id.split('_')[0] === 'facade' ? FACADE_COS : UNSEEN_COS)
+/** D172 (E48): what stands on the ground lies on it as a smear when seen at a slant, so outside a room a road's, a pavement's or a floor's
+ *  texel under this cosine is the Fill's too (place_sets.GROUND_COS). */
+export const GROUND_COS = 0.35
+/** The cosine under which a face's texel counts as unseen (place_sets.unseen_cos): a facade's, the ground's outside a room, else 0.05. */
+export function unseenCos(id: string, kind: PlaceSetDoc['kind'] = 'room'): number {
+  if (id.split('_')[0] === 'facade') return FACADE_COS
+  return isGround(id, kind) ? GROUND_COS : UNSEEN_COS
+}
 /** D143: the texel by kind — the picture's pixel on the faces measured 1.1–1.8 cm in rooms, 4.6 in corridors, 8–12 in streets. */
 export const TEXEL_BY_KIND: Record<PlaceSetDoc['kind'], number> = { room: 0.01, corridor: 0.02, street: 0.04, ground: 0.04 }
 
@@ -81,7 +87,7 @@ export async function bakeSet(ps: PlaceSetDoc, plate: TexImageSource & { width: 
       const gl = r.getContext(), buf = new Uint8Array(W * H * 4)
       gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, buf)
       const coverage = await toBlob(r.domElement)
-      out.push({ id: f.id, w: f.w, h: f.h, px: [W, H], texel_m: +tx.toFixed(5), texture, coverage, ...coverageShares(buf, unseenCos(f.id)) })
+      out.push({ id: f.id, w: f.w, h: f.h, px: [W, H], texel_m: +tx.toFixed(5), texture, coverage, ...coverageShares(buf, unseenCos(f.id, ps.kind)) })
       scene.remove(mesh); mesh.geometry.dispose()
     }
     return out

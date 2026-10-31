@@ -885,6 +885,55 @@ async def profile_set_fill(svc: Svc, pid: str, vid: str, body: SetFillBody):
     return {"job_id": job.id, "faces": order}
 
 
+class SetCrowdBody(BaseModel):
+    face: str
+    from_m: float = Field(ge=0.0)
+    to_m: float = Field(gt=0.0)
+    words: str = Field("", max_length=400)         # who is there and what they do; blank: people walking along it in profile
+    seed: int | None = Field(None, ge=1)
+
+
+class SetCrowdQueued(BaseModel):
+    job_id: str
+    face: str
+    size: list[int]
+
+
+@router.post("/story/profiles/{pid}/versions/{vid}/set/crowd", response_model=SetCrowdQueued)
+async def profile_set_crowd(svc: Svc, pid: str, vid: str, body: SetCrowdBody):
+    """D173: *Crowd ▶* — people along a vertical face over a stretch of it: the face's texture there refined by Klein with the people in,
+    then the plain Wan 2.2 from that picture back to it (a loop), its tone locked; the face plays it in Clay and the plate. The first step is
+    queued now, its landing queues the loop."""
+    from ..place_sets import queue_crowd
+    if svc.queue is None:
+        raise HTTPException(409, "no queue")
+    svc.require_documents()
+    await _place(svc, pid, vid)
+    try:
+        job = await queue_crowd(svc.queue, pid, vid, body.face, body.from_m, body.to_m, body.words.strip(), body.seed)
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0]))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await svc.queue.flush()
+    return {"job_id": job.id, "face": body.face, "size": list((job.origin.payload or {}).get("size") or [])}
+
+
+@router.delete("/story/profiles/{pid}/versions/{vid}/set/crowd/{fid}", response_model=Profile)
+async def profile_set_crowd_delete(svc: Svc, pid: str, vid: str, fid: str):
+    """D173: the face's crowd removed (a step still running is stopped; its clip stays in the Catalogue)."""
+    ws, _, _ = svc.require_project()
+    _, v = await _place(svc, pid, vid)
+    face = next((f for f in (v.place_set.faces if v.place_set else []) if f.id == fid), None)
+    if face is None:
+        raise HTTPException(404, f"the set has no face {fid!r}")
+    if face.crowd is not None and face.crowd.job_id and svc.queue is not None and svc.queue.job_live(face.crowd.job_id):
+        await svc.queue.cancel(face.crowd.job_id)
+    p = await asyncio.to_thread(StoryStore(ws).update_face, pid, vid, fid, crowd=None)
+    _changed(svc, p)
+    return p.model_dump()
+
+
 class AnimTestUpload(BaseModel):
     """CA0: a turn on the spot rendered by the client from the version's body (the Stage's own pose renderer) — PNG frames put through
     `PUT /blobs/{sha}`, in order, with their COCO-18 keypoints."""

@@ -131,7 +131,7 @@ export async function makeFinal(opts: MakeOptions): Promise<Final> {
   const [w, h] = opts.size ?? finalSize()
   const plate = opts.plate ?? (hasPictureSet(doc) || hasBuiltSet(doc) ? null : plateChoice(cameraTravel(doc, cam.id, plan.times)).method)
   await blocksReady(doc)                                                          // U5: the figures' clip blocks evaluated before a frame is sampled
-  const sampled = plan.times.map((t) => { const d = sampleDoc(doc, t); return { cam: d.cameras.find((c) => c.id === cam.id) ?? cam, doc: d } })
+  const sampled = plan.times.map((t) => { const d = sampleDoc(doc, t); return { cam: d.cameras.find((c) => c.id === cam.id) ?? cam, doc: d, frame: t } })   // D173: a crowd plays at its frame
   const depth = (await st().depthRanger?.(sampled, sampleDoc(doc, st().frame))) ?? null   // D167: one range for every depth pass of the final
   const actors = plan.layers.filter((l) => l.object_id).map((l) => l.object_id!)
   const todo = plan.layers.flatMap((l) => passesOf(l).map((p) => ({ l, p })))
@@ -229,7 +229,7 @@ async function redrawLayer(f: Final, lid: string): Promise<Final> {
   if (!render || !doc || doc.id !== f.stage_id || !l?.object_id || !cam) throw new Error("open the final's stage to draw its guide again")
   const times = framesAt(f.range.start, f.range.end, f.rate as Rate)
   await blocksReady(doc)                                                          // U5: the figures' clip blocks evaluated before a frame is sampled
-  const sampled = times.map((t) => { const d = sampleDoc(doc, t); return { cam: d.cameras.find((c) => c.id === cam.id) ?? cam, doc: d } })
+  const sampled = times.map((t) => { const d = sampleDoc(doc, t); return { cam: d.cameras.find((c) => c.id === cam.id) ?? cam, doc: d, frame: t } })
   const uploaded = new Set<string>(), passes: Record<string, string[]> = {}
   let keypoints: unknown[] = [], wholebody: unknown[] = []
   for (const p of passesOf({ id: lid, kind: 'figure', name: l.name, object_id: l.object_id, profile_id: l.profile_id, version: l.version })) {
@@ -300,7 +300,7 @@ export async function picturePlate(f: Final, onProgress?: (done: number, total: 
   const times = framesAt(f.range.start, f.range.end, f.rate as Rate)
   const camOf = (d: StageDoc) => d.cameras.find((c) => c.id === f.camera_id) ?? d.cameras[0]
   await blocksReady(doc)                                                          // U5: the figures' clip blocks evaluated before a frame is sampled
-  const frames = times.map((t) => { const d = sampleDoc(doc, t); return { cam: camOf(d), doc: only(d, []) } })
+  const frames = times.map((t) => { const d = sampleDoc(doc, t); return { cam: camOf(d), doc: only(d, []), frame: t } })   // D173: the set's crowds at each frame
   const out = await render(frames, f.size.w, f.size.h, 'beauty', sampleDoc(doc, st().frame), onProgress)
   return storePlate(f, out.blobs)
 }

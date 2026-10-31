@@ -3887,6 +3887,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/profiles/{pid}/versions/{vid}/set/crowd": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Profile Set Crowd
+         * @description D173: *Crowd ▶* — people along a vertical face over a stretch of it: the face's texture there refined by Klein with the people in,
+         *     then the plain Wan 2.2 from that picture back to it (a loop), its tone locked; the face plays it in Clay and the plate. The first step is
+         *     queued now, its landing queues the loop.
+         */
+        post: operations["profile_set_crowd_story_profiles__pid__versions__vid__set_crowd_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/profiles/{pid}/versions/{vid}/set/crowd/{fid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Profile Set Crowd Delete
+         * @description D173: the face's crowd removed (a step still running is stopped; its clip stays in the Catalogue).
+         */
+        delete: operations["profile_set_crowd_delete_story_profiles__pid__versions__vid__set_crowd__fid__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/profiles/{pid}/versions/{vid}/set/fill": {
         parameters: {
             query?: never;
@@ -13012,6 +13054,111 @@ export interface components {
             texel_m: number;
         };
         /**
+         * SetCrowd
+         * @description D173 (M6, E49c): people along a vertical face — a loop of the face's own texture over a stretch (metres from the face's left end, as
+         *     seen from inside the set), made by Klein then Wan 2.2 (first = last frame), played on a plane over the stretch in Clay and the plate.
+         */
+        "SetCrowd-Input": {
+            /** Asset Id */
+            asset_id?: string | null;
+            /** Clip Id */
+            clip_id?: string | null;
+            /** Error */
+            error?: string | null;
+            /**
+             * Fps
+             * @default 16
+             */
+            fps?: number;
+            /**
+             * Frames
+             * @default 0
+             */
+            frames?: number;
+            /** From M */
+            from_m: number;
+            /** Job Id */
+            job_id?: string | null;
+            /**
+             * Status
+             * @default making
+             * @enum {string}
+             */
+            status?: "making" | "done" | "failed";
+            /** To M */
+            to_m: number;
+            /**
+             * Words
+             * @default
+             */
+            words?: string;
+        };
+        /**
+         * SetCrowd
+         * @description D173 (M6, E49c): people along a vertical face — a loop of the face's own texture over a stretch (metres from the face's left end, as
+         *     seen from inside the set), made by Klein then Wan 2.2 (first = last frame), played on a plane over the stretch in Clay and the plate.
+         */
+        "SetCrowd-Output": {
+            /** Asset Id */
+            asset_id: string | null;
+            /** Clip Id */
+            clip_id: string | null;
+            /** Error */
+            error: string | null;
+            /**
+             * Fps
+             * @default 16
+             */
+            fps: number;
+            /**
+             * Frames
+             * @default 0
+             */
+            frames: number;
+            /** From M */
+            from_m: number;
+            /** Job Id */
+            job_id: string | null;
+            /**
+             * Status
+             * @default making
+             * @enum {string}
+             */
+            status: "making" | "done" | "failed";
+            /** To M */
+            to_m: number;
+            /**
+             * Words
+             * @default
+             */
+            words: string;
+        };
+        /** SetCrowdBody */
+        SetCrowdBody: {
+            /** Face */
+            face: string;
+            /** From M */
+            from_m: number;
+            /** Seed */
+            seed?: number | null;
+            /** To M */
+            to_m: number;
+            /**
+             * Words
+             * @default
+             */
+            words?: string;
+        };
+        /** SetCrowdQueued */
+        SetCrowdQueued: {
+            /** Face */
+            face: string;
+            /** Job Id */
+            job_id: string;
+            /** Size */
+            size: number[];
+        };
+        /**
          * SetFace
          * @description CW6 (04 §2, §4): a built set's face — what it shows (a Catalogue image of the face straight on: its Fill once filled, else its bake),
          *     the bake and its coverage, its texel size, how much the picture saw, and the material its Fill names (D143).
@@ -13023,6 +13170,7 @@ export interface components {
             baked_asset_id?: string | null;
             /** Coverage Asset Id */
             coverage_asset_id?: string | null;
+            crowd?: components["schemas"]["SetCrowd-Input"] | null;
             /** Fill Job Id */
             fill_job_id?: string | null;
             /**
@@ -13059,6 +13207,7 @@ export interface components {
             baked_asset_id: string | null;
             /** Coverage Asset Id */
             coverage_asset_id: string | null;
+            crowd: components["schemas"]["SetCrowd-Output"] | null;
             /** Fill Job Id */
             fill_job_id: string | null;
             /**
@@ -23101,6 +23250,75 @@ export interface operations {
                 "application/json": components["schemas"]["SetBake"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Profile"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_set_crowd_story_profiles__pid__versions__vid__set_crowd_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetCrowdBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetCrowdQueued"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_set_crowd_delete_story_profiles__pid__versions__vid__set_crowd__fid__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+                fid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

@@ -44,6 +44,8 @@ const setJobs = (surface: string) => { const p = profile(); const v = version();
   && (j.origin?.payload as { version?: string } | null)?.version === v.id && !['done', 'failed', 'cancelled'].includes(j.status)) : [] }
 const setBusy = () => setJobs('set_fit').length > 0 || setJobs('set_fill').length > 0 || !!version()?.place_set?.faces.some((f) => f.fill_job_id)
 const fillable = () => (version()?.place_set?.faces ?? []).filter((f) => f.baked_asset_id && (f.bad ?? 0) >= 0.002).map((f) => f.id)
+const crowdOf = (fid?: string) => (fid ? version()?.place_set?.faces.find((f) => f.id === fid)?.crowd ?? null : null)   // D173
+const vertical = (fid?: string) => !!fid && ['wall', 'facade', 'end', 'backdrop'].includes(fid.split('_')[0])            // D173 (placeSet.ts VERTICAL_PARTS)
 const toFill = () => (version()?.place_set?.faces ?? []).filter((f) => f.baked_asset_id && !f.filled && (f.bad ?? 0) >= 0.002).map((f) => f.id)
 const picked = () => sy().picked
 const modelJob = () => { const p = profile(); const v = version(); return p && v ? latestModelJob(useSession.getState().jobs, p.id, v.id) : undefined }
@@ -451,6 +453,11 @@ const cmds: Command[] = [
   { id: 'cast.place.fillFace', scope: 'story', label: 'Fill this face ▶', icon: Paintbrush, hint: 'a filled face is filled again from its bake, with another seed — name its material first for a cleaner surface',
     placement: ['context'], when: () => isPlace() && !!storyItem.face && fillable().includes(storyItem.face) && !setBusy(),
     run: () => { const f = storyItem.face; if (f) void import('./setBuilder').then((m) => m.fillSet([f])) } },
+  { id: 'cast.place.crowd', scope: 'story', label: 'Crowd along this face ▶…', icon: Users, hint: 'people walking along it — a loop made from the face itself, the camera held; set the stretch first (about 4 min)',
+    placement: ['context'], when: () => isPlace() && vertical(storyItem.face) && !!version()?.place_set?.faces.find((f) => f.id === storyItem.face)?.texture_asset_id && crowdOf(storyItem.face)?.status !== 'making',
+    run: () => { const f = storyItem.face; if (f) void import('./setBuilder').then((m) => m.useCrowdForm.setState({ face: f })) } },
+  { id: 'cast.place.crowdRemove', scope: 'story', label: 'Remove the crowd', icon: X, placement: ['context'], when: () => isPlace() && !!crowdOf(storyItem.face),
+    run: () => { const f = storyItem.face; if (f) void import('./setBuilder').then((m) => m.removeCrowd(f)) } },
   { id: 'cast.place.clear', scope: 'story', label: 'Clear the set…', icon: X, danger: true, placement: ['inspector', 'context'], when: () => isPlace() && !!version()?.place_set && !setBusy(),
     run: () => void askConfirm({ title: 'Clear the set?', okLabel: 'Clear', text: 'Its kind, sizes and faces go; the baked and filled faces stay in the Bin. Build the set ▶ fits it again.' })
       .then((ok) => { if (ok) void import('./setBuilder').then((m) => m.saveSet(null)) }) },

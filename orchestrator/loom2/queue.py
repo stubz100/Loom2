@@ -625,12 +625,14 @@ class JobQueue:
         """CW1: a job some record waits on failed or was cancelled — an idea variant's clay step says so; CW6: a set's face waits for the next
         Fill (never raises). V37: the job's temp folders go with it."""
         from .ideas import IDEA_CLAY_SURFACE, clay_failed
-        from .place_sets import SET_FILL_SURFACE, fill_failed
+        from .place_sets import CROWD_START_SURFACE, CROWD_SURFACE, SET_FILL_SURFACE, crowd_failed, fill_failed
         self._sweep_job_temp(job.id)
         if job.origin is not None and job.origin.surface == IDEA_CLAY_SURFACE:
             clay_failed(self, job, msg)
         if job.origin is not None and job.origin.surface == SET_FILL_SURFACE:
             fill_failed(self, job, msg)
+        if job.origin is not None and job.origin.surface in (CROWD_START_SURFACE, CROWD_SURFACE):   # D173
+            crowd_failed(self, job, msg)
 
     def _finish_cancelled(self, job: JobRecord) -> None:
         self._cancel_requested.discard(job.id)

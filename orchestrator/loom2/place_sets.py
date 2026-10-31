@@ -25,6 +25,8 @@ from .stages import PlaceSet, SetFace, SetSource, SourceCamera
 
 SET_FIT_SURFACE = "set_fit"                      # origin.surface of a set's fit (image_to_set); ref = the place, payload {version, from, camera_height_m}
 SET_FILL_SURFACE = "set_fill"                    # origin.surface of a face's Fill (inpaint); ref = the place, payload {version, face, rest, seed, document_id}
+CROWD_START_SURFACE = "set_crowd_start"          # D173: a face's crowd — the start's refine (i2i on a document); payload {version, face, from_m, to_m, words, seed, size}
+CROWD_SURFACE = "set_crowd"                      # D173: the crowd's loop (i2v, first = last frame); the same payload and the start picture
 EYE_HEIGHT_M = 1.6                               # D143: the camera's height a fit is scaled by unless the author gives one
 TEXEL_BY_KIND = {"room": 0.01, "corridor": 0.02, "street": 0.04, "ground": 0.04}   # D143 (stage/setBake.ts TEXEL_BY_KIND)
 UNSEEN_COS = 0.05                                # D133 / E38: a texel seen at a cosine under this is unseen
@@ -33,6 +35,14 @@ RATIO_SCALE = 8.0                                # the coverage's green × this 
 FILL_MIN = 0.002                                 # PF1: a face with less to fill is left as baked
 FACADE_COS = 0.7                                 # D170 (E46): a street's fronts stand out from their face (stalls, steps, awnings); seen more
                                                  # than 45° off square they lie on it sheared, so they go to Fill as unseen (stage/setBake.ts)
+VERTICAL_PARTS = ("wall", "facade", "end", "backdrop")   # D173: the faces a crowd can stand along
+CROWD_MAX_ASPECT = 2.7                           # D173: a stretch at most this many times the face's height (E49: 11.2 × 4.96 m at 1088 × 480)
+CROWD_MIN_ASPECT = 0.5
+CROWD_PIXELS = 520_000                           # ≈ E49's 1088 × 480
+CROWD_FRAMES, CROWD_FPS = 81, 16
+CROWD_STRENGTH = 0.6                             # E49b: the refine that puts people in without moving the face far
+CROWD_PEOPLE = "people walking left and right along it, seen in profile, some stopping to look, nobody facing the camera"
+CROWD_MOTION = "people walk left and right along it, seen in profile; nobody walks toward the camera"
 ROOM_FACES = ("floor", "ceiling", "wall")        # a room's or a corridor's faces: filled plain (E38: a Fill invents windows on a wall)
 GROUND_FACES = ("floor", "road", "pavement")     # D172 (E48): what is walked on — outside a room, filled from above
 GROUND_COS = 0.35                                # D172: what stands on the ground lies on it as a smear when seen at a slant (stage/setBake.ts)
@@ -327,5 +337,203 @@ def fill_failed(q: Any, job: Any, msg: str) -> None:
             return
         p = store.update_face(pid, vid, fid, fill_job_id=None)
         q.hub.broadcast("story.changed", {"kind": "profile", "id": p.id, "revision": p.revision, "error": f"The set's {fid}: the Fill {msg}"})
+    except Exception:  # noqa: BLE001
+        pass
+
+
+# ---- D173: a crowd along a face ---------------------------------------------------------------------------------------------------
+def crowd_size(width_m: float, height_m: float) -> tuple[int, int]:
+    """D173: the loop's size for a stretch — ≈ CROWD_PIXELS at the stretch's aspect, on Wan's ×16 grid. Raises ValueError outside the
+    aspects a loop holds (E49: 2.27)."""
+    if height_m <= 0 or width_m <= 0:
+        raise ValueError("the stretch is empty")
+    a = width_m / height_m
+    if a > CROWD_MAX_ASPECT:
+        raise ValueError(f"a crowd covers at most {CROWD_MAX_ASPECT:g}× the face's height ({CROWD_MAX_ASPECT * height_m:.1f} m on this face) — make two")
+    if a < CROWD_MIN_ASPECT:
+        raise ValueError(f"a crowd covers at least {CROWD_MIN_ASPECT:g}× the face's height ({CROWD_MIN_ASPECT * height_m:.1f} m on this face)")
+    h = max(128, round((CROWD_PIXELS / a) ** 0.5 / 16) * 16)
+    return max(128, round(a * h / 16) * 16), h
+
+
+def crowd_prompts(fid: str, material: str, words: str) -> tuple[str, str]:
+    """D173: the start's words (the face as an elevation with its people, E49b) and the loop's (their motion, the camera held)."""
+    what = (material or "").strip().rstrip(".") or face_noun(fid)
+    what = what if what[1:2].isupper() else what[:1].lower() + what[1:]
+    people = (words or "").strip().rstrip(".") or CROWD_PEOPLE
+    start = f"A flat elevation of {what}, seen square on: {people}, seen from the side at eye level, even light, no perspective."
+    motion = (words or "").strip().rstrip(".") or CROWD_MOTION
+    return start, f"{motion}; a static locked-off camera."
+
+
+class CrowdPlan(NamedTuple):
+    pid: str
+    vid: str
+    fid: str
+    recipe: dict[str, Any]
+    origin: JobOrigin
+
+
+def prepare_crowd(q: Any, pid: str, vid: str, fid: str, from_m: float, to_m: float, words: str = "", seed: int | None = None) -> CrowdPlan:
+    """D173: a face's crowd, its first step — the face's texture over the stretch scaled to the loop's size, a document refined by Klein
+    with the people in (E49b). File and pixel work — a worker thread's. Raises ValueError when the face cannot take one."""
+    from PIL import Image
+
+    from .models import registry
+    from .story import StoryStore
+    if q.documents is None:
+        raise ValueError("the Edit documents are not open")
+    p = StoryStore(q.ws).profile(pid)
+    if p is None:
+        raise KeyError(pid)
+    ps = p.version(vid).place_set
+    face = next((f for f in ps.faces if f.id == fid), None) if ps is not None else None
+    if face is None:
+        raise KeyError(f"the set has no face {fid!r}")
+    if fid.split("_")[0] not in VERTICAL_PARTS:
+        raise ValueError("a crowd stands along a wall, a street's fronts or its end — not on the ground or a ceiling")
+    if face.crowd is not None and face.crowd.status == "making" and face.crowd.job_id and q.job_live(face.crowd.job_id):
+        raise ValueError("the face's crowd is being made — wait for it, or stop its job")
+    rec = q.catalogue.get(face.texture_asset_id) if face.texture_asset_id else None
+    if rec is None:
+        raise ValueError("the face has no texture yet — bake the set first")
+    with Image.open(q.catalogue.abs_path(rec)) as im:
+        tex = im.convert("RGB")
+    width_m, height_m = tex.width * face.texel_m, tex.height * face.texel_m
+    from_m, to_m = max(0.0, float(from_m)), min(width_m, float(to_m))
+    if to_m - from_m < 0.5:
+        raise ValueError(f"the stretch is inside the face's 0–{width_m:.1f} m and at least 0.5 m long")
+    w, h = crowd_size(to_m - from_m, height_m)
+    x0, x1 = round(from_m / face.texel_m), max(round(from_m / face.texel_m) + 1, round(to_m / face.texel_m))
+    crop = tex.crop((x0, 0, x1, tex.height)).resize((w, h), Image.LANCZOS)
+    rgba = np.dstack([np.asarray(crop), np.full((h, w), 255, np.uint8)])
+    od = q.documents.create(f"{p.name} · crowd · {fid}", w, h, "transparent", rec.id, rgba)
+    od.save()
+    seed = seed or secrets.randbelow(2**31 - 2) + 1
+    start, _ = crowd_prompts(fid, face.material, words)
+    recipe = {"kind": "i2i", "model_id": registry.default_model("i2i", q.app.settings.variant), "document_id": od.doc.id, "source": "visible",
+              "prompt_text": start, "strength": CROWD_STRENGTH, "match_colour": True, "seeds": [seed]}   # E51: the face's own colours kept (ΔE 0.01)
+    origin = JobOrigin(suite="story", surface=CROWD_START_SURFACE, ref=pid,
+                       payload={"version": vid, "face": fid, "from_m": round(from_m, 3), "to_m": round(to_m, 3), "words": words, "seed": seed,
+                                "size": [w, h], "document_id": od.doc.id})
+    return CrowdPlan(pid, vid, fid, recipe, origin)
+
+
+async def _staged(q: Any, recipe: dict[str, Any], origin: JobOrigin, pid: str, vid: str, fid: str, crowd: dict[str, Any]) -> Any:
+    """Fill's pattern (V21 / V22): submitted staged, the face names the job, then released — the job never runs before its marker is on disk."""
+    from .stages import SetCrowd
+    from .story import StoryStore
+    job = q.submit(recipe, stage=True, origin=origin)[0]
+    if job.status != "staged":
+        raise ValueError(job.error or "the crowd was refused")
+    try:
+        p = await asyncio.to_thread(StoryStore(q.ws).update_face, pid, vid, fid, crowd=SetCrowd(**crowd, status="making", job_id=job.id, error=None))
+    except Exception:
+        await q.cancel(job.id)
+        raise
+    q.release(job.id)
+    q.hub.broadcast("story.changed", {"kind": "profile", "id": p.id, "revision": p.revision})
+    return job
+
+
+async def queue_crowd(q: Any, pid: str, vid: str, fid: str, from_m: float, to_m: float, words: str = "", seed: int | None = None) -> Any:
+    """*Crowd ▶*: the start's refine prepared on a thread and submitted on the loop; the face's crowd is *making* from now on."""
+    plan = await asyncio.to_thread(prepare_crowd, q, pid, vid, fid, from_m, to_m, words, seed)
+    pl = plan.origin.payload
+    return await _staged(q, plan.recipe, plan.origin, pid, vid, fid, {"from_m": pl["from_m"], "to_m": pl["to_m"], "words": words})
+
+
+def crowd_start_landed(q: Any, job: Any, od: Any) -> str | None:
+    """D173: the start's refine landed on its document — flattened, it is the loop's start picture (lineage `set-crowd` ← the face's
+    texture); the document closes. None (and the crowd failed) when it cannot be read."""
+    from PIL import Image
+
+    from .fsio import new_id
+    pid, pl = str(job.origin.ref or ""), job.origin.payload or {}
+    try:
+        merged = od.flatten()
+        path = q.ws.temp_dir / "set_crowds" / f"{new_id('scrowd')}.png"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        Image.fromarray(merged[..., :3]).save(path, "PNG")
+        rec = q.catalogue.ingest_file(path, kind="image", move=True, job_id=job.id, suite="story", lineage_kind="set-crowd",
+                                      parents=[od.doc.source_asset_id] if od.doc.source_asset_id else [],
+                                      params={"profile_id": pid, "version": pl.get("version"), "face": pl.get("face"), "from_m": pl.get("from_m"), "to_m": pl.get("to_m")},
+                                      origin=job.origin)
+        rec = q.catalogue.make_thumbs(rec)
+        q.hub.broadcast("asset.created", rec.model_dump())
+        job.result["asset_ids"] = [rec.id]
+        if q.documents is not None:
+            q.documents.close(od.doc.id)
+        return rec.id
+    except Exception as e:  # noqa: BLE001
+        crowd_failed(q, job, f"its start could not be read: {e}")
+        return None
+
+
+async def queue_crowd_loop(q: Any, job: Any, start_id: str) -> None:
+    """D173: the loop from the start picture back to it (the default I2V model, first = last frame, E49c), staged on the face."""
+    from .models import registry
+    pid, pl = str(job.origin.ref or ""), dict(job.origin.payload or {})
+    vid, fid = str(pl.get("version") or ""), str(pl.get("face") or "")
+    try:
+        model = registry.default_model("i2v", q.app.settings.variant)
+        spec = registry.get(model)
+        if spec is None or not spec.recipes.flf:
+            raise ValueError("no video model in this build runs from a first to a last frame")
+        from .story import StoryStore
+        p = StoryStore(q.ws).profile(pid)
+        face = next((f for f in p.version(vid).place_set.faces if f.id == fid), None) if p is not None and p.version(vid).place_set else None
+        if face is None or face.crowd is None or face.crowd.job_id != job.id:
+            job.log_tail.append(f"the set's {fid}: its crowd was removed or made again meanwhile")
+            return
+        _, motion = crowd_prompts(fid, face.material, str(pl.get("words") or ""))
+        w, h = pl.get("size") or [1088, 480]
+        recipe = {"kind": "i2v", "model_id": model, "start_asset": start_id, "end_asset": start_id, "prompt_text": motion, "frames": CROWD_FRAMES,
+                  "fps": CROWD_FPS, "width": int(w), "height": int(h), "preset": "draft", "seeds": [int(pl.get("seed") or 0)]}
+        origin = JobOrigin(suite="story", surface=CROWD_SURFACE, ref=pid, payload={**pl, "start_asset_id": start_id})
+        nxt = await _staged(q, recipe, origin, pid, vid, fid, {"from_m": face.crowd.from_m, "to_m": face.crowd.to_m, "words": face.crowd.words})
+        job.result["next_job_id"] = nxt.id
+        job.log_tail.append(f"the set's {fid}: the crowd's loop queued ({nxt.id})")
+    except Exception as e:  # noqa: BLE001
+        crowd_failed(q, job, str(e))
+
+
+def crowd_landed(q: Any, job: Any, clip: Any) -> None:
+    """D173: the loop landed (its tone locked and its seam faded by the finisher) — the face plays it. A crowd removed or made again
+    meanwhile keeps what it has. Never raises."""
+    from .stages import SetCrowd
+    from .story import StoryStore
+    pid, pl = str(job.origin.ref or ""), job.origin.payload or {}
+    vid, fid = str(pl.get("version") or ""), str(pl.get("face") or "")
+    try:
+        store = StoryStore(q.ws)
+        p = store.profile(pid)
+        face = next((f for f in p.version(vid).place_set.faces if f.id == fid), None) if p is not None and p.version(vid).place_set else None
+        if face is None or face.crowd is None or face.crowd.job_id != job.id:
+            job.log_tail.append(f"the set's {fid}: its crowd was removed or made again meanwhile; {clip.id} not used")
+            return
+        c = face.crowd.model_dump() | {"status": "done", "job_id": None, "error": None, "clip_id": clip.id, "asset_id": clip.asset_id,
+                                        "frames": clip.frames, "fps": clip.fps}
+        p = store.update_face(pid, vid, fid, crowd=SetCrowd(**c))
+        job.log_tail.append(f"the set's {fid}: a crowd over {face.crowd.from_m}–{face.crowd.to_m} m ({clip.id})")
+        q.hub.broadcast("story.changed", {"kind": "profile", "id": p.id, "revision": p.revision})
+    except Exception as e:  # noqa: BLE001
+        job.log_tail.append(f"the set's {fid}: the crowd landed but {e}")
+
+
+def crowd_failed(q: Any, job: Any, msg: str) -> None:
+    """D173: a step of a face's crowd failed or was cancelled — the crowd says so (the author makes it again or removes it). Never raises."""
+    from .stages import SetCrowd
+    from .story import StoryStore
+    try:
+        pid, pl = str(job.origin.ref or ""), job.origin.payload or {}
+        vid, fid = str(pl.get("version") or ""), str(pl.get("face") or "")
+        store = StoryStore(q.ws)
+        p = store.profile(pid)
+        face = next((f for f in p.version(vid).place_set.faces if f.id == fid), None) if p is not None and p.version(vid).place_set else None
+        if face is None or face.crowd is None or face.crowd.job_id != job.id:
+            return
+        p = store.update_face(pid, vid, fid, crowd=SetCrowd(**(face.crowd.model_dump() | {"status": "failed", "job_id": None, "error": msg})))
+        q.hub.broadcast("story.changed", {"kind": "profile", "id": p.id, "revision": p.revision, "error": f"The set's {fid}: the crowd {msg}"})
     except Exception:  # noqa: BLE001
         pass

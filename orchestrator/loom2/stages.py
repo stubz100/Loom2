@@ -123,6 +123,22 @@ class SetThing(BaseModel):
 SetKind = Literal["room", "street", "corridor", "ground"]
 
 
+class SetCrowd(BaseModel):
+    """D173 (M6, E49c): people along a vertical face — a loop of the face's own texture over a stretch (metres from the face's left end, as
+    seen from inside the set), made by Klein then Wan 2.2 (first = last frame), played on a plane over the stretch in Clay and the plate."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    from_m: float = Field(ge=0.0)
+    to_m: float = Field(gt=0.0)
+    words: str = Field("", max_length=400)         # who is there and what they do; blank: people walking along it in profile
+    status: Literal["making", "done", "failed"] = "making"
+    job_id: str | None = None                      # the step running (the start's refine, then the loop)
+    error: str | None = None
+    clip_id: str | None = None
+    asset_id: str | None = None                    # the clip's proxy (a Catalogue video): what Clay and the plate play
+    frames: int = 0
+    fps: int = 16
+
+
 class SetFace(BaseModel):
     """CW6 (04 §2, §4): a built set's face — what it shows (a Catalogue image of the face straight on: its Fill once filled, else its bake),
     the bake and its coverage, its texel size, how much the picture saw, and the material its Fill names (D143)."""
@@ -137,6 +153,7 @@ class SetFace(BaseModel):
     filled: bool = False
     material: str = Field("", max_length=200)      # D143: named for the face's Fill ("pale ochre plaster"); blank: the face's noun
     fill_job_id: str | None = None                 # the face's Fill while it runs
+    crowd: SetCrowd | None = None                  # D173: people along the face, played over a stretch of it
 
 
 class SourceCamera(BaseModel):

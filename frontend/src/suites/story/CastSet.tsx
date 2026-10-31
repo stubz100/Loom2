@@ -9,9 +9,9 @@ import { markUsed, sep } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import { Help } from '../../frame/Help'
 import { useSession } from '../../store/session'
-import { isGround, SET_KIND_PARTS, SET_KIND_SIZES, type PlaceSetDoc, type SetKind } from '../stage/placeSet'
+import { CROWD_ASPECT, isGround, isVertical, setFaces, SET_KIND_PARTS, SET_KIND_SIZES, type PlaceSetDoc, type SetKind } from '../stage/placeSet'
 import { changeKind, dragTo, handles, outlines, rescale, type Handle, type SourceCam } from '../stage/setOverlay'
-import { autoBake, faceNoun, saveSet, setCamera, setPicture, setStatus, useSetBuilder, type PlaceSet } from './setBuilder'
+import { autoBake, faceNoun, makeCrowd, saveSet, setCamera, setPicture, setStatus, useCrowdForm, useSetBuilder, type PlaceSet } from './setBuilder'
 import { onStoryItem } from './storyCommands'
 
 type Version = Profile['versions'][number]
@@ -125,11 +125,13 @@ function SetOverlay({ pic, ps, cam, assumed, onEdit }: { pic: string; ps: PlaceS
  *  ground outside a room is filled from above; unnamed, its noun paints the wrong ground (a road as asphalt, E48), so it is marked too. */
 function FaceRows({ ps, onEdit }: { ps: PlaceSet; onEdit: (ps: PlaceSet) => void }) {
   const order = [...ps.faces].sort((a, b) => (a.bad ?? 0) - (b.bad ?? 0))
+  const size = new Map(setFaces(ps as PlaceSetDoc).map((f) => [f.id, { w: f.w, h: f.h }]))   // D173: a crowd's stretch is in the face's metres
   return (
     <div className="set-faces" role="list" aria-label="the set's faces">
       {order.map((f) => { const facade = f.id.split('_')[0] === 'facade', ground = isGround(f.id, ps.kind); return (
         <div key={f.id} role="listitem" className={`set-face${f.filled ? ' filled' : ''}`} data-face={f.id}
-          onContextMenu={(e) => showMenu(e, [{ cmd: 'cast.place.fillFace', on: onStoryItem({ face: f.id }) }, { cmd: 'cast.place.fill' }, { cmd: 'cast.place.bake' }])}>
+          onContextMenu={(e) => showMenu(e, [{ cmd: 'cast.place.fillFace', on: onStoryItem({ face: f.id }) }, { cmd: 'cast.place.crowd', on: onStoryItem({ face: f.id }) },
+            { cmd: 'cast.place.crowdRemove', on: onStoryItem({ face: f.id }) }, { cmd: 'cast.place.fill' }, { cmd: 'cast.place.bake' }])}>
           {f.texture_asset_id ? <img src={api.thumbUrl(f.texture_asset_id, 256)} alt="" /> : <span className="thumb" />}
           <span className="name">{PART_LABEL[f.id.replace(/_\d+$/, '')] ?? f.id}</span>
           <span className="muted">{f.fill_job_id ? 'filling…' : f.filled ? 'filled' : (f.bad ?? 0) >= 0.002 ? `${Math.round((f.bad ?? 0) * 100)} % to fill` : 'seen'}</span>
@@ -141,8 +143,39 @@ function FaceRows({ ps, onEdit }: { ps: PlaceSet; onEdit: (ps: PlaceSet) => void
               : "The face's material, named for its Fill (pale ochre plaster, worn terracotta tiles)"}
             onBlur={(e) => { const m = e.target.value.trim(); if (m !== f.material) onEdit({ ...ps, faces: ps.faces.map((x) => (x.id === f.id ? { ...x, material: m } : x)) }) }}
             onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+          {isVertical(f.id) && f.texture_asset_id && <FaceCrowd face={f} w={size.get(f.id)?.w ?? 0} h={size.get(f.id)?.h ?? 0} />}
         </div>
       ) })}
+    </div>
+  )
+}
+
+/** D173: a vertical face's crowd — its state, *Crowd ▶* and, open, the stretch (metres from the face's left end, as seen from inside the
+ *  set) and who is there. A loop of the face's own texture with people along it, the camera held; Clay and the plate play it. */
+function FaceCrowd({ face, w, h }: { face: PlaceSet['faces'][number]; w: number; h: number }) {
+  const open = useCrowdForm((s) => s.face === face.id)
+  const c = face.crowd
+  const [from, setFrom] = useState(0)
+  const [to, setTo] = useState(+Math.min(w, CROWD_ASPECT.usual * h).toFixed(1))
+  const [words, setWords] = useState('')
+  const len = to - from, max = +(CROWD_ASPECT.max * h).toFixed(1), min = +(CROWD_ASPECT.min * h).toFixed(1)
+  const why = from < 0 || to > w + 0.01 ? `the face is 0–${w.toFixed(1)} m` : len > max + 0.01 ? `at most ${max} m on this face — make two` : len < Math.max(0.5, min) - 0.01 ? `at least ${Math.max(0.5, min)} m` : ''
+  const state = c?.status === 'making' ? 'crowd · making…' : c?.status === 'done' ? `crowd · ${c.from_m}–${c.to_m} m` : c?.status === 'failed' ? 'crowd failed' : ''
+  return (
+    <div className="crowd" data-testid={`crowd-${face.id}`}>
+      {state && <span className={`muted${c?.status === 'failed' ? ' failed' : ''}`} title={c?.error ?? undefined}>{state}</span>}
+      {!open && c?.status !== 'making' && <button onClick={() => useCrowdForm.setState({ face: face.id })}
+        title="People walking along this face — a loop made from the face itself, the camera held (about 4 min). Right-click for more">{c ? 'Crowd again ▶' : 'Crowd ▶'}</button>}
+      {open && (
+        <div className="crowd-form">
+          <label title="metres from the face's left end, as seen from inside the set">from <input type="number" step={0.1} min={0} max={w} value={from} aria-label={`${face.id}: the crowd from (m)`} onChange={(e) => setFrom(+e.target.value)} /></label>
+          <label>to <input type="number" step={0.1} min={0} max={w} value={to} aria-label={`${face.id}: the crowd to (m)`} onChange={(e) => setTo(+e.target.value)} /> m</label>
+          <input type="text" value={words} maxLength={400} aria-label={`${face.id}: who is there`} placeholder="who is there — shoppers with baskets at the counters" onChange={(e) => setWords(e.target.value)} />
+          <button className="primary" disabled={!!why} title={why || `${len.toFixed(1)} m of ${face.id}: the picture, then its loop`}
+            onClick={() => void makeCrowd(face.id, +from.toFixed(2), +to.toFixed(2), words.trim()).then((ok) => { if (ok) useCrowdForm.setState({ face: null }) })}>Make ▶ ≈ 4 min</button>
+          <button onClick={() => useCrowdForm.setState({ face: null })}>Cancel</button>
+        </div>
+      )}
     </div>
   )
 }

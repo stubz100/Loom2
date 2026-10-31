@@ -15,7 +15,8 @@ import { HAND_MARKER, heldWorld, onHand, ownTraverse, transformOf } from './held
 import { CHAINS, eulerDeg, figureChain, solveTwoBone, type Chain } from './ik'
 import { aimHead, chainOf, holdPins, type Pins } from './motion/contact'
 import { gazeTarget, resolvePins, type Contacts, type Frames, type Gaze } from './motion/contacts'
-import { placeSet, type PlaceSetDoc } from './placeSet'
+import { normalOf, placeSet, setFaces, type Face, type PlaceSetDoc } from './placeSet'
+import { clipFrame, crowdPlane } from './crowd'
 import { makeDetailed, type Detailed, type HandPreset } from './detailed'
 import { measure } from './motion/path'
 import { bindProxy, FACE_LANDMARKS, FEET_LANDMARKS, shellPoints, shellStance, type Landmark, type Proxy } from './proxy'
@@ -107,6 +108,8 @@ export class StageEngine {
   // SC3e: the loads in flight (a model, a relief and the picture behind it, an image plane's picture, a proxy, a detailed mannequin) — a
   // render waits for them (`settled`), so a headless pass never catches a stand-in
   private loading = new Set<Promise<void>>()
+  private crowds = new Set<Crowd>()                                                 // D173: the faces' crowds playing (a video each)
+  private viewFrame = 0                                                             // D173: the viewport's frame, the crowds' between sequences
   // ST3: the pass materials and the helpers that stay out of the passes
   private grid: THREE.GridHelper
   private passClay = new THREE.MeshLambertMaterial({ color: 0xd8d8d8 })
@@ -175,6 +178,8 @@ export class StageEngine {
   dispose(): void {
     this.disposed = true
     this.stop()
+    for (const c of this.crowds) dropCrowd(c)
+    this.crowds.clear()
     this.gizmo.dispose(); this.orbit.dispose()
     disposeObject(this.scene)                                                            // V82: textures too, the shared materials with them
     for (const l of this.lights.values()) { l.light.shadow.map?.dispose(); l.aim.geometry.dispose() }
@@ -894,13 +899,46 @@ export class StageEngine {
     const tex = new Map(ps.faces.filter((f) => f.texture_asset_id).map((f) => [f.id, f.texture_asset_id!]))
     const grey = this.setMat.clone()
     grey.side = THREE.FrontSide
-    return placeSet(ps as PlaceSetDoc, grey, (id) => {
+    const g = placeSet(ps as PlaceSetDoc, grey, (id) => {
       const aid = tex.get(id)
       if (!aid) return null
       const t = new THREE.TextureLoader().load(api.assetUrl(aid), () => { this.dirty = true })
       t.colorSpace = THREE.SRGBColorSpace
       return new THREE.MeshBasicMaterial({ map: t, side: THREE.FrontSide })
     })
+    for (const f of setFaces(ps as PlaceSetDoc)) {                                // D173: a face's crowd plays over its stretch
+      const c = ps.faces.find((x) => x.id === f.id)?.crowd
+      if (c?.status === 'done' && c.asset_id) g.add(this.crowdMesh(f, c.asset_id, c.from_m, c.to_m, c.frames, c.fps))
+    }
+    return g
+  }
+  /** D173: a crowd's plane over its stretch of the face, its clip (the proxy) as a video texture, sought to the viewport's frame. */
+  private crowdMesh(f: Face, assetId: string, fromM: number, toM: number, frames: number, fps: number): THREE.Mesh {
+    const n = normalOf(f)
+    const p = crowdPlane(f, n, fromM, toM)
+    const video = document.createElement('video')
+    video.crossOrigin = 'anonymous'; video.muted = true; video.playsInline = true; video.preload = 'auto'
+    video.src = api.assetUrl(assetId)
+    const tex = new THREE.VideoTexture(video)
+    tex.colorSpace = THREE.SRGBColorSpace
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(p.w, p.h), new THREE.MeshBasicMaterial({ map: tex, side: THREE.FrontSide }))
+    mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(f.u, f.v, n))
+    mesh.position.copy(p.centre)
+    mesh.userData.face = f.id
+    const c: Crowd = { video, tex, mesh, frames: Math.max(2, frames), fps: Math.max(1, fps) }
+    this.crowds.add(c)
+    video.addEventListener('loadeddata', () => { void seekCrowd(c, this.viewFrame).then(() => { this.dirty = true }) }, { once: true })
+    return mesh
+  }
+  /** D173: every crowd at a stage frame (a sequence waits for it; the viewport does not); a crowd whose set was rebuilt lets go. */
+  async seekCrowds(frame: number): Promise<void> {
+    for (const c of [...this.crowds]) if (!c.mesh.parent) { dropCrowd(c); this.crowds.delete(c) }
+    await Promise.all([...this.crowds].map((c) => seekCrowd(c, frame)))
+  }
+  /** D173: the viewport's frame — its crowds follow it. */
+  setFrame(frame: number): void {
+    this.viewFrame = frame
+    if (this.crowds.size) void this.seekCrowds(frame).then(() => { this.dirty = true })
   }
   /** CW4 (a dev hook's check): an object's height as drawn, in metres (its box in the world); null before it is built. */
   heightOf(id: string): number | null {
@@ -978,7 +1016,7 @@ export class StageEngine {
   /** ST4 (16 §8): one pass per frame of an animated range — the scene synced to each frame's sampled document and camera (anim.ts),
    *  the depth (the IC-LoRA guide, D76) or the pose sequence, with every frame's COCO-18 keypoints for the rig's scoring. The scene
    *  is left at `restoreDoc` (the frame the viewport shows). */
-  async renderSequence(frames: { cam: StageCamera; doc: StageDoc }[], w: number, h: number, kind: 'depth' | 'pose' | 'clay' | 'proxy' | 'proxymask' | 'beauty', restoreDoc: StageDoc,
+  async renderSequence(frames: { cam: StageCamera; doc: StageDoc; frame?: number }[], w: number, h: number, kind: 'depth' | 'pose' | 'clay' | 'proxy' | 'proxymask' | 'beauty', restoreDoc: StageDoc,
                        onProgress?: (done: number, total: number) => void, depth?: { near: number; far: number } | null): Promise<{ blobs: Blob[]; keypoints: Keypoint[][][]; wholebody: (WholeBody | null)[][] }> {
     if (frames.length) { this.sync(frames[0].doc); await this.settled() }          // SC3e: what the frames show, loaded
     this.depthShared = depth ?? null                                                 // D167: the final's one range, every layer's depth alike
@@ -993,9 +1031,10 @@ export class StageEngine {
       const keypoints: Keypoint[][][] = []
       const wholebody: (WholeBody | null)[][] = []                                   // CA1b: the hands and feet the pose pass draws, for measuring
       for (let i = 0; i < frames.length; i++) {
-        const { cam, doc } = frames[i]
+        const { cam, doc, frame } = frames[i]
         this.sync(doc)
         if (this.loading.size) await this.settled()                                 // CS3: a skeleton key rebuilt a figure (its mannequin and shell load again)
+        if (frame !== undefined && this.crowds.size) await this.seekCrowds(frame)   // D173: the faces' crowds at this frame
         const camera = this.shotCamera(cam, w / h)
         restore(); restore = this.hideHelpers(camera)
         if (kind !== 'beauty') { const helpers = restore, back = this.hideBackdrops(); restore = () => { back(); helpers() } }   // SC3b
@@ -1020,6 +1059,7 @@ export class StageEngine {
       env?.dispose()
       r.dispose(); r.forceContextLoss()
       this.sync(restoreDoc)
+      if (this.crowds.size) void this.seekCrowds(this.viewFrame)                   // D173: back to the viewport's frame
       this.dirty = true
     }
   }
@@ -1318,4 +1358,28 @@ export class StageEngine {
     batches.sort((a, b) => a - b)
     return batches[2]
   }
+}
+
+/** D173: a face's crowd playing — its video, the texture fed from it, its plane, its clip's frames and rate. */
+interface Crowd { video: HTMLVideoElement; tex: THREE.VideoTexture; mesh: THREE.Mesh; frames: number; fps: number }
+
+/** D173: a crowd at a stage frame — its clip's frame (looping), the video sought there and the texture told; at most 3 s a seek. */
+async function seekCrowd(c: Crowd, stageFrame: number): Promise<void> {
+  const v = c.video
+  if (v.readyState < 1) await new Promise<void>((res) => { const t = setTimeout(res, 5000); v.addEventListener('loadedmetadata', () => { clearTimeout(t); res() }, { once: true }) })
+  const at = (clipFrame(stageFrame, c.fps, c.frames) + 0.5) / c.fps
+  if (Math.abs(v.currentTime - at) > 0.25 / c.fps || v.readyState < 2) {
+    await new Promise<void>((res) => {
+      const t = setTimeout(res, 3000)
+      v.addEventListener('seeked', () => { clearTimeout(t); res() }, { once: true })
+      v.currentTime = at
+    })
+  }
+  c.tex.needsUpdate = true
+}
+
+/** D173: a crowd let go — its video emptied (the element stops fetching), its texture freed. */
+function dropCrowd(c: Crowd): void {
+  c.video.removeAttribute('src'); c.video.load()
+  c.tex.dispose()
 }

@@ -2446,7 +2446,8 @@ test("the bench and a prop's height (D142, CW4): Bench ▶ opens Clay for the ch
 test("a place's set (CW6, D143): Build the set ▶ queues MoGe on the set picture and says when the relief fits nothing; a fitted set is drawn over its picture and baked on its own; a wall's foot dragged deepens the room; the kind is one click; a face's material is named; Fill ▶ paints the faces one after another; Bench ▶ opens Clay on the set from the picture's camera (World’s Sheet, B2a)", async ({ page }) => {
   test.setTimeout(180_000)
   const tag = Date.now().toString(36)
-  type Face = { id: string; texture_asset_id: string | null; baked_asset_id: string | null; seen: number | null; bad: number | null; filled: boolean; material: string; fill_job_id: string | null }
+  type Face = { id: string; texture_asset_id: string | null; baked_asset_id: string | null; seen: number | null; bad: number | null; filled: boolean; material: string; fill_job_id: string | null;
+    crowd?: { status: string; from_m: number; to_m: number; clip_id: string | null } | null }
   type PS = { kind: string; sizes: Record<string, number>; parts: Record<string, boolean>; faces: Face[]; sources: { asset_id: string; camera: { pos: number[]; target: number[] } }[]; baked_key: string | null }
   type ProfileLite = { id: string; revision: number; versions: { id: string; place_set: PS | null; anim_ref_asset_id: string | null }[] }
   const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
@@ -2508,6 +2509,14 @@ test("a place's set (CW6, D143): Build the set ▶ queues MoGe on the set pictur
   const filled = (await ps())!.faces.filter((f) => f.filled)
   expect(filled.every((f) => f.texture_asset_id !== f.baked_asset_id && !f.fill_job_id)).toBe(true)
   await expect(sec.locator('[data-status]')).toHaveText('baked and filled')
+  // D173: a crowd along the back wall — Crowd ▶ opens the stretch, Make ▶ queues the picture then its loop (the fake engine makes both), the row says it
+  const crowdRow = sec.locator('[data-testid="crowd-wall_back"]')
+  await crowdRow.locator('button', { hasText: /^Crowd/ }).click()
+  await crowdRow.locator('input[aria-label="wall_back: the crowd to (m)"]').fill('4')
+  await crowdRow.locator('button', { hasText: /^Make/ }).click()
+  await expect.poll(async () => (await ps())?.faces.find((f) => f.id === 'wall_back')?.crowd?.status, { timeout: 120_000 }).toBe('done')
+  await expect(crowdRow).toContainText('crowd · 0–4 m')
+  expect((await ps())!.faces.find((f) => f.id === 'wall_back')!.crowd!.clip_id).toBeTruthy()
   // Bench ▶: Clay on the set, bound to the place, from the picture's camera
   await sec.locator('button', { hasText: /^Bench/ }).click()
   await expect(page.locator('.w-mode button.active')).toHaveText('Clay')                                    // Clay on the set, inside World

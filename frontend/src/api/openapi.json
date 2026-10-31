@@ -19922,6 +19922,265 @@
         "title": "SetBakeFace",
         "type": "object"
       },
+      "SetCrowd-Input": {
+        "description": "D173 (M6, E49c): people along a vertical face — a loop of the face's own texture over a stretch (metres from the face's left end, as\nseen from inside the set), made by Klein then Wan 2.2 (first = last frame), played on a plane over the stretch in Clay and the plate.",
+        "properties": {
+          "asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Id"
+          },
+          "clip_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clip Id"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "fps": {
+            "default": 16,
+            "title": "Fps",
+            "type": "integer"
+          },
+          "frames": {
+            "default": 0,
+            "title": "Frames",
+            "type": "integer"
+          },
+          "from_m": {
+            "minimum": 0.0,
+            "title": "From M",
+            "type": "number"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "status": {
+            "default": "making",
+            "enum": [
+              "making",
+              "done",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "to_m": {
+            "exclusiveMinimum": 0.0,
+            "title": "To M",
+            "type": "number"
+          },
+          "words": {
+            "default": "",
+            "maxLength": 400,
+            "title": "Words",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from_m",
+          "to_m"
+        ],
+        "title": "SetCrowd",
+        "type": "object"
+      },
+      "SetCrowd-Output": {
+        "description": "D173 (M6, E49c): people along a vertical face — a loop of the face's own texture over a stretch (metres from the face's left end, as\nseen from inside the set), made by Klein then Wan 2.2 (first = last frame), played on a plane over the stretch in Clay and the plate.",
+        "properties": {
+          "asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Id"
+          },
+          "clip_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clip Id"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "fps": {
+            "default": 16,
+            "title": "Fps",
+            "type": "integer"
+          },
+          "frames": {
+            "default": 0,
+            "title": "Frames",
+            "type": "integer"
+          },
+          "from_m": {
+            "minimum": 0.0,
+            "title": "From M",
+            "type": "number"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "status": {
+            "default": "making",
+            "enum": [
+              "making",
+              "done",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "to_m": {
+            "exclusiveMinimum": 0.0,
+            "title": "To M",
+            "type": "number"
+          },
+          "words": {
+            "default": "",
+            "maxLength": 400,
+            "title": "Words",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from_m",
+          "to_m",
+          "words",
+          "status",
+          "job_id",
+          "error",
+          "clip_id",
+          "asset_id",
+          "frames",
+          "fps"
+        ],
+        "title": "SetCrowd",
+        "type": "object"
+      },
+      "SetCrowdBody": {
+        "properties": {
+          "face": {
+            "title": "Face",
+            "type": "string"
+          },
+          "from_m": {
+            "minimum": 0.0,
+            "title": "From M",
+            "type": "number"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed"
+          },
+          "to_m": {
+            "exclusiveMinimum": 0.0,
+            "title": "To M",
+            "type": "number"
+          },
+          "words": {
+            "default": "",
+            "maxLength": 400,
+            "title": "Words",
+            "type": "string"
+          }
+        },
+        "required": [
+          "face",
+          "from_m",
+          "to_m"
+        ],
+        "title": "SetCrowdBody",
+        "type": "object"
+      },
+      "SetCrowdQueued": {
+        "properties": {
+          "face": {
+            "title": "Face",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "size": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Size",
+            "type": "array"
+          }
+        },
+        "required": [
+          "job_id",
+          "face",
+          "size"
+        ],
+        "title": "SetCrowdQueued",
+        "type": "object"
+      },
       "SetFace-Input": {
         "description": "CW6 (04 §2, §4): a built set's face — what it shows (a Catalogue image of the face straight on: its Fill once filled, else its bake),\nthe bake and its coverage, its texel size, how much the picture saw, and the material its Fill names (D143).",
         "properties": {
@@ -19959,6 +20218,16 @@
               }
             ],
             "title": "Coverage Asset Id"
+          },
+          "crowd": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SetCrowd-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "fill_job_id": {
             "anyOf": [
@@ -20062,6 +20331,16 @@
             ],
             "title": "Coverage Asset Id"
           },
+          "crowd": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SetCrowd-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "fill_job_id": {
             "anyOf": [
               {
@@ -20130,7 +20409,8 @@
           "bad",
           "filled",
           "material",
-          "fill_job_id"
+          "fill_job_id",
+          "crowd"
         ],
         "title": "SetFace",
         "type": "object"
@@ -37946,6 +38226,129 @@
           }
         },
         "summary": "Profile Set Bake",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/profiles/{pid}/versions/{vid}/set/crowd": {
+      "post": {
+        "description": "D173: *Crowd ▶* — people along a vertical face over a stretch of it: the face's texture there refined by Klein with the people in,\nthen the plain Wan 2.2 from that picture back to it (a loop), its tone locked; the face plays it in Clay and the plate. The first step is\nqueued now, its landing queues the loop.",
+        "operationId": "profile_set_crowd_story_profiles__pid__versions__vid__set_crowd_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetCrowdBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetCrowdQueued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Set Crowd",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/profiles/{pid}/versions/{vid}/set/crowd/{fid}": {
+      "delete": {
+        "description": "D173: the face's crowd removed (a step still running is stopped; its clip stays in the Catalogue).",
+        "operationId": "profile_set_crowd_delete_story_profiles__pid__versions__vid__set_crowd__fid__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Set Crowd Delete",
         "tags": [
           "story"
         ]

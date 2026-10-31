@@ -997,7 +997,7 @@ function Viewport() {
   const frame = useStage((s) => s.frame)
   const playing = useStage((s) => s.playing)
   const blocksVersion = useBlocks((s) => s.version)                                                                 // U5: a clip block evaluated — sync again
-  useEffect(() => { const e = engineRef.current; if (e && current) { e.setAspect(current.size.w / current.size.h); e.sync(sampleDoc(current, frame)); setRect({ ...e.frameRect() }); setPipRect(e.pipRect()) } }, [current, frame, blocksVersion])   // ST4: the document at the frame
+  useEffect(() => { const e = engineRef.current; if (e && current) { e.setAspect(current.size.w / current.size.h); e.sync(sampleDoc(current, frame)); e.setFrame(frame); setRect({ ...e.frameRect() }); setPipRect(e.pipRect()) } }, [current, frame, blocksVersion])   // D173: the crowds follow the frame   // ST4: the document at the frame
   useEffect(() => {                                                                                                     // ST4: playback loops over the range at the project's fps
     if (!playing || !current || !active) return                                                                         // V87 (D69): hidden, the loop rests; it goes on when the level is back
     const t = window.setInterval(() => { const s = st(); const cur = s.current; if (!cur) return; s.setFrame(s.frame + 1 > cur.range.end ? cur.range.start : s.frame + 1) }, 1000 / Math.max(1, current.size.fps))

@@ -84,6 +84,27 @@ export async function saveSet(ps: PlaceSet | null): Promise<boolean> {
 }
 
 export const useSetBuilder = create<{ baking: boolean }>(() => ({ baking: false }))
+/** D173: the face whose crowd form is open in Build's face rows (one at a time). */
+export const useCrowdForm = create<{ face: string | null }>(() => ({ face: null }))
+
+/** D173: *Crowd ▶* — people along a face over a stretch of it (metres from the face's left end, as seen from inside): Klein puts them in,
+ *  Wan 2.2 loops them; the face plays it in Clay and the plate. */
+export async function makeCrowd(face: string, fromM: number, toM: number, words: string): Promise<boolean> {
+  const c = current(); if (!c) return false
+  try {
+    await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/set/crowd', { params: { path: { pid: c.p.id, vid: c.v.id } }, body: { face, from_m: fromM, to_m: toM, words } }))
+    toast(`A crowd along ${c.p.name}'s ${face}, ${fromM}–${toM} m: the picture, then its loop — about 4 min`, 'info')
+    return true
+  } catch (e) { toast(`Crowd: ${detail(e)}`); return false }
+}
+
+/** D173: the face's crowd removed (a step still running is stopped; its clip stays in the Bin). */
+export async function removeCrowd(face: string): Promise<void> {
+  const c = current(); if (!c) return
+  try {
+    await unwrap(http.DELETE('/story/profiles/{pid}/versions/{vid}/set/crowd/{fid}', { params: { path: { pid: c.p.id, vid: c.v.id, fid: face } } }))
+  } catch (e) { toast(`Remove the crowd: ${detail(e)}`) }
+}
 
 /** The noun a face's Fill names when the author gave no material (place_sets.py NOUN). */
 const NOUN: Record<string, string> = { floor: 'the floor', ceiling: 'the ceiling', wall: 'a wall', road: "the road's surface", pavement: 'the pavement', facade: "the buildings' fronts",

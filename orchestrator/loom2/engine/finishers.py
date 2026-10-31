@@ -229,6 +229,10 @@ class DocumentFinisher:
             rest = await asyncio.to_thread(place_sets.fill_landed, q, job, od)
             if rest:
                 await place_sets.fill_next(q, job, rest)                                       # V22: the next face submitted on the loop
+        if isinstance(recipe, I2I) and getattr(job, "origin", None) and job.origin.surface == place_sets.CROWD_START_SURFACE:   # D173: a face's crowd, its start
+            start = await asyncio.to_thread(place_sets.crowd_start_landed, q, job, od)
+            if start:
+                await place_sets.queue_crowd_loop(q, job, start)                                # on the loop, as Fill's next face
         if isinstance(recipe, Inpaint) and getattr(job, "origin", None) and job.origin.surface == set_things.CLEAN_SURFACE:   # D123 (SC3c-3): a picture set's plate
             done = await asyncio.to_thread(set_things.clean_plate, q, job, od)
             q.hub.broadcast("asset.created", done["asset"].model_dump())
@@ -294,6 +298,10 @@ class ClipFinisher:
                 tone_match = await asyncio.to_thread(tone.match_frames_to, paths, q.catalogue.abs_path(start))
                 job.log_tail.append(f"tone matched to the start image: gains {tone_match.get('gains')}, offsets {tone_match.get('offsets')}, "
                                     f"the first frame's MAE {tone_match.get('mae_before')} → {tone_match.get('mae_after')}")
+        if job.origin and job.origin.surface == place_sets.CROWD_SURFACE:   # D173 (E49c): a face's crowd loops — its tone locked, its seam faded
+            q.progress(job, "locking the loop's tone")
+            tone_match = await asyncio.to_thread(tone.lock_loop, paths)
+            job.log_tail.append(f"the crowd's loop: the seam {tone_match.get('seam_before')} → {tone_match.get('seam_after')} (the largest step {tone_match.get('largest_step')})")
         clips = ClipStore(q.ws)
         ep = compiled.summary | ({"tone_match": tone_match} if tone_match else {})
         q.progress(job, "writing the master")
@@ -337,6 +345,8 @@ class ClipFinisher:
             await _final_layer_batch(q, job, recipe, rec.id)
         if job.origin and job.origin.surface == FINAL_PLATE_PATH_SURFACE and job.origin.ref:   # CA3 (D130): the plate generated along the path
             await asyncio.to_thread(_final_plate_path, q, job, rec.id)
+        if job.origin and job.origin.surface == place_sets.CROWD_SURFACE and job.origin.ref:   # D173: the face plays it
+            await asyncio.to_thread(place_sets.crowd_landed, q, job, rec)
         if job.origin and job.origin.surface == "anim_test" and job.origin.ref:   # CA0: the reference's test animation → the version's
             await asyncio.to_thread(_anim_test_result, q, job.origin.ref, job.origin.payload or {}, rec.id)
         if job.origin and job.origin.surface == FOR_SHOT:                     # D90 (02 §5): Animate for a shot version → its takes

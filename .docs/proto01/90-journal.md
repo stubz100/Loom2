@@ -14788,3 +14788,112 @@ E50 ran on E47's copy, the GPU parts alone (`engine/spikes/out/e50/`: `sheet.jpg
   - (b) is not worth pursuing for a set the shot already has: LTX repaints the place.
 
 Sent to the author with the decision (what to build for M6).
+
+## 2026-10-31 15:07 — M6 → D173: a crowd plays on a set's face (the author: "Crowd clip + extras"); the build and its acceptance
+
+**The author's answer** after E50: "Crowd clip + extras". D173 is recorded; the extras stay as they are.
+
+**The build:**
+
+- **The record:** `SetFace.crowd` holds the stretch (from_m, to_m), the author's words, the state (making, done, failed), the running job,
+  and the clip (its id, the proxy's asset, frames, fps).
+- **The route:** `POST /story/profiles/{pid}/versions/{vid}/set/crowd` takes a face, a stretch and words. `DELETE …/set/crowd/{face}`
+  removes it.
+- **The chain** (as Fill's, `place_sets`):
+  1. the face's texture over the stretch, scaled to ≈ 0.5 MP at its aspect, becomes a document;
+  2. Klein refines it (I2I 0.6, origin `set_crowd_start`);
+  3. its landing flattens the document into the start picture and queues the plain Wan 2.2 loop (first = last frame, origin
+     `set_crowd`, the default I2V spec, never a literal);
+  4. the video finisher locks the frames' tone and fades the last four into the first (`tone.lock_loop`), and the face takes the clip;
+  5. a failure or a cancel marks the crowd failed.
+- **Clay and the plate:** a plane over the stretch, 2 mm off the face, shows the clip's frame for the stage frame (24 fps → the clip's
+  rate, looping over its first n − 1 frames). In a sequence render each frame waits for its seek.
+- **Build:** a vertical face's row offers *Crowd ▶* (the stretch, words, then Make). The row says the crowd's state; *Remove the crowd*
+  is in its right-click.
+
+**Acceptance on the rig** (the market copy, alone on the GPU, the app's own route): the right stall front's crowd over 3.2–14.4 m (the
+stretch the shot's v2 sees). Bars:
+
+- the loop lands; its seam after the lock and the fade is ≤ 3 levels, and the largest step inside the clip is no more than it was
+  before the fade;
+- a final of the shot made in the app (no engine job) shows the crowd on its plate: the facade band differs from Final 5's plate on
+  frames 5, 32 and 60 by people, not by the stalls, and moves between those frames;
+- Clay's viewport plays it (two frames' screenshots).
+
+## 2026-10-31 15:25 — D173 built; on the rig the crowd plays in Clay and the plate, but this seed's crowd barely moves and the refine shifts the stalls' colours; E51's bars
+
+**Built:**
+
+- the server: `SetFace.crowd`; `POST …/set/crowd`, `DELETE …/set/crowd/{face}`; `place_sets` `queue_crowd` → `crowd_start_landed` →
+  `queue_crowd_loop` → `crowd_landed`, `crowd_failed`; `engine/tone.py lock_loop`;
+- the client: `stage/crowd.ts`; the engine's crowd planes (a video texture each, sought per frame, waited for in a sequence); the
+  final's frames carry their stage frame; Build's *Crowd ▶* with the stretch and the words, and *Remove the crowd*.
+- offline 4 new (the chain on the fake engine), Vitest 2 new, and an e2e step (the back wall's crowd on the fake engine).
+
+**On the rig** (E47's copy, `engine/spikes/d173_rig.py`, alone on the GPU), the right stall front 3.2–14.4 m with the market's words:
+
+- the refine took 57 s and the loop 220 s (1088 × 480, Draft, a random seed);
+- the loop's seam went 5.65 → 0.38, with the largest step inside 0.91;
+- in the app (no engine job), Clay's viewport through the shot's camera shows the clip on the stall front at frames 60 and 100, a
+  different stretch of it as the camera tracks;
+- Final 8 (the shot's v2) has it on its plate: the facade band differs from Final 5's by 29–32 levels on frames 5, 32 and 60.
+
+**Against the bars set at 15:07:**
+
+- **The loop lands, the seam ≤ 3, no larger step from the fade:** passes.
+- **Clay's viewport plays it:** passes.
+- **The plate shows a crowd that moves, the stalls unchanged:** fails.
+  - The people barely move: the largest step inside the clip is 0.91, against E49c's L1 (typical 1.9, largest 2.5). It is a stallholder
+    standing in the gap and faint figures behind the counter. The plate's frame-to-frame change (≈ 9.9) is the camera's tracking.
+  - The refine changed the stalls themselves: the warm wooden counters came out blue-grey, the crates were redrawn, the lamps more
+    yellow. The stretch no longer matches the face around it.
+  - The figures behind the counter are faint, almost transparent.
+- **The integration is accepted; the crowd's content is not yet.** One loop of three so far (E49c's L1) had real walkers.
+
+**E51, two levers the app already has** (the same copy, stretch and words; `engine/spikes/out/e51/`), two seeds an arm, the GPU alone:
+
+- **C:** the start refined with `match_colour` (D48: the result's Lab statistics mapped back onto the crop's), Draft as built;
+- **CM:** C with the loop on Wan's Motion preset (the undistilled high expert at CFG 3.5, ≈ 8 min).
+
+**Measured:**
+
+- the people's motion: the mean step between frames over the clip's lower 60 %, the camera still;
+- the colour: the start's mean Lab distance from the crop;
+- the seam after the lock;
+- to the eye: solid people walking along the counters.
+
+**Bars:**
+
+- **An arm passes** when both its seeds move at least as much as E49c's L1 (a mean step ≥ 1.5 on the lower band), the start stays within
+  ΔE 6 of the crop, the seam is ≤ 3, and to the eye the people are solid and walk along the counters.
+- **What goes in:** the passing arm's settings become D173's crowd recipe. With none passing, D173 ships the integration with *Crowd
+  again ▶* as the author's lever, and the gap is written down.
+
+## 2026-10-31 15:49 — E51: the colour match keeps the face's colours; neither preset makes every loop move; D173 ships with *Crowd again ▶* and the odds written down
+
+E51 ran on E47's copy, the GPU alone (`engine/spikes/out/e51/`). The starts took 60 s and 44 s; the loops took 204 s and 196 s on
+Draft, 392 s and 392 s on Motion.
+
+| Clip | Motion (mean · max step, lower 60 %) | Seam after the lock | To the eye |
+| --- | --- | --- | --- |
+| start 41 · start 42 | ΔE from the crop 0.01 · 0.01 | — | the warm wooden counters and white tiles kept. 41: solid people (a stallholder in apron and cap, a woman with a bag, a woman in a green coat); 42: a few small ones |
+| C 41 (Draft) | 1.83 · 3.49 | 0.36 | solid people, the woman in green moving along the counter, someone passing in front. A crowd that works |
+| CM 41 (Motion) | 0.98 · 2.04 | 0.33 | nearly still |
+| C 42 (Draft) | 2.97 · 6.38 | 0.42 | a translucent, ghostly walker crosses |
+| CM 42 (Motion) | 5.71 · 13.01 | 0.44 | a woman with a basket and a man in a brown jacket walk across, solid: the best loop yet |
+
+**Against the bars set at 15:25:**
+
+- **Neither arm passes on both seeds.** C fails on 42's ghost; CM fails on 41's stillness.
+- **The colour criterion passes on every start** (ΔE 0.01 ≤ 6). The colour shift seen on the rig (D173's Final 8) was the refine's, and
+  `match_colour` undoes it.
+
+**So D173's recipe:**
+
+- the start's refine with `match_colour` (measured);
+- Draft for the loop (Motion costs twice as much and is not more reliable);
+- *Crowd again ▶* as the author's lever.
+
+**The odds, written down:** of the six Draft loops made with people so far (E49c L1, L2; the rig's; E51 C 41, C 42; E49b's open clips
+not counted), two moved with solid people (L1, C 41), two were nearly still and one had a ghost. A crowd is a roll the author may repeat
+(≈ 4 min each); keeping the better of two is not built (the motion measure would have picked C 42's ghost).

@@ -59,3 +59,30 @@ def match_frames_to(paths: list[Path], start_path: Path) -> dict:
             fixed.putalpha(im.getchannel("A"))
         fixed.save(p, "PNG")
     return {"frames": len(paths), "applied": True, "gains": gains, "offsets": offsets, "mae_before": before, "mae_after": after}
+
+
+def lock_loop(paths: list[Path], band: float = 0.4, fade: int = 4) -> dict:
+    """D173 (E49c): a crowd loop's frames rewritten in place — each frame's tone locked to the first (fit_affine on the frame's upper
+    `band`, where the face stands still: Wan drifts about 7 levels over 5 s), then the last `fade` frames faded into the first and the last
+    made the first, so the loop repeats without a pop. The seam (the step from the frame before the last back to the first) before and
+    after, and the largest step inside."""
+    if len(paths) < 3:
+        return {"frames": len(paths)}
+    frames = [np.asarray(Image.open(p).convert("RGB")) for p in paths]
+    rows = max(1, int(frames[0].shape[0] * band))
+    seam_before = mae(frames[-2], frames[0])
+    out = [frames[0].astype(np.float64)]
+    for f in frames[1:]:
+        gains, offsets = fit_affine(f[:rows], frames[0][:rows])
+        out.append(apply_affine(f, gains, offsets).astype(np.float64))
+    n = len(out)
+    k = max(0, min(fade, n - 2))
+    for j in range(1, k + 1):                                             # the j-th frame before the last, faded toward the first
+        w = (k + 1 - j) / (k + 1)
+        out[n - 1 - j] = out[n - 1 - j] * (1 - w) + out[0] * w
+    out[-1] = out[0]
+    final = [np.clip(a + 0.5, 0, 255).astype(np.uint8) for a in out]
+    for p, a in zip(paths, final):
+        Image.fromarray(a, "RGB").save(p, "PNG")
+    steps = [mae(final[i + 1], final[i]) for i in range(n - 2)]
+    return {"frames": n, "seam_before": seam_before, "seam_after": mae(final[-2], final[0]), "largest_step": max(steps) if steps else 0.0}

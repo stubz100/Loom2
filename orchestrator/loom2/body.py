@@ -73,6 +73,49 @@ def rebase_body(raw: dict[str, Any]) -> dict[str, Any]:
     return {**raw, "neck": round(min(3.0, max(0.5, (n + hd) / 2)), 4)}
 
 
+# ---- D168 (M9): a body nobody has set, seeded from the sheet's words -----------------------------------------------------------------
+_MALE = r"\b(man|men|boy|gentleman|male|father|grandfather|husband|son|brother|king|he|his|him|beard|bearded|moustache|mustache)\b"
+_FEMALE = r"\b(woman|women|girl|lady|female|mother|grandmother|wife|daughter|sister|queen|she|her|hers)\b"
+_BUILDS = (("heavy", r"\b(heavy-?set|heavy|stout|portly|fat|plump|burly|rotund|big-bellied|chubby)\b"),
+           ("broad", r"\b(broad|stocky|muscular|brawny|thickset|well-built|athletic)\b"),
+           ("slim", r"\b(slim|slender|thin|wiry|petite|lean|skinny|willowy|frail|bony)\b"))
+_CHILD = r"\b(child|kid|toddler|little (?:boy|girl))\b"
+_TALL, _SHORT = r"\b(tall|towering|lanky)\b", r"\b(small|short|petite|tiny|diminutive)\b"
+_ELDERLY = r"\b(elderly|old|aged|in (?:his|her|their) (?:seventies|eighties|nineties))\b"
+
+
+def body_from_words(text: str) -> dict[str, Any]:
+    """D168 (M9): what a character sheet's words say of its body — the figure (more man words than woman words, or the other way; neither
+    or a tie says nothing), the build (heavy-set, broad, slim — the first that the words name, in that order) and the height (a man 1.78 m,
+    a woman 1.66 m, else 1.75 m; tall +0.12, small or short −0.10, elderly −0.03; a child 1.25 m). Only what the words say is returned."""
+    import re
+    t = (text or "").lower()
+    out: dict[str, Any] = {}
+    m, f = len(re.findall(_MALE, t)), len(re.findall(_FEMALE, t))
+    if m != f:
+        out["figure"] = "male" if m > f else "female"
+    for build, rx in _BUILDS:
+        if re.search(rx, t):
+            out["build"] = build
+            break
+    if re.search(_CHILD, t):
+        out["height_m"] = 1.25
+    else:
+        h = {"male": 1.78, "female": 1.66}.get(out.get("figure", ""), 1.75)
+        h += 0.12 if re.search(_TALL, t) else -0.10 if re.search(_SHORT, t) else 0.0
+        h -= 0.03 if re.search(_ELDERLY, t) else 0.0
+        if out or abs(h - 1.75) > 1e-6:
+            out["height_m"] = round(h, 2)
+    return out
+
+
+def seed_body(body: Body | None, words: str) -> Body:
+    """D168: the body the fit starts from — the author's when they set one, else Body's defaults moved by what the sheet's words say."""
+    if body is not None and body != Body():
+        return body
+    return Body(**body_from_words(words))
+
+
 # ---- CA1b (D104): the body fitted to the character's animation reference -------------------------------------------------------------
 BUILD_WIDTH = {"slim": 0.85, "average": 1.0, "broad": 1.15, "heavy": 1.3}      # frontend stage/body.ts
 PALM_PER_LEG = 0.147          # the Detailed figure's palm (wrist → the middle finger's base) per leg length, measured on Stage in the A-pose front (CS1, journal 2026-10-25; 0.149 before)

@@ -16,6 +16,9 @@ describe('U3: the readiness line', () => {
     expect(r.line).toBe('4 to go')
     const done = readiness({ cls: 'character', voice_id: 'vce_1' }, v({ hero_asset_id: 'a', anim_ref_asset_id: 'b', body_fit_from: 'b' }), 3)
     expect([done.line, done.items.find((x) => x.id === 'references')!.detail]).toEqual(['Ready for Clay', '3'])
+    const bram = readiness({ cls: 'character', voice_id: null }, v({ anim_ref_asset_id: 'b', body_fit_from: 'b', body: { figure: 'male', height_m: 1.78, build: 'heavy' } as never }), 1)
+    expect(bram.items.find((x) => x.id === 'body')!.detail).toBe('♂ 1.78 m · heavy')                       // D168: what the body is
+    expect(readiness({ cls: 'character', voice_id: null }, v({ body: { figure: 'male', height_m: 1.78, build: 'heavy' } as never }), 1).items.find((x) => x.id === 'body')!.detail).toBeUndefined()
   })
   it('a prop owes its hero, model and height; a place its set picture, set and filled faces', () => {
     expect(readiness({ cls: 'prop', voice_id: null }, v({ hero_asset_id: 'a', height_m: 0.3 }), 1).line).toBe('1 to go')

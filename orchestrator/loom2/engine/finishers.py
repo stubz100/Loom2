@@ -888,7 +888,7 @@ class KeypointsFinisher:
 def _body_fit_result(q: JobQueue, job: JobRecord, recipe: Keypoints, people: list[dict]) -> None:
     """CA1b: the version's body fitted to the reference's proportions (the height, build, head, feet and attachments stay). A reference that
     shows no whole figure fails the job, so the author sees why."""
-    from ..body import Body, body_points, fit_body, reference_ratios, stance_note
+    from ..body import body_points, fit_body, reference_ratios, seed_body, stance_note
     from ..story import StoryStore
     if not people:
         raise ValueError("no figure found in the animation reference")
@@ -905,7 +905,8 @@ def _body_fit_result(q: JobQueue, job: JobRecord, recipe: Keypoints, people: lis
         q.hub.broadcast("story.changed", {"kind": "profile", "id": p.id, "revision": p.revision})
         from ..story import ARMS_DOWN
         raise ValueError(ARMS_DOWN)
-    body, report = fit_body(measured, v.body or Body(), (v.body.locks if v.body else ()))   # CS2: the locked factors stay the author's
+    base = seed_body(v.body, " ".join([v.appearance, v.label, v.marks]))      # D168 (M9): an untouched body starts from the sheet's words
+    body, report = fit_body(measured, base, base.locks)                        # CS2: the locked factors stay the author's
     p = store.set_fitted_body(pid, v.id, body, recipe.asset_id, body_points(people[0], job.result.get("canvas")), note)
     job.result["body"] = body.model_dump()
     job.result["fit"] = report

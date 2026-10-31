@@ -127,6 +127,28 @@ async def test_a_reference_fits_the_body(tmp_path: Path, object_info: dict):
 
 
 @pytest.mark.asyncio
+async def test_an_untouched_body_starts_from_the_sheet(tmp_path: Path, object_info: dict):
+    """D168 (M9): the fit of a body nobody set starts from the sheet's words — Bram, "a heavy-set man", is fitted as a man, heavy, 1.78 m
+    (the market walk's every body was "female · 1.75 m · average")."""
+    rig = Rig(tmp_path, object_info)
+    try:
+        groups = rig.queue.groups = GroupStore(rig.ws, rig.catalogue)
+        st = StoryStore(rig.ws)
+        ref = rig.catalogue.ingest_file(_png(tmp_path / "ref.png")).id
+        p = st.create_profile("Bram", "character", groups, appearance="a heavy-set man in his fifties, a bald head, a thick grey beard")
+        rig.fake.people = [fake_person({"head_neck": 0.167, "shoulders": 0.234, "torso": 0.334, "leg": 0.499, "arm": 0.344, "palm": 0.06})]
+        rig.queue.load()
+        await rig.queue.start()
+        job = rig.queue.submit({"kind": "keypoints", "asset_id": ref}, origin=body_fit_origin(p.id, "v1"))[0]
+        done = await rig.wait(job.id)
+        assert done.status == "done", done.error
+        b = st.profile(p.id).version("v1").body
+        assert (b.figure, b.build, b.height_m) == ("male", "heavy", 1.78) and b.neck > 1.4          # seeded, then fitted
+    finally:
+        await rig.close()
+
+
+@pytest.mark.asyncio
 async def test_an_arms_down_picture_fits_nothing(tmp_path: Path, object_info: dict):
     """D140: the body is fitted only on an A-pose — a read that finds the arms against the body fails the job with the way out, keeps the
     note, and leaves the body, its points and its picture as they were; the route then refuses until the reference is drawn again."""

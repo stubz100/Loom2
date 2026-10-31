@@ -8,6 +8,9 @@ export interface Readiness { items: ReadyItem[]; owed: number; line: string }
 const item = (id: string, label: string, done: boolean, detail?: string, optional = false): ReadyItem =>
   ({ id, label, state: done ? 'done' : optional ? 'optional' : 'owed', ...(detail ? { detail } : {}) })
 
+/** D168 (M9): a body as the readiness chip says it — the figure, the height, the build ("♂ 1.80 m · heavy"). */
+export const bodyText = (b: { figure?: string | null; height_m: number; build: string }): string => `${b.figure === 'male' ? '♂' : '♀'} ${b.height_m.toFixed(2)} m · ${b.build}`
+
 export function readiness(p: Pick<Profile, 'cls' | 'voice_id'>, v: ProfileVersion, refs: number): Readiness {
   let items: ReadyItem[]
   if (p.cls === 'character') {
@@ -16,7 +19,7 @@ export function readiness(p: Pick<Profile, 'cls' | 'voice_id'>, v: ProfileVersio
       item('references', 'references', refs > 0, String(refs)),
       item('a_pose_front', 'A-pose front', !!v.anim_ref_asset_id),
       item('a_pose_back', 'A-pose back', !!v.anim_ref_back_asset_id, undefined, true),
-      item('body', 'body fitted', !!v.body_fit_from),
+      item('body', 'body fitted', !!v.body_fit_from, v.body_fit_from && v.body ? bodyText(v.body) : undefined),   // D168: what the body is, so a wrong one shows
       item('voice', 'voice', !!p.voice_id, undefined, true),
     ]
   } else if (p.cls === 'prop') {

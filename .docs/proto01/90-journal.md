@@ -14218,3 +14218,27 @@ no figure, behind the camera) and `shotRange` (the version's range, the current 
   - **The height:** a man 1.78 m, a woman 1.66 m, else 1.75 m; tall +0.12, small or short −0.10, elderly −0.03, a child 1.25 m.
   - A body the author has set is never touched.
   - World's readiness chip says what the body is ("body fitted · ♂ 1.80 m · heavy"), so a wrong one is seen.
+
+## 2026-10-31 07:09 — D168 (M9) built: an untouched body is seeded from the sheet's words before its fit; the chip says what it is
+
+**Built:**
+
+- `body.body_from_words` / `seed_body` (the figure, the build, the height) and their use in the fit's finisher. The words read are the
+  appearance, the version's label and the marks; the marks carry Bram's "anchor tattoo on **his** right forearm".
+- World's readiness chip: "body fitted · ♂ 1.78 m · heavy".
+
+**On the market walk's sheets:**
+
+| Character | Seeded as | Set by hand on 2026-10-30 (M9) |
+| --- | --- | --- |
+| Bram | male · heavy · 1.78 m | 1.80 m · heavy · ♂ |
+| Hanne | female · 1.53 m | 1.58 m · slim |
+| Mira | female · 1.66 m | 1.70 m |
+
+**Tests:**
+
+- `test_body_words_d168` (2: the words, only an untouched body);
+- `test_body_fit_ca1b`'s new case: the fit through the fake engine seeds a heavy-set man, then fits him;
+- the Vitest readiness chip.
+
+No rig: D168 changes no model's path (SDPose's keypoints, the GPU step, are untouched); the real path is the fake engine's.

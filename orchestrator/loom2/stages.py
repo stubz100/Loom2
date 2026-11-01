@@ -196,6 +196,25 @@ class SetSource(BaseModel):
     made_at: str = Field(default_factory=utc_now)
 
 
+class PlaceThing(BaseModel):
+    """D180 (W60): a part of a built set that moves — picked on the set picture (SAM 3's points and the mask they found), cut out (`card`: its
+    pixels with the mask as alpha, cropped), standing where the picture shows it (`base`: the bottom centre on the set's floor, in the set's
+    frame; its width and height there; turned to face the picture's camera); and what it is made into — the card itself, or (`mesh_asset_id`)
+    a 3D model of the cut-out. Clay places either as a stage object of its own, so it can be keyed."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    id: str = Field(default_factory=lambda: new_id("pth"))
+    name: str
+    mask_asset_id: str
+    card_asset_id: str
+    points: list[dict[str, int]] = Field(default_factory=list)
+    base: list[float]                              # [x, y, z] in the set's frame: where its bottom centre stands
+    width_m: float
+    height_m: float
+    yaw_deg: float = 0.0                           # turned to face the picture's camera
+    mesh_asset_id: str | None = None               # its 3D model (image → 3D on the cut-out)
+    mesh_job_id: str | None = None                 # the model's job in flight
+
+
 class PlaceSet(BaseModel):
     """CW6 (04 §2): a place's set — a room, a street, a corridor or open ground, its sizes and parts (frontend placeSet.ts lays its faces
     out), its baked faces and the pictures they came from."""
@@ -206,6 +225,8 @@ class PlaceSet(BaseModel):
     faces: list[SetFace] = Field(default_factory=list)
     sources: list[SetSource] = Field(default_factory=list)
     baked_key: str | None = None                   # what the faces were baked for (setOverlay.bakeKey: the set and its camera); another → bake again
+    things: list[PlaceThing] = Field(default_factory=list)   # D180 (W60): its parts that move, picked on the set picture
+    things_document_id: str | None = None          # D180: the set picture's own document the things are found on (SAM 3's points)
 
 
 class StageObject(BaseModel):

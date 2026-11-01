@@ -15607,3 +15607,44 @@ cut-out card stays the other choice.
   - Offline 798: a paler fill beside a teal seen part, the step under 2 ΔE after, the seen part untouched, a face filled whole unchanged.
   - Vitest unchanged.
   - e2e 84/84 alone: the set scenario's Fill lands through it on the fake engine.
+
+## 2026-11-01 06:25 — D180 built: a built set's things that move — picked on the set picture, cut out, stood where it shows them, a 3D model or a card in Clay
+
+**The server:**
+
+- **The record:** `PlaceThing` on the place set (`things`, `things_document_id`): the mask, the card (the pixels, the mask as alpha, cropped), the
+  points, where it stands (`base` in the set's frame, `width_m`, `height_m`, `yaw_deg`), and its model (`mesh_asset_id`, `mesh_job_id`).
+- **`place_things.py`:**
+  - the set picture's own document;
+  - `stand`: the ray from the set picture's camera through the mask's bottom centre onto the floor (y = 0), else 40 m out; its size there;
+    facing the camera;
+  - `keep` (the card ingested with lineage `place-thing`);
+  - `model_job`: the cut-out on white through the app's `image_to_mesh`, landing on the thing, a failure letting go of it;
+  - `remove`.
+- **The routes:** `POST …/set/things/find` (SAM 3's points), `POST …/set/things` (keep), `POST …/set/things/{tid}/model`,
+  `DELETE …/set/things/{tid}`.
+
+**The client:**
+
+- **Build:**
+  - *Pick a thing that moves…* opens the picking sheet on the set picture (`PlaceThingsSheet`, as SC3's: + the thing, − not it, the mask
+    tinted, Keep as a thing).
+  - Below the set, *Things that move* lists each thing: its card, its size, *Make a 3D model ▶* (the model and its minutes in the tooltip),
+    then "making…" and "3D model ✓", and ✕.
+- **Clay:**
+  - placing a Cast set places its things as objects of their own (`placeThings.thingFields`): the 3D model at its base, its height the
+    thing's, else its card on an image plane with its bottom on the floor, both turned to face the picture's camera and through the set
+    object's turn;
+  - *Add its things that move* (a bound set's right-click and Inspector) adds those not on the stage yet.
+
+**Not built yet:** cleaning the set picture under a thing (a Fill, then Bake again and Fill), so its painted copy leaves the faces. Until
+then the moving thing shows over a still copy of itself.
+
+**Tests:**
+
+- Offline 800: the standing geometry; keep, card and model through the fake engine; the route table.
+- Vitest 637 + 3 skipped: the thing's object, a card and a model, through the set's turn.
+- e2e 84/84 alone: the set scenario picks a thing, keeps it, standing on the floor, and makes its 3D model on the fake engine.
+- Typecheck, build and lint clean (61 warnings, as before); settings audit 322 / 0; agent docs and model literals clean.
+
+**Rig:** owed — the Last Ferry's ferry through the product path, on a copy.

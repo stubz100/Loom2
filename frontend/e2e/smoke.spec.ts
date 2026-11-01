@@ -2526,6 +2526,28 @@ test("a place's set (CW6, D143): Build the set ▶ queues MoGe on the set pictur
   await expect.poll(async () => (await ps())?.faces.find((f) => f.id === 'wall_back')?.walkers?.[0]?.status, { timeout: 120_000 }).toBe('done')
   await expect(walkRow).toContainText('walkers · 0–4 m')
   expect((await ps())!.faces.find((f) => f.id === 'wall_back')!.walkers![0].kept).toBeGreaterThan(0)
+  // D180 (W60): a thing that moves — picked on the set picture (SAM 3: the fake's mask), kept, standing on the floor; its 3D model made
+  await sec.locator('button', { hasText: /^Pick a thing that moves/ }).click()
+  const tsheet = page.locator('.modal.things-sheet')
+  await expect(tsheet).toBeVisible()
+  const tcanvas = tsheet.locator('.things-pic canvas')
+  await expect.poll(async () => (await tcanvas.boundingBox())?.width ?? 0).toBeGreaterThan(100)
+  const tbox = (await tcanvas.boundingBox())!
+  await tcanvas.click({ position: { x: tbox.width * 0.5, y: tbox.height * 0.7 } })
+  await expect(tsheet.locator('.things-status')).toHaveAttribute('data-state', 'found', { timeout: 30_000 })
+  await tsheet.locator(`input[aria-label="the thing's name"]`).fill('Cart')
+  await tsheet.getByRole('button', { name: 'Keep as a thing' }).click()
+  await expect(tsheet.locator('.things-kept')).toContainText('1 kept')
+  await page.keyboard.press('Escape')
+  type ThingLite = { name: string; base: number[]; card_asset_id: string; mesh_asset_id: string | null }
+  const thingsOf = async () => ((await ps()) as unknown as { things: ThingLite[] }).things
+  await expect.poll(async () => (await thingsOf()).map((t) => t.name)).toEqual(['Cart'])
+  expect((await thingsOf())[0].base[1]).toBe(0)                                                                 // standing on the set's floor
+  const thingRow = sec.locator('[data-testid="place-things"] .place-thing')
+  await expect(thingRow).toHaveCount(1)
+  await thingRow.locator('button', { hasText: /^Make a 3D model/ }).click()
+  await expect.poll(async () => (await thingsOf())[0].mesh_asset_id, { timeout: 120_000 }).toBeTruthy()
+  await expect(thingRow).toContainText('3D model ✓')
   // Bench ▶: Clay on the set, bound to the place, from the picture's camera
   await sec.locator('button', { hasText: /^Bench/ }).click()
   await expect(page.locator('.w-mode button.active')).toHaveText('Clay')                                    // Clay on the set, inside World

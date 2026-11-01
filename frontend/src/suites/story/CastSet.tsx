@@ -13,6 +13,7 @@ import { CROWD_ASPECT, isGround, isVertical, setFaces, SET_KIND_PARTS, SET_KIND_
 import { changeKind, dragTo, handles, outlines, rescale, type Handle, type SourceCam } from '../stage/setOverlay'
 import { autoBake, faceNoun, makeCrowd, makeWalkers, saveSet, setCamera, setPicture, setStatus, useCrowdForm, useSetBuilder, type PlaceSet } from './setBuilder'
 import { onStoryItem } from './storyCommands'
+import { PlaceThingsSheet, ThingRows } from './PlaceThingsSheet'
 
 type Version = Profile['versions'][number]
 const KINDS: [SetKind, string][] = [['room', 'Room'], ['corridor', 'Corridor'], ['street', 'Street'], ['ground', 'Open ground']]
@@ -72,6 +73,8 @@ export function PlaceSetSection({ p, v }: { p: Profile; v: Version }) {
         </div>
       </div>
       {ps && ps.faces.some((f) => f.baked_asset_id) && <FaceRows ps={ps} onEdit={edit} />}
+      {ps && <ThingRows pid={p.id} vid={v.id} ps={ps} />}{/* D180 (W60): the parts that move */}
+      <PlaceThingsSheet />
     </section>
   )
 }

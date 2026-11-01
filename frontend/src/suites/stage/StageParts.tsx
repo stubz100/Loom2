@@ -311,6 +311,7 @@ function ObjectEditor({ o }: { o: StageObject }) {
       {o.kind === 'mesh' && <MeshProp o={o} />}
       {o.kind === 'light' && <LightControls o={o} />}
       {o.kind === 'set' && o.preset === 'image' && <ImageSetFields key={`${o.id}:${o.lens_deg}`} o={o} />}
+      {o.kind === 'set' && !!o.profile_id && !!o.place_set?.things?.length && <div className="verbs"><CommandButton id="stage.set.things" text /></div>}{/* D180 */}
       {o.kind === 'mannequin' && <div className="kv"><span>pose</span><span><select value={o.pose?.preset ?? 'stand'} onChange={(e) => st().applyPose(o.id, e.target.value)}>{POSE_NAMES.map((p) => <option key={p} value={p}>{p}</option>)}</select> <span className="hint">(Pose, over the viewport, poses the joints)</span></span></div>}
       {o.kind === 'plane' && <div className="kv"><span>faces camera</span><input type="checkbox" checked={o.billboard} onChange={(e) => st().updateObject(o.id, { billboard: e.target.checked })} /></div>}
       {!o.parent_joint && <div className="kv"><span>parent <Help text="It moves with its parent and stays where it stands when you pick one; its transform below is then its place on the parent." /></span><select value={o.parent ?? ''} onChange={(e) => { const [k, fid, hand] = e.target.value.split(':'); if (k === 'hand') st().hold(o.id, fid, hand as 'r_hand' | 'l_hand'); else st().setParent(o.id, e.target.value || null) }}>

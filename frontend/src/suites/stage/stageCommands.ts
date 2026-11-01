@@ -142,6 +142,11 @@ registerCommands([
     hint: "a draft character (its body and shell) or prop (its model and height) in World, with Clay's view of it as its hero",
     when: () => { const o = sel(); return !!o && !o.profile_id && (o.kind === 'mannequin' || (o.kind === 'mesh' && !!o.asset_id)) && !!viewport.snapshot },
     run: () => void st().prototypeObject(st().selected!) },
+  { id: 'stage.set.things', scope: 'stage', label: 'Add its things that move', icon: Box, placement: ['context', 'inspector'],
+    hint: "D180: the place's things that move (picked in World › Build), each its own object here — its 3D model, else its card — to key",
+    when: () => { const o = sel(); return o?.kind === 'set' && !!o.profile_id && !!o.place_set?.things?.length },
+    run: () => { const o = sel(); if (!o) return; const n = st().addSetThings(o.id)
+      useSession.getState().toast(n ? `${n} thing${n === 1 ? '' : 's'} added — each an object you can key` : 'Its things are on the stage already', n ? 'success' : 'info') } },
   { id: 'stage.object.freeCopy', scope: 'stage', label: 'Make a free copy', icon: Copy, placement: ['inspector', 'context'], hint: "beside it, free of Cast: its body and shell (or its model and height, or a set's faces) as they are now, to experiment with",
     when: () => !!sel()?.profile_id && (sel()?.kind === 'mannequin' || sel()?.kind === 'mesh' || (sel()?.kind === 'set' && sel()?.preset === 'built')), run: () => st().freeCopy(st().selected!) },
   // CW7 (02 §9): a picture set becomes a Cast place — the picture its set picture, its set built from it
@@ -215,7 +220,7 @@ export function viewportMenu(onObject: boolean): MenuItem[] {
       ...holdItems(),
       ...(sel()?.kind === 'mannequin' ? [...bindItems(), { cmd: 'stage.pose.mode' }, { label: 'Pins', icon: Pin, items: [{ cmd: 'stage.pose.pinFeet' }, { cmd: 'stage.pose.pinHands' }, sep, { cmd: 'stage.pose.release' }, { cmd: 'stage.pose.unpin' }] }, { label: 'Looks at', icon: Eye, items: [{ cmd: 'stage.pose.lookAtCamera' }, { cmd: 'stage.pose.lookAway' }] }, { cmd: 'stage.pose.mirror' }, { cmd: 'stage.pose.reset' }, { cmd: 'stage.pose.save' }, { cmd: 'stage.pose.saveForCharacter' }, { cmd: 'stage.motion.apply' }, { cmd: 'stage.path.clear' }, sep] : []),
       ...(sel()?.profile_id ? [{ cmd: 'stage.object.freeCopy' }] : sel()?.kind === 'mannequin' || sel()?.kind === 'mesh' ? [{ cmd: 'stage.object.prototype' }] : []),
-      ...(sel()?.kind === 'set' && sel()?.profile_id ? [{ cmd: 'stage.figure.openInCast' }] : []),                      // CW7: a bound set's way to its place
+      ...(sel()?.kind === 'set' && sel()?.profile_id ? [{ cmd: 'stage.figure.openInCast' }, { cmd: 'stage.set.things' }] : []),   // CW7: a bound set's way to its place; D180: its things
       ...(sel()?.kind === 'set' && sel()?.preset === 'image' ? [{ cmd: 'stage.set.toPlace' }] : []),
       { cmd: 'stage.anim.keyObject' }, sep, { cmd: 'stage.object.delete' }, sep, { cmd: 'stage.undo' }, { cmd: 'stage.redo' }]
     : [addMenu(), { cmd: 'stage.add.plane' }, { cmd: 'stage.camera.add' }, { cmd: 'stage.camera.setFromView' }, cameraShotItem(), sep, { cmd: 'stage.tool.select' }, { cmd: 'stage.tool.move' }, { cmd: 'stage.tool.rotate' }, { cmd: 'stage.tool.scale' }, { cmd: 'stage.tool.path' }, { cmd: 'stage.snap' }, sep, { cmd: 'stage.frameAll' }, sep,

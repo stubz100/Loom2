@@ -3975,6 +3975,88 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/profiles/{pid}/versions/{vid}/set/things": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Profile Set Thing Keep
+         * @description D180: the mask the last find left, kept as a thing of the set — its mask, its card (the cut-out) and where it stands (its bottom
+         *     centre's ray from the set picture's camera onto the set's floor, its size there).
+         */
+        post: operations["profile_set_thing_keep_story_profiles__pid__versions__vid__set_things_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/profiles/{pid}/versions/{vid}/set/things/find": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Profile Set Thing Find
+         * @description D180 (W60): SAM 3's point prompts on the set picture's own document (made the first time); the mask lands as that document's
+         *     selection, which the client reads (`GET /documents/{id}/selection`) and draws on the picture.
+         */
+        post: operations["profile_set_thing_find_story_profiles__pid__versions__vid__set_things_find_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/profiles/{pid}/versions/{vid}/set/things/{tid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Profile Set Thing Remove
+         * @description D180: a thing leaves the set's list (its mask, card and model stay in the Catalogue; a stage that placed it keeps its object).
+         */
+        delete: operations["profile_set_thing_remove_story_profiles__pid__versions__vid__set_things__tid__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/profiles/{pid}/versions/{vid}/set/things/{tid}/model": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Profile Set Thing Model
+         * @description D180 (E56): the thing's 3D model — its cut-out by the app's image → 3D (some minutes); it lands on the thing.
+         */
+        post: operations["profile_set_thing_model_story_profiles__pid__versions__vid__set_things__tid__model_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/profiles/{pid}/versions/{vid}/set/walkers": {
         parameters: {
             query?: never;
@@ -11520,6 +11602,10 @@ export interface components {
             };
             /** Sources */
             sources?: components["schemas"]["SetSource-Input"][];
+            /** Things */
+            things?: components["schemas"]["PlaceThing-Input"][];
+            /** Things Document Id */
+            things_document_id?: string | null;
         };
         /**
          * PlaceSet
@@ -11547,6 +11633,122 @@ export interface components {
             };
             /** Sources */
             sources: components["schemas"]["SetSource-Output"][];
+            /** Things */
+            things: components["schemas"]["PlaceThing-Output"][];
+            /** Things Document Id */
+            things_document_id: string | null;
+        };
+        /**
+         * PlaceThing
+         * @description D180 (W60): a part of a built set that moves — picked on the set picture (SAM 3's points and the mask they found), cut out (`card`: its
+         *     pixels with the mask as alpha, cropped), standing where the picture shows it (`base`: the bottom centre on the set's floor, in the set's
+         *     frame; its width and height there; turned to face the picture's camera); and what it is made into — the card itself, or (`mesh_asset_id`)
+         *     a 3D model of the cut-out. Clay places either as a stage object of its own, so it can be keyed.
+         */
+        "PlaceThing-Input": {
+            /** Base */
+            base: number[];
+            /** Card Asset Id */
+            card_asset_id: string;
+            /** Height M */
+            height_m: number;
+            /** Id */
+            id?: string;
+            /** Mask Asset Id */
+            mask_asset_id: string;
+            /** Mesh Asset Id */
+            mesh_asset_id?: string | null;
+            /** Mesh Job Id */
+            mesh_job_id?: string | null;
+            /** Name */
+            name: string;
+            /** Points */
+            points?: {
+                [key: string]: number;
+            }[];
+            /** Width M */
+            width_m: number;
+            /**
+             * Yaw Deg
+             * @default 0
+             */
+            yaw_deg?: number;
+        };
+        /**
+         * PlaceThing
+         * @description D180 (W60): a part of a built set that moves — picked on the set picture (SAM 3's points and the mask they found), cut out (`card`: its
+         *     pixels with the mask as alpha, cropped), standing where the picture shows it (`base`: the bottom centre on the set's floor, in the set's
+         *     frame; its width and height there; turned to face the picture's camera); and what it is made into — the card itself, or (`mesh_asset_id`)
+         *     a 3D model of the cut-out. Clay places either as a stage object of its own, so it can be keyed.
+         */
+        "PlaceThing-Output": {
+            /** Base */
+            base: number[];
+            /** Card Asset Id */
+            card_asset_id: string;
+            /** Height M */
+            height_m: number;
+            /** Id */
+            id: string;
+            /** Mask Asset Id */
+            mask_asset_id: string;
+            /** Mesh Asset Id */
+            mesh_asset_id: string | null;
+            /** Mesh Job Id */
+            mesh_job_id: string | null;
+            /** Name */
+            name: string;
+            /** Points */
+            points: {
+                [key: string]: number;
+            }[];
+            /** Width M */
+            width_m: number;
+            /**
+             * Yaw Deg
+             * @default 0
+             */
+            yaw_deg: number;
+        };
+        /** PlaceThingFind */
+        PlaceThingFind: {
+            /** Points */
+            points: components["schemas"]["PlaceThingPoint"][];
+        };
+        /** PlaceThingFound */
+        PlaceThingFound: {
+            /** Document Id */
+            document_id: string;
+            /** Job Id */
+            job_id: string;
+        };
+        /** PlaceThingKeep */
+        PlaceThingKeep: {
+            /**
+             * Name
+             * @default
+             */
+            name?: string;
+            /** Points */
+            points?: components["schemas"]["PlaceThingPoint"][];
+        };
+        /** PlaceThingModelQueued */
+        PlaceThingModelQueued: {
+            /** Job Id */
+            job_id: string;
+        };
+        /** PlaceThingPoint */
+        PlaceThingPoint: {
+            /**
+             * Label
+             * @description 1 = on the thing, 0 = not it
+             * @default 1
+             */
+            label?: number;
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
         };
         /** PlanBatch */
         PlanBatch: {
@@ -23604,6 +23806,144 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SetFitQueued"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_set_thing_keep_story_profiles__pid__versions__vid__set_things_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlaceThingKeep"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Profile"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_set_thing_find_story_profiles__pid__versions__vid__set_things_find_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlaceThingFind"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaceThingFound"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_set_thing_remove_story_profiles__pid__versions__vid__set_things__tid__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+                tid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Profile"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_set_thing_model_story_profiles__pid__versions__vid__set_things__tid__model_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+                tid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaceThingModelQueued"];
                 };
             };
             /** @description Validation Error */

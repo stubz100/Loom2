@@ -457,3 +457,9 @@
 .idea-clay .aref { width: 160px; aspect-ratio: 16 / 9; object-fit: contain; background: var(--media-bg, var(--bg1)); border: 1px solid var(--line2); border-radius: var(--radius); }
 .idea-clay .kv { display: grid; grid-template-columns: 48px 1fr; gap: 2px 8px; font-size: 12px; }
 .idea-clay .warn { color: var(--warn, #e0a040); }
+/* D180 (W60): the set's things that move, below the set */
+.place-things { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.place-things h4 { margin: 0; }
+.place-thing { display: flex; align-items: center; gap: 8px; }
+.place-thing img { width: 48px; height: 48px; object-fit: contain; background: var(--bg2); border-radius: var(--radius); }
+.place-thing .name { flex: 1; min-width: 0; }

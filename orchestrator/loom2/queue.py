@@ -633,6 +633,9 @@ class JobQueue:
             fill_failed(self, job, msg)
         if job.origin is not None and job.origin.surface in (CROWD_START_SURFACE, CROWD_SURFACE, WALKERS_MATTE_SURFACE):   # D173, D174
             crowd_failed(self, job, msg)
+        if job.origin is not None and job.origin.surface == "place_thing_model":   # D180: a built set's thing waits for no model now
+            from .place_things import model_failed
+            model_failed(self, job)
 
     def _finish_cancelled(self, job: JobRecord) -> None:
         self._cancel_requested.discard(job.id)

@@ -977,6 +977,100 @@ async def profile_set_walkers(svc: Svc, pid: str, vid: str, body: SetCrowdBody):
     return {"job_id": job.id, "face": body.face, "size": list((job.origin.payload or {}).get("size") or [])}
 
 
+class PlaceThingPoint(BaseModel):
+    x: int
+    y: int
+    label: int = Field(1, ge=0, le=1, description="1 = on the thing, 0 = not it")
+
+
+class PlaceThingFind(BaseModel):
+    points: list[PlaceThingPoint] = Field(min_length=1, max_length=32)
+
+
+class PlaceThingFound(BaseModel):
+    job_id: str
+    document_id: str
+
+
+class PlaceThingKeep(BaseModel):
+    name: str = Field("", max_length=80)
+    points: list[PlaceThingPoint] = Field(default_factory=list, max_length=32)
+
+
+class PlaceThingModelQueued(BaseModel):
+    job_id: str
+
+
+def _thing_error(e: Exception) -> HTTPException:
+    return HTTPException(404, f"not found: {e.args[0] if e.args else e}") if isinstance(e, KeyError) else HTTPException(422, str(e))
+
+
+@router.post("/story/profiles/{pid}/versions/{vid}/set/things/find", response_model=PlaceThingFound)
+async def profile_set_thing_find(svc: Svc, pid: str, vid: str, body: PlaceThingFind):
+    """D180 (W60): SAM 3's point prompts on the set picture's own document (made the first time); the mask lands as that document's
+    selection, which the client reads (`GET /documents/{id}/selection`) and draws on the picture."""
+    from ..place_things import FIND_SURFACE, ensure_document
+    from ..set_things import check_points
+    ws, cat, q = svc.require_project()
+    await _place(svc, pid, vid)
+    try:
+        od = await asyncio.to_thread(ensure_document, StoryStore(ws), svc.require_documents(), cat, pid, vid)
+        points = check_points([x.model_dump() for x in body.points], od.doc.w, od.doc.h)
+        jobs = q.submit({"kind": "segment", "mode": "points", "points": points, "op": "replace", "document_id": od.doc.id},
+                        origin=JobOrigin(suite="story", surface=FIND_SURFACE, ref=pid, payload={"version": vid}))
+    except (KeyError, ValueError) as e:
+        raise _thing_error(e) from e
+    return {"job_id": jobs[0].id, "document_id": od.doc.id}
+
+
+@router.post("/story/profiles/{pid}/versions/{vid}/set/things", response_model=Profile)
+async def profile_set_thing_keep(svc: Svc, pid: str, vid: str, body: PlaceThingKeep):
+    """D180: the mask the last find left, kept as a thing of the set — its mask, its card (the cut-out) and where it stands (its bottom
+    centre's ray from the set picture's camera onto the set's floor, its size there)."""
+    from ..place_things import keep
+    ws, cat, _ = svc.require_project()
+    await _place(svc, pid, vid)
+    try:
+        p, _, recs = await asyncio.to_thread(keep, StoryStore(ws), svc.require_documents(), cat, pid, vid, body.name, [x.model_dump() for x in body.points])
+    except (KeyError, ValueError) as e:
+        raise _thing_error(e) from e
+    for r in recs:
+        svc.hub.broadcast("asset.created", r.model_dump())
+    _changed(svc, p)
+    return p.model_dump()
+
+
+@router.post("/story/profiles/{pid}/versions/{vid}/set/things/{tid}/model", response_model=PlaceThingModelQueued)
+async def profile_set_thing_model(svc: Svc, pid: str, vid: str, tid: str):
+    """D180 (E56): the thing's 3D model — its cut-out by the app's image → 3D (some minutes); it lands on the thing."""
+    from ..place_things import model_job
+    ws, cat, q = svc.require_project()
+    await _place(svc, pid, vid)
+    try:
+        job = await asyncio.to_thread(model_job, q, StoryStore(ws), cat, pid, vid, tid)
+    except (KeyError, ValueError) as e:
+        raise _thing_error(e) from e
+    await q.flush()
+    p = await asyncio.to_thread(StoryStore(ws).profile, pid)
+    if p is not None:
+        _changed(svc, p)
+    return {"job_id": job.id}
+
+
+@router.delete("/story/profiles/{pid}/versions/{vid}/set/things/{tid}", response_model=Profile)
+async def profile_set_thing_remove(svc: Svc, pid: str, vid: str, tid: str):
+    """D180: a thing leaves the set's list (its mask, card and model stay in the Catalogue; a stage that placed it keeps its object)."""
+    from ..place_things import remove
+    ws, _, _ = svc.require_project()
+    await _place(svc, pid, vid)
+    try:
+        p = await asyncio.to_thread(remove, StoryStore(ws), pid, vid, tid)
+    except (KeyError, ValueError) as e:
+        raise _thing_error(e) from e
+    _changed(svc, p)
+    return p.model_dump()
+
+
 @router.delete("/story/profiles/{pid}/versions/{vid}/set/walkers/{fid}/{wid}", response_model=Profile)
 async def profile_set_walkers_delete(svc: Svc, pid: str, vid: str, fid: str, wid: str):
     """D174: a walkers' segment removed (a step still running is stopped; its clips stay in the Catalogue)."""

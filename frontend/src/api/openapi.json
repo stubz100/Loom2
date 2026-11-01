@@ -16034,6 +16034,24 @@
             },
             "title": "Sources",
             "type": "array"
+          },
+          "things": {
+            "items": {
+              "$ref": "#/components/schemas/PlaceThing-Input"
+            },
+            "title": "Things",
+            "type": "array"
+          },
+          "things_document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Things Document Id"
           }
         },
         "title": "PlaceSet",
@@ -16091,6 +16109,24 @@
             },
             "title": "Sources",
             "type": "array"
+          },
+          "things": {
+            "items": {
+              "$ref": "#/components/schemas/PlaceThing-Output"
+            },
+            "title": "Things",
+            "type": "array"
+          },
+          "things_document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Things Document Id"
           }
         },
         "required": [
@@ -16099,9 +16135,277 @@
           "parts",
           "faces",
           "sources",
-          "baked_key"
+          "baked_key",
+          "things",
+          "things_document_id"
         ],
         "title": "PlaceSet",
+        "type": "object"
+      },
+      "PlaceThing-Input": {
+        "description": "D180 (W60): a part of a built set that moves — picked on the set picture (SAM 3's points and the mask they found), cut out (`card`: its\npixels with the mask as alpha, cropped), standing where the picture shows it (`base`: the bottom centre on the set's floor, in the set's\nframe; its width and height there; turned to face the picture's camera); and what it is made into — the card itself, or (`mesh_asset_id`)\na 3D model of the cut-out. Clay places either as a stage object of its own, so it can be keyed.",
+        "properties": {
+          "base": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Base",
+            "type": "array"
+          },
+          "card_asset_id": {
+            "title": "Card Asset Id",
+            "type": "string"
+          },
+          "height_m": {
+            "title": "Height M",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "mask_asset_id": {
+            "title": "Mask Asset Id",
+            "type": "string"
+          },
+          "mesh_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mesh Asset Id"
+          },
+          "mesh_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mesh Job Id"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "width_m": {
+            "title": "Width M",
+            "type": "number"
+          },
+          "yaw_deg": {
+            "default": 0.0,
+            "title": "Yaw Deg",
+            "type": "number"
+          }
+        },
+        "required": [
+          "name",
+          "mask_asset_id",
+          "card_asset_id",
+          "base",
+          "width_m",
+          "height_m"
+        ],
+        "title": "PlaceThing",
+        "type": "object"
+      },
+      "PlaceThing-Output": {
+        "description": "D180 (W60): a part of a built set that moves — picked on the set picture (SAM 3's points and the mask they found), cut out (`card`: its\npixels with the mask as alpha, cropped), standing where the picture shows it (`base`: the bottom centre on the set's floor, in the set's\nframe; its width and height there; turned to face the picture's camera); and what it is made into — the card itself, or (`mesh_asset_id`)\na 3D model of the cut-out. Clay places either as a stage object of its own, so it can be keyed.",
+        "properties": {
+          "base": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Base",
+            "type": "array"
+          },
+          "card_asset_id": {
+            "title": "Card Asset Id",
+            "type": "string"
+          },
+          "height_m": {
+            "title": "Height M",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "mask_asset_id": {
+            "title": "Mask Asset Id",
+            "type": "string"
+          },
+          "mesh_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mesh Asset Id"
+          },
+          "mesh_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mesh Job Id"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "width_m": {
+            "title": "Width M",
+            "type": "number"
+          },
+          "yaw_deg": {
+            "default": 0.0,
+            "title": "Yaw Deg",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "mask_asset_id",
+          "card_asset_id",
+          "points",
+          "base",
+          "width_m",
+          "height_m",
+          "yaw_deg",
+          "mesh_asset_id",
+          "mesh_job_id"
+        ],
+        "title": "PlaceThing",
+        "type": "object"
+      },
+      "PlaceThingFind": {
+        "properties": {
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/PlaceThingPoint"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Points",
+            "type": "array"
+          }
+        },
+        "required": [
+          "points"
+        ],
+        "title": "PlaceThingFind",
+        "type": "object"
+      },
+      "PlaceThingFound": {
+        "properties": {
+          "document_id": {
+            "title": "Document Id",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "document_id"
+        ],
+        "title": "PlaceThingFound",
+        "type": "object"
+      },
+      "PlaceThingKeep": {
+        "properties": {
+          "name": {
+            "default": "",
+            "maxLength": 80,
+            "title": "Name",
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/PlaceThingPoint"
+            },
+            "maxItems": 32,
+            "title": "Points",
+            "type": "array"
+          }
+        },
+        "title": "PlaceThingKeep",
+        "type": "object"
+      },
+      "PlaceThingModelQueued": {
+        "properties": {
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id"
+        ],
+        "title": "PlaceThingModelQueued",
+        "type": "object"
+      },
+      "PlaceThingPoint": {
+        "properties": {
+          "label": {
+            "default": 1,
+            "description": "1 = on the thing, 0 = not it",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Label",
+            "type": "integer"
+          },
+          "x": {
+            "title": "X",
+            "type": "integer"
+          },
+          "y": {
+            "title": "Y",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "title": "PlaceThingPoint",
         "type": "object"
       },
       "PlanBatch": {
@@ -38833,6 +39137,252 @@
           }
         },
         "summary": "Profile Set Fit",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/profiles/{pid}/versions/{vid}/set/things": {
+      "post": {
+        "description": "D180: the mask the last find left, kept as a thing of the set — its mask, its card (the cut-out) and where it stands (its bottom\ncentre's ray from the set picture's camera onto the set's floor, its size there).",
+        "operationId": "profile_set_thing_keep_story_profiles__pid__versions__vid__set_things_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlaceThingKeep"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Set Thing Keep",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/profiles/{pid}/versions/{vid}/set/things/find": {
+      "post": {
+        "description": "D180 (W60): SAM 3's point prompts on the set picture's own document (made the first time); the mask lands as that document's\nselection, which the client reads (`GET /documents/{id}/selection`) and draws on the picture.",
+        "operationId": "profile_set_thing_find_story_profiles__pid__versions__vid__set_things_find_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlaceThingFind"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaceThingFound"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Set Thing Find",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/profiles/{pid}/versions/{vid}/set/things/{tid}": {
+      "delete": {
+        "description": "D180: a thing leaves the set's list (its mask, card and model stay in the Catalogue; a stage that placed it keeps its object).",
+        "operationId": "profile_set_thing_remove_story_profiles__pid__versions__vid__set_things__tid__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "tid",
+            "required": true,
+            "schema": {
+              "title": "Tid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Set Thing Remove",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/profiles/{pid}/versions/{vid}/set/things/{tid}/model": {
+      "post": {
+        "description": "D180 (E56): the thing's 3D model — its cut-out by the app's image → 3D (some minutes); it lands on the thing.",
+        "operationId": "profile_set_thing_model_story_profiles__pid__versions__vid__set_things__tid__model_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "tid",
+            "required": true,
+            "schema": {
+              "title": "Tid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaceThingModelQueued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Set Thing Model",
         "tags": [
           "story"
         ]

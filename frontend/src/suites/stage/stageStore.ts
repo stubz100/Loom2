@@ -21,6 +21,7 @@ import { profilesForMentions, useStory, versionPointsOfShell } from '../story/st
 import { navigate, type Layer } from '../../frame/router'
 import { contextSlot } from '../../store/contexts'
 import { blocksReady, type MotionBlock } from './blocks'
+import { thingFields } from './placeThings'
 
 /** CA0: the body of a bound figure's Cast version (its pinned version, else the character's current one); null = the preset's dummy;
  *  undefined = the character is not loaded (the figure keeps what it has). */
@@ -301,6 +302,8 @@ interface StageState {
   addObject: (kind: Kind, preset?: string | null, pos?: number[], assetId?: string | null) => string | null
   /** CW7 (02 §9): a Cast place's set on the stage, bound (it follows Cast); selected when it is already there. */
   placePlace: (profileId: string) => string | null
+  /** D180 (W60): a placed Cast set's things that move, each added as an object of its own (those not on the stage yet); how many. */
+  addSetThings: (setId: string) => number
   /** CW7: *Make it a Cast place…* — a picture set's picture becomes a new Cast place's set picture, and its set is built from it. */
   setToPlace: (id: string) => Promise<void>
   setFromImage: (assetId: string) => Promise<void>            // SC3 (D120): a Catalogue image → MoGe's relief as a locked set with the picture's camera (a job; the stage reloads when it lands)
@@ -918,9 +921,22 @@ export const useStage = create<StageState>()((set, get) => ({
     const ps = p?.versions.find((x) => x.id === p.current)?.place_set
     if (!p || !ps) { useSession.getState().toast(`${p?.name ?? 'The place'} has no set yet — Build the set ▶ on its Cast page`, 'info'); return null }
     const o = { ...newObject(cur, 'set', 'built'), name: p.name, locked: true, profile_id: profileId, version: null, place_set: ps }
-    get().apply((d) => ({ ...d, objects: [...d.objects, o] }), 'place a Cast set')
+    const things = (ps.things ?? []).map((t, k) => { const f = thingFields(t, o); return { ...newObject(cur, f.kind, null, f.transform?.pos, f.asset_id), ...f, colour_id: ((cur.objects.length + 1 + k) % 12) + 1 } })   // D180: its parts that move, each its own
+    get().apply((d) => ({ ...d, objects: [...d.objects, o, ...things] }), 'place a Cast set')
     set({ selected: o.id })
     return o.id
+  },
+  addSetThings: (setId) => {
+    const cur = get().current
+    const o = cur?.objects.find((x) => x.id === setId)
+    const p = o?.profile_id ? useStory.getState().profiles.find((x) => x.id === o.profile_id) : undefined
+    const ps = p?.versions.find((x) => x.id === (o?.version ?? p.current))?.place_set
+    if (!cur || !o || !ps) return 0
+    const have = new Set(cur.objects.filter((x) => x.kind === 'mesh' || x.kind === 'plane').map((x) => x.asset_id))
+    const todo = (ps.things ?? []).filter((t) => !have.has(t.mesh_asset_id ?? t.card_asset_id))
+    const objs = todo.map((t, k) => { const f = thingFields(t, o); return { ...newObject(cur, f.kind, null, f.transform?.pos, f.asset_id), ...f, colour_id: ((cur.objects.length + k) % 12) + 1 } })
+    if (objs.length) get().apply((d) => ({ ...d, objects: [...d.objects, ...objs] }), "the set's things")
+    return objs.length
   },
   setFromImage: async (assetId) => {
     const cur = get().current

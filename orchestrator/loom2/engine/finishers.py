@@ -35,7 +35,7 @@ from ..roster import ROSTER_BY_ID
 from ..fsio import utc_now
 from ..finals import FINAL_LAYER_SURFACE, FINAL_PLATE_KEY_SURFACE, FINAL_PLATE_PATH_SURFACE, FINAL_PLATE_SURFACE
 from ..story import BODY_FIT_SURFACE, FOR_SHOT, PROP_MODEL_SURFACE, SHELL_SURFACE
-from .. import ideas, place_sets
+from .. import ideas, place_sets, place_things
 from ..ideas import FOR_IDEA, IDEA_CLAY_SURFACE
 from ..timelines import TimelineStore, at, duration, starts
 from ..tools import facesim
@@ -788,6 +788,10 @@ class MeshFinisher:
             await asyncio.to_thread(ideas.clay_shell_landed, q, job, rec.id)
         if job.origin and job.origin.surface == set_things.MODEL_SURFACE:                      # D123 (SC3c-3): a picture set's thing, stood on its relief
             await asyncio.to_thread(set_things.model_landed, q, job, rec.id)
+        if job.origin and job.origin.surface == place_things.MODEL_SURFACE:                    # D180 (W60): a built set's thing, a 3D model
+            p = await asyncio.to_thread(place_things.model_landed, q, job, rec.id)
+            if p is not None:
+                q.hub.broadcast("story.changed", {"kind": "profile", "id": p.id, "revision": p.revision})
 
 
 class SetFinisher:

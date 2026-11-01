@@ -102,3 +102,15 @@ async def test_a_thing_is_kept_cut_out_and_made_a_model(tmp_path: Path, object_i
             place_things.remove(store, pid, "v1", t.id)
     finally:
         await rig.close()
+
+
+def test_a_kept_thing_is_what_was_clicked():
+    """D180's rig: SAM 3's ferry mask carried specks over the sky, and the box (so the width) read 2.6× too wide — the thing kept is what is
+    connected to the clicks; with no click on the mask, the whole mask."""
+    from loom2.place_things import clicked
+    m = np.zeros((H, W), bool)
+    m[110:150, 140:180] = True                                                              # the ferry
+    m[10:12, 300:302] = True                                                                # a speck far off
+    kept = clicked(m, [{"x": 160, "y": 130, "label": 1}, {"x": 5, "y": 5, "label": 0}])
+    assert kept[110:150, 140:180].all() and not kept[10:12, 300:302].any()
+    assert (clicked(m, [{"x": 5, "y": 5, "label": 1}]) == m).all()

@@ -15648,3 +15648,58 @@ then the moving thing shows over a still copy of itself.
 - Typecheck, build and lint clean (61 warnings, as before); settings audit 322 / 0; agent docs and model literals clean.
 
 **Rig:** owed — the Last Ferry's ferry through the product path, on a copy.
+
+## 2026-11-01 06:26 — D180's rig set up: the Last Ferry's ferry through the product path, on a copy; the bars before the run
+
+`engine/spikes/d180_rig.py`, alone on the GPU.
+
+- **The copy:** the walkthrough's project and its state copied to `F:/loom2-projects/_d180`.
+- **The routes, on the Harbour pier's set:**
+  - `find`, with two points on the ferry (the cabin and the hull);
+  - `keep` as "Ferry";
+  - `model`, Pixal3D;
+  - then, in the app, Shots › Departure › Clay: the set's *Add its things that move*, and a look through the shot's camera.
+
+**Bars:**
+
+1. SAM 3's mask is the ferry: most of its pixels, and little of the water or the pier.
+2. The thing stands out on the water, in front of the far houses, 10–80 m from the camera, and its width is plausible for a small ferry
+   (5–25 m).
+3. The model lands on the thing.
+4. In Clay through Departure's camera, the model or the card shows where the painted ferry is, at about its size.
+
+## 2026-11-01 06:39 — D180's rig: the Last Ferry's ferry picked, cut out, stood 27.5 m out, made a model and placed in Clay — passed after one fix
+
+On the copy (`engine/spikes/d180_rig.py`, `d180_rig2.py`, then the app; `engine/spikes/out/d180`).
+
+**Run 1:**
+
+- **Found:** SAM 3 found the ferry from two points in 20 s (11 248 px). `mask_over.jpg`: the hull, the cabin, the mast — most of the
+  ferry, little of the water or the pier.
+- **The fault:** the mask also carried a few specks over the sky, so the kept box was 2.6 times the ferry's width. The thing read 17.3 ×
+  8.2 m.
+- **The model** landed in 284 s.
+
+**The fix (`place_things.clicked`):** the kept thing is what is connected to the clicks on it (SC3's `_reach`); with no click on the mask,
+the whole mask. One test.
+
+**Run 2** (the same copy, the first thing removed):
+
+- **The thing:** 6.4 × 6.2 m, the ferry's beam seen bow-on with the mast. It stands on the floor 27.5 m from the set picture's camera,
+  turned −19° to face it; its card is 136 × 131 px.
+- **The model** landed on it in 280 s.
+
+**In the app**, Shots › Departure › Clay (`clay_departure.jpg`):
+
+- the pier set's right-click *Add its things that move* added "Ferry", the 3D model;
+- through Departure's camera it stands where the painted ferry is, over it and at about its size;
+- it shows more of its side than the picture does, because it faces the set picture's camera and Departure's camera stands elsewhere;
+- it can now be keyed like any object;
+- the painted ferry still shows behind it (cleaning the set picture is not built).
+
+**Against the bars set at 06:26:**
+
+1. The mask is the ferry: passed.
+2. It stands out on the water, 10–80 m off, a plausible size: passed after the fix (17.3 m before, 6.4 m after).
+3. The model lands on the thing: passed.
+4. In Clay it shows where the painted ferry is, at about its size: passed.

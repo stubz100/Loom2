@@ -129,7 +129,7 @@ def keep(store: Any, documents: Any, catalogue: Any, pid: str, vid: str, name: s
     sel = od.selection
     if sel is None or not (sel > 127).any():
         raise ValueError("nothing is found yet — click the thing on the set picture")
-    mask = sel > 127
+    mask = clicked(sel > 127, points)
     tmp = catalogue.ws.temp_dir / "things" / f"{new_id('msk')}.png"
     tmp.parent.mkdir(parents=True, exist_ok=True)
     Image.fromarray(np.where(mask, 255, 0).astype(np.uint8), "L").save(tmp, "PNG")
@@ -140,6 +140,20 @@ def keep(store: Any, documents: Any, catalogue: Any, pid: str, vid: str, name: s
     t = PlaceThing(name=label, mask_asset_id=mrec.id, card_asset_id=crec.id, points=points, **stand(ps.sources[0].camera, mask))
     p = _put(store, pid, vid, lambda x: x.things.append(t))
     return p, t, [mrec, crec]
+
+
+def clicked(mask: np.ndarray, points: list[dict[str, int]]) -> np.ndarray:
+    """The part of SAM 3's mask the author clicked: what is connected to the points on the thing (SAM 3 leaves stray specks — the rig's
+    ferry had some over the sky, and its width read 2.6× too wide); the whole mask when no point falls on it."""
+    from .set_things import _reach
+    seed = np.zeros_like(mask)
+    h, w = mask.shape
+    for p in points:
+        if int(p.get("label", 1)) == 1 and 0 <= int(p["y"]) < h and 0 <= int(p["x"]) < w:
+            y, x = int(p["y"]), int(p["x"])
+            seed[max(0, y - 3):y + 4, max(0, x - 3):x + 4] = True
+    seed &= mask
+    return _reach(seed, mask) if seed.any() else mask
 
 
 def thing_of(ps: PlaceSet, tid: str) -> PlaceThing:

@@ -13902,6 +13902,12 @@ export interface components {
             stage_id: string | null;
             /** Stage Revision */
             stage_revision: number | null;
+            /** Stage Stamps */
+            stage_stamps: {
+                [key: string]: string;
+            } | null;
+            /** Stamps Revision */
+            stamps_revision: number | null;
             /**
              * State
              * @default open

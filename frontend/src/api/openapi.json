@@ -21992,6 +21992,31 @@
             ],
             "title": "Stage Revision"
           },
+          "stage_stamps": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Stamps"
+          },
+          "stamps_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stamps Revision"
+          },
           "state": {
             "default": "open",
             "enum": [
@@ -22030,7 +22055,9 @@
           "recipe",
           "range",
           "words",
-          "method"
+          "method",
+          "stage_stamps",
+          "stamps_revision"
         ],
         "title": "ShotVersion",
         "type": "object"

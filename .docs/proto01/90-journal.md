@@ -15493,3 +15493,43 @@ variable* (`FlowVariables`, the old World editor's rows). The Inspector's "none"
 - Vitest 632 + 3 skipped: new are the variables section, the multi-line ask, and the readiness items.
 - Typecheck, build and lint clean (61 warnings, as before); settings audit 322 / 0; agent docs and model literals clean.
 - e2e 84/84 alone.
+
+## 2026-11-01 05:18 — The author's answers on the walkthrough-2 register: D176 (W8), D177 (W9), D178 (W56); W22 and W60 next, designed first
+
+Asked after wave 5 (four questions); the author chose:
+
+- **W8 → D176:** drop the Look's style from the reference makes (the A-pose front, back and side, a prop's view). A set picture keeps it.
+- **W9 → D177:** a taller frame. Make's A-pose framings set a 2:3 portrait frame on the panel's model; a prop's view and a set picture stay
+  16:9. This amends D162.
+- **W56 → D178:** per shot's parts. A shot version stamps the stage as it read it (its own camera, the set, each figure and prop) and goes
+  stale only when one of those changes.
+- **Next:** W22 (the projected road's tone against the fills) and W60 (a part of a set that moves, the ferry), each designed before it is
+  built.
+
+## 2026-11-01 05:36 — D176, D177, D178 built: references without the Look, a tall frame for Make's A-pose, staleness by a shot's own parts
+
+**D176 (W8):**
+
+- Make's run with a character's or a prop's reference framing on sends no style (`recipeFromPanel`), so the preview shows what is sent.
+- `plan_anim_ref` sends no style for a character or a prop either.
+- A place's set picture keeps the Look.
+
+**D177 (W9):** a character's A-pose framings (front, back, side) set a 2:3 portrait frame of about the same pixels (`to23`, `refFrame`). A
+prop's view and a set picture stay 16:9, and the chip's tooltip says which.
+
+**D178 (W56):**
+
+- A shot version keeps the stage's stamps as it read them (`stage_stamps`, `stamps_revision`). They are written by the node store when a
+  version's stage revision is the stage's revision now, which covers every route that sets a take or a source.
+- It is stale only when one of its own parts differs (`version_stage_stale`): its camera and keys, the set and lights, a figure or a prop.
+  The board's stage cell and the recipe's stage stamp read the same rule, and the client reads the board's reading (`shotStale`).
+- A version stamped before reads the revision, as before.
+- RC2b's card test now moves the shot's own camera. Its old rename of the stage is not stale any more, which is D178's point.
+
+**Tests:**
+
+- Offline 797: new are D176 (`plan_anim_ref`), D178 (two coverage shots: the other camera moved, a figure moved, an old version) and the
+  card test's camera.
+- Vitest 634 + 3 skipped: new are D176 and D177.
+- Typecheck, build and lint clean (61 warnings, as before); settings audit 322 / 0; agent docs and model literals clean.
+- e2e 84/84 alone.

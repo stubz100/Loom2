@@ -223,7 +223,7 @@ export function recipeFromPanel(p: Panel, seeds?: number[]): T2IRecipe {
       const sc = sceneOf(p, m.profile_id) ? p.tree.scene_link : undefined                    // D93 (C6): the place of the scene, its version and this shot's line
       if (sc) return { ...base, scene: true, ...(sc.version ? { version: sc.version } : {}), ...(sc.note?.trim() ? { shot: { outfit: '', note: sc.note.trim() } } : {}) }
       return base }),
-    style_id: styleFor(p.style_id),                                                                    // D85: resolved to its fragment by the server at preview and submit
+    style_id: p.ref_framing && p.ref_framing !== 'set_picture' ? null : styleFor(p.style_id),            // D85: resolved to its fragment by the server at preview and submit; D176: a reference make leaves the Look out (a set picture keeps it)
   }
 }
 

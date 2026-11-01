@@ -181,6 +181,9 @@ class StampReader:
         self.stages, self.groups, self.story = stages, groups, story
         self._cache: dict[str, Any] = {}
 
+    def same_parts(self, key: str, version: Any, then: Any) -> bool:
+        return _same_parts(self, key, version, then)
+
     def now(self, key: str, version: Any) -> Any:
         if key in self._cache:
             return self._cache[key]
@@ -207,6 +210,16 @@ class StampReader:
             val = version.frame_asset_id
         self._cache[key] = val
         return val
+
+
+def _same_parts(reader: "StampReader", key: str, version: Any, then: Any) -> bool:
+    """D178: the version's own parts of the stage (its camera, the set, the figures and props) are as it read them at revision `then`."""
+    stamps = getattr(version, "stage_stamps", None)
+    if not stamps or getattr(version, "stamps_revision", None) != then or not getattr(version, "camera_id", None) or reader.stages is None:
+        return False
+    from .shot_graph import stage_stamps
+    st = reader.stages.get(key.partition(":")[2])
+    return st is not None and stage_stamps(st, version.camera_id) == stamps
 
 
 def _why(key: str, then: Any, now: Any, names: dict[str, str]) -> str | None:
@@ -274,7 +287,10 @@ def recipe_state(version: Any, reader: StampReader) -> dict[str, Any]:
             state: str = "planned" if t and t.wave else "missing"
         else:
             for key, then in run.stamps.items():
-                why = _why(key, then, reader.now(key, version), names)
+                now = reader.now(key, version)
+                if key.startswith("stage:") and now is not None and then is not None and now > then and reader.same_parts(key, version, then):
+                    continue                                                  # D178 (W56): the stage moved on, but not in a part this shot reads
+                why = _why(key, then, now, names)
                 if why:
                     reasons.append(why)
             stale_inputs = [i for i in inputs if state_of.get(i) == "stale"]

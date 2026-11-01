@@ -92,3 +92,40 @@ def test_an_exported_line_is_named_by_its_shot_and_words(tmp_path: Path):
     _, _, audio_of = story_lookup(ws, cat)
     cue = audio_of(TimelineClip(id="c1", clip_id="clp_1", out=24, node_id=n.id))[0]
     assert cue["name"] == "The seal · line 1 · You knew my father, didn't you?" and cue["path"].endswith("ast_v1.wav")
+
+
+def test_a_reference_make_leaves_the_look_out(tmp_path: Path):
+    """D176 (W8): an A-pose or a prop's view is made on a plain studio ground without the Look's style; a place's set picture keeps it."""
+    from loom2.catalogue import Catalogue
+    from loom2.groups import GroupStore
+    from loom2.story import StoryStore, plan_anim_ref
+    from loom2.workspace import Workspace
+    ws = Workspace.create(tmp_path / "p", name="P", size_cap_gb=10)
+    st, gs = StoryStore(ws), GroupStore(ws, Catalogue(ws))
+    ines, quay = st.create_profile("Ines", "character", gs), st.create_profile("Quay", "place", gs)
+    plan = lambda p: plan_anim_ref(p, p.version("v1"), "front", "full", width=640, height=960, count=1, group_id="g", style_id="sty_noir")[0][0]  # noqa: E731
+    assert plan(ines)["style_id"] is None and plan(quay)["style_id"] == "sty_noir"
+
+
+def test_a_coverage_shot_goes_stale_only_with_what_it_reads(tmp_path: Path):
+    """D178 (W56): any edit to a shared stage staled every shot of the scene. Two shots on one stage, each its own camera: moving the second's
+    camera stales the second only; moving a figure stales both; a version from before the stamps reads the revision."""
+    from loom2.stages import StageStore
+    from loom2.story import StoryStore, copy_camera, version_stage_stale
+    from loom2.workspace import Workspace
+    ws = Workspace.create(tmp_path / "p", name="P", size_cap_gb=10)
+    st, stages = StoryStore(ws), StageStore(ws)
+    stg = stages.create("Pier")
+    stg = stages.put(stg.id, {"revision": stg.revision, "objects": [{"id": "fig_i", "kind": "mannequin", "name": "Ines", "transform": {"pos": [0, 0, 0], "rot": [0, 0, 0], "scale": [1, 1, 1]}}]})
+    stg, cam2 = copy_camera(ws, stg.id, stg.cameras[0].id)
+    a, b = st.create_node("shot", "Wide", 0, 0), st.create_node("shot", "Close", 300, 0)
+    st.set_source(a.shot_id, "v1", stg.id, stg.cameras[0].id, stg.revision)
+    st.set_source(b.shot_id, "v1", stg.id, cam2.id, stg.revision)
+    va, vb = st.shot(a.shot_id).version(), st.shot(b.shot_id).version()
+    assert va.stage_stamps and va.stamps_revision == stg.revision and vb.stage_stamps
+    moved = stages.put(stg.id, {"revision": stg.revision, "cameras": [c.model_dump() if c.id != cam2.id else {**c.model_dump(), "pos": [3.0, 1.6, 4.0]} for c in stg.cameras]})
+    assert not version_stage_stale(va, moved) and version_stage_stale(vb, moved)                 # the other shot's camera: not Wide's business
+    walked = stages.put(moved.id, {"revision": moved.revision, "objects": [{**moved.objects[0].model_dump(), "transform": {"pos": [1.0, 0, 0], "rot": [0, 0, 0], "scale": [1, 1, 1]}}]})
+    assert version_stage_stale(va, walked) and version_stage_stale(vb, walked)
+    old = va.model_copy(update={"stage_stamps": None, "stamps_revision": None})
+    assert version_stage_stale(old, moved)                                                    # stamped before D178: the revision, as before

@@ -1013,6 +1013,9 @@ export const useStory = create<StoryState>()((set, get) => {
     },
     shotStale: (v) => {
       if (!v.stage_id || v.stage_revision === null || v.stage_revision === undefined) return false
+      const holder = get().shots.find((x) => x.versions.some((y) => y.id === v.id && y.created_at === v.created_at))
+      const card = holder ? get().cards[holder.id] : undefined
+      if (card && card.version === v.id) return card.stale_steps.includes('stage')                // D178: the server read it part by part
       const st = get().stagesLite.find((x) => x.id === v.stage_id)
       return !!st && st.revision > v.stage_revision
     },

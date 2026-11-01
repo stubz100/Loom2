@@ -23,7 +23,7 @@ from ..stages import PlaceSet, Pose, SetFace, StageStore, encode_guide
 from ..shot_recipe import TEMPLATES, StampReader, Template, recipe_state, rerun_recipe, stale_plan, used_run
 from ..shot_graph import ShotGraph, clay_rows, final_for, shot_graph
 from ..shot_prompt import ShotPrompt, shot_prompt
-from ..story import FOR_SHOT, NODE_TYPES, VISUAL_TYPES, has_lines, node_type, StaleScenes, CastUse, cast_uses, body_fit_origin, fit_if_untouched, model_source, prop_model_origin, shell_origin, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
+from ..story import FOR_SHOT, version_stage_stale, NODE_TYPES, VISUAL_TYPES, has_lines, node_type, StaleScenes, CastUse, cast_uses, body_fit_origin, fit_if_untouched, model_source, prop_model_origin, shell_origin, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
 from ..voices import VoiceRecord, VoiceStore, check_voice
 from .deps import Svc
 
@@ -1326,7 +1326,7 @@ def _stale_steps(g: Any, v: Any, st: Any) -> list[str]:
     """U0 (FE#3): the board's cells that are stale, from RC1's graph — the frame, the clip and the lip-sync steps, the final when any of its
     layers, its composition, its finish or its render is behind, and the stage when it moved on since the version pinned it."""
     out = [k for k in ("frame", "clip", "lipsync") if any(n.id == f"step:{k}" and n.state == "stale" for n in g.nodes)]
-    if st is not None and v.stage_id == st.id and v.stage_revision is not None and st.revision > v.stage_revision:
+    if version_stage_stale(v, st):                                             # D178: only a part it reads
         out.append("stage")
     if any(n.kind in FINAL_KINDS and n.state == "stale" for n in g.nodes):
         out.append("final")

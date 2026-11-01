@@ -324,6 +324,20 @@ class ShotVersion(BaseModel):
     range: dict[str, int] | None = None           # U2 (D157, G6): the frames of its scene's timeline it covers {start, end}; None: the stage's range
     words: str = Field("", max_length=2000)       # U4d (G13): this shot only — the author's extra words for its pictures (shot_prompt.py)
     method: Literal["layered", "one_pass", "start_still", "speaking"] | None = None   # U6c (04 §4): how Performance makes it; None = layered
+    stage_stamps: dict[str, str] | None = None    # D178 (W56): the stage as it read it, part by part (shot_graph.stage_stamps), at `stamps_revision`
+    stamps_revision: int | None = None
+
+
+def version_stage_stale(v: ShotVersion, stage: Any) -> bool:
+    """D178 (W56): the version is stale when the stage moved on in a part it reads — its own camera and keys, the set and lights, a figure or
+    a prop — not when another shot's camera moved (a scene's coverage). A version stamped before D178, or at another revision, reads the
+    revision as before."""
+    if stage is None or v.stage_id != stage.id or v.stage_revision is None or stage.revision <= v.stage_revision:
+        return False
+    if v.stage_stamps is not None and v.stamps_revision == v.stage_revision and v.camera_id:
+        from .shot_graph import stage_stamps
+        return stage_stamps(stage, v.camera_id) != v.stage_stamps
+    return True
 
 
 class Shot(BaseModel):
@@ -930,7 +944,7 @@ def plan_anim_ref(profile: Profile, version: ProfileVersion, side: str, variant:
     out = []
     for i in range(max(1, min(4, int(count)))):
         recipe = {"kind": "t2i", "model_id": spec.id, "prompt_mode": "text", "prompt_text": lead + anim_ref_sentence(profile.cls, side),
-                  "width": width, "height": height, "seeds": [i], "style_id": style_id, "tier": "draft",
+                  "width": width, "height": height, "seeds": [i], "style_id": style_id if profile.cls == "place" else None, "tier": "draft",   # D176: a reference leaves the Look out
                   "mentions": [{"group_id": "", "name": profile.name, "profile_id": profile.id, "version": version.id}]}
         origin = {"suite": "story", "surface": ANIM_REF_SURFACE, "ref": profile.id, "payload": {"version": version.id, "side": side, "group_id": group_id}}
         out.append((recipe, origin))
@@ -983,6 +997,22 @@ class _ShotMixin:
     def shots(self) -> list[Shot]:
         out = [r.as_shot() for r in self._records().values() if r.shot is not None]   # type: ignore[attr-defined]
         return sorted(out, key=lambda s: s.updated_at, reverse=True)
+
+    def _stamped(self, r: NodeRecord) -> NodeRecord:
+        """D178 (W56): each version whose stage revision is the stage's revision now (it was just taken or set) gets the stage's stamps, part
+        by part; one stamped already at its revision, or behind the stage (a copy, a migration), is left as it is."""
+        if r.shot is None or not any(v.stage_id and v.camera_id and v.stage_revision is not None and v.stamps_revision != v.stage_revision for v in r.shot.versions):
+            return r
+        from .shot_graph import stage_stamps
+        from .stages import StageStore
+        stages, out = StageStore(self.ws), []                                   # type: ignore[attr-defined]
+        for v in r.shot.versions:
+            if v.stage_id and v.camera_id and v.stage_revision is not None and v.stamps_revision != v.stage_revision:
+                st = stages.get(v.stage_id)
+                if st is not None and st.revision == v.stage_revision:
+                    v = v.model_copy(update={"stage_stamps": stage_stamps(st, v.camera_id), "stamps_revision": st.revision})
+            out.append(v)
+        return r.model_copy(update={"shot": r.shot.model_copy(update={"versions": out})})
 
     def save_shot(self, s: Shot) -> None:
         """A shot's view written back as it is: its versions and current version into its node, its name as the node's title."""
@@ -1313,6 +1343,7 @@ class _FlowMixin:
         return out
 
     def _save_record(self, r: NodeRecord) -> NodeRecord:
+        r = self._stamped(r)                                                    # D178: a version taken at the stage's revision now keeps its parts
         r = NodeRecord.model_validate({**r.model_dump(), "schema_version": FLOW_SCHEMA_VERSION})   # the shot's id and current version written beside it
         (self.flow_dir / "nodes").mkdir(parents=True, exist_ok=True)
         atomic_write_json(self.node_path(r.id), r.model_dump())

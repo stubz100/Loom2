@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest'
 import type { ProfileVersion } from '../../api/types'
 import { carriedThings, readiness, sheetDrift } from './readiness'
 import { passes, placeOfHash } from './worldStore'
-import { activeFraming, FRAMINGS, REF_FRAMINGS, refTree, to169 } from './make'
+import { activeFraming, FRAMINGS, REF_FRAMINGS, refFrame, refTree, to169, to23 } from './make'
+import { DEFAULT_PANEL, recipeFromPanel } from '../../suites/generate/generateStore'
 
 const v = (extra: Partial<ProfileVersion> = {}): ProfileVersion => ({ id: 'v1', label: 'v1', state: 'open', group_id: 'grp_r', candidates_group_id: null, hero_asset_id: null,
   appearance: '', outfit: '', colours: [], marks: '', body: null, anim_ref_asset_id: null, anim_ref_back_asset_id: null, anim_ref_side_asset_id: null, body_fit_from: null, model_asset_id: null, height_m: null,
@@ -91,6 +92,21 @@ describe('D162: the framing row', () => {
     expect(w % 16 + h % 16).toBe(0)
     expect(Math.abs(w / h - 16 / 9)).toBeLessThan(0.02)
     expect(Math.abs(w * h - 1024 * 1024) / (1024 * 1024)).toBeLessThan(0.03)                             // about the same pixels
+  })
+  it("D177 (W9): an A-pose framing makes a tall 2:3 frame, a prop's view and a set picture 16:9", () => {
+    const [w, h] = to23(960, 544)
+    expect(w % 16 + h % 16).toBe(0)
+    expect(Math.abs(w / h - 2 / 3)).toBeLessThan(0.02)
+    expect(Math.abs(w * h - 960 * 544) / (960 * 544)).toBeLessThan(0.04)
+    expect(refFrame('character', 960, 544)).toEqual([w, h])
+    expect(refFrame('prop', 960, 544)).toEqual(to169(960, 544))
+  })
+  it("D176 (W8): a reference make leaves the Look's style out; a set picture keeps it", () => {
+    const panel = { ...DEFAULT_PANEL, style_id: 'sty_noir' } as never
+    expect(recipeFromPanel(panel).style_id).toBe('sty_noir')
+    expect(recipeFromPanel({ ...(panel as object), ref_framing: 'apose_front' } as never).style_id).toBeNull()
+    expect(recipeFromPanel({ ...(panel as object), ref_framing: 'reference' } as never).style_id).toBeNull()
+    expect(recipeFromPanel({ ...(panel as object), ref_framing: 'set_picture' } as never).style_id).toBe('sty_noir')
   })
 })
 

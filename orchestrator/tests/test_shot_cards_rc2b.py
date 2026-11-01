@@ -49,6 +49,9 @@ def test_cards(tmp_path: Path):
         assert cards[s.shot_id]["stale"] == 0 and cards[s.shot_id]["stale_steps"] == []
         cur = stages.get(stg.id)
         stages.put(stg.id, {**cur.model_dump(), "revision": cur.revision, "name": "Alley at night"})
+        assert {c["shot_id"]: c for c in cl.get("/story/shots/cards").json()["items"]}[s.shot_id]["stale_steps"] == []   # D178: a rename changes nothing it reads
+        cur = stages.get(stg.id)
+        stages.put(stg.id, {**cur.model_dump(), "revision": cur.revision, "cameras": [{**cur.cameras[0].model_dump(), "pos": [1.0, 1.6, 4.0]}]})   # its own camera moved
         r = cl.get("/story/shots/cards").json()
         assert r["guide_s"] == 30.0
         cards = {c["shot_id"]: c for c in r["items"]}

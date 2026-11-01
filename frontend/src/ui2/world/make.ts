@@ -51,6 +51,16 @@ export function activeFraming(cls: ProfileClass, words: string, refs: References
   return f ? { id: f.id, ref: null } : null
 }
 
+/** D177: an A-pose framing's portrait frame — 2:3 with about the same pixels, each side a multiple of 16 (FLUX.2 at 16:9 cut a standing
+ *  figure at the thighs). */
+export function to23(width: number, height: number): [number, number] {
+  const snap = (x: number) => Math.max(64, Math.round(x / 16) * 16)
+  const h = snap(Math.sqrt((width * height * 3) / 2))
+  return [snap((h * 2) / 3), h]
+}
+/** D177: the frame a reference framing sets — a character's A-pose a 2:3 portrait, a prop's view and a set picture 16:9. */
+export const refFrame = (cls: ProfileClass, width: number, height: number): [number, number] => (cls === 'character' ? to23(width, height) : to169(width, height))
+
 /** The size at 16:9 with about the same pixels (a reference is 16:9), each side a multiple of 16. */
 export function to169(width: number, height: number): [number, number] {
   const snap = (x: number) => Math.max(64, Math.round(x / 16) * 16)

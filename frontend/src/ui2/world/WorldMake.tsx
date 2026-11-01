@@ -15,7 +15,7 @@ import { CameraSection, LookSection, ModelSection, PreviewSection, PromptSection
 import { Help } from '../../frame/Help'
 import { useStory } from '../../suites/story/storyStore'
 import { CastSheet } from '../../suites/story/CastSheet'
-import { activeFraming, enterMake, FRAMINGS, linkEntity, REF_FRAMINGS, refTree, to169, type RefFraming } from './make'
+import { activeFraming, enterMake, FRAMINGS, linkEntity, REF_FRAMINGS, refFrame, refTree, type RefFraming } from './make'
 import '../../suites/generate/generate.css'
 import '../../suites/story/story.css'
 
@@ -39,11 +39,12 @@ export function WorldMake() {
   const active = panel.prompt_mode === 'tree' ? activeFraming(p.cls, words, refs, panel.ref_framing) : null
   const reference = active?.ref ?? null
   const refFramings = REF_FRAMINGS[p.cls].filter((f) => !!refs?.[p.cls]?.[f.side])
-  const frameRef = (f: RefFraming) => {                                 // D162: the server's sentence, 16:9 — nothing is queued
+  const frameRef = (f: RefFraming) => {                                 // D162: the server's sentence — nothing is queued; D177: an A-pose's frame is a 2:3 portrait
     if (active?.id === f.id) { g.set({ ref_framing: null }); return }  // D169: a second click turns it off, the words stay
     g.set({ ref_framing: f.id })
     g.setTree(refTree(p.cls, refs?.[p.cls]?.[f.side] ?? '', panel.tree.camera))
-    if (Math.abs(panel.width / panel.height - 16 / 9) > 0.02) { const [w, h] = to169(panel.width, panel.height); g.set({ width: w, height: h, tier: 'custom' }) }
+    const [w, h] = refFrame(p.cls, panel.width, panel.height)
+    if (w !== panel.width || h !== panel.height) g.set({ width: w, height: h, tier: 'custom' })
   }
   const run = async () => {
     if (reference) {                                                    // a reference framing: that reference's make, its pictures Build's candidates
@@ -65,7 +66,7 @@ export function WorldMake() {
         <div className="w-framing"><div className="w-chips left">
           {FRAMINGS[p.cls].map((f) => <button key={f.id} className={active?.id === f.id ? 'active' : ''} aria-pressed={active?.id === f.id} onClick={() => { g.set({ ref_framing: null }); g.setTree({ ...f.tree, camera: { ...panel.tree.camera, ...(f.tree.camera ?? {}) } }) }}>{f.label}</button>)}
           {refFramings.map((f) => <button key={f.id} className={active?.id === f.id ? 'active' : ''} aria-pressed={active?.id === f.id} onClick={() => frameRef(f)}
-            title={active?.id === f.id ? `on: the run makes ${p.name}'s ${f.label} — click to turn it off` : `the run makes ${p.name}'s ${f.label}, 16:9; its pictures land in Build`}>{f.label}</button>)}
+            title={active?.id === f.id ? `on: the run makes ${p.name}'s ${f.label} — click to turn it off` : `the run makes ${p.name}'s ${f.label}, ${p.cls === 'character' ? 'a tall 2:3 frame' : '16:9'}${p.cls === 'place' ? '' : ', without the Look'}; its pictures land in Build`}>{f.label}</button>)}
         </div>
         <textarea rows={2} value={words} aria-label="framing words" placeholder="your own framing — three-quarter view from below, the head turned away …" onChange={(e) => g.setTree({ composition: e.target.value })} /></div></div>
     </div>

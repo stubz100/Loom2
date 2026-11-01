@@ -15597,3 +15597,13 @@ The time is reported.
 
 **→ D180's 3D path:** worth building, for a far thing. Its length can be set by hand: a prop's height and a stage object's scale exist. The
 cut-out card stays the other choice.
+
+## 2026-11-01 06:03 — D179 built: a face filled in part continues its seen part's tone across the seam
+
+- **Built:** `place_sets.seam_match`, called in `fill_landed` on the face's document with its selection (the fill region). For a face
+  filled in part (2–98 %), the filled region's Lab means and spreads, measured within 12 px of the seam, are mapped onto the seen part's
+  within 12 px. The scale is clamped as `tone.match_colour`'s is. A face filled whole is left as Klein painted it.
+- **Tests:**
+  - Offline 798: a paler fill beside a teal seen part, the step under 2 ΔE after, the seen part untouched, a face filled whole unchanged.
+  - Vitest unchanged.
+  - e2e 84/84 alone: the set scenario's Fill lands through it on the fake engine.

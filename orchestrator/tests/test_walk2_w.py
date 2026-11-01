@@ -129,3 +129,21 @@ def test_a_coverage_shot_goes_stale_only_with_what_it_reads(tmp_path: Path):
     assert version_stage_stale(va, walked) and version_stage_stale(vb, walked)
     old = va.model_copy(update={"stage_stamps": None, "stamps_revision": None})
     assert version_stage_stale(old, moved)                                                    # stamped before D178: the revision, as before
+
+
+def test_a_part_filled_face_continues_the_seen_tone():
+    """D179 (W22, E55): a fill painted paler than the part the picture saw is matched to it across the seam; a face filled whole is left."""
+    from loom2.place_sets import seam_match
+    from loom2.tone import lab_stats, srgb_to_lab
+    rng = np.random.default_rng(1)
+    rgb = np.zeros((120, 200, 3), np.uint8)
+    rgb[:, :160] = np.clip(rng.normal((40, 90, 95), 6, (120, 160, 3)), 0, 255)          # the seen part: dark teal
+    rgb[:, 160:] = np.clip(rng.normal((150, 170, 175), 6, (120, 40, 3)), 0, 255)        # the fill: a paler sky
+    filled = np.zeros((120, 200), bool)
+    filled[:, 160:] = True
+    out = seam_match(rgb, filled)
+    lab = srgb_to_lab(out)
+    seen, fill = lab_stats(lab, ~filled & (np.arange(200) >= 148)[None, :])[0], lab_stats(lab, filled & (np.arange(200) < 172)[None, :])[0]
+    assert float(np.linalg.norm(seen - fill)) < 2.0                                          # the step closed (E55: 15–24 → about 1)
+    assert (out[:, :160] == rgb[:, :160]).all()                                              # the seen part untouched
+    assert (seam_match(rgb, np.ones((120, 200), bool)) == rgb).all()                         # filled whole: nothing to match

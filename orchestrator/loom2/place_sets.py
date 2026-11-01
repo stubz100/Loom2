@@ -310,6 +310,38 @@ async def queue_fill(q: Any, pid: str, vid: str, order: list[str], seed: int | N
     return None if plan is None else await start_fill(q, plan)
 
 
+SEAM_BAND = 12                                   # D179 (E55): the px each side of a fill's seam its tone is measured on
+SEAM_FILLED = (0.02, 0.98)                       # D179: a face filled in part (a face filled whole has no seam to match)
+
+
+def _grow(m: np.ndarray, r: int) -> np.ndarray:
+    out = m.copy()
+    for _ in range(r):
+        out[1:] |= out[:-1]; out[:-1] |= out[1:]; out[:, 1:] |= out[:, :-1]; out[:, :-1] |= out[:, 1:]
+    return out
+
+
+def seam_match(rgb: np.ndarray, filled: np.ndarray, band: int = SEAM_BAND) -> np.ndarray:
+    """D179 (W22, E55): a face filled in part, its fill's tone continued from what the picture saw — the filled region's Lab means and
+    spreads, measured within `band` px of the seam, mapped onto the seen part's within `band` px of it (uint8 RGB; unchanged when the face
+    is filled whole or not at all). E55: the seam's step 15–24 ΔE before, about 1 after."""
+    from .tone import SCALE_LIMITS, lab_stats, lab_to_srgb, srgb_to_lab
+    share = float(filled.mean()) if filled.size else 0.0
+    if not (SEAM_FILLED[0] <= share <= SEAM_FILLED[1]):
+        return rgb
+    seen_band = _grow(filled, band) & ~filled
+    fill_band = filled & ~_grow(~filled, band)
+    if int(seen_band.sum()) < 64 or int(fill_band.sum()) < 64:
+        return rgb
+    lab = srgb_to_lab(rgb)
+    mu_f, sd_f = lab_stats(lab, fill_band)
+    mu_s, sd_s = lab_stats(lab, seen_band)
+    scale = np.clip(sd_s / np.maximum(sd_f, 1e-6), *SCALE_LIMITS)
+    out = rgb.copy()
+    out[filled] = lab_to_srgb((lab - mu_f) * scale + mu_s)[filled]
+    return out
+
+
 def fill_landed(q: Any, job: Any, od: Any) -> list[str]:
     """A face's Fill landed on its document: flattened, it is the face's texture (lineage `set-fill` ← the bake); the document closes.
     Returns the faces still to fill (`fill_next` queues the first). A face baked again meanwhile keeps its new bake. Never the job's
@@ -322,9 +354,12 @@ def fill_landed(q: Any, job: Any, od: Any) -> list[str]:
     vid, fid = str(payload.get("version") or ""), str(payload.get("face") or "")
     try:
         merged = od.flatten()
+        rgb = np.ascontiguousarray(merged[..., :3])
+        if od.selection is not None and od.selection.shape == rgb.shape[:2]:
+            rgb = seam_match(rgb, od.selection > 0)                             # D179: the fill continues the seen part's tone
         path = q.ws.temp_dir / "set_fills" / f"{new_id('sfill')}.png"
         path.parent.mkdir(parents=True, exist_ok=True)
-        Image.fromarray(merged[..., :3]).save(path, "PNG")
+        Image.fromarray(rgb).save(path, "PNG")
         rec = q.catalogue.ingest_file(path, kind="image", move=True, job_id=job.id, suite="story", lineage_kind="set-fill",
                                       parents=[od.doc.source_asset_id] if od.doc.source_asset_id else [], params={"profile_id": pid, "version": vid, "face": fid},
                                       origin=job.origin)

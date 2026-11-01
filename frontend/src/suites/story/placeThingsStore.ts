@@ -1,6 +1,7 @@
 // D180 (W60): the parts of a built set that move, picked by the author on the place's set picture — the sheet's state (the place version
 // it is open for, SAM 3's points, the find in flight and the mask it left on the set picture's document), and the verbs: keep the mask as a
-// thing (its card and where it stands are the server's), make a thing's 3D model, remove one. As SC3's thingsStore, for a place's set.
+// thing (its card and where it stands are the server's), make a thing's 3D model, clean the set picture under the things, remove one.
+// As SC3's thingsStore, for a place's set.
 import { create } from 'zustand'
 import { ApiError, api, http, unwrap } from '../../api/client'
 import { useSession } from '../../store/session'
@@ -22,6 +23,7 @@ interface PlaceThingsState {
   clear: () => void
   keep: (name: string) => Promise<boolean>
   model: (pid: string, vid: string, tid: string) => Promise<void>
+  clean: (pid: string, vid: string) => Promise<void>
   remove: (pid: string, vid: string, tid: string) => Promise<void>
 }
 
@@ -69,6 +71,13 @@ export const usePlaceThings = create<PlaceThingsState>()((set, get) => ({
       toast('Its 3D model is queued — some minutes on the GPU; it lands on the thing, and Clay places it', 'info')
       await useStory.getState().loadProfiles()
     } catch (e) { toast(`Make its 3D model: ${detail(e)}`) }
+  },
+  clean: async (pid, vid) => {
+    try {
+      const r = await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/set/things/clean', { params: { path: { pid, vid } } }))
+      toast(`The set picture is cleaned under ${r.things.length} thing${r.things.length === 1 ? '' : 's'} — about a minute on the GPU; the faces are baked from it again, their Fills kept`, 'info')
+      await useStory.getState().loadProfiles()
+    } catch (e) { toast(`Clean the set picture: ${detail(e)}`) }
   },
   remove: async (pid, vid, tid) => {
     try {

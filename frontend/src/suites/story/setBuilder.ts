@@ -22,6 +22,8 @@ export const setPicture = (v: Pick<Version, 'anim_ref_asset_id' | 'hero_asset_id
 export const setCamera = (ps: PlaceSet | null | undefined): SourceCam | null => (ps?.sources[0]?.camera as SourceCam | undefined) ?? null
 /** The faces were baked for this set and camera (not for an earlier fit or before an edit). */
 export const bakedFresh = (ps: PlaceSet) => { const c = setCamera(ps); return !!c && ps.faces.some((f) => f.baked_asset_id) && ps.baked_key === bakeKey(ps as PlaceSetDoc, c) }
+/** The page bakes the set by itself: never baked, or (D180) its picture was cleaned under its things since the bake — the server keeps the Fills. */
+export const bakeDue = (ps: PlaceSet) => !!ps.sources.length && (!ps.faces.some((f) => f.baked_asset_id) || !!ps.keep_fills_key)
 
 const jobsOf = (jobs: Record<string, Job>, surface: string, pid: string, vid: string) => Object.values(jobs)
   .filter((j) => j.origin?.surface === surface && j.origin?.ref === pid && (j.origin?.payload as { version?: string } | null)?.version === vid)
@@ -29,6 +31,7 @@ const jobsOf = (jobs: Record<string, Job>, surface: string, pid: string, vid: st
 export const latestFitJob = (jobs: Record<string, Job>, pid: string, vid: string) => jobsOf(jobs, 'set_fit', pid, vid)[0]
 export const fillBusy = (jobs: Record<string, Job>, pid: string, vid: string) => jobsOf(jobs, 'set_fill', pid, vid).some(busy)
 export const fitBusy = (jobs: Record<string, Job>, pid: string, vid: string) => busy(latestFitJob(jobs, pid, vid))
+export const cleanBusy = (jobs: Record<string, Job>, pid: string, vid: string) => jobsOf(jobs, 'place_things_clean', pid, vid).some(busy)
 
 /** What the set builder says in a few words (D116: a state, a count). */
 export function setStatus(v: Version, jobs: Record<string, Job>, pid: string, baking: boolean): { text: string; warn?: boolean } {
@@ -40,6 +43,7 @@ export function setStatus(v: Version, jobs: Record<string, Job>, pid: string, ba
   if (fit?.status === 'failed' && !ps) return { text: `the fit failed: ${fit.error ?? 'see the job'}`, warn: true }
   if (!ps) return { text: setPicture(v) ? 'no set yet' : 'no set picture yet' }
   if (baking) return { text: 'baking the faces…' }
+  if (cleanBusy(jobs, pid, v.id)) return { text: 'cleaning the set picture under its things…' }
   const filling = ps.faces.filter((f) => f.fill_job_id).length
   if (filling || fillBusy(jobs, pid, v.id)) return { text: `filling ${ps.faces.filter((f) => f.filled).length + 1} of ${ps.faces.filter((f) => f.filled || (f.bad ?? 0) >= 0.002).length} faces…` }
   if (!ps.faces.some((f) => f.baked_asset_id)) return { text: 'fitted · not baked yet' }
@@ -131,10 +135,10 @@ const NOUN: Record<string, string> = { floor: 'the floor', ceiling: 'the ceiling
 export const faceNoun = (fid: string) => NOUN[fid.split('_')[0]] ?? 'the surface'
 
 const tried = new Set<string>()
-/** A fit just landed (a set with its source and no baked face): baked once, here, while the page shows it. */
+/** A fit just landed (a set with its source and no baked face), or its picture was cleaned (D180): baked once, here, while the page shows it. */
 export function autoBake(pid: string, vid: string, ps: PlaceSet): void {
-  const key = `${pid}/${vid}/${ps.sources[0]?.made_at ?? ''}`
-  if (!ps.sources.length || ps.faces.some((f) => f.baked_asset_id) || tried.has(key) || useSetBuilder.getState().baking) return
+  const key = `${pid}/${vid}/${ps.sources[0]?.made_at ?? ''}/${ps.sources[0]?.asset_id ?? ''}`
+  if (!bakeDue(ps) || tried.has(key) || useSetBuilder.getState().baking) return
   tried.add(key)
   void bakeSet()
 }

@@ -248,6 +248,7 @@
  "POST /story/profiles/{pid}/versions/{vid}/set/fill",
  "POST /story/profiles/{pid}/versions/{vid}/set/fit",
  "POST /story/profiles/{pid}/versions/{vid}/set/things",
+ "POST /story/profiles/{pid}/versions/{vid}/set/things/clean",
  "POST /story/profiles/{pid}/versions/{vid}/set/things/find",
  "POST /story/profiles/{pid}/versions/{vid}/set/things/{tid}/model",
  "POST /story/profiles/{pid}/versions/{vid}/set/walkers",

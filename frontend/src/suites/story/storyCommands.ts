@@ -1,6 +1,6 @@
 // 17 (D85): the Story suite's verbs — every one has a mouse home (the panel's buttons, the editor rows' tools, the Inspector, right-click
 // menus) per D32; Delete and the arrows are accelerators. SY1 adds the Cast tab's verbs (new profile, expand, add to the reference set, lock, copy, open).
-import { Paintbrush, RefreshCw, CopyPlus, Hammer, Lightbulb, Group, Ungroup, Workflow, ArrowDown, ArrowLeft, Box, Ruler, ArrowUp, BookOpen, BookPlus, ChevronLeft, ChevronRight, Pencil, UserRoundPlus, Users, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImageOff, ImagePlus, ImageUp, Link, ListChecks, ListPlus, Lock, MapPinPlus, Maximize, Mic, PackagePlus, Palette, PersonStanding, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
+import { Paintbrush, RefreshCw, Eraser, CopyPlus, Hammer, Lightbulb, Group, Ungroup, Workflow, ArrowDown, ArrowLeft, Box, Ruler, ArrowUp, BookOpen, BookPlus, ChevronLeft, ChevronRight, Pencil, UserRoundPlus, Users, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImageOff, ImagePlus, ImageUp, Link, ListChecks, ListPlus, Lock, MapPinPlus, Maximize, Mic, PackagePlus, Palette, PersonStanding, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
 import { command, isEnabled, registerCommands, runCommand, sep, type Command, type MenuItem, type OnItem } from '../../frame/commands'
 import { nextOwed, readinessOf, type ReadyCell, type ReadyItem } from './castReady'
 import { linesToVoice, spineTodo } from './episodeVerbs'
@@ -42,7 +42,7 @@ const isPlace = () => profile()?.cls === 'place'
 /** CW6: the place version's set jobs still running (its fit, a face's Fill). */
 const setJobs = (surface: string) => { const p = profile(); const v = version(); return p && v ? Object.values(useSession.getState().jobs).filter((j) => j.origin?.surface === surface && j.origin?.ref === p.id
   && (j.origin?.payload as { version?: string } | null)?.version === v.id && !['done', 'failed', 'cancelled'].includes(j.status)) : [] }
-const setBusy = () => setJobs('set_fit').length > 0 || setJobs('set_fill').length > 0 || !!version()?.place_set?.faces.some((f) => f.fill_job_id)
+const setBusy = () => setJobs('set_fit').length > 0 || setJobs('set_fill').length > 0 || setJobs('place_things_clean').length > 0 || !!version()?.place_set?.faces.some((f) => f.fill_job_id)
 const fillable = () => (version()?.place_set?.faces ?? []).filter((f) => f.baked_asset_id && (f.bad ?? 0) >= 0.002).map((f) => f.id)
 const crowdOf = (fid?: string) => (fid ? version()?.place_set?.faces.find((f) => f.id === fid)?.crowd ?? null : null)   // D173
 const vertical = (fid?: string) => !!fid && ['wall', 'facade', 'end', 'backdrop'].includes(fid.split('_')[0])            // D173 (placeSet.ts VERTICAL_PARTS)
@@ -457,6 +457,12 @@ const cmds: Command[] = [
   { id: 'cast.place.things', scope: 'story', label: 'Pick a thing that moves…', icon: Paintbrush, hint: 'D180: a part of the set that should move (the ferry, a cart) — picked on the set picture, cut out; Clay places it as an object you can key',
     placement: ['panel'], when: () => isPlace() && !!version()?.place_set?.sources.length,
     run: () => { const p = profile(), v = version(); if (p && v) void import('./placeThingsStore').then((m) => m.usePlaceThings.getState().open({ pid: p.id, vid: v.id })) } },
+  { id: 'cast.place.things.clean', scope: 'story', label: 'Clean the set picture under them ▶', icon: Eraser, hint: 'D180: a Fill paints what was behind the things, so the painted copies leave the faces (baked again, their Fills kept) — about a minute',
+    placement: ['panel'], when: () => isPlace() && !!version()?.place_set?.things.some((t) => !t.cleaned) && !setBusy(),
+    run: () => { const p = profile(), v = version(); if (p && v) void import('./placeThingsStore').then((m) => m.usePlaceThings.getState().clean(p.id, v.id)) } },
+  { id: 'cast.place.things.cleanAgain', scope: 'story', label: 'Clean the set picture again ▶', icon: Eraser, hint: 'D180: every thing cleaned again from the picture before any clean, another seed — where a shape was painted in a thing’s place',
+    placement: ['panel'], when: () => isPlace() && !!version()?.place_set?.things.length && !!version()?.place_set?.things.every((t) => t.cleaned) && !setBusy(),
+    run: () => { const p = profile(), v = version(); if (p && v) void import('./placeThingsStore').then((m) => m.usePlaceThings.getState().clean(p.id, v.id)) } },
   { id: 'cast.place.fill', scope: 'story', label: 'Fill what the picture never saw ▶', icon: Paintbrush, hint: 'Klein paints each face the picture did not see well, the most seen first, with its material — about 45 s a face',
     placement: ['panel', 'context'], when: () => isPlace() && toFill().length > 0 && !setBusy(), run: () => void import('./setBuilder').then((m) => m.fillSet()) },
   { id: 'cast.place.fillFace', scope: 'story', label: 'Fill this face ▶', icon: Paintbrush, hint: 'a filled face is filled again from its bake, with another seed — name its material first for a cleaner surface',

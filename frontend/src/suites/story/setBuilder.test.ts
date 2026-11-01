@@ -1,16 +1,16 @@
 // proto01_UIcast CW6 (D143): what a place's set builder says — its fit running or failed, a set changed since its bake, the faces to fill
-// and how much of the set they are.
+// and how much of the set they are; D180: the picture being cleaned under its things, and the bake due again after it.
 import { describe, expect, it } from 'vitest'
 import type { Job, Profile } from '../../api/types'
 import { bakeKey, type SourceCam } from '../stage/setOverlay'
 import type { PlaceSetDoc } from '../stage/placeSet'
-import { bakedFresh, setStatus, unseenShare, type PlaceSet } from './setBuilder'
+import { bakeDue, bakedFresh, setStatus, unseenShare, type PlaceSet } from './setBuilder'
 
 type Version = Profile['versions'][number]
 const cam: SourceCam = { pos: [0.3, 1.6, 2], target: [0.1, 1.3, -3], roll: 0, focal_mm: 24, sensor_mm: 36 }
 const face = (id: string, bad: number, extra: Partial<PlaceSet['faces'][number]> = {}): PlaceSet['faces'][number] => ({ id, texture_asset_id: 'ast_t', baked_asset_id: 'ast_t', coverage_asset_id: 'ast_c',
   texel_m: 0.01, seen: 1 - bad, bad, filled: false, material: '', fill_job_id: null, crowd: null, walkers: [], ...extra })
-const set = (faces: PlaceSet['faces'], key: string | null = null): PlaceSet => ({ kind: 'room', sizes: { width: 5, depth: 6, height: 2.8 }, parts: {}, faces, baked_key: key, things: [], things_document_id: null,
+const set = (faces: PlaceSet['faces'], key: string | null = null): PlaceSet => ({ kind: 'room', sizes: { width: 5, depth: 6, height: 2.8 }, parts: {}, faces, baked_key: key, things: [], things_document_id: null, clean_job_id: null, keep_fills_key: null,
   sources: [{ asset_id: 'ast_pic', camera: cam, relief_asset_id: null, assumed: [], lens_deg: 73.7, made_at: '2026-10-25T18:00:00Z' }] })
 const ver = (ps: PlaceSet | null): Version => ({ id: 'v1', anim_ref_asset_id: 'ast_pic', hero_asset_id: null, place_set: ps } as unknown as Version)
 const job = (status: Job['status'], result: Record<string, unknown> = {}, created_at = '2026-10-25T18:30:00Z'): Record<string, Job> =>
@@ -34,5 +34,17 @@ describe("a place's set builder (CW6)", () => {
     expect(setStatus(ver(fresh), {}, 'prf_k', false).text).toBe('1 face to fill · 20 % of the set')
     expect(setStatus(ver(set([face('floor', 0.5, { filled: true })], key)), {}, 'prf_k', false).text).toBe('baked and filled')
     expect(setStatus(ver(fresh), {}, 'prf_k', true).text).toBe('baking the faces…')
+  })
+  it('says the picture is being cleaned, and bakes again by itself after it (D180)', () => {
+    const key = bakeKey(set([]) as PlaceSetDoc, cam)
+    const baked = set([face('floor', 0.5, { filled: true })], key)
+    const cleaning = job('running')
+    cleaning.j1.origin = { suite: 'story', surface: 'place_things_clean', ref: 'prf_k', payload: { version: 'v1' } } as Job['origin']
+    expect(setStatus(ver(baked), cleaning, 'prf_k', false).text).toBe('cleaning the set picture under its things…')
+    expect(bakeDue(set([]))).toBe(true)                                                          // never baked
+    expect(bakeDue(baked)).toBe(false)
+    const cleaned = { ...baked, baked_key: null, keep_fills_key: key }                           // the clean landed: the bake is due, the Fills kept
+    expect(bakeDue(cleaned)).toBe(true)
+    expect(setStatus(ver(cleaned), {}, 'prf_k', false)).toEqual({ text: 'changed since the bake', warn: true })
   })
 })

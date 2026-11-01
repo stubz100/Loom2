@@ -15996,12 +15996,34 @@
             ],
             "title": "Baked Key"
           },
+          "clean_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clean Job Id"
+          },
           "faces": {
             "items": {
               "$ref": "#/components/schemas/SetFace-Input"
             },
             "title": "Faces",
             "type": "array"
+          },
+          "keep_fills_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keep Fills Key"
           },
           "kind": {
             "default": "room",
@@ -16071,12 +16093,34 @@
             ],
             "title": "Baked Key"
           },
+          "clean_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clean Job Id"
+          },
           "faces": {
             "items": {
               "$ref": "#/components/schemas/SetFace-Output"
             },
             "title": "Faces",
             "type": "array"
+          },
+          "keep_fills_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keep Fills Key"
           },
           "kind": {
             "default": "room",
@@ -16137,7 +16181,9 @@
           "sources",
           "baked_key",
           "things",
-          "things_document_id"
+          "things_document_id",
+          "clean_job_id",
+          "keep_fills_key"
         ],
         "title": "PlaceSet",
         "type": "object"
@@ -16155,6 +16201,11 @@
           "card_asset_id": {
             "title": "Card Asset Id",
             "type": "string"
+          },
+          "cleaned": {
+            "default": false,
+            "title": "Cleaned",
+            "type": "boolean"
           },
           "height_m": {
             "title": "Height M",
@@ -16239,6 +16290,11 @@
             "title": "Card Asset Id",
             "type": "string"
           },
+          "cleaned": {
+            "default": false,
+            "title": "Cleaned",
+            "type": "boolean"
+          },
           "height_m": {
             "title": "Height M",
             "type": "number"
@@ -16308,7 +16364,8 @@
           "height_m",
           "yaw_deg",
           "mesh_asset_id",
-          "mesh_job_id"
+          "mesh_job_id",
+          "cleaned"
         ],
         "title": "PlaceThing",
         "type": "object"
@@ -16406,6 +16463,32 @@
           "y"
         ],
         "title": "PlaceThingPoint",
+        "type": "object"
+      },
+      "PlaceThingsClean": {
+        "properties": {
+          "coverage": {
+            "title": "Coverage",
+            "type": "number"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "things": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Things",
+            "type": "array"
+          }
+        },
+        "required": [
+          "job_id",
+          "things",
+          "coverage"
+        ],
+        "title": "PlaceThingsClean",
         "type": "object"
       },
       "PlanBatch": {
@@ -38835,7 +38918,7 @@
     },
     "/story/profiles/{pid}/versions/{vid}/set/bake": {
       "put": {
-        "description": "CW6 (04 §4): the client's bake (stage/setBake.ts) — each face's texture and coverage become Catalogue images (lineage `set-bake` ←\nthe set picture); the faces are the version's, unfilled, each keeping the material the author named. V23: written into the set as it\nis when the ingest is done (a wall dragged or a fit landed meanwhile stays; the bake's key tells the page whether it still matches),\nnever while a face's Fill runs (its result would land on the new bake).",
+        "description": "CW6 (04 §4): the client's bake (stage/setBake.ts) — each face's texture and coverage become Catalogue images (lineage `set-bake` ←\nthe set picture); the faces are the version's, unfilled, each keeping the material the author named. V23: written into the set as it\nis when the ingest is done (a wall dragged or a fit landed meanwhile stays; the bake's key tells the page whether it still matches),\nnever while a face's Fill runs (its result would land on the new bake). D180: after the picture was cleaned under its things, a bake for\nthe same set and camera keeps each filled face's Fill where it painted (`place_things.keep_fill`) — no Fill again.",
         "operationId": "profile_set_bake_story_profiles__pid__versions__vid__set_bake_put",
         "parameters": [
           {
@@ -39199,6 +39282,58 @@
           }
         },
         "summary": "Profile Set Thing Keep",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/profiles/{pid}/versions/{vid}/set/things/clean": {
+      "post": {
+        "description": "D180: the set picture cleaned under the things not cleaned yet — a Fill over their masks grown (as SC3's clean plate); it lands as the\nset's picture, and the faces are baked from it again keeping their Fills (Build bakes when it sees the set due).",
+        "operationId": "profile_set_things_clean_story_profiles__pid__versions__vid__set_things_clean_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaceThingsClean"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Set Things Clean",
         "tags": [
           "story"
         ]

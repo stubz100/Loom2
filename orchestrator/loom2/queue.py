@@ -636,6 +636,11 @@ class JobQueue:
         if job.origin is not None and job.origin.surface == "place_thing_model":   # D180: a built set's thing waits for no model now
             from .place_things import model_failed
             model_failed(self, job)
+        if job.origin is not None and job.origin.surface == "place_things_clean":   # D180: the set picture is not being cleaned now
+            from .place_things import clean_failed
+            p = clean_failed(self, job)
+            if p is not None:
+                self.hub.broadcast("story.changed", {"kind": "profile", "id": p.id, "revision": p.revision})
 
     def _finish_cancelled(self, job: JobRecord) -> None:
         self._cancel_requested.discard(job.id)

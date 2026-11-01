@@ -831,7 +831,8 @@ async def profile_set_bake(svc: Svc, pid: str, vid: str, body: SetBake):
     """CW6 (04 §4): the client's bake (stage/setBake.ts) — each face's texture and coverage become Catalogue images (lineage `set-bake` ←
     the set picture); the faces are the version's, unfilled, each keeping the material the author named. V23: written into the set as it
     is when the ingest is done (a wall dragged or a fit landed meanwhile stays; the bake's key tells the page whether it still matches),
-    never while a face's Fill runs (its result would land on the new bake)."""
+    never while a face's Fill runs (its result would land on the new bake). D180: after the picture was cleaned under its things, a bake for
+    the same set and camera keeps each filled face's Fill where it painted (`place_things.keep_fill`) — no Fill again."""
     from .finals import _blob
     ws, cat, _ = svc.require_project()
     p, v = await _place(svc, pid, vid)
@@ -842,8 +843,28 @@ async def profile_set_bake(svc: Svc, pid: str, vid: str, body: SetBake):
         raise HTTPException(409, "the set's Fill is running — wait for it, or stop its job, before baking again")
     files = [(f, _blob(ws, f.image), _blob(ws, f.coverage)) for f in body.faces]
     source = ps.sources[0].asset_id
+    fills = {f.id: f.texture_asset_id for f in ps.faces if f.filled and f.texture_asset_id} if ps.keep_fills_key and ps.keep_fills_key == body.key else {}
 
     from ..bins import home_now
+
+    def kept(fid: str, img: Any, cov: Any, bake_id: str, params: dict, mine: JobOrigin) -> Any | None:
+        """D180: the face's Fill kept over its new bake, or None (no Fill, or one of another size)."""
+        import numpy as np
+        from PIL import Image
+
+        from ..place_things import keep_fill
+        old = cat.get(fills.get(fid) or "")
+        if old is None:
+            return None
+        with Image.open(cat.abs_path(old)) as a, Image.open(img) as b, Image.open(cov) as c:
+            filled, bake, cv = np.asarray(a.convert("RGB")), np.asarray(b.convert("RGBA")), np.asarray(c.convert("RGB"))
+        if filled.shape[:2] != bake.shape[:2] or cv.shape[:2] != bake.shape[:2]:
+            return None
+        path = ws.temp_dir / "set_fills" / f"{new_id('sfill')}.png"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        Image.fromarray(keep_fill(filled, bake, cv, fid, ps.kind)).save(path, "PNG")
+        return cat.make_thumbs(cat.ingest_file(path, kind="image", move=True, suite="story", lineage_kind="set-fill", parents=[bake_id, old.id],
+                                               params={**params, "kept_from": old.id}, origin=mine))
 
     def ingest() -> list[SetFace]:
         out = []
@@ -852,8 +873,10 @@ async def profile_set_bake(svc: Svc, pid: str, vid: str, body: SetBake):
             mine = JobOrigin(suite="story", surface="set_bake", ref=pid, payload={"version": vid})   # W57: the place's version owns its bakes
             t = cat.make_thumbs(cat.ingest_file(img, kind="image", move=False, suite="story", lineage_kind="set-bake", parents=[source], params=params, origin=mine))
             c = cat.ingest_file(cov, kind="image", move=False, suite="story", lineage_kind="set-coverage", parents=[t.id], params=params, origin=mine)
-            home_now(getattr(svc, "groups", None), ws, t, c)                                         # W57: the place's version, not Imports
-            out.append(SetFace(id=f.id, texture_asset_id=t.id, baked_asset_id=t.id, coverage_asset_id=c.id, texel_m=f.texel_m, seen=f.seen, bad=f.bad))
+            k = kept(f.id, img, cov, t.id, params, mine) if f.id in fills else None
+            home_now(getattr(svc, "groups", None), ws, t, c, k)                                      # W57: the place's version, not Imports
+            out.append(SetFace(id=f.id, texture_asset_id=(k or t).id, baked_asset_id=t.id, coverage_asset_id=c.id, texel_m=f.texel_m, seen=f.seen, bad=f.bad,
+                               filled=k is not None))
         return out
     faces = await asyncio.to_thread(ingest)
     try:
@@ -889,6 +912,8 @@ async def profile_set_fill(svc: Svc, pid: str, vid: str, body: SetFillBody):
         raise HTTPException(422, "the set is not baked yet — Build the set ▶ bakes it")
     if any(f.fill_job_id and svc.queue.job_live(f.fill_job_id) for f in ps.faces):
         raise HTTPException(409, "the set's Fill is running — one at a time")
+    if ps.clean_job_id and svc.queue.job_live(ps.clean_job_id):                 # D180: the faces are baked again when it lands
+        raise HTTPException(409, "the set picture is being cleaned — Fill after the faces are baked from it again")
     stale = [f.id for f in ps.faces if f.fill_job_id]
     if stale:                                                                   # V21: a face naming a job that is gone or over (a shutdown, a crash) lets go
         ws, _, _ = svc.require_project()
@@ -1020,6 +1045,7 @@ async def profile_set_thing_find(svc: Svc, pid: str, vid: str, body: PlaceThingF
                         origin=JobOrigin(suite="story", surface=FIND_SURFACE, ref=pid, payload={"version": vid}))
     except (KeyError, ValueError) as e:
         raise _thing_error(e) from e
+    await q.flush()                                                          # D64: on disk before the reply
     return {"job_id": jobs[0].id, "document_id": od.doc.id}
 
 
@@ -1034,10 +1060,36 @@ async def profile_set_thing_keep(svc: Svc, pid: str, vid: str, body: PlaceThingK
         p, _, recs = await asyncio.to_thread(keep, StoryStore(ws), svc.require_documents(), cat, pid, vid, body.name, [x.model_dump() for x in body.points])
     except (KeyError, ValueError) as e:
         raise _thing_error(e) from e
+    from ..bins import home_now
+    await asyncio.to_thread(home_now, getattr(svc, "groups", None), ws, *recs)       # W57: the place's version
     for r in recs:
         svc.hub.broadcast("asset.created", r.model_dump())
     _changed(svc, p)
     return p.model_dump()
+
+
+class PlaceThingsClean(BaseModel):
+    job_id: str
+    things: list[str]
+    coverage: float
+
+
+@router.post("/story/profiles/{pid}/versions/{vid}/set/things/clean", response_model=PlaceThingsClean)
+async def profile_set_things_clean(svc: Svc, pid: str, vid: str):
+    """D180: the set picture cleaned under the things not cleaned yet — a Fill over their masks grown (as SC3's clean plate); it lands as the
+    set's picture, and the faces are baked from it again keeping their Fills (Build bakes when it sees the set due)."""
+    from ..place_things import clean_job
+    ws, cat, q = svc.require_project()
+    await _place(svc, pid, vid)
+    try:
+        job, prep = await clean_job(q, StoryStore(ws), svc.require_documents(), cat, pid, vid)
+    except (KeyError, ValueError) as e:
+        raise _thing_error(e) from e
+    await q.flush()                                                          # D64: on disk before the reply
+    p = await asyncio.to_thread(StoryStore(ws).profile, pid)
+    if p is not None:
+        _changed(svc, p)
+    return {"job_id": job.id, "things": prep["things"], "coverage": prep["coverage"]}
 
 
 @router.post("/story/profiles/{pid}/versions/{vid}/set/things/{tid}/model", response_model=PlaceThingModelQueued)
@@ -1047,10 +1099,10 @@ async def profile_set_thing_model(svc: Svc, pid: str, vid: str, tid: str):
     ws, cat, q = svc.require_project()
     await _place(svc, pid, vid)
     try:
-        job = await asyncio.to_thread(model_job, q, StoryStore(ws), cat, pid, vid, tid)
+        job = await model_job(q, StoryStore(ws), cat, pid, vid, tid)
     except (KeyError, ValueError) as e:
         raise _thing_error(e) from e
-    await q.flush()
+    await q.flush()                                                          # D64: on disk before the reply
     p = await asyncio.to_thread(StoryStore(ws).profile, pid)
     if p is not None:
         _changed(svc, p)

@@ -213,6 +213,7 @@ class PlaceThing(BaseModel):
     yaw_deg: float = 0.0                           # turned to face the picture's camera
     mesh_asset_id: str | None = None               # its 3D model (image → 3D on the cut-out)
     mesh_job_id: str | None = None                 # the model's job in flight
+    cleaned: bool = False                          # the set picture is cleaned under it (its painted copy gone from the faces once baked again)
 
 
 class PlaceSet(BaseModel):
@@ -227,6 +228,8 @@ class PlaceSet(BaseModel):
     baked_key: str | None = None                   # what the faces were baked for (setOverlay.bakeKey: the set and its camera); another → bake again
     things: list[PlaceThing] = Field(default_factory=list)   # D180 (W60): its parts that move, picked on the set picture
     things_document_id: str | None = None          # D180: the set picture's own document the things are found on (SAM 3's points)
+    clean_job_id: str | None = None                # D180: the clean under the things while it runs
+    keep_fills_key: str | None = None              # D180: the picture was cleaned since the bake for this key — a bake for it again keeps the Fills
 
 
 class StageObject(BaseModel):

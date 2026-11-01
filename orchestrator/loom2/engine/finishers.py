@@ -233,6 +233,10 @@ class DocumentFinisher:
             start = await asyncio.to_thread(place_sets.crowd_start_landed, q, job, od)
             if start:
                 await place_sets.queue_crowd_loop(q, job, start)                                # on the loop, as Fill's next face
+        if isinstance(recipe, Inpaint) and getattr(job, "origin", None) and job.origin.surface == place_things.CLEAN_SURFACE:   # D180: a built set's picture cleaned
+            p = await asyncio.to_thread(place_things.clean_landed, q, job, od)
+            if p is not None:
+                q.hub.broadcast("story.changed", {"kind": "profile", "id": p.id, "revision": p.revision})
         if isinstance(recipe, Inpaint) and getattr(job, "origin", None) and job.origin.surface == set_things.CLEAN_SURFACE:   # D123 (SC3c-3): a picture set's plate
             done = await asyncio.to_thread(set_things.clean_plate, q, job, od)
             q.hub.broadcast("asset.created", done["asset"].model_dump())

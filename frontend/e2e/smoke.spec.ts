@@ -2449,7 +2449,7 @@ test("a place's set (CW6, D143): Build the set ▶ queues MoGe on the set pictur
   const tag = Date.now().toString(36)
   type Face = { id: string; texture_asset_id: string | null; baked_asset_id: string | null; seen: number | null; bad: number | null; filled: boolean; material: string; fill_job_id: string | null;
     crowd?: { status: string; from_m: number; to_m: number; clip_id: string | null } | null; walkers?: { status: string; kept: number; asset_id: string | null }[] }
-  type PS = { kind: string; sizes: Record<string, number>; parts: Record<string, boolean>; faces: Face[]; sources: { asset_id: string; camera: { pos: number[]; target: number[] } }[]; baked_key: string | null }
+  type PS = { kind: string; sizes: Record<string, number>; parts: Record<string, boolean>; faces: Face[]; sources: { asset_id: string; camera: { pos: number[]; target: number[] } }[]; baked_key: string | null; keep_fills_key?: string | null }
   type ProfileLite = { id: string; revision: number; versions: { id: string; place_set: PS | null; anim_ref_asset_id: string | null }[] }
   const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
   const place = await api<ProfileLite>('POST', '/story/profiles', { name: `Farm kitchen ${tag}`, cls: 'place', appearance: 'a farmhouse kitchen, whitewashed walls' })
@@ -2548,6 +2548,19 @@ test("a place's set (CW6, D143): Build the set ▶ queues MoGe on the set pictur
   await thingRow.locator('button', { hasText: /^Make a 3D model/ }).click()
   await expect.poll(async () => (await thingsOf())[0].mesh_asset_id, { timeout: 120_000 }).toBeTruthy()
   await expect(thingRow).toContainText('3D model ✓')
+  // D180: the set picture cleaned under the cart (the fake engine's Fill) is the set's picture from now on; Build bakes the faces from it
+  // again by itself, their Fills kept (no Fill again)
+  const before = (await ps())!.sources[0].asset_id
+  await sec.locator('button', { hasText: /^Clean the set picture under them/ }).click()
+  await expect.poll(async () => (await ps())?.sources[0].asset_id, { timeout: 120_000 }).not.toBe(before)
+  await expect(thingRow).toContainText('gone from the picture')
+  await expect.poll(async () => { const s = await ps(); return !!s && !s.keep_fills_key && !!s.baked_key }, { timeout: 60_000 }).toBe(true)
+  const rebaked = (await ps())!.faces.filter((f) => f.filled)
+  expect(rebaked).toHaveLength(toFill)
+  expect(rebaked.every((f) => f.texture_asset_id !== f.baked_asset_id && !filled.some((x) => x.baked_asset_id === f.baked_asset_id))).toBe(true)   // new bakes, the Fills over them
+  await expect(sec.locator('[data-status]')).toHaveText('baked and filled')
+  await expect(sec.locator('button', { hasText: /^Clean the set picture under them/ })).toHaveCount(0)                    // nothing left to clean: Clean again in its place
+  await expect(sec.locator('button', { hasText: /^Clean the set picture again/ })).toBeEnabled()
   // Bench ▶: Clay on the set, bound to the place, from the picture's camera
   await sec.locator('button', { hasText: /^Bench/ }).click()
   await expect(page.locator('.w-mode button.active')).toHaveText('Clay')                                    // Clay on the set, inside World

@@ -3880,7 +3880,8 @@ export interface paths {
          * @description CW6 (04 §4): the client's bake (stage/setBake.ts) — each face's texture and coverage become Catalogue images (lineage `set-bake` ←
          *     the set picture); the faces are the version's, unfilled, each keeping the material the author named. V23: written into the set as it
          *     is when the ingest is done (a wall dragged or a fit landed meanwhile stays; the bake's key tells the page whether it still matches),
-         *     never while a face's Fill runs (its result would land on the new bake).
+         *     never while a face's Fill runs (its result would land on the new bake). D180: after the picture was cleaned under its things, a bake for
+         *     the same set and camera keeps each filled face's Fill where it painted (`place_things.keep_fill`) — no Fill again.
          */
         put: operations["profile_set_bake_story_profiles__pid__versions__vid__set_bake_put"];
         post?: never;
@@ -3990,6 +3991,27 @@ export interface paths {
          *     centre's ray from the set picture's camera onto the set's floor, its size there).
          */
         post: operations["profile_set_thing_keep_story_profiles__pid__versions__vid__set_things_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/profiles/{pid}/versions/{vid}/set/things/clean": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Profile Set Things Clean
+         * @description D180: the set picture cleaned under the things not cleaned yet — a Fill over their masks grown (as SC3's clean plate); it lands as the
+         *     set's picture, and the faces are baked from it again keeping their Fills (Build bakes when it sees the set due).
+         */
+        post: operations["profile_set_things_clean_story_profiles__pid__versions__vid__set_things_clean_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -11584,8 +11606,12 @@ export interface components {
         "PlaceSet-Input": {
             /** Baked Key */
             baked_key?: string | null;
+            /** Clean Job Id */
+            clean_job_id?: string | null;
             /** Faces */
             faces?: components["schemas"]["SetFace-Input"][];
+            /** Keep Fills Key */
+            keep_fills_key?: string | null;
             /**
              * Kind
              * @default room
@@ -11615,8 +11641,12 @@ export interface components {
         "PlaceSet-Output": {
             /** Baked Key */
             baked_key: string | null;
+            /** Clean Job Id */
+            clean_job_id: string | null;
             /** Faces */
             faces: components["schemas"]["SetFace-Output"][];
+            /** Keep Fills Key */
+            keep_fills_key: string | null;
             /**
              * Kind
              * @default room
@@ -11650,6 +11680,11 @@ export interface components {
             base: number[];
             /** Card Asset Id */
             card_asset_id: string;
+            /**
+             * Cleaned
+             * @default false
+             */
+            cleaned?: boolean;
             /** Height M */
             height_m: number;
             /** Id */
@@ -11686,6 +11721,11 @@ export interface components {
             base: number[];
             /** Card Asset Id */
             card_asset_id: string;
+            /**
+             * Cleaned
+             * @default false
+             */
+            cleaned: boolean;
             /** Height M */
             height_m: number;
             /** Id */
@@ -11749,6 +11789,15 @@ export interface components {
             x: number;
             /** Y */
             y: number;
+        };
+        /** PlaceThingsClean */
+        PlaceThingsClean: {
+            /** Coverage */
+            coverage: number;
+            /** Job Id */
+            job_id: string;
+            /** Things */
+            things: string[];
         };
         /** PlanBatch */
         PlanBatch: {
@@ -23842,6 +23891,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Profile"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_set_things_clean_story_profiles__pid__versions__vid__set_things_clean_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaceThingsClean"];
                 };
             };
             /** @description Validation Error */

@@ -135,7 +135,8 @@ def fit_landed(q: Any, job: Any, relief_asset_id: str, glb: Path) -> None:
         if p is None:
             raise ValueError("the place is gone")
         keep = p.version(vid).place_set
-        p = store.set_place_set(pid, vid, place_set_from_fit(f, source, relief_asset_id, keep))
+        from .place_things import restand
+        p = store.set_place_set(pid, vid, restand(q.catalogue, keep, place_set_from_fit(f, source, relief_asset_id, keep)))   # D180: the things stay
         job.result["set"] = {"kind": f["kind"], "sizes": f["sizes"], "assumed": f["assumed"], "pitch_deg": f["pitch_deg"], "scale": f["scale"]}
         job.log_tail.append(f"the set: a {f['kind']} {', '.join(f'{k} {v} m' for k, v in f['sizes'].items())}; the camera {h} m up, "
                             f"pitched {f['pitch_deg']}°; assumed: {', '.join(f['assumed']) or 'nothing'}")

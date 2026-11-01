@@ -132,7 +132,7 @@ export function ThingRows({ pid, vid, ps }: { pid: string; vid: string; ps: Plac
         return (
           <div key={t.id} className="place-thing" data-thing={t.id}>
             <img src={api.thumbUrl(t.card_asset_id, 256)} alt="" />
-            <span className="name">{t.name}<small> · {t.width_m.toFixed(1)} × {t.height_m.toFixed(1)} m</small></span>
+            <span className="name">{t.name}<small> · {t.width_m.toFixed(1)} × {t.height_m.toFixed(1)} m{t.cleaned ? ' · gone from the picture' : ''}</small></span>
             {t.mesh_asset_id ? <span className="hint">3D model ✓</span>
               : making ? <span className="hint">3D model: making…</span>
                 : mesh?.model_id ? <button type="button" className="quiet" title={`Its cut-out made a 3D model (${mesh.label ?? mesh.model_id}, about ${Math.round((mesh.seconds ?? 300) / 60)} min) — else Clay places its card`}
@@ -141,7 +141,7 @@ export function ThingRows({ pid, vid, ps }: { pid: string; vid: string; ps: Plac
           </div>
         )
       })}
-      <div className="verbs"><CommandButton id="cast.place.things" text /></div>
+      <div className="verbs"><CommandButton id="cast.place.things" text />{ps.things.some((t) => !t.cleaned) ? <CommandButton id="cast.place.things.clean" text /> : ps.things.length > 0 && <CommandButton id="cast.place.things.cleanAgain" text />}</div>
     </div>
   )
 }

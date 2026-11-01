@@ -15703,3 +15703,115 @@ the whole mask. One test.
 2. It stands out on the water, 10–80 m off, a plausible size: passed after the fix (17.3 m before, 6.4 m after).
 3. The model lands on the thing: passed.
 4. In Clay it shows where the painted ferry is, at about its size: passed.
+
+## 2026-11-01 08:52 — D180's clean built and accepted on the rig: the pier's set picture cleaned under the ferry, the faces baked from it again with their Fills kept; E57 and E58 on what takes a thing out
+
+The painted ferry left the pier's faces, so the ferry in Clay no longer stands over a still copy of itself. Getting there took two spikes:
+the first recipe painted the ferry back.
+
+**Built:**
+
+- **The clean** (`POST …/set/things/clean`, `place_things.clean_job`):
+  - a Fill on the set picture's document over the things not cleaned yet, their masks grown 14 px (E28b, as SC3's clean plate);
+  - submitted *staged* on the loop, as V21's Fill;
+  - its words an instruction naming the things (`clean_prompt`, from E58: "Remove the ferry: only what was behind it remains — …").
+- **Its landing** (`clean_landed`):
+  - the flattened document becomes the set's picture (lineage `clean-plate` ← the picture);
+  - the things are marked cleaned;
+  - the bake is due again (`keep_fills_key` holds the bake's key, `baked_key` is cleared);
+  - a clean whose things' pixels moved less than 8 of 255 painted them back (E58): it is not used, and the page says so.
+- **The bake after it:**
+  - Build bakes again by itself when the set is due (`setBuilder.bakeDue`);
+  - the bake route, for the same set and camera, keeps each filled face's Fill where it painted and wherever the new bake is unseen
+    (`keep_fill`, a `set-fill` image ← the new bake and the old Fill) — no Fill again;
+  - the set's Fill refuses while a clean runs.
+- **Clean again ▶:** with every thing cleaned, all of them are cleaned again on a new document of the picture before any clean, with
+  another seed (for a shape painted in a thing's place).
+- **Around it:**
+  - a thing's model is cut from the picture it was picked on, not the cleaned one;
+  - a set fitted again keeps the things picked on its picture, stood again under the new camera (`restand`); a thing picked on another
+    picture goes;
+  - the things' masks, cards and cut-outs belong to the place's version (W57's origin, homed now);
+  - the model and the clean are submitted on the loop: D180's model route had submitted from a worker thread, and the queue is not
+    thread-safe.
+- **Build:** *Clean the set picture under them ▶* (then *Clean the set picture again ▶*) under the things; a cleaned thing's row says
+  "gone from the picture"; the status line says "cleaning the set picture under its things…".
+
+**Rig run 1** (`engine/spikes/d180_rig3.py`, alone on the GPU, the copy `F:/loom2-projects/_d180`; outputs in `engine/spikes/out/d180`):
+
+- The clean was SC3's: a Fill with "the same place with the thing gone: …". It took 93 s.
+- The painted ferry went, but SAM 3's mask had left the mast out (2–3 px wide at 960 px). The mast stayed, and Klein painted a ghost
+  ferry round it in the fog (`clean_pair.jpg`).
+
+**Rig run 2** (`d180_rig4.py`):
+
+- A third click on the mast adds nothing to SAM 3's mask (the same box).
+- On that mask, Remove (Q17 / E8b: Klein ICM, the hole mid grey, a background-only prompt) painted a boathouse, and Fill a fog ship
+  (`clean_ab.jpg`).
+
+**E57** (`engine/spikes/e57_clean.py`, alone on the GPU; `engine/spikes/out/e57`) — the mask made whole by hand (SAM 3's plus the mast and
+its yard), four recipes:
+
+| Recipe | Result |
+| --- | --- |
+| Fill | fog and water, no vessel |
+| Remove | a boathouse with a mast |
+| Remove, pre-filled by content-aware fill | a roof smeared from the house beside it |
+| Quick remove | a roof smeared from the house beside it |
+
+So the mask must carry the thin parts, and Fill, not Remove, suits open fog (E8b's crates stood against a wall).
+
+**Built from E57 — `thin_parts`:**
+
+- The kept mask takes the pixels standing 25+ grey levels off their 9 px median that are connected to SAM 3's mask, within 0.4 of the
+  thing's height of it.
+- On the ferry that is the mast and its yard, in 0.7 s on the CPU.
+- The card, the model and the clean all take it.
+
+**Rig run 3** (`d180_rig5.py`, the product path with the thin parts and the Fill): the cleaned picture came back with the ferry in it — its
+pixels moved 1.6 of 255.
+
+**E58** (`engine/spikes/e58_clean_seeds.py`, three seeds a recipe; `engine/spikes/out/e58`):
+
+| Recipe | Seed 11 | Seed 22 | Seed 33 |
+| --- | --- | --- | --- |
+| Image first, the clean's prompt | fog | fog, a splash | fog |
+| Prompt first, the clean's prompt | fog | fog, a splash | a ship |
+| Prompt first, "the same ground, water … as around it" | the ferry, untouched (2.0) | the ferry (1.9) | the ferry (1.8) |
+
+Klein reads a Fill's words as an edit of the picture it is shown: asking for "the same" place is asking for no change.
+
+**E58b** (`--b`; `engine/spikes/out/e58b`):
+
+- Run 3's seed again with the clean's prompt: the ferry back (1.8) — the seed, not chance; two other seeds removed it.
+- "Remove the ferry: only what was behind it remains — the water, the ground and the background continued, the same light": removed on
+  that seed and two others. One leaves a faint low shape in the fog.
+
+**Built from E58:** the instruction naming the things, and the check that a clean did not paint them back.
+
+**Rig run 4, accepted** (`d180_rig5.py` again):
+
+- **Kept:** the ferry with its mast (11 519 px, 6.5 × 7.5 m).
+- **Cleaned** in 61 s: fog and the far quay's houses continue where it stood; nothing outside the clean's reach changed (mean 0.0)
+  (`clean5_pair.jpg`).
+- **In the app** (World › Harbour pier › Build, then Shots › Departure › Clay):
+  - Build baked the pier again by itself from the cleaned picture — "baked and filled";
+  - every face that was filled kept its Fill: 12 of 13, and the thirteenth (`backdrop_0`) never needed one;
+  - the ferry's row says "gone from the picture", with *Clean the set picture again ▶* in place of the clean;
+  - Clay's Departure shows the backdrop without the painted ferry, and the ferry's 3D model standing as an object to key.
+- **The ferry leaving** (a look for the author, on the copy): the ferry keyed in Departure's Clay, turning 50° and pulling 6 m out to the
+  right over the shot's 4 s (keys at 0, 32, 64, 96), recorded frame by frame through Departure's camera into a 4 s MP4: the backdrop
+  behind it is fog and the far quay, and the ferry slides out of frame.
+
+**Left:**
+
+- The ropes the ferry was moored by stay; they end at the clean's edge.
+- SC3's picture-set clean (`set_things`) still sends its "same place" prompt. E58's instruction is a candidate there; it is not measured.
+
+**Tests:**
+
+- Offline 805: the clean, its landing, the check, Clean again; the bake keeping the Fills; the thin parts; the words; a set fitted again.
+  One warning: the fake ComfyUI's websocket closing on shutdown in `test_lifecycle`, unrelated.
+- Vitest 638 + 3 skipped: the status line and the bake due again.
+- e2e 84/84 alone: the set scenario cleans on the fake engine, then bakes again by itself, the Fills kept, and offers Clean again.
+- Typecheck, build and lint clean (61 warnings, as before); settings audit 322 / 0; agent docs and model literals clean.

@@ -15533,3 +15533,27 @@ prop's view and a set picture stay 16:9, and the chip's tooltip says which.
 - Vitest 634 + 3 skipped: new are D176 and D177.
 - Typecheck, build and lint clean (61 warnings, as before); settings audit 322 / 0; agent docs and model literals clean.
 - e2e 84/84 alone.
+
+## 2026-11-01 05:37 — E55 (W22, CPU only): a fill matched to its seen part across the seam; W22 and W60 designed (proto01_UI2 14)
+
+**The question:** does matching a filled face's colours to its seen part close the tone step W22 saw (the street's projected road, a
+darker trapezoid against the filled cobbles)? `engine/spikes/e55_seam.py`, read-only on the walkthrough's project.
+
+**Found:**
+
+- **D172 already removes the road's case:** it refills a grazing ground whole, so the street's road, pavements and facades are now 100 %
+  filled, with no seam inside them.
+- **Faces filled in part keep a seam:**
+  - the street's end, 17 % filled: a step of 15.1 ΔE, 0.06 after the match;
+  - the pier's backdrop_1: 16.2 → 0.9;
+  - backdrop_11: 23.8 → 1.2.
+- **Pictures:** on the pier the filled sky takes the seen teal. On the street's end the seen band is mostly the letterbox bar (W65), so the
+  fill went darker — a picture W65 now refuses.
+
+**Designed (`.docs/proto01_UI2/14-w22-w60.md`), put to the author:**
+
+- **W22 → D179 proposed:** a face filled in part has its fill matched across the seam when its Fill lands.
+- **W60, three ways:**
+  - **A, proposed:** the thing cut out by SAM 3, its region filled, and the thing an image plane Clay can key;
+  - **B:** a 3D model, later, for a near thing;
+  - **C:** a card playing a clip.

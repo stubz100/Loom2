@@ -15557,3 +15557,43 @@ darker trapezoid against the filled cobbles)? `engine/spikes/e55_seam.py`, read-
   - **A, proposed:** the thing cut out by SAM 3, its region filled, and the thing an image plane Clay can key;
   - **B:** a 3D model, later, for a near thing;
   - **C:** a card playing a clip.
+
+## 2026-11-01 05:43 — The author's answers on W22 and W60: D179 (the seam match) and D180 (a moving set part: a 3D model, or a cut-out card)
+
+- **W22 → D179:** "Build D179". A face filled in part is matched to its seen part across the seam when its Fill lands.
+- **W60 → D180:** "We should try a 3D model, but cut-out card should also be an option". A thing of a built set is picked on the set
+  picture, cut out by SAM 3 and its place on the face filled. It then becomes a 3D model (image → 3D) or an image plane, either keyed in
+  Clay. E56 first measures whether a whole ferry comes out of image → 3D usable. The card needs no spike.
+
+## 2026-11-01 05:45 — E56 set up (D180): the pier's ferry through the app's image → 3D; the bars before the run
+
+`engine/spikes/e56_ferry.py`, alone on the GPU:
+
+- **The run:** the ferry cropped from the Last Ferry's pier set picture (read-only, 192×202 px), enlarged ×4 and ingested into E47's copy,
+  then made a 3D model by the app's own `image_to_mesh` (Pixal3D, its own BiRefNet cut-out).
+- **How it is judged:** drawn on the CPU from the front, the side and three-quarters.
+
+**Bars:** usable when
+
+1. the hull, the cabin and the mast read from the side and from three-quarters;
+2. its length is about 2–5 times its height (a ferry, not a slab);
+3. no large hole, and no wall of fog baked into it.
+
+The time is reported.
+
+## 2026-11-01 05:51 — E56's result: the pier's ferry comes out of image → 3D as a recognisable boat, short in length — D180's 3D path is worth building
+
+`engine/spikes/out/e56` (`sheet.jpg`: the crop and three views):
+
+- **The job:** Pixal3D (`pixal3d-int8`, 1024, 49 762 faces) in 328 s, from cold.
+
+**Against the bars set at 05:45:**
+
+1. **Hull, cabin and mast read from the side and three-quarters: passed.** The model has the hull, the white cabin with its windows, the
+   railings, the mast and its radar arm, and it reads as the same ferry from the front, the side and three-quarters.
+2. **Its length 2–5 times its height: failed.** The extent is 0.51 × 0.78 × 0.99 (width × height × length), so the length is about 1.3
+   times the height, the mast included. The set picture sees the ferry nearly bow-on, so the model's length is a guess, and a short one.
+3. **No large hole and no fog baked in: passed.** BiRefNet cut it clean of the fog; the underside is closed.
+
+**→ D180's 3D path:** worth building, for a far thing. Its length can be set by hand: a prop's height and a stage object's scale exist. The
+cut-out card stays the other choice.

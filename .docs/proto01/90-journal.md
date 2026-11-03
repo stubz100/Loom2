@@ -16095,3 +16095,39 @@ The three shells stay on the project (D183's intent); Nora's offsets were reset.
 
 **Owed / next:** the e2e not rerun after the surface-name fix (said above). Joints the rig lacks (a tail) stay a later item. Next E59 and
 E60 alone on the GPU, then C3 (propo02 05's order).
+
+## 2026-11-03 21:46 — E59 · the same shot three ways (propo02 04 §4.5): the walk's shot 1 as Layered, as one pass and from the animatic — the street or Nora, never both
+
+**The run** (alone on the GPU, my orchestrator on 8766 on the walk's project, every job through the product path, the three figures as their
+shells since C2c). Shot 1 (sht_9c8ebc78 on stg_387698e9, Camera 1 leading Nora backward down the street, 0–240 at 24 fps). *The still:*
+Image › From a stage on the lit clay's frame 0, *Clay reference* (Klein 9B, the passes rendered in the page, Nora's three pictures riding
+along as references 2–4, the man and the woman from their sheets), 80 s with the engine's start — a photographic late-afternoon street,
+all three figures whole, their shadows on the cobbles (Klein drew the man facing the camera with his newspaper, not walking away). *(a)
+Layered*, as the walk made it (clp_2709fd56, 241 frames): Nora alone on the plate — the passers-by absent (their mattes empty, P19), the
+road the plate's slabs, the black corners. *(b) one pass*: Performance › Stage clip, the depth sequence of the whole range (241 frames at
+1024×576) and LTX-2.3's IC-LoRA from the still — 391 s: the street lives (the passers-by, whole legs, shadows, the look), but Nora does not
+survive it — by the middle the figure walking at the camera is the old man, the woman wanders; the IC-LoRA follows the depth and forgets who
+is who over ten seconds. *(c) from the animatic*: Performance › Image to video on the Camera model (Fun-Camera, D156) with *Zoom In* for the
+push, from the same still — 120 s for 81 frames at 832×480: the first two seconds are the still alive (everyone kept, shadows, the look), then
+the camera's push overruns the people walking at it and the street empties; the move is Fun-Camera's preset, not the blocking's camera.
+
+**Scored** (FaceSim, Nora's hero against the best face in twelve frames; the walk's own bar: 0.19 for her layer): (a) mean 0.234, min 0.086
+— hers, weakly; (b) 0.055 — not her; (c) 0.076, a face in 7 of 12 frames — not her. **The four complaints:** the passers-by visible — (a) no,
+(b) yes, (c) yes until the camera passes them; the legs whole — (a) no, (b) yes, (c) yes; shadows — (a) no, (b) yes, (c) yes; the look — (a)
+the '90s game, (b) and (c) photographic. **The minutes:** (a) ≈ 23 min of GPU for 10 s (seven Wan Animate batches 11 min, three mattes,
+two face passes) plus the assembly; (b) 7.9 min for 10 s; (c) 3.3 min for 5 s.
+
+**What it says.** §4.5's rule was "the default for a street with extras is whichever keeps the extras and the shadows; Layered stays for a
+shot where a character's identity must be exact" — and the shot asks for both at once. One pass keeps the street and loses the hero;
+Layered keeps the hero and loses the street. The recommendation for Q5 and C5 is therefore not a default among the three but a **hybrid
+for C5**: the one-pass clip as the shot's living plate (the street, the extras, the shadows, the look, from the clay's depth), and the hero
+alone performed by Wan Animate on her references and matted over it — the Layered route for one layer, the character whose identity
+matters, on top of a plate that is already a film. Until the author answers Q5, Performance's method row keeps its three cards and no
+default is declared. Two things found on the way: (1) **the For chip does not follow *New version (copy)*** — v1 of shot 1 is final, the copy
+made v2 current, and *Animate ▶* still named v1 ("Shot v1 is final — its frame and clip are fixed") until the page was read again: a fault,
+small, for the W register (the chip is set when the shot is opened; the copy should re-set it); (2) a still made in Image › From a stage
+with no shot open in Shots is nobody's frame — it is found in the Bin under Shots, not Sketches. Left on the project: shot 1's v2 (open,
+E59's take on it), the still, the two clips; v1 untouched. Four pictures sent: the still and the three contact sheets.
+
+**Next:** Q5 is the author's; E60 (text-to-motion on the mannequin, Q7) needs weights the author has not approved yet (D17 licences first);
+C3 after.

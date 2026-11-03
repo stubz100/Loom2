@@ -163,6 +163,14 @@ entity as soon as the entity does.
   (today's Build › Body, Build › 3D model, Build › The set, moved whole) beside its own viewer — the bench, with the asset alone on a floor, a 1.75 m
   figure for scale, the turn test. Several tiles picked and *Line up* is the line-up. *Animations* holds the CC0 files, the local folder and *Mine*
   (the templates), searched as clips (F36). Lights and cameras hold the templates (Q10's presets, D157).
+- **The animation workshop (D182, the author after C2: "edit animations — not just use the downloaded ones — and create a library of my own").**
+  An animation is an asset of the author's. *Animations* shows every one as a tile — the author's library, the project's, the files' clips —
+  with a thumbnail and its length; a tile opens it on the **animation bench**: a figure on the floor playing it as its one block, with the
+  editor's chrome (C1) and the tracks (C2). Editing is what the tracks already do: corrections and keys over the block, its trims, speed,
+  loops, mirror and blends, a second clip dropped after it (a splice, blended in), the range cut; *Save* writes it back over the animation
+  (its revision), *Save as…* a new one. *New animation…* starts from a figure standing still over N frames. A downloaded clip is edited
+  through *Make it mine* — a copy on the mannequin rig, its source file and licence kept on the record (D17). E60's text-to-motion, if it
+  holds, is one more way in. No curve editor: a correction a frame is the grain; curves are a later item if the author wants them.
 - **Scenes** lists the scenes, each with the shots it serves and its length; *New scene* (empty, at a World place, a copy of another), *Duplicate*.
 
 **Build mode** is the editor, with ArtCraft's four rules (26 §2): the mode owns the chrome; the viewport carries the tools; one selected thing, one
@@ -343,11 +351,12 @@ Rough, author + AI, each wave ending usable; the spikes alone on the GPU.
 | **C3** | Record: the animatic (frame-stepped, lit, shadows), the still, the passes; the scene's length; the scene as the shot's record | 1 week |
 | **C4** | the shot page's ledger and the storyboard's play; the rows' editors in the centre; the Flow behind the toggle with the route from the order; P12, P13, P17, P23–P25 | 1 week |
 | **C6** | the Bin's kinds: the vocabulary in the orchestrator, the tree's third level with counts, sequences as one tile (the passes, the masters, the mattes), the kinds' verbs, the drawer | 1 week |
+| **C2b** | the animation workshop (D182): the Animations tiles with thumbnails, the animation bench, Save over and Save as…, New animation…, Make it mine with the source and licence kept, Rename / Duplicate / Remove | 1 week |
 | **E59** | the same shot three ways (§4.5) | 1 day on the rig |
 | **E60** | text-to-motion on the mannequin (Q7) | 2 days |
 | **C5** | Performance's default and fields after E59; the story motions after E60 | ½ week + |
 
-About eight weeks with the spikes. C0, C4 and C6 can go first in any order; C1–C3 are one piece of work on the scene editor.
+About nine weeks with the spikes. C0, C4 and C6 can go first in any order; C1–C3 are one piece of work on the scene editor; C2b follows C2.
 
 ## 8. The decision, as it would be recorded
 

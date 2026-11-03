@@ -15959,3 +15959,19 @@ run, the merge, the diff, where Apply lands, a dragged clip); agents check 9 / 0
 port 1420 is the author's dev server's. No orchestrator change: the stage record carries `correction` on a key as it carries the rest of the
 untyped keyframes. Driver lessons: a `page.goto` to the page's own URL and hash does not reload, so a changed module stays stale (reload);
 a row click toggles the selection off.
+
+## 2026-11-03 17:34 — the author's own animations: D182 recorded (an animation workshop in Clay's Library), the wave C2b added to the plan
+
+The author, after C2: "On top of the pose edit, I'd like to be able to edit animations — not just use the downloaded ones, but perhaps
+create a library of my own. Can you incorporate that into the plan?" Today an animation is one of: a downloaded clip (the CC0 starter
+files, the local folder), or a template saved from a block or a track's range (*Save as animation…*, the stage's own keys on the mannequin
+rig, the project's under *Mine*, *To my library* for every project — Q4); a template is applied as a block and never opened again. What
+the author asks for is the animation as an asset of their own: made from scratch, from a downloaded clip, or from a track; opened and
+edited; kept in a library. Recorded as **D182** (13) and written into propo02 04 §4.3 and §7 and 05's order as wave **C2b · the animation
+workshop**, before C3: Clay › Library › Animations shows every animation as a tile (the author's, the project's, the files' clips) with a
+thumbnail and its length; a tile opens it on the animation bench — a figure on the floor playing it as its one block, the editor's chrome
+and tracks as C1 and C2 made them; editing is C2's corrections and keys over it, the block's trims, speed, loops, mirror and blends, a
+second clip dropped after it (a splice, blended), the range cut; *Save* writes it back over the animation (its revision), *Save as…* a new
+one; *New animation…* starts from a figure standing still; a downloaded clip is edited through *Make it mine* (a copy, its source and
+licence kept on the record); E60's text-to-motion, if it holds, is one more way in. No curve editor in C2b — a correction a frame is the
+grain; curves are a later item if the author wants them. ≈ 1 week. Nothing built.

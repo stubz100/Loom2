@@ -27,6 +27,7 @@ The author, 2026-11-03, on [04](04-rethink.md) §6: "I'll take all your recommen
 | **C0** | the Clay layer on the rail; the Library (the body, model and set builders moved whole; the bench as the asset's viewer; the line-up); World = Make \| Edit; the readiness split | 1½ wk | the walk's three characters and the street, re-opened from the Library |
 | **C1** | the editor's chrome: Build \| Record, the outliner a list, the Inspector, the camera pill and look-through, the PiP; drop by raycast, *Stand here*, keys on rows (P7, P11) | 1½ wk | shot 1 blocked again without a number typed |
 | **C2** | the tracks: blocks kept as blocks, the key layer of corrections (P8), the path an object (P9), drop where dropped (P10), *Save as animation…* | 1½ wk | Nora's glance as a correction on the walk |
+| **C2b** | the animation workshop (D182, the author after C2): the Animations tiles with thumbnails, the animation bench (a figure playing the animation as its one block), corrections, keys, block ops and splices as the edit, Save over / Save as…, New animation…, Make it mine from a downloaded clip (its source and licence kept), Rename / Duplicate / Remove | 1 wk | an animation made from Nora's walk with the glance, edited, saved to the library, applied to the man |
 | **E59** | the same shot three ways | 1 day | alone on the GPU, judged on the author's four complaints |
 | **E60** | text-to-motion on the mannequin | 2 days | "walks on, looks back over her shoulder" |
 | **C3** | Record: the animatic, the still, the passes; the scene's length; the scene as the shot's record | 1 wk | the animatic of shot 1 in the storyboard's play |
@@ -34,5 +35,5 @@ The author, 2026-11-03, on [04](04-rethink.md) §6: "I'll take all your recommen
 | **C6** | the Bin's kinds: the vocabulary, the tree's third level with counts, sequences as one tile, the kinds' verbs, the drawer | 1 wk | the street's home by kind; shot 1's passes in the Bin |
 | **C5** | Performance's default and fields after E59; the story motions after E60 | ½ wk + | — |
 
-About eight weeks with the spikes. Each wave ends usable, with its rig check on propo02's project (`F:/loom2-projects/propo02-followed`), its
-screenshots sent, and its journal entry. **Status: C0 (journal 15:13), C1 (16:27) and C2 (the tracks) built 2026-11-03; the e2e ports owed a run while port 1420 is the author's dev server's; E59 / E60 or C3 next.**
+About nine weeks with the spikes. Each wave ends usable, with its rig check on propo02's project (`F:/loom2-projects/propo02-followed`), its
+screenshots sent, and its journal entry. **Status: C0 (journal 15:13), C1 (16:27) and C2 (the tracks) built 2026-11-03; the e2e ports owed a run while port 1420 is the author's dev server's; D182 (the animation workshop, C2b) recorded the same evening and next.**

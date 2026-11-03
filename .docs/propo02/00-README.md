@@ -1,6 +1,6 @@
 # propo02 · A scene from scratch, and the record of every control it took
 
-Started 2026-11-03 at `d7b48c2`. **Status: built, 07:57–09:38; the record is complete; the author's look, the rethink [04](04-rethink.md) and its answers [05](05-answers.md) → D181 the same day; C0 (the Clay layer and its Library), C1 (the editor's chrome) C2 (the tracks: corrections, the path as an object, a clip where it is dropped) and C2b (the animation workshop, D182) built the same day; the spikes E59 and E60, then C3 next.**
+Started 2026-11-03 at `d7b48c2`. **Status: built, 07:57–09:38; the record is complete; the author's look, the rethink [04](04-rethink.md) and its answers [05](05-answers.md) → D181 the same day; C0 (the Clay layer and its Library), C1 (the editor's chrome) C2 (the tracks: corrections, the path as an object, a clip where it is dropped) C2b (the animation workshop, D182) and C2c (shells only, the skeleton placed by hand, D183) built the same day; the spikes E59 and E60, then C3 next.**
 Nothing in the code was changed; nothing is committed.
 
 **What came out:** two shots, 14 s, `F:/loom2-projects/propo02-followed/timelines/tl_2bdc101c/followed/followed.mp4` — Nora walking the cobbled

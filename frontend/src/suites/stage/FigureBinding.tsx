@@ -2,7 +2,8 @@
 // pinned version beside) and the Outliner's tag (who the figure is). The right-click "Bind to a character ▸" is stageCommands.ts bindItems.
 import { useEffect } from 'react'
 import { Help } from '../../frame/Help'
-import { api } from '../../api/client'
+import { api, http, unwrap } from '../../api/client'
+import { useSession } from '../../store/session'
 import type { Profile, StageObject } from '../../api/types'
 import { CommandButton, CommandRow } from '../../frame/CommandButton'
 import { showMenu } from '../../frame/ContextMenu'
@@ -53,6 +54,7 @@ export function FigureCharacter({ o }: { o: StageObject }) {
       {p && <div className="kv"><span>body</span><span className="hint">{o.body
         ? `from Cast — ${o.body.height_m.toFixed(2)} m · ${o.body.build}${o.body.attachments.length ? ` · ${o.body.attachments.map((a) => a.kind).join(', ')}` : ''}`
         : 'the default dummy (no body on the Cast sheet)'}</span></div>}{/* CA0: the sheet's body shapes this figure */}
+      {p && <ShellLine o={o} p={p} />}{/* D183 (C2c): a character in Clay is its shell */}
       {p && <div className="verbs"><CommandRow ids={['stage.figure.unbind', 'stage.figure.openInCast', 'stage.figure.skeleton', 'stage.object.freeCopy']} /></div>}
       {p && <div className="verbs" aria-label="skeleton keys"><CommandRow ids={['stage.skeleton.hold', 'stage.skeleton.cast']} /></div>}{/* CS3: a change of body in a shot is a key */}
       {!p && <div className="verbs"><CommandButton id="stage.object.prototype" text /></div>}{/* CW3: a free figure into an idea */}
@@ -60,6 +62,26 @@ export function FigureCharacter({ o }: { o: StageObject }) {
   )
 }
 const NONE = '__none'
+
+const ON_THE_WAY = ['queued', 'running', 'staged'] as string[]
+/** D183 (C2c): the figure's shell — here, on its way (its job queued or running), or owed with the way to make it; a figure without
+ *  it is a ghost in the viewport until it lands. */
+function ShellLine({ o, p }: { o: StageObject; p: Profile }) {
+  const v = p.versions.find((x) => x.id === (o.version ?? p.current)) ?? p.versions[0]
+  const making = useSession((s) => Object.values(s.jobs).some((j) => j.origin?.surface === 'character_shell' && j.origin?.ref === p.id
+    && ((j.origin?.payload as { version?: string } | null | undefined)?.version ?? null) === (v?.id ?? null) && ON_THE_WAY.includes(j.status)))
+  if (!v) return null
+  const why = !v.anim_ref_asset_id ? 'needs its A-pose picture — in World' : v.anim_ref_note === 'arms_close' ? 'the A-pose holds its arms close — draw it again in World'
+    : !v.body_fit_from ? 'fit the body first — Clay › Library › Figures' : null
+  const make = async () => {
+    try { await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/shell', { params: { path: { pid: p.id, vid: v.id } } })); useSession.getState().toast(`${p.name}'s shell queued — about four minutes`, 'info') }
+    catch (e) { useSession.getState().toast(`Shell: ${(e as { detail?: string }).detail ?? e}`, 'error') }
+  }
+  return <div className="kv" data-testid="figure-shell"><span>shell</span>{o.shadow_proxy ? <span className="hint">its shell — the figure is drawn in it</span>
+    : making ? <span className="hint">on its way — a ghost until it lands</span>
+    : why ? <span className="hint">owed: {why}</span>
+    : <button type="button" className="quiet" data-verb="make-shell" title="Pixal3D makes the shell from the A-pose picture, about four minutes in the background; the figure wears it when it lands" onClick={() => void make()}>Make the shell ▶</button>}</div>
+}
 
 // ---- D110 (PS3): props from Story · Cast — a mesh bound to a Cast prop, its version's 3D model following ----------------------------
 /** The picture of a prop version: its model's view, else its hero. */

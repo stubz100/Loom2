@@ -95,7 +95,8 @@ export function SceneTab() {
   const castFigures = profiles.filter((p) => p.cls === 'character').map((p) => { const v = p.versions.find((x) => x.id === p.current)
     return { id: `char:${p.id}`, label: p.name, icon: <UserRound size={18} />, img: v?.hero_asset_id ? api.thumbUrl(v.hero_asset_id, 256) : null,
       hint: current.objects.some((o) => o.kind === 'mannequin' && o.profile_id === p.id) ? 'on the stage — a click selects it' : `${p.name}'s figure, bound: its body${v?.shell_asset_id ? ' and shell' : ''} follow Cast` } })
-  const figures = [...castFigures, ...Object.entries(MANNEQUIN_PRESETS).map(([p, m]) => ({ id: p, label: m.label, icon: <User size={18} />, hint: 'a mannequin, free' }))]
+  const dummies = Object.entries(MANNEQUIN_PRESETS).map(([p, m]) => ({ id: p, label: m.label, icon: <User size={18} />, hint: "a mannequin, free — the animation bench's, for an animation that is nobody's" }))
+  const figures = current.purpose === 'animation' ? dummies : castFigures           // D183 (C2c): a scene holds characters, as their shells; the dummy is the animation bench's
   // CW7 (02 §9): Cast's places with a set first — a click adds the place's set, bound (it follows Cast), then the presets
   const castSets = profiles.filter((p) => p.cls === 'place').flatMap((p) => { const v = p.versions.find((x) => x.id === p.current); const ps = v?.place_set
     if (!ps) return []
@@ -114,7 +115,7 @@ export function SceneTab() {
   const groups: { key: string; label: string; of: (o: StageObject) => boolean; add: React.ReactNode; help?: string }[] = [
     { key: 'figures', label: 'Figures', of: (o) => o.kind === 'mannequin',
       add: <PresetPanel label="figure presets" items={figures} showText drag={drag('figures')} onPick={(id) => (id.startsWith('char:') ? st().placeCharacter(id.slice(5), centre(), yawAt(centre())) : runCommand(`stage.add.mannequin.${id}`))}
-        title="A figure on the floor in the camera's frame, facing it — a Cast character's (bound, it follows Cast) or a mannequin to pose; drag a tile onto the viewport to put it where the mouse points" /> },
+        title={current.purpose === 'animation' ? 'A mannequin on the floor to play the animation' : "A character's figure on the floor in the camera's frame, facing it — bound: its body and shell follow the Library (D183); drag a tile onto the viewport to put it where the mouse points"} /> },
     { key: 'sets', label: 'Sets', of: (o) => o.kind === 'set',
       add: <><PresetPanel label="set presets" items={sets} showText onPick={(id) => (id.startsWith('place:') ? void st().placePlace(id.slice(6)) : runCommand(`stage.add.set.${id}`))}
         title="A set: a Cast place's (bound, it follows Cast) or architecture only — room, street, deck, empty (D108)" />
@@ -1168,7 +1169,7 @@ function Viewport() {
       {current && pipRect && view === 'free' && !rec && <button type="button" className="pip-frame" style={{ left: pipRect.x, top: pipRect.y, width: pipRect.w, height: pipRect.h }}
         onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()} onClick={() => runCommand('stage.view.camera')}
         title="The active camera's picture — a click looks through it"><span>{shotCam?.name} · {shotCam?.focal_mm} mm</span></button>}
-      {current && !current.objects.length && <div className="stage-empty"><div>Empty stage — add a set and a figure from the Scene section, or drop a picture from the Bin.<div className="quick-cards"><CommandButton id="stage.add.set.room" text /><CommandButton id="stage.add.mannequin.adult" text /></div></div></div>}
+      {current && !current.objects.length && <div className="stage-empty"><div>Empty stage — add a set and a character from the Scene section, or drop a picture from the Bin.<div className="quick-cards"><CommandButton id="stage.add.set.room" text />{current.purpose === 'animation' && <CommandButton id="stage.add.mannequin.adult" text />}</div></div></div>}
     </div>
   )
 }

@@ -123,6 +123,9 @@ def test_the_routes_and_motion_import(tmp_path: Path):
         assert cl.put(f"/stages/animations/library/{aid}", json=over, headers=H).json()["library"][0]["name"] == "Wave twice"
         assert cl.put("/stages/animations/library/anm_x", json=over, headers=H).status_code == 422          # the id is the path's
         assert cl.put(f"/stages/animations/library/{aid}", json={**over, "keys": [{"frame": 90, "transform": {}}]}, headers=H).status_code == 422
+        # D183 (C2c): the character the animation is tried on, kept on the record
+        assert cl.put(f"/stages/animations/library/{aid}", json={**over, "try_on": "prf_x"}, headers=H).json()["library"][0]["try_on"] == "prf_x"
+        assert cl.get("/stages/animations", headers=H).json()["library"][0]["try_on"] == "prf_x"
         import hashlib
         import io as _io
         from PIL import Image

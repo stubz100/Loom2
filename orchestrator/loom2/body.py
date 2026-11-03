@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 BodyBuild = Literal["slim", "average", "broad", "heavy"]
 AttachmentKind = Literal["tail", "horns", "ears", "wings", "antennae", "hat", "backpack", "other"]
@@ -16,6 +16,8 @@ BodyJoint = Literal["root", "spine", "head", "r_shoulder", "l_shoulder", "r_elbo
 FigureKind = Literal["female", "male"]
 HandPresetName = Literal["open", "relaxed", "fist", "point", "grip", "pinch"]
 ELBOW_AT = 29 / 56               # the upper arm's share of the arm (builders.ts: 0.29 + 0.27 at ×1)
+JOINT_KEYS = frozenset(("root", "spine", "neck", "head", "r_shoulder", "r_elbow", "l_shoulder", "l_elbow", "r_hip", "r_knee", "l_hip", "l_knee",
+                        "r_wrist", "l_wrist", "r_ankle", "l_ankle"))   # D183: the twelve joints and the four ends a hand can place on the shell
 KNEE_AT = 44 / 87                # the thigh's share of the leg (0.44 + 0.43)
 
 
@@ -63,6 +65,24 @@ class Body(BaseModel):
     feet_out: float = Field(0.0, ge=-20.0, le=45.0)       # CS2: the feet turned out at rest (degrees)
     locks: list[str] = Field(default_factory=list, max_length=16)   # CS2: the factors *Fit again* leaves as the author set them
     attachments: list[BodyAttachment] = Field(default_factory=list, max_length=6)
+    joint_offsets: dict[str, list[float]] = Field(default_factory=dict)   # D183 (C2c): a joint placed on the shell by hand — metres from where
+    #                                                                       the fitted body puts it, in its parent's frame (builders.ts applies it;
+    #                                                                       the bench writes it); the fit leaves them, *Reset* clears them
+
+    @field_validator("joint_offsets")
+    @classmethod
+    def _offsets(cls, v: dict[str, list[float]]) -> dict[str, list[float]]:
+        if len(v) > 16:
+            raise ValueError("at most 16 joints placed")
+        out: dict[str, list[float]] = {}
+        for k, xyz in v.items():
+            if k not in JOINT_KEYS:
+                raise ValueError(f"not a joint of the figure: {k!r}")
+            if len(xyz) != 3 or any(not isinstance(x, (int, float)) or abs(x) > 0.6 for x in xyz):
+                raise ValueError(f"{k}: three offsets of at most 0.6 m")
+            if any(abs(x) > 1e-6 for x in xyz):                                 # a zero offset is no offset
+                out[k] = [round(float(x), 4) for x in xyz]
+        return out
 
 
 def rebase_body(raw: dict[str, Any]) -> dict[str, Any]:

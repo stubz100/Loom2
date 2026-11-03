@@ -30,7 +30,30 @@ const rad = THREE.MathUtils.degToRad
 function limb(parent: THREE.Object3D, length: number, radius: number, mat: THREE.Material): void {
   const m = new THREE.Mesh(new THREE.CapsuleGeometry(radius, Math.max(0.01, length - 2 * radius), 6, 12), mat)
   m.position.y = -length / 2
+  m.userData.limb = length
   parent.add(m)
+}
+/** D183 (C2c): the limb drawn under `parent` re-aimed at `child` once a hand has placed either — along their line, as long as it. */
+function aimLimb(parent: THREE.Object3D, child: THREE.Object3D): void {
+  const m = parent.children.find((c) => (c as THREE.Mesh).isMesh && c.userData.limb) as THREE.Mesh | undefined
+  if (!m) return
+  const to = child.position.clone(), len = to.length()
+  if (len < 1e-6) return
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), to.clone().normalize())
+  m.position.copy(to).multiplyScalar(0.5)
+  m.scale.y = len / (m.userData.limb as number)
+}
+/** D183 (C2c): the joints and ends a hand placed on the shell — each an offset in its parent's frame (body.joint_offsets); the limbs
+ *  between follow (their lean and length), and the lengths the binder and the retargeter read become the placed ones (the sides' mean). */
+export function placeJoints(J: Record<Joint, THREE.Object3D>, ends: { rW: THREE.Object3D; lW: THREE.Object3D; rA: THREE.Object3D; lA: THREE.Object3D }, limbs: Limbs, off: Record<string, number[]> | undefined): void {
+  if (!off || !Object.keys(off).length) return
+  const shift = (o: THREE.Object3D, k: string) => { const d = off[k]; if (d && d.length === 3) o.position.add(new THREE.Vector3(d[0], d[1], d[2])) }
+  for (const j of JOINTS) if (j !== 'root') shift(J[j], j)
+  shift(ends.rW, 'r_wrist'); shift(ends.lW, 'l_wrist'); shift(ends.rA, 'r_ankle'); shift(ends.lA, 'l_ankle')
+  const len = (o: THREE.Object3D) => o.position.length()
+  limbs.upper_arm = (len(J.r_elbow) + len(J.l_elbow)) / 2; limbs.forearm = (len(ends.rW) + len(ends.lW)) / 2
+  limbs.thigh = (len(J.r_knee) + len(J.l_knee)) / 2; limbs.shin = (len(ends.rA) + len(ends.lA)) / 2
+  for (const [p, c] of [[J.r_shoulder, J.r_elbow], [J.l_shoulder, J.l_elbow], [J.r_elbow, ends.rW], [J.l_elbow, ends.lW], [J.r_hip, J.r_knee], [J.l_hip, J.l_knee], [J.r_knee, ends.rA], [J.l_knee, ends.lA]] as const) aimLimb(p, c)
 }
 
 /** Set a mannequin's joint rotations (degrees; joints a pose leaves out go back to rest). The root's height follows the figure's legs
@@ -91,6 +114,7 @@ export function mannequin(mat: THREE.Material, pose: Pose = POSES.stand, joints?
     return [marker(J[hipJ], 0, 0, 0), marker(J[knee], 0, 0, 0), marker(J[knee], 0, -limbs.shin, 0)]
   }
   const [rH, rK, rA] = leg('r_hip', 'r_knee', -1), [lH, lK, lA] = leg('l_hip', 'l_knee', 1)
+  placeJoints(J, { rW, lW, rA, lA }, limbs, b?.joint_offsets)                 // D183 (C2c): the joints a hand placed on the shell
   if (b) for (const a of b.attachments) attach(J, a, mat, x)
   applyPose(J, pose, joints, ground)
   let top: THREE.Object3D = root

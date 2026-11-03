@@ -900,12 +900,18 @@ class KeypointsFinisher:
         job.result["canvas"] = [frame.get("canvas_width"), frame.get("canvas_height")]
         job.log_tail.append(f"{len(people)} {'person' if len(people) == 1 else 'people'} found")
         if job.origin and job.origin.surface == BODY_FIT_SURFACE:
-            await asyncio.to_thread(_body_fit_result, q, job, recipe, people)
+            p = await asyncio.to_thread(_body_fit_result, q, job, recipe, people)
+            from ..story import shell_after_fit                                            # D183 (C2c): the shell follows the fit by itself
+            try:
+                if shell_after_fit(q, p, str((job.origin.payload or {}).get("version") or ""), getattr(job, "variant", None)):
+                    job.log_tail.append("the shell queued (D183)")
+            except Exception as e:  # noqa: BLE001 — the fit landed; a shell not queued is said, not a failure
+                job.log_tail.append(f"the shell was not queued: {e}")
         if job.origin and job.origin.surface == IDEA_CLAY_SURFACE:                             # CW1: an idea variant's fit → its shell
             await ideas.start_next(q, job, await asyncio.to_thread(ideas.clay_fit_landed, q, job, recipe, people))   # V22: submitted on the loop
 
 
-def _body_fit_result(q: JobQueue, job: JobRecord, recipe: Keypoints, people: list[dict]) -> None:
+def _body_fit_result(q: JobQueue, job: JobRecord, recipe: Keypoints, people: list[dict]) -> Any:
     """CA1b: the version's body fitted to the reference's proportions (the height, build, head, feet and attachments stay). A reference that
     shows no whole figure fails the job, so the author sees why."""
     from ..body import body_points, figures_in, fit_body, reference_ratios, seed_body, stance_note
@@ -941,6 +947,7 @@ def _body_fit_result(q: JobQueue, job: JobRecord, recipe: Keypoints, people: lis
     job.result["fit"] = report
     job.log_tail.append("body fitted: " + ", ".join(f"{k} {body.model_dump()[k]}" for k in ("neck", "torso", "shoulders", "arms", "legs", "hands")))
     q.hub.broadcast("story.changed", {"kind": "profile", "id": p.id, "revision": p.revision})
+    return p
 
 
 class MatteFinisher:

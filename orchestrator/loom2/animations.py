@@ -39,6 +39,7 @@ class AnimationTemplate(BaseModel):
     keys: list[dict[str, Any]] = Field(default_factory=list)   # ObjectKey[] (anim.ts): frame, ease, transform, pose
     source: AnimationFrom = Field(default_factory=AnimationFrom)
     thumb_asset_id: str | None = None             # D182 (C2b): its first frame on the mannequin, rendered by the client on the animation bench
+    try_on: str | None = None                      # D183 (C2c): the character (a profile id) whose shell the bench figure wears for it; None: the dummy
     created_at: str = Field(default_factory=utc_now)
 
 

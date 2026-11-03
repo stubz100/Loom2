@@ -97,6 +97,11 @@ export class StageEngine {
   private w = 1
   private h = 1
   private clayMat = clay()
+  /** D183 (C2c): a character's figure before its shell lands — the mannequin in x-ray, grey ("shell on its way"); the viewport only: the
+   *  passes override or swap every material, and the shell takes over when it arrives (dressShell gives the hands clay back). */
+  private ghostMat = new THREE.MeshLambertMaterial({ color: 0x9a9ca3, transparent: true, opacity: 0.38, depthWrite: false })
+  /** D183: a figure bound to a character whose shell is not here yet. */
+  private ghost(o: StageObject): boolean { return !!o.profile_id && !o.shadow_proxy && o.kind === 'mannequin' }
   private setMat = setMaterial()
   private texLoader = new THREE.TextureLoader()
   private disposed = false
@@ -195,7 +200,7 @@ export class StageEngine {
   }
   /** The materials every object shares (V78: kept across rebuilds; freed with the engine). */
   private sharedMaterials(): Set<THREE.Material> {
-    return new Set([this.clayMat, this.pickerMat, this.ikMat, this.pinMat, this.setMat, this.camMat, this.camActiveMat, this.catcherMat, this.pathMat, this.whiteMat, this.aimMat].filter(Boolean) as THREE.Material[])
+    return new Set([this.clayMat, this.ghostMat, this.pickerMat, this.ikMat, this.pinMat, this.setMat, this.camMat, this.camActiveMat, this.catcherMat, this.pathMat, this.whiteMat, this.aimMat].filter(Boolean) as THREE.Material[])
   }
   /** V78: an entry leaves the scene with its GPU resources (a rebuild, a removal). */
   private disposeEntry(e: Entry): void {
@@ -665,7 +670,7 @@ export class StageEngine {
     let figure: Mannequin | undefined
     let pickers: THREE.Object3D[] | undefined
     if (o.kind === 'mannequin') {
-      figure = mannequin(this.clayMat, POSES[o.pose?.preset ?? 'stand'] ?? POSES.stand, o.pose?.joints, (o as { body?: Body | null }).body, o.pose?.ground ?? 0)   // CA0: the bound character's body
+      figure = mannequin(this.ghost(o) ? this.ghostMat : this.clayMat, POSES[o.pose?.preset ?? 'stand'] ?? POSES.stand, o.pose?.joints, (o as { body?: Body | null }).body, o.pose?.ground ?? 0)   // CA0: the bound character's body; D183: a ghost until its shell
       body = figure.root
       // ST2: a picker sphere on every joint (FK) and a handle at each hand and foot (IK), hidden until pose mode
       pickers = []
@@ -856,13 +861,13 @@ export class StageEngine {
     e.detailed?.wholebody?.feet.forEach((m, i) => list.push({ m, ray: FEET_LANDMARKS[i] }))
     const d = e.detailed
     e.unmark = e.proxy.landmark(list, e.doc.pose ?? null, d ? () => d.follow(fig.joints, e.doc.pose?.extra) : undefined)
-    if (d) { d.handsOnly(true); d.object.traverse((c) => { const m = c as THREE.Mesh; if (m.isMesh) m.castShadow = true }) }
+    if (d) { d.handsOnly(true); d.object.traverse((c) => { const m = c as THREE.Mesh; if (m.isMesh) { m.castShadow = true; if (m.material === this.ghostMat) m.material = this.clayMat } }) }   // D183: the shell is here — the hands in clay
   }
   /** CA1: the Detailed level — the starter set's mannequin, loaded once and cloned, follows the figure's joints; the Simple shapes hide
    *  (the joints, pickers and markers stay: they drive the pose and carry the pose pass). Until it loads, or without it, the figure is Simple. */
   private attachDetailed(e: Entry, kind: 'male' | 'female'): void {
     const id = e.doc.id
-    this.track(import('./motion/mannequins').then((m) => m.mannequinClone(kind, this.clayMat)).then(({ root, rig }) => {
+    this.track(import('./motion/mannequins').then((m) => m.mannequinClone(kind, this.ghost(e.doc) ? this.ghostMat : this.clayMat)).then(({ root, rig }) => {   // D183: a ghost until its shell
       if (this.disposed || this.entries.get(id) !== e || !e.figure) return
       e.holder.updateMatrixWorld(true)
       const b = e.doc.body

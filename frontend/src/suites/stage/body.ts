@@ -11,12 +11,19 @@ export interface Body {
   head_forward: number; shoulder_drop: number; feet_out: number             // CS2: the head carried forward (°), the shoulders' drop (×), the feet out (°)
   locks: string[]                                                          // CS2: the factors *Fit again* leaves as the author set them
   attachments: { kind: 'tail' | 'horns' | 'ears' | 'wings' | 'antennae' | 'hat' | 'backpack' | 'other'; joint: string | null; size: number; note: string }[]
+  joint_offsets?: Record<string, number[]>                                 // D183 (C2c): a joint placed on the shell by hand — from where the fitted body
+  //                                                                          puts it, in its parent's frame, in the figure's own units (the 1.75 m adult's)
 }
+/** D183: the four ends a hand can place besides the twelve joints (the wrist and ankle markers). */
+export const ENDS = ['r_wrist', 'l_wrist', 'r_ankle', 'l_ankle'] as const
+export type End = (typeof ENDS)[number]
+/** D183: how many joints and ends a body has placed by hand. */
+export const placedCount = (b: Body | null | undefined): number => Object.keys(b?.joint_offsets ?? {}).length
 /** S6: the upper arm's and the thigh's shares of their limbs at ×1 (0.29 + 0.27, 0.44 + 0.43): body.py ELBOW_AT, KNEE_AT. */
 export const ELBOW_AT = 29 / 56, KNEE_AT = 44 / 87
 export const DEFAULT_BODY: Body = { height_m: 1.75, build: 'average', head: 1, torso: 1, shoulders: 1, arms: 1, legs: 1, neck: 1, hands: 1, feet: 1,
   hips: 1, elbow: ELBOW_AT, knee: KNEE_AT, figure: 'female', hand_rest: { preset: 'relaxed', curl: 1, spread: 0, thumb: 0 }, head_forward: 0, shoulder_drop: 1,
-  feet_out: 0, locks: [], attachments: [] }
+  feet_out: 0, locks: [], attachments: [], joint_offsets: {} }
 export const BUILD_WIDTH: Record<Body['build'], number> = { slim: 0.85, average: 1, broad: 1.15, heavy: 1.3 }
 export type Limbs = { upper_arm: number; forearm: number; thigh: number; shin: number }
 

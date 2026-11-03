@@ -5,7 +5,7 @@
 // editor on a scene (a stage), opened from a shot card with the way back. World = Make | Edit: its pictures and their roles.
 import { Boxes, Clapperboard } from 'lucide-react'
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { api } from '../../api/client'
+import { api, http, unwrap } from '../../api/client'
 import type { Profile } from '../../api/types'
 import { CommandButton, MenuButton } from '../../frame/CommandButton'
 import { command, isEnabled, runCommand, type MenuItem } from '../../frame/commands'
@@ -104,11 +104,12 @@ function LibraryHeader() {
     <div className="w-head" data-testid="clay-library-header">
       <div className="c-kinds" role="group" aria-label="the kind">{KINDS.map((k) => <button key={k.id} className={kind === k.id ? 'active' : ''} aria-pressed={kind === k.id} onClick={() => useClay.getState().setKind(k.id)}>{k.label}</button>)}</div>
       {anim && view !== 'animation' && <div className="w-head-row"><span className="w-val">the author's animations, the project's, the downloaded clips</span><span className="spacer" /><CommandButton id="clay.anim.new" text /></div>}
-      {anim && view === 'animation' && animation && <div className="w-head-row c-anim-head" data-testid="clay-animation-header"><AnimationName animation={animation} /><span className="spacer" />
+      {anim && view === 'animation' && animation && <div className="w-head-row c-anim-head" data-testid="clay-animation-header"><AnimationName animation={animation} /><TryOn key={animation.kind === 'template' ? animation.id : `${animation.file}:${animation.clip}`} /><span className="spacer" />
         <CommandButton id="clay.anim.save" text /><CommandButton id="clay.anim.saveAs" text /><CommandButton id="clay.anim.mine" text /><CommandButton id="clay.anim.back" text label="Back" /></div>}
       {cls && <div className="w-head-row">
         <MenuButton label={p ? p.name : `Pick a ${KINDS.find((k) => k.id === kind)!.one}`} items={entities} text />
         {p && v && <MenuButton label={`${v.id}${v.state === 'final' ? ' · final' : ''}`} items={versions} text />}
+        {kind === 'figure' && <MakeShells profiles={profiles} />}
         <span className="spacer" />
         {view === 'bench' ? <CommandButton id="clay.bench.close" text /> : <><CommandButton id="clay.bench.open" text /><CommandButton id="clay.lineup" text /></>}
       </div>}
@@ -122,6 +123,40 @@ function LibraryHeader() {
 }
 
 /** D182 (C2b): the animation on the bench, by name (a template's name follows a rename). */
+const ON_THE_WAY = ['queued', 'running', 'staged'] as string[]
+/** D183 (C2c): the characters whose shell is owed — a fitted body on an A-pose, no shell yet, none on its way — made in one go, each a
+ *  Pixal3D job after the other; a scene's figure wears its shell when it lands. */
+function MakeShells({ profiles }: { profiles: Profile[] }) {
+  const making = useSession((s) => Object.values(s.jobs).filter((j) => j.origin?.surface === 'character_shell' && ON_THE_WAY.includes(j.status))
+    .map((j) => `${j.origin!.ref}/${(j.origin!.payload as { version?: string } | null)?.version ?? ''}`).join(' '))
+  const owed = profiles.filter((x) => x.cls === 'character').flatMap((x) => x.versions.filter((y) => !y.shell_asset_id && y.body_fit_from && y.anim_ref_asset_id && y.anim_ref_note !== 'arms_close').map((y) => ({ p: x, v: y })))
+    .filter(({ p, v }) => !making.split(' ').includes(`${p.id}/${v.id}`))
+  if (!owed.length) return null
+  const go = async () => {
+    let n = 0
+    for (const { p, v } of owed) {
+      try { await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/shell', { params: { path: { pid: p.id, vid: v.id } } })); n++ }
+      catch (e) { useSession.getState().toast(`${p.name}'s shell: ${(e as { detail?: string }).detail ?? e}`, 'error') }
+    }
+    if (n) useSession.getState().toast(`${n} shell${n === 1 ? '' : 's'} queued — about four minutes each, one after another`, 'info')
+  }
+  return <button type="button" className="quiet" data-testid="make-shells" onClick={() => void go()}
+    title={`${owed.map((x) => x.p.name).join(', ')} — Pixal3D makes each shell from its A-pose picture in the background; a scene's figure wears it when it lands (D183)`}>Make the shells ({owed.length})</button>
+}
+
+/** D183 (C2c): the bench figure wears a character's shell for this animation — or the dummy (an animation is nobody's). */
+function TryOn() {
+  const profiles = useStory((s) => s.profiles)
+  const [who, setWho] = useState<string | null>(null)
+  useEffect(() => { let live = true; void import('../../suites/stage/animationBench').then((m) => { if (live) setWho(m.tryOnWho()) }); return () => { live = false } }, [])
+  const chars = profiles.filter((p) => p.cls === 'character')
+  const pick = (id: string | null) => void import('../../suites/stage/animationBench').then((m) => m.tryOn(id)).then(() => setWho(id))
+  const items = (): MenuItem[] => [{ label: 'the dummy', checked: !who, run: () => pick(null) },
+    ...chars.map((p) => ({ label: `${p.name}${p.versions.find((v) => v.id === p.current)?.shell_asset_id ? '' : ' · no shell yet'}`, checked: who === p.id, run: () => pick(p.id) }))]
+  const name = who ? chars.find((p) => p.id === who)?.name ?? '…' : 'the dummy'
+  return <MenuButton label={`Try it on · ${name}`} items={items} text />
+}
+
 function AnimationName({ animation }: { animation: import('../../suites/stage/animationBench').AnimRef }) {
   const [name, setName] = useState<string>(animation.kind === 'clip' ? animation.clip : '…')
   useEffect(() => { let live = true; void import('../../suites/stage/animationBench').then((m) => m.nameOf(animation)).then((n) => { if (live) setName(n) }); return () => { live = false } }, [animation])

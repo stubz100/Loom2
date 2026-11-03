@@ -19,6 +19,7 @@ import { walkAlong } from './motion/walkpath'
 
 export type MotionBlock = NonNullable<StageDoc['tracks']>[string][number]
 export type AnimationTemplate = { id: string; name: string; frames: number; fps: number; hip: number; keys: ObjectKey[]; thumb_asset_id?: string | null   // D182 (C2b): its tile picture
+  try_on?: string | null                                                                                                 // D183 (C2c): the character whose shell the bench figure wears for it
   source?: { stage_id?: string | null; object_id?: string | null; start?: number; end?: number; file_id?: string | null; clip?: string | null; licence?: string | null } }   // where it came from (a clip's file and licence, D17)
 
 /** The figure's hip above its ankles (its own body's), as the retarget scales the root by. */

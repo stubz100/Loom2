@@ -16051,3 +16051,47 @@ in 6.5 min**, exit 0. A lesson for the driver and the specs: a dangerous ask's O
 
 **Checked:** e2e 85/85 alone, typecheck (the e2e build's `tsc -b`), Vitest 653 + 3 skipped, lint 61 warnings as before. Committed with D183's
 recording (20:28); C2c next in its own commit.
+
+## 2026-11-03 21:12 — C2c (D183, propo02 05): shells only — a scene holds characters as their shells, the shell queued by the fit, the ghost until it lands, Try it on ‹character› on the bench, the skeleton placed on the shell by hand
+
+**Built.** *A scene holds characters:* the Scene section's figure ＋ lists the Library's figures and no adult or child preset (StageParts —
+the presets stay the animation bench's, as do the empty stage's dummy card and the Add menu's dummies, gated on the stage's purpose);
+the e2e's figures are characters now (`addCharacter`: eleven adds and four empty-state cards, every figure named after its character, a
+frame's lineage carrying the character's hero beside the clay pass). *The shell by itself:* `story.shell_after_fit` is called by the
+keypoints finisher once a body fit lands — the version's shell (Pixal3D, the next job in the queue) when it has none, D139's guard and the
+build's offer respected, "the shell queued (D183)" on the fit's log, a refusal said there and never the fit's failure. *The ghost:* a figure
+bound to a character whose shell is not here yet draws in `engine.ghostMat` (grey x-ray, the mannequin and the Detailed figure alike, the
+viewport only — the passes override or swap every material); the hands get clay back when the shell lands. The figure's Inspector has a
+*shell* line (FigureBinding.ShellLine: its shell / on its way — a `character_shell` job queued or running / owed with why / *Make the
+shell ▶*), and the Library's figures header *Make the shells (n)* (ClayLayer.MakeShells) queues every owed one in one go. *The bench:*
+*Try it on · ‹character›* in the animation header (ClayLayer.TryOn; animationBench.tryOn / tryOnWho) binds the bench figure to the
+character — its body and shell follow — and keeps it on the animation (`AnimationTemplate.try_on`); the dummy otherwise, an animation
+being nobody's. *The skeleton placed by hand:* `Body.joint_offsets` (body.py — the twelve joints and the four ends, three numbers of at
+most 0.6 in the figure's own units, a zero offset dropped, anything else refused); `builders.placeJoints` applies each in its parent's
+frame after the fitted body, re-aims the limb between (`aimLimb`: its lean and length) and makes the limb lengths the binder and the
+retargeter read the placed ones (the sides' mean); the skeleton bench's 3D pane (SkeletonBench.FigurePane) takes a drag on any joint's
+ball or an end's (green) on the view's plane — pointer capture, the orbit held — and writes the offset through `saveBody`; a placed one
+is drawn larger and warmer; *n placed by hand · Reset*; `__loom2SkeletonBench.screen` for the driver and the e2e. The OpenAPI document
+and the client types regenerated.
+
+**Checked.** Offline 808 (805 + the validator, the shell after a landed fit on the test rig, the try_on round trip), Vitest 656 + 3 skipped
+(body.test.ts: three cases on the placed joints), typecheck, build and lint clean (61 warnings, as before — the bench's ref read moved
+into an effect), agent docs 9 / 0, settings audit 322 / 0, model literals 0. The e2e: the suite is 86 scenarios now; the whole run with
+C2c 84 + the C2c scenario (the ＋ without a dummy, the shell line's *owed: needs its A-pose picture*, Try it on kept on the animation,
+the elbow dragged on the bench writing `joint_offsets.r_elbow`, Reset clearing it) in 11.5 min under load, the two that timed out there
+(places in Clay CW7, the Bin holds up) passing alone in 25 s. After that run the shell job's surface name was corrected in the two
+client filters (`character_shell`, not `shell`) and typecheck, Vitest, lint and the build run again; the scenario does not read that
+state — the live check does.
+
+**Live on the walk's project** (my orchestrator on 8766, my Vite on 1420, the author's app closed): Clay › Library › Figures showed *Make
+the shells (3)*; one click queued Nora's, the man's and the woman's — Pixal3D one after another, 19:57 → 20:10 by the driver's clock,
+about four minutes each (a fourth, queued by my own route probe, cancelled); the readiness line then *✓ shell · Ready for a scene*. The
+walk's scene: the three figures as their shells — Nora in her coat with her bag, the man, the woman — their proxies on the figures, the
+Inspector's shell line *its shell — the figure is drawn in it*. The animation bench: Walk_Loop on the dummy, *Try it on · Nora* put her
+body on the figure as a ghost (her shell was still on its way), back to the dummy after. Nora's skeleton bench: the shell in x-ray,
+front and side; the right elbow dragged 30 px → `joint_offsets.r_elbow = [−0.030, 0.037, −0.144]`, *1 placed by hand*, the shell bound
+again from it (*1 joint outside the shell* — the test drag left the arm); *Reset* → `{}`. No page errors. Nine screenshots, four sent.
+The three shells stay on the project (D183's intent); Nora's offsets were reset.
+
+**Owed / next:** the e2e not rerun after the surface-name fix (said above). Joints the rig lacks (a tail) stay a later item. Next E59 and
+E60 alone on the GPU, then C3 (propo02 05's order).

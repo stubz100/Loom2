@@ -842,6 +842,21 @@ def fit_if_untouched(queue: Any, p: Any, vid: str, asset_id: str) -> bool:
     return True
 
 
+def shell_after_fit(queue: Any, p: Any, vid: str, variant: str | None) -> bool:
+    """D183 (C2c): a character in Clay is its shell, always — so a body fitted queues the version's shell by itself (Pixal3D, the next job in
+    the queue) when it has none, the reference allows one (D139) and the build offers an image → 3D; True when queued. The shell's own
+    finisher writes it on the version when it lands."""
+    from .models import registry
+    v = p.version(vid)
+    if p.cls != "character" or v.shell_asset_id or shell_blocked(v) is not None:
+        return False
+    spec = next((s for s in registry.mesh_specs() if registry.offered(s, variant)), None)
+    if spec is None:
+        return False
+    queue.submit({"kind": "image_to_mesh", "asset_id": v.anim_ref_asset_id, "model_id": spec.id}, origin=shell_origin(p.id, v.id, v.anim_ref_asset_id))
+    return True
+
+
 PROP_MODEL_SURFACE = "prop_model"              # D110 (PS2): origin.surface of an image → mesh job made for a prop version; payload {version, from}
 
 

@@ -5500,6 +5500,8 @@ export interface components {
             source?: components["schemas"]["AnimationFrom-Input"];
             /** Thumb Asset Id */
             thumb_asset_id?: string | null;
+            /** Try On */
+            try_on?: string | null;
         };
         /** AnimationTemplate */
         "AnimationTemplate-Output": {
@@ -5539,6 +5541,8 @@ export interface components {
             source: components["schemas"]["AnimationFrom-Output"];
             /** Thumb Asset Id */
             thumb_asset_id: string | null;
+            /** Try On */
+            try_on: string | null;
         };
         /** AnimationThumb */
         AnimationThumb: {
@@ -6133,6 +6137,10 @@ export interface components {
              * @default 1
              */
             hips?: number;
+            /** Joint Offsets */
+            joint_offsets?: {
+                [key: string]: number[];
+            };
             /**
              * Knee
              * @default 0.5057471264367817
@@ -6232,6 +6240,10 @@ export interface components {
              * @default 1
              */
             hips: number;
+            /** Joint Offsets */
+            joint_offsets: {
+                [key: string]: number[];
+            };
             /**
              * Knee
              * @default 0.5057471264367817

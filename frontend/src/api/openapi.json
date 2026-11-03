@@ -688,6 +688,17 @@
               }
             ],
             "title": "Thumb Asset Id"
+          },
+          "try_on": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Try On"
           }
         },
         "required": [
@@ -763,6 +774,17 @@
               }
             ],
             "title": "Thumb Asset Id"
+          },
+          "try_on": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Try On"
           }
         },
         "required": [
@@ -776,6 +798,7 @@
           "keys",
           "source",
           "thumb_asset_id",
+          "try_on",
           "created_at"
         ],
         "title": "AnimationTemplate",
@@ -2339,6 +2362,16 @@
             "title": "Hips",
             "type": "number"
           },
+          "joint_offsets": {
+            "additionalProperties": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "title": "Joint Offsets",
+            "type": "object"
+          },
           "knee": {
             "default": 0.5057471264367817,
             "maximum": 0.65,
@@ -2490,6 +2523,16 @@
             "title": "Hips",
             "type": "number"
           },
+          "joint_offsets": {
+            "additionalProperties": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "title": "Joint Offsets",
+            "type": "object"
+          },
           "knee": {
             "default": 0.5057471264367817,
             "maximum": 0.65,
@@ -2561,7 +2604,8 @@
           "shoulder_drop",
           "feet_out",
           "locks",
-          "attachments"
+          "attachments",
+          "joint_offsets"
         ],
         "title": "Body",
         "type": "object"

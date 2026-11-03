@@ -86,3 +86,33 @@ describe("the skeleton bench's rows (proto01_UIcast CS2)", () => {
     expect(bodyDims({ ...DEFAULT_BODY, head_forward: 30 }).top).toBeLessThan(bodyDims(DEFAULT_BODY).top)
   })
 })
+
+describe('the joints placed on the shell by hand (D183, C2c)', () => {
+  const body = (off: Record<string, number[]>): Body => ({ ...DEFAULT_BODY, joint_offsets: off })
+  const local = (o: THREE.Object3D) => o.position.clone()
+  it('moves a joint by its offset in its parent\'s frame, and the limb between follows', () => {
+    const plain = mannequin(mat, POSES.stand, undefined, body({}))
+    const placed = mannequin(mat, POSES.stand, undefined, body({ r_elbow: [0.05, -0.04, 0.03] }))
+    const d = local(placed.joints.r_elbow).sub(local(plain.joints.r_elbow))
+    expect([d.x, d.y, d.z].map((x) => +x.toFixed(3))).toEqual([0.05, -0.04, 0.03])
+    expect(local(placed.joints.l_elbow).distanceTo(local(plain.joints.l_elbow))).toBeLessThan(1e-9)          // the other side as fitted
+    const capsule = placed.joints.r_shoulder.children.find((c) => (c as THREE.Mesh).isMesh && c.userData.limb)!
+    expect(capsule.quaternion.equals(new THREE.Quaternion())).toBe(false)                                     // re-aimed along the new line
+    expect(capsule.position.distanceTo(local(placed.joints.r_elbow).multiplyScalar(0.5))).toBeLessThan(1e-9)  // its middle halfway to the joint
+  })
+  it('reads the limb lengths from the placed joints — the sides\' mean — so the binder and the retargeter follow', () => {
+    const plain = mannequin(mat, POSES.stand, undefined, body({}))
+    const placed = mannequin(mat, POSES.stand, undefined, body({ r_knee: [0, -0.1, 0], l_wrist: [0, -0.06, 0] }))
+    expect(placed.limbs.thigh).toBeCloseTo((plain.limbs.thigh * 2 + 0.1) / 2, 6)
+    expect(placed.limbs.forearm).toBeCloseTo((plain.limbs.forearm * 2 + 0.06) / 2, 6)
+    expect(placed.limbs.upper_arm).toBeCloseTo(plain.limbs.upper_arm, 9)
+    const wrist = local(placed.markers[7]), was = local(plain.markers[7])
+    expect(wrist.y - was.y).toBeCloseTo(-0.06, 6)                                                             // the end moved
+  })
+  it('leaves everything as fitted without offsets, and never moves the root', () => {
+    const a = mannequin(mat, POSES.stand, undefined, body({})), b = mannequin(mat, POSES.stand, undefined, body({ root: [0.3, 0.3, 0.3] }))
+    expect(local(b.joints.root).distanceTo(local(a.joints.root))).toBeLessThan(1e-9)
+    expect(b.limbs).toEqual(a.limbs)
+    expect(b.joints.r_shoulder.children.find((c) => c.userData.limb)!.quaternion.equals(new THREE.Quaternion())).toBe(true)
+  })
+})

@@ -79,11 +79,44 @@ export async function openAnimationBench(ref: AnimRef): Promise<boolean> {
   st().select(fig.id)
   st().setFrame(0)
   bench = { ref, figure: fig.id, stage: stage.id }
+  if (t?.try_on) st().bindFigure(fig.id, t.try_on)                           // D183 (C2c): the character it is tried on — its body and shell
   if (t && !t.thumb_asset_id) void thumbnailLater(t.id, fig.id)
   return true
 }
 
 export function closeAnimationBench(): void { bench = null }
+
+/** D183 (C2c): who the bench figure is — the character whose shell it wears for this animation (null: the dummy). */
+export function tryOnWho(): string | null {
+  if (!bench) return null
+  const figure = bench.figure
+  return useStage.getState().current?.objects.find((o) => o.id === figure)?.profile_id ?? null
+}
+
+/** D183 (C2c): *Try it on ‹character›* — the bench figure bound to the character (its body and shell follow), remembered on the
+ *  animation; null: the dummy, an animation being nobody's. */
+export async function tryOn(profileId: string | null): Promise<void> {
+  if (!bench) return
+  st().bindFigure(bench.figure, profileId)
+  if (bench.ref.kind !== 'template') return
+  const t = await templateById(bench.ref.id)
+  if (!t || (t.try_on ?? null) === profileId) return
+  await patchAnimation(t, { try_on: profileId })
+}
+
+/** A template's fields written — the library's by its own route, the project's with the list. */
+async function patchAnimation(t: AnimationTemplate, patch: Partial<AnimationTemplate>): Promise<boolean> {
+  const next = { ...t, ...patch }
+  if (inLibrary(t.id)) {
+    try {
+      const r = await unwrap(http.PUT('/stages/animations/library/{aid}', { params: { path: { aid: t.id } }, body: next as never }))
+      useTemplates.setState({ revision: r.revision, items: r.items as unknown as AnimationTemplate[], library: r.library as unknown as AnimationTemplate[], loaded: true })
+      templatesChanged()
+      return true
+    } catch (e) { toast(`Animation: ${(e as { detail?: string }).detail ?? e}`, 'error'); return false }
+  }
+  return putTemplates(useTemplates.getState().items.map((x) => (x.id === t.id ? next : x)))
+}
 
 /** The figure's first frame on the bench, once the figure is drawn, as the animation's tile picture. */
 async function thumbnailLater(aid: string, figureId: string): Promise<void> {

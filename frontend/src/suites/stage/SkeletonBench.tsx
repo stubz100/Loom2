@@ -20,8 +20,8 @@ import { CommandButton } from '../../frame/CommandButton'
 import { Help } from '../../frame/Help'
 import { askConfirm, useSession } from '../../store/session'
 import { shellBlocked, shellFromArmsDown, useStory, versionPointsOfShell } from '../story/storyStore'
-import { DEFAULT_BODY, type Body } from './body'
-import { JOINTS, mannequin, POSE_NAMES, POSES, type Joint } from './builders'
+import { DEFAULT_BODY, ENDS, placedCount, type Body, type End } from './body'
+import { JOINTS, mannequin, POSE_NAMES, POSES, type Joint, type Mannequin } from './builders'
 import { HAND_PRESETS, makeDetailed } from './detailed'
 import { bindProxy, insideShell, setShellPoints, stanceOf } from './proxy'
 import { COCO, cropOf, defaultOf, disagreements, dragFactor, lengthCm, outside, pictureMap, ROWS, seen, setLocked, unlock, type Points, type RowKey, type XY } from './skeleton'
@@ -213,7 +213,7 @@ function RefPane({ v, body, stance, side }: { v: Profile['versions'][number]; bo
   )
   if (view === 'side') return (
     <div className="skel-pane ref" aria-label="the reference">
-      <span className="lab">the figure · side</span>
+      <span className="lab" title="D183: drag a joint (blue) or a hand's or foot's end (green) to place it on the shell — the shell is bound again from the placed skeleton; Reset puts them back where the fitted body has them">the figure · side</span>
       {tools}
       <FigurePane body={body} stance={stance} shell={shell} look={look} points={(v.body_points ?? null) as Points | null} />
     </div>
@@ -256,7 +256,9 @@ function FigurePane({ body, stance, shell, look, points }: { body: Body; stance:
   const host = useRef<HTMLDivElement>(null)
   const [outside, setOutside] = useState<Joint[]>([])                       // the joints the shell's volume does not hold (ringed)
   const u = useUi()
-  const world = useRef<{ r: THREE.WebGLRenderer; scene: THREE.Scene; cam: THREE.PerspectiveCamera; orbit: OrbitControls; content: THREE.Group; balls: Map<Joint, THREE.Mesh> } | null>(null)
+  const world = useRef<{ r: THREE.WebGLRenderer; scene: THREE.Scene; cam: THREE.PerspectiveCamera; orbit: OrbitControls; content: THREE.Group; balls: Map<Joint, THREE.Mesh>; ends: Map<End, THREE.Mesh>; fig?: Mannequin } | null>(null)
+  const bodyRef = useRef(body)
+  useEffect(() => { bodyRef.current = body }, [body])                       // the body the drag writes over: the latest
   useEffect(() => {                                                          // the viewer, once
     const el = host.current!
     const r = new THREE.WebGLRenderer({ antialias: true })
@@ -268,7 +270,7 @@ function FigurePane({ body, stance, shell, look, points }: { body: Body; stance:
     const cam = new THREE.PerspectiveCamera(30, 1, 0.05, 50)
     const orbit = new OrbitControls(cam, r.domElement)
     const content = new THREE.Group(); scene.add(content)
-    const w = { r, scene, cam, orbit, content, balls: new Map<Joint, THREE.Mesh>() }
+    const w: NonNullable<typeof world.current> = { r, scene, cam, orbit, content, balls: new Map<Joint, THREE.Mesh>(), ends: new Map<End, THREE.Mesh>() }
     world.current = w
     let raf = 0
     const loop = () => { raf = requestAnimationFrame(loop); r.render(scene, cam) }
@@ -282,26 +284,78 @@ function FigurePane({ body, stance, shell, look, points }: { body: Body; stance:
       if (j && JOINT_ROW[j]) setUi({ row: JOINT_ROW[j]! })
     }
     r.domElement.addEventListener('click', click)
-    return () => { cancelAnimationFrame(raf); ro.disconnect(); r.domElement.removeEventListener('click', click); orbit.dispose(); r.dispose(); r.domElement.remove(); world.current = null }
+    // D183 (C2c): a joint or an end dragged on the view's plane is placed there — written as its offset from the fitted body, in its
+    // parent's frame (body.joint_offsets); the figure is built again from it and the shell bound again
+    const ray = new THREE.Raycaster(), plane = new THREE.Plane(), hitAt = new THREE.Vector3()
+    let drag: { key: Joint | End; ball: THREE.Mesh; from: THREE.Vector3; start: [number, number]; moved: boolean } | null = null
+    const ndc = (e: PointerEvent) => { const b = r.domElement.getBoundingClientRect(); return new THREE.Vector2(((e.clientX - b.left) / b.width) * 2 - 1, -((e.clientY - b.top) / b.height) * 2 + 1) }
+    const down = (e: PointerEvent) => {
+      if (e.button !== 0) return
+      ray.setFromCamera(ndc(e), cam)
+      const hit = ray.intersectObjects([...w.balls.values(), ...w.ends.values()], false)[0]
+      const key = (hit?.object.userData.joint ?? hit?.object.userData.end) as Joint | End | undefined
+      if (!hit || !key || key === 'root') return
+      drag = { key, ball: hit.object as THREE.Mesh, from: hit.object.position.clone(), start: [e.clientX, e.clientY], moved: false }
+      plane.setFromNormalAndCoplanarPoint(cam.getWorldDirection(new THREE.Vector3()), hit.object.position)
+      orbit.enabled = false
+      r.domElement.setPointerCapture(e.pointerId)
+    }
+    const move = (e: PointerEvent) => {
+      if (!drag) return
+      if (!drag.moved && Math.hypot(e.clientX - drag.start[0], e.clientY - drag.start[1]) < 3) return
+      drag.moved = true
+      ray.setFromCamera(ndc(e), cam)
+      if (ray.ray.intersectPlane(plane, hitAt)) drag.ball.position.copy(hitAt)
+    }
+    const up = (e: PointerEvent) => {
+      if (!drag) return
+      const d = drag; drag = null; orbit.enabled = true
+      if (r.domElement.hasPointerCapture(e.pointerId)) r.domElement.releasePointerCapture(e.pointerId)
+      const fig = w.fig
+      if (!d.moved || !fig) return
+      const parent = ((JOINTS as readonly string[]).includes(d.key) ? fig.joints[d.key as Joint] : endObject(fig, d.key as End)).parent
+      if (!parent) return
+      parent.updateMatrixWorld(true)
+      const delta = parent.worldToLocal(d.ball.position.clone()).sub(parent.worldToLocal(d.from.clone()))
+      const b = bodyRef.current, was = b.joint_offsets?.[d.key] ?? [0, 0, 0]
+      const next = [was[0] + delta.x, was[1] + delta.y, was[2] + delta.z].map((x) => Math.max(-0.6, Math.min(0.6, +x.toFixed(4))))
+      saveBody({ ...b, joint_offsets: { ...(b.joint_offsets ?? {}), [d.key]: next } })
+    }
+    r.domElement.addEventListener('pointerdown', down); r.domElement.addEventListener('pointermove', move); r.domElement.addEventListener('pointerup', up)
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); r.domElement.removeEventListener('click', click); r.domElement.removeEventListener('pointerdown', down); r.domElement.removeEventListener('pointermove', move); r.domElement.removeEventListener('pointerup', up); orbit.dispose(); r.dispose(); r.domElement.remove(); world.current = null }
   }, [])
   useEffect(() => {                                                          // the figure, whenever the body, the stance or the look change
     const w = world.current
     if (!w) return
     let live = true
     const t = window.setTimeout(() => {
-      w.content.clear(); w.balls.clear()
+      w.content.clear(); w.balls.clear(); w.ends.clear()
       const clay = new THREE.MeshLambertMaterial({ color: 0xb4b4b8 })
       const fig = mannequin(clay, POSES.stand, stance, body)
+      w.fig = fig
       const g = new THREE.Group(); g.add(fig.root); w.content.add(g); g.updateMatrixWorld(true)
       const H = body.height_m
-      // the skeleton: a ball per joint, a line along each part
+      const placed = body.joint_offsets ?? {}
+      // the skeleton: a ball per joint, a line along each part; D183: the ends too, a placed one a little larger and warmer
       const pts: THREE.Vector3[] = []
       for (const j of JOINTS) {
         const at = fig.joints[j].getWorldPosition(new THREE.Vector3())
         const on = (ROW_JOINTS[ui.row as RowKey] ?? []).includes(j)
-        const ball = new THREE.Mesh(new THREE.SphereGeometry(0.022 * H / 1.75, 12, 8), new THREE.MeshBasicMaterial({ color: on ? 0xf0a030 : 0x2f9be8, depthTest: false }))
+        const ball = new THREE.Mesh(new THREE.SphereGeometry(0.022 * H / 1.75, 12, 8), new THREE.MeshBasicMaterial({ color: on ? 0xf0a030 : placed[j] ? 0xe8c46a : 0x2f9be8, depthTest: false }))
+        if (placed[j]) ball.scale.setScalar(1.25)
         ball.position.copy(at); ball.renderOrder = 3; ball.userData.joint = j; w.content.add(ball); w.balls.set(j, ball)
       }
+      for (const k of ENDS) {
+        const at = endObject(fig, k).getWorldPosition(new THREE.Vector3())
+        const ball = new THREE.Mesh(new THREE.SphereGeometry(0.016 * H / 1.75, 10, 8), new THREE.MeshBasicMaterial({ color: placed[k] ? 0xe8c46a : 0x8fd3a8, depthTest: false }))
+        if (placed[k]) ball.scale.setScalar(1.25)
+        ball.position.copy(at); ball.renderOrder = 3; ball.userData.end = k; w.content.add(ball); w.ends.set(k, ball)
+      }
+      ;(window as unknown as { __loom2SkeletonBench?: unknown }).__loom2SkeletonBench = { screen: (key: string): [number, number] | null => {   // the driver's: a ball's place on the page
+        const o = w.balls.get(key as Joint) ?? w.ends.get(key as End)
+        if (!o) return null
+        const b = w.r.domElement.getBoundingClientRect(), p = o.position.clone().project(w.cam)
+        return [b.left + ((p.x + 1) / 2) * b.width, b.top + ((1 - p.y) / 2) * b.height] } }
       const link = (a: Joint, b: Joint | THREE.Object3D) => pts.push(fig.joints[a].getWorldPosition(new THREE.Vector3()), b instanceof THREE.Object3D ? b.getWorldPosition(new THREE.Vector3()) : fig.joints[b].getWorldPosition(new THREE.Vector3()))
       link('root', 'spine'); link('spine', 'neck'); link('neck', 'head'); link('spine', 'r_shoulder'); link('spine', 'l_shoulder'); link('r_shoulder', 'r_elbow'); link('l_shoulder', 'l_elbow')
       link('r_elbow', fig.markers[4]); link('l_elbow', fig.markers[7]); link('root', 'r_hip'); link('root', 'l_hip'); link('r_hip', 'r_knee'); link('l_hip', 'l_knee'); link('r_knee', fig.markers[10]); link('l_knee', fig.markers[13])
@@ -339,9 +393,14 @@ function FigurePane({ body, stance, shell, look, points }: { body: Body; stance:
     <>
       <div ref={host} className="skel-3d" />
       {look === 'shell' && outside.length > 0 && <span className="hint warn" title={outside.join(', ')}>{outside.length} joint{outside.length === 1 ? '' : 's'} outside the shell</span>}
+      {placedCount(body) > 0 && <span className="hint" data-testid="placed-joints">{placedCount(body)} placed by hand · <button type="button" className="quiet" title="The joints and ends back where the fitted body puts them" onClick={() => saveBody({ ...body, joint_offsets: {} })}>Reset</button></span>}
     </>
   )
 }
+
+/** D183: the wrist and ankle markers a hand can place (builders.mannequin's marker order). */
+const END_MARKER: Record<End, number> = { r_wrist: 4, l_wrist: 7, r_ankle: 10, l_ankle: 13 }
+const endObject = (fig: Mannequin, k: End): THREE.Object3D => fig.markers[END_MARKER[k]]
 
 // ------------------------------------------------------------------ the guide
 function GuidePane({ body, stance, refId, points, shell }: { body: Body; stance: Record<string, number[]>; refId: string | null; points: Points | null; shell: string | null }) {

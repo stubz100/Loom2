@@ -305,3 +305,43 @@ async def test_several_figures_say_so_on_the_version(tmp_path: Path, object_info
         assert v.anim_ref_note == "several" and v.body_fit_from is None and fit_blocked(v) == SEVERAL
     finally:
         await rig.close()
+
+
+def test_the_joints_placed_by_hand_on_the_body():
+    """D183 (C2c): a joint placed on the shell by hand is an offset on the body — a joint or an end of the figure's tree, three numbers of
+    at most 0.6, a zero offset dropped, anything else refused."""
+    b = Body(joint_offsets={"r_elbow": [0.05, -0.04, 0.03], "l_wrist": [0, 0, 0], "head": [0.123456, 0, 0]})
+    assert b.joint_offsets == {"r_elbow": [0.05, -0.04, 0.03], "head": [0.1235, 0, 0]}
+    assert Body().joint_offsets == {} and Body.model_validate(rebase_body({"neck": 1.0, "head": 1.0})).joint_offsets == {}
+    for bad in ({"tail": [0, 0.1, 0]}, {"r_elbow": [0.1, 0]}, {"r_elbow": [0.7, 0, 0]}, {f"k{i}": [0.1, 0, 0] for i in range(17)}):
+        with pytest.raises(ValueError):
+            Body(joint_offsets=bad)
+
+
+@pytest.mark.asyncio
+async def test_a_landed_fit_queues_the_shell_by_itself(tmp_path: Path, object_info: dict):
+    """D183 (C2c): a character in Clay is its shell, always — so the body fit's landing queues the version's shell (image → 3D of the
+    reference, origin `shell`) when it has none; a version that has one, or whose reference is no A-pose, gets none."""
+    from loom2.story import SHELL_SURFACE, shell_after_fit
+    rig = Rig(tmp_path, object_info)
+    try:
+        groups = rig.queue.groups = GroupStore(rig.ws, rig.catalogue)
+        st = StoryStore(rig.ws)
+        ref = rig.catalogue.ingest_file(_png(tmp_path / "ref.png")).id
+        p = st.create_profile("Ines", "character", groups, appearance="a dancer")
+        st.set_anim_ref(p.id, "v1", "front", ref)
+        rig.fake.people = [fake_person({"head_neck": 0.167, "shoulders": 0.234, "torso": 0.334, "leg": 0.499, "arm": 0.344, "palm": 0.06})]
+        rig.queue.load()
+        await rig.queue.start()
+        job = rig.queue.submit({"kind": "keypoints", "asset_id": ref}, origin=body_fit_origin(p.id, "v1"))[0]
+        done = await rig.wait(job.id)
+        assert done.status == "done", done.error
+        shells = [j for j in rig.queue.jobs.values() if j.kind == "image_to_mesh" and j.origin and j.origin.surface == SHELL_SURFACE and j.origin.ref == p.id]
+        assert len(shells) == 1 and shells[0].origin.payload["version"] == "v1" and "the shell queued (D183)" in done.log_tail
+        # a version with a shell already, or no A-pose fit, queues none
+        assert not shell_after_fit(rig.queue, st.profile(p.id).model_copy(update={"versions": [st.profile(p.id).version("v1").model_copy(update={"shell_asset_id": "ast_x"})]}), "v1", "full")
+        q = st.create_profile("Nobody", "character", groups, appearance="a courier")
+        assert not shell_after_fit(rig.queue, st.profile(q.id), "v1", "full")                     # no reference, no fit
+        assert len([j for j in rig.queue.jobs.values() if j.kind == "image_to_mesh"]) == 1
+    finally:
+        await rig.close()

@@ -32,7 +32,8 @@ const tool = (id: Tool, label: string, icon: typeof MousePointer2, key: string):
   id: `stage.tool.${id}`, scope: 'stage', label, icon, keys: key, placement: ['toolbar', 'context'], when: hasStage, run: () => st().setTool(id),
 })
 const addCmd = (kind: Kind, preset: string, label: string, icon: typeof Box): Command => ({
-  id: `stage.add.${kind}.${preset}`, scope: 'stage', label, icon, placement: ['panel', 'context'], when: hasStage,
+  id: `stage.add.${kind}.${preset}`, scope: 'stage', label, icon, placement: ['panel', 'context'],
+  when: kind === 'mannequin' ? () => hasStage() && st().current?.purpose === 'animation' : hasStage,   // D183 (C2c): the dummy is the animation bench's; a scene holds characters
   run: () => { const p = landAt(); st().addObject(kind, preset, p, null, kind === 'mannequin' ? yawAt(p) : undefined) },   // C1: on the floor in the camera's frame, facing it
 })
 
@@ -200,7 +201,7 @@ registerCommands([
 ])
 
 export const addMenu = (): MenuItem => ({ label: 'Add', icon: Plus, items: [
-  ...Object.keys(MANNEQUIN_PRESETS).map((p) => ({ cmd: `stage.add.mannequin.${p}` })), sep,
+  ...(st().current?.purpose === 'animation' ? [...Object.keys(MANNEQUIN_PRESETS).map((p) => ({ cmd: `stage.add.mannequin.${p}` })), sep] : []),   // D183: the dummy only on the animation bench
   ...SET_PRESETS.map((p) => ({ cmd: `stage.add.set.${p}` })), { cmd: 'stage.add.set.image' }, sep,
   ...PROP_PRESETS.map((p) => ({ cmd: `stage.add.prop.${p}` })), sep,
   { cmd: 'stage.add.light' },

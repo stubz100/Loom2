@@ -16131,3 +16131,49 @@ E59's take on it), the still, the two clips; v1 untouched. Four pictures sent: t
 
 **Next:** Q5 is the author's; E60 (text-to-motion on the mannequin, Q7) needs weights the author has not approved yet (D17 licences first);
 C3 after.
+
+## 2026-11-03 22:44 — E59, two more ways after the author's questions: the pull-back the shot asks for, and the one pass with identity anchors
+
+The author, on the sheets: "Fun-camera seems to be ok, but the characters walk out of the frame — is this solution cannot process camera
+movement?"; "could we tweak some of the model constraints (the ComfyUI layer) to get more control over their output?" Two runs answer, alone
+on the GPU, on shot 1's v2 from the same Klein still.
+
+**(d) Fun-Camera with the shot's own move.** My (c) was told *Zoom In* — but shot 1's camera backs away ahead of Nora at her pace (Camera 1
+from z −10 to +1.5 over 10 s, looking down −z: a pull-back), so Zoom In plus "she walks toward the camera" doubled the closing speed and the
+people passed the lens. *Zoom Out* at speed 1, the prompt saying only what the people do: all four stay in the frame for the whole five
+seconds, walking at the camera as the street flows past — the passers-by, the whole legs, the shadows, the look, as the blocking has it.
+195 s. The pinned node (`comfy_extras/nodes_camera_trajectory.py`) offers presets only — Static, Pan ×4, Zoom In/Out, rolls — each a
+constant-velocity line (`get_camera_motion(angle, T, speed, n)`) turned into Plücker rays per frame; the model underneath takes any
+per-frame pose. A shot's straight move at constant speed is a preset with the right speed; a curve, a pan with a dolly or a change of
+pace is not — a patched node taking the per-frame RT from Clay's camera keys (`engine/patches/`, a decision under rule 2) would feed the
+blocking's camera as told. That is the first lever.
+
+**(e) one pass with identity anchors.** The same one-pass clip (LTX-2.3's IC-LoRA on the clay's depth, 241 frames at 1024×576) with two
+more Klein stills of the lit clay at frames 120 and 240 — Nora's references riding along — as LTX keyframe beats (`recipe.beats`, the
+I2V graph's `LTXVAddGuide` at a frame; the Stage clip card has no beats, so the clip went as one API job on v2 after the stills through
+the product path: 57 s and 27 s). 381 s. Nora stays Nora for the ten seconds — the green coat, the scarf, the bag, walking at the camera;
+the passers-by keep walking, the legs whole, the shadows, the look; around each beat the frame morphs toward the anchor for a few frames
+(a soft double image at the half-way beat, settled by the next second). Without anchors (b) she had become the old man by frame 120.
+That is the second lever, and it works.
+
+**On the numbers.** FaceSim against Nora's hero: the Klein stills score 0.41 / 0.50 / 0.39 (her A-pose picture itself 0.29) — the stills
+are her by the tool's own scale (0.45–0.7 the same person); every clip scores 0.05–0.08 — (b) 0.055, (c) 0.076, (d) 0.052, (e) 0.064 —
+because a face 40 px across in a moving 832×480 or 1024×576 frame is below what ArcFace reads (D164's band 48–78 px was already the
+floor). The clips' identity is judged on the sheets, not the number; the number is kept as the warning it is.
+
+**What the hybrid for C5 is, in detail** (the author asked): the shot's clay gives (1) the depth sequence of the whole range and (2) Klein
+stills at the beats — frame 0, every 5 s and the last frame — each with the hero's references riding along (D93) so the anchors are her;
+(3) the one-pass clip: LTX's IC-LoRA on the depth from still 0 with the other stills as beats — the street, the extras, the shadows and
+the look, the hero walking her path as the clay blocked it; (4) the hero's own layer, only where identity must be exact: Wan Animate
+performs her on her references from the clay's pose pass (the Layered route's character layer as it exists, D111 PS5), its matte from
+SAM 3 as today, laid over the one-pass clip in the Final's composition with the shadow pass — or, to measure first, Wan Animate's
+*replacement* mode (the character put into a background video with its light matched), which our graphs do not wire yet; (5) the plate's
+own camera comes from the clay, so the Final's camera is the blocking's. The cost on this shot: the still ≈ 1 min, the one-pass clip
+≈ 6.5 min, the hero's Animate batches ≈ 7 min (three of 77 frames), one matte ≈ 1 min — about 16 min of GPU for ten seconds against the
+walk's 23, with the street alive. What it does not fix by itself: the morph at a beat (a lower beat strength, or beats at the shot's
+cuts), and the extras' identities (they drift freely; the plate's business, not a layer's). Q5 stays the author's: the hybrid as C5's
+default for a street with extras, Layered alone for a close shot where nothing but the character counts, the Fun-Camera clip for an
+animatic with a straight move.
+
+Left on the project: shot 1's v2 with E59's four takes, the three stills, the depth sequence. Sheets d and e sent. My orchestrator, Vite,
+Edge and the engine stopped.

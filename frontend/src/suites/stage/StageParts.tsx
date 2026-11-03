@@ -28,10 +28,13 @@ import { useStageActive } from '../../frame/stageKeep'
 import { askConfirm, askText, useSession } from '../../store/session'
 import { BenchChip } from './ShotStepper'
 import { presetDrop } from './placement'
+import { useMotion } from './motion/motionStore'
+import { clipDrop, correctionWords } from './corrections'
+import type { DragPayload } from '../../frame/drag'
 import { AnimColumn, Sec } from '../animate/column'
 import type { StageCamera, StageDoc, StageObject } from '../../api/types'
 import { keyedFrames as keyedFramesOf, keyframesOf, sampleCamera, sampleDoc } from './anim'
-import { blockMenu, dragBlock, saveRangeAsAnimation } from './blockEdit'
+import { applyTemplate, useTemplates, blockMenu, dragBlock, saveRangeAsAnimation } from './blockEdit'
 import { blocksReady, useBlocks, type MotionBlock } from './blocks'
 import { awayStretches, lineSpans } from './tracks'
 import { Timeline as TimelineView, TransportBar, type TLRow } from '../animate/Timeline'
@@ -344,6 +347,7 @@ function ObjectEditor({ o }: { o: StageObject }) {
       {o.kind === 'set' && o.preset === 'image' && <ImageSetFields key={`${o.id}:${o.lens_deg}`} o={o} />}
       {o.kind === 'set' && !!o.profile_id && !!o.place_set?.things?.length && <div className="verbs"><CommandButton id="stage.set.things" text /></div>}{/* D180 */}
       {o.kind === 'mannequin' && <div className="kv"><span>pose</span><span><select value={o.pose?.preset ?? 'stand'} onChange={(e) => st().applyPose(o.id, e.target.value)}>{POSE_NAMES.map((p) => <option key={p} value={p}>{p}</option>)}</select> <span className="hint">(Pose, over the viewport, poses the joints)</span></span></div>}
+      {o.kind === 'mannequin' && <PathFields o={o} />}{/* C2 (P9): the path as an object */}
       {o.kind === 'plane' && <div className="kv"><span>faces camera</span><input type="checkbox" checked={o.billboard} onChange={(e) => st().updateObject(o.id, { billboard: e.target.checked })} /></div>}
       {!o.parent_joint && <div className="kv"><span>parent <Help text="It moves with its parent and stays where it stands when you pick one; its transform below is then its place on the parent." /></span><select value={o.parent ?? ''} onChange={(e) => { const [k, fid, hand] = e.target.value.split(':'); if (k === 'hand') st().hold(o.id, fid, hand as 'r_hand' | 'l_hand'); else st().setParent(o.id, e.target.value || null) }}>
         <option value="">— none —</option>
@@ -451,7 +455,7 @@ export function PosesTab() {
   if (!current) return <span className="hint">Open or make a stage in the Shot section.</span>
   markUsed('stage.pose.mirror'); markUsed('stage.pose.reset'); markUsed('stage.pose.save'); markUsed('stage.pose.unpin'); markUsed('stage.pose.saveForCharacter')
   if (!o || o.kind !== 'mannequin') return <><MotionLibrary /><div className="stage-panel"><div className="head"><b>Poses</b></div><span className="hint">No figure selected. <Help text="Select a figure, then Pose (over the viewport, or its right-click): click a joint for the rotate gizmo, or drag a hand / foot handle." /></span></div></>
-  const joints = effectiveJoints(o)
+  const joints = effectiveJoints(shown ?? o)                                      // C2 (P8): from the figure as it is at the playhead, so a second joint keeps the first
   const v = joint ? (joints[joint] ?? [0, 0, 0]) : null
   const setJoint = (nv: number[]) => { if (joint) st().setJoints(o.id, { ...joints, [joint]: nv }) }
   return (
@@ -851,7 +855,7 @@ function Timeline() {
   const tracks = current.tracks ?? {}
   const blockErrors = useBlocks((s) => s.errors)
   // U5e (04 §3.2): a thing held in a figure's hand has a track too — carried, it goes where the hand goes
-  const objects = current.objects.filter((o) => (k.objects[o.id] ?? []).length > 0 || (tracks[o.id] ?? []).length > 0 || (!!o.parent_joint && !!o.parent))
+  const objects = current.objects.filter((o) => (o.kind === 'mannequin' && o.visible) || (k.objects[o.id] ?? []).length > 0 || (tracks[o.id] ?? []).length > 0 || (!!o.parent_joint && !!o.parent))   // C2: every figure has its track (a clip is dropped on it)
   const skeletons = current.objects.filter((o) => (k.skeleton?.[o.id] ?? []).length > 0)        // CS3: the figures with skeleton keys
   const blockEnd = (b: MotionBlock) => b.start + Math.max(1, b.length) - 1
   const span = stageSpan(end, [...camKeys, ...objects.flatMap((o) => (k.objects[o.id] ?? []).map((x) => x.frame)), ...objects.flatMap((o) => (tracks[o.id] ?? []).map(blockEnd)),
@@ -868,6 +872,8 @@ function Timeline() {
   if (cam) rows.push(row(`cam:${cam.id}`, `camera · ${cam.name}`, camKeys, selectedCamera === cam.id, () => st().selectCamera(cam.id), () => st().keyCamera()))   // U5e (04 §3.2): the camera's track, keyed or not
   for (const o of objects) {
     const r = row(`obj:${o.id}`, o.name, (k.objects[o.id] ?? []).map((x) => x.frame), selected === o.id, () => st().select(o.id), () => st().keyObject(o.id))
+    r.keys = r.keys?.map((kk) => { const ck = (k.objects[o.id] ?? []).find((x) => x.frame === kk.frame)                 // C2 (P8): a correction over a block is a hollow diamond
+      return ck?.correction ? { ...kk, className: 'correction', title: `correction at frame ${kk.frame}: ${correctionWords(ck)} — over the clip, eased in and out; drag: move it; right-click: remove it` } : kk })
     // U5 (G8): the figure's clip blocks — the clip and its loops, past the range's end when longer than the shot (the range never moves by itself)
     r.onMenu = (e) => {                                                           // U5c: a block's own menu, else the track's
       e.preventDefault()
@@ -916,9 +922,20 @@ function Timeline() {
       <TimelineView className="stage-tl" span={span} fps={current.size.fps} frame={frame} onSeek={(f) => { st().setPlaying(false); st().setFrame(f) }}
         work={{ from: start, to: end, title: "the clip's range", onChange: (a, b) => st().setRange(a, b) }} rows={rows}
         onKeyDrag={(r, from, to) => st().moveKey(r, from, to)} onKeyMenu={keyMenu}
-        onBarDrag={(r, bar, mode, delta) => { if (r.startsWith('obj:') && bar.startsWith('blk:')) dragBlock(r.slice(4), bar.slice(4), mode, delta) }} />
+        onBarDrag={(r, bar, mode, delta) => { if (r.startsWith('obj:') && bar.startsWith('blk:')) dragBlock(r.slice(4), bar.slice(4), mode, delta) }}
+        acceptDrop={(p, r) => r.startsWith('obj:') && p.items.some((i) => i.kind === 'preset' && !!clipDrop(i.id))} onDrop={dropOnTrack} />
     </div>
   )
+}
+
+/** C2 (P10): a clip or a template dropped on a figure's track lands where it was let go. */
+function dropOnTrack(row: string, frame: number, p: DragPayload): void {
+  const oid = row.slice(4)
+  const it = p.items.find((i) => i.kind === 'preset'), d = it ? clipDrop(it.id) : null
+  if (!d) return
+  if (d.kind === 'clip') { void useMotion.getState().applyAt(oid, frame, d.file, d.clip); return }
+  const t = [...useTemplates.getState().items, ...useTemplates.getState().library].find((x) => x.id === d.id)
+  if (t) void applyTemplate(t, oid, frame)
 }
 
 // ------------------------------------------------------------------ D121 (AW4): the viewport's camera chrome
@@ -981,6 +998,7 @@ function Viewport() {
   const canvasHolderRef = useRef<HTMLDivElement>(null)
   const engineRef = useRef<StageEngine | null>(null)
   const lastPointer = useRef<{ x: number; y: number } | null>(null)
+  const pathDrag = useRef<{ id: string; index: number; x: number; y: number; moved: boolean } | null>(null)   // C2 (P9): a path point grabbed
   const active = useStageActive()
   const current = useStage((s) => s.current)
   const selected = useStage((s) => s.selected)
@@ -1030,7 +1048,7 @@ function Viewport() {
     useStage.setState({ passRenderer: (cam, w, h) => { const s = st(); if (s.current) engine.sync(sampleDoc(s.current, s.frame)); return engine.renderPasses(cam, w, h) },   // U5: the document at the playhead, its blocks evaluated sequenceRenderer: (fr, w, h, kind, restore, on, depth) => engine.renderSequence(fr, w, h, kind, restore, on, depth), depthRanger: (fr, restore) => engine.depthRangeOf(fr, restore),
       plateProjector: (fr, w, h, plate, proj, aspect, restore, on, coverage) => engine.renderProjected(fr, w, h, plate, proj, aspect, restore, on, coverage) })   // ST3 / ST4, D111; D132: coverage
     viewport.handPreset = (id, side, preset) => engine.handPreset(id, side, preset)                                   // CA1
-    if (DEV_HOOKS) Object.assign(devHook(), { worldOf: (id: string) => engine.worldOf(id), heightOf: (id: string) => engine.heightOf(id), screenOf: (at: string) => engine.screenOf(at as Joint), cameraScreen: (id: string) => engine.cameraScreen(id), gizmoMode: () => engine.gizmoMode(), pipRect: () => engine.pipRect(), imageSetLayers: (id: string) => engine.imageSetLayers(id),
+    if (DEV_HOOKS) Object.assign(devHook(), { worldOf: (id: string) => engine.worldOf(id), heightOf: (id: string) => engine.heightOf(id), screenOf: (at: string) => engine.screenOf(at as Joint), cameraScreen: (id: string) => engine.cameraScreen(id), pathScreen: (id: string, i: number) => engine.pathScreen(id, i), pick: (x: number, y: number) => engine.pick(x, y), gizmoAxis: () => engine.gizmo.axis, pathDragging: () => pathDrag.current, gizmoMode: () => engine.gizmoMode(), pipRect: () => engine.pipRect(), imageSetLayers: (id: string) => engine.imageSetLayers(id),
       frameTime: (n: number, on: boolean) => { const was = useStage.getState().pip; engine.setPip(on); const t = engine.measureFrame(n); engine.setPip(was); return t }, meshes: () => ({ loaded: [...engine.meshesLoaded], failed: Object.fromEntries(engine.meshesFailed) }) })   // the smoke test aims the mouse at joints and handles; P18 asks which props loaded
     const ro = new ResizeObserver(() => { const r = host.getBoundingClientRect(); engine.resize(Math.round(r.width), Math.round(r.height)); setRect({ ...engine.frameRect() }); setPipRect(engine.pipRect()) })
     ro.observe(host)
@@ -1057,20 +1075,50 @@ function Viewport() {
   useEffect(() => { engineRef.current?.setPoseMode(poseMode); if (!poseMode) st().selectJoint(null) }, [poseMode])
   useEffect(() => { const e = engineRef.current; if (e && selected) e.selectJoint(selected, selectedJoint as Joint | null) }, [selectedJoint]) // eslint-disable-line react-hooks/exhaustive-deps
   const down = useRef<{ x: number; y: number; t: number; hot: boolean } | null>(null)
-  const onDown = (e: ReactPointerEvent) => { if (e.button === 0) down.current = { x: e.clientX, y: e.clientY, t: Date.now(), hot: !!engineRef.current?.gizmo.axis } }   // on a gizmo handle: the click is the gizmo's
+  const onDown = (e: ReactPointerEvent) => {
+    if (e.button !== 0) return
+    const eng = engineRef.current
+    const hot = !!eng?.gizmo.object && !!eng.gizmo.axis                                                         // on a gizmo handle (a stale axis with nothing attached is not)
+    const p = eng && st().mode !== 'record' && !hot ? eng.pick(e.clientX, e.clientY) : null
+    if (p && p.pathPoint !== undefined && p.id) {                                                              // C2 (P9): grab the point; it follows the floor until let go
+      pathDrag.current = { id: p.id, index: p.pathPoint, x: e.clientX, y: e.clientY, moved: false }
+      eng!.beginPathDrag(); e.currentTarget.setPointerCapture(e.pointerId); down.current = null
+      return
+    }
+    down.current = { x: e.clientX, y: e.clientY, t: Date.now(), hot }                     // on a gizmo handle: the click is the gizmo's
+  }
+  const onMove = (e: ReactPointerEvent) => {
+    lastPointer.current = { x: e.clientX, y: e.clientY }
+    const d = pathDrag.current, eng = engineRef.current
+    if (!d || !eng) return
+    if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 2) d.moved = true
+    const at = eng.place(e.clientX, e.clientY)
+    if (at && d.moved) eng.movePathPointTo(d.id, d.index, at[0], at[2])
+  }
   const onUp = (e: ReactPointerEvent) => {
+    const pd = pathDrag.current
+    if (pd) {                                                                                                     // C2 (P9): the point let go — written where the floor is under the pointer
+      pathDrag.current = null
+      const eng = engineRef.current; eng?.endPathDrag()
+      try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* released */ }
+      if (st().selected !== pd.id) st().select(pd.id)
+      const at = pd.moved && eng ? eng.place(e.clientX, e.clientY) : null
+      if (at) { const q = (v: number) => (st().snap ? Math.round(v * 4) / 4 : v); st().setPathPoint(pd.id, pd.index, [q(at[0]), q(at[2])]) }
+      else if (eng) { const cur = st().object(pd.id)?.path?.[pd.index]; if (cur) eng.movePathPointTo(pd.id, pd.index, cur[0], cur[1]) }   // a click: the point stays
+      return
+    }
     const d = down.current; down.current = null
     const eng = engineRef.current
     if (!d || !eng || e.button !== 0 || d.hot || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4 || eng.gizmo.dragging) return
     const s = st()
     if (s.mode === 'record') return                                                    // C1: nothing is picked in Record
     const fig = s.object(s.selected)
+    const p = eng.pick(e.clientX, e.clientY)
     if (s.tool === 'path' && fig?.kind === 'mannequin') {                             // CA1: a click on the floor adds to the figure's path
       const at = eng.place(e.clientX, e.clientY)
       if (at) s.addPathPoint(fig.id, [at[0], at[2]])
       return
     }
-    const p = eng.pick(e.clientX, e.clientY)
     if (p.joint && p.id) { st().selectJoint(p.joint) }                                 // the rotate gizmo moves to the joint (FK)
     else if (p.ik && p.id) { st().selectJoint(null); eng.startIk(p.id, p.ik) }         // a translate handle on the hand / foot (IK)
     else if (p.camera) st().selectCamera(p.camera)                                      // D119 (SC1): a camera's body — the camera as the selection
@@ -1087,6 +1135,7 @@ function Viewport() {
     const eng = engineRef.current
     const p = eng ? eng.pick(e.clientX, e.clientY) : { id: null }
     if (p.camera) { st().selectCamera(p.camera); showMenu(e, cameraMenu()); return }
+    if (p.pathPoint !== undefined && p.id) { const id = p.id, i = p.pathPoint; st().select(id); showMenu(e, [{ label: `Remove point ${i + 1}`, danger: true, run: () => st().removePathPoint(id, i) }, { cmd: 'stage.path.clear' }]); return }   // C2 (P9)
     const s = st()
     const floor = !!p.id && s.object(p.id)?.kind === 'set' && s.selected !== p.id       // C1 (P11): a set's floor under the right-click is the floor, not a thing to select — its row selects it
     if (p.id && !floor) s.select(p.id)
@@ -1096,7 +1145,7 @@ function Viewport() {
   markUsed('stage.tool.select'); markUsed('stage.tool.move'); markUsed('stage.tool.rotate'); markUsed('stage.tool.scale'); markUsed('stage.snap'); markUsed('stage.undo'); markUsed('stage.redo')
   return (
     <div ref={(el) => { (hostRef as React.MutableRefObject<HTMLDivElement | null>).current = el; dropRef(el) }} className={`stage-host${over ? ' over' : ''}`}
-      onPointerDown={onDown} onPointerUp={onUp} onPointerMove={(e) => { lastPointer.current = { x: e.clientX, y: e.clientY } }} onContextMenu={onMenu} onDoubleClick={onDouble}>
+      onPointerDown={onDown} onPointerUp={onUp} onPointerMove={onMove} onContextMenu={onMenu} onDoubleClick={onDouble}>
       <div ref={canvasHolderRef} className="stage-canvas-holder" />
       {current && <div className="mode-pill" role="group" aria-label="Build or Record" onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}>{/* C1 (D181): ArtCraft's Build | Record */}
         <CommandButton id="stage.mode.build" text active={!rec} /><CommandButton id="stage.mode.record" text active={rec} />
@@ -1140,6 +1189,24 @@ export function Stage() {
   if (!project?.open) return <div className="placeholder"><div><h2>Stage</h2>open or create a project to begin</div></div>
   if (!current) return <div className="placeholder"><div><h2>Stage</h2>a blocking in 3D: a set, figures, props and cameras at the project size<div className="quick-cards"><CommandButton id="stage.new" text label="New stage…" /></div></div></div>
   return <div className="stage-col"><Viewport /><Timeline /></div>   // D95 (AN1): the transport under the viewer, as at the Performance level
+}
+
+/** C2 (P9): the figure's floor path as numbers — each point's x · z typed, a point removed, the path cleared; in the viewport the points
+ *  are dragged (and the Path tool adds them by clicking the floor). A clip along the path re-flows as a point moves. */
+function PathFields({ o }: { o: StageObject }) {
+  const pts = (o.path ?? []) as number[][]
+  markUsed('stage.path.clear'); markUsed('stage.tool.path')
+  return (
+    <div className="path-fields" data-testid="path-fields">
+      <div className="kv"><span>path <Help text="The floor path a clip walks along: its points in metres on the floor (x · z). Drag a point in the viewport, type it here, or right-click it to remove it — the walk re-flows. The Path tool adds points by clicking the floor; with Snap on a point lands on the quarter metre." /></span>
+        <span className="hint">{pts.length ? `${pts.length} point${pts.length === 1 ? '' : 's'}` : 'none'}</span></div>
+      {pts.map((p, i) => <div key={i} className="kv path-point" data-point={i}><span>{i + 1}</span><span className="vec">
+        <input type="number" step={0.05} aria-label={`point ${i + 1} x`} value={num(p[0])} onChange={(e) => st().setPathPoint(o.id, i, [Number(e.target.value) || 0, p[1]])} />
+        <input type="number" step={0.05} aria-label={`point ${i + 1} z`} value={num(p[1])} onChange={(e) => st().setPathPoint(o.id, i, [p[0], Number(e.target.value) || 0])} />
+        <button type="button" className="quiet danger" title="Remove this point" aria-label={`remove point ${i + 1}`} onClick={() => st().removePathPoint(o.id, i)}>✕</button></span></div>)}
+      <div className="verbs"><CommandButton id="stage.tool.path" text label={pts.length ? 'Add points (click the floor)' : 'Draw a path (click the floor)'} />{pts.length > 0 && <CommandButton id="stage.path.clear" text />}</div>
+    </div>
+  )
 }
 
 // ------------------------------------------------------------------ Inspector

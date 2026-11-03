@@ -5,6 +5,7 @@
 // the one transport: the same command buttons and the frame field at every level, the level's own verbs after them.
 import { useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { CommandRow } from '../../frame/CommandButton'
+import { useDropTarget, type DragPayload } from '../../frame/drag'
 import { deltaFrames, frameAt, pct, ticks, type Span } from './timelineMath'
 import './timeline.css'
 
@@ -34,7 +35,17 @@ interface Props {
   onKeyDrag?: (row: string, from: number, to: number) => void
   onKeyMenu?: (e: ReactMouseEvent, row: string, frame: number) => void
   onMenu?: (e: ReactMouseEvent) => void
+  /** C2 (P10): a drag (a clip, a template) let go on a row's track lands at the frame under the pointer. */
+  acceptDrop?: (p: DragPayload, row: string) => boolean
+  onDrop?: (row: string, frame: number, p: DragPayload) => void
   children?: ReactNode
+}
+
+/** C2 (P10): a track that takes a drop at the frame under the pointer. */
+function TrackDrop({ row, span, accept, drop, children }: { row: string; span: Span; accept: (p: DragPayload, row: string) => boolean; drop: (row: string, frame: number, p: DragPayload) => void; children: ReactNode }) {
+  const { ref, over } = useDropTarget((p) => accept(p, row), (p, info) => { const r = info.el.getBoundingClientRect(); drop(row, Math.max(span[0], frameAt(info.x, r.left, r.width, span)), p) },
+    (p) => (accept(p, row) ? { ok: true, label: 'Drop it on this track' } : { ok: false, reason: 'Not for this track' }))
+  return <div ref={ref} className={`tl-track${over ? ' over' : ''}`}>{children}</div>
 }
 
 type Drag =
@@ -42,7 +53,7 @@ type Drag =
   | { kind: 'key'; row: string; frame: number; x0: number; dx: number; width: number }
   | { kind: 'work'; end: 'from' | 'to'; frame: number }
 
-export function Timeline({ className = '', span, fps, frame, onSeek, work, rows, onBarDrag, onKeyDrag, onKeyMenu, onMenu, children }: Props) {
+export function Timeline({ className = '', span, fps, frame, onSeek, work, rows, onBarDrag, onKeyDrag, onKeyMenu, onMenu, acceptDrop, onDrop, children }: Props) {
   const ruler = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<Drag | null>(null)
   const moved = useRef(false)                                            // a drag's own click does not select the row
@@ -108,12 +119,8 @@ export function Timeline({ className = '', span, fps, frame, onSeek, work, rows,
         </div>
       </div>
       {children}
-      {rows.map((r) => (
-        <div key={r.id} className={`tl-row${r.selected ? ' selected' : ''}${r.className ? ` ${r.className}` : ''}`} data-row={r.id} {...dataOf(r.data)} title={r.title}
-          onClick={() => { if (moved.current) { moved.current = false; return } r.onSelect?.() }} onContextMenu={r.onMenu}>
-          <span className="tl-label">{r.label}{r.onKey && <button type="button" className="tl-keybtn" title={r.keyTitle ?? `Key it here (frame ${frame})`} aria-label={`key ${typeof r.label === 'string' ? r.label : 'this row'} at the playhead`}
-            onClick={(e) => { e.stopPropagation(); r.onKey!() }} onPointerDown={(e) => e.stopPropagation()}>◆</button>}</span>
-          <div className="tl-track">
+      {rows.map((r) => {
+        const inner = <>
             {r.bars?.map((b) => {
               const [f, t] = shown(r.id, b)
               return (
@@ -134,9 +141,16 @@ export function Timeline({ className = '', span, fps, frame, onSeek, work, rows,
             {r.markers?.map((m, i) => <span key={`${m.frame}.${i}`} className={`tl-marker marker${m.className ? ` ${m.className}` : ''}`} style={{ left: pct(m.frame, span) }} title={m.title}
               onClick={m.onClick ? (e) => { e.stopPropagation(); m.onClick!() } : undefined}>{m.glyph}</span>)}
             <div className="tl-line playhead" style={{ left: pct(frame, span) }} />
-          </div>
+          </>
+        return (
+        <div key={r.id} className={`tl-row${r.selected ? ' selected' : ''}${r.className ? ` ${r.className}` : ''}`} data-row={r.id} {...dataOf(r.data)} title={r.title}
+          onClick={() => { if (moved.current) { moved.current = false; return } r.onSelect?.() }} onContextMenu={r.onMenu}>
+          <span className="tl-label">{r.label}{r.onKey && <button type="button" className="tl-keybtn" title={r.keyTitle ?? `Key it here (frame ${frame})`} aria-label={`key ${typeof r.label === 'string' ? r.label : 'this row'} at the playhead`}
+            onClick={(e) => { e.stopPropagation(); r.onKey!() }} onPointerDown={(e) => e.stopPropagation()}>◆</button>}</span>
+          {acceptDrop && onDrop ? <TrackDrop row={r.id} span={span} accept={acceptDrop} drop={onDrop}>{inner}</TrackDrop> : <div className="tl-track">{inner}</div>}
         </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

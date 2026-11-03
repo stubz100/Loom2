@@ -44,3 +44,7 @@
 .tl-bar.away { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--fg3) 20%, var(--bg3)) 0 6px, var(--bg3) 6px 12px); border-color: var(--fg3); cursor: default; }   /* F42 */
 .tl-bar.away.warn { border-color: var(--warn); color: var(--warn); }
 .tl-bar.held { background: color-mix(in srgb, var(--accent) 10%, var(--bg3)); border-color: var(--line2); border-style: dotted; cursor: default; }   /* U5e: carried in a hand */
+/* C2 (P8, P10): a correction over a clip is a hollow diamond; a track taking a drop */
+.tl-key.correction { background: var(--bg1); border: 1.5px solid var(--accent); box-sizing: border-box; }
+.tl-key.correction.here { border-color: var(--fg); }
+.tl-track.over { outline: 1px dashed var(--accent); outline-offset: -1px; background: color-mix(in srgb, var(--accent) 8%, transparent); }

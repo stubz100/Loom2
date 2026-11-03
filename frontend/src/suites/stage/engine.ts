@@ -38,7 +38,7 @@ export interface EngineHooks {
   onCameraMoved?: (id: string, pos: number[]) => void
   onCameraTurned?: (id: string, target: number[], roll: number) => void     // the camera's body turned with the rotate tool: a new target at the old distance, the roll about it
 }
-export interface Pick { id: string | null; joint?: Joint; ik?: Chain; camera?: string }
+export interface Pick { id: string | null; joint?: Joint; ik?: Chain; camera?: string; pathPoint?: number }   // C2 (P9): a point of the figure's floor path
 
 interface Entry { holder: THREE.Group; body: THREE.Object3D; doc: StageObject; figure?: Mannequin; pickers?: THREE.Object3D[]; detailed?: Detailed; proxy?: Proxy; unmark?: () => void; pinKey?: string }
 
@@ -295,6 +295,15 @@ export class StageEngine {
     if (h) this.selection.setFromObject(h)
     this.dirty = true
   }
+  /** C2 (P9): where a path point is on the canvas (client px) — the dev hook and the smoke test aim the mouse at it; null when there is none. */
+  pathScreen(id: string, index: number): { x: number; y: number } | null {
+    const d = this.paths.get(id)?.dots[index]
+    if (!d) return null
+    const v = d.getWorldPosition(new THREE.Vector3()).project(this.camera())
+    const r = this.canvas.getBoundingClientRect()
+    const f = this.view === 'camera' ? this.frameRect() : { x: 0, y: 0, w: this.w, h: this.h }
+    return { x: r.left + f.x + ((v.x + 1) / 2) * f.w, y: r.top + f.y + ((1 - v.y) / 2) * f.h }
+  }
   /** D119 (SC1): where a camera's body is on the canvas (client px), for a click to land on it — null when it is off screen or hidden. */
   cameraScreen(id: string): { x: number; y: number } | null {
     const h = this.camHelpers.get(id)
@@ -350,7 +359,11 @@ export class StageEngine {
     if (!joint && this.ik?.id === id) return                       // clearing the joint while a hand / foot handle is live keeps that handle
     this.endIk()
     const e = this.entries.get(id)
-    if (!e?.figure || !joint) { this.posing = null; if (this.gizmo.enabled && e && !e.doc.locked) this.attach(id); else this.gizmo.detach(); this.dirty = true; return }
+    if (!e?.figure || !joint) {                                                     // C2: pose mode over — the figure's gizmo only under a transform tool (under Select it stayed attached, and its handles took the next click)
+      this.posing = null
+      if (this.gizmo.enabled && e && !e.doc.locked && this.tool !== 'select' && this.tool !== 'path') this.attach(id); else { this.gizmo.detach(); if (this.tool === 'select' || this.tool === 'path') this.gizmo.enabled = false }
+      this.dirty = true; return
+    }
     this.posing = { id, joint }
     this.gizmo.setMode('rotate')
     this.gizmo.setSpace('local')
@@ -496,6 +509,9 @@ export class StageEngine {
   /** What is under a client-space point: an object, a joint picker or an IK handle of the selected figure, or nothing. */
   pick(x: number, y: number): Pick {
     this.ray.setFromCamera(this.ndc(x, y), this.camera())
+    const dots = [...this.paths.values()].flatMap((p) => (p.obj.visible ? p.dots : []))   // C2 (P9): a path point before anything else — it is small and lies on the floor
+    const dot = dots.length ? this.ray.intersectObjects(dots, false)[0] : undefined
+    if (dot) { const pp = dot.object.userData.pathPoint as { id: string; index: number }; return { id: pp.id, pathPoint: pp.index } }
     // pose mode: the selected figure's pickers first — a joint sphere sits inside its limb, so the body would always win on distance
     const sel = this.selectedId ? this.entries.get(this.selectedId) : undefined
     if (this.poseMode && sel?.pickers && sel.doc.visible) {
@@ -865,9 +881,21 @@ export class StageEngine {
     return this.entries.get(id)?.detailed?.handPreset(side, preset) ?? null
   }
   // CA1: each figure's floor path, smoothed as a clip walks it, with its clicked points — a viewport guide, never in the passes
-  private paths = new Map<string, { key: string; obj: THREE.Object3D }>()
+  private paths = new Map<string, { key: string; obj: THREE.Object3D; line: THREE.Line; dots: THREE.Mesh[] }>()
   private pathMat = new THREE.LineBasicMaterial({ color: 0x5ad0ff })
   private pathDot = new THREE.MeshBasicMaterial({ color: 0x5ad0ff })
+  private pathLine(pts: number[][]): THREE.Vector3[] { return measure(pts.map((p) => [p[0], p[1]] as [number, number])).points.map(([x, z]) => new THREE.Vector3(x, 0.01, z)) }
+  /** C2 (P9): a path point grabbed in the viewport — the orbit is held while it is dragged; the point and its line follow the floor under
+   *  the pointer (movePathPointTo), and the viewport writes the point on release. */
+  beginPathDrag(): void { this.orbit.enabled = false }
+  movePathPointTo(id: string, index: number, x: number, z: number): void {
+    const p = this.paths.get(id), dot = p?.dots[index]
+    if (!p || !dot) return
+    dot.position.set(x, 0.03, z)
+    p.line.geometry.dispose(); p.line.geometry = new THREE.BufferGeometry().setFromPoints(this.pathLine(p.dots.map((m) => [m.position.x, m.position.z])))
+    this.dirty = true
+  }
+  endPathDrag(): void { this.orbit.enabled = this.view === 'free' }
   private syncPaths(doc: StageDoc): void {
     const seen = new Set<string>()
     for (const o of doc.objects) {
@@ -879,11 +907,11 @@ export class StageEngine {
       const old = this.paths.get(o.id)
       if (old) this.scene.remove(old.obj)
       const g = new THREE.Group(); g.userData.helper = 'path'
-      const smooth = measure(pts.map((p) => [p[0], p[1]] as [number, number])).points
-      g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(smooth.map(([x, z]) => new THREE.Vector3(x, 0.01, z))), this.pathMat))
-      for (const [x, z] of pts) { const d = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), this.pathDot); d.position.set(x, 0.02, z); g.add(d) }
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(this.pathLine(pts)), this.pathMat)
+      g.add(line)
+      const dots = pts.map(([x, z], index) => { const d = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), this.pathDot); d.position.set(x, 0.03, z); d.userData.pathPoint = { id: o.id, index }; g.add(d); return d })   // C2 (P9): a point is a handle
       this.scene.add(g)
-      this.paths.set(o.id, { key, obj: g })
+      this.paths.set(o.id, { key, obj: g, line, dots })
     }
     for (const [id, p] of [...this.paths]) if (!seen.has(id)) { this.scene.remove(p.obj); this.paths.delete(id) }
   }

@@ -3,10 +3,12 @@
 // track (blocks.ts evaluates it: retargeted onto its body's hip height, from where it stands at the playhead and facing its way).
 import { create } from 'zustand'
 import { useSession } from '../../../store/session'
+import type { StageDoc, StageObject } from '../../../api/types'
 import type { ApiError } from '../../../api/client'
 import { st } from '../stageStore'
 import { keyframesOf } from '../anim'
 import { blockKeys, useBlocks, type MotionBlock } from '../blocks'
+import { nextStart } from '../corrections'
 import { clipsOf, listFiles, type MotionClip, type MotionFile } from './library'
 
 export type MotionFilter = 'all' | 'starter' | 'local' | 'mine'   // U5c: mine — the project's animations and the author's library
@@ -24,6 +26,8 @@ interface MotionState {
   pick: (clip: MotionClip | null) => void
   set: (patch: Partial<Pick<MotionState, 'filter' | 'q' | 'start' | 'end' | 'speed' | 'inPlace' | 'lock' | 'ground' | 'alongPath' | 'blend'>>) => void
   apply: () => Promise<void>
+  /** C2 (P10): a clip dropped on a figure's track — the block starts at that frame. */
+  applyAt: (oid: string, frame: number, fileId: string, clipName: string) => Promise<void>
 }
 
 /** A Mixamo download is one clip named after its file: it is listed without loading the file. */
@@ -50,16 +54,33 @@ export const useMotion = create<MotionState>((set, get) => ({
   set: (patch) => set(patch),
   apply: async () => {
     // U5 (D157 G8): a clip is a block on the figure's track — evaluated first (its length goes on the block; a clip that cannot be
-    // evaluated is not added), never baked into its keys, and the stage's range stays as it is (F37)
-    const s = useSession.getState()
+    // evaluated is not added), never baked into its keys, and the stage's range stays as it is (F37). C2 (P10): it lands after the
+    // figure's last clip (else at the shot's start), never silently at the playhead; a drop on the track lands where it was let go.
     const clip = get().picked
     const o = st().object(st().selected)
     const doc = st().current
     if (!clip || !o || o.kind !== 'mannequin' || !doc) return
+    await applyClip(get, set, o, doc, clip, nextStart(doc, o.id))
+  },
+  applyAt: async (oid, frame, fileId, clipName) => {
+    const doc = st().current, o = doc?.objects.find((x) => x.id === oid)
+    if (!doc || !o || o.kind !== 'mannequin') return
+    const f = get().files.find((x) => x.id === fileId), clips = f ? get().clips[f.id] : undefined
+    const clip = Array.isArray(clips) ? clips.find((c) => c.name === clipName) : f && f.ext === 'fbx' ? singleClip(f) : undefined
+    if (!clip) { useSession.getState().toast('The clip is not in the library any more', 'error'); return }
+    await applyClip(get, set, o, doc, clip, Math.max(doc.range.start, Math.round(frame)))
+  },
+}))
+
+type Get = () => MotionState
+type Set = (p: Partial<MotionState>) => void
+/** The clip as a block on the figure's track from `start`, with the panel's trim, speed, lock and path choices. */
+async function applyClip(get: Get, set: Set, o: StageObject, doc: StageDoc, clip: MotionClip, start: number): Promise<void> {
+    const s = useSession.getState()
     const path = get().alongPath && !!o.path && o.path.length >= 2
     const had = (keyframesOf(doc).objects[o.id]?.length ?? 0) > 0 || (doc.tracks?.[o.id]?.length ?? 0) > 0
     const block: MotionBlock = { id: `blk_${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}`, source: { kind: 'library', id: clip.file.id, clip: clip.name },
-      start: st().frame, trim_in: get().start, trim_out: get().end ?? null, loops: path && /_loop$|loop$/i.test(clip.name) ? 0 : 1, speed: get().speed,
+      start, trim_in: get().start, trim_out: get().end ?? null, loops: path && /_loop$|loop$/i.test(clip.name) ? 0 : 1, speed: get().speed,
       blend_in: had ? get().blend : 0, blend_out: 0, in_place: get().inPlace && !path, foot_lock: get().lock, ground: get().ground, mirror: false, path, length: 0 }
     set({ applying: true })
     try {
@@ -72,5 +93,4 @@ export const useMotion = create<MotionState>((set, get) => ({
       s.toast(`${clip.name} on ${o.name}: a clip from frame ${first} to ${last}${path ? ', along its path' : ''}${get().lock ? ', feet locked' : ''}${past}`, 'success')
     } catch (e) { s.toast(`The clip was not applied: ${e instanceof Error ? e.message : String(e)}`, 'error') }
     finally { set({ applying: false }) }
-  },
-}))
+}

@@ -2949,7 +2949,7 @@ test('the motion library (CA1, 01 step 5; U5b G8): the starter folder\'s clips l
     tracks: Record<string, { source: { kind: string; clip: string }; start: number; length: number; foot_lock: boolean }[]> }
   const doc = async () => (await api<{ items: Doc[] }>('GET', '/stages')).items.find((s) => s.name === 'Motion test')!
   const range = (await doc()).range.end
-  await lib.locator('button', { hasText: /^Apply to Figure 1 at the playhead/ }).click()
+  await lib.locator('button', { hasText: /^Apply to Figure 1/ }).click()
   await expect.poll(async () => Object.values((await doc()).tracks ?? {})[0]?.length ?? 0, { timeout: 15_000 }).toBe(1)
   const d = await doc()
   const b = Object.values(d.tracks)[0][0]
@@ -3002,7 +3002,7 @@ test('a floor path (CA1, 01 step 5): the Path tool adds the floor points clicked
   await lib.locator('.motion-file-head', { hasText: 'test_rig' }).click()
   await lib.locator('.motion-clip', { hasText: 'Walk_RM' }).click()
   await expect(lib.locator('label', { hasText: /^ ?along Figure 1's path/ })).toBeVisible()
-  await lib.locator('button', { hasText: /^Apply to Figure 1 at the playhead/ }).click()
+  await lib.locator('button', { hasText: /^Apply to Figure 1/ }).click()
   await expect.poll(async () => Object.values(((await doc()) as unknown as { tracks?: Record<string, unknown[]> })?.tracks ?? {})[0]?.length ?? 0, { timeout: 15_000 }).toBe(1)   // U5b: a clip block
   const d = (await doc())!
   const first = await page.evaluate(() => (window as unknown as { __loom2Stage: { sampleAt: (f: number) => Promise<{ objects: { transform: { pos: number[] } }[] }> } }).__loom2Stage.sampleAt(0))
@@ -3819,7 +3819,7 @@ test('the animation editor (U5c, D157 G8 G9 · proto01_UI2 04 §3.2): a clip blo
   const lib = page.locator('.motion-lib')
   await lib.locator('.motion-file-head', { hasText: 'test_rig' }).click()
   await lib.locator('.motion-clip', { hasText: 'Walk_RM' }).click()
-  await lib.locator('button', { hasText: /^Apply to Figure 1 at the playhead/ }).click()
+  await lib.locator('button', { hasText: /^Apply to Figure 1/ }).click()
   type Block = { id: string; start: number; loops: number; length: number }
   type Doc = { name: string; range: { start: number; end: number }; tracks: Record<string, Block[]>; keyframes: { objects: Record<string, unknown[]> } }
   const doc = async () => (await api<{ items: Doc[] }>('GET', '/stages')).items.find((s) => s.name === 'Editor test')!

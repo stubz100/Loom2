@@ -10,6 +10,7 @@ import { askText, useSession } from '../../store/session'
 import { keyframesOf, sampleFigure, type ObjectKey } from './anim'
 import { blockKeys, blockRuns, blocksReady, hipOf, templatesChanged, useBlocks, type AnimationTemplate, type MotionBlock } from './blocks'
 import { thinKeys } from './motion/bake'
+import { nextStart } from './corrections'
 import { st } from './stageStore'
 
 const toast = (t: string, kind: 'success' | 'error' | 'info' = 'info') => useSession.getState().toast(t, kind)
@@ -118,12 +119,12 @@ export async function saveRangeAsAnimation(oid: string): Promise<void> {
   await saveTemplate(name.trim(), thinKeys(keys), oid, doc.range)
 }
 
-/** A template applied as a block to the selected figure at the playhead. */
-export async function applyTemplate(t: AnimationTemplate): Promise<void> {
-  const doc = st().current, o = st().object(st().selected)
+/** A template applied as a block to a figure (the selected one) — after its last clip, or at `start` when dropped on its track (C2, P10). */
+export async function applyTemplate(t: AnimationTemplate, oid?: string, start?: number): Promise<void> {
+  const doc = st().current, o = oid ? doc?.objects.find((x) => x.id === oid) : st().object(st().selected)
   if (!doc || !o || o.kind !== 'mannequin') { toast('Select a figure to apply the animation to', 'info'); return }
   const had = (keyframesOf(doc).objects[o.id]?.length ?? 0) > 0 || (doc.tracks?.[o.id]?.length ?? 0) > 0
-  const block = { id: newId('blk'), source: { kind: 'template', id: t.id, clip: t.name }, start: st().frame, trim_in: 0, trim_out: null, loops: 1, speed: 1,
+  const block = { id: newId('blk'), source: { kind: 'template', id: t.id, clip: t.name }, start: start ?? nextStart(doc, o.id), trim_in: 0, trim_out: null, loops: 1, speed: 1,
     blend_in: had ? 6 : 0, blend_out: 0, in_place: false, foot_lock: true, ground: true, mirror: false, path: false, length: 0 } as MotionBlock
   const probe = { ...doc, tracks: { ...(doc.tracks ?? {}), [o.id]: [...(doc.tracks?.[o.id] ?? []), block] } }
   const keys = await blockKeys(probe, o.id, block.id)

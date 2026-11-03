@@ -8,7 +8,7 @@ import type { StageCamera, StageDoc, StageObject } from '../../api/types'
 
 export type Ease = 'linear' | 'ease'
 export interface CameraKey { frame: number; ease: Ease; pos: number[]; target: number[]; focal_mm: number }
-export interface ObjectKey { frame: number; ease: Ease; transform: { pos: number[]; rot: number[]; scale: number[] }; pose?: { preset?: string | null; joints: Record<string, number[]>; extra?: Record<string, number[]>; ground?: number; pins?: Record<string, number[]>;
+export interface ObjectKey { correction?: boolean; frame: number; ease: Ease; transform: { pos: number[]; rot: number[]; scale: number[] }; pose?: { preset?: string | null; joints: Record<string, number[]>; extra?: Record<string, number[]>; ground?: number; pins?: Record<string, number[]>;
   contacts?: NonNullable<StageObject['pose']>['contacts']; gaze?: NonNullable<StageObject['pose']>['gaze'] } | null }
 /** CS3: from `frame` the figure's body is `body` (null: the figure's own — its Cast version's, whatever it is now), reached over
  *  `transition` frames from the body before it (0: a cut). */
@@ -106,9 +106,18 @@ export function sampleFigure(o: StageObject, layer: ObjectKey[] | undefined, run
   for (const k of layer ?? []) {
     const d = Math.abs(frame - k.frame)
     if (k.frame < run.start || k.frame > run.end || d >= CORRECTION_FRAMES) continue
-    at = mixObjects(o, at, sampleObject(o, [k], k.frame), smoothstep(1 - d / CORRECTION_FRAMES))
+    const w = smoothstep(1 - d / CORRECTION_FRAMES)
+    // C2 (P8): a correction key holds only the joints the author changed — they go over the block's pose, which keeps moving the figure;
+    // a key from before C2 (the whole pose) mixes in whole, as it did
+    at = mixObjects(o, at, k.correction ? corrected(at, k) : sampleObject(o, [k], k.frame), w)
   }
   return at
+}
+
+/** The block's pose at a frame with a correction's joints (and the Detailed level's bones) laid over it; everything else the block's. */
+export function corrected(at: StageObject, k: ObjectKey): StageObject {
+  const pose = at.pose ?? { preset: 'stand', joints: {}, extra: {}, ground: 0, pins: {}, contacts: {}, gaze: null }
+  return { ...at, pose: { ...pose, joints: { ...(pose.joints ?? {}), ...(k.pose?.joints ?? {}) }, extra: { ...(pose.extra ?? {}), ...(k.pose?.extra ?? {}) } } }
 }
 
 type Body = NonNullable<StageObject['body']>

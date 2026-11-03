@@ -239,3 +239,6 @@
 /* C1: the column's rows never wider than the column (the hands' grid pushed a scrollbar under it) */
 .stage-panel .kv, .stage-insp .kv { grid-template-columns: 76px minmax(0, 1fr); }
 .stage-panel .lib-grid.hands { min-width: 0; flex-wrap: wrap; }
+/* C2 (P9): the path's points as numbers in the Inspector */
+.path-fields .path-point > span:first-child { color: var(--fg3); text-align: right; padding-right: 4px; }
+.path-fields .vec input { width: 100%; min-width: 0; }

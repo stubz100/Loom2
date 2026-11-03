@@ -6,6 +6,7 @@ import type { AnimationTemplate } from '../blocks'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { CommandButton } from '../../../frame/CommandButton'
+import { beginDrag } from '../../../frame/drag'
 import { Help } from '../../../frame/Help'
 import { markUsed } from '../../../frame/commands'
 import { useSession } from '../../../store/session'
@@ -61,7 +62,8 @@ export function MotionLibrary() {
             : <label className="hint check"><input type="checkbox" checked={m.inPlace} onChange={(e) => m.set({ inPlace: e.target.checked })} /> in place (no travel)</label>}
           <div className="kv"><span>blend in</span><span><input type="number" aria-label="blend in frames" min={0} max={24} step={1} value={m.blend} onChange={(e) => m.set({ blend: Math.max(0, Math.min(24, Number(e.target.value) || 0)) })} /> frames from what the figure was doing</span></div>
           {fig && <div className="verbs"><CommandButton id="stage.tool.path" text label={fig.path?.length ? 'Add to the path (click the floor)' : 'Draw a path (click the floor)'} /><CommandButton id="stage.path.clear" text /></div>}
-          <div className="verbs"><CommandButton id="stage.motion.apply" text label={m.applying ? 'Applying…' : fig ? `Apply to ${fig.name} at the playhead` : 'Apply at the playhead (select a figure)'} /></div>
+          <div className="verbs"><CommandButton id="stage.motion.apply" text label={m.applying ? 'Applying…' : fig ? `Apply to ${fig.name}` : 'Apply (select a figure)'} />
+            <Help text="Apply puts the clip after the figure's last clip, or at the shot's start — never silently at the playhead. To put it elsewhere, drag the clip's name onto the figure's track: it lands at the frame under the mouse (C2, P10)." /></div>
         </div>
       )}
     </div>
@@ -77,9 +79,9 @@ function MineList({ q, fig }: { q: string; fig: string | null }) {
   const inLib = new Set(t.library.map((x) => x.id))
   const row = (x: AnimationTemplate, from: 'project' | 'library') => (
     <div key={`${from}:${x.id}`} className="motion-clip mine" role="listitem" data-id={x.id}>
-      <span>{x.name}<small> · {(x.frames / Math.max(1, x.fps)).toFixed(1)} s</small></span>
+      <span title="drag it onto a figure's track" onPointerDown={(e) => beginDrag(e, () => ({ items: [{ kind: 'preset', id: `template:${x.id}` }], label: `${x.name} — onto a figure's track` }))}>{x.name}<small> · {(x.frames / Math.max(1, x.fps)).toFixed(1)} s</small></span>
       <span className="verbs">
-        <button type="button" className="link" disabled={!fig} title={fig ? `A clip block on ${fig} at the playhead` : 'Select a figure'} onClick={() => void applyTemplate(x)}>Apply</button>
+        <button type="button" className="link" disabled={!fig} title={fig ? `A clip block on ${fig}, after its last clip` : 'Select a figure'} onClick={() => void applyTemplate(x)}>Apply</button>
         {from === 'project' && !inLib.has(x.id) && <button type="button" className="link" title="Every project has it under Mine" onClick={() => void templateToLibrary(x)}>To my library</button>}
         <button type="button" className="link danger" title={from === 'project' ? 'Remove it from the project' : 'Remove it from your library'} onClick={() => void removeTemplate(x, from)}>Remove</button>
       </span>
@@ -101,7 +103,8 @@ function FileRow({ f }: { f: MotionFile }) {
   const isPicked = (c: MotionClip) => picked?.file.id === c.file.id && picked.name === c.name
   if (f.ext === 'fbx') {                                                       // a Mixamo download: one clip, named after its file
     const c = singleClip(f)
-    return <button type="button" role="listitem" className={`motion-clip${isPicked(c) ? ' active' : ''}`} onClick={() => useMotion.getState().pick(c)} title={`${f.rel} · ${f.licence}`}>{f.name}<small>local · fbx</small></button>
+    return <button type="button" role="listitem" className={`motion-clip${isPicked(c) ? ' active' : ''}`} onClick={() => useMotion.getState().pick(c)} title={`${f.rel} · ${f.licence} — drag it onto a figure's track`}
+      onPointerDown={(e) => beginDrag(e, () => ({ items: [{ kind: 'preset', id: `clip:${f.id}:${c.name}` }], label: `${c.name} — onto a figure's track` }))}>{f.name}<small>local · fbx</small></button>
   }
   return (
     <div className="motion-file" role="listitem">
@@ -112,7 +115,8 @@ function FileRow({ f }: { f: MotionFile }) {
         : 'error' in (clips as object) ? <span className="hint error">{(clips as { error: string }).error}</span>
         : (clips as MotionClip[]).length === 0 ? <span className="hint">no clips in this file (a mannequin only)</span>
         : <div className="motion-clips">{(clips as MotionClip[]).map((c) => (
-          <button key={c.name} type="button" className={`motion-clip${isPicked(c) ? ' active' : ''}`} onClick={() => useMotion.getState().pick(c)} title={c.rig ? `rig: ${c.rig}` : 'an unknown rig'}>
+          <button key={c.name} type="button" className={`motion-clip${isPicked(c) ? ' active' : ''}`} onClick={() => useMotion.getState().pick(c)} title={`${c.rig ? `rig: ${c.rig}` : 'an unknown rig'} — drag it onto a figure's track`}
+            onPointerDown={(e) => beginDrag(e, () => ({ items: [{ kind: 'preset', id: `clip:${f.id}:${c.name}` }], label: `${c.name} — onto a figure's track` }))}>
             {c.name}<small>{secs(c.duration)}{c.rootMotion ? ' · moves' : ''}</small>
           </button>))}</div>)}
     </div>

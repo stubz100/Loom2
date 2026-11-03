@@ -15930,3 +15930,32 @@ Record emptied the viewport's chrome. The additions were undone and the scene is
 the spread, the facing, the dragged tile; `outliner.test.tsx` and `modes.test.ts` re-cut to the Inspector and Clay's three sections);
 agents check 9 / 0. **The e2e is ported** (the editors in `.w-insp .sel-editor`, no Shot section in Clay) **and still not run:** port 1420
 is the author's dev server's. No orchestrator change.
+
+## 2026-11-03 17:09 — C2 built (D181, propo02 05): the tracks — a pose key over a clip is a correction, the path an object, a clip lands where it is dropped, Apply after the last clip
+
+The third wave of D181, on Clay's animation editor. **Corrections (P8):** a pose edit on a figure while a clip block plays it — a joint
+turned in the pose editor, a preset, a hand — is a key that holds only the joints the author changed (`corrections.ts`: the diff against the
+block's pose at that frame beyond half a degree, merged with the correction already at that frame so a second joint keeps the first), with
+the block's transform; `sampleFigure` lays the correction's joints over the block's pose, eased in and out over six frames, and the block
+goes on moving the figure (`anim.ts`); the row's ◆ over a block writes a correction too; the pose editor's fields start from the figure as it
+is at the playhead; a key from before C2 (the whole pose) mixes in whole as it did. A correction is a hollow diamond on the track, its hover
+naming the joints. **The path as an object (P9):** its points are handles on the floor — grabbed in the viewport (pointer-down on a dot, the
+orbit held, the point and its line following the floor under the pointer, written on release, on the quarter metre with Snap on), typed in
+the Inspector's path fields (x · z a point, ✕ a point, Clear the path), or removed from a point's right-click; the walk along the path
+re-flows. **A clip where it is dropped (P10):** a clip's name (and a template's under Mine) is dragged out of the motion library onto a
+figure's track and lands at the frame under the mouse (`TrackDrop` in the shared timeline, `useMotion.applyAt`, `applyTemplate(t, oid,
+start)`); every figure has a track row; *Apply to ‹figure›* lands after the figure's last clip, else at the shot's start — never silently at
+the playhead — and the toast says the frames. *Save as animation…* was already a block's and a track's verb. One pre-existing quirk fixed
+on the way: when pose mode ended under the Select tool the gizmo re-attached to the figure, and its handles took the next click.
+
+**Seen on the walk's scene** (shot 1): at frame 60 of Nora's walk, head y 30 then neck y 20 gave one correction key with both joints, her
+position at 60 the block's (0.50, −11.86), the hips the walk's, the head back to 0 by frame 70 and her x moving on; point 2 of her path
+dragged from (0.48, −9.97) to (3.06, −7.28) and point 3's z typed to −9.5; Crouch_Idle_Loop dropped on the man's track landed at frame 194
+(the mouse at the track's middle); *Apply to Nora* put it at 316, after her walk. Everything undone; the scene as the walk left it. Six
+screenshots, three sent.
+
+**Checks:** typecheck, build and lint clean (61 warnings, as before); Vitest 653 + 3 skipped (`corrections.test.ts` new: the correction over a
+run, the merge, the diff, where Apply lands, a dragged clip); agents check 9 / 0; the e2e ported (*Apply to Figure 1*) and still not run —
+port 1420 is the author's dev server's. No orchestrator change: the stage record carries `correction` on a key as it carries the rest of the
+untyped keyframes. Driver lessons: a `page.goto` to the page's own URL and hash does not reload, so a changed module stays stale (reload);
+a row click toggles the selection off.

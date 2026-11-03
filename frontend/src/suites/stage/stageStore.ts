@@ -7,7 +7,7 @@ import { api, ApiError, http, sha256Hex, unwrap } from '../../api/client'
 import { isDocumentPreview, type Asset, type DocumentPreview, type Job, type StageCamera, type StageDoc, type StageObject, type StageTemplate } from '../../api/types'
 import { useSession } from '../../store/session'
 import { registerTransport } from '../animate/transport'
-import { clipFrames, EMPTY_KEYS, keyedFrames as keyedFramesOf, keyframesOf, sampleDoc, withKey, withoutKey, type CameraKey, type Keyframes, type ObjectKey, type SkeletonKey } from './anim'
+import { sampleFigure, clipFrames, EMPTY_KEYS, keyedFrames as keyedFramesOf, keyframesOf, sampleDoc, withKey, withoutKey, type CameraKey, type Keyframes, type ObjectKey, type SkeletonKey } from './anim'
 import { JOINTS, MANNEQUIN_PRESETS, POSES } from './builders'
 import { mirrorJoints, type Chain } from './ik'
 import { lensGuess, parseLens } from './lens'
@@ -20,7 +20,8 @@ import type { Keypoint, WholeBody } from './passes'
 import { profilesForMentions, useStory, versionPointsOfShell } from '../story/storyStore'
 import { navigate, type Layer } from '../../frame/router'
 import { contextSlot } from '../../store/contexts'
-import { blocksReady, type MotionBlock } from './blocks'
+import { blockRuns, blocksReady, type MotionBlock } from './blocks'
+import { correctionKey, diffJoints } from './corrections'
 import { thingFields } from './placeThings'
 
 /** CA0: the body of a bound figure's Cast version (its pinned version, else the character's current one); null = the preset's dummy;
@@ -254,6 +255,9 @@ interface StageState {
   /** CA1: a point clicked on the floor added to the figure's path; the path cleared. */
   addPathPoint: (id: string, p: [number, number]) => void
   clearPath: (id: string) => void
+  /** C2 (P9): the path is an object — a point moved (dragged in the viewport, typed in the Inspector) or removed; the walk along it re-flows. */
+  setPathPoint: (id: string, index: number, p: [number, number]) => void
+  removePathPoint: (id: string, index: number) => void
   removeKeyAt: (frame: number) => void
   /** CS3 (proto01_UIcast 06 §2.10, D136 U19): a skeleton key on a figure, replacing one at its frame — `body` null: the figure's own (its
    *  Cast version's) from there; a body: that one held. */
@@ -423,7 +427,16 @@ function editPose(get: () => StageState, id: string, fn: (p: StageObject['pose']
     const o = get().sampledDoc()?.objects.find((x) => x.id === id)
     if (!o) return
     const pose = fn(o.pose)
-    get().apply((d) => withObjectKey(d, id, { frame: get().frame, ease: 'ease', transform: { pos: [...o.transform.pos], rot: [...o.transform.rot], scale: [...o.transform.scale] }, pose }), label)
+    const frame = get().frame, layer = keyframesOf(cur).objects[id], runs = blockRuns(cur, id, layer)
+    if (runs.some((r) => frame >= r.start && frame <= r.end)) {                              // C2 (P8): over a block the edit is a correction — the joints changed, on top of the block
+      const raw = cur.objects.find((x) => x.id === id)!
+      const base = sampleFigure(raw, (layer ?? []).filter((k) => !k.correction), runs, frame)
+      const joints = diffJoints(effectiveJoints(base), { ...effectiveJoints(base), ...(pose.joints ?? {}) })
+      const extra = diffJoints(base.pose?.extra ?? {}, pose.extra ?? {})
+      get().apply((d) => withObjectKey(d, id, correctionKey(frame, base, joints, extra, (layer ?? []).find((k) => k.frame === frame))), `${label} · a correction`)
+      return
+    }
+    get().apply((d) => withObjectKey(d, id, { frame, ease: 'ease', transform: { pos: [...o.transform.pos], rot: [...o.transform.rot], scale: [...o.transform.scale] }, pose }), label)
     return
   }
   get().apply((d) => ({ ...d, objects: d.objects.map((x) => (x.id === id ? { ...x, pose: fn(x.pose) } : x)) }), label)
@@ -501,12 +514,23 @@ export const useStage = create<StageState>()((set, get) => ({
     get().apply((d) => withCameraKey(d, cam.id, { frame: get().frame, ease: 'ease', pos: [...cam.pos], target: [...cam.target], focal_mm: cam.focal_mm }), 'key camera')
   },
   keyObject: (id) => {
+    const cur = get().current, frame = get().frame, layer = cur ? keyframesOf(cur).objects[id] : undefined, runs = cur ? blockRuns(cur, id, layer) : []
+    if (cur && runs.some((r) => frame >= r.start && frame <= r.end)) {                        // C2 (P8): over a block the key is a correction of what the figure shows now
+      const shown = get().sampledDoc()?.objects.find((x) => x.id === id), raw = cur.objects.find((x) => x.id === id)
+      if (!shown || !raw) return
+      const base = sampleFigure(raw, (layer ?? []).filter((k) => !k.correction), runs, frame)
+      get().apply((d) => withObjectKey(d, id, correctionKey(frame, base, diffJoints(effectiveJoints(base), effectiveJoints(shown)), diffJoints(base.pose?.extra ?? {}, shown.pose?.extra ?? {}), (layer ?? []).find((k) => k.frame === frame))), 'correction')
+      return
+    }
     const o = get().sampledDoc()?.objects.find((x) => x.id === id)
     if (!o) return
     get().apply((d) => withObjectKey(d, id, { frame: get().frame, ease: 'ease', transform: { pos: [...o.transform.pos], rot: [...o.transform.rot], scale: [...o.transform.scale] }, pose: o.pose ? { preset: o.pose.preset, joints: { ...o.pose.joints }, extra: { ...(o.pose.extra ?? {}) }, ground: o.pose.ground ?? 0, pins: { ...(o.pose.pins ?? {}) } } : null }), 'key object')
   },
   addPathPoint: (id, p) => get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id ? { ...o, path: [...(o.path ?? []), [Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000]] } : o)) }), 'path point'),
   clearPath: (id) => get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id ? { ...o, path: null, shadow_proxy: null } : o)) }), 'clear path'),
+  setPathPoint: (id, index, p) => get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id && o.path && index < o.path.length
+    ? { ...o, path: o.path.map((q, i) => (i === index ? [Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000] : q)) } : o)) }), 'path point'),   // C2 (P9)
+  removePathPoint: (id, index) => get().apply((d) => ({ ...d, objects: d.objects.map((o) => { if (o.id !== id || !o.path) return o; const path = o.path.filter((_q, i) => i !== index); return { ...o, path: path.length ? path : null } }) }), 'path point removed'),
   setDetail: (id, detail) => get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id && o.kind === 'mannequin' ? { ...o, detail } : o)) }), detail === 'male' ? 'figure ♂' : 'figure ♀'),
   setExtra: (id, extra, label = 'hand') => editPose(get, id, (p) => ({ preset: p?.preset ?? 'stand', joints: p?.joints ?? {}, extra: { ...(p?.extra ?? {}), ...extra }, ground: p?.ground ?? 0, pins: p?.pins ?? {}, ...rest(p) }), label),
   applyMotion: (id, keys, label) => {

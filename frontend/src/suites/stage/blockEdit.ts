@@ -75,7 +75,7 @@ export const useTemplates = create<TemplatesState>()((set) => ({
   },
 }))
 
-async function putTemplates(items: AnimationTemplate[]): Promise<boolean> {
+export async function putTemplates(items: AnimationTemplate[]): Promise<boolean> {
   try {
     const r = await unwrap(http.PUT('/stages/animations', { body: { revision: useTemplates.getState().revision, items } as never }))
     useTemplates.setState({ revision: r.revision, items: r.items as unknown as AnimationTemplate[], library: r.library as unknown as AnimationTemplate[], loaded: true })
@@ -106,17 +106,26 @@ export async function saveBlockAsAnimation(oid: string, bid: string): Promise<vo
   if (keys?.length) await saveTemplate(name.trim(), keys, oid, { start: b.start, end: b.start + b.length - 1 })
 }
 
+/** A figure's track across the stage's range — its clips, keys and corrections — as a key a frame (what *Save as animation…* and the
+ *  animation bench's *Save* write, thinned). */
+export async function rangeKeys(oid: string): Promise<ObjectKey[]> {
+  const doc = st().current, o = doc?.objects.find((x) => x.id === oid)
+  if (!doc || !o) return []
+  await blocksReady(doc)
+  const layer = keyframesOf(doc).objects[oid], runs = blockRuns(doc, oid, layer)
+  const keys: ObjectKey[] = []
+  for (let f = doc.range.start; f <= doc.range.end; f++) { const s = sampleFigure(o, layer, runs, f); keys.push({ frame: f, ease: 'linear', transform: s.transform, pose: s.pose ?? null }) }
+  return keys
+}
+
 /** *Save as animation…* from a figure's track: everything it does across the shot's range (blocks, keys and corrections), a key a frame. */
 export async function saveRangeAsAnimation(oid: string): Promise<void> {
   const doc = st().current, o = doc?.objects.find((x) => x.id === oid)
   if (!doc || !o) return
   const name = await askText({ title: `Save ${o.name}'s motion as an animation`, text: `Frames ${doc.range.start}–${doc.range.end}: its clips, keys and corrections, kept in the project in the stage's own keys.`, initial: `${o.name}'s motion` })
   if (!name?.trim()) return
-  await blocksReady(doc)
-  const layer = keyframesOf(doc).objects[oid], runs = blockRuns(doc, oid, layer)
-  const keys: ObjectKey[] = []
-  for (let f = doc.range.start; f <= doc.range.end; f++) { const s = sampleFigure(o, layer, runs, f); keys.push({ frame: f, ease: 'linear', transform: s.transform, pose: s.pose ?? null }) }
-  await saveTemplate(name.trim(), thinKeys(keys), oid, doc.range)
+  const keys = await rangeKeys(oid)
+  if (keys.length) await saveTemplate(name.trim(), thinKeys(keys), oid, doc.range)
 }
 
 /** A template applied as a block to a figure (the selected one) — after its last clip, or at `start` when dropped on its track (C2, P10). */

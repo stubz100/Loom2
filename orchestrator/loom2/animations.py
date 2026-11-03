@@ -16,12 +16,15 @@ ANIMATIONS_SCHEMA_VERSION = 1
 
 
 class AnimationFrom(BaseModel):
-    """Where a template was saved from (lineage)."""
+    """Where a template was saved from (lineage). D182 (C2b): a downloaded clip made one's own keeps its file, clip and licence (D17)."""
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
     stage_id: str | None = None
     object_id: str | None = None
     start: int = 0
     end: int = 0
+    file_id: str | None = None
+    clip: str | None = None
+    licence: str | None = None
 
 
 class AnimationTemplate(BaseModel):
@@ -35,6 +38,7 @@ class AnimationTemplate(BaseModel):
     hip: float = Field(0.91, gt=0.2, le=2.0)       # the hip height (m) of the figure it was saved from — a figure's root is scaled by its own over this
     keys: list[dict[str, Any]] = Field(default_factory=list)   # ObjectKey[] (anim.ts): frame, ease, transform, pose
     source: AnimationFrom = Field(default_factory=AnimationFrom)
+    thumb_asset_id: str | None = None             # D182 (C2b): its first frame on the mannequin, rendered by the client on the animation bench
     created_at: str = Field(default_factory=utc_now)
 
 
@@ -111,3 +115,28 @@ class AnimationStore:
         if not p.is_file():
             raise KeyError(aid)
         unlink(p)
+
+    def library_put(self, t: AnimationTemplate) -> AnimationTemplate:
+        """D182 (C2b): a library animation written over (*Save* on the animation bench, a rename) — its file replaced; KeyError when it is
+        not in the library (a project animation goes through `put`)."""
+        p = self.lib / f"{plain_name(t.id)}.json"
+        if not p.is_file():
+            raise KeyError(t.id)
+        check_template(t)
+        atomic_write_json(p, t.model_dump())
+        return t
+
+    def set_thumb(self, aid: str, asset_id: str) -> AnimationTemplate:
+        """D182 (C2b): the animation's thumbnail — the project's item, else the library's (KeyError: neither)."""
+        b = self.book()
+        for t in b.items:
+            if t.id == aid:
+                t.thumb_asset_id = asset_id
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+                atomic_write_json(self.path, b.model_dump())             # no revision step: the thumbnail is not an edit of the keys
+                return t
+        for t in self.library():
+            if t.id == aid:
+                t.thumb_asset_id = asset_id
+                return self.library_put(t)
+        raise KeyError(aid)

@@ -36,4 +36,4 @@ The author, 2026-11-03, on [04](04-rethink.md) §6: "I'll take all your recommen
 | **C5** | Performance's default and fields after E59; the story motions after E60 | ½ wk + | — |
 
 About nine weeks with the spikes. Each wave ends usable, with its rig check on propo02's project (`F:/loom2-projects/propo02-followed`), its
-screenshots sent, and its journal entry. **Status: C0 (journal 15:13), C1 (16:27) and C2 (the tracks) built 2026-11-03; the e2e ports owed a run while port 1420 is the author's dev server's; D182 (the animation workshop, C2b) recorded the same evening and next.**
+screenshots sent, and its journal entry. **Status: C0 (journal 15:13), C1 (16:27), C2 (the tracks, 17:09) and C2b (the animation workshop, D182, 19:15) built 2026-11-03; the e2e ports owed a run while port 1420 is the author's dev server's; E59 and E60 next, alone on the GPU, then C3.**

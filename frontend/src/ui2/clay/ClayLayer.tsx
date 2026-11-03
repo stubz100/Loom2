@@ -4,7 +4,7 @@
 // whole from World's Build) and its tiles behind it; Bench ▶ opens Clay for it in the centre (D142's bench, the line-up). Scenes is the
 // editor on a scene (a stage), opened from a shot card with the way back. World = Make | Edit: its pictures and their roles.
 import { Boxes, Clapperboard } from 'lucide-react'
-import { lazy, Suspense, useEffect } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { api } from '../../api/client'
 import type { Profile } from '../../api/types'
 import { CommandButton, MenuButton } from '../../frame/CommandButton'
@@ -32,7 +32,7 @@ const SkeletonParts = lazy(() => import('../../suites/stage/SkeletonBench').then
 const CastBody = lazy(() => import('../../suites/story/CastBody').then((m) => ({ default: m.CastBody })))
 const PropModel = lazy(() => import('../../suites/story/CastParts').then((m) => ({ default: m.PropModel })))
 const PlaceSetSection = lazy(() => import('../../suites/story/CastSet').then((m) => ({ default: m.PlaceSetSection })))
-const MotionLibrary = lazy(() => import('../../suites/stage/motion/MotionLibrary').then((m) => ({ default: m.MotionLibrary })))
+const AnimationsGrid = lazy(() => import('./AnimationsGrid').then((m) => ({ default: m.AnimationsGrid })))   // D182 (C2b): the author's animations as tiles
 
 type Version = Profile['versions'][number]
 const RAIL = [{ id: 'library', cmd: 'clay.rail.library', Icon: Boxes }, { id: 'scenes', cmd: 'clay.rail.scenes', Icon: Clapperboard }] as const
@@ -81,7 +81,7 @@ function Tiles({ kind }: { kind: LibKind }) {
 
 /** Lights, cameras and animations: what the kind holds and where it is used (their pages grow with C1–C2). */
 function KindNote({ kind }: { kind: LibKind }) {
-  if (kind === 'animation') return <div className="c-motion" data-testid="clay-motion"><Part label="The motion library" fallback={<div className="w-empty">Loading the library…</div>}><MotionLibrary /></Part></div>
+  if (kind === 'animation') return <Part label="The animations" fallback={<div className="w-empty">Reading the animations…</div>}><AnimationsGrid /></Part>
   return <div className="c-kind-note" data-testid="clay-kind-note">{kind === 'light'
     ? 'Lights are added in a scene: the outliner\'s ＋ offers the templates (a window, the sun, a lamp…), and the light editor is under the light\'s row. Saved templates come here with C1.'
     : 'Cameras belong to scenes: one per shot, added in the outliner, its lens and height under its row. Lens presets come here with C1.'}</div>
@@ -98,9 +98,14 @@ function LibraryHeader() {
   const entities = (): MenuItem[] => profiles.filter((x) => x.cls === cls).map((x) => ({ label: x.name, checked: x.id === p?.id, run: () => useClay.getState().openLibrary(kind, x.id, x.current) }))
   const versions = (): MenuItem[] => (p ? p.versions.map((x) => ({ label: `${x.id}${x.label && x.label !== x.id ? ` · ${x.label}` : ''}${x.state === 'final' ? ' · final' : ''}`, checked: x.id === v?.id, run: () => useClay.getState().openLibrary(kind, p.id, x.id) })) : [])
   const r = p && v ? clayReadiness(p, v) : null
+  const animation = useClay((s) => s.animation)
+  const anim = kind === 'animation'
   return (
     <div className="w-head" data-testid="clay-library-header">
       <div className="c-kinds" role="group" aria-label="the kind">{KINDS.map((k) => <button key={k.id} className={kind === k.id ? 'active' : ''} aria-pressed={kind === k.id} onClick={() => useClay.getState().setKind(k.id)}>{k.label}</button>)}</div>
+      {anim && view !== 'animation' && <div className="w-head-row"><span className="w-val">the author's animations, the project's, the downloaded clips</span><span className="spacer" /><CommandButton id="clay.anim.new" text /></div>}
+      {anim && view === 'animation' && animation && <div className="w-head-row c-anim-head" data-testid="clay-animation-header"><AnimationName animation={animation} /><span className="spacer" />
+        <CommandButton id="clay.anim.save" text /><CommandButton id="clay.anim.saveAs" text /><CommandButton id="clay.anim.mine" text /><CommandButton id="clay.anim.back" text label="Back" /></div>}
       {cls && <div className="w-head-row">
         <MenuButton label={p ? p.name : `Pick a ${KINDS.find((k) => k.id === kind)!.one}`} items={entities} text />
         {p && v && <MenuButton label={`${v.id}${v.state === 'final' ? ' · final' : ''}`} items={versions} text />}
@@ -114,6 +119,13 @@ function LibraryHeader() {
       </div>}
     </div>
   )
+}
+
+/** D182 (C2b): the animation on the bench, by name (a template's name follows a rename). */
+function AnimationName({ animation }: { animation: import('../../suites/stage/animationBench').AnimRef }) {
+  const [name, setName] = useState<string>(animation.kind === 'clip' ? animation.clip : '…')
+  useEffect(() => { let live = true; void import('../../suites/stage/animationBench').then((m) => m.nameOf(animation)).then((n) => { if (live) setName(n) }); return () => { live = false } }, [animation])
+  return <b className="c-anim-name" title={animation.kind === 'clip' ? 'a downloaded clip — Make it mine to keep an edited copy' : 'an animation of your own'}>{name}{animation.kind === 'clip' ? <small> · downloaded</small> : null}</b>
 }
 
 /** The asset's builder — World's Build, moved whole: the body with its fit, shell and skeleton; a prop's model and height; a place's set. */
@@ -157,7 +169,7 @@ function Library() {
   const skeleton = useStory((s) => s.skeleton)
   const p = asset ? profiles.find((x) => x.id === asset.profile) : undefined
   const v = p ? p.versions.find((x) => x.id === asset!.version) ?? p.versions[0] : undefined
-  const bench = view === 'bench'
+  const bench = view === 'bench' || view === 'animation'                              // D182: the animation bench is Clay opened on the animation
   const skel = !bench && skeleton && p?.cls === 'character'
   return <>
     <section className="w-left" data-testid="clay-library">
@@ -165,7 +177,7 @@ function Library() {
       <div className="w-panel">{bench ? <Suspense fallback={null}><ClayColumn tab="scene" /></Suspense> : p && v ? <Builder p={p} v={v} /> : <KindHint kind={kind} />}</div>
     </section>
     <section className="w-centre">
-      {bench ? <Suspense fallback={<div className="w-empty">Loading Clay…</div>}><div className="strip w-edit-strip"><ClayStrip /></div><div className="w-edit-stage" data-testid="clay-bench"><ClayStage /></div></Suspense>
+      {bench ? <Suspense fallback={<div className="w-empty">Loading Clay…</div>}><div className="strip w-edit-strip"><ClayStrip /></div><div className="w-edit-stage" data-testid={view === 'animation' ? 'clay-animation-bench' : 'clay-bench'}><ClayStage /></div></Suspense>
         : skel ? <Part label="The skeleton bench" fallback={<div className="w-empty">Loading the bench…</div>}><div className="w-skeleton" data-testid="clay-skeleton"><SkeletonBench /></div></Part>
         : <Tiles kind={kind} />}
     </section>
@@ -176,7 +188,7 @@ function Library() {
 
 function KindHint({ kind }: { kind: LibKind }) {
   const k = KINDS.find((x) => x.id === kind)!
-  return <span className="hint">{k.cls ? `A ${k.one} is a ${k.cls} from World with its 3D made here. Pick one in the grid.` : k.id === 'animation' ? 'The clips a figure walks and stands with; applied on a figure\'s track in a scene.' : `${k.label} are made in a scene.`}</span>
+  return <span className="hint">{k.cls ? `A ${k.one} is a ${k.cls} from World with its 3D made here. Pick one in the grid.` : k.id === 'animation' ? 'An animation is yours to edit: open one on the bench, pose the figure at the frames you want, Save. A downloaded clip becomes yours with Make it mine.' : `${k.label} are made in a scene.`}</span>
 }
 
 /** Scenes: the scene open in the editor (a picker of the project's scenes with the shots each serves), the way back to the shot, then the

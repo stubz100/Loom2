@@ -10,6 +10,7 @@ import type { StageDoc } from '../../api/types'
 import { navigate, onNavigate } from '../../frame/router'
 import { useSession } from '../../store/session'
 import { useStory, type ProfileClass } from '../../suites/story/storyStore'
+import type { AnimRef } from '../../suites/stage/animationBench'
 
 export type ClayRail = 'library' | 'scenes'
 export type LibKind = 'figure' | 'prop' | 'set' | 'light' | 'camera' | 'animation'
@@ -21,19 +22,24 @@ export const kindOfClass = (cls: ProfileClass): LibKind => (cls === 'character' 
 export const classOfKind = (k: LibKind): ProfileClass | null => KINDS.find((x) => x.id === k)?.cls ?? null
 const isKind = (x: string | undefined): x is LibKind => KINDS.some((k) => k.id === x)
 
-export interface ClayPlace { rail: ClayRail; kind: LibKind; profile: string | null; version: string | null; bench: boolean; stage: string | null }
+export interface ClayPlace { rail: ClayRail; kind: LibKind; profile: string | null; version: string | null; bench: boolean; stage: string | null; anim: AnimRef | null }
 /** The hash's Clay place: #clay/library/<kind>/<profile>/<version>/bench, #clay/scene/<stage> (the parts optional). */
 export function placeOfHash(hash: string): ClayPlace | null {
   const [layer, rail, a, b, c, d] = hash.replace(/^#/, '').split('/')
   if (layer !== 'clay') return null
-  if (rail === 'scene') return { rail: 'scenes', kind: 'figure', profile: null, version: null, bench: false, stage: a || null }
+  if (rail === 'scene') return { rail: 'scenes', kind: 'figure', profile: null, version: null, bench: false, stage: a || null, anim: null }
   const kind = isKind(a) ? a : 'figure'
+  if (kind === 'animation') {                                                       // D182 (C2b): #clay/library/animation/anm/<id> · /clip/<file>/<clip>
+    const anim: AnimRef | null = b === 'anm' && c ? { kind: 'template', id: c } : b === 'clip' && c && d ? { kind: 'clip', file: c, clip: decodeURIComponent(d) } : null
+    return { rail: 'library', kind, profile: null, version: null, bench: false, stage: null, anim }
+  }
   const bench = b === 'bench' || c === 'bench' || d === 'bench'
-  return { rail: 'library', kind, profile: b && b !== 'bench' ? b : null, version: c && c !== 'bench' ? c : null, bench, stage: null }
+  return { rail: 'library', kind, profile: b && b !== 'bench' ? b : null, version: c && c !== 'bench' ? c : null, bench, stage: null, anim: null }
 }
 const writeHash = (h: string): void => { if (location.hash !== h) history.replaceState(null, '', `${location.pathname}${location.search}${h}`) }
 const libraryHash = (kind: LibKind, asset: { profile: string; version: string } | null, bench: boolean): string =>
   `#clay/library/${kind}${asset ? `/${asset.profile}/${asset.version}` : ''}${bench ? '/bench' : ''}`
+const animHash = (a: AnimRef): string => (a.kind === 'template' ? `#clay/library/animation/anm/${a.id}` : `#clay/library/animation/clip/${a.file}/${encodeURIComponent(a.clip)}`)
 
 /** A scene's shots: the shots whose current version is a camera on the stage (the storyboard's names). */
 export function shotsOnStage<T extends { id: string; name: string; current: string; versions: { id: string; stage_id?: string | null }[] }>(stageId: string, shots: T[]): T[] {
@@ -46,7 +52,9 @@ interface ClayState {
   rail: ClayRail
   kind: LibKind
   asset: { profile: string; version: string } | null            // the Library asset open: a World entity version
-  view: 'page' | 'bench'                                         // the asset's page (its tiles behind it) or Clay opened for it (D142's bench, the line-up)
+  view: 'page' | 'bench' | 'animation'                           // the asset's page (its tiles behind it), Clay opened for it (D142's bench, the line-up), or the animation bench (D182)
+  animation: AnimRef | null                                      // D182 (C2b): the animation on the bench
+  animSel: AnimRef | null                                        // D182: the animation a tile's right-click acts on
   from: From | null                                              // the shot the scene was opened from (← Back to the shot)
   setRail: (rail: ClayRail) => void
   setKind: (kind: LibKind) => void
@@ -57,15 +65,20 @@ interface ClayState {
   /** CW5 → C0: the kind's entities side by side at their sizes (the open one first, twelve at most). */
   openLineup: () => Promise<void>
   closeBench: () => void
+  /** D182 (C2b): an animation opened on the animation bench (a figure playing it as its one block), and the way back to the tiles. */
+  openAnimation: (ref: AnimRef) => Promise<void>
+  closeAnimation: () => void
+  selectAnimation: (ref: AnimRef | null) => void
   /** The editor on a scene (the stage), through the shot's camera when opened from a shot; `from` left out keeps the way back it had. */
   openScene: (stageId: string, from?: From | null) => Promise<void>
   backToShot: () => Promise<void>
 }
 
 export const useClay = create<ClayState>()((set, get) => ({
-  rail: placeOfHash(location.hash)?.rail ?? 'library', kind: placeOfHash(location.hash)?.kind ?? 'figure', asset: null, view: 'page', from: null,
+  rail: placeOfHash(location.hash)?.rail ?? 'library', kind: placeOfHash(location.hash)?.kind ?? 'figure', asset: null, view: 'page', animation: null, animSel: null, from: null,
   setRail: (rail) => {
     if (rail === 'library') { get().openLibrary(get().kind, get().asset?.profile, get().asset?.version); return }
+    if (get().view === 'animation') get().closeAnimation()
     set({ rail, view: 'page' })
     navigate({ suite: 'stage' })
     void import('../../suites/stage/stageStore').then((m) => writeHash(`#clay/scene${m.useStage.getState().current?.id ? `/${m.useStage.getState().current!.id}` : ''}`))
@@ -78,7 +91,8 @@ export const useClay = create<ClayState>()((set, get) => ({
     if (p && p.cls !== cls) { get().openLibrary(kindOfClass(p.cls), profile, version); return }   // the entity's own kind
     if (p) st.selectProfile(p.id, version ?? p.current)
     const asset = p ? { profile: p.id, version: useStory.getState().versionId ?? p.current } : null
-    set({ rail: 'library', kind, asset, view: 'page' })
+    if (get().view === 'animation') void import('../../suites/stage/animationBench').then((m) => m.closeAnimationBench())
+    set({ rail: 'library', kind, asset, view: 'page', animation: null })
     navigate({ suite: 'story', tab: 'cast', layer: 'clay' })                        // the builders' commands (cast.*, story.cast.*) are in reach
     writeHash(libraryHash(kind, asset, false))
   },
@@ -108,6 +122,21 @@ export const useClay = create<ClayState>()((set, get) => ({
     navigate({ suite: 'story', tab: 'cast', layer: 'clay' })
     writeHash(libraryHash(get().kind, get().asset, false))
   },
+  openAnimation: async (ref) => {
+    set({ rail: 'library', kind: 'animation', asset: null, view: 'animation', animation: ref, animSel: ref })
+    const m = await import('../../suites/stage/animationBench')
+    if (!(await m.openAnimationBench(ref))) { set({ view: 'page', animation: null }); return }
+    navigate({ suite: 'stage', layer: 'clay' })
+    writeHash(animHash(ref))
+  },
+  closeAnimation: () => {
+    if (get().view !== 'animation') return
+    void import('../../suites/stage/animationBench').then((m) => m.closeAnimationBench())
+    set({ view: 'page', animation: null })
+    navigate({ suite: 'story', tab: 'cast', layer: 'clay' })
+    writeHash(libraryHash('animation', null, false))
+  },
+  selectAnimation: (animSel) => set({ animSel }),
   openScene: async (stageId, from) => {
     set({ rail: 'scenes', view: 'page', ...(from !== undefined ? { from } : {}) })
     const m = await import('../../suites/stage/stageStore')
@@ -171,6 +200,7 @@ export function startClay(): () => void {
     void useStory.getState().loadProfiles().then(() => {
       const c = useClay.getState()
       if (from?.rail === 'scenes') { if (from.stage) void c.openScene(from.stage); else c.setRail('scenes'); return }
+      if (from?.anim) { void c.openAnimation(from.anim); return }
       c.openLibrary(from?.kind ?? c.kind, from?.profile ?? null, from?.version ?? null)
       if (from?.bench) void c.openBench()
     })
@@ -181,6 +211,7 @@ export function startClay(): () => void {
     const at = placeOfHash(location.hash), c = useClay.getState()
     if (!at || !opened) return
     if (at.rail === 'scenes') { if (at.stage) void c.openScene(at.stage); else if (c.rail !== 'scenes') c.setRail('scenes'); return }
+    if (at.anim) { if (c.view !== 'animation' || JSON.stringify(c.animation) !== JSON.stringify(at.anim)) void c.openAnimation(at.anim); return }
     if (at.profile !== (c.asset?.profile ?? null) || at.kind !== c.kind || c.rail !== 'library' || (at.bench && c.view !== 'bench')) {
       c.openLibrary(at.kind, at.profile, at.version)
       if (at.bench) void c.openBench()
@@ -189,7 +220,7 @@ export function startClay(): () => void {
   window.addEventListener('hashchange', onHash)
   const offNav = onNavigate((p) => {                                       // the editor opened from anywhere shows under Scenes
     const c = useClay.getState()
-    if (p.suite !== 'stage' || p.layer === 'clay' || c.view === 'bench' || c.rail === 'scenes') return
+    if (p.suite !== 'stage' || p.layer === 'clay' || c.view === 'bench' || c.view === 'animation' || c.rail === 'scenes') return
     useClay.setState({ rail: 'scenes', view: 'page' })
     void import('../../suites/stage/stageStore').then((m) => writeHash(`#clay/scene${m.useStage.getState().current?.id ? `/${m.useStage.getState().current!.id}` : ''}`))
   })

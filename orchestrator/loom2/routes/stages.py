@@ -31,7 +31,7 @@ class StageCreate(BaseModel):
 
 
 @router.get("/stages", response_model=StageList)
-async def stages_list(svc: Svc, purpose: Literal["stage", "bench", "lineup", "all"] = "stage"):
+async def stages_list(svc: Svc, purpose: Literal["stage", "bench", "lineup", "animation", "all"] = "stage"):
     """The project's stages — D142: the stages proper by default; a Cast version's bench and the line-up only when asked for."""
     ws, _, _ = svc.require_project()
     return {"items": [s.model_dump() for s in await asyncio.to_thread(StageStore(ws).list) if purpose == "all" or s.purpose == purpose]}
@@ -247,6 +247,58 @@ async def animations_library_remove(svc: Svc, aid: str):
     except KeyError:
         raise HTTPException(404, "animation not in the library")
     return await asyncio.to_thread(_animations_out, store)
+
+
+@router.put("/stages/animations/library/{aid}", response_model=AnimationsOut)
+async def animations_library_put(svc: Svc, aid: str, body: AnimationTemplate):
+    """D182 (C2b): a library animation written over — *Save* on the animation bench, a rename."""
+    store = _animations(svc)
+    if body.id != aid:
+        raise HTTPException(422, "the animation's id is the path's")
+    try:
+        await asyncio.to_thread(store.library_put, body)
+    except KeyError:
+        raise HTTPException(404, "animation not in the library")
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    return await asyncio.to_thread(_animations_out, store)
+
+
+class AnimationThumb(BaseModel):
+    blob: str                                     # the sha256 of a PNG uploaded with PUT /blobs/{sha}
+
+
+@router.post("/stages/animations/{aid}/thumbnail", response_model=AnimationsOut)
+async def animations_thumbnail(svc: Svc, aid: str, body: AnimationThumb):
+    """D182 (C2b): the animation's tile picture — its first frame on the mannequin, rendered by the client on the animation bench and
+    uploaded as a blob; it becomes an image asset of the project and the animation's `thumb_asset_id` (the project's or the library's)."""
+    ws, cat, _ = svc.require_project()
+    store = _animations(svc)
+    p = ws.temp_dir / "blobs" / body.blob
+    if not p.is_file():
+        raise HTTPException(422, f"blob {body.blob[:12]}… was not uploaded (PUT /blobs/{{sha}} first)")
+    rec = await asyncio.to_thread(cat.ingest_file, p, kind="image", move=False, suite="stage", lineage_kind="animation-thumb", parents=[],
+                                  origin=JobOrigin(suite="stage", surface="animation", ref=aid, payload=None), params={"view": "animation", "animation_id": aid})
+    try:
+        await asyncio.to_thread(store.set_thumb, aid, rec.id)
+    except KeyError:
+        raise HTTPException(404, "animation not found")
+    return await asyncio.to_thread(_animations_out, store)
+
+
+class AnimationBenchAsk(BaseModel):
+    name: str = "Animation"
+    frames: int = Field(120, ge=1, le=100_000)
+
+
+@router.post("/stages/animation-bench", response_model=Stage)
+async def stage_animation_bench(svc: Svc, body: AnimationBenchAsk):
+    """D182 (C2b): the animation bench — the project's one stage of purpose `animation`, made again each time: a figure standing at the
+    origin, one camera framing it, the range the animation's frames. The client puts the animation on the figure's track."""
+    ws, _, _ = svc.require_project()
+    fmt = ws.load().format
+    st = await asyncio.to_thread(StageStore(ws).animation_bench, body.name, body.frames, {"w": fmt.width, "h": fmt.height, "fps": fmt.fps})
+    return st.model_dump()
 
 
 @router.get("/stages/{st_id}", response_model=Stage)

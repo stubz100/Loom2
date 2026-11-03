@@ -3,7 +3,7 @@
 // frame (Image › From a stage) · clip (Performance › Stage clip) · final (Performance › Final shot) · composition and render (Final). Each
 // step's verb is the foot of the level it opens, so the row carries no second primary; it replaces the rig strip of D116 U7 and the passes
 // row of AN1 #16. Light: no three.js engine here (the Final level imports it).
-import { Hammer, PersonStanding, Send, Users } from 'lucide-react'
+import { Film, Hammer, PersonStanding, Send, Users } from 'lucide-react'
 import { CommandButton, MenuButton } from '../../frame/CommandButton'
 import { markUsed, runCommand, sep, type MenuItem } from '../../frame/commands'
 import { Help } from '../../frame/Help'
@@ -91,7 +91,13 @@ export function BenchChip() {
   const cur = useStage((s) => s.current)
   const stages = useStage((s) => s.stages)
   if (!cur || cur.purpose === 'stage') return null
-  markUsed('stage.bench.back'); markUsed('stage.lineup.send'); markUsed('stage.lineup.pose')
+  markUsed('stage.bench.back'); markUsed('stage.lineup.send'); markUsed('stage.lineup.pose'); markUsed('clay.anim.back')
+  if (cur.purpose === 'animation') return (                                                    // D182 (C2b): the animation bench
+    <div className="for-chip bench-chip" data-testid="bench-chip" title="The animation bench: a figure playing the animation as its one clip; what you change on its track is saved into the animation">
+      <span className="for-what"><Film size={14} /> Animation: <b>{cur.name.replace(/^Animation · /, '')}</b></span>
+      <CommandButton id="clay.anim.back" text size={14} label="Back to the Library" />
+    </div>
+  )
   if (cur.purpose === 'bench') return (
     <div className="for-chip bench-chip" data-testid="bench-chip" title="Clay opened for a Cast version: its figure (or its prop) follows Cast; what you change here is the bench's own scene">
       <span className="for-what"><Hammer size={14} /> Bench: <b>{cur.name.replace(/^Bench · /, '')}</b></span>

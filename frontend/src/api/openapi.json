@@ -451,13 +451,64 @@
         "title": "AnimatePanels",
         "type": "object"
       },
-      "AnimationFrom-Input": {
-        "description": "Where a template was saved from (lineage).",
+      "AnimationBenchAsk": {
         "properties": {
+          "frames": {
+            "default": 120,
+            "maximum": 100000.0,
+            "minimum": 1.0,
+            "title": "Frames",
+            "type": "integer"
+          },
+          "name": {
+            "default": "Animation",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "title": "AnimationBenchAsk",
+        "type": "object"
+      },
+      "AnimationFrom-Input": {
+        "description": "Where a template was saved from (lineage). D182 (C2b): a downloaded clip made one's own keeps its file, clip and licence (D17).",
+        "properties": {
+          "clip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clip"
+          },
           "end": {
             "default": 0,
             "title": "End",
             "type": "integer"
+          },
+          "file_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Id"
+          },
+          "licence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Licence"
           },
           "object_id": {
             "anyOf": [
@@ -491,12 +542,45 @@
         "type": "object"
       },
       "AnimationFrom-Output": {
-        "description": "Where a template was saved from (lineage).",
+        "description": "Where a template was saved from (lineage). D182 (C2b): a downloaded clip made one's own keeps its file, clip and licence (D17).",
         "properties": {
+          "clip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clip"
+          },
           "end": {
             "default": 0,
             "title": "End",
             "type": "integer"
+          },
+          "file_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Id"
+          },
+          "licence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Licence"
           },
           "object_id": {
             "anyOf": [
@@ -530,7 +614,10 @@
           "stage_id",
           "object_id",
           "start",
-          "end"
+          "end",
+          "file_id",
+          "clip",
+          "licence"
         ],
         "title": "AnimationFrom",
         "type": "object"
@@ -590,6 +677,17 @@
           },
           "source": {
             "$ref": "#/components/schemas/AnimationFrom-Input"
+          },
+          "thumb_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumb Asset Id"
           }
         },
         "required": [
@@ -654,6 +752,17 @@
           },
           "source": {
             "$ref": "#/components/schemas/AnimationFrom-Output"
+          },
+          "thumb_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumb Asset Id"
           }
         },
         "required": [
@@ -666,9 +775,23 @@
           "hip",
           "keys",
           "source",
+          "thumb_asset_id",
           "created_at"
         ],
         "title": "AnimationTemplate",
+        "type": "object"
+      },
+      "AnimationThumb": {
+        "properties": {
+          "blob": {
+            "title": "Blob",
+            "type": "string"
+          }
+        },
+        "required": [
+          "blob"
+        ],
+        "title": "AnimationThumb",
         "type": "object"
       },
       "AnimationsOut": {
@@ -22646,7 +22769,8 @@
             "enum": [
               "stage",
               "bench",
-              "lineup"
+              "lineup",
+              "animation"
             ],
             "title": "Purpose",
             "type": "string"
@@ -35101,6 +35225,7 @@
                 "stage",
                 "bench",
                 "lineup",
+                "animation",
                 "all"
               ],
               "title": "Purpose",
@@ -35170,6 +35295,48 @@
           }
         },
         "summary": "Stage Create",
+        "tags": [
+          "stages"
+        ]
+      }
+    },
+    "/stages/animation-bench": {
+      "post": {
+        "description": "D182 (C2b): the animation bench — the project's one stage of purpose `animation`, made again each time: a figure standing at the\norigin, one camera framing it, the range the animation's frames. The client puts the animation on the figure's track.",
+        "operationId": "stage_animation_bench_stages_animation_bench_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnimationBenchAsk"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stage Animation Bench",
         "tags": [
           "stages"
         ]
@@ -35276,6 +35443,57 @@
         "tags": [
           "stages"
         ]
+      },
+      "put": {
+        "description": "D182 (C2b): a library animation written over — *Save* on the animation bench, a rename.",
+        "operationId": "animations_library_put_stages_animations_library__aid__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "aid",
+            "required": true,
+            "schema": {
+              "title": "Aid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnimationTemplate-Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnimationsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Animations Library Put",
+        "tags": [
+          "stages"
+        ]
       }
     },
     "/stages/animations/{aid}/library": {
@@ -35316,6 +35534,59 @@
           }
         },
         "summary": "Animations To Library",
+        "tags": [
+          "stages"
+        ]
+      }
+    },
+    "/stages/animations/{aid}/thumbnail": {
+      "post": {
+        "description": "D182 (C2b): the animation's tile picture — its first frame on the mannequin, rendered by the client on the animation bench and\nuploaded as a blob; it becomes an image asset of the project and the animation's `thumb_asset_id` (the project's or the library's).",
+        "operationId": "animations_thumbnail_stages_animations__aid__thumbnail_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "aid",
+            "required": true,
+            "schema": {
+              "title": "Aid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnimationThumb"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnimationsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Animations Thumbnail",
         "tags": [
           "stages"
         ]

@@ -2613,6 +2613,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/stages/animation-bench": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stage Animation Bench
+         * @description D182 (C2b): the animation bench — the project's one stage of purpose `animation`, made again each time: a figure standing at the
+         *     origin, one camera framing it, the range the animation's frames. The client puts the animation on the figure's track.
+         */
+        post: operations["stage_animation_bench_stages_animation_bench_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stages/animations": {
         parameters: {
             query?: never;
@@ -2642,7 +2663,11 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        put?: never;
+        /**
+         * Animations Library Put
+         * @description D182 (C2b): a library animation written over — *Save* on the animation bench, a rename.
+         */
+        put: operations["animations_library_put_stages_animations_library__aid__put"];
         post?: never;
         /** Animations Library Remove */
         delete: operations["animations_library_remove_stages_animations_library__aid__delete"];
@@ -2665,6 +2690,27 @@ export interface paths {
          * @description U5 (G9, Q4): *Save to my library* — the template becomes the author's in every project.
          */
         post: operations["animations_to_library_stages_animations__aid__library_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stages/animations/{aid}/thumbnail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Animations Thumbnail
+         * @description D182 (C2b): the animation's tile picture — its first frame on the mannequin, rendered by the client on the animation bench and
+         *     uploaded as a blob; it becomes an image asset of the project and the animation's `thumb_asset_id` (the project's or the library's).
+         */
+        post: operations["animations_thumbnail_stages_animations__aid__thumbnail_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5351,16 +5397,35 @@ export interface components {
              */
             schema_version: number;
         };
+        /** AnimationBenchAsk */
+        AnimationBenchAsk: {
+            /**
+             * Frames
+             * @default 120
+             */
+            frames?: number;
+            /**
+             * Name
+             * @default Animation
+             */
+            name?: string;
+        };
         /**
          * AnimationFrom
-         * @description Where a template was saved from (lineage).
+         * @description Where a template was saved from (lineage). D182 (C2b): a downloaded clip made one's own keeps its file, clip and licence (D17).
          */
         "AnimationFrom-Input": {
+            /** Clip */
+            clip?: string | null;
             /**
              * End
              * @default 0
              */
             end?: number;
+            /** File Id */
+            file_id?: string | null;
+            /** Licence */
+            licence?: string | null;
             /** Object Id */
             object_id?: string | null;
             /** Stage Id */
@@ -5373,14 +5438,20 @@ export interface components {
         };
         /**
          * AnimationFrom
-         * @description Where a template was saved from (lineage).
+         * @description Where a template was saved from (lineage). D182 (C2b): a downloaded clip made one's own keeps its file, clip and licence (D17).
          */
         "AnimationFrom-Output": {
+            /** Clip */
+            clip: string | null;
             /**
              * End
              * @default 0
              */
             end: number;
+            /** File Id */
+            file_id: string | null;
+            /** Licence */
+            licence: string | null;
             /** Object Id */
             object_id: string | null;
             /** Stage Id */
@@ -5427,6 +5498,8 @@ export interface components {
              */
             schema_version?: number;
             source?: components["schemas"]["AnimationFrom-Input"];
+            /** Thumb Asset Id */
+            thumb_asset_id?: string | null;
         };
         /** AnimationTemplate */
         "AnimationTemplate-Output": {
@@ -5464,6 +5537,13 @@ export interface components {
              */
             schema_version: number;
             source: components["schemas"]["AnimationFrom-Output"];
+            /** Thumb Asset Id */
+            thumb_asset_id: string | null;
+        };
+        /** AnimationThumb */
+        AnimationThumb: {
+            /** Blob */
+            blob: string;
         };
         /**
          * AnimationsOut
@@ -14265,7 +14345,7 @@ export interface components {
              * @default stage
              * @enum {string}
              */
-            purpose: "stage" | "bench" | "lineup";
+            purpose: "stage" | "bench" | "lineup" | "animation";
             range: components["schemas"]["StageRange"];
             /**
              * Revision
@@ -21070,7 +21150,7 @@ export interface operations {
     stages_list_stages_get: {
         parameters: {
             query?: {
-                purpose?: "stage" | "bench" | "lineup" | "all";
+                purpose?: "stage" | "bench" | "lineup" | "animation" | "all";
             };
             header?: never;
             path?: never;
@@ -21108,6 +21188,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["StageCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Stage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stage_animation_bench_stages_animation_bench_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnimationBenchAsk"];
             };
         };
         responses: {
@@ -21184,6 +21297,41 @@ export interface operations {
             };
         };
     };
+    animations_library_put_stages_animations_library__aid__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                aid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnimationTemplate-Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnimationsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     animations_library_remove_stages_animations_library__aid__delete: {
         parameters: {
             query?: never;
@@ -21225,6 +21373,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnimationsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    animations_thumbnail_stages_animations__aid__thumbnail_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                aid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnimationThumb"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

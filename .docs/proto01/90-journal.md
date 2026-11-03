@@ -15975,3 +15975,40 @@ second clip dropped after it (a splice, blended), the range cut; *Save* writes i
 one; *New animation…* starts from a figure standing still; a downloaded clip is edited through *Make it mine* (a copy, its source and
 licence kept on the record); E60's text-to-motion, if it holds, is one more way in. No curve editor in C2b — a correction a frame is the
 grain; curves are a later item if the author wants them. ≈ 1 week. Nothing built.
+
+## 2026-11-03 19:15 — C2b (D182, propo02 05): the animation workshop — the Library's Animations tiles, the animation bench, Save over and Save as…, New animation…, Make it mine, Rename / Duplicate / To my library / Remove
+
+**Built.** An animation is an asset of the author's now, not only a template applied as a block. *Server:* `animations.py` — `AnimationFrom`
+carries the source of a copy made from a downloaded clip (`file_id`, `clip`, `licence`) and `AnimationTemplate` a `thumb_asset_id`;
+`AnimationStore.library_put` writes over a library animation and `set_thumb` keeps the thumbnail; routes `PUT /stages/animations/library/{aid}`,
+`POST /stages/animations/{aid}/thumbnail` (a PNG blob ingested as an image asset, lineage `animation-thumb`) and `POST /stages/animation-bench
+{name, frames}`; `StageStore.animation_bench` makes one stage of purpose `animation` — out of the scene pickers, listed by
+`/stages?purpose=animation` — with a figure "Figure" at the origin, a bench camera at (1.4, 1.2, 3.6) looking at (0, 0.9, 0) and the range
+0…frames−1, remade in place on the next opening (its revision up). *Client:* `suites/stage/animationBench.ts` — an `AnimRef` is a template or a
+file's clip; `openAnimationBench` makes the bench, opens the stage, lays the animation as the figure's one block at frame 0 with the range its
+frames, selects the figure and posts a thumbnail of the first frame once the viewport has drawn it; `saveAnimationOver` writes the bench's
+range keys (C2's corrections and keys over the block, the block's own ops and splices as the track holds them) over the animation,
+`saveAnimationAs` a new one of the project's, `makeMine` copies a downloaded clip as the author's with its file, clip name and licence on the
+record, `newAnimation(name, seconds)` starts from a figure standing still, then `renameAnimation`, `duplicateAnimation`, `animationToLibrary`,
+`removeAnimation`. `ui2/clay/AnimationsGrid.tsx` is the Library's Animations: *Mine* (this project), *My library* (every project) and
+*Downloaded* (the starter set and the local folder, each file opened to its clips) as tiles — the thumbnail, the length, where it is kept or
+what it came from — a click opening the bench, the right-click holding the verbs. `clayStore` has the `animation` view and the hashes
+`#clay/library/animation/anm/<id>` and `…/clip/<file>/<clip>`; `clayCommands` the `clay.anim.*` commands (new, open, save, saveAs, mine, back,
+rename, duplicate, toLibrary, remove — Remove a dangerous ask); `ClayLayer` the bench's header row (the name, *· downloaded* for a clip; Save ·
+Save as… · Make it mine · Back) and the bench view; `ShotStepper`'s BenchChip reads *Animation: ‹name›*; `blockEdit` exports `rangeKeys` and
+`putTemplates`. The e2e scenario is appended to `smoke.spec.ts` (the test rig's Walk_RM through the whole round, Rename and Remove from a tile).
+No curve editor (D182): a correction a frame is the grain.
+
+**Checked.** Offline 806 (805 + the route snapshot refreshed with the three routes), Vitest 653 + 3 skipped, typecheck, build and lint clean
+(61 warnings, as before), agent docs 9 / 0, settings audit 322 / 0, model literals 0. The e2e is ported but not run: port 1420 is the author's
+dev server's — owed with C0–C2's. Live on the walk's project (my orchestrator on 8766, the author's Vite): the tiles (3 files, the Godot
+starter's clips); Walk_Loop on the bench with the range 0–32 and the figure's one block; a head correction (y 35) at frame 20 — a hollow
+diamond on the track, the figure turning its head over the walk; *Make it mine* → Walk_Loop of the project's ("from Walk_Loop · CC0 1.0
+(Quaternius)") with its thumbnail, the header no longer *downloaded*; *Save* with the range cut to 0–23 → 24 frames; *Save as…* "Walk with a
+glance"; *New animation…* "Nod" over 2 s → 48 frames, the figure standing still on the bench; three tiles under Mine with their thumbnails;
+then all three removed through the tiles' Remove — the project left as it was found (the bench stage of purpose `animation` stays, remade
+in place). Five screenshots sent. Two quirks on the way: the header's verbs wrapped word by word in the narrow column (each on one line now,
+the row wrapping as a whole, *Back* short in the header, the full label in its tooltip); my driver and the first cut of the e2e waited for a
+primary button on a dangerous ask — its OK is the red one.
+
+**Next:** E59 and E60 alone on the GPU, then C3 (Record: the animatic, the still, the passes), C4, C6, C5 — propo02 05's order.

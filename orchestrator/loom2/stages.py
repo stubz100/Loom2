@@ -283,7 +283,7 @@ class StageRange(BaseModel):
     end: int = 120
 
 
-Purpose = Literal["stage", "bench", "lineup"]
+Purpose = Literal["stage", "bench", "lineup", "animation"]   # D182 (C2b): the animation bench stays out of the pickers too
 
 
 class StageBound(BaseModel):
@@ -575,6 +575,19 @@ class StageStore:
         st = Stage(id=cur.id if cur else new_id("stg"), name="Line-up", purpose="lineup", size=size or {"w": 1920, "h": 1080, "fps": 24},
                    objects=[wall, *objects], cameras=[cam], active_camera=cam.id, revision=(cur.revision + 1) if cur else 0,
                    created_at=cur.created_at if cur else utc_now())
+        check(st)
+        self.save(st)
+        return st
+
+    def animation_bench(self, name: str, frames: int, size: dict[str, int] | None = None) -> Stage:
+        """D182 (C2b): the animation bench — the project's one stage of purpose `animation`, made again each time: a figure standing at
+        the origin, facing +Z, one camera framing it from the front and a little to the side, the range the animation's frames."""
+        cur = next((s for s in self.list() if s.purpose == "animation"), None)
+        fig = StageObject(id=new_id("fig"), kind="mannequin", name="Figure", preset="adult", detail="female", pose=Pose(preset="stand"), colour_id=1)
+        cam = StageCamera(id=new_id("cam"), name="Bench camera", pos=[1.4, 1.2, 3.6], target=[0.0, 0.9, 0.0])
+        st = Stage(id=cur.id if cur else new_id("stg"), name=f"Animation · {name.strip() or 'Animation'}"[:120], purpose="animation",
+                   size=size or {"w": 1920, "h": 1080, "fps": 24}, objects=[fig], cameras=[cam], active_camera=cam.id,
+                   range=StageRange(start=0, end=max(1, frames - 1)), revision=(cur.revision + 1) if cur else 0)
         check(st)
         self.save(st)
         return st

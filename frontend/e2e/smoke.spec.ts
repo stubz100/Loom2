@@ -4195,3 +4195,78 @@ test("Episode's Sound (U8b, D157 · proto01_UI2 05 §1): a sound brought in is i
   type Tracks = { audio: { items: { asset_id: string | null }[] }[] }
   await expect.poll(async () => (await api<Tracks>('GET', `/timelines/${tl.id}/tracks`)).audio[1].items.map((i) => i.asset_id), { timeout: 10_000 }).toEqual([sound.id])   // A2, Music
 })
+
+test("the animation workshop (D182, C2b): the Library's Animations tiles; a downloaded clip opened on the animation bench, a correction over it, Make it mine, Save, Save as…, New animation…, Rename and Remove (Clay)", async ({ page }) => {
+  test.setTimeout(150_000)
+  const tag = Date.now().toString(36)
+  type Anim = { id: string; name: string; frames: number; keys: { frame: number; correction?: boolean; pose: { joints: Record<string, number[]> } | null }[]; source: { file_id: string | null; clip: string | null; licence: string | null }; thumb_asset_id: string | null }
+  const anims = async () => api<{ items: Anim[]; library: Anim[] }>('GET', '/stages/animations')
+  await openShell(page, 'clay/library/animation')
+  const grid = page.locator('[data-testid="clay-animations"]')
+  await expect(grid).toBeVisible()
+  await expect(grid.locator('.c-anim-file')).toHaveCount(1)                                               // the e2e tree's starter folder: the test rig
+  await grid.locator('.c-anim-file button', { hasText: 'test_rig' }).click()
+  await expect(grid.locator('.c-tile.clip')).toHaveCount(2, { timeout: 20_000 })
+  // a downloaded clip on the bench: a figure plays it as its one block, the range its frames
+  await grid.locator('.c-tile.clip', { hasText: 'Walk_RM' }).click()
+  await expect(page.locator('[data-testid="clay-animation-bench"] canvas').first()).toBeVisible({ timeout: 30_000 })
+  await expect(page.locator('[data-testid="bench-chip"]')).toContainText('Animation: Walk_RM')
+  await expect(page.locator('[data-testid="clay-animation-header"]')).toContainText('downloaded')
+  type Doc = { id: string; purpose: string; range: { end: number }; objects: { id: string; kind: string }[]; tracks: Record<string, { source: { kind: string; clip: string }; start: number; length: number }[]>; keyframes: { objects: Record<string, { frame: number; correction?: boolean }[]> } }
+  const bench = async () => (await api<{ items: Doc[] }>('GET', '/stages?purpose=animation')).items[0]
+  await expect.poll(async () => Object.values((await bench())?.tracks ?? {})[0]?.length ?? 0, { timeout: 20_000 }).toBe(1)
+  const b0 = await bench()
+  const fig = b0.objects.find((o) => o.kind === 'mannequin')!
+  expect([b0.tracks[fig.id][0].source.clip, b0.tracks[fig.id][0].start, b0.range.end]).toEqual(['Walk_RM', 0, 24])
+  expect((await api<{ items: Doc[] }>('GET', '/stages')).items.map((x) => x.id)).not.toContain(b0.id)        // out of the pickers
+  // a correction over it at frame 12: the pose editor's joint field on the figure as it is at the playhead
+  await page.locator(`.outl-row[data-id="${fig.id}"]`).click()
+  const tl = page.locator('.stage-col')
+  await tl.locator('input[aria-label="frame"]').fill('12'); await tl.locator('input[aria-label="frame"]').press('Enter')
+  await tl.locator('button', { hasText: /^Pose Figure/ }).first().click()
+  const left = page.locator('[data-testid="clay-library"]')
+  await left.locator('select:has(option[value="head"])').first().selectOption('head')
+  const ins = left.locator('.kv', { hasText: /x · y · z/ }).first().locator('input')
+  await ins.nth(1).fill('30'); await ins.nth(1).press('Tab')
+  await expect.poll(async () => (await bench()).keyframes.objects[fig.id]?.find((k) => k.frame === 12)?.correction ?? null, { timeout: 10_000 }).toBe(true)
+  await tl.locator('button', { hasText: /^Done posing/ }).first().click()
+  // Make it mine: a copy of the author's with the clip's file and licence; the bench now plays the copy; its thumbnail arrives
+  await page.locator('[data-testid="clay-animation-header"] button', { hasText: 'Make it mine' }).click()
+  await expect.poll(async () => (await anims()).items.map((x) => x.name), { timeout: 15_000 }).toEqual(['Walk_RM'])
+  const mine = (await anims()).items[0]
+  expect([mine.source.clip, mine.source.licence, mine.frames]).toEqual(['Walk_RM', 'CC0', 25])
+  expect(mine.keys.some((k) => k.frame === 12 && k.pose?.joints.head?.[1] === 30)).toBe(true)                // the correction is in the copy
+  await expect(page.locator('[data-testid="clay-animation-header"]')).not.toContainText('downloaded')
+  await expect.poll(async () => (await anims()).items[0].thumb_asset_id, { timeout: 30_000 }).not.toBeNull()
+  // Save: the range cut to 12 frames, written over the animation
+  const rangeEnd = tl.locator('.range-field input').nth(1)
+  await rangeEnd.fill('11'); await rangeEnd.dispatchEvent('change')
+  await page.locator('[data-testid="clay-animation-header"] button', { hasText: /^Save$/ }).click()
+  await expect.poll(async () => (await anims()).items[0].frames, { timeout: 15_000 }).toBe(12)
+  // Save as…: a second animation of the project's
+  await page.locator('[data-testid="clay-animation-header"] button', { hasText: 'Save as…' }).click()
+  const dialog = page.locator('.modal.ask')
+  await dialog.locator('input').fill(`Short walk ${tag}`); await dialog.locator('button.primary').click()
+  await expect.poll(async () => (await anims()).items.map((x) => x.name).sort(), { timeout: 15_000 }).toEqual([`Short walk ${tag}`, 'Walk_RM'])
+  await expect(page.locator('[data-testid="clay-animation-header"]')).toContainText(`Short walk ${tag}`)
+  // back to the tiles; New animation… lands on the bench standing still; Rename and Remove from a tile
+  await page.locator('[data-testid="clay-animation-header"] button', { hasText: 'Back to the Library' }).click()
+  await expect(grid.locator('.c-tile[data-anim]')).toHaveCount(2)
+  await grid.locator('h4 button', { hasText: 'New animation…' }).click()
+  await dialog.locator('input').fill(`Nod ${tag}`); await dialog.locator('button.primary').click()
+  await dialog.locator('input').fill('2'); await dialog.locator('button.primary').click()
+  await expect(page.locator('[data-testid="clay-animation-bench"] canvas').first()).toBeVisible({ timeout: 30_000 })
+  await expect.poll(async () => (await anims()).items.find((x) => x.name === `Nod ${tag}`)?.frames ?? 0, { timeout: 15_000 }).toBe(48)
+  await expect(page.locator('[data-testid="bench-chip"]')).toContainText(`Animation: Nod ${tag}`)
+  await page.locator('[data-testid="clay-animation-header"] button', { hasText: 'Back to the Library' }).click()
+  const nod = grid.locator('.c-tile[data-anim]', { hasText: `Nod ${tag}` })
+  await nod.click({ button: 'right' })
+  await page.locator('.ctx-menu button.item', { hasText: 'Rename…' }).click()
+  await dialog.locator('input').fill(`Nod twice ${tag}`); await dialog.locator('button.primary').click()
+  await expect(grid.locator('.c-tile[data-anim]', { hasText: `Nod twice ${tag}` })).toBeVisible()
+  await grid.locator('.c-tile[data-anim]', { hasText: `Nod twice ${tag}` }).click({ button: 'right' })
+  await page.locator('.ctx-menu button.item', { hasText: 'Remove' }).click()
+  await dialog.locator('button.danger').click()                                                              // a dangerous ask: its OK is the red one
+  await expect.poll(async () => (await anims()).items.map((x) => x.name).sort(), { timeout: 15_000 }).toEqual([`Short walk ${tag}`, 'Walk_RM'])
+  await page.screenshot({ path: 'node_modules/.e2e/c2b-animations.png' })
+})

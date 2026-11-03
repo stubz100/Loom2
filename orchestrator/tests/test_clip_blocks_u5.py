@@ -76,6 +76,30 @@ def test_templates_and_the_library(tmp_path: Path):
     assert store.library() == []
 
 
+def test_the_library_written_over_and_a_thumbnail(tmp_path: Path):
+    """D182 (C2b): a library animation is written over (*Save* on the animation bench); a thumbnail lands on the project's item or the library's."""
+    ws = Workspace.create(tmp_path / "p", name="P")
+    store = AnimationStore(ws.stages_dir, tmp_path / "state")
+    t = AnimationTemplate(name="Glance", frames=12, keys=[{"frame": 0, "transform": {"pos": [0, 0, 0], "rot": [0, 0, 0], "scale": [1, 1, 1]}}],
+                          source={"file_id": "mot_a", "clip": "Walk_Loop", "licence": "CC0"})
+    store.put(0, [t])
+    with pytest.raises(KeyError):
+        store.library_put(t)                                                                                # not in the library yet
+    store.to_library(t.id)
+    edited = t.model_copy(update={"name": "Glance back", "frames": 24, "keys": t.keys + [{"frame": 23, "transform": {"pos": [0, 0, 1]}}]})
+    store.library_put(edited)
+    lib = store.library()[0]
+    assert (lib.name, lib.frames, len(lib.keys), lib.source.clip, lib.source.licence) == ("Glance back", 24, 2, "Walk_Loop", "CC0")
+    with pytest.raises(ValueError):
+        store.library_put(edited.model_copy(update={"keys": [{"frame": 40, "transform": {}}]}))
+    assert store.set_thumb(t.id, "ast_p").thumb_asset_id == "ast_p" and store.book().items[0].thumb_asset_id == "ast_p"   # the project's item
+    assert store.book().revision == 1                                                                       # a thumbnail is no edit of the keys
+    store.put(1, [])
+    assert store.set_thumb(t.id, "ast_l").thumb_asset_id == "ast_l" and store.library()[0].thumb_asset_id == "ast_l"   # then the library's
+    with pytest.raises(KeyError):
+        store.set_thumb("anm_none", "ast_x")
+
+
 def test_the_routes_and_motion_import(tmp_path: Path):
     state = tmp_path / "state"
     AppState(state).update_settings({"engine": {"python": str(tmp_path / "missing.exe"), "health_timeout_s": 1}, "models_root": str(tmp_path / "models"),
@@ -93,6 +117,34 @@ def test_the_routes_and_motion_import(tmp_path: Path):
         assert cl.put("/stages/animations", json={"revision": 0, "items": []}, headers=H).status_code == 409
         r = cl.post(f"/stages/animations/{aid}/library", headers=H)
         assert r.status_code == 200 and [x["id"] for x in r.json()["library"]] == [aid]
+        # D182 (C2b): the library written over, the thumbnail from an uploaded PNG, the animation bench
+        r = cl.post(f"/stages/animations/{aid}/library", headers=H)
+        over = {**r.json()["library"][0], "name": "Wave twice", "frames": 48}
+        assert cl.put(f"/stages/animations/library/{aid}", json=over, headers=H).json()["library"][0]["name"] == "Wave twice"
+        assert cl.put("/stages/animations/library/anm_x", json=over, headers=H).status_code == 422          # the id is the path's
+        assert cl.put(f"/stages/animations/library/{aid}", json={**over, "keys": [{"frame": 90, "transform": {}}]}, headers=H).status_code == 422
+        import hashlib
+        import io as _io
+        from PIL import Image
+        buf = _io.BytesIO()
+        Image.new("RGB", (64, 36), (40, 40, 48)).save(buf, format="PNG")
+        png = buf.getvalue()
+        sha = hashlib.sha256(png).hexdigest()
+        assert cl.post(f"/stages/animations/{aid}/thumbnail", json={"blob": sha}, headers=H).status_code == 422   # not uploaded yet
+        assert cl.put(f"/blobs/{sha}", content=png, headers=H).status_code == 200
+        r = cl.post(f"/stages/animations/{aid}/thumbnail", json={"blob": sha}, headers=H)
+        assert r.status_code == 200, r.text
+        thumb = r.json()["items"][0]["thumb_asset_id"]
+        assert thumb and cl.get(f"/assets/{thumb}", headers=H).json()["lineage_kind"] == "animation-thumb"
+        assert cl.post("/stages/animations/anm_none/thumbnail", json={"blob": sha}, headers=H).status_code == 404
+        b = cl.post("/stages/animation-bench", json={"name": "Wave", "frames": 48}, headers=H)
+        assert b.status_code == 200, b.text
+        bench = b.json()
+        assert (bench["purpose"], bench["name"], bench["range"], [o["kind"] for o in bench["objects"]], len(bench["cameras"])) == ("animation", "Animation · Wave", {"start": 0, "end": 47}, ["mannequin"], 1)
+        again = cl.post("/stages/animation-bench", json={"name": "Nod", "frames": 10}, headers=H).json()
+        assert again["id"] == bench["id"] and again["name"] == "Animation · Nod" and again["revision"] == bench["revision"] + 1   # the one bench, made again
+        assert bench["id"] not in [x["id"] for x in cl.get("/stages", headers=H).json()["items"]]                              # out of the pickers
+        assert [x["id"] for x in cl.get("/stages?purpose=animation", headers=H).json()["items"]] == [bench["id"]]
         assert cl.delete(f"/stages/animations/library/{aid}", headers=H).json()["library"] == []
         src = tmp_path / "Wave.glb"
         src.write_bytes(b"glTF-not-really")                                                                  # the scanner does not parse

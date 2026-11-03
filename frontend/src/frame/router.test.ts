@@ -22,7 +22,8 @@ describe('U1: the router', () => {
   })
   it("maps the old places onto D157's layers", () => {
     expect([layerOf({ suite: 'generate' }), layerOf({ suite: 'edit' }), layerOf({ suite: 'story', tab: 'world' }), layerOf({ suite: 'story', tab: 'cast' })]).toEqual(['world', 'world', 'world', 'world'])
-    expect([layerOf({ suite: 'stage' }), layerOf({ suite: 'animate' }), layerOf({ suite: 'final' }), layerOf({ suite: 'story', tab: 'flow' }), layerOf({ suite: 'story', tab: 'shots' })]).toEqual(['shots', 'shots', 'shots', 'shots', 'shots'])
+    expect([layerOf({ suite: 'stage' }), layerOf({ suite: 'animate' }), layerOf({ suite: 'final' }), layerOf({ suite: 'story', tab: 'flow' }), layerOf({ suite: 'story', tab: 'shots' })]).toEqual(['clay', 'shots', 'shots', 'shots', 'shots'])   // C0 (D181): the stage suite is Clay's
+    expect(layerOf({ suite: 'story', tab: 'cast', layer: 'clay' })).toBe('clay')
     expect([layerOf({ suite: 'story', tab: 'episode' }), layerOf({ suite: 'catalogue' })]).toEqual(['episode', 'bin'])
   })
   it('is the only module that changes the suite — stores and commands navigate', () => {

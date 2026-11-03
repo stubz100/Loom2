@@ -1,7 +1,7 @@
 // U4 (D157, proto01_UI2 04): Shots' own view state — the level (Flow, or the open shot's Clay · Performance · Final). The shot and its node
 // are the Story store's selection (the records of today), so Shots and the old Story tabs act on the same records. The place is kept in the
-// hash: #shots/<shot>/<level>. A level is also an old suite (the Flow is Story's Flow tab, Clay the stage suite), so the reused parts' keys
-// and reads follow through U1's router (the layer stays Shots).
+// hash: #shots/<shot>/<level>. A level is also an old suite (the Flow is Story's Flow tab), so the reused parts' keys and reads follow
+// through U1's router (the layer stays Shots). C0 (D181): Clay is a layer of its own — the shot's Clay opens its scene there, with the way back.
 import { create } from 'zustand'
 import { http, unwrap } from '../../api/client'
 import { navigate, onNavigate, type Place } from '../../frame/router'
@@ -32,9 +32,9 @@ export function suiteOf(level: ShotLevel): { suite: 'story' | 'stage' | 'animate
   return level === 'flow' ? { suite: 'story', tab: 'flow' } : level === 'clay' ? { suite: 'stage' } : level === 'performance' ? { suite: 'animate' } : { suite: 'final' }
 }
 
-/** The level an old place is (a command of the old suites — *Open the stage*, *Block it on a stage…* — navigates there), or null. */
+/** The level an old place is (a command of the old suites navigates there), or null — the stage suite is Clay's layer (C0). */
 export function levelOf(p: Place): ShotLevel | null {
-  return p.suite === 'stage' ? 'clay' : p.suite === 'animate' ? 'performance' : p.suite === 'final' ? 'final' : p.suite === 'story' && p.tab === 'flow' ? 'flow' : null
+  return p.suite === 'animate' ? 'performance' : p.suite === 'final' ? 'final' : p.suite === 'story' && p.tab === 'flow' ? 'flow' : null
 }
 
 interface ShotsState {
@@ -159,6 +159,16 @@ async function openClay(): Promise<void> {
   if (v.camera_id) { useStage.getState().setActiveCamera(v.camera_id); useStage.getState().setView('camera') }   // 04 §3: the shot's camera by default
 }
 
+/** C0 (D181): the shot's Clay — its scene in Clay's editor, through its camera, with *← Back to the shot*. */
+async function openInClay(): Promise<void> {
+  const s = useStory.getState().shot(), v = useStory.getState().shotVersion()
+  if (!s || !v) return
+  if (!v.stage_id) { useSession.getState().toast('The shot has no scene yet — give it one in the header', 'info'); return }
+  await openClay()
+  const { useClay } = await import('../clay/clayStore')
+  await useClay.getState().openScene(v.stage_id, { shot: s.id, version: v.id, camera: v.camera_id ?? null })
+}
+
 /** Before a server change to the open stage (a camera copied for a shot): Clay's pending save goes first. */
 export async function flushClay(): Promise<void> {
   const { useStage } = await import('../../suites/stage/stageStore')
@@ -166,11 +176,13 @@ export async function flushClay(): Promise<void> {
 }
 
 let opens = 0                                                            // the shots opened: the mount's place from the hash yields to a later one
+const level0 = placeOfHash(location.hash)?.level
 export const useShots = create<ShotsState>()((set, get) => ({
-  level: placeOfHash(location.hash)?.level ?? 'flow',
+  level: level0 && level0 !== 'clay' ? level0 : 'flow',                 // C0: a Clay hash opens the scene in Clay's layer; Shots stays where it was
   flowView: 'canvas',
   setFlowView: (flowView) => set({ flowView }),
   setLevel: (level) => {
+    if (level === 'clay') { void openInClay(); return }                   // C0 (D181): Clay is its own layer
     set({ level })
     navigate(suiteOf(level))
     writeHash(useStory.getState().shotId, level)

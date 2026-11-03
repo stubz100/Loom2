@@ -11,8 +11,8 @@ import { DEFAULT_RAIL } from './railTabs'
  *  it is in when that is not the suite's own (World's *See in clay* is the stage suite on the World layer). */
 export interface Place { suite: Suite; tab?: string; layer?: Layer }
 
-/** D157 (02 §1): the new shell's four layers. */
-export type Layer = 'world' | 'shots' | 'episode' | 'bin'
+/** D157 (02 §1): the new shell's four layers; C0 (D181): Clay, between World and Shots. */
+export type Layer = 'world' | 'clay' | 'shots' | 'episode' | 'bin'
 
 interface RailState { active: Record<string, string>; setActive: (suite: string, tab: string) => void }
 /** The rail tab each suite opens on (a session's memory, not persisted). */
@@ -52,12 +52,13 @@ export function currentPlace(): Place {
   return { suite, tab: useRailState.getState().active[suite] }
 }
 
-/** D157 (02 §1): the layer an old place belongs to — Image's Make and Edit and Story's World and Cast are World; Animate's three levels and
- *  Story's Flow and Shots are Shots; Story's Episode is Episode; the Catalogue is the Bin. */
+/** D157 (02 §1): the layer an old place belongs to — Image's Make and Edit and Story's World and Cast are World; the stage suite is Clay (C0,
+ *  D181); Animate's Performance and Final and Story's Flow and Shots are Shots; Story's Episode is Episode; the Catalogue is the Bin. */
 export function layerOf(p: Place): Layer {
   if (p.layer) return p.layer
   switch (p.suite) {
-    case 'animate': case 'stage': case 'final': return 'shots'
+    case 'stage': return 'clay'
+    case 'animate': case 'final': return 'shots'
     case 'catalogue': return 'bin'
     case 'story': return p.tab === 'flow' || p.tab === 'shots' ? 'shots' : p.tab === 'episode' ? 'episode' : 'world'
     default: return 'world'

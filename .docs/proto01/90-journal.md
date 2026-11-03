@@ -15872,3 +15872,36 @@ correction keys, the path an object; Record writes the animatic, a still, the pa
 Shots the storyboard of ledger cards whose rows open their editors in the centre, the route the cards' order, the animatic a deliverable; the
 performance's default after E59, story motions after E60; the Bin's homes with their kinds, working files as kinds, a sequence one tile; built in
 place wave by wave, C0 → C1–C3 → C4 → C6 → C5 with the spikes between, ≈ 8 weeks. Nothing built yet; C0 is next on the author's word.
+
+## 2026-11-03 15:13 — C0 built (D181, propo02 05): Clay a layer of its own on the top rail — the Library of 3D assets made from World's pictures, the scenes' editor with the way back; World = Make | Edit
+
+The first wave of D181. **The top rail is World · Clay · Shots · Episode · Bin** (Ctrl+1–5; `ui2/layers.ts`, `router.ts`: the stage
+suite is Clay's layer). **Clay** (`frontend/src/ui2/clay/`: `clayStore.ts`, `ClayLayer.tsx`, `clayCommands.ts`, `readiness.ts`) has two rail
+items. *Library*: the kinds Figures · Props · Sets · Lights · Cameras · Animations as chips; the three bound kinds are World's entities as
+tiles (the hero or the set picture, the name and version, the Clay readiness as chips: a figure's A-pose, body fitted, shell, back view; a
+prop's picture, 3D model, height; a set's picture, built, faces filled); a tile opened puts its builder in the left column — the body with its
+fit, shell and skeleton (`CastBody`), a prop's model and height (`PropModel`), a place's set builder (`PlaceSetSection`) — moved whole from
+World's Build; *Bench ▶* and *Line-up ▶* in the header open Clay for it in the centre (D142's bench and CW5's line-up under the hood, their
+*← Back* now *Back to the Library*); the skeleton bench shows in the centre with its parts in the Inspector; the Inspector lists the scenes the
+asset stands in and its versions, with *Open in World ▸*; Animations shows the motion library; Lights and Cameras say where they are made
+(their pages come with C1). *Scenes*: the editor (`StageParts`' column, strip, stage and foot) on a scene, a picker of the project's scenes with
+the shots each serves, and *← ‹shot›* when opened from a shot. **Shots' rail keeps Clay** as the jump: it opens the shot's scene in Clay's
+layer through the shot's camera (`shotsStore.openInClay`); a Flow node's double-click and a new shot do the same; the Shots level never
+becomes Clay (a `#shots/…/clay` hash jumps too). **World = Make | Edit:** the Clay and Build modes are gone; the A-pose slots, their makes
+and the candidates to pick from are a section under Make's sheet (`WorldRefs.tsx`, D161's pick by hand kept, Q2); the readiness line says
+the pictures only (hero, references, A-pose front, back and side, voice: *Pictures done*), and *Open in Clay ▸* in the header opens the
+Library on the entity (`clay.asset.open`); the Clay readiness is the Library's (`clayReadiness`); a shot's cast counts both. Hashes:
+`#clay/library/<kind>/<profile>/<version>[/bench]`, `#clay/scene/<stage>`.
+
+**Checks:** typecheck, build and lint clean (61 warnings, as before); Vitest 643 + 3 skipped (clay.test.ts: the readiness, the hash, the
+scenes' shots; World's readiness tests re-cut; the layers' and router's tests say the stage suite is Clay's); agents check 9 docs / 0;
+`frontend/src/frame/AGENTS.md` says five layers. **The e2e is ported, not run:** `openBuild` → `openLibrary`, `toLevel(page, 'clay')`
+waits for Clay's scene, the bench and line-up scenarios read the Library, the storyboard scenario goes to Clay and back — port 1420 is held
+by the author's dev server (`vite.js`, PID 38276), which the e2e's preview needs; owed as soon as it is free. No orchestrator change: the
+offline suite is not touched.
+
+**Seen on the propo02 project** (my own orchestrator on 8766 against the author's dev server at 1420, in a separate Edge): World's header
+*Pictures done* with the A-pose section under the sheet; the Library on Nora (*1 to go*: the shell), her bench; the street's set page
+(*Ready for a scene*); shot 1's scene opened from the Shots rail (*Cobbled street · 4.0 s · ← Shot*) and the way back landing on
+Performance. Seven screenshots sent. One lesson: the dev server's watcher missed files written by a script — its transform cache served
+the old `readiness.ts` until the files were touched; a from-scratch `page.goto` does not refresh a module Vite thinks unchanged.

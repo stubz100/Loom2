@@ -348,7 +348,7 @@ const cmds: Command[] = [
   { id: 'story.cast.bench', scope: 'story', label: 'Bench ▶', icon: Hammer, placement: ['panel', 'inspector', 'context'],
     hint: "Clay opened for this version: its figure (a prop: its model at its height beside a 1.75 m figure; a place: its set from the picture's camera) on a scene of its own, with all of Clay's tools",
     when: () => { const p = sy().profile(); const v = sy().version(); return !!p && !!v && (p.cls === 'character' || (p.cls === 'prop' && !!v.model_asset_id) || (p.cls === 'place' && !!v.place_set)) },
-    run: () => runCommand('world.mode.clay') },                                   // B2a: the bench inside World
+    run: () => runCommand('clay.bench.open') },                                    // B2a → C0 (D181): the bench is Clay's Library's viewer
   { id: 'story.cast.lineup', scope: 'story', label: 'Line-up ▶', icon: Users, placement: ['panel', 'context'], hint: 'the characters and props shown, side by side at their sizes in Clay (twelve at most)',
     when: () => castLineup().length > 0, run: () => { const items = castLineup().map((p) => ({ profile_id: p.id })); void import('../stage/stageStore').then((m) => m.st().openLineup(items, backToBoard('cast'))) } },
   { id: 'story.idea.lineup', scope: 'story', label: 'Line-up ▶', icon: Users, placement: ['panel', 'context'], hint: 'the ideas picked (Ctrl-click), else those shown, in their clay side by side in Clay',
@@ -398,8 +398,9 @@ const cmds: Command[] = [
     placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character' && !fitBlocked(version()) && version()?.state === 'open', run: () => void sy().fitBody() },   // D140: only on an A-pose
   // CS2 (proto01_UIcast 03 §3.2, D136 U17): the skeleton bench — its view, its foot's verbs (its code loads with the stage's)
   { id: 'cast.skeleton.open', scope: 'story', label: 'Skeleton…', icon: PersonStanding, hint: "the character's skeleton against its reference, its figure and its guide — fit, tune and lock each part",
-    placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character' && !!version(), run: () => sy().setSkeleton(true) },
-  { id: 'cast.skeleton.close', scope: 'story', label: 'Back to the sheet', icon: ChevronLeft, placement: ['panel'], when: () => sy().skeleton, run: () => sy().setSkeleton(false) },
+    placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character' && !!version(),
+    run: () => { sy().setSkeleton(true); const p = profile(); if (p) void import('../../ui2/clay/clayStore').then((m) => m.useClay.getState().openLibrary('figure', p.id, version()?.id ?? p.current)) } },   // C0: in Clay's Library
+  { id: 'cast.skeleton.close', scope: 'story', label: 'Back to the figure', icon: ChevronLeft, placement: ['panel'], when: () => sy().skeleton, run: () => sy().setSkeleton(false) },
   { id: 'cast.skeleton.fit', scope: 'story', label: 'Fit again ▶', icon: Ruler, hint: "the body fitted to the points as they are now — SDPose's, with those you moved; the locked parts stay",
     placement: ['panel', 'context'], when: () => sy().skeleton && openVersion() && !!version()?.body_points && !fitBlocked(version()),
     run: () => void import('../stage/benchState').then((m) => { const pts = m.bench.points(); if (pts) void sy().refitBody(pts as never) }) },

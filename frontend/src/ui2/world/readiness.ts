@@ -1,5 +1,6 @@
-// U3 (D157, proto01_UI2 03 §2): the readiness line — what an entity version still needs before Clay can use it. Each item is done, owed or
-// optional; the line ends in "Ready for Clay" or "N to go". Pure, from the version's record and its reference count.
+// U3 (D157, proto01_UI2 03 §2): the readiness line — what an entity version still needs of its pictures. Each item is done, owed or
+// optional; the line ends in "Pictures done" or "N to go". Pure, from the version's record and its reference count. C0 (D181): the 3D
+// (the body, the model, the set) is Clay's readiness (ui2/clay/readiness.ts).
 import type { Profile, ProfileVersion } from '../../api/types'
 import { sentColours } from '../../suites/generate/sheet'
 
@@ -51,8 +52,6 @@ export function readiness(p: Pick<Profile, 'cls' | 'voice_id'>, v: ProfileVersio
       item('a_pose_front', 'A-pose front', !!v.anim_ref_asset_id),
       item('a_pose_back', 'A-pose back', !!v.anim_ref_back_asset_id, undefined, true),
       item('a_pose_side', 'A-pose side', !!v.anim_ref_side_asset_id, undefined, true),   // D175: a character seen from the side
-      item('body', 'body fitted', !!v.body_fit_from, v.body_fit_from && v.body ? bodyText(v.body) : v.anim_ref_note === 'not_whole' ? '— the A-pose is cut'
-        : v.anim_ref_note === 'several' ? '— the A-pose shows more than one figure' : undefined),   // D168: what the body is; W9, W11: why not
       ...(v.anim_ref_note === 't_pose' ? [{ id: 'tpose', label: 'A-pose is a T-pose', state: 'warn' as const, detail: 'the arms are held level, not about 30° out' }] : []),   // W11
       item('voice', 'voice', !!p.voice_id, undefined, true),
       ...DRIFT_ROLES.flatMap(([role, label]) => { const d = sheetDrift(v, prompts[role])                // M3: made before the sheet's colours took — said, not counted
@@ -61,14 +60,10 @@ export function readiness(p: Pick<Profile, 'cls' | 'voice_id'>, v: ProfileVersio
         detail: carriedThings(v).join('; ') }] : []),                                              // M4: the A-pose leaves it out
     ]
   } else if (p.cls === 'prop') {
-    items = [item('hero', 'hero', !!v.hero_asset_id), item('model', '3D model', !!v.model_asset_id), item('height', 'height', !!v.height_m, v.height_m ? `${v.height_m} m` : undefined)]
+    items = [item('hero', 'hero', !!v.hero_asset_id), item('reference', 'reference view', !!v.anim_ref_asset_id, undefined, true)]   // the model is made from either
   } else {
-    const ps = v.place_set, faces = ps?.faces ?? []
-    const ok = faces.filter((f) => f.filled || !f.bad).length
-    const pct = faces.length ? Math.round((100 * ok) / faces.length) : 0
-    items = [item('set_picture', 'set picture', !!ps?.sources.length), item('set', 'set built', faces.length > 0),
-      item('faces', 'faces filled', faces.length > 0 && ok === faces.length, faces.length ? `${pct} %` : undefined)]
+    items = [item('set_picture', 'set picture', !!(v.place_set?.sources.length || v.anim_ref_asset_id))]
   }
   const owed = items.filter((x) => x.state === 'owed').length
-  return { items, owed, line: owed ? `${owed} to go` : 'Ready for Clay' }
+  return { items, owed, line: owed ? `${owed} to go` : 'Pictures done' }
 }

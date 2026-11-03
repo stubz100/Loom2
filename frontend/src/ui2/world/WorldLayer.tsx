@@ -21,11 +21,8 @@ import './worldCommands'
 import './world.css'
 import { NoProject } from '../NoProject'
 
-// U3c: the editor loads on the first Edit (its Pixi code stays out of World until then)
-// U3f: the bench's Clay parts and the voices block load with their use
-const BenchColumn = lazy(() => import('../../suites/stage/StageParts').then((m) => ({ default: () => <m.ClayColumn tab="scene" /> })))
-const BenchStrip = lazy(() => import('../../suites/stage/StageParts').then((m) => ({ default: m.Strip })))
-const BenchStage = lazy(() => import('../../suites/stage/StageParts').then((m) => ({ default: m.Stage })))
+// U3c: the editor loads on the first Edit (its Pixi code stays out of World until then); the voices block with its use. C0 (D181): the
+// bench, the skeleton bench and Build's 3D (the body, the model, the set) live in Clay's Library now — World = Make | Edit.
 const Voices = lazy(() => import('../../suites/story/VoicesBlock').then((m) => ({ default: m.VoicesBlock })))
 
 const EditColumn = lazy(() => import('./WorldEdit').then((m) => ({ default: m.WorldEditColumn })))
@@ -38,18 +35,15 @@ const LookInspector = lazy(() => import('./WorldLook').then((m) => ({ default: m
 const SketchColumn = lazy(() => import('./WorldSketches').then((m) => ({ default: m.SketchColumn })))
 const SketchCentre = lazy(() => import('./WorldSketches').then((m) => ({ default: m.SketchCentre })))
 const SketchInspector = lazy(() => import('./WorldSketches').then((m) => ({ default: m.SketchInspector })))
-const Build = lazy(() => import('./WorldBuild').then((m) => ({ default: m.WorldBuild })))   // D161: what Clay needs of the version
-const SkeletonBench = lazy(() => import('../../suites/stage/SkeletonBench'))              // B2a (CS2): the skeleton bench in World's centre
-const SkeletonParts = lazy(() => import('../../suites/stage/SkeletonBench').then((m) => ({ default: m.SkeletonParts })))
 
 const RAIL_ICON: Record<WorldRail, typeof User> = { character: User, prop: Box, place: MapPin, look: Palette, sketches: PenLine }
 /** 03 §2: an item is its verb — the Cast command that makes it (they act on the entity the header shows: the Story store's selection). */
-// D161: an item opens Build, where it is made (a click here queues nothing)
-const READY_VERB: Record<string, string> = { ...Object.fromEntries(['a_pose_front', 'a_pose_back', 'a_pose_side', 'body', 'model', 'set_picture', 'set', 'faces'].map((k) => [k, 'world.mode.build'])),
-  carried: 'world.carried.prop', tpose: 'world.mode.build' }                           // M4; W11
+// D161 → C0: a picture item opens Make, whose A-pose section makes and picks it (a click here queues nothing); the 3D is Clay's Library
+const READY_VERB: Record<string, string> = { ...Object.fromEntries(['a_pose_front', 'a_pose_back', 'a_pose_side', 'reference', 'set_picture'].map((k) => [k, 'world.mode.make'])),
+  carried: 'world.carried.prop', tpose: 'world.mode.make' }                            // M4; W11
 /** M3, M4: what a warning chip says on hover. */
 const warnTitle = (x: ReadyItem) => (x.id === 'tpose'
-  ? 'The A-pose holds its arms level (a T-pose), not about 30° out: the fit took it, but the shell and Wan Animate follow the arms as drawn — a click opens Build to make candidates'
+  ? 'The A-pose holds its arms level (a T-pose), not about 30° out: the fit took it, but the shell and Wan Animate follow the arms as drawn — make candidates in Make\'s A-pose section'
   : x.id === 'carried'
   ? `${x.detail}: the A-pose leaves it out (its hands open, no props), so a performance has it only from the words and it comes and goes — a click makes it a Cast prop, which Clay's Hold ▸ puts in the hand`
   : `${x.detail} — made before the sheet said so: make it again, or set the colour back`)
@@ -90,7 +84,7 @@ function Header() {
       <div className="w-head-row">
         <MenuButton label={p.name} items={entities} text />
         <MenuButton label={`${v.id}${v.label && v.label !== v.id ? ` · ${v.label}` : ''}${v.state === 'final' ? ' · final' : ''}`} items={versions} text />
-        <span className="spacer" /><CommandButton id="world.mode.clay" text /><CommandButton id="world.entity.new" />
+        <span className="spacer" /><CommandButton id="clay.asset.open" text /><CommandButton id="world.entity.new" />
       </div>
       <div className="w-ready" data-testid="world-readiness">
         {r.items.map((x) => {
@@ -98,7 +92,7 @@ function Header() {
           if (x.state === 'warn') return c ? <button key={x.id} className="w-ready-item warn" data-ready={x.id} disabled={!isEnabled(c)} title={warnTitle(x)} onClick={() => runCommand(verb!)}>⚠ {x.label}</button>
             : <span key={x.id} className="w-ready-item warn" data-ready={x.id} title={warnTitle(x)}>⚠ {x.label}</span>
           const text = <>{x.state === 'done' ? '✓' : x.state === 'owed' ? '○' : '–'} {x.label}{x.detail ? ` ${x.detail}` : ''}</>
-          return c && x.state !== 'done' ? <button key={x.id} className={`w-ready-item ${x.state}`} disabled={!isEnabled(c)} title={`${x.label}: in Build`} onClick={() => runCommand(verb!)}>{text}</button>
+          return c && x.state !== 'done' ? <button key={x.id} className={`w-ready-item ${x.state}`} disabled={!isEnabled(c)} title={`${x.label}: in Make, below the sheet`} onClick={() => runCommand(verb!)}>{text}</button>
             : <span key={x.id} className={`w-ready-item ${x.state}`} title={x.state === 'done' ? 'done' : x.state === 'owed' ? 'owed' : 'optional'}>{text}</span>
         })}
         <b className={`w-ready-line${r.owed ? '' : ' ok'}`}>{r.line}</b>
@@ -184,11 +178,9 @@ function Inspector() {
 function ModeSwitch() {
   const mode = useWorld((s) => s.mode)
   useWorld((s) => s.selected)                                              // W59: Edit follows the picked picture
-  return <div className="w-mode segmented" role="group" aria-label="Make, Edit or Clay">
+  return <div className="w-mode segmented" role="group" aria-label="Make or Edit">
     <button className={mode === 'make' ? 'active' : ''} onClick={() => runCommand('world.mode.make')}>Make</button>
     <button className={mode === 'edit' ? 'active' : ''} disabled={mode !== 'edit' && !isEnabled(command('world.mode.edit')!)} title="Edit the selected creation" onClick={() => runCommand('world.mode.edit')}>Edit</button>
-    <button className={mode === 'clay' ? 'active' : ''} disabled={mode !== 'clay' && !isEnabled(command('world.mode.clay')!)} title={command('world.mode.clay')?.hint} onClick={() => runCommand('world.mode.clay')}>Clay</button>
-    <button className={mode === 'build' ? 'active' : ''} title={command('world.mode.build')?.hint} onClick={() => runCommand('world.mode.build')}>Build</button>
   </div>
 }
 
@@ -196,23 +188,17 @@ export function WorldLayer() {
   const rail = useWorld((s) => s.rail)
   const mode = useWorld((s) => s.mode)
   const project = useSession((s) => s.project)
-  const skeleton = useStory((s) => s.skeleton)
   useEffect(() => startWorld(), [])
   if (!project?.open) return <div className="w-layer"><Rail /><section className="w-centre wide"><NoProject /></section></div>   // nothing reads before there is one
   const classRail = rail !== 'look' && rail !== 'sketches'
   const freeEdit = !classRail && mode === 'edit'                                    // B2a: a picture that is no entity's, in the editor
-  const bench = classRail && rail === 'character' && skeleton                           // B2a (CS2): the skeleton bench in place of the bin
   return (
     <div className="w-layer" data-testid="world-layer">
       <Rail />
       {classRail ? <>
-        <section className="w-left"><Header /><ModeSwitch /><div className="w-panel">{mode === 'edit' ? <Part label="Edit" quiet="line"><EditColumn /></Part> : mode === 'clay' ? <Suspense fallback={null}><BenchColumn /></Suspense>
-          : mode === 'build' ? <Part label="Build" quiet="line"><Build /></Part> : <WorldMake />}</div></section>
-        <section className="w-centre">{mode === 'edit' ? <Part label="Edit" fallback={<div className="w-empty">Loading the editor…</div>}><EditCentre /></Part>
-          : mode === 'clay' ? <Suspense fallback={<div className="w-empty">Loading Clay…</div>}><div className="strip w-edit-strip"><BenchStrip /></div><div className="w-edit-stage" data-testid="world-clay"><BenchStage /></div></Suspense>
-          : bench ? <Part label="The skeleton bench" fallback={<div className="w-empty">Loading the bench…</div>}><div className="w-skeleton" data-testid="world-skeleton"><SkeletonBench /></div></Part> : <Bin />}</section>
-        {mode === 'edit' ? <Part label="Edit" quiet="hide" fallback={<aside className="w-insp" />}><EditInspector /></Part>
-          : bench && mode !== 'clay' ? <Part label="The skeleton bench" quiet="hide" fallback={<aside className="w-insp" />}><aside className="w-insp"><SkeletonParts /></aside></Part> : <Inspector />}
+        <section className="w-left"><Header /><ModeSwitch /><div className="w-panel">{mode === 'edit' ? <Part label="Edit" quiet="line"><EditColumn /></Part> : <WorldMake />}</div></section>
+        <section className="w-centre">{mode === 'edit' ? <Part label="Edit" fallback={<div className="w-empty">Loading the editor…</div>}><EditCentre /></Part> : <Bin />}</section>
+        {mode === 'edit' ? <Part label="Edit" quiet="hide" fallback={<aside className="w-insp" />}><EditInspector /></Part> : <Inspector />}
       </> : freeEdit ? <>
         <section className="w-left"><div className="w-panel"><Part label="Edit" quiet="line"><EditColumn /></Part></div></section>
         <section className="w-centre"><Part label="Edit" fallback={<div className="w-empty">Loading the editor…</div>}><EditCentre /></Part></section>

@@ -22,6 +22,7 @@ import { followNavigation, LAYERS, useLayer } from './layers'
 import { EpisodeLayer } from './episode/EpisodeLayer'
 import { BinLayer } from './bin/BinLayer'
 import { ShotsLayer } from './shots/ShotsLayer'
+import { ClayLayer } from './clay/ClayLayer'
 import { WorldLayer } from './world/WorldLayer'
 import { KeyHosts } from '../frame/keyHosts'
 import { AngleSheet } from '../suites/generate/AngleTab'
@@ -29,6 +30,7 @@ import { AngleSheet } from '../suites/generate/AngleTab'
 // registry loaded Animate's and the Catalogue loaded Story's; the layers' parts load lazily, so the shell loads both
 import '../suites/animate/animateCommands'
 import '../suites/story/storyCommands'
+import './clay/clayCommands'                                                 // C0 (D181): Clay's verbs, in reach from World's readiness too
 import '../frame/frame.css'
 import './shell.css'
 
@@ -38,10 +40,10 @@ import './shell.css'
   idle(() => void import('../suites/edit/EditSuite').catch(() => undefined))
 }
 
-/** The layer tabs — each the global command its key runs (Ctrl+1–4), so the tab, the key, the palette and the help list agree. */
+/** The layer tabs — each the global command its key runs (Ctrl+1–5), so the tab, the key, the palette and the help list agree. */
 function LayerTabs() {
   const layer = useLayer((s) => s.layer)
-  const ids = ['global.suite.story', 'global.suite.image', 'global.suite.animate', 'global.suite.catalogue']
+  const ids = ['global.suite.story', 'global.suite.clay', 'global.suite.image', 'global.suite.animate', 'global.suite.catalogue']
   return <>{LAYERS.map((l, i) => (
     <button key={l.id} className={`tab${layer === l.id ? ' active' : ''}`} onClick={() => runCommand(ids[i])} title={`${l.label} (Ctrl+${l.key})`} data-layer={l.id}>
       {l.label}<kbd>Ctrl+{l.key}</kbd>
@@ -50,7 +52,7 @@ function LayerTabs() {
 }
 
 /** Each layer's name (the main region's label). */
-const NAME: Record<string, string> = { world: 'World', shots: 'Shots', episode: 'Episode', bin: 'Bin' }
+const NAME: Record<string, string> = { world: 'World', clay: 'Clay', shots: 'Shots', episode: 'Episode', bin: 'Bin' }
 
 export function Shell() {
   const init = useSession((s) => s.init)
@@ -71,7 +73,7 @@ export function Shell() {
       <TopBar tabs={<LayerTabs />} />
       <Banner />
       <main className="ui2-layer filled" aria-label={name}>
-        <ErrorBoundary key={layer} label={name}>{layer === 'world' ? <WorldLayer /> : layer === 'shots' ? <ShotsLayer /> : layer === 'episode' ? <EpisodeLayer /> : <BinLayer />}</ErrorBoundary>{/* B2a: a layer that fails says so; the shell stays */}
+        <ErrorBoundary key={layer} label={name}>{layer === 'world' ? <WorldLayer /> : layer === 'clay' ? <ClayLayer /> : layer === 'shots' ? <ShotsLayer /> : layer === 'episode' ? <EpisodeLayer /> : <BinLayer />}</ErrorBoundary>{/* B2a: a layer that fails says so; the shell stays */}
       </main>
       <Dock />
       <Toasts />

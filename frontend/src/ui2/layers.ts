@@ -1,11 +1,11 @@
-// U1 (D157, proto01_UI2 02 §1, §4): the new shell's layer — World · Shots · Episode · Bin. It follows every `navigate` (a store or a
+// U1 (D157, proto01_UI2 02 §1, §4): the new shell's layer — World · Shots · Episode · Bin; C0 (D181): Clay between World and Shots. It follows every `navigate` (a store or a
 // command going to an old place lands on that place's layer) and the URL's hash (`#world`, `#shots`, `#episode`, `#bin`), so a reload stays
 // where the author was; the deeper parts of a place (`#world/character/<id>/v1`) come with their layers.
 import { create } from 'zustand'
 import { layerOf, onNavigate, type Layer } from '../frame/router'
 
 export const LAYERS: { id: Layer; label: string; key: string }[] = [
-  { id: 'world', label: 'World', key: '1' }, { id: 'shots', label: 'Shots', key: '2' }, { id: 'episode', label: 'Episode', key: '3' }, { id: 'bin', label: 'Bin', key: '4' },
+  { id: 'world', label: 'World', key: '1' }, { id: 'clay', label: 'Clay', key: '2' }, { id: 'shots', label: 'Shots', key: '3' }, { id: 'episode', label: 'Episode', key: '4' }, { id: 'bin', label: 'Bin', key: '5' },
 ]
 
 /** The layer a hash names (`#shots/…` → shots), else null. */

@@ -22,7 +22,7 @@ describe('Shots\' place (U4)', () => {
   })
   it('a level reads with an old suite, and an old place lands on its level (Open the stage, Block it on a stage…)', () => {
     expect(['flow', 'clay', 'performance', 'final'].map((l) => suiteOf(l as never))).toEqual([{ suite: 'story', tab: 'flow' }, { suite: 'stage' }, { suite: 'animate' }, { suite: 'final' }])
-    expect([levelOf({ suite: 'stage' }), levelOf({ suite: 'animate' }), levelOf({ suite: 'final' }), levelOf({ suite: 'story', tab: 'flow' })]).toEqual(['clay', 'performance', 'final', 'flow'])
+    expect([levelOf({ suite: 'stage' }), levelOf({ suite: 'animate' }), levelOf({ suite: 'final' }), levelOf({ suite: 'story', tab: 'flow' })]).toEqual([null, 'performance', 'final', 'flow'])   // C0 (D181): the stage suite is Clay's layer
     expect([levelOf({ suite: 'story', tab: 'cast' }), levelOf({ suite: 'generate' })]).toEqual([null, null])
   })
 })
@@ -57,7 +57,7 @@ describe("the header's scene (U4c)", () => {
   })
   it('the cast: the figures, bound or not, and the World props, each with what it lacks for Clay', () => {
     const pv = (extra: object) => ({ id: 'v1', hero_asset_id: 'ast_h', anim_ref_asset_id: null, anim_ref_back_asset_id: null, anim_ref_side_asset_id: null, body_fit_from: null, model_asset_id: null, height_m: null, place_set: null, ...extra })
-    const profiles = [{ id: 'prf_ines', name: 'Ines', cls: 'character', voice_id: null, current: 'v1', versions: [pv({ anim_ref_asset_id: 'ast_a', body_fit_from: 'ast_a' })] },
+    const profiles = [{ id: 'prf_ines', name: 'Ines', cls: 'character', voice_id: null, current: 'v1', versions: [pv({ anim_ref_asset_id: 'ast_a', body_fit_from: 'ast_a', shell_asset_id: 'ast_s' })] },   // C0: the Library counts the shell too
       { id: 'prf_lamp', name: 'Lantern', cls: 'prop', voice_id: null, current: 'v1', versions: [pv({})] }] as unknown as Profile[]
     expect(castOf(stage, profiles).map((m) => [m.name, m.cls, m.line])).toEqual([['Ines', 'character', 'Ready for Clay'], ['Figure 2', null, 'not bound to World'], ['Lantern', 'prop', '2 to go']])
   })

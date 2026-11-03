@@ -232,10 +232,15 @@ async function freeView(page: import('@playwright/test').Page): Promise<void> {
 async function section(page: import('@playwright/test').Page, id: string): Promise<void> {
   await page.locator(`#anim-sec-${id}`).evaluate((el) => el.scrollIntoView({ block: 'start' }))
 }
-/** B2a: the open shot's level, from the rail. */
+/** B2a: the open shot's level, from the rail. C0 (D181): Clay is a layer of its own — the rail's Clay opens the shot's scene there. */
 async function toLevel(page: import('@playwright/test').Page, level: 'clay' | 'performance' | 'final'): Promise<void> {
   if (!(await page.locator('[data-testid="shots-layer"]').isVisible())) await page.locator('nav.tabs button.tab', { hasText: 'Shots' }).click()
   await page.locator(`.w-rail-btn[data-level="${level}"]`).click()
+  if (level === 'clay') {
+    await expect(page.locator('[data-testid="clay-layer"]')).toHaveAttribute('data-rail', 'scenes')
+    await expect(page.locator('[data-testid="clay-scene"] canvas').first()).toBeVisible({ timeout: 20_000 })
+    return
+  }
   await expect(page.locator('[data-testid="shots-layer"]')).toHaveAttribute('data-level', level)
 }
 /** B2a: a card of the open shot's Performance — Image to video, Stage clip or Final shot (the foot follows the card). */
@@ -246,12 +251,12 @@ async function perfCardOf(page: import('@playwright/test').Page, card: 'Image to
   await expect(page.locator('.perf-cards button.active')).toHaveText(card)
 }
 
-/** B2a (D159): an entity version's Sheet in World — its whole card (the sheet, the body, the animation reference, the model or the set). */
-async function openBuild(page: import('@playwright/test').Page, cls: 'character' | 'prop' | 'place', id: string, version = 'v1'): Promise<void> {
-  await openShell(page, `world/${cls}/${id}/${version}`)
-  await expect(page.locator('[data-testid="world-header"]')).toBeVisible()
-  await page.locator('.w-mode button', { hasText: 'Build' }).click()                                      // D161: what Clay needs
-  await expect(page.locator('[data-testid="world-build"]')).toBeVisible()
+/** B2a → C0 (D181): an entity version's 3D in Clay's Library — its builder (the body, the model or the set) in the left column, its kind's tiles behind. */
+async function openLibrary(page: import('@playwright/test').Page, cls: 'character' | 'prop' | 'place', id: string, version = 'v1'): Promise<void> {
+  const kind = cls === 'character' ? 'figure' : cls === 'prop' ? 'prop' : 'set'
+  await openShell(page, `clay/library/${kind}/${id}/${version}`)
+  await expect(page.locator('[data-testid="clay-library-header"]')).toContainText(version)
+  await expect(page.locator('[data-testid="clay-builder"]')).toBeVisible()
 }
 
 /** D161: World's Make — the sheet's words at its top, then the picture settings. */
@@ -979,7 +984,7 @@ test("the pose editor (AP1b, D141): a crouch stands on the character's feet, the
   expect(Object.keys((await figure())!.pins).sort()).toEqual(['l_foot', 'r_foot', 'r_hand'])
   expect((await figure())!.contacts.r_hand.object_id).toBe('self')
   // the skeleton bench (World's Sheet) lists the character's poses
-  await openBuild(page, 'character', p.id)
+  await openLibrary(page, 'character', p.id)
   await page.locator('.cast-body button', { hasText: 'body' }).click()                                    // a body of its own (the default adult's)
   await page.locator('.cast-body button', { hasText: /^Skeleton…/ }).click()
   await expect(page.locator('.skel-parts [data-group="poses"] [data-pose="crouch"]')).toContainText('its starter pose · 3 pinned')
@@ -1180,10 +1185,10 @@ test('a prop (D110 PS1–PS2, D125): Cast\'s props class lists the props (the ol
   const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
   const name = `Crate ${Date.now().toString(36)}`
   const prop = await api<{ id: string; current: string }>('POST', '/story/profiles', { name, cls: 'prop', hero_asset_id: img, appearance: 'an old wooden slatted crate' })
-  await openBuild(page, 'prop', prop.id)                                                                    // D157: World's Props, the prop's Sheet
-  await expect(page.locator('.w-rail-btn[aria-label="Props"]')).toHaveClass(/active/)
-  await expect(page.locator('[data-testid="world-header"]')).toContainText(name)
-  const section = page.locator('[data-testid="world-build"] .prop-model')
+  await openLibrary(page, 'prop', prop.id)                                                                    // D157: World's Props, the prop's Sheet
+  await expect(page.locator('.c-kinds button', { hasText: 'Props' })).toHaveClass(/active/)                 // C0: the Library's kind
+  await expect(page.locator('[data-testid="clay-library-header"]')).toContainText(name)
+  const section = page.locator('[data-testid="clay-builder"] .prop-model')
   await expect(section).toBeVisible()
   await expect(section.locator('.model-view.empty')).toBeVisible()
   const make = section.locator('button', { hasText: 'Make the 3D model' })
@@ -1894,7 +1899,7 @@ test('a voice (19 / CN2, D87): a draft voice from the Cast Inspector\'s form spe
   await expect(voices).toContainText('am_adam')
   // Shots' Flow: the node's Inspector — 🎙 on line 1 → the fake runner speaks it → ▶ and the audio asset
   const shotOf = (await api<{ nodes: { id: string; shot_id: string | null }[] }>('GET', '/story/flow')).nodes.find((n) => n.id === node.id)!.shot_id!
-  await openShell(page, `shots/${shotOf}/clay`)                                                         // its shot open: the Flow comes up on it
+  await openShell(page, `shots/${shotOf}/flow`)                                                         // its shot open: the Flow comes up on it
   await page.locator('.w-rail-btn[data-level="flow"]').click()
   await expect(page.locator('[data-testid="flow-canvas"]')).toBeVisible()
   await page.waitForFunction(() => !!(window as unknown as { __loom2Story?: unknown }).__loom2Story)                  // the Flow's Inspector loaded Story's parts
@@ -2410,10 +2415,10 @@ test("the bench and a prop's height (D142, CW4): Bench ▶ opens Clay for the ch
   type StageLite = { id: string; name: string; purpose: string; bound: { profile_id: string; version: string } | null; objects: { id: string; kind: string; profile_id: string | null; height_m: number | null; body: { height_m: number } | null }[] }
   const mara = await api<ProfileLite>('POST', '/story/profiles', { name: `Mara ${tag}`, cls: 'character', appearance: 'a fisher' })
   await api('PATCH', `/story/profiles/${mara.id}`, { revision: 0, versions: [{ id: 'v1', body: { height_m: 1.62 } }] })
-  await openBuild(page, 'character', mara.id)
+  await openLibrary(page, 'character', mara.id)
   await page.locator('.cast-body button', { hasText: /^Bench/ }).first().click()
-  await expect(page.locator('[data-testid="world-clay"] canvas').first()).toBeVisible({ timeout: 20_000 })   // the bench, inside World
-  await expect(page.locator('.w-mode button.active')).toHaveText('Clay')
+  await expect(page.locator('[data-testid="clay-bench"] canvas').first()).toBeVisible({ timeout: 20_000 })   // the bench, in Clay's Library (C0)
+  await expect(page.locator('[data-testid="clay-layer"]')).toHaveAttribute('data-rail', 'library')
   const benches = async () => (await api<{ items: StageLite[] }>('GET', '/stages?purpose=bench')).items
   await expect.poll(async () => (await benches()).some((b) => b.bound?.profile_id === mara.id), { timeout: 10_000 }).toBe(true)
   const bench = (await benches()).find((b) => b.bound?.profile_id === mara.id)!
@@ -2421,20 +2426,20 @@ test("the bench and a prop's height (D142, CW4): Bench ▶ opens Clay for the ch
   expect(bench.objects[0].body?.height_m).toBe(1.62)
   expect((await api<{ items: StageLite[] }>('GET', '/stages')).items.map((s) => s.id)).not.toContain(bench.id)          // out of the stage list
   await page.screenshot({ path: 'node_modules/.e2e/cw3-bench.png' })
-  await page.locator('.w-mode button', { hasText: 'Build' }).click()
-  await expect(page.locator('[data-testid="world-build"]')).toBeVisible()
+  await page.locator('[data-testid="clay-library-header"] button', { hasText: 'Back to the Library' }).click()
+  await expect(page.locator('[data-testid="clay-builder"]')).toBeVisible()
   // CW4: a prop's height — read from its name, edited in Cast; its bench stands the model at it
   const cup = await api<ProfileLite>('POST', '/story/profiles', { name: `Grandma cup ${tag}`, cls: 'prop' })
   expect(cup.versions[0].height_m).toBe(0.1)
   const glb = `${process.cwd().replace(/\\/g, '/')}/../orchestrator/tests/fixtures/motion/test_rig.glb`      // a GLB import (D128): both builds, no job
   await api('POST', `/story/profiles/${cup.id}/versions/v1/model/import`, { path: glb })
-  await openBuild(page, 'prop', cup.id)
+  await openLibrary(page, 'prop', cup.id)
   const h = page.locator('.prop-height input')
   await expect(h).toHaveValue('0.1')
   await h.fill('0.12'); await h.press('Enter')
   await expect.poll(async () => (await api<ProfileLite>('GET', `/story/profiles/${cup.id}`)).versions[0].height_m, { timeout: 10_000 }).toBe(0.12)
   await page.locator('.prop-model button', { hasText: /^Bench/ }).click()
-  await expect(page.locator('.w-mode button.active')).toHaveText('Clay')
+  await expect(page.locator('[data-testid="clay-bench"] canvas').first()).toBeVisible({ timeout: 20_000 })
   const pb = (await benches()).find((b) => b.bound?.profile_id === cup.id)!
   expect(pb.objects.map((o) => o.kind)).toEqual(['mesh', 'mannequin'])
   expect(pb.objects[0].height_m).toBe(0.12)
@@ -2456,7 +2461,7 @@ test("a place's set (CW6, D143): Build the set ▶ queues MoGe on the set pictur
   await api('PUT', `/story/profiles/${place.id}/versions/v1/anim-ref`, { side: 'front', asset_id: img })                 // the set picture
   const prof = async () => api<ProfileLite>('GET', `/story/profiles/${place.id}`)
   const ps = async () => (await prof()).versions[0].place_set
-  await openBuild(page, 'place', place.id)
+  await openLibrary(page, 'place', place.id)
   const sec = page.locator('section.place-set')
   await expect(sec.locator('[data-status]')).toHaveText('no set yet')
   // Build the set ▶: MoGe on the set picture; the fake engine's relief is a bare triangle — the fit says so, and nothing is set
@@ -2563,7 +2568,7 @@ test("a place's set (CW6, D143): Build the set ▶ queues MoGe on the set pictur
   await expect(sec.locator('button', { hasText: /^Clean the set picture again/ })).toBeEnabled()
   // Bench ▶: Clay on the set, bound to the place, from the picture's camera
   await sec.locator('button', { hasText: /^Bench/ }).click()
-  await expect(page.locator('.w-mode button.active')).toHaveText('Clay')                                    // Clay on the set, inside World
+  await expect(page.locator('[data-testid="clay-bench"] canvas').first()).toBeVisible({ timeout: 20_000 })   // Clay on the set, in the Library (C0)
   type StageLite = { bound: { profile_id: string } | null; objects: { kind: string; preset: string | null; profile_id: string | null; place_set: PS | null }[]; cameras: { pos: number[] }[] }
   const bench = (await api<{ items: StageLite[] }>('GET', '/stages?purpose=bench')).items.find((b) => b.bound?.profile_id === place.id)!
   expect(bench.objects[0]).toMatchObject({ kind: 'set', preset: 'built', profile_id: place.id })
@@ -2659,11 +2664,11 @@ test("Cast in Clay and the line-up (CW3, CW5): a Cast character's card adds its 
   expect(free.body?.height_m).toBe(1.58)
   expect(free.name).toBe(`Ines ${tag} (free)`)
   // CW5: Line-up ▶ in World's Sheet — the class's characters side by side before 0.5 m marks, the one open first; Send to a stage ▸ copies them
-  await openBuild(page, 'character', ines.id)
-  await page.locator('[data-testid="world-build"] button', { hasText: /^Line-up/ }).click()
+  await openLibrary(page, 'character', ines.id)
+  await page.locator('[data-testid="clay-library-header"] button', { hasText: /^Line-up/ }).click()
   const chip = page.locator('[data-testid="bench-chip"]')
   await expect(chip).toContainText('Line-up ·')
-  await expect(page.locator('.w-mode button.active')).toHaveText('Clay')                                    // inside World
+  await expect(page.locator('[data-testid="clay-layer"]')).toHaveAttribute('data-rail', 'library')             // in Clay's Library (C0)
   const lineup = (await api<{ items: StageLite[] }>('GET', '/stages?purpose=lineup')).items[0]
   expect(lineup.objects[0].preset ?? lineup.objects[0].kind).toBe('lineup')
   expect(lineup.objects[1].profile_id).toBe(ines.id)                                                       // the one open first
@@ -2685,7 +2690,7 @@ test('a body on the Cast sheet (CA0, 01 §9): height, build and an attachment sa
   type ProfileLite = { id: string; versions: { id: string; body: Body | null }[] }
   const p = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', hero_asset_id: hero, appearance: `${name}, a hulking ogre` })
   expect(p.versions[0].body).toBeNull()
-  await openBuild(page, 'character', p.id)
+  await openLibrary(page, 'character', p.id)
   await page.locator('.cast-body button', { hasText: 'body' }).click()
   await page.locator('.cast-body input[aria-label="height in metres"]').fill('2.4')
   await page.locator('.cast-body .segmented button', { hasText: 'heavy' }).click()
@@ -2717,7 +2722,7 @@ test('an animation reference picked by hand (CA0 → D161): Make reference candi
   const hero = (await api<{ ids: string[] }>('POST', '/assets/duplicate', { ids: [src.id] })).ids[0]
   type ProfileLite = { id: string; versions: { id: string; anim_ref_asset_id: string | null; anim_ref_back_asset_id: string | null }[] }
   const p = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', hero_asset_id: hero, appearance: `${name}, a dancer in a red dress` })
-  await openBuild(page, 'character', p.id)
+  await openLibrary(page, 'character', p.id)
   await expect(page.locator('.anim-ref-slot[data-side="front"]')).toContainText('none yet')
   await page.locator('.anim-ref button', { hasText: /^Make reference candidates/ }).click()
   const cands = page.locator('[data-testid="anim-ref-candidates"] .anim-ref-cand')
@@ -2753,7 +2758,7 @@ test('the body fitted to the animation reference (CA1b, D104): Fit the body meas
     body: { height_m: number; neck: number; shoulders: number; hips: number; elbow: number; figure: string; hand_rest: { preset: string } } | null }[] }
   const p = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', appearance: `${name}, a mechanic` })
   await api('PUT', `/story/profiles/${p.id}/versions/v1/anim-ref`, { side: 'front', asset_id: ref })           // the author's pick (D161: an untouched body is fitted at once)
-  await openBuild(page, 'character', p.id)
+  await openLibrary(page, 'character', p.id)
   await expect.poll(async () => (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0].body_fit_from, { timeout: 60_000 }).toBe(ref)
   type JobLite = { status: string; origin: { surface: string; ref: string } | null }
   const fits = async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.filter((j) => j.origin?.surface === 'body_fit' && j.origin.ref === p.id)
@@ -2782,7 +2787,7 @@ test('the skeleton bench (proto01_UIcast CS2): Skeleton… opens the reference w
   type ProfileLite = { id: string; versions: { id: string; body_fit_from: string | null; body: Body | null; body_points: { pose: number[][]; sdpose?: { pose: number[][] } } | null }[] }
   const p = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', appearance: `${name}, a baker` })
   await api('PUT', `/story/profiles/${p.id}/versions/v1/anim-ref`, { side: 'front', asset_id: ref })
-  await openBuild(page, 'character', p.id)
+  await openLibrary(page, 'character', p.id)
   await page.locator('.cast-body button', { hasText: /^Fit the body to the animation reference/ }).click()
   const prof = async () => (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0]
   await expect.poll(async () => (await prof()).body_points?.pose.length ?? 0, { timeout: 60_000 }).toBe(18)
@@ -2826,9 +2831,9 @@ test('the skeleton bench (proto01_UIcast CS2): Skeleton… opens the reference w
   await bench.locator('.skel-motions button', { hasText: 'walk' }).click()
   await expect(bench.locator('.skel-guide img.pose')).toHaveCount(1, { timeout: 20_000 })
   await page.screenshot({ path: 'node_modules/.e2e/cs2-bench.png' })
-  await bench.locator('.skel-strip button', { hasText: /^Back to the sheet/ }).click()
-  await expect(page.locator('[data-testid="world-build"]')).toBeVisible()
-  await expect(page.locator('[data-testid="world-bin"]')).toBeVisible()                                       // the bin back in the centre
+  await bench.locator('.skel-strip button', { hasText: /^Back to the figure/ }).click()
+  await expect(page.locator('[data-testid="clay-builder"]')).toBeVisible()
+  await expect(page.locator('[data-testid="clay-tiles"]')).toBeVisible()                                      // the tiles back in the centre (C0)
 })
 
 test("the skeleton changed (proto01_UIcast CS3, D136 U19): a final's character layer stamps its body per frame; Cast's skeleton changing under it shows on the layer, nothing done by itself — Re-render draws the guide again and performs it; Apply from the playhead keys the skeleton (the frames before it held) and performs again (Shots, B2a)", async ({ page }) => {
@@ -2911,7 +2916,7 @@ test('a test animation in Cast (CA0, 01 step 2): Test it draws a turn on the spo
   const p = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', appearance: `${name}, an old captain` })
   await api('PATCH', `/story/profiles/${p.id}`, { revision: p.revision, versions: [{ id: 'v1', body: { height_m: 1.9, build: 'broad', head: 1, torso: 1, shoulders: 1, arms: 1, legs: 1, attachments: [] } }] })
   await api('PUT', `/story/profiles/${p.id}/versions/v1/anim-ref`, { side: 'front', asset_id: ref })
-  await openBuild(page, 'character', p.id)
+  await openLibrary(page, 'character', p.id)
   await expect(page.locator('.anim-ref-slot[data-side="test"]')).toContainText('none yet')
   await page.locator('.anim-ref button', { hasText: /^Test it/ }).click()
   const dialog = page.locator('.modal.ask')
@@ -2977,8 +2982,8 @@ test('the Detailed level (CA1, 01 §9a; U18 every figure): a figure switched to 
   }, { timeout: 15_000 }).toBe('index_01_r,index_02_r,index_03_r,pinky_01_r')
   // the passes render with the mannequin in them (D121: the Clay level's foot)
   await toLevel(page, 'clay')
-  await page.locator('.s-foot button.primary', { hasText: /^Render passes/ }).click()
-  await expect(page.locator('.s-foot [data-passes-state]')).toContainText(/\d+ passes at \d+×\d+/, { timeout: 30_000 })   // rendered: 'Camera 1 · 5 passes at 1280×720 · current'
+  await page.locator('.c-left-foot button.primary', { hasText: /^Render passes/ }).click()
+  await expect(page.locator('.c-left-foot [data-passes-state]')).toContainText(/\d+ passes at \d+×\d+/, { timeout: 30_000 })   // rendered: 'Camera 1 · 5 passes at 1280×720 · current'
   await page.screenshot({ path: 'node_modules/.e2e/ca1-detailed.png' })
 })
 
@@ -3483,8 +3488,9 @@ test('the recipe graph in Animate (RC1b): Graph shows the For chip\'s shot as it
   await expect(graph.locator(`.recipe-node[data-id="motion:${fig}"] .badge`)).toHaveText('done')
   // the motion opens Clay's Motion on its figure; the graph stays over the viewer until its pill turns it off
   await graph.locator(`.recipe-node[data-id="motion:${fig}"]`).click()
-  await expect(page.locator('[data-testid="shots-layer"]')).toHaveAttribute('data-level', 'clay')
+  await expect(page.locator('[data-testid="clay-layer"]')).toHaveAttribute('data-rail', 'scenes')            // C0 (D181): Clay's layer, the scene
   await expect.poll(() => page.evaluate(() => (window as unknown as { __loom2Stage: { state: () => { selected: string | null } } }).__loom2Stage.state().selected)).toBe(fig)
+  await page.locator('nav.tabs button.tab', { hasText: 'Shots' }).click()                                    // back in Shots the graph is still over the level
   await expect(graph).toBeVisible()
   await page.locator('.w-rail-btn[data-level="graph"]').click()
   await expect(graph).toHaveCount(0)
@@ -3653,8 +3659,7 @@ test('World\'s Make (U3b, D157 · proto01_UI2 03 §3): the panel is the entity\'
   await make.locator('.w-framing button', { hasText: 'A-pose front' }).click()
   await make.locator('.w-foot button.primary', { hasText: `Make ${name}'s A-pose front` }).click()
   await expect.poll(async () => (await api<{ items: { status: string; origin: { surface: string; ref: string } | null }[] }>('GET', '/jobs')).items.filter((j) => j.origin?.surface === 'anim_ref' && j.origin.ref === prof.id && j.status === 'done').length, { timeout: 60_000 }).toBe(1)
-  await page.locator('.w-mode button', { hasText: 'Build' }).click()
-  await expect(page.locator('[data-testid="anim-ref-candidates"] .anim-ref-cand')).toHaveCount(1)
+  await expect(page.locator('[data-testid="world-refs"] [data-testid="anim-ref-candidates"] .anim-ref-cand')).toHaveCount(1)   // C0: Make's A-pose section
   expect((await api<{ versions: { anim_ref_asset_id: string | null }[] }>('GET', `/story/profiles/${prof.id}`)).versions[0].anim_ref_asset_id).toBeNull()
 })
 
@@ -3743,22 +3748,24 @@ test('Shots in the new shell (U4a–d, D157 · proto01_UI2 04 §2–3, §6–7):
   type ShotLite = { id: string; owner_node: string | null; versions: { stage_id: string | null; camera_id: string | null }[] }
   const a = await api<NodeLite>('POST', '/story/flow/shots', { title: `Quay ${tag}`, scene: 'new' })
   const b = await api<NodeLite>('POST', '/story/flow/shots', { title: `Pier ${tag}`, after: a.id, scene: 'same' })
-  await page.goto(`${appUrl()}#shots/${a.shot_id}/clay`)
+  await page.goto(`${appUrl()}#shots/${a.shot_id}/performance`)
   const head = page.locator('[data-testid="shots-header"]')
   await expect(head).toContainText(`Quay ${tag}`)
-  await expect(page.locator('[data-testid="shots-layer"]')).toHaveAttribute('data-level', 'clay')
+  await expect(page.locator('[data-testid="shots-layer"]')).toHaveAttribute('data-level', 'performance')
   await expect(page.locator('[data-testid="shots-scene"] button').first()).toHaveText(new RegExp(`Quay ${tag}`))   // the scene's stage and the shot's camera, by name
   await expect(page.locator('[data-testid="shots-scene"] button').nth(1)).toHaveText(/Camera 1/)
-  await expect(page.locator('.s-clay canvas').first()).toBeVisible()
+  await expect(page.locator('[data-testid="shots-performance"]')).toBeVisible()
   const card = (id: string) => page.locator(`.s-card[data-id="${id}"]`)
   await expect(card(a.shot_id!)).toHaveClass(/active/)
   await card(b.shot_id!).click()                                                                            // a card opens the shot at the level last used
   await expect(head).toContainText(`Pier ${tag}`)
-  await expect.poll(() => new URL(page.url()).hash).toBe(`#shots/${b.shot_id}/clay`)
+  await expect.poll(() => new URL(page.url()).hash).toBe(`#shots/${b.shot_id}/performance`)
   await page.locator('.w-rail-btn[data-level="flow"]').click()
   await expect(page.locator('[data-testid="flow-canvas"]')).toBeVisible()
-  await page.locator(`.react-flow__node[data-id="${a.id}"]`).dblclick()                                    // a Shot node's double-click opens it in Clay
-  await expect(page.locator('[data-testid="shots-layer"]')).toHaveAttribute('data-level', 'clay')
+  await page.locator(`.react-flow__node[data-id="${a.id}"]`).dblclick()                                    // a Shot node's double-click opens its scene in Clay (C0: Clay's layer)
+  await expect(page.locator('[data-testid="clay-layer"]')).toHaveAttribute('data-rail', 'scenes')
+  await expect(page.locator('[data-testid="clay-scene-header"]')).toContainText(`Quay ${tag}`)
+  await page.locator('[data-testid="clay-scene-header"] button', { hasText: `← Quay ${tag}` }).click()       // ← Back to the shot: Shots, where it was left
   await expect(head).toContainText(`Quay ${tag}`)
   await page.locator('.s-new button').click()
   await page.locator('.ctx-menu button', { hasText: 'New shot in the same scene' }).click()
@@ -3848,7 +3855,7 @@ test('the animation editor (U5c, D157 G8 G9 · proto01_UI2 04 §3.2): a clip blo
   expect((await doc()).range).toEqual(range)
 })
 
-test('World\'s owed parts (U3f, D157 · proto01_UI2 03 §2, §5, §8): a character\'s voice in the header, its facts in the Inspector (used in shots, versions), See in clay ▶ — its bench — inside World', async ({ page }) => {
+test('World\'s owed parts (U3f, D157 · proto01_UI2 03 §2, §5, §8): a character\'s voice in the header, its facts in the Inspector (used in shots, versions), Open in Clay ▸ — its bench in the Library (C0, D181)', async ({ page }) => {
   test.setTimeout(90_000)
   const tag = Date.now().toString(36)
   type ProfileLite = { id: string }
@@ -3861,13 +3868,14 @@ test('World\'s owed parts (U3f, D157 · proto01_UI2 03 §2, §5, §8): a charact
   await expect(insp.locator('[data-testid="world-uses"]')).toContainText('none yet')
   await expect(insp).toContainText('v1')
   await expect(insp.locator('button', { hasText: `Delete Maren ${tag}…` })).toBeVisible()
-  await head.locator('button', { hasText: 'See in clay ▶' }).click()
-  await expect(page.locator('[data-testid="world-clay"] canvas').first()).toBeVisible({ timeout: 20_000 })
-  await expect(page.locator('.w-mode button.active')).toHaveText('Clay')
-  expect(new URL(page.url()).hash).toMatch(/^#world/)                                                     // the bench opens inside World
+  await head.locator('button', { hasText: 'Open in Clay ▸' }).click()                                    // C0 (D181): the Library on the character
+  await expect(page.locator('[data-testid="clay-builder"]')).toBeVisible()
+  await page.locator('[data-testid="clay-library-header"] button', { hasText: 'Bench ▶' }).click()
+  await expect(page.locator('[data-testid="clay-bench"] canvas').first()).toBeVisible({ timeout: 20_000 })
+  expect(new URL(page.url()).hash).toMatch(/^#clay\/library\/figure/)                                     // the bench is the Library's
   type StageLite = { purpose: string; bound: { profile_id: string } | null }
   await expect.poll(async () => (await api<{ items: StageLite[] }>('GET', '/stages?purpose=bench')).items.some((s) => s.bound?.profile_id === prof.id), { timeout: 10_000 }).toBe(true)
-  await page.locator('.w-mode button', { hasText: 'Make' }).click()
+  await page.locator('nav.tabs button.tab', { hasText: 'World' }).click()
   await expect(page.locator('[data-testid="world-make"]')).toBeVisible()
 })
 
@@ -3880,7 +3888,9 @@ test('Performance and Final in Shots (U6b–c, D157 · proto01_UI2 04 §4–5): 
   await expect(page.locator('.for-chip').first()).toContainText(`Lantern ${tag} · v1`)                          // this shot's takes (F41)
   await expect(page.locator('.perf-cards button[aria-pressed="true"]')).toHaveText('Final shot')                 // Layered, the default
   await page.locator('.perf-cards button', { hasText: 'Image to video' }).click()
-  await page.locator('.w-rail-btn[data-level="clay"]').click()
+  await page.locator('.w-rail-btn[data-level="clay"]').click()                                             // C0: the scene in Clay's layer, and back
+  await expect(page.locator('[data-testid="clay-layer"]')).toHaveAttribute('data-rail', 'scenes')
+  await page.locator('[data-testid="clay-scene-header"] button', { hasText: `← Lantern ${tag}` }).click()
   await page.locator('.w-rail-btn[data-level="performance"]').click()
   await expect(page.locator('.perf-cards button[aria-pressed="true"]')).toHaveText('Image to video')             // the shot's method, kept
   await expect.poll(async () => (await api<{ items: { id: string; versions: { method: string | null }[] }[] }>('GET', '/story/shots')).items.find((s) => s.id === a.shot_id)!.versions[0].method,

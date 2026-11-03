@@ -10,18 +10,22 @@ router, the drag manager and the loupe.
 
 ## The layers place the suites' parts
 
-The shell's four layers (World · Shots · Episode · Bin, `ui2/layers.ts`) place the parts a suite's code exports — `SuiteParts {Panel, Strip,
-Stage, Inspector, PrimaryAction?}` (`suiteParts.ts`): Shots' Performance and Final are `AnimateSuite` and `FinalSuite`, World's Edit is
-`EditSuite`, Clay is `StageParts`, the Flow and Episode are `StoryParts`. A layer loads them lazily (`React.lazy` in the layer) and unmounts
+The shell's five layers (World · Clay · Shots · Episode · Bin, `ui2/layers.ts`; C0 of D181 added Clay) place the parts a suite's code
+exports — `SuiteParts {Panel, Strip, Stage, Inspector, PrimaryAction?}` (`suiteParts.ts`): Shots' Performance and Final are `AnimateSuite` and
+`FinalSuite`, World's Edit is `EditSuite`, Clay's editor (its Scenes, and the Library's bench) is `StageParts`, the Flow and Episode are
+`StoryParts`. Clay's Library (`ui2/clay/ClayLayer.tsx`) holds the builders that were World's Build — `CastBody`, `CastParts.PropModel`,
+`CastSet.PlaceSetSection`, the skeleton bench — on the entity version the Story store selects; World is Make | Edit. A layer loads them lazily (`React.lazy` in the layer) and unmounts
 what it does not show; `useStageActive()` (`stageKeep.ts`) is true unless a host says otherwise.
 
-- **Places.** The hash names a layer's place (`#world/<class>/<profile>/<version>`, `#shots/<shot>/<level>`, `#episode`, `#bin`). A suite and
+- **Places.** The hash names a layer's place (`#world/<class>/<profile>/<version>`, `#clay/library/<kind>/<profile>/<version>[/bench]`,
+  `#clay/scene/<stage>`, `#shots/<shot>/<level>`, `#episode`, `#bin`). A suite and
   its rail tab still name a place inside the code (`navigate({ suite, tab })`); the shell maps it onto its layer (`layerOf`), and a
   `?suite=` deep link or the dev start suite (`scripts/dev.ps1 -Suite`) lands there unless the hash names a place. `?suite=edit&doc=<id>`
   opens World's Edit on the document; `?suite=edit&tool=…&ai=…&asset=…` is `ui2/deepLinks.ts`. The rail tabs in `railTabs.tsx` are the
   sections of a suite's column (`useSuiteRail` in `router.ts`).
-- **A level's keys are its reach (D121).** Shots' Clay, Performance and Final are the `stage`, `animate` and `final` suites: `setReach` in
-  `commands.ts`, registered in `animateCommands.ts` — Clay the stage scope and the animate scope's shared commands (the one transport,
+- **A level's keys are its reach (D121).** Clay's editor (C0: the `clay` layer's Scenes, and its Library's bench) and Shots' Performance and
+  Final are the `stage`, `animate` and `final` suites: `setReach` in `commands.ts`, registered in `animateCommands.ts` — Clay the stage scope
+  and the animate scope's shared commands (the one transport,
   `anim.level.*`, the Shot head's `anim.step.*`), Performance the animate scope but `anim.final.*`, Final `anim.final.*` and the shared ones.
   The Bin layer is the `catalogue` suite in `ui.suite`; its reach is the `bin` scope (`ui2/bin/binCommands.ts`). The level's key hook
   (`handleKeysAt`), the help overlay, the palette and the dev audit (`commandsAt`) read the one list; `commandAudit.test.ts` fails on a chord

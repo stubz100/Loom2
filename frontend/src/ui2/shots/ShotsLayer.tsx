@@ -1,6 +1,6 @@
 // U4 (D157, proto01_UI2 04 §2): Shots — what happens, shot by shot, refined level by level. The storyboard strip shows the route's shots
-// with their level dots; the rail is Flow, then the open shot's Clay · Performance · Final; the left column is the shot's header (§2.1) and
-// the level's sections; the centre the level's viewer. U4a–c: the frame, the strip, the header, the Flow and Clay; Performance and Final are U6.
+// with their level dots; the rail is Flow, then the open shot's Clay (C0, D181: a jump to Clay's layer, the scene through the shot's camera)
+// · Performance · Final; the left column is the shot's header (§2.1) and the level's sections; the centre the level's viewer.
 import { lazy, Suspense, useEffect } from 'react'
 import { api } from '../../api/client'
 import { CommandButton, MenuButton } from '../../frame/CommandButton'
@@ -23,10 +23,7 @@ const BoardPanel = lazy(() => import('../../suites/story/ShotsBoard').then((m) =
 const FlowVariables = lazy(() => import('../../suites/story/StoryParts').then((m) => ({ default: m.FlowVariables })))   // W23
 const AnimateGraph = lazy(() => import('../../suites/story/recipe/AnimateGraph'))   // B2a (RC1b): the shot's recipe over its level
 const StoryInspector = lazy(() => import('../../suites/story/StoryParts').then((m) => ({ default: m.Inspector })))
-const ClayColumn = lazy(() => import('../../suites/stage/StageParts').then((m) => ({ default: () => <m.ClayColumn tab="scene" /> })))
-const ClayStrip = lazy(() => import('../../suites/stage/StageParts').then((m) => ({ default: m.Strip })))
-const ClayStage = lazy(() => import('../../suites/stage/StageParts').then((m) => ({ default: m.Stage })))
-const ClayFoot = lazy(() => import('../../suites/stage/StageParts').then((m) => ({ default: m.ClayFoot })))
+// C0 (D181): Clay is a layer of its own — the rail's Clay opens the shot's scene there (shotsStore.openInClay)
 // U6b (04 §4–5): Performance and Final — Animate's two other modes, mounted as they are on the open shot (the For chip its version)
 const PerfColumn = lazy(() => import('../../suites/animate/AnimateSuite').then((m) => ({ default: () => <m.AnimateSuite.Panel tab="performance" /> })))
 const PerfStrip = lazy(() => import('../../suites/animate/AnimateSuite').then((m) => ({ default: m.AnimateSuite.Strip })))
@@ -88,9 +85,6 @@ function Centre() {
   const graph = useSession((s) => !!s.ui.graph)                                       // B2a: the Graph over the level (the rail's toggle)
   const v = useStory((st) => st.shotVersion())
   if (level === 'flow') return <Suspense fallback={null}><ShotsFlow paneItems={[...NEW_SHOT, { sep: true }]} /></Suspense>
-  if (level === 'clay') return v?.stage_id
-    ? <Suspense fallback={<div className="w-empty">Loading Clay…</div>}><div className="strip s-clay-strip"><ClayStrip /></div><div className="s-clay"><ClayStage />{graph && <AnimateGraph />}</div></Suspense>
-    : <div className="w-empty">No scene yet <CommandButton id="shots.scene.new" text /></div>
   if (!v?.stage_id) return <div className="s-clay"><div className="w-empty">No scene yet <CommandButton id="shots.scene.new" text /></div>{graph && <Suspense fallback={null}><AnimateGraph /></Suspense>}</div>   // the recipe needs no scene
   const [Strip, Stage] = level === 'performance' ? [PerfStrip, PerfStage] : [FinalStrip, FinalStage]
   return <Suspense fallback={<div className="w-empty">Loading {level === 'performance' ? 'Performance' : 'Final'}…</div>}>
@@ -107,7 +101,7 @@ function LevelColumn() {
   const list = useShots((s) => s.flowView === 'list')
   if (level === 'flow') return <div className="w-panel">{list && <Suspense fallback={null}><BoardPanel /></Suspense>}<Suspense fallback={null}><FlowVariables /></Suspense></div>   // B2a: the List view's filters and order; W23: the variables
   if (!staged) return <div className="w-panel" />
-  const [Col, Foot, next] = level === 'clay' ? [ClayColumn, ClayFoot, 'shots.toPerformance'] : level === 'performance' ? [PerfColumn, PerfFoot, 'shots.toFinal'] : [FinalColumn, FinalFoot, 'story.shot.finalize']
+  const [Col, Foot, next] = level === 'performance' ? [PerfColumn, PerfFoot, 'shots.toFinal'] : [FinalColumn, FinalFoot, 'story.shot.finalize']
   return <>
     <div className="w-panel"><Suspense fallback={null}><Col /></Suspense></div>
     <div className="s-foot"><Suspense fallback={null}><Foot /></Suspense>

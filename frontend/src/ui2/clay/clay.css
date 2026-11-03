@@ -1,0 +1,26 @@
+/* C0 (D181, propo02 04 §4.3): Clay — World's columns (rail, left column, centre, Inspector); Scenes has no Inspector (the editor's
+   selection is under its row, as Shots' Clay had it). */
+.c-layer.no-insp { grid-template-columns: 48px minmax(320px, 380px) 1fr; }
+.c-kinds { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 12px 0; }
+.c-kinds button { padding: 2px 8px; border-radius: 999px; font-size: 11px; background: var(--bg2); border: 1px solid var(--line2); color: var(--fg2); }
+.c-kinds button.active { border-color: var(--accent); color: var(--fg); }
+.c-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; padding: 12px; overflow: auto; align-content: start; }
+.c-tile { display: flex; flex-direction: column; gap: 4px; padding: 0 0 6px; border: 2px solid transparent; border-radius: var(--radius); background: var(--bg2); text-align: left; color: var(--fg2); overflow: hidden; }
+.c-tile.selected { border-color: var(--accent); color: var(--fg); }
+.c-tile .c-thumb { aspect-ratio: 1; background: var(--bg0); display: grid; place-items: center; color: var(--fg3); font-size: 11px; }
+.c-tile .c-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.c-tile .c-name { padding: 0 8px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.c-tile .c-name small { color: var(--fg3); }
+.c-tile .c-ready { padding: 0 8px; font-size: 10px; display: flex; flex-wrap: wrap; gap: 2px 8px; color: var(--fg3); }
+.c-tile .c-ready .done { color: var(--keep); }
+.c-tile .c-ready .owed { color: var(--fg2); }
+.c-tile .c-line { padding: 0 8px; font-size: 10px; font-weight: 600; color: var(--warn); }
+.c-tile .c-line.ok { color: var(--keep); }
+.c-kind-note { padding: 12px; color: var(--fg3); font-size: 12px; max-width: 48em; }
+.c-scene-head { display: flex; flex-direction: column; gap: 6px; }
+.c-scene-shots { font-size: 11px; color: var(--fg3); }
+.c-motion { padding: 12px; overflow: auto; min-height: 0; flex: 1; }
+.c-motion .motion-lib { max-width: 640px; }
+.c-left-foot { padding: 8px 12px; border-top: 1px solid var(--line); display: flex; gap: 8px; align-items: center; }
+.c-left-foot > div { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.c-left-foot .primary { width: 100%; }

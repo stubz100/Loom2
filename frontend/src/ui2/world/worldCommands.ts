@@ -1,6 +1,6 @@
 // U3 (D157, proto01_UI2 03 §8): World's commands (rule 3: every action a command with a mouse home; keys are accelerators). They act on the
 // entity and version the header shows (the Story store's selection) and on the creation selected in the bin.
-import { ArrowLeft, Box, CopyPlus, Hammer, ImagePlus, Lock, Pencil, PersonStanding, Plus, Sparkles, Star, Trash2, UserRoundPlus, Users } from 'lucide-react'
+import { ArrowLeft, Box, CopyPlus, ImagePlus, Lock, Pencil, PersonStanding, Plus, Sparkles, Star, Trash2, UserRoundPlus } from 'lucide-react'
 import { http, unwrap } from '../../api/client'
 import { registerCommands } from '../../frame/commands'
 import { navigate } from '../../frame/router'
@@ -13,33 +13,13 @@ const sy = () => useStory.getState()
 const w = () => useWorld.getState()
 const selected = () => w().bin?.items.find((x) => x.asset.id === w().selected) ?? null
 const open = () => sy().version()?.state === 'open'
-/** B2a: the Line-up — the rail's class (a prop with its 3D model), the one open first, twelve at most. */
-const lineup = () => {
-  const cls = w().rail, here = sy().profileId
-  const all = sy().profiles.filter((p) => p.cls === cls && cls !== 'place' && (p.cls === 'character' || !!p.versions.find((v) => v.id === p.current)?.model_asset_id))
-  return [...all.filter((p) => p.id === here), ...all.filter((p) => p.id !== here)].slice(0, 12)                  // the one open first
-}
 const cls = () => { const r = w().rail; return r === 'look' || r === 'sketches' ? null : r }
 /** W16: what a new entity of each class still needs (a prop has no body, a character no set). */
 const NEEDS: Record<string, string> = { character: 'its pictures, A-pose and body are made', prop: 'its pictures and 3D model are made', place: 'its set picture and set are made' }
 
 registerCommands([
-  // U3c (03 §4): Make or Edit in the left column — Edit opens the selected creation in Image's editor (the World layer stays)
-  // U3f (03 §8, D142): See in clay — the entity version's bench (Clay opened for it: a character's figure, a prop's model beside a 1.75 m
-  // figure, a place's set from its picture's camera) inside World, with Clay's tools
-  { id: 'world.mode.clay', scope: 'world', label: 'See in clay ▶', icon: Box, placement: ['panel'],
-    hint: "Clay opened for this version on a scene of its own — the figure, the model at its height or the set — with all of Clay's tools",
-    when: () => { const p = sy().profile(); const v = sy().version(); return !!p && !!v && (p.cls === 'character' || (p.cls === 'prop' && !!v.model_asset_id) || (p.cls === 'place' && !!v.place_set)) },
-    run: () => { const p = sy().profile(); const v = sy().version(); if (!p || !v) return
-      void import('../../suites/stage/stageStore').then(async (m) => { if (await m.st().openBench(p.id, v.id, 'world')) w().setMode('clay') }) } },
-  // B2a (D159, 11 §7): the Sheet — the version's whole card (the sheet, the body and its skeleton, the animation reference and its test, a
-  // prop's model, a place's set builder, the Line-up)
-  { id: 'world.mode.build', scope: 'world', label: 'Build', icon: Hammer, placement: ['panel'], hint: "what Clay needs: the animation reference, the body, the skeleton, the test animation, a prop's 3D model, a place's set, the line-up",
-    when: () => !!sy().profile(), run: () => { w().setMode('build'); navigate({ suite: 'generate' }) } },   // D161: the Sheet's words went to Make
-  { id: 'world.lineup', scope: 'world', label: 'Line-up ▶', icon: Users, placement: ['panel'], hint: "this class's characters or props side by side at their sizes in Clay (twelve at most)",
-    when: () => lineup().length > 0,
-    run: () => { const items = lineup().map((p) => ({ profile_id: p.id }))
-      void import('../../suites/stage/stageStore').then(async (m) => { if (await m.st().openLineup(items, () => w().setMode('make'), 'world')) w().setMode('clay') }) } },
+  // U3c (03 §4): Make or Edit in the left column — Edit opens the selected creation in Image's editor (the World layer stays). C0 (D181):
+  // the bench, the line-up and Build's 3D are Clay's Library (clay.bench.open, clay.lineup, clay.asset.open)
   { id: 'world.creation.aposeFront', scope: 'world', label: 'Use as the A-pose front', icon: PersonStanding, placement: ['inspector', 'context'],
     hint: 'the animation reference: full body, A-pose, 16:9, plain ground', when: () => !!selected() && open() && (sy().profile()?.cls === 'character' || sy().profile()?.cls === 'prop'),
     run: () => { const s = selected(); if (s) void sy().setAnimRef('front', s.asset.id) } },

@@ -1,4 +1,4 @@
-// Global commands (07 §4): the dock, settings, help, the command palette. The layer tabs (Ctrl+1–4) are registered here so the help
+// Global commands (07 §4): the dock, settings, help, the command palette. The layer tabs (Ctrl+1–5) are registered here so the help
 // overlay lists them.
 import { Boxes, Clapperboard, FilePlus, Images, Menu, FolderOpen, FolderPlus, Info, Keyboard, LayoutGrid, NotebookPen, PanelBottom, RefreshCw, Settings, Shapes } from 'lucide-react'
 const CircleHelp = Info
@@ -25,10 +25,11 @@ registerCommands([
   { id: 'global.refresh', scope: 'global', label: 'Refresh state', icon: RefreshCw, placement: ['topbar'], run: () => void s().refreshAll() },
   // U1 (D157): the layers, keyed Ctrl+1–4 in their order; Models & engine is a sheet in ☰
   { id: 'global.suite.story', scope: 'global', label: 'World', keys: 'Ctrl+1', placement: ['topbar'], run: () => openLayer('world') },
-  { id: 'global.suite.image', scope: 'global', label: 'Shots', keys: 'Ctrl+2', placement: ['topbar'], run: () => openLayer('shots') },
-  { id: 'global.suite.animate', scope: 'global', label: 'Episode', keys: 'Ctrl+3', placement: ['topbar'], run: () => openLayer('episode') },
-  { id: 'global.suite.catalogue', scope: 'global', label: 'Bin', icon: Images, keys: 'Ctrl+4', placement: ['topbar'], run: () => openLayer('bin') },
-  { id: 'global.suite.stage', scope: 'global', label: 'Shots · Clay', icon: Shapes, placement: ['toolbar'], run: () => navigate({ suite: 'stage' }) },   // From a stage's *Edit the stage*
+  { id: 'global.suite.clay', scope: 'global', label: 'Clay', icon: Shapes, keys: 'Ctrl+2', placement: ['topbar'], run: () => openLayer('clay') },   // C0 (D181)
+  { id: 'global.suite.image', scope: 'global', label: 'Shots', keys: 'Ctrl+3', placement: ['topbar'], run: () => openLayer('shots') },
+  { id: 'global.suite.animate', scope: 'global', label: 'Episode', keys: 'Ctrl+4', placement: ['topbar'], run: () => openLayer('episode') },
+  { id: 'global.suite.catalogue', scope: 'global', label: 'Bin', icon: Images, keys: 'Ctrl+5', placement: ['topbar'], run: () => openLayer('bin') },
+  { id: 'global.suite.stage', scope: 'global', label: 'Clay · the scene', icon: Shapes, placement: ['toolbar'], run: () => navigate({ suite: 'stage' }) },   // From a stage's *Edit the stage*: Clay's Scenes
   { id: 'global.suite.models', scope: 'global', label: 'Models & engine…', icon: Boxes, placement: ['topbar'], run: () => s().openModels() },
   // D71 (P15): quick actions — the empty states' cards, the app menu and the palette
   { id: 'global.project.new', scope: 'global', label: 'New project…', icon: FolderPlus, placement: ['topbar', 'toolbar'], run: () => s().setProjectDialog('new') },

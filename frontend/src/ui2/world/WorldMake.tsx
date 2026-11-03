@@ -5,7 +5,8 @@
 // references, the Look, the camera, the model with its sampling, LoRAs and encoder, the size and count, the prompt as sent. The foot runs
 // the casting run: the pictures land as the version's candidates in its bin. D162: the framing row's chips (the class's framings and its
 // reference framings — a character's A-pose front and back) fill the framing words, which the author may write; with a reference framing
-// on, the run is that reference's make (its pictures land as Build's candidates to pick from). A chip queues nothing. D169: a reference
+// on, the run is that reference's make (its pictures land as candidates in the A-pose section, to pick from — C0: World = Make | Edit, the
+// body, the model and the set are Clay's Library). A chip queues nothing. D169: a reference
 // framing is a switch (`panel.ref_framing`) — its words may be edited and it stays on; a second click or a class framing turns it off.
 import { useEffect } from 'react'
 import { useSession } from '../../store/session'
@@ -15,6 +16,7 @@ import { CameraSection, LookSection, ModelSection, PreviewSection, PromptSection
 import { Help } from '../../frame/Help'
 import { useStory } from '../../suites/story/storyStore'
 import { CastSheet } from '../../suites/story/CastSheet'
+import { WorldRefs } from './WorldRefs'
 import { activeFraming, enterMake, FRAMINGS, linkEntity, REF_FRAMINGS, refFrame, refTree, type RefFraming } from './make'
 import '../../suites/generate/generate.css'
 import '../../suites/story/story.css'
@@ -50,7 +52,7 @@ export function WorldMake() {
     if (reference) {                                                    // a reference framing: that reference's make, its pictures Build's candidates
       const gid = await useStory.getState().ensureCandidates(p.id, vid)
       if (gid) await g.generate(false, { suite: 'story', surface: 'anim_ref', ref: p.id, payload: { version: vid, side: reference.side, group_id: gid } },
-        { text: ` — they land as ${p.name}'s ${reference.label} candidates: pick in Build` })
+        { text: ` — they land as ${p.name}'s ${reference.label} candidates: pick them below the sheet` })
       return
     }
     if (p.cls !== 'place' && i >= 0 && panel.prompt_mode === 'tree') { await g.castLook(i); return }   // the casting run renders the sheet
@@ -62,11 +64,11 @@ export function WorldMake() {
     <div className="w-make-tree">
       <label className="w-field"><span>this picture <Help text="Words for this run only, after the sheet above (soaked, hood up)." /></span>
         <textarea rows={2} value={note} aria-label="this picture only" placeholder="soaked, hood up" onChange={(e) => setNote(e.target.value)} /></label>
-      <div className="w-field"><span>framing <Help text="A chip fills the framing words; write your own instead. Nothing is queued here. An A-pose (or a prop's reference view, a place's set picture) is a switch: on, the next run makes that reference, 16:9, its pictures landing in Build to pick from. Its words may be edited and it stays on; click it again to turn it off. A set picture looks down the place (its set is fitted to the floor and the walls receding); the side a shot faces is painted in Build." /></span>
+      <div className="w-field"><span>framing <Help text="A chip fills the framing words; write your own instead. Nothing is queued here. An A-pose (or a prop's reference view, a place's set picture) is a switch: on, the next run makes that reference, 16:9, its pictures landing below the sheet to pick from. Its words may be edited and it stays on; click it again to turn it off. A set picture looks down the place (its set is fitted to the floor and the walls receding); the side a shot faces is painted in Clay's Library." /></span>
         <div className="w-framing"><div className="w-chips left">
           {FRAMINGS[p.cls].map((f) => <button key={f.id} className={active?.id === f.id ? 'active' : ''} aria-pressed={active?.id === f.id} onClick={() => { g.set({ ref_framing: null }); g.setTree({ ...f.tree, camera: { ...panel.tree.camera, ...(f.tree.camera ?? {}) } }) }}>{f.label}</button>)}
           {refFramings.map((f) => <button key={f.id} className={active?.id === f.id ? 'active' : ''} aria-pressed={active?.id === f.id} onClick={() => frameRef(f)}
-            title={active?.id === f.id ? `on: the run makes ${p.name}'s ${f.label} — click to turn it off` : `the run makes ${p.name}'s ${f.label}, ${p.cls === 'character' ? 'a tall 2:3 frame' : '16:9'}${p.cls === 'place' ? '' : ', without the Look'}; its pictures land in Build`}>{f.label}</button>)}
+            title={active?.id === f.id ? `on: the run makes ${p.name}'s ${f.label} — click to turn it off` : `the run makes ${p.name}'s ${f.label}, ${p.cls === 'character' ? 'a tall 2:3 frame' : '16:9'}${p.cls === 'place' ? '' : ', without the Look'}; its pictures land below the sheet, to pick from`}>{f.label}</button>)}
         </div>
         <textarea rows={2} value={words} aria-label="framing words" placeholder="your own framing — three-quarter view from below, the head turned away …" onChange={(e) => g.setTree({ composition: e.target.value })} /></div></div>
     </div>
@@ -74,8 +76,9 @@ export function WorldMake() {
   return (
     <div className="w-make" data-testid="world-make">
       <div className="w-make-body gen-column">
-        {v && <section className="gen-sec w-make-sheet" id="gen-sec-sheet" data-testid="world-sheet"><h4 className="gen-sec-head"><span>Sheet</span><span className="spacer" /><Help text="The words every picture of it carries — a @mention and every linked subject carry them too. The body, the animation reference and the rest are Build's." /></h4>
+        {v && <section className="gen-sec w-make-sheet" id="gen-sec-sheet" data-testid="world-sheet"><h4 className="gen-sec-head"><span>Sheet</span><span className="spacer" /><Help text="The words every picture of it carries — a @mention and every linked subject carry them too. The body, the model and the set are made from the pictures in Clay's Library." /></h4>
           <CastSheet p={p} v={v} /></section>}{/* D161: the words and the pictures made from them, one tab */}
+        {v && <section className="gen-sec w-make-refs" id="gen-sec-refs"><WorldRefs p={p} v={v} /></section>}{/* D161 → C0 (Q2): the A-pose stays a World picture, picked by hand */}
         <PromptSection tree={tree} />
         <RefsSection />
         <LookSection />
@@ -86,7 +89,7 @@ export function WorldMake() {
       </div>
       <div className="w-foot">
         <button className="primary" disabled={!open} onClick={() => void run()}
-          title={!open ? `${p.name} ${vid} is final — make a new version` : reference ? `${panel.count} ${reference.label} pictures of ${p.name}; they land in Build to pick from` : `${panel.count} pictures of ${p.name}; they land as its candidates`}>
+          title={!open ? `${p.name} ${vid} is final — make a new version` : reference ? `${panel.count} ${reference.label} pictures of ${p.name}; they land below the sheet to pick from` : `${panel.count} pictures of ${p.name}; they land as its candidates`}>
           {reference ? `Make ${p.name}'s ${reference.label} ▶` : `Give ${p.name} a look ▶`}{secs ? ` ≈ ${secs < 90 ? `${secs} s` : `${Math.round(secs / 60)} min`}` : ''}</button>
         {pv?.estimate.refs_fit === 'spill' && <span className="spill" title="the references do not fit beside the model and run from shared memory">refs spill VRAM</span>}
       </div>

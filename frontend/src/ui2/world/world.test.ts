@@ -10,22 +10,21 @@ const v = (extra: Partial<ProfileVersion> = {}): ProfileVersion => ({ id: 'v1', 
   appearance: '', outfit: '', colours: [], marks: '', body: null, anim_ref_asset_id: null, anim_ref_back_asset_id: null, anim_ref_side_asset_id: null, body_fit_from: null, model_asset_id: null, height_m: null,
   place_set: null, ...extra }) as unknown as ProfileVersion
 
-describe('U3: the readiness line', () => {
-  it('a character owes its hero, references, A-pose front and body fit; the back and side views and the voice are optional', () => {
+describe('U3 → C0: the readiness line (the pictures; the 3D is Clay\'s, clay.test.ts)', () => {
+  it('a character owes its hero, references and A-pose front; the back and side views and the voice are optional', () => {
     const r = readiness({ cls: 'character', voice_id: null }, v(), 0)
-    expect(r.items.map((x) => `${x.id}:${x.state}`)).toEqual(['hero:owed', 'references:owed', 'a_pose_front:owed', 'a_pose_back:optional', 'a_pose_side:optional', 'body:owed', 'voice:optional'])
-    expect(r.line).toBe('4 to go')
-    const done = readiness({ cls: 'character', voice_id: 'vce_1' }, v({ hero_asset_id: 'a', anim_ref_asset_id: 'b', body_fit_from: 'b' }), 3)
-    expect([done.line, done.items.find((x) => x.id === 'references')!.detail]).toEqual(['Ready for Clay', '3'])
-    const bram = readiness({ cls: 'character', voice_id: null }, v({ anim_ref_asset_id: 'b', body_fit_from: 'b', body: { figure: 'male', height_m: 1.78, build: 'heavy' } as never }), 1)
-    expect(bram.items.find((x) => x.id === 'body')!.detail).toBe('♂ 1.78 m · heavy')                       // D168: what the body is
-    expect(readiness({ cls: 'character', voice_id: null }, v({ body: { figure: 'male', height_m: 1.78, build: 'heavy' } as never }), 1).items.find((x) => x.id === 'body')!.detail).toBeUndefined()
+    expect(r.items.map((x) => `${x.id}:${x.state}`)).toEqual(['hero:owed', 'references:owed', 'a_pose_front:owed', 'a_pose_back:optional', 'a_pose_side:optional', 'voice:optional'])
+    expect(r.line).toBe('3 to go')
+    const done = readiness({ cls: 'character', voice_id: 'vce_1' }, v({ hero_asset_id: 'a', anim_ref_asset_id: 'b' }), 3)
+    expect([done.line, done.items.find((x) => x.id === 'references')!.detail]).toEqual(['Pictures done', '3'])
+    expect(readiness({ cls: 'character', voice_id: null }, v({ body_fit_from: 'b' }), 1).items.some((x) => x.id === 'body')).toBe(false)   // C0: the body is the Library's
   })
-  it('a prop owes its hero, model and height; a place its set picture, set and filled faces', () => {
-    expect(readiness({ cls: 'prop', voice_id: null }, v({ hero_asset_id: 'a', height_m: 0.3 }), 1).line).toBe('1 to go')
-    const faces = [{ filled: true, bad: 0.4 }, { filled: false, bad: 0 }, { filled: false, bad: 0.2 }]
-    const place = readiness({ cls: 'place', voice_id: null }, v({ place_set: { kind: 'street', faces, sources: [{ asset_id: 'p' }] } as never }), 0)
-    expect(place.items.map((x) => `${x.id}:${x.state}${x.detail ? `:${x.detail}` : ''}`)).toEqual(['set_picture:done', 'set:done', 'faces:owed:67 %'])
+  it('a prop owes its hero (its reference view optional); a place its set picture', () => {
+    expect(readiness({ cls: 'prop', voice_id: null }, v({ height_m: 0.3 }), 1).line).toBe('1 to go')
+    expect(readiness({ cls: 'prop', voice_id: null }, v({ hero_asset_id: 'a' }), 1).line).toBe('Pictures done')
+    const place = readiness({ cls: 'place', voice_id: null }, v({ place_set: { kind: 'street', faces: [], sources: [{ asset_id: 'p' }] } as never }), 0)
+    expect(place.items.map((x) => `${x.id}:${x.state}`)).toEqual(['set_picture:done'])
+    expect(readiness({ cls: 'place', voice_id: null }, v(), 0).line).toBe('1 to go')
   })
 })
 
@@ -123,7 +122,7 @@ describe('the market walk small items (M3, M4)', () => {
     const r = readiness({ cls: 'character', voice_id: null }, { ...bram, hero_asset_id: 'h', anim_ref_asset_id: 'a', body_fit_from: 'a' } as ProfileVersion, 1,
       { hero: tree, a_pose_front: 'a heavy-set man, #E8E4DA rubber apron' })
     expect(r.items.filter((x) => x.state === 'warn').map((x) => x.label)).toEqual(['hero ≠ sheet'])
-    expect(r.line).toBe('Ready for Clay')
+    expect(r.line).toBe('Pictures done')
   })
   it('M4: the things the words have a character carry — not what it wears, not its marks', () => {
     expect(carriedThings({ appearance: 'a small elderly woman in her seventies', outfit: 'a long dark-red wool coat, a wicker shopping basket on her arm' })).toEqual(['a wicker shopping basket'])
@@ -132,10 +131,8 @@ describe('the market walk small items (M3, M4)', () => {
     const r = readiness({ cls: 'character', voice_id: null }, v({ outfit: 'a wicker shopping basket on her arm' }), 0)
     expect(r.items.find((x) => x.id === 'carried')).toMatchObject({ label: 'carried: wicker shopping basket', state: 'warn' })
   })
-  it('W11: a T-pose is fitted but said; more than one figure leaves the body owed and says why', () => {
+  it('W11: a T-pose is fitted but said (more than one figure is the Library\'s body item, clay.test.ts)', () => {
     const tp = readiness({ cls: 'character', voice_id: null }, v({ anim_ref_asset_id: 'a', body_fit_from: 'a', anim_ref_note: 't_pose' } as never), 1)
     expect(tp.items.find((x) => x.id === 'tpose')).toMatchObject({ state: 'warn' })
-    const sev = readiness({ cls: 'character', voice_id: null }, v({ anim_ref_asset_id: 'a', anim_ref_note: 'several' } as never), 1)
-    expect(sev.items.find((x) => x.id === 'body')).toMatchObject({ state: 'owed', detail: '— the A-pose shows more than one figure' })
   })
 })

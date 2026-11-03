@@ -15,6 +15,9 @@ describe('U1: the layers', () => {
   it('lands a navigation on its layer and keeps the hash in step', () => {
     const off = followNavigation()
     navigate({ suite: 'stage' })
+    expect(useLayer.getState().layer).toBe('clay')                                          // C0 (D181): the stage suite is Clay's
+    expect(location.hash).toBe('#clay')
+    navigate({ suite: 'animate' })
     expect(useLayer.getState().layer).toBe('shots')
     expect(location.hash).toBe('#shots')
     navigate({ suite: 'story', tab: 'episode' })

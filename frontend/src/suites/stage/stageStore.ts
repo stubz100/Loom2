@@ -333,7 +333,7 @@ interface StageState {
   /** D93 (C8): bind a figure to a Cast character (at a version — a costume; null = the current one), or unbind it (`null`). */
   bindFigure: (id: string, profileId: string | null, version?: string | null) => void
   /** D142: Clay opened for a Cast version — its bench stage (made once, kept); `back` is where *← Back* goes (Cast on the version). */
-  openBench: (profileId: string, version?: string | null, layer?: Layer) => Promise<boolean>
+  openBench: (profileId: string, version?: string | null, layer?: Layer, back?: () => void) => Promise<boolean>
   /** CW5: Clay opened on the line-up of these Cast versions and ideas (made again each time); `back` returns to the board it came from. */
   openLineup: (items: { profile_id?: string; version?: string | null; idea_id?: string }[], back?: () => void, layer?: Layer) => Promise<boolean>
   /** D142: *← Back* from a bench or the line-up. */
@@ -367,6 +367,13 @@ interface StageState {
 
 let saveTimer: number | null = null
 let benchBack: (() => void) | null = null                                     // D142: where *← Back* from a bench or the line-up goes (this session)
+/** C0 (D181): Clay's Library on the entity version (its kind from its class), else on the figures. */
+function libraryOf(profileId: string | null, version: string | null): void {
+  void Promise.all([import('../../ui2/clay/clayStore'), import('../story/storyStore')]).then(([m, s]) => {
+    const p = profileId ? s.useStory.getState().profiles.find((x) => x.id === profileId) : undefined
+    m.useClay.getState().openLibrary(p ? m.kindOfClass(p.cls) : 'figure', p?.id ?? null, p ? version ?? p.current : null)
+  })
+}
 let saveChain: Promise<void> = Promise.resolve()                              // V79: one PUT at a time — the next starts from the revision the last reply gave
 
 /** The document's save, one after another: a save that starts while another is in flight waits for its reply and its revision, so the
@@ -1049,11 +1056,11 @@ export const useStage = create<StageState>()((set, get) => ({
   frameView: (ids) => set({ frameRequest: { ids, n: get().frameRequest.n + 1 } }),
   object: (id) => (id ? get().current?.objects.find((o) => o.id === id) : undefined),
   activeCamera: () => { const c = get().current; return c?.cameras.find((x) => x.id === c.active_camera) ?? c?.cameras[0] },
-  openBench: async (profileId, version = null, layer) => {
+  openBench: async (profileId, version = null, layer, back) => {
     try {
       const r = await unwrap(http.POST('/stages/bench', { body: { profile_id: profileId, version } }))
       await get().open(r.stage.id)
-      benchBack = () => void import('../../store/origin').then((m) => m.goToStory({ tab: 'cast', id: profileId, version: r.stage.bound?.version ?? version }))
+      benchBack = back ?? (() => libraryOf(profileId, r.stage.bound?.version ?? version))              // C0 (D181): the Library's page
       navigate({ suite: 'stage', ...(layer ? { layer } : {}) })                     // U3f: World's See in clay stays on the World layer
       return true
     } catch (e) { useSession.getState().toast(`The bench: ${(e as ApiError).detail ?? e}`, 'error'); return false }
@@ -1071,8 +1078,7 @@ export const useStage = create<StageState>()((set, get) => ({
   },
   backFromBench: () => {
     const cur = get().current
-    const back = benchBack ?? (cur?.bound ? () => void import('../../store/origin').then((m) => m.goToStory({ tab: 'cast', id: cur.bound!.profile_id, version: cur.bound!.version }))
-      : () => void import('../../store/origin').then((m) => m.goToStory({ tab: 'cast', id: '' })))
+    const back = benchBack ?? (cur?.bound ? () => libraryOf(cur.bound!.profile_id, cur.bound!.version) : () => libraryOf(null, null))   // C0: Clay's Library
     benchBack = null
     back()
   },

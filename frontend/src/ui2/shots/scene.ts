@@ -6,6 +6,7 @@ import { http, unwrap } from '../../api/client'
 import type { Profile, Shot, StageDoc } from '../../api/types'
 import { useSession } from '../../store/session'
 import { useStory } from '../../suites/story/storyStore'
+import { clayReadiness } from '../clay/readiness'
 import { readiness } from '../world/readiness'
 import { routeRows } from './route'
 import { flushClay } from './shotsStore'
@@ -68,9 +69,9 @@ export function castOf(stage: StageLite, profiles: Profile[]): CastMember[] {
   return stage.objects.filter((o) => o.visible && (o.kind === 'mannequin' || (o.kind === 'mesh' && o.profile_id))).map((o) => {
     const p = o.profile_id ? profiles.find((x) => x.id === o.profile_id) : undefined
     const v = p ? p.versions.find((x) => x.id === (o.version ?? p.current)) ?? p.versions[0] : undefined
-    const r = p && v ? readiness(p, v, v.hero_asset_id ? 1 : 0) : null                // the hero is a reference too (World's bin)
+    const owed = p && v ? readiness(p, v, v.hero_asset_id ? 1 : 0).owed + clayReadiness(p, v).owed : null   // the hero is a reference too (World's bin); C0: the pictures and the 3D
     return { id: o.id, name: p?.name ?? o.name, cls: p ? (p.cls === 'prop' ? 'prop' : 'character') : null, profile: p?.id ?? null, version: v?.id ?? null,
-      owed: r?.owed ?? 0, line: r ? r.line : 'not bound to World' }
+      owed: owed ?? 0, line: owed === null ? 'not bound to World' : owed ? `${owed} to go` : 'Ready for Clay' }
   })
 }
 

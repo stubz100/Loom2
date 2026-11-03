@@ -19,7 +19,7 @@ registerCommands([
   { id: 'shots.graph', scope: 'shots', label: 'Graph', icon: Workflow, placement: ['rail'], hint: "the shot's recipe — what it is made of, what is stale; a node opens where it is made",
     when: () => !!shot() && useShots.getState().level !== 'flow', run: () => { const s = useSession.getState(); s.setUi({ graph: !s.ui.graph }) } },
   { id: 'shots.level.flow', scope: 'shots', label: 'Flow', icon: GitBranch, placement: ['rail'], when: open, run: level('flow'), hint: 'the story\'s graph — its shots, lines and choices' },
-  { id: 'shots.level.clay', scope: 'shots', label: 'Clay', icon: Box, placement: ['rail'], when: () => !!shot(), run: level('clay'), hint: 'the shot\'s scene through its camera: blocking, poses, the camera\'s moves' },
+  { id: 'shots.level.clay', scope: 'shots', label: 'Clay', icon: Box, placement: ['rail'], when: () => !!shot(), run: level('clay'), hint: 'the shot\'s scene in Clay\'s editor, through its camera — blocking, poses, the camera\'s moves; ← Back returns here (C0, D181)' },
   { id: 'shots.level.performance', scope: 'shots', label: 'Performance', icon: Clapperboard, placement: ['rail'], when: () => !!shot(), run: level('performance') },
   { id: 'shots.level.final', scope: 'shots', label: 'Final', icon: MonitorPlay, placement: ['rail'], when: () => !!shot(), run: level('final') },
   // 04 §2.1: the header's scene menu (the same scene as the shot before is the menu's own entry: it names that shot)

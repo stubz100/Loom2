@@ -16012,3 +16012,42 @@ the row wrapping as a whole, *Back* short in the header, the full label in its t
 primary button on a dangerous ask — its OK is the red one.
 
 **Next:** E59 and E60 alone on the GPU, then C3 (Record: the animatic, the still, the passes), C4, C6, C5 — propo02 05's order.
+
+## 2026-11-03 19:55 — D183 recorded: a character in Clay is its shell, the dummy for an animation that is nobody's, the skeleton placed on the shell by hand (wave C2c)
+
+The author, after C2b, on seeing the walk's figures as mannequins: Pixal3D is still the app's image → 3D (a prop's model, a character's shell,
+D84 / D136 / D138); on "Followed" the shells were never made (*Make the shell ▶* was not used), so the figures drew as the Detailed mannequin.
+Asked whether the dummy has a merit over the shell on a character: it is instant (the shell is a four-minute job the author has to press),
+it bends more cleanly in a deep crouch (bone heat stretches 0.2–4.3 % of a shell's triangles there, D138) and it weighs less — none a
+reason to keep it on a character. The author's rules: "there should be only a shell for a character in clay — including animation, poses,
+etc."; "a clay shot should not use dummies but shell only — as you always add a character to a clay stage and not a dummy"; the dummy only on
+the animation bench for an animation not tied to a character; and "some characters could be very different than a clay dummy — a bench where
+the animation points could be allocated across the shell manually". Recorded as **D183** (13): a scene holds characters as shells (the
+figure ＋ lists the Library's figures, no adult or child preset); the shell queued by the body fit, a ghost until it lands, *Make the shells
+(n)* for a project without them; the bench's *Try it on ‹character›*; the skeleton placed on the shell by hand — the skeleton bench's 3D
+pane takes a drag on any joint, written as `body.joint_offsets` from the fitted body, the bind redone and every pose and clip driving the
+placed skeleton. Joints the rig lacks (a tail) stay a later item. Wave **C2c** (≈ 3 days, propo02 04 §4.3, §7; 05), after the e2e port of
+C0–C2b now running, before E59. Documents only.
+
+## 2026-11-03 20:28 — the e2e port of C0–C2b run at last: sixteen scenarios ported, three product faults found by them, the suite 85/85 alone
+
+Port 1420 was the author's dev server's all day; the author closed the app this evening, and the Playwright suite ran for the first time since
+C0 (`npm run build:e2e; npm run test:e2e`, alone). First run: 69 passed, 16 failed — every one a port C0, C1 or C2 owed, not a flake. The
+ports: the five layers in the tabs; a Clay hash reloads into Clay's layer; the mesh editor's verb and the figure's character picker live in
+the Inspector (`.w-insp`, C1); the passes state is the Clay column's foot; the A-pose slots are under World's Make sheet (C0, Q2 —
+`openMake`, not the Library); a pose preset over a clip block is a correction (C2) — the key holds the joints the preset moves, not the
+whole pose; the preset panel stays open after a pick and, in the narrower Clay column, covered the motion library and the next row's ＋
+(`libAdd` closes it); a new shot opens its scene in Clay (C0) and Shots keeps it as the open shot; the line of a shot that outlasts it sits
+on the scene's track in Clay's layer; the bench selects its figure already, so the row click toggled it off; the file's licence reads
+"CC0 1.0 (Quaternius)", not "CC0"; the bench's Back is short now; a scenario before the workshop's saves an animation, so the workshop counts
+only what it made. **Three faults in the product, fixed:** (1) World's *used in shots* link opened the shot at level `clay` — since C0 that is
+Clay's layer, not the shot — it opens the shot's page (performance) now; (2) the recipe graph's Clay node navigated to the stage suite,
+which lands on Clay's Library, not the scene — it opens the scene in Clay's layer with ← back to the shot, the figure selected; (3) the Shots
+tab from another layer wrote a bare `#shots` and `startShots` read it as the Flow — the Graph button went dead and the open shot was lost;
+the tab lands where Shots was left (the open shot at its level) now. One environment fault: `ERR_NO_BUFFER_SPACE` on one page load (Windows
+sockets), gone on the rerun. Then 83/85 with two more: the camera scenario's last step opened the shot by a Clay hash (ported to its page);
+a place's set fit not listed — the run had C2c's server change in the tree, so the port alone was run again with C2c stashed: **85 passed
+in 6.5 min**, exit 0. A lesson for the driver and the specs: a dangerous ask's OK is `button.danger`, not `.primary`.
+
+**Checked:** e2e 85/85 alone, typecheck (the e2e build's `tsc -b`), Vitest 653 + 3 skipped, lint 61 warnings as before. Committed with D183's
+recording (20:28); C2c next in its own commit.

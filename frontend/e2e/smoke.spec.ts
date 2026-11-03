@@ -26,7 +26,7 @@ test('open the project: the Bin shows tiles and their thumbnails load; the Proje
   await projectTab.click()
   await expect(page.locator('.menu.project-menu')).toHaveCount(0)
   // D157: the layers in the work's order; Models & engine is a sheet in ☰
-  await expect(page.locator('nav.tabs button.tab:not(.project-tab)')).toHaveText([/^World/, /^Shots/, /^Episode/, /^Bin/])
+  await expect(page.locator('nav.tabs button.tab:not(.project-tab)')).toHaveText([/^World/, /^Clay/, /^Shots/, /^Episode/, /^Bin/])
   await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Bin/)
   await page.locator('button[aria-label="app menu"]').click()
   await page.locator('.menu button', { hasText: 'Models & engine' }).click()
@@ -192,6 +192,7 @@ async function libAdd(page: import('@playwright/test').Page, group: string, name
   const row = page.locator(`.lib-row[data-group="${group}"]`)
   if (!(await row.locator('[data-preset-panel-btn][aria-expanded="true"]').count())) await row.locator('[data-preset-panel-btn]').click()
   await page.locator(`[data-preset-panel] button.preset-icon[aria-label^="${name}"]`).click()
+  await page.locator('[data-preset-panel] button[aria-label="close the presets"]').click()                 // the panel stays open for a second pick; closed, it covers nothing
 }
 
 /** B2a (D159): a shot on a scene of its own with its Clay open — its stage named `name` (the old shell's *New stage…*). */
@@ -828,7 +829,7 @@ test('a stage (P13 / ST1, D81): a new stage gets a set and a figure from the Lib
   await expect(page.locator('.cam-pill .cam-pill-main')).toContainText('35 mm')
   await page.screenshot({ path: 'node_modules/.e2e/stage-camera-view.png' })                     // a look for the journal: the framing rectangle over the set
   await page.reload()
-  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Shots/)
+  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Clay/)                               // C0 (D181): the scene reopens in Clay's layer
   await expect(page.locator('canvas.stage-canvas')).toBeVisible()
   await freeView(page)                                                                                      // reopened through its camera
   await section(page, 'scene')
@@ -1166,7 +1167,7 @@ test('a 3D prop (P18, D84): "Make a 3D prop…" on a tile says its cost, the fak
   await expect.poll(async () => (await api<{ params: { thumb_source?: string } }>('GET', `/assets/${m.id}`)).params.thumb_source, { timeout: 15_000 }).toBe('client')   // the viewport's fitted view became the thumbnail
   await page.screenshot({ path: 'node_modules/.e2e/stage-prop.png' })
   // proto01_UIcast CF8: the loose mesh becomes a Cast prop from its editor — the model its, the picture it was made from its hero, the object bound
-  await page.locator('.w-panel button[data-verb="cast-prop"]').click()
+  await page.locator('.w-insp button[data-verb="cast-prop"]').click()
   await page.locator('.ctx-menu button.item', { hasText: 'New prop…' }).click()
   await dialog.locator('input').fill('Lamp')
   await dialog.locator('button.primary').click()
@@ -1238,7 +1239,7 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   await api('PUT', `/story/profiles/${who.id}/versions/v1/anim-ref`, { side: 'front', asset_id: img })
   await libAdd(page, 'sets', 'room')
   await libAdd(page, 'figures', 'Adult')
-  await page.locator(`.w-panel [aria-label="the figure's character"] button[aria-label="${who.name}"]`).click()
+  await page.locator(`.w-insp [aria-label="the figure's character"] button[aria-label="${who.name}"]`).click()
   await libAdd(page, 'standins', 'crate')
   await page.locator('.lib-row[data-group="lights"] button', { hasText: /^Add light$/ }).click()
   await page.evaluate(() => (window as unknown as { __loom2Stage: { setRange: (a: number, b: number) => void } }).__loom2Stage.setRange(0, 12))   // half a second: 9 frames at F16
@@ -1631,8 +1632,8 @@ test('a shot from the camera (SY2, B2a): Clay\'s New shot from this camera makes
   await expect.poll(async () => (await open()).versions[0].frame_asset_id, { timeout: 60_000 }).toBeTruthy()   // made for the shot open in Shots (its For)
   expect((await open()).versions[0].takes.map((t) => t.kind)).toEqual(['image'])
   expect((await shotOf()).versions[0].frame_asset_id).toBeNull()                                         // not the other shot on the same camera
-  // the shot in Shots: its storyboard card, its header
-  await openShell(page, `shots/${shot.id}/clay`)
+  // the shot in Shots: its storyboard card, its header (C0: a Clay hash would open the scene in Clay's layer)
+  await openShell(page, `shots/${shot.id}/performance`)
   await expect(page.locator('[data-testid="shots-layer"] .w-head, [data-testid="shot-header"]').first()).toContainText(name)
 })
 
@@ -2211,7 +2212,7 @@ test('figures bound to characters (D93 · C8): a figure picks a character in the
   await section(page, 'scene')
   // the left figure: the Inspector's tiles (the Cast's characters by their heroes)
   await page.locator('.outl-row[data-row="object"]').filter({ has: page.locator('.name', { hasText: 'Left one' }) }).click()
-  const tile = page.locator(`.w-panel [aria-label="the figure's character"] button[aria-label="${ana.name}"]`)   // D95 (AN1): the Selection section
+  const tile = page.locator(`.w-insp [aria-label="the figure's character"] button[aria-label="${ana.name}"]`)   // D95 (AN1): the Selection section
   await expect(tile.locator('img')).toBeVisible()
   await tile.click()
   await expect(page.locator('.outl-row[data-row="object"]').filter({ has: page.locator('.name', { hasText: 'Left one' }) }).locator('.bound-tag')).toContainText(ana.name)
@@ -2386,7 +2387,7 @@ test('AN1 step 5 (D95): the Clay level adds an image plane from the Bin, renames
   await clayShot(page, 'Plane test')
   const dialog = page.locator('.modal.ask')
   await section(page, 'scene')
-  await expect(page.locator('.s-foot [data-passes-state]')).toContainText('No passes yet for')         // #16: the passes at a glance (D121: in the Clay foot)
+  await expect(page.locator('[data-testid="clay-layer"] [data-passes-state]')).toContainText('No passes yet for')   // #16: the passes at a glance (D121: the Clay column's foot)
   await page.locator('.lib-row[data-group="planes"] button', { hasText: /^Add image plane/ }).click()                           // #18: opens the Bin
   const bin = page.locator('.dock .bin')
   await expect(bin).toBeVisible()
@@ -2722,7 +2723,7 @@ test('an animation reference picked by hand (CA0 → D161): Make reference candi
   const hero = (await api<{ ids: string[] }>('POST', '/assets/duplicate', { ids: [src.id] })).ids[0]
   type ProfileLite = { id: string; versions: { id: string; anim_ref_asset_id: string | null; anim_ref_back_asset_id: string | null }[] }
   const p = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', hero_asset_id: hero, appearance: `${name}, a dancer in a red dress` })
-  await openLibrary(page, 'character', p.id)
+  await openMake(page, 'character', p.id)                                                               // C0 (Q2): the A-pose slots under Make's sheet
   await expect(page.locator('.anim-ref-slot[data-side="front"]')).toContainText('none yet')
   await page.locator('.anim-ref button', { hasText: /^Make reference candidates/ }).click()
   const cands = page.locator('[data-testid="anim-ref-candidates"] .anim-ref-cand')
@@ -2853,7 +2854,7 @@ test("the skeleton changed (proto01_UIcast CS3, D136 U19): a final's character l
   await api('PUT', `/story/profiles/${who.id}/versions/v1/anim-ref`, { side: 'front', asset_id: img })
   await libAdd(page, 'sets', 'room')
   await libAdd(page, 'figures', 'Adult')
-  await page.locator(`.w-panel [aria-label="the figure's character"] button[aria-label="${who.name}"]`).click()
+  await page.locator(`.w-insp [aria-label="the figure's character"] button[aria-label="${who.name}"]`).click()
   await page.evaluate(() => (window as unknown as { __loom2Stage: { setRange: (a: number, b: number) => void } }).__loom2Stage.setRange(0, 12))   // 9 frames at F16: one batch
   await perfCardOf(page, 'Final shot')
   await page.locator('.final-section button', { hasText: /^Make the final shot/ }).click()
@@ -2916,7 +2917,7 @@ test('a test animation in Cast (CA0, 01 step 2): Test it draws a turn on the spo
   const p = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', appearance: `${name}, an old captain` })
   await api('PATCH', `/story/profiles/${p.id}`, { revision: p.revision, versions: [{ id: 'v1', body: { height_m: 1.9, build: 'broad', head: 1, torso: 1, shoulders: 1, arms: 1, legs: 1, attachments: [] } }] })
   await api('PUT', `/story/profiles/${p.id}/versions/v1/anim-ref`, { side: 'front', asset_id: ref })
-  await openLibrary(page, 'character', p.id)
+  await openMake(page, 'character', p.id)                                                               // C0 (Q2): the A-pose slots under Make's sheet
   await expect(page.locator('.anim-ref-slot[data-side="test"]')).toContainText('none yet')
   await page.locator('.anim-ref button', { hasText: /^Test it/ }).click()
   const dialog = page.locator('.modal.ask')
@@ -3010,11 +3011,11 @@ test('a floor path (CA1, 01 step 5): the Path tool adds the floor points clicked
   expect(Math.hypot(first.objects[0].transform.pos[0] - p0[0], first.objects[0].transform.pos[2] - p0[1])).toBeLessThan(0.05)   // it starts at the path's start
   await expect(page.locator('.toast')).toContainText(/along its path, feet locked/)
   // a pose preset on the keyed figure is a key at the playhead (before CA1 it changed only the unkeyed pose, which the keys hide)
-  type Key = { frame: number; pose: { preset: string; joints: Record<string, number[]> } | null }
+  type Key = { frame: number; correction?: boolean; pose: { preset: string; joints: Record<string, number[]> } | null }
   await libAdd(page, 'poses', 'point')                                                       // the pose tiles sit behind the Motion section's + (D119 SC2)
-  await expect.poll(async () => { const k = Object.values((await doc())?.keyframes.objects ?? {})[0] as unknown as Key[]; return k?.find((x) => x.frame === 0)?.pose?.preset ?? null }, { timeout: 10_000 }).toBe('point')
+  await expect.poll(async () => { const k = Object.values((await doc())?.keyframes.objects ?? {})[0] as unknown as Key[]; return k?.find((x) => x.frame === 0)?.correction ?? null }, { timeout: 10_000 }).toBe(true)   // C2: a pose over a block is a correction
   const k0 = (Object.values((await doc())!.keyframes.objects)[0] as unknown as Key[]).find((x) => x.frame === 0)!
-  expect(Object.keys(k0.pose!.joints)).toHaveLength(12)                                       // spelled out, so it blends with the clip's keys
+  expect(Object.keys(k0.pose!.joints).length).toBeGreaterThan(0)                              // the joints the preset moves against the clip's pose at that frame, laid over it
 })
 
 test('a set from an image (D120, SC3): a Bin picture becomes a relief set on the stage with the picture camera active, its lens and budget in its row (Shots, B2a)', async ({ page }) => {
@@ -3374,7 +3375,7 @@ test('readiness in World (D125 SP5, B2a): the header says what the character owe
   // a use opens its shot in Shots
   await uses.locator('button', { hasText: `Walk ${tag}` }).click()
   await expect(page.locator('[data-testid="shots-layer"]')).toBeVisible()
-  await expect.poll(() => new URL(page.url()).hash, { timeout: 10_000 }).toContain(`#shots/${walk.shot_id}`)
+  await expect.poll(() => new URL(page.url()).hash, { timeout: 10_000 }).toBe(`#shots/${walk.shot_id}/performance`)   // C0: the shot's page, never Clay's layer
 })
 
 test('the cut from the Flow (D125 SP6): Assemble from the Flow… asks at the Choice and lays the route\'s shots in order, stamped; a newer take marks a lane clip changed and its badge updates it; Assemble again takes the other route; Export for Resolve writes one folder (Episode, B2a)', async ({ page }) => {
@@ -3774,7 +3775,9 @@ test('Shots in the new shell (U4a–d, D157 · proto01_UI2 04 §2–3, §6–7):
   await expect.poll(async () => (await shots()).filter((s) => s.versions[0].stage_id === stage).length, { timeout: 10_000 }).toBe(3)   // coverage: a third camera on the scene's stage
   const cams = (await shots()).filter((s) => s.versions[0].stage_id === stage).map((s) => s.versions[0].camera_id)
   expect(new Set(cams).size).toBe(3)                                                                        // each shot its own camera
-  await expect(page.locator('.s-card.active')).not.toHaveAttribute('data-id', a.shot_id!)                  // the new shot is open
+  await expect(page.locator('[data-testid="clay-layer"]')).toHaveAttribute('data-rail', 'scenes')          // C0 (D181): a new shot opens its scene in Clay
+  await page.locator('nav.tabs button.tab', { hasText: 'Shots' }).click()                                    // back in Shots the new shot is the open one
+  await expect(page.locator('.s-card.active')).not.toHaveAttribute('data-id', a.shot_id!)
   // U4c (04 §2.1): the header's scene menu gives the open shot a scene of its own; its range on the scene's timeline
   const c = (await shots()).find((s) => s.versions[0].stage_id === stage && s.id !== a.shot_id && s.id !== b.shot_id)!
   await expect(page.locator('.s-card.active')).toHaveAttribute('data-id', c.id)
@@ -3807,6 +3810,7 @@ test('Shots in the new shell (U4a–d, D157 · proto01_UI2 04 §2–3, §6–7):
   await expect.poll(async () => (await api<{ items: (ShotLite & { versions: { range: { start: number; end: number } | null }[] })[] }>('GET', '/story/shots')).items.find((s) => s.id === c.id)!.versions[0].range?.end ?? 0, { timeout: 10_000 })
     .toBe(Math.round((words / 2.6) * 24) - 1)                                                              // the unvoiced line timed by its words, from frame 0
   await expect(outlast).toHaveCount(0)
+  await toLevel(page, 'clay')                                                                               // C0 (D181): the line on the scene's track, in Clay's layer
   await expect(page.locator('.tl-bar.line')).toContainText('narrator: Do you know whose seal')
 })
 
@@ -4201,6 +4205,9 @@ test("the animation workshop (D182, C2b): the Library's Animations tiles; a down
   const tag = Date.now().toString(36)
   type Anim = { id: string; name: string; frames: number; keys: { frame: number; correction?: boolean; pose: { joints: Record<string, number[]> } | null }[]; source: { file_id: string | null; clip: string | null; licence: string | null }; thumb_asset_id: string | null }
   const anims = async () => api<{ items: Anim[]; library: Anim[] }>('GET', '/stages/animations')
+  const before = new Set((await anims()).items.map((x) => x.id))                                           // another scenario's animations stay out of the count
+  const made = async () => (await anims()).items.filter((x) => !before.has(x.id))
+  const tiles0 = (await anims()).items.length + (await anims()).library.filter((x) => !before.has(x.id)).length
   await openShell(page, 'clay/library/animation')
   const grid = page.locator('[data-testid="clay-animations"]')
   await expect(grid).toBeVisible()
@@ -4220,7 +4227,8 @@ test("the animation workshop (D182, C2b): the Library's Animations tiles; a down
   expect([b0.tracks[fig.id][0].source.clip, b0.tracks[fig.id][0].start, b0.range.end]).toEqual(['Walk_RM', 0, 24])
   expect((await api<{ items: Doc[] }>('GET', '/stages')).items.map((x) => x.id)).not.toContain(b0.id)        // out of the pickers
   // a correction over it at frame 12: the pose editor's joint field on the figure as it is at the playhead
-  await page.locator(`.outl-row[data-id="${fig.id}"]`).click()
+  const row = page.locator(`.outl-row[data-id="${fig.id}"]`)
+  if (!(await row.evaluate((r) => r.classList.contains('active')))) await row.click()                       // selected by the bench already; a click would toggle it off
   const tl = page.locator('.stage-col')
   await tl.locator('input[aria-label="frame"]').fill('12'); await tl.locator('input[aria-label="frame"]').press('Enter')
   await tl.locator('button', { hasText: /^Pose Figure/ }).first().click()
@@ -4232,33 +4240,33 @@ test("the animation workshop (D182, C2b): the Library's Animations tiles; a down
   await tl.locator('button', { hasText: /^Done posing/ }).first().click()
   // Make it mine: a copy of the author's with the clip's file and licence; the bench now plays the copy; its thumbnail arrives
   await page.locator('[data-testid="clay-animation-header"] button', { hasText: 'Make it mine' }).click()
-  await expect.poll(async () => (await anims()).items.map((x) => x.name), { timeout: 15_000 }).toEqual(['Walk_RM'])
-  const mine = (await anims()).items[0]
-  expect([mine.source.clip, mine.source.licence, mine.frames]).toEqual(['Walk_RM', 'CC0', 25])
+  await expect.poll(async () => (await made()).map((x) => x.name), { timeout: 15_000 }).toEqual(['Walk_RM'])
+  const mine = (await made())[0]
+  expect([mine.source.clip, mine.frames]).toEqual(['Walk_RM', 25]); expect(mine.source.licence).toMatch(/^CC0/)        // the file's licence as the motion library records it
   expect(mine.keys.some((k) => k.frame === 12 && k.pose?.joints.head?.[1] === 30)).toBe(true)                // the correction is in the copy
   await expect(page.locator('[data-testid="clay-animation-header"]')).not.toContainText('downloaded')
-  await expect.poll(async () => (await anims()).items[0].thumb_asset_id, { timeout: 30_000 }).not.toBeNull()
+  await expect.poll(async () => (await made())[0].thumb_asset_id, { timeout: 30_000 }).not.toBeNull()
   // Save: the range cut to 12 frames, written over the animation
   const rangeEnd = tl.locator('.range-field input').nth(1)
   await rangeEnd.fill('11'); await rangeEnd.dispatchEvent('change')
   await page.locator('[data-testid="clay-animation-header"] button', { hasText: /^Save$/ }).click()
-  await expect.poll(async () => (await anims()).items[0].frames, { timeout: 15_000 }).toBe(12)
+  await expect.poll(async () => (await made())[0].frames, { timeout: 15_000 }).toBe(12)
   // Save as…: a second animation of the project's
   await page.locator('[data-testid="clay-animation-header"] button', { hasText: 'Save as…' }).click()
   const dialog = page.locator('.modal.ask')
   await dialog.locator('input').fill(`Short walk ${tag}`); await dialog.locator('button.primary').click()
-  await expect.poll(async () => (await anims()).items.map((x) => x.name).sort(), { timeout: 15_000 }).toEqual([`Short walk ${tag}`, 'Walk_RM'])
+  await expect.poll(async () => (await made()).map((x) => x.name).sort(), { timeout: 15_000 }).toEqual([`Short walk ${tag}`, 'Walk_RM'])
   await expect(page.locator('[data-testid="clay-animation-header"]')).toContainText(`Short walk ${tag}`)
   // back to the tiles; New animation… lands on the bench standing still; Rename and Remove from a tile
-  await page.locator('[data-testid="clay-animation-header"] button', { hasText: 'Back to the Library' }).click()
-  await expect(grid.locator('.c-tile[data-anim]')).toHaveCount(2)
+  await page.locator('[data-testid="clay-animation-header"] button', { hasText: /^Back$/ }).click()
+  await expect(grid.locator('.c-tile[data-anim]')).toHaveCount(tiles0 + 2)
   await grid.locator('h4 button', { hasText: 'New animation…' }).click()
   await dialog.locator('input').fill(`Nod ${tag}`); await dialog.locator('button.primary').click()
   await dialog.locator('input').fill('2'); await dialog.locator('button.primary').click()
   await expect(page.locator('[data-testid="clay-animation-bench"] canvas').first()).toBeVisible({ timeout: 30_000 })
   await expect.poll(async () => (await anims()).items.find((x) => x.name === `Nod ${tag}`)?.frames ?? 0, { timeout: 15_000 }).toBe(48)
   await expect(page.locator('[data-testid="bench-chip"]')).toContainText(`Animation: Nod ${tag}`)
-  await page.locator('[data-testid="clay-animation-header"] button', { hasText: 'Back to the Library' }).click()
+  await page.locator('[data-testid="clay-animation-header"] button', { hasText: /^Back$/ }).click()
   const nod = grid.locator('.c-tile[data-anim]', { hasText: `Nod ${tag}` })
   await nod.click({ button: 'right' })
   await page.locator('.ctx-menu button.item', { hasText: 'Rename…' }).click()
@@ -4267,6 +4275,6 @@ test("the animation workshop (D182, C2b): the Library's Animations tiles; a down
   await grid.locator('.c-tile[data-anim]', { hasText: `Nod twice ${tag}` }).click({ button: 'right' })
   await page.locator('.ctx-menu button.item', { hasText: 'Remove' }).click()
   await dialog.locator('button.danger').click()                                                              // a dangerous ask: its OK is the red one
-  await expect.poll(async () => (await anims()).items.map((x) => x.name).sort(), { timeout: 15_000 }).toEqual([`Short walk ${tag}`, 'Walk_RM'])
+  await expect.poll(async () => (await made()).map((x) => x.name).sort(), { timeout: 15_000 }).toEqual([`Short walk ${tag}`, 'Walk_RM'])
   await page.screenshot({ path: 'node_modules/.e2e/c2b-animations.png' })
 })

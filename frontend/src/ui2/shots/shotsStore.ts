@@ -223,7 +223,9 @@ export function startShots(): () => void {
       void useStory.getState().loadBoard()
       const sh = useShots.getState()
       if (opens !== n) return
+      const bare = location.hash.slice(1) === 'shots' || location.hash.slice(1) === 'shots/'   // the layer's tab, from another layer
       if (from?.shot && useStory.getState().shots.some((x) => x.id === from.shot)) sh.open(from.shot, from.level)
+      else if (bare && useStory.getState().shotId && sh.level !== 'flow') sh.setLevel(sh.level)   // C0 (D181): the tab lands where Shots was left — the open shot at its level, not the Flow
       else sh.setLevel(from?.level === 'flow' || !useStory.getState().shotId ? 'flow' : from?.level ?? 'flow')
     })
   }

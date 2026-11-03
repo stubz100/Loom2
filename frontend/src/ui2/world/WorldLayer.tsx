@@ -145,7 +145,7 @@ function EntityFacts({ p, binCount }: { p: Profile; binCount: number }) {
       <h4>{p.name}</h4>
       <div className="kv"><span>in the bin</span><span>{binCount}</span></div>
       <div className="w-facts" data-testid="world-uses"><span>used in shots</span>
-        {uses?.length ? <ul>{uses.map((u) => <li key={u.shot_id}><button className="link" title={`Open ${u.name} in Shots`} onClick={() => { navigate({ suite: 'story', tab: 'flow' }); void import('../shots/shotsStore').then((m) => m.useShots.getState().open(u.shot_id, 'clay')) }}>{u.name}</button>
+        {uses?.length ? <ul>{uses.map((u) => <li key={u.shot_id}><button className="link" title={`Open ${u.name} in Shots`} onClick={() => { navigate({ suite: 'story', tab: 'flow' }); void import('../shots/shotsStore').then((m) => m.useShots.getState().open(u.shot_id, 'performance')) }}>{u.name}</button>
           <small> · {u.how.map((h) => HOW[h] ?? h).join(', ')} · {u.version}</small></li>)}</ul> : <span className="w-val">none yet</span>}</div>
       <div className="w-facts"><span>versions</span><ul>{p.versions.map((x) => <li key={x.id}><button className={`link${x.id === vid ? ' active' : ''}`} onClick={() => useWorld.getState().pick(p.id, x.id)}>
         {x.id}{x.label && x.label !== x.id ? ` · ${x.label}` : ''}</button><small> · {x.state === 'final' ? 'final' : 'open'}{x.id === p.current ? ' · current' : ''}</small></li>)}</ul></div>

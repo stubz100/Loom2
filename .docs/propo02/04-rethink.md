@@ -171,6 +171,12 @@ entity as soon as the entity does.
   (its revision), *Save as…* a new one. *New animation…* starts from a figure standing still over N frames. A downloaded clip is edited
   through *Make it mine* — a copy on the mannequin rig, its source file and licence kept on the record (D17). E60's text-to-motion, if it
   holds, is one more way in. No curve editor: a correction a frame is the grain; curves are a later item if the author wants them.
+- **Shells only, the skeleton placed by hand (D183, the author after C2b: "there should be only a shell for a character in clay"; "a bench where
+  the animation points could be allocated across the shell manually").** A scene holds characters, as their shells: the figure ＋ lists the
+  Library's figures and no adult or child preset; fitting a body queues its shell by itself, and until it lands the figure is a ghost (the
+  mannequin in x-ray) that everything works on. The dummy is the animation bench's, for an animation that is nobody's — *Try it on ‹character›*
+  puts a shell on it. The skeleton bench's 3D pane takes a drag on any joint of the tree, written as an offset from the fitted body
+  (`body.joint_offsets`), the bind redone from the placed joints: a lizard's hips, a stooped back, a heavy build are a few drags after the fit.
 - **Scenes** lists the scenes, each with the shots it serves and its length; *New scene* (empty, at a World place, a copy of another), *Duplicate*.
 
 **Build mode** is the editor, with ArtCraft's four rules (26 §2): the mode owns the chrome; the viewport carries the tools; one selected thing, one
@@ -352,11 +358,12 @@ Rough, author + AI, each wave ending usable; the spikes alone on the GPU.
 | **C4** | the shot page's ledger and the storyboard's play; the rows' editors in the centre; the Flow behind the toggle with the route from the order; P12, P13, P17, P23–P25 | 1 week |
 | **C6** | the Bin's kinds: the vocabulary in the orchestrator, the tree's third level with counts, sequences as one tile (the passes, the masters, the mattes), the kinds' verbs, the drawer | 1 week |
 | **C2b** | the animation workshop (D182): the Animations tiles with thumbnails, the animation bench, Save over and Save as…, New animation…, Make it mine with the source and licence kept, Rename / Duplicate / Remove | 1 week |
+| **C2c** | shells only (D183): the scene's figure ＋ lists characters, the shell queued by the fit, the ghost until it lands, *Make the shells (n)*; the bench's *Try it on ‹character›*; the skeleton placed on the shell by hand (`joint_offsets`, the bench's 3D drag, the bind redone); the e2e's figures as characters | 3 days |
 | **E59** | the same shot three ways (§4.5) | 1 day on the rig |
 | **E60** | text-to-motion on the mannequin (Q7) | 2 days |
 | **C5** | Performance's default and fields after E59; the story motions after E60 | ½ week + |
 
-About nine weeks with the spikes. C0, C4 and C6 can go first in any order; C1–C3 are one piece of work on the scene editor; C2b follows C2.
+About nine weeks with the spikes. C0, C4 and C6 can go first in any order; C1–C3 are one piece of work on the scene editor; C2b and C2c follow C2.
 
 ## 8. The decision, as it would be recorded
 

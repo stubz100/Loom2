@@ -11,9 +11,9 @@ export function openTarget(t: Target, shotId: string, version: string): void {
     case 'flow': goToStory({ tab: 'flow', id: t.nodeId }); return
     case 'shots': goToStory({ tab: 'shots', id: shotId, version }); return
     case 'clay':
-      navigate({ suite: 'stage', tab: t.section })
-      void import('../../stage/stageStore').then(async (m) => {                 // the shot's stage opened first: Clay may show another, or none
-        if (t.stageId && m.useStage.getState().current?.id !== t.stageId) await m.useStage.getState().open(t.stageId)
+      navigate({ suite: 'stage', tab: t.section })                              // the column's section
+      void Promise.all([import('../../stage/stageStore'), import('../../../ui2/clay/clayStore')]).then(async ([m, c]) => {
+        if (t.stageId) await c.useClay.getState().openScene(t.stageId, { shot: shotId, version, camera: t.cameraId ?? null })   // C0 (D181): the scene in Clay's layer, ← back to the shot
         const st = m.useStage.getState(); if (t.objectId) st.select(t.objectId); if (t.cameraId) st.setActiveCamera(t.cameraId) })
       return
     case 'performance':

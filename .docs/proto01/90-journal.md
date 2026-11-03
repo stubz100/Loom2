@@ -16177,3 +16177,30 @@ animatic with a straight move.
 
 Left on the project: shot 1's v2 with E59's four takes, the three stills, the depth sequence. Sheets d and e sent. My orchestrator, Vite,
 Edge and the engine stopped.
+
+## 2026-11-03 22:59 — E59 (f): the hybrid composed by hand on shot 1 — it holds; D184 recorded: C5 builds it as Performance's method for a street
+
+The author: "Let's try to run this hybrid for C5." Composed outside the app from the pieces E59 left (CPU, a minute): the one-pass plate
+with Nora's identity anchors (clip e, 241 frames at 1024×576, 24 fps) under **Nora's own Wan Animate layer from the walk's Layered final**
+(fin_92d559c1: `fig_7pe3mq4s/frames` with the composition's checked matte `comp/fig_7pe3mq4s_matte` and its 21 px lift, 161 frames at
+848×480 at F16 — resampled 161 → 241 by the nearest frame, ×1.2 in size, the matte feathered 2 px). The result: Nora is the walk's Nora for
+the ten seconds, on a street that lives — the man with his newspaper and the woman with her bags walking, whole legs, shadows, the look;
+the camera the blocking's. What shows: the plate's own Nora peeks out around the layer's (a second coat edge, a ghost of a head above
+hers) where the two walks differ a little in size and timing — the layer's framing comes from the 848×480 final, the plate's from the
+1280×720 passes, and LTX gives her walk its own dynamics; and the extras blur for a few frames around the beat at 5 s (the LTX beat's
+morph). Neither is in the method's way: the first goes with the plate's depth rendered without the hero — or, better, with Wan Animate's
+*replacement* mode putting her into the plate in the hero's own place (a spike); the second with a softer beat or beats at cuts.
+`hybrid.mp4`, the sheet and the middle frame sent.
+
+**D184 recorded** (13): the hybrid is Performance's method for a shot with extras — Clay's depth and Klein stills at the beats (the hero's
+references riding along) make the one-pass plate holding everyone; the characters marked *exact* are performed by Wan Animate on their
+references from the clay's pose pass and matted over the plate in the Final's composition; Layered alone stays for a close shot; the
+Fun-Camera clip for an animatic with a straight move. Wave **C5** (≈ 1 week, propo02 05's order): the Stage clip card with beats (the stills
+made from the clay at every N seconds by the card itself), the Final shot's plate from a clip (the one-pass clip as the plate layer, the
+extras not split into layers), the figures the author marks *exact* as the only character layers, the composition as it is; the camera
+model's speed matched to the blocking's straight move; E61 (Wan Animate replacement into the plate, the plate without the hero's depth)
+measured inside the wave before the overlay is kept as the way. Q5 answered by the author's ask.
+
+**The stale task** the author saw: no process of mine was alive (a process list by command line: none of the drivers, servers, test runners
+or the engine) — an entry of the earlier context's orchestrator, started before the session's summary, that the terminal still listed;
+nothing to kill.

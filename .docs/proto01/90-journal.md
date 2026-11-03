@@ -15815,3 +15815,60 @@ Klein reads a Fill's words as an edit of the picture it is shown: asking for "th
 - Vitest 638 + 3 skipped: the status line and the bake due again.
 - e2e 84/84 alone: the set scenario cleans on the fake engine, then bakes again by itself, the Fills kept, and offers Clean again.
 - Typecheck, build and lint clean (61 warnings, as before); settings audit 322 / 0; agent docs and model literals clean.
+
+## 2026-11-03 14:15 — propo02: the "Followed" scene built from scratch through the product path, every control recorded; the author's look; the rethink of Clay and Shots proposed
+
+The author's request (2026-11-03): assemble a scene from scratch — a woman walking a cobbled street, checking over her shoulder, storming into a
+store, storefronts and a few pedestrians — and record every function used, for a later broadening study. Built 07:57–09:38 on a project of its
+own (`F:/loom2-projects/propo02-followed`, state `_propo02-state`, its own orchestrator on 8766, driven in a visible Edge over CDP), the real engine,
+one job at a time. Written to `.docs/propo02/` (00–03, `data/functions.jsonl`, `img/`, 90 screenshots). Nothing in the code changed; nothing committed.
+
+**What came out:** two shots, 14 s, `timelines/tl_2bdc101c/followed/followed.mp4`. Nora walks toward a leading camera, stops with a slight head
+turn, then walks up to the pharmacy front. 279 uses of 167 distinct controls (about 120 once per-entity repeats fold), 16 GPU runs, ≈ 50 min of GPU
+for 14 s of picture (casting 205 s a run of 4, the set picture 162 s, MoGe 10 s, five Fills 85 s, a Wan Animate batch 1:45–2:10, a matte 28 s–1:40,
+a face pass 4–5 min, the assembly 64 s, the comp render 14 s, the movie 11 s).
+
+**Findings P1–P28** (03): four near-identical candidates a run (P1); the framing sentence not obeyed (P3); the set almost all Fill, the road painted
+at the picture's scale (P4, P5); figures land on the centre ray (P7); a pose key is the whole pose, not a correction, and only the last joint
+survives (P8); a path is floor clicks (P9); a clip lands at the playhead (P10); Key object keys whatever is selected (P11); shots have no names (P12);
+orphan stages (P13); no story motions in the library (P14); the final's size, rate and plate stated, not offered (P16); the extras' mattes empty
+(`cover_min 0.0`), the composition dropped them (P19); black sky (P20); the glance reads as a stand (P21); Nora's identity 0.19 (P22); shot 2's Final
+showed shot 1's composition (P23); the Flow from the storyboard has no route (P25).
+
+**The author's look** (after the movie): "this isn't very good — I'm assuming this is a draft created as an input to the final version. The
+passers-by are almost completely invisible, the street plain cuts into the main character's legs on the frontal shot. There are no shadows and
+everything feels like it is a computer game from the '90s." → P26 (the road's far edge at z −15 hides her shins in the first 80 frames,
+`clips/clp_2709fd56/master/000040.png`), P27 (the Shadows layer stayed *passes ready*; the plate's faces asked for *even light*), P28 (there is no
+later final: the layered final is made once at 848×480 / 16 fps, Draft the only tier taken).
+
+**Then the author's three points** — World's prototyping is fine; Clay is "all over the place", a chore, in World and in Shots both, and its result a
+mixed bag of clay and model-made motion; the shot flow shows useless information and should list what a shot owns — answered as a proposal,
+`.docs/propo02/04-rethink.md`: Clay as a layer of its own on the top rail (World · Clay · Shots · Episode · Bin), with a Library of 3D assets made
+from World's pictures (the body, the model and the set builders moved whole out of World's Build; the bench as the asset's viewer) and a scene editor
+with ArtCraft's Build | Record (the outliner as a list, the Inspector, the camera pill, drop by raycast, tracks with blocks and correction keys, the
+path as an object; Record writes the animatic from the lit clay, a still and the passes); the shot as a card whose page is a ledger of its rows
+(description, lines, scene, cast, animatic, performance, final), the editors opening from the rows; the route from the storyboard's order. In the
+numbers: Clay and World's 3D building took 164 of the 279 uses (59 %) for one walking figure. Questions Q1–Q11, waves C0–C5 (≈ 7 weeks with the
+spikes), spikes E59 (the same shot three ways: layered, one pass from the passes, from the animatic) and E60 (text-to-motion on the mannequin). D181
+when answered; nothing decided yet.
+
+## 2026-11-03 14:18 — propo02: the author's fourth point, the Bin by kind, added to the rethink
+
+The author, while 04 was being written: "the Bin needs to be way more detailed — all the different types of assets should be categorized (a depth map
+for a place creates a lot of different images, character poses, …); everything relevant should be a subcategory." In the walk, `world/place/Cobbled
+street/v1` held 36 things in one grid (the candidates, the set picture, the depth, the bakes, the coverage masks, two passes of Fills, the cut-outs),
+told apart by a kind chip and role badges; the 1449 pass pictures of shot 1 are not in the Bin at all. → `04-rethink.md` §4.7: every home gets a
+third level, its kinds, read from the lineage kinds and the roles at write time (a closed vocabulary per class in the orchestrator; today twenty-one
+free strings); a sequence (a pass, a master, a matte run) is one tile with its count; a kind's verbs are its own; counts on the tree. Q12 (the
+vocabulary vs folders), Q13 (working files always shown, as their own kinds); wave C6 (≈ 1 week), the whole ≈ 8 weeks.
+
+## 2026-11-03 14:34 — D181 recorded: Clay a layer of its own, the shot a card that lists what it owns, the Bin by kind (propo02 04 accepted)
+
+The author on propo02's 04 §6: "I'll take all your recommendations as answers to the questions" — Q1–Q13 answered as recommended, written to
+`.docs/propo02/05-answers.md` and recorded as D181. In short: the top rail World · Clay · Shots · Episode · Bin; World = Make | Edit (the A-pose
+pictures stay a framing picked by hand); Clay = Library (the body fit, the prop model and the set builder moved whole from World's Build; the bench
+the asset's viewer) and Scenes (Build | Record; the outliner a list, the Inspector, the camera pill, drop by raycast, keys on rows, blocks with
+correction keys, the path an object; Record writes the animatic, a still, the passes); a scene the shot's, 5 s default and 20 s cap, coverage shared;
+Shots the storyboard of ledger cards whose rows open their editors in the centre, the route the cards' order, the animatic a deliverable; the
+performance's default after E59, story motions after E60; the Bin's homes with their kinds, working files as kinds, a sequence one tile; built in
+place wave by wave, C0 → C1–C3 → C4 → C6 → C5 with the spikes between, ≈ 8 weeks. Nothing built yet; C0 is next on the author's word.

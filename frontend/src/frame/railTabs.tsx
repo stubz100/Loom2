@@ -8,7 +8,7 @@ export interface RailTab { id: string; label: string; key?: string; icon: ReactN
 // D121 (proto01_animate 26 §5): each level's column — Clay composes the scene and its motion, Performance makes the moving picture,
 // Final finishes the composition; the Shot section heads all three
 const shot: RailTab = { id: 'shot', label: 'Shot', icon: <Clapperboard size={18} /> }
-const CLAY_RAIL: RailTab[] = [shot, { id: 'scene', label: 'Scene', icon: <Shapes size={18} /> },
+const CLAY_RAIL: RailTab[] = [{ id: 'scene', label: 'Scene', icon: <Shapes size={18} /> },   // C1 (D181): no Shot section — the scene and its shot are Clay's header
   { id: 'motion', label: 'Motion', icon: <PersonStanding size={18} /> }, { id: 'camera', label: 'Camera', icon: <Camera size={18} /> }]
 const PERFORMANCE_RAIL: RailTab[] = [shot, { id: 'performance', label: 'Performance', icon: <Aperture size={18} /> },
   { id: 'clips', label: 'Clips', icon: <Film size={18} /> }]   // AW3: a clip's details under its row, as a layer's at Final and a thing's at Clay

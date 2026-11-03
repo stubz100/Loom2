@@ -1,5 +1,7 @@
 // P13 / ST1 (D81): the Stage suite's verbs — every one has a mouse home (the gizmo bar, the panel, the Inspector, the viewport's
 // right-click menu) per D32; G / R / S / W, F, Delete, Ctrl+Z / Ctrl+Shift+Z are accelerators.
+import { Hammer } from 'lucide-react'
+import { faceCamera, landing } from './placement'
 import { Aperture, BookmarkPlus, Box, FlaskConical, Hand, MapPin, PersonStanding, Pin, PinOff, PictureInPicture2, Sun, UserRound, UserX, Camera, Clapperboard, Copy, Crosshair, Diamond, Eye, EyeOff, Focus, Frame, Grid3x3, ImagePlus, Layers, Pencil, Lock, LockOpen, Magnet, Move3d, MousePointer2, Play, Plus, Redo2, Rotate3d, Route, Scaling, Trash2, Undo2, User, Video, X } from 'lucide-react'
 import { registerCommands, sep, type Command, type MenuItem } from '../../frame/commands'
 import { askConfirm, askText, useSession } from '../../store/session'
@@ -21,12 +23,17 @@ export const viewport: { centre?: () => number[]; freePose?: () => { pos: number
   snapshot?: (id: string) => Promise<Blob | null>                                                       // CW3: one object alone, for Prototype ▸
   handPreset?: (id: string, side: 'r' | 'l', preset: HandPreset) => Record<string, number[]> | null } = {}   // CA1: the mounted viewport's Detailed figures
 
+/** C1 (F35, P7): where ＋ puts a thing — on the floor in the active camera's frame, beside what stands there; else the viewport's centre. */
+export const landAt = (): number[] => { const s = st(); return landing(s.activeCamera() ?? null, s.current?.objects ?? [], viewport.centre?.() ?? [0, 0, 0]) }
+/** C1: a figure added faces the active camera (undefined without one). */
+export const yawAt = (p: number[]): number | undefined => { const cam = st().activeCamera(); return cam ? faceCamera(p, cam.pos) : undefined }
+
 const tool = (id: Tool, label: string, icon: typeof MousePointer2, key: string): Command => ({
   id: `stage.tool.${id}`, scope: 'stage', label, icon, keys: key, placement: ['toolbar', 'context'], when: hasStage, run: () => st().setTool(id),
 })
 const addCmd = (kind: Kind, preset: string, label: string, icon: typeof Box): Command => ({
   id: `stage.add.${kind}.${preset}`, scope: 'stage', label, icon, placement: ['panel', 'context'], when: hasStage,
-  run: () => { st().addObject(kind, preset, viewport.centre?.() ?? [0, 0, 0]) },
+  run: () => { const p = landAt(); st().addObject(kind, preset, p, null, kind === 'mannequin' ? yawAt(p) : undefined) },   // C1: on the floor in the camera's frame, facing it
 })
 
 /** D125 (A3): the version Animate's For chip names (read from Story's shots), or undefined. */
@@ -181,6 +188,13 @@ registerCommands([
   // D121: Performance › Final shot's foot — the newest final's next step (make it, the plate, each character, assemble, compose, open in Final)
   { id: 'stage.final.next', scope: 'stage', label: "The final shot's next step", icon: Layers, placement: ['panel'], when: () => !!nextFinalStep(st().current?.id ?? null).run,
     run: () => nextFinalStep(st().current?.id ?? null).run?.() },
+  // C1 (D181, 26 §2): Build | Record — the mode pill over the viewport; Stand it here — the floor's right-click puts the selection there
+  { id: 'stage.mode.build', scope: 'stage', label: 'Build', icon: Hammer, placement: ['toolbar'], when: hasStage, run: () => st().setMode('build'),
+    hint: 'arrange the scene — the outliner, the gizmos, the pose and camera tools' },
+  { id: 'stage.mode.record', scope: 'stage', label: 'Record', icon: Video, placement: ['toolbar'], when: () => hasStage() && !!st().activeCamera(), run: () => st().setMode('record'),
+    hint: "the scene through the shot's camera over its range, nothing else on screen: capture a still, render the passes" },
+  { id: 'stage.object.standHere', scope: 'stage', label: 'Stand it here', icon: MapPin, placement: ['context'], hint: 'the selected thing moved to where you right-clicked on the floor',
+    when: () => !!sel() && !sel()!.locked && !!st().menuAt, run: () => { const o = sel(), at = st().menuAt; if (o && at) st().setTransform(o.id, { ...o.transform, pos: [at[0], at[1], at[2]] }) } },
   { id: 'stage.undo', scope: 'stage', label: 'Undo', icon: Undo2, keys: 'Ctrl+Z', placement: ['toolbar', 'context'], when: () => st().undo.length > 0, run: () => st().undoEdit() },
   { id: 'stage.redo', scope: 'stage', label: 'Redo', icon: Redo2, keys: 'Ctrl+Shift+Z', placement: ['toolbar', 'context'], when: () => st().redo.length > 0, run: () => st().redoEdit() },
 ])
@@ -223,7 +237,7 @@ export function viewportMenu(onObject: boolean): MenuItem[] {
       ...(sel()?.kind === 'set' && sel()?.profile_id ? [{ cmd: 'stage.figure.openInCast' }, { cmd: 'stage.set.things' }] : []),   // CW7: a bound set's way to its place; D180: its things
       ...(sel()?.kind === 'set' && sel()?.preset === 'image' ? [{ cmd: 'stage.set.toPlace' }] : []),
       { cmd: 'stage.anim.keyObject' }, sep, { cmd: 'stage.object.delete' }, sep, { cmd: 'stage.undo' }, { cmd: 'stage.redo' }]
-    : [addMenu(), { cmd: 'stage.add.plane' }, { cmd: 'stage.camera.add' }, { cmd: 'stage.camera.setFromView' }, cameraShotItem(), sep, { cmd: 'stage.tool.select' }, { cmd: 'stage.tool.move' }, { cmd: 'stage.tool.rotate' }, { cmd: 'stage.tool.scale' }, { cmd: 'stage.tool.path' }, { cmd: 'stage.snap' }, sep, { cmd: 'stage.frameAll' }, sep,
+    : [{ cmd: 'stage.object.standHere' }, sep, addMenu(), { cmd: 'stage.add.plane' }, { cmd: 'stage.camera.add' }, { cmd: 'stage.camera.setFromView' }, cameraShotItem(), sep, { cmd: 'stage.tool.select' }, { cmd: 'stage.tool.move' }, { cmd: 'stage.tool.rotate' }, { cmd: 'stage.tool.scale' }, { cmd: 'stage.tool.path' }, { cmd: 'stage.snap' }, sep, { cmd: 'stage.frameAll' }, sep,
       { cmd: 'stage.shot.passes' }, { cmd: 'stage.shot.generate' }, sep, { cmd: 'stage.anim.keyCamera' }, { cmd: 'stage.anim.removeKey' }, { cmd: 'stage.clip.guide' }, { cmd: 'stage.clip.animate' }, sep,
       { cmd: 'stage.undo' }, { cmd: 'stage.redo' }, sep, { label: 'Stage', icon: Frame, items: [{ cmd: 'stage.rename' }, { cmd: 'stage.delete' }, sep, { cmd: 'stage.new' }] }]
 }

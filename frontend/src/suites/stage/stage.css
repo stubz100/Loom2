@@ -164,7 +164,7 @@
 .rig-strip { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-bottom: 6px; }
 .rig-strip button { font-size: 11px; padding: 2px 7px; min-height: 22px; }
 /* D121: the pose pill — pose mode by the selected figure (ArtCraft's Enter Pose Mode / Done), centred over the viewport's top */
-.pose-pill { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; padding: 4px; background: color-mix(in srgb, var(--bg1) 85%, transparent); border: 1px solid var(--line); border-radius: var(--radius); backdrop-filter: blur(4px); }
+.pose-pill { position: absolute; left: 50%; top: 48px; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; padding: 4px; background: color-mix(in srgb, var(--bg1) 85%, transparent); border: 1px solid var(--line); border-radius: var(--radius); backdrop-filter: blur(4px); }
 .pose-pill .cmd-btn.active { border-color: var(--accent); color: var(--accent); }
 /* D121: Performance's Stage clip card */
 .stage-clip .start-stills { margin-bottom: 4px; }
@@ -228,3 +228,14 @@
 .final-section .chip.identity.low { border-color: var(--warn); color: var(--warn); }
 .final-section .chip.window { font-size: 10px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--line2); color: var(--fg2); }   /* D163: performed in its own window */
 .final-section .final-layers .matte-strays { padding: 0 6px; font-size: 11px; line-height: 16px; border-color: var(--warn, #d29922); color: var(--warn, #d29922); }   /* D163: the matte check */
+/* C1 (D181, 26 §2): ArtCraft's Build | Record over the viewport; Record's bar; the selected thing's editor in the Inspector */
+.mode-pill { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); display: flex; align-items: center; gap: 2px; padding: 3px; background: color-mix(in srgb, var(--bg1) 85%, transparent); border: 1px solid var(--line); border-radius: var(--radius); z-index: 2; }
+.mode-pill .cmd-btn.active { border-color: var(--accent); color: var(--accent); }
+.record-bar { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: color-mix(in srgb, var(--bg1) 85%, transparent); border: 1px solid var(--line); border-radius: var(--radius); z-index: 2; }
+.sel-editor { cursor: default; }
+.sel-editor.stage-insp h4 { margin-top: 2px; }
+.sel-facts { display: grid; gap: 4px; }
+.sel-facts h4 { margin: 2px 0; }
+/* C1: the column's rows never wider than the column (the hands' grid pushed a scrollbar under it) */
+.stage-panel .kv, .stage-insp .kv { grid-template-columns: 76px minmax(0, 1fr); }
+.stage-panel .lib-grid.hands { min-width: 0; flex-wrap: wrap; }

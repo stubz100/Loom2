@@ -816,8 +816,8 @@ test('a stage (P13 / ST1, D81): a new stage gets a set and a figure from the Lib
   await section(page, 'scene')
   await expect(page.locator('.outl-row[data-row="object"]')).toHaveCount(2)                                              // D119 (SC1): one outliner — the stage, the objects, the cameras
   await expect(page.locator('.outl-row[data-row="camera"]')).toHaveCount(1)
-  await expect(page.locator('.outl-row.active .name')).toHaveText('Figure 1')                                            // the last added is selected; its editor under its row
-  await expect(page.locator('.w-panel .stage-insp h4')).toContainText('Figure 1')
+  await expect(page.locator('.outl-row.active .name')).toHaveText('Figure 1')                                            // the last added is selected; its editor in the Inspector (C1)
+  await expect(page.locator('.w-insp .stage-insp h4')).toContainText('Figure 1')
   await expect.poll(async () => (await api<{ items: { name: string; revision: number; objects: { kind: string }[] }[] }>('GET', '/stages')).items.find((s) => s.name === 'Alley at night')?.objects.length ?? 0, { timeout: 10_000 }).toBe(2)
   const before = (await api<{ items: { id: string; name: string; revision: number }[] }>('GET', '/stages')).items.find((s) => s.name === 'Alley at night')!
   expect(before.revision).toBeGreaterThanOrEqual(1)
@@ -835,17 +835,17 @@ test('a stage (P13 / ST1, D81): a new stage gets a set and a figure from the Lib
   await expect(page.locator('.outl-row[data-row="object"]')).toHaveCount(2)
   // D119 (SC1): the camera is an object — its row opens its editor and its body in the free view is clicked to select it
   await page.locator('.outl-row[data-row="camera"]').first().click()
-  await expect(page.locator('.outl-row[data-row="camera"].active .row-editor h4')).toContainText('Camera 1')
-  await page.locator('.outl-row[data-row="camera"] .name').first().click()                                               // again (on its name: the editor is part of the row): closed
-  await expect(page.locator('.row-editor')).toHaveCount(0)
+  await expect(page.locator('.w-insp .sel-editor h4')).toContainText('Camera 1')                                          // C1: its editor in the Inspector
+  await page.locator('.outl-row[data-row="camera"] .name').first().click()                                               // again: deselected, the Inspector shows the scene's facts
+  await expect(page.locator('.sel-editor')).toHaveCount(0)
   await page.locator('.outl-row[data-row="stage"]').click()
-  await expect(page.locator('.outl-row[data-row="stage"] .row-editor')).toContainText('the project format')
+  await expect(page.locator('.w-insp .sel-editor')).toContainText('the project format')
   const camId = (await api<{ items: { name: string; cameras: { id: string }[] }[] }>('GET', '/stages')).items.find((s) => s.name === 'Alley at night')!.cameras[0].id
   await page.locator('canvas.stage-canvas').hover()
   const at = await page.evaluate((id) => (window as unknown as { __loom2Stage: { cameraScreen: (id: string) => { x: number; y: number } | null } }).__loom2Stage.cameraScreen(id), camId)
   expect(at).not.toBeNull()
   await page.mouse.click(at!.x, at!.y)
-  await expect(page.locator('.outl-row[data-row="camera"].active .row-editor h4')).toContainText('Camera 1')
+  await expect(page.locator('.w-insp .sel-editor h4')).toContainText('Camera 1')
   // the rotate tool after a camera (the author, 2026-10-22: it moved the object instead): the object's gizmo follows the tool
   const mode = () => page.evaluate(() => (window as unknown as { __loom2Stage: { gizmoMode: () => string } }).__loom2Stage.gizmoMode())
   await page.locator('button.cmd-btn[aria-label^="Rotate"]').first().click()
@@ -1054,8 +1054,8 @@ test('a clip (P13 / ST4, D81): the camera is keyed on the timeline, the depth se
   await page.mouse.click(box.x + 60, box.y + box.height - 40)                                                // empty floor, bottom-left (the gizmo bar sits top-left; toasts bottom-right, over the viewport since AN1): nothing selected, Selection shows the camera
   await section(page, 'scene')
   await page.locator('.outl-row[data-row="camera"]').first().click()                                        // D119 (SC1): the camera's editor under its row
-  await expect(page.locator('.w-panel .stage-insp h4', { hasText: 'Camera 1' })).toBeVisible()            // D95 (AN1): Selection shows the stage, then its active camera
-  const z = page.locator('.w-panel .stage-insp .vec input').nth(2)                                           // the camera's position z
+  await expect(page.locator('.w-insp .stage-insp h4', { hasText: 'Camera 1' })).toBeVisible()            // D95 (AN1): Selection shows the stage, then its active camera
+  const z = page.locator('.w-insp .stage-insp .vec input').nth(2)                                           // the camera's position z
   await z.fill('2'); await z.dispatchEvent('change')
   const rangeEnd = tl.locator('.range-field input').nth(1)
   await rangeEnd.fill('8'); await rangeEnd.dispatchEvent('change')
@@ -1161,7 +1161,7 @@ test('a 3D prop (P18, D84): "Make a 3D prop…" on a tile says its cost, the fak
   await clayShot(page, `Props ${Date.now().toString(36)}`)
   await expect(page.locator('canvas.stage-canvas')).toBeVisible()
   await libAdd(page, 'meshes', '3D model')                                                                // the Scene's Meshes + (proto01_UIcast CF9: named by source)
-  await expect(page.locator('.w-panel .stage-insp h4')).toContainText('Mesh 1')
+  await expect(page.locator('.w-insp .stage-insp h4')).toContainText('Mesh 1')
   await expect.poll(() => page.evaluate(() => (window as unknown as { __loom2Stage: { meshes: () => { loaded: string[]; failed: Record<string, string> } } }).__loom2Stage.meshes().loaded.length), { timeout: 15_000 }).toBe(1)
   await expect.poll(async () => (await api<{ params: { thumb_source?: string } }>('GET', `/assets/${m.id}`)).params.thumb_source, { timeout: 15_000 }).toBe('client')   // the viewport's fitted view became the thumbnail
   await page.screenshot({ path: 'node_modules/.e2e/stage-prop.png' })
@@ -1216,7 +1216,7 @@ test('a prop (D110 PS1–PS2, D125): Cast\'s props class lists the props (the ol
   // PS3: Animate's library lists the prop; a click places its model bound to the prop; the viewport loads it; the Outliner names the prop
   await clayShot(page, 'Props scene')
   await libAdd(page, 'props', name)                                                                        // the Scene's Props +
-  await expect(page.locator('.w-panel .stage-insp h4')).toContainText(name)
+  await expect(page.locator('.w-insp .stage-insp h4')).toContainText(name)
   await expect(page.locator('.stage-insp [aria-label="the mesh\'s prop"] button[aria-pressed="true"]')).toHaveAttribute('aria-label', name)
   await expect.poll(() => page.evaluate(() => (window as unknown as { __loom2Stage: { meshes: () => { loaded: string[] } } }).__loom2Stage.meshes().loaded.length), { timeout: 15_000 }).toBe(1)
   await expect(page.locator('.outl-row .bound-tag', { hasText: name })).toBeVisible()
@@ -2709,7 +2709,7 @@ test('a body on the Cast sheet (CA0, 01 §9): height, build and an attachment sa
   await expect.poll(async () => (await grak())?.body?.height_m ?? null, { timeout: 15_000 }).toBe(2.4)
   await page.locator('#anim-sec-scene').scrollIntoViewIfNeeded()
   await page.locator('.outl-row[data-row="object"]').filter({ has: page.locator('.name', { hasText: /^Grak$/ }) }).click()
-  await expect(page.locator('.outl-row[data-row="object"].active .row-editor')).toContainText('from Cast — 2.40 m · heavy · horns')   // D119 (SC1): the figure's editor under its row
+  await expect(page.locator('.w-insp .sel-editor')).toContainText('from Cast — 2.40 m · heavy · horns')   // D119 (SC1) → C1: the figure's editor in the Inspector
   await page.evaluate(async (id) => { await (window as unknown as { __loom2Stage: { open: (id: string) => Promise<void> } }).__loom2Stage.open(id) }, st.id)   // reopened: the body stays
   await page.waitForTimeout(500)
   await page.screenshot({ path: 'node_modules/.e2e/ca0-body-stage.png' })                  // a look for the journal: the ogre beside nothing, 2.4 m
@@ -3069,7 +3069,7 @@ test('a set from an image (D120, SC3): a Bin picture becomes a relief set on the
   await expect(cam).toHaveCount(1)
   await expect(cam).toHaveClass(/cam-active/)                                                                                 // the picture's camera is the active one
   await row.locator('.name').click()
-  const editor = page.locator('.row-editor.stage-insp')
+  const editor = page.locator('.sel-editor.stage-insp')
   await expect(editor).toContainText(/° wide · Picture camera/)                                                               // the default lens: the fake's relief has no UVs
   await expect(editor.locator('[data-budget]')).toHaveAttribute('data-budget', 'within')
   await expect(editor.locator('[data-level]')).toHaveText(/^as it came/)                                                     // SC3d: no floor to lay it level by
@@ -3091,9 +3091,9 @@ test('a set from an image (D120, SC3): a Bin picture becomes a relief set on the
   expect(l0.backdrop!.z).toBeLessThan(0); expect(Math.abs(l0.backdrop!.w / l0.backdrop!.h - plate.w / plate.h)).toBeLessThan(0.01)   // behind the picture camera, the picture's shape
   // the lens corrected and the set rebuilt in place: the same set, a new relief, the camera's focal following
   await row.locator('.name').click()                                                                                       // its row again (Look through selected the camera)
-  const lensField = page.locator('.row-editor.stage-insp input[aria-label="the picture\'s lens"]')
+  const lensField = page.locator('.sel-editor.stage-insp input[aria-label="the picture\'s lens"]')
   await expect(lensField).toHaveValue('60')
-  const rebuild = page.locator('.row-editor.stage-insp button', { hasText: /^Rebuild with this lens/ })
+  const rebuild = page.locator('.sel-editor.stage-insp button', { hasText: /^Rebuild with this lens/ })
   await expect(rebuild).toBeDisabled()                                                                                      // nothing to change yet
   await lensField.fill('75')
   await rebuild.click()
@@ -3152,7 +3152,7 @@ test('the things of a picture set (D123, SC3c): picked on the picture, kept by n
   await clayOn(page, stg.id, name)
   await section(page, 'scene')
   const row = page.locator('.outl-row[data-row="object"]', { has: page.locator('.kind', { hasText: 'set' }) })
-  const editor = page.locator('.row-editor.stage-insp')
+  const editor = page.locator('.sel-editor.stage-insp')
   const openRow = async () => { if (!(await editor.locator('.set-things').isVisible())) await row.locator('.name').click(); await expect(editor.locator('.set-things')).toBeVisible() }
   await openRow()
   await expect(editor.locator('.set-things')).toContainText('none picked')
@@ -3264,7 +3264,7 @@ test('the one timeline and transport (D121 AW2): Clay keys the camera on its row
   expect(await hook()).not.toBeNull()
   // the PiP's cost on a busier stage (a room, three figures, a stand-in): the viewport's frame time without and with it (CPU and GPU, Edge's ANGLE)
   await libAdd(page, 'sets', 'room'); await libAdd(page, 'figures', 'Adult'); await libAdd(page, 'figures', 'Child'); await libAdd(page, 'standins', 'crate')
-  await page.locator('#anim-sec-shot .col-sec-head').click()
+  await page.locator('#anim-sec-scene .col-sec-head').click()                                              // C1: Clay's column has no Shot section
   const ms = await page.evaluate(() => { const h = (window as unknown as { __loom2Stage: { frameTime: (n: number, on: boolean) => number } }).__loom2Stage; h.frameTime(10, true); return [h.frameTime(60, false), h.frameTime(60, true), h.frameTime(60, false), h.frameTime(60, true)] })
   console.log(`[aw4] viewport frame time (headless Edge, the median of five batches of 60, twice): ${ms[0].toFixed(3)} / ${ms[2].toFixed(3)} ms without the PiP, ${ms[1].toFixed(3)} / ${ms[3].toFixed(3)} ms with it`)
   expect(Math.min(ms[1], ms[3])).toBeLessThan(Math.max(ms[0], ms[2]) * 1.5 + 0.5)                       // a loose bound here; the 20 % bar is judged on the numbers
@@ -3563,17 +3563,17 @@ test('a prop held in a hand (D129 · HP1): a prop goes into a figure\'s right ha
   await expect.poll(async () => (await world())!.pos[0], { timeout: 10_000 }).toBeLessThan(0)          // at Mara's right hand (her right is −x), no longer at 1.5
   const low = (await world())!.pos[1]
   await page.locator('.outl-row[data-row="object"]').filter({ has: page.locator('.name', { hasText: 'Mara' }) }).click()
-  await page.locator('.row-editor select').filter({ has: page.locator('option[value="wave"]') }).first().selectOption('wave')
+  await page.locator('.sel-editor select').filter({ has: page.locator('option[value="wave"]') }).first().selectOption('wave')
   await expect.poll(async () => (await world())!.pos[1] - low, { timeout: 10_000 }).toBeGreaterThan(0.5)   // up with the waving hand
   await cupRow.click()
-  await expect(page.locator('.row-editor [data-held]')).toContainText("Mara's right hand")
+  await expect(page.locator('.sel-editor [data-held]')).toContainText("Mara's right hand")
   const at = (await world())!.pos
-  await page.locator('.row-editor [data-held] button', { hasText: 'Take it out of the hand' }).click()            // the Inspector's (also under Hold in a hand ▸)
+  await page.locator('.sel-editor [data-held] button', { hasText: 'Take it out of the hand' }).click()            // the Inspector's (also under Hold in a hand ▸)
   await expect.poll(async () => (await api<StageLite>('GET', `/stages/${st0.id}`)).objects.find((x) => x.id === 'prop_c')!.parent_joint, { timeout: 10_000 }).toBeNull()
   const out = (await api<StageLite>('GET', `/stages/${st0.id}`)).objects.find((x) => x.id === 'prop_c')!.transform.pos
   out.forEach((v, i) => expect(Math.abs(v - at[i])).toBeLessThan(0.01))                                 // where it was in the hand
   // proto01_UIcast CB4: any object as a parent — the Cup picks Mara and stays where it stands, then moves with her
-  await page.locator('.row-editor select').filter({ has: page.locator('option[value="fig_m"]') }).first().selectOption('fig_m')
+  await page.locator('.sel-editor select').filter({ has: page.locator('option[value="fig_m"]') }).first().selectOption('fig_m')
   await expect.poll(async () => (await api<StageLite>('GET', `/stages/${st0.id}`)).objects.find((x) => x.id === 'prop_c')!.parent, { timeout: 10_000 }).toBe('fig_m')
   const kept = (await world())!.pos
   kept.forEach((v, i) => expect(Math.abs(v - out[i])).toBeLessThan(0.01))                                // no jump

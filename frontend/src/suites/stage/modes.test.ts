@@ -20,7 +20,7 @@ const lay = (id: string, kind: string, status: string, done = 0): Lay => ({ id, 
 
 describe('D121: a level is a mode', () => {
   it('gives each level its own column sections', () => {
-    expect(DEFAULT_RAIL.stage.map((t) => t.id)).toEqual(['shot', 'scene', 'motion', 'camera'])
+    expect(DEFAULT_RAIL.stage.map((t) => t.id)).toEqual(['scene', 'motion', 'camera'])                       // C1 (D181): the scene and its shot are Clay's header
     expect(DEFAULT_RAIL.animate.map((t) => t.id)).toEqual(['shot', 'performance', 'clips'])                 // AW3: a clip's details under its row
     expect(DEFAULT_RAIL.final.map((t) => t.id)).toEqual(['shot', 'layers', 'output'])
   })
@@ -44,6 +44,19 @@ describe('D121: pose mode by the figure', () => {
     expect(useStage.getState()).toMatchObject({ posing: false, selectedJoint: null })
     st().select('fig_1'); st().setPosing(true); st().selectCamera('cam_1')
     expect(useStage.getState().posing).toBe(false)
+  })
+})
+
+describe('C1 (D181): Build | Record', () => {
+  beforeEach(() => useStage.setState({ current: DOC, selected: null, selectedJoint: null, posing: false, selectedCamera: null, stageSelected: false, mode: 'build', view: 'free' }))
+  afterEach(() => useStage.setState({ current: null, selected: null, selectedJoint: null, posing: false, mode: 'build', view: 'free' }))
+  it("Record looks through the camera with nothing picked and keeps that view; Build frees it again", () => {
+    st().select('fig_1'); st().setPosing(true); st().setMode('record')
+    expect(useStage.getState()).toMatchObject({ mode: 'record', view: 'camera', posing: false, selected: null, tool: 'select' })
+    st().setView('free')
+    expect(useStage.getState().view).toBe('camera')
+    st().setMode('build'); st().setView('free')
+    expect(useStage.getState()).toMatchObject({ mode: 'build', view: 'free' })
   })
 })
 

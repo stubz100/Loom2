@@ -2,6 +2,7 @@
 // chips. Each preset is a small icon tile; its words live in the tooltip and the accessible name, and a section may show them under the
 // tiles when the reader asks (`showText`). D92: no lettered tiles — every item carries a drawn glyph (`icon`, required); a picture (`img`)
 // covers it when there is one, and `busy` marks a tile whose picture is being made (the glyph shows meanwhile).
+import { beginDrag } from './drag'
 import type { ReactNode } from 'react'
 import './presetIcons.css'
 
@@ -24,9 +25,10 @@ interface Props {
   size?: number                                   // tile size in px (40 by default; styles use 48)
   showText?: boolean
   label?: string                                  // the group's accessible name
+  drag?: (id: string) => import('./drag').DragPayload | null   // C1: a tile dragged (onto a viewport, by raycast) — the payload, or null for a tile that only picks
 }
 
-export function PresetIcons({ items, selected, onPick, onContext, size = 40, showText = false, label }: Props) {
+export function PresetIcons({ items, selected, onPick, onContext, size = 40, showText = false, label, drag }: Props) {
   const sel = new Set(Array.isArray(selected) ? selected : selected ? [selected] : [])
   return (
     <div className={`preset-icons${showText ? ' with-text' : ''}`} role="group" aria-label={label} style={{ '--tile': `${size}px` } as React.CSSProperties}>
@@ -35,7 +37,8 @@ export function PresetIcons({ items, selected, onPick, onContext, size = 40, sho
         return (
           <button key={p.id} type="button" className={`preset-icon${on ? ' active' : ''}${p.img ? ' img' : ' glyph'}${p.busy ? ' busy' : ''}`} aria-pressed={on} disabled={p.disabled}
             title={[p.label, p.hint, p.busy ? 'its picture is being made…' : ''].filter(Boolean).join('\n')} aria-label={p.label} data-id={p.id}
-            onClick={(e) => onPick(p.id, e)} onContextMenu={onContext ? (e) => { e.preventDefault(); onContext(p.id, e) } : undefined}>
+            onClick={(e) => onPick(p.id, e)} onContextMenu={onContext ? (e) => { e.preventDefault(); onContext(p.id, e) } : undefined}
+            onPointerDown={drag ? (e) => { const pl = drag(p.id); if (pl) beginDrag(e, () => pl) } : undefined}>{/* C1: a tile dragged onto a viewport lands by raycast; a plain click still picks */}
             <span className="tile">{p.img ? <img src={p.img} alt="" draggable={false} /> : p.icon}{p.busy && <i className="busy-mark" aria-hidden="true" />}{p.badge && <i className="badge-corner">{p.badge}</i>}</span>
             {showText && <span className="cap">{p.label}</span>}
           </button>

@@ -15905,3 +15905,28 @@ offline suite is not touched.
 (*Ready for a scene*); shot 1's scene opened from the Shots rail (*Cobbled street · 4.0 s · ← Shot*) and the way back landing on
 Performance. Seven screenshots sent. One lesson: the dev server's watcher missed files written by a script — its transform cache served
 the old `readiness.ts` until the files were touched; a from-scratch `page.goto` does not refresh a module Vite thinks unchanged.
+
+## 2026-11-03 16:27 — C1 built (D181, propo02 05): the editor's chrome — Build | Record, the outliner a list with the Inspector, things land in the camera's frame, tiles drop by raycast, Stand it here, keys on rows
+
+The second wave of D181, on Clay's scene editor (`StageParts.tsx`, `stageStore.ts`, `stageCommands.ts`, `placement.ts`). **Build | Record** is a
+pill over the viewport (ArtCraft's, 26 §2 rule 1): Record locks the view to the shot's camera (the free view, the gizmo bar, the pose pill and
+the PiP go; nothing is picked; the camera pill reads only) and offers *Capture a still ▸* (Image › From a stage) and *Render the passes ▶* in
+a bar at the foot of the picture; the animatic comes with C3. **The outliner is a list** (rule 3: one selected thing, one editor): the
+editors that sat under the rows — the stage's, a camera's, an object's — are the Inspector's (`SelectionInspector`, the third column of
+Clay's Scenes and of the Library's bench); nothing selected shows the scene's facts; a camera's row has its look-through ◉. **Where a thing
+lands** (P7, F35; `placement.ts`): the ＋ puts it on the floor where the active camera looks, no farther than 6 m out and no nearer than 1.5
+(the walk's camera was nearly level: its line of sight met the floor 23 m off, beyond the set's end), beside what already stands there in
+0.7 m steps to the camera's right then left, a figure facing the camera; a preset tile (a figure, a stand-in, a mesh) dragged out of its
+panel onto the viewport lands where the mouse points, by raycast (the frame's drag manager carries `preset` items now); *Stand it here* on
+the floor's right-click moves the selection there (and a set's floor under a right-click is the floor, not a thing to select — the walk's
+stray key on the set, P11). **Keys on rows** (P11): each timeline row has its ◆ at the label's end, keying that row's camera or object at
+the playhead. Clay's column has no Shot section (the scene and its shot are the layer's header; a bench or the line-up keeps its chip).
+
+**Seen on the walk's scene** (shot 1): two figures added in a row stood at z −16, 0.7 m apart, facing the camera; a tile dragged onto the
+pavement landed under the mouse facing the camera; *Stand it here* moved it onto the pavement (y 0.12); the camera row's ◆ keyed frame 24;
+Record emptied the viewport's chrome. The additions were undone and the scene is as the walk left it. Ten screenshots, seven sent.
+
+**Checks:** typecheck, build and lint clean (61 warnings, as before); Vitest 648 + 3 skipped (`placement.test.ts` new: the floor point,
+the spread, the facing, the dragged tile; `outliner.test.tsx` and `modes.test.ts` re-cut to the Inspector and Clay's three sections);
+agents check 9 / 0. **The e2e is ported** (the editors in `.w-insp .sel-editor`, no Shot section in Clay) **and still not run:** port 1420
+is the author's dev server's. No orchestrator change.

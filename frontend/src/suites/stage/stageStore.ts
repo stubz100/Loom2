@@ -64,10 +64,10 @@ function withModel(o: StageObject): StageObject {
   return h !== undefined && h !== next.height_m ? { ...next, height_m: h } : next
 }
 /** A new object of a kind with every field at its default (a figure standing, its Detailed mannequin; a light aimed ahead). */
-function newObject(cur: StageDoc, kind: Kind, preset: string | null = null, pos?: number[], assetId: string | null = null): StageObject {
+function newObject(cur: StageDoc, kind: Kind, preset: string | null = null, pos?: number[], assetId: string | null = null, yaw = 0): StageObject {
   const scale = kind === 'mannequin' ? (MANNEQUIN_PRESETS[preset ?? 'adult']?.scale ?? 1) : 1
   return { id: newId(kind === 'mannequin' ? 'fig' : kind), kind, name: `${NAMES[kind] ?? kind} ${cur.objects.filter((o) => o.kind === kind).length + 1}`, preset, asset_id: assetId,
-    transform: { pos: pos ?? [0, 0, 0], rot: [0, 0, 0], scale: [scale, scale, scale] }, parent: null, parent_joint: null,
+    transform: { pos: pos ?? [0, 0, 0], rot: [0, yaw, 0], scale: [scale, scale, scale] }, parent: null, parent_joint: null,
     locked: false, visible: true, colour_id: (cur.objects.length % 12) + 1, pose: kind === 'mannequin' ? { preset: 'stand', joints: {}, extra: {}, ground: 0, pins: {}, contacts: {}, gaze: null } : null, billboard: kind === 'plane', profile_id: null, version: null, body: null, detail: kind === 'mannequin' ? newDetail(cur.objects) : null, path: null, shadow_proxy: null,
     light: kind === 'light' ? { ...NEW_LIGHT, target: [...NEW_LIGHT.target] } : null,
     lens_deg: null, plate_asset_id: null, floor_y: null, plate_camera_id: null, level: null, things: [], things_document_id: null, height_m: null, place_set: null }
@@ -164,6 +164,9 @@ interface StageState {
   view: View
   guides: boolean
   pip: boolean                                              // D121 (AW4): the active camera's picture-in-picture in the free view
+  mode: 'build' | 'record'                                  // C1 (D181): Build edits; Record locks the view to the shot's camera and hides the chrome
+  setMode: (mode: 'build' | 'record') => void
+  menuAt: number[] | null                                   // C1: where the viewport's last right-click hit the floor (Stand it here)
   undo: StageDoc[]; redo: StageDoc[]
   saving: boolean
   frameRequest: { ids: string[] | null; n: number }         // the viewport frames these (null = everything) when n changes
@@ -299,7 +302,7 @@ interface StageState {
   setView: (v: View) => void
   setGuides: (on: boolean) => void
   setPip: (on: boolean) => void
-  addObject: (kind: Kind, preset?: string | null, pos?: number[], assetId?: string | null) => string | null
+  addObject: (kind: Kind, preset?: string | null, pos?: number[], assetId?: string | null, yaw?: number) => string | null   // C1: `yaw` — a figure added faces the camera
   /** CW7 (02 §9): a Cast place's set on the stage, bound (it follows Cast); selected when it is already there. */
   placePlace: (profileId: string) => string | null
   /** D180 (W60): a placed Cast set's things that move, each added as an object of its own (those not on the stage yet); how many. */
@@ -343,7 +346,7 @@ interface StageState {
   /** CW5: every figure on the stage takes a preset at once (the line-up's *Pose all ▸*). */
   poseAll: (preset: string) => void
   /** CW3 (02 §9): a Cast character's figure at a point — its figure selected when it is already here (one per character). */
-  placeCharacter: (profileId: string, pos?: number[]) => void
+  placeCharacter: (profileId: string, pos?: number[], yaw?: number) => void
   /** CW3 (06 §2.7): a bound figure or mesh copied beside it, free — its body and shell, or its model and height, as they are now. */
   freeCopy: (id: string) => void
   /** CW3 (06 §2.7): *Prototype ▸* on a free figure or mesh — a new idea in Cast, Clay's view of it as its picture, the object as its clay. */
@@ -464,7 +467,7 @@ async function putPoses(poses: Record<string, PoseDef>, set: (p: Partial<StageSt
 }
 
 export const useStage = create<StageState>()((set, get) => ({
-  stages: [], current: null, selected: null, selectedCamera: null, stageSelected: false, posing: false, tool: 'select', snap: false, view: 'free', guides: true, pip: true, undo: [], redo: [], saving: false,
+  stages: [], current: null, selected: null, selectedCamera: null, stageSelected: false, posing: false, tool: 'select', snap: false, view: 'free', guides: true, pip: true, mode: 'build', menuAt: null, undo: [], redo: [], saving: false,
   frameRequest: { ids: null, n: 0 }, selectedJoint: null, userPoses: {}, posesRevision: 0, templates: [], pendingSet: null,
   shot: DEFAULT_SHOT, shotPreview: null, shotPreviewError: null, rendering: false, shots: [], passRenderer: null, worldOf: null,
   frame: 0, playing: false, guideKind: 'depth', clipMethod: 'guided', shotStart: null, rendered: null, sequenceRenderer: null, depthRanger: null, plateProjector: null,
@@ -907,14 +910,15 @@ export const useStage = create<StageState>()((set, get) => ({
   },
   setTool: (tool) => set({ tool }),
   setSnap: (snap) => set({ snap }),
-  setView: (view) => set({ view }),
+  setView: (view) => set(get().mode === 'record' ? { view: 'camera' } : { view }),   // C1: Record stays through the camera
   setGuides: (guides) => set({ guides }),
   setPip: (pip) => set({ pip }),
+  setMode: (mode) => { if (mode === 'record') { set({ mode, view: 'camera', posing: false, selectedJoint: null, tool: 'select', selected: null, selectedCamera: null, stageSelected: false }); return } set({ mode }) },   // C1: Record is the camera's view, nothing picked
 
-  addObject: (kind, preset = null, pos, assetId = null) => {
+  addObject: (kind, preset = null, pos, assetId = null, yaw) => {
     const cur = get().current
     if (!cur) return null
-    const o = newObject(cur, kind, preset, pos, assetId)
+    const o = newObject(cur, kind, preset, pos, assetId, yaw)
     get().apply((d) => ({ ...d, objects: [...d.objects, o] }), 'add')
     set({ selected: o.id })
     return o.id
@@ -1103,10 +1107,10 @@ export const useStage = create<StageState>()((set, get) => ({
     useSession.getState().toast(`${added.length} from the line-up in ${d.name}`, 'success')
   },
   poseAll: (preset) => { for (const o of get().current?.objects ?? []) if (o.kind === 'mannequin') get().applyPose(o.id, preset) },
-  placeCharacter: (profileId, pos) => {
+  placeCharacter: (profileId, pos, yaw) => {
     const here = get().current?.objects.find((o) => o.kind === 'mannequin' && o.profile_id === profileId)
     if (here) { get().select(here.id); return }
-    const id = get().addObject('mannequin', 'adult', pos)
+    const id = get().addObject('mannequin', 'adult', pos, null, yaw)
     if (!id) return
     get().bindFigure(id, profileId)                                                       // M8: the character's name with it, not "Figure 3"
   },

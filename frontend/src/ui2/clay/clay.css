@@ -1,6 +1,4 @@
-/* C0 (D181, propo02 04 §4.3): Clay — World's columns (rail, left column, centre, Inspector); Scenes has no Inspector (the editor's
-   selection is under its row, as Shots' Clay had it). */
-.c-layer.no-insp { grid-template-columns: 48px minmax(320px, 380px) 1fr; }
+/* C0 (D181, propo02 04 §4.3): Clay — World's columns (rail, left column, centre, Inspector); C1: the Inspector is the selected thing's editor. */
 .c-kinds { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 12px 0; }
 .c-kinds button { padding: 2px 8px; border-radius: 999px; font-size: 11px; background: var(--bg2); border: 1px solid var(--line2); color: var(--fg2); }
 .c-kinds button.active { border-color: var(--accent); color: var(--fg); }

@@ -26,7 +26,8 @@ import { MotionLibrary } from './motion/MotionLibrary'
 import { HAND_PRESETS, type HandPreset } from './detailed'
 import { useStageActive } from '../../frame/stageKeep'
 import { askConfirm, askText, useSession } from '../../store/session'
-import { ShotHead } from './ShotStepper'
+import { BenchChip } from './ShotStepper'
+import { presetDrop } from './placement'
 import { AnimColumn, Sec } from '../animate/column'
 import type { StageCamera, StageDoc, StageObject } from '../../api/types'
 import { keyedFrames as keyedFramesOf, keyframesOf, sampleCamera, sampleDoc } from './anim'
@@ -39,7 +40,7 @@ import { JOINTS, MANNEQUIN_PRESETS, POSE_NAMES, PROP_PRESETS, SET_PRESETS, type 
 import { ThingsSheet } from './ThingsSheet'
 import { useThings } from './thingsStore'
 import { StageEngine } from './engine'
-import { viewport, viewportMenu, cameraMenu } from './stageCommands'
+import { landAt, yawAt, viewport, viewportMenu, cameraMenu } from './stageCommands'
 import { canHold, descendsFrom, HAND_LABEL, holders } from './held'
 import { meshLabel, propMeshes } from './meshes'
 import { castPoses, effectiveJoints, st, TEMPLATE_KINDS, useStage, type ShotState, imageSetBudget } from './stageStore'
@@ -104,21 +105,22 @@ export function SceneTab() {
   const meshItems = propMeshes(meshes).slice(0, 48).map((m) => { const l = meshLabel(m, profiles, names); return { id: m.id, label: l.label, icon: <Box size={18} />, img: api.thumbUrl(m.id, 256), hint: l.hint } })   // proto01_UIcast CF9: named by source
   const tmpl = templates.map((t) => ({ id: t.name, label: t.name, icon: <LayoutTemplate size={18} />, hint: `${t.objects.length} object${t.objects.length === 1 ? '' : 's'}`, img: t.thumb_asset_id ? api.thumbUrl(t.thumb_asset_id, 256) : null }))
   const holds = current.objects.filter((o) => TEMPLATE_KINDS.has(o.kind)).length
-  const centre = () => viewport.centre?.() ?? [0, 0, 0]
+  const centre = () => landAt()                                                       // C1 (F35, P7): on the floor in the camera's frame, beside what stands there
+  const drag = (group: string) => (id: string) => ({ items: [{ kind: 'preset' as const, id: `${group}:${id}` }], label: 'Place it where the mouse points' })   // C1: a tile dragged onto the viewport lands by raycast
   const renameCam = (cam: StageCamera) => void askText({ title: 'Rename camera', initial: cam.name }).then((n) => { if (n?.trim()) st().updateCamera(cam.id, { name: n.trim() }) })
   const groups: { key: string; label: string; of: (o: StageObject) => boolean; add: React.ReactNode; help?: string }[] = [
     { key: 'figures', label: 'Figures', of: (o) => o.kind === 'mannequin',
-      add: <PresetPanel label="figure presets" items={figures} showText onPick={(id) => (id.startsWith('char:') ? st().placeCharacter(id.slice(5), centre()) : runCommand(`stage.add.mannequin.${id}`))}
-        title="A figure at the viewport's centre: a Cast character's (bound, it follows Cast) or a mannequin to pose" /> },
+      add: <PresetPanel label="figure presets" items={figures} showText drag={drag('figures')} onPick={(id) => (id.startsWith('char:') ? st().placeCharacter(id.slice(5), centre(), yawAt(centre())) : runCommand(`stage.add.mannequin.${id}`))}
+        title="A figure on the floor in the camera's frame, facing it — a Cast character's (bound, it follows Cast) or a mannequin to pose; drag a tile onto the viewport to put it where the mouse points" /> },
     { key: 'sets', label: 'Sets', of: (o) => o.kind === 'set',
       add: <><PresetPanel label="set presets" items={sets} showText onPick={(id) => (id.startsWith('place:') ? void st().placePlace(id.slice(6)) : runCommand(`stage.add.set.${id}`))}
         title="A set: a Cast place's (bound, it follows Cast) or architecture only — room, street, deck, empty (D108)" />
         <CommandButton id="stage.add.set.image" text label="From an image…" /></> },                                       /* SC3 (D120) */
     { key: 'props', label: 'Props', of: (o) => o.kind === 'mesh' && !!o.profile_id, add: <LibraryProps centre={centre} /> },      /* D110 (PS3): Story · Props, each its 3D model bound to the prop */
     { key: 'standins', label: 'Stand-ins', of: (o) => o.kind === 'prop', help: 'Grey shapes for blocking (D109).',
-      add: <PresetPanel label="stand-in presets" items={standins} showText onPick={(id) => runCommand(`stage.add.prop.${id}`)} title="A grey stand-in shape at the viewport's centre" /> },
+      add: <PresetPanel label="stand-in presets" items={standins} showText drag={drag('standins')} onPick={(id) => runCommand(`stage.add.prop.${id}`)} title="A grey stand-in shape on the floor in the camera's frame; drag a tile onto the viewport to put it where the mouse points" /> },
     { key: 'meshes', label: 'Meshes', of: (o) => o.kind === 'mesh' && !o.profile_id, help: `3D models not bound to a Cast prop, named by where they came from: a picture's "Make a 3D prop…", a picture set's thing, an imported GLB. A mesh's editor makes it a Cast prop.`,
-      add: <PresetPanel label="mesh models" items={meshItems} showText onPick={(id) => st().addObject('mesh', null, centre(), id)} empty="None yet — a picture's Make a 3D prop… lands here." title="A 3D model from the Bin at the viewport's centre" /> },
+      add: <PresetPanel label="mesh models" items={meshItems} showText drag={drag('meshes')} onPick={(id) => st().addObject('mesh', null, centre(), id)} empty="None yet — a picture's Make a 3D prop… lands here." title="A 3D model from the Bin, on the floor in the camera's frame; drag a tile onto the viewport to put it where the mouse points" /> },
     { key: 'lights', label: 'Lights', of: (o) => o.kind === 'light', add: <CommandButton id="stage.add.light" text /> },           /* D110 (PS4) */
     { key: 'planes', label: 'Image planes', of: (o) => o.kind === 'plane', help: "A picture from the Bin standing in the scene, facing the camera. Also from the Bin: drag an image onto the viewport (it lands where the pointer is), or double-click it there (the viewport's centre).",
       add: <CommandButton id="stage.add.plane" text label="Add image plane…" /> },
@@ -126,11 +128,10 @@ export function SceneTab() {
   return (
     <div className="stage-panel outliner scene" aria-label="the scene">
       <div className="head"><span className="hint">{current.objects.length} object{current.objects.length === 1 ? '' : 's'} · {current.cameras.length} camera{current.cameras.length === 1 ? '' : 's'}</span>
-        <Help text="Everything on the stage, one row each under its kind — the stage, the figures, the sets, the props, the lights, the cameras. Each kind's + adds one (its presets as tiles); click a row to edit the thing under it, again to close. A camera's row selects its body in the viewport and makes it the active camera; double-click looks through it." /></div>
+        <Help text="Everything on the stage, one row each under its kind — the stage, the figures, the sets, the props, the lights, the cameras. Each kind's + adds one (its presets as tiles; a tile dragged onto the viewport lands where the mouse points); click a row to select the thing — its editor is in the Inspector. A camera's row selects its body in the viewport and makes it the active camera; its ◉ (or a double-click) looks through it." /></div>
       <div className={`outl-row${stageSelected ? ' active' : ''}`} data-row="stage" onClick={() => (stageSelected ? st().select(null) : st().selectStage())}
         onDoubleClick={() => st().frameView(null)}>
         <Frame size={13} /><span className="name">{current.name}</span><span className="meta">{current.size.w}×{current.size.h} @ {current.size.fps}{saving ? ' · saving…' : ''}</span>
-        {stageSelected && <StageEditor />}
       </div>
       {groups.map((g) => {
         const rows = current.objects.filter(g.of)
@@ -151,7 +152,7 @@ export function SceneTab() {
             <span className="name" onDoubleClick={(e) => { e.stopPropagation(); renameCam(cam) }}>{cam.name}</span>
             {current.active_camera === cam.id && <span className="meta" title="The active camera: the one the shot renders through">★</span>}
             <span className="meta">{cam.focal_mm} mm</span>
-            {selectedCamera === cam.id && <CameraEditor c={cam} />}
+            <button className="quiet" title={`Look through ${cam.name}`} aria-label={`look through ${cam.name}`} onClick={(e) => { e.stopPropagation(); st().selectCamera(cam.id); st().setView('camera') }}><Video size={13} /></button>{/* C1: ArtCraft's look-through on the row */}
           </div>
         ))}
       </div>
@@ -166,7 +167,7 @@ export function SceneTab() {
 }
 export const OutlinerTab = SceneTab                                   // the name the tests and the old Stage suite know
 
-/** An object's row: the swatch, the kind, the name (double-click renames), who it is bound to, hide and lock, its editor when selected. */
+/** An object's row: the swatch, the kind, the name (double-click renames), who it is bound to, hide and lock (C1: its editor is the Inspector's). */
 function ObjectRow({ o, selected }: { o: StageObject; selected: boolean }) {
   const rename = () => void askText({ title: 'Rename', initial: o.name, placeholder: 'name' }).then((n) => { if (n?.trim()) st().updateObject(o.id, { name: n.trim() }) })
   return (
@@ -178,27 +179,57 @@ function ObjectRow({ o, selected }: { o: StageObject; selected: boolean }) {
       {(o.kind === 'mannequin' || o.kind === 'mesh' || o.kind === 'set') && o.profile_id && <BoundTag o={o} />}
       <button className="quiet" title={o.visible ? 'Hide' : 'Show'} onClick={(e) => { e.stopPropagation(); st().updateObject(o.id, { visible: !o.visible }) }}>{o.visible ? <Eye size={13} /> : <EyeOff size={13} />}</button>
       <button className="quiet" title={o.locked ? 'Unlock' : 'Lock'} onClick={(e) => { e.stopPropagation(); st().updateObject(o.id, { locked: !o.locked }) }}>{o.locked ? <Lock size={13} /> : <LockOpen size={13} />}</button>
-      {selected && <ObjectEditor o={o} />}
     </div>
   )
 }
 
-// ------------------------------------------------------------------ D121: the Clay level's column and foot
-const CLAY_SECTIONS = ['shot', 'scene', 'motion', 'camera'] as const
+// ------------------------------------------------------------------ D121 → C1 (D181): Clay's column, Inspector and foot
+const CLAY_SECTIONS = ['scene', 'motion', 'camera'] as const
 
-/** D121 (26 §5.2): the Clay level's column — the shot (its For chip, the stages), what stands on the stage, its motion, its camera. */
+/** D121 (26 §5.2) → C1: Clay's column — what stands on the scene, its motion, its camera; a bench or the line-up says so at the top (the
+ *  scene and its shot are the layer's header; D121's Shot section and stepper are superseded by D181's ledger, C4). */
 export function ClayColumn({ tab }: { tab: string }) {
   const project = useSession((s) => s.project)
+  const bench = useStage((s) => !!s.current && s.current.purpose !== 'stage')
   useStageLoad()
   if (!project?.open) return <span className="hint">Open or create a project to begin.</span>
   return (
     <AnimColumn suite="stage" sections={CLAY_SECTIONS} tab={tab}>
       <ThingsSheet />{/* D123 (SC3c-2): over everything while it is open */}
-      <Sec id="shot" title="Shot"><ShotHead /></Sec>
+      {bench && <BenchChip />}
       <Sec id="scene" title="Scene"><SceneTab /></Sec>
       <Sec id="motion" title="Motion"><PosesTab /></Sec>
       <Sec id="camera" title="Camera"><CamerasTab /></Sec>
     </AnimColumn>
+  )
+}
+
+/** C1 (D181, 26 §2 rule 3): one selected thing, one editor — the Inspector beside the viewport: the stage, a camera or an object; nothing
+ *  selected: the scene's facts; in Record: what is being looked at. */
+export function SelectionInspector() {
+  const current = useStage((s) => s.current)
+  const selected = useStage((s) => s.selected)
+  const selectedCamera = useStage((s) => s.selectedCamera)
+  const stageSelected = useStage((s) => s.stageSelected)
+  const mode = useStage((s) => s.mode)
+  const cam = useStage((s) => s.activeCamera())
+  if (!current) return <span className="hint">No scene open.</span>
+  if (mode === 'record') return <div className="stage-panel sel-facts" data-testid="clay-selection-record"><h4>Record</h4>
+    <span className="hint">{cam ? `${cam.name} · ${cam.focal_mm} mm` : 'no camera'} · frames {current.range.start}–{current.range.end}</span>
+    <span className="hint">The scene as the shot sees it, nothing else on screen. Build to change it.</span></div>
+  if (stageSelected) return <StageEditor />
+  const c = selectedCamera ? current.cameras.find((x) => x.id === selectedCamera) : undefined
+  if (c) return <CameraEditor c={c} />
+  const o = selected ? current.objects.find((x) => x.id === selected) : undefined
+  if (o) return <ObjectEditor o={o} />
+  return (
+    <div className="stage-panel sel-facts" data-testid="clay-selection-none">
+      <h4>{current.name}</h4>
+      <div className="kv"><span>objects</span><span>{current.objects.length}</span></div>
+      <div className="kv"><span>cameras</span><span>{current.cameras.length}{cam ? ` · ★ ${cam.name}` : ''}</span></div>
+      <div className="kv"><span>range</span><span>{current.range.start}–{current.range.end} · {current.size.fps} fps</span></div>
+      <span className="hint">Click a thing in the viewport or the outliner: its editor shows here.</span>
+    </div>
   )
 }
 
@@ -222,12 +253,12 @@ export function ClayFoot() {
   )
 }
 
-/** D119 (SC1): the stage's own editor under its row — the frame, the contents, the ambient (D110), rename / delete. */
+/** D119 (SC1) → C1: the stage's own editor, in the Inspector — the frame, the contents, the ambient (D110), rename / delete. */
 function StageEditor() {
   const current = useStage((s) => s.current)
   if (!current) return null
   return (
-    <div className="row-editor stage-insp" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+    <div className="sel-editor stage-insp" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
       <h4>{current.name} <span className="hint">· revision {current.revision}</span></h4>
       <div className="kv"><span>frame</span><span>{current.size.w}×{current.size.h} @ {current.size.fps} fps (the project format)</span></div>
       <div className="kv"><span>contents</span><span>{current.objects.length} objects · {current.cameras.length} cameras</span></div>
@@ -295,13 +326,13 @@ function SetThings({ o }: { o: StageObject }) {
   )
 }
 
-/** D119 (SC1): an object's editor under its row — the transform, the kind's own fields, the parent, the object verbs (the Selection section of before). */
+/** D119 (SC1) → C1: an object's editor, in the Inspector — the transform, the kind's own fields, the parent, the object verbs. */
 function ObjectEditor({ o }: { o: StageObject }) {
   const current = useStage((s) => s.current)
   const t = o.transform
   if (!current) return null
   return (
-    <div className="row-editor stage-insp" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+    <div className="sel-editor stage-insp" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
       <h4>{o.name} <span className="hint">· {o.kind}{o.preset ? ` · ${o.preset}` : ''}</span></h4>
       {o.parent_joint && <div className="kv held" data-held><span>held</span><span>in {current.objects.find((x) => x.id === o.parent)?.name ?? 'a figure'}'s {HAND_LABEL[o.parent_joint]} <Help text="It moves with the hand; its position and rotation below are its place on the hand (the wrist)." /> <CommandButton id="stage.object.letGo" text /></span></div>}
       <Vec label="position" v={t.pos} onChange={(pos) => st().setTransform(o.id, { ...t, pos })} />
@@ -323,15 +354,15 @@ function ObjectEditor({ o }: { o: StageObject }) {
   )
 }
 
-/** D119 (SC1): a camera's editor under its row — the lens, the roll, where it stands and what it looks at, and its verbs (Look through,
- *  Set from view, To shot, Key camera, rename, delete). In the viewport the camera's body takes the gizmo while its row is selected. */
+/** D119 (SC1) → C1: a camera's editor, in the Inspector — the lens, the roll, where it stands and what it looks at, and its verbs (Look
+ *  through, Set from view, To shot, Key camera, rename, delete). In the viewport the camera's body takes the gizmo while its row is selected. */
 function CameraEditor({ c }: { c: StageCamera }) {
   const current = useStage((s) => s.current)
   const view = useStage((s) => s.view)
   if (!current) return null
   markUsed('stage.camera.setFromView'); markUsed('stage.camera.delete'); markUsed('stage.view.camera'); markUsed('stage.camera.rename'); markUsed('stage.anim.keyCamera')
   return (
-    <div className="row-editor stage-insp" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+    <div className="sel-editor stage-insp" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
       <h4>{c.name} <span className="hint">· camera{current.active_camera === c.id ? ' · active' : ''}</span></h4>
       <Vec label="position" v={c.pos} onChange={(pos) => st().updateCamera(c.id, { pos })} />
       <Vec label="target" v={c.target} onChange={(target) => st().updateCamera(c.id, { target })} />
@@ -826,17 +857,17 @@ function Timeline() {
   const span = stageSpan(end, [...camKeys, ...objects.flatMap((o) => (k.objects[o.id] ?? []).map((x) => x.frame)), ...objects.flatMap((o) => (tracks[o.id] ?? []).map(blockEnd)),
     ...skeletons.flatMap((o) => k.skeleton![o.id].map((x) => x.frame + x.transition))])
   markUsed('stage.anim.keyCamera'); markUsed('stage.anim.keyObject'); markUsed('stage.anim.removeKey')
-  const row = (id: string, label: string, frames: number[], sel: boolean, onSelect: () => void): TLRow => {
+  const row = (id: string, label: string, frames: number[], sel: boolean, onSelect: () => void, onKey?: () => void): TLRow => {   // C1 (P11): the row's own key
     const { runs, singles } = keyRuns(frames)
-    return { id, label, selected: sel, onSelect, data: { kind: id.slice(0, 3) },
+    return { id, label, selected: sel, onSelect, data: { kind: id.slice(0, 3) }, ...(onKey ? { onKey, keyTitle: `Key ${label} at frame ${frame}` } : {}),
       bars: runs.map(([a, b]) => ({ id: `${a}`, from: a, to: b, label: `motion · ${b - a + 1}`, className: 'motion', title: `${b - a + 1} keys frame by frame (a motion clip), frames ${a}–${b}` })),
       keys: singles.map((f) => ({ frame: f, title: `key at frame ${f} — click: go there; drag: move it; right-click: move it to the playhead or remove it` })) }
   }
   const rows: TLRow[] = []
   const extraRows = useReadOnlyRows(current, cam, start, end)
-  if (cam) rows.push(row(`cam:${cam.id}`, `camera · ${cam.name}`, camKeys, selectedCamera === cam.id, () => st().selectCamera(cam.id)))   // U5e (04 §3.2): the camera's track, keyed or not
+  if (cam) rows.push(row(`cam:${cam.id}`, `camera · ${cam.name}`, camKeys, selectedCamera === cam.id, () => st().selectCamera(cam.id), () => st().keyCamera()))   // U5e (04 §3.2): the camera's track, keyed or not
   for (const o of objects) {
-    const r = row(`obj:${o.id}`, o.name, (k.objects[o.id] ?? []).map((x) => x.frame), selected === o.id, () => st().select(o.id))
+    const r = row(`obj:${o.id}`, o.name, (k.objects[o.id] ?? []).map((x) => x.frame), selected === o.id, () => st().select(o.id), () => st().keyObject(o.id))
     // U5 (G8): the figure's clip blocks — the clip and its loops, past the range's end when longer than the shot (the range never moves by itself)
     r.onMenu = (e) => {                                                           // U5c: a block's own menu, else the track's
       e.preventDefault()
@@ -906,8 +937,10 @@ function CameraPill() {
   const pip = useStage((s) => s.pip)
   const guides = useStage((s) => s.guides)
   const cam = useShotCamera()
+  const mode = useStage((s) => s.mode)
   markUsed('stage.view.camera'); markUsed('stage.view.free')
   if (!current || !cam) return null
+  if (mode === 'record') return <div className="cam-pill" onPointerDown={(e) => e.stopPropagation()}><span className="cam-pill-main active"><Video size={14} /> {cam.name} · {cam.focal_mm} mm</span></div>   // C1: Record looks through it, nothing to pick
   const through = view === 'camera'
   const items = (): MenuItem[] => [
     ...current.cameras.map((c) => ({ label: `${c.id === current.active_camera ? '★ ' : ''}${c.name} · ${c.focal_mm} mm`, run: () => st().selectCamera(c.id) })), sep,
@@ -963,10 +996,17 @@ function Viewport() {
   const [pipRect, setPipRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null)   // D121 (AW4): where the PiP sits
   const pip = useStage((s) => s.pip)
   const shotCam = useShotCamera()
-  const { ref: dropRef, over } = useDropTarget((d) => onlyAssets(d) && d.items.some((i) => i.media !== 'video') && !!useStage.getState().current,
-    (d) => { const it = d.items.find((i) => i.kind === 'asset' && i.media !== 'video'); const e = engineRef.current; const p = lastPointer.current
-      if (it && e) st().addObject(it.media === 'mesh' ? 'mesh' : 'plane', null, (p ? e.place(p.x, p.y) : null) ?? e.centre(), it.id) },         // P18: a mesh lands as a prop
-    (d) => { const it = d.items.find((i) => i.kind === 'asset' && i.media !== 'video'); return it ? { ok: true, label: it.media === 'mesh' ? 'Place the prop here' : 'Place as an image plane' } : { ok: false, reason: 'Only images and meshes go on the stage' } })
+  const mode = useStage((s) => s.mode)
+  const rec = mode === 'record'                                                                                        // C1 (D181): Record — the chrome away, the view locked
+  const { ref: dropRef, over } = useDropTarget((d) => !!useStage.getState().current && useStage.getState().mode !== 'record' && ((onlyAssets(d) && d.items.some((i) => i.media !== 'video')) || d.items.some((i) => i.kind === 'preset')),
+    (d, info) => { const e = engineRef.current; if (!e) return
+      const at = e.place(info.x, info.y) ?? e.centre()                                                                 // C1: by raycast, where the mouse points
+      const pr = d.items.find((i) => i.kind === 'preset')
+      if (pr) { dropPreset(pr.id, at); return }
+      const it = d.items.find((i) => i.kind === 'asset' && i.media !== 'video')
+      if (it) st().addObject(it.media === 'mesh' ? 'mesh' : 'plane', null, at, it.id) },         // P18: a mesh lands as a prop
+    (d) => { if (d.items.some((i) => i.kind === 'preset')) return { ok: true, label: 'Place it here' }
+      const it = d.items.find((i) => i.kind === 'asset' && i.media !== 'video'); return it ? { ok: true, label: it.media === 'mesh' ? 'Place the prop here' : 'Place as an image plane' } : { ok: false, reason: 'Only images and meshes go on the stage' } })
   // the engine: one per mounted viewport (kept alive with the suite, D69). U0 (F34): the canvas is made here, a fresh one per mount — dispose()
   // force-loses its GL context (V82), and StrictMode's mount → cleanup → mount in a dev build would hand the second engine that dead context
   useEffect(() => {
@@ -1023,6 +1063,7 @@ function Viewport() {
     const eng = engineRef.current
     if (!d || !eng || e.button !== 0 || d.hot || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4 || eng.gizmo.dragging) return
     const s = st()
+    if (s.mode === 'record') return                                                    // C1: nothing is picked in Record
     const fig = s.object(s.selected)
     if (s.tool === 'path' && fig?.kind === 'mannequin') {                             // CA1: a click on the floor adds to the figure's path
       const at = eng.place(e.clientX, e.clientY)
@@ -1042,34 +1083,55 @@ function Viewport() {
   }
   const onMenu = (e: React.MouseEvent) => {
     e.preventDefault()
+    if (st().mode === 'record') return
     const eng = engineRef.current
     const p = eng ? eng.pick(e.clientX, e.clientY) : { id: null }
     if (p.camera) { st().selectCamera(p.camera); showMenu(e, cameraMenu()); return }
-    if (p.id) st().select(p.id)
-    showMenu(e, viewportMenu(!!p.id))
+    const s = st()
+    const floor = !!p.id && s.object(p.id)?.kind === 'set' && s.selected !== p.id       // C1 (P11): a set's floor under the right-click is the floor, not a thing to select — its row selects it
+    if (p.id && !floor) s.select(p.id)
+    useStage.setState({ menuAt: eng && (!p.id || floor) ? eng.place(e.clientX, e.clientY) : null })   // C1: Stand it here — the floor under the right-click
+    showMenu(e, viewportMenu(!!p.id && !floor))
   }
   markUsed('stage.tool.select'); markUsed('stage.tool.move'); markUsed('stage.tool.rotate'); markUsed('stage.tool.scale'); markUsed('stage.snap'); markUsed('stage.undo'); markUsed('stage.redo')
   return (
     <div ref={(el) => { (hostRef as React.MutableRefObject<HTMLDivElement | null>).current = el; dropRef(el) }} className={`stage-host${over ? ' over' : ''}`}
       onPointerDown={onDown} onPointerUp={onUp} onPointerMove={(e) => { lastPointer.current = { x: e.clientX, y: e.clientY } }} onContextMenu={onMenu} onDoubleClick={onDouble}>
       <div ref={canvasHolderRef} className="stage-canvas-holder" />
-      {current && <div className="gizmo-bar" onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}>
+      {current && <div className="mode-pill" role="group" aria-label="Build or Record" onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}>{/* C1 (D181): ArtCraft's Build | Record */}
+        <CommandButton id="stage.mode.build" text active={!rec} /><CommandButton id="stage.mode.record" text active={rec} />
+      </div>}
+      {current && rec && <div className="record-bar" data-testid="record-bar" onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}>
+        <CommandButton id="stage.frame.make" text label="Capture a still ▸" /><CommandButton id="stage.shot.passes" text label="Render the passes ▶" />
+        <Help text="Record: the scene through the shot's camera over its range, the editing chrome away. Capture a still makes a picture of this frame in Image (From a stage); the passes — clay, depth, pose, masks — are what the performances use. The animatic, the lit clay recorded as a clip, comes with C3." />
+      </div>}
+      {current && !rec && <div className="gizmo-bar" onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}>
         <CommandRow ids={['stage.tool.select', 'stage.tool.move', 'stage.tool.rotate', 'stage.tool.scale', 'stage.tool.path', 'gap', 'stage.snap', 'gap', 'stage.undo', 'stage.redo']} active={`stage.tool.${tool}`} />
         {snap && <span className="hint">snap</span>}
       </div>}
-      {current && figure && <div className="pose-pill" onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}>{/* D121: pose mode by the figure, ArtCraft's Enter Pose Mode / Done */}
+      {current && figure && !rec && <div className="pose-pill" onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}>{/* D121: pose mode by the figure, ArtCraft's Enter Pose Mode / Done */}
         <CommandButton id="stage.pose.mode" text active={poseMode} label={poseMode ? `Done posing ${figure.name}` : `Pose ${figure.name}`} />
         {poseMode && <Help text="Orange spheres are joints: click one for its rotate gizmo. Blue cubes are hands and feet: drag one and the elbow or knee follows. Done (or a click on the floor) ends pose mode." />}
       </div>}
       {current && view === 'camera' && rect && guides && <div className="frame-guides" style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}><i className="thirds" /><i className="centre" /></div>}
       {current && <CameraPill />}{/* D121 (AW4): which camera, its lens, look through — ArtCraft's camera pill */}
       <LensReadout />
-      {current && pipRect && view === 'free' && <button type="button" className="pip-frame" style={{ left: pipRect.x, top: pipRect.y, width: pipRect.w, height: pipRect.h }}
+      {current && pipRect && view === 'free' && !rec && <button type="button" className="pip-frame" style={{ left: pipRect.x, top: pipRect.y, width: pipRect.w, height: pipRect.h }}
         onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()} onClick={() => runCommand('stage.view.camera')}
         title="The active camera's picture — a click looks through it"><span>{shotCam?.name} · {shotCam?.focal_mm} mm</span></button>}
       {current && !current.objects.length && <div className="stage-empty"><div>Empty stage — add a set and a figure from the Scene section, or drop a picture from the Bin.<div className="quick-cards"><CommandButton id="stage.add.set.room" text /><CommandButton id="stage.add.mannequin.adult" text /></div></div></div>}
     </div>
   )
+}
+
+/** C1: a preset tile dropped on the viewport — placed where the mouse pointed, by its group (figures, stand-ins, meshes). */
+function dropPreset(dragId: string, at: number[]): void {
+  const d = presetDrop(dragId)
+  if (!d) return
+  const yaw = yawAt(at)
+  if (d.group === 'figures') { if (d.id.startsWith('char:')) st().placeCharacter(d.id.slice(5), at, yaw); else st().addObject('mannequin', d.id, at, null, yaw); return }
+  if (d.group === 'standins') { st().addObject('prop', d.id, at); return }
+  if (d.group === 'meshes') st().addObject('mesh', null, at, d.id)
 }
 
 export function Stage() {

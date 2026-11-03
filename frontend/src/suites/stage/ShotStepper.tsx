@@ -87,7 +87,7 @@ export function StagePicker() {
 }
 
 /** D142: Clay opened for a Cast version (*Bench · Mara v1*) or on the line-up (CW5) — what it is and the way back; the line-up's verbs. */
-function BenchChip() {
+export function BenchChip() {
   const cur = useStage((s) => s.current)
   const stages = useStage((s) => s.stages)
   if (!cur || cur.purpose === 'stage') return null

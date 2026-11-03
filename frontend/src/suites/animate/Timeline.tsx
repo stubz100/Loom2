@@ -15,6 +15,8 @@ export interface TLRow {
   id: string; label: ReactNode; title?: string; selected?: boolean; className?: string; data?: Record<string, string>
   bars?: TLBar[]; keys?: TLKey[]; markers?: TLMarker[]
   onSelect?: () => void; onMenu?: (e: ReactMouseEvent) => void
+  /** C1 (D181, P11): a key set on this row's thing at the playhead — the diamond at the label's end (ArtCraft's row-end diamond). */
+  onKey?: () => void; keyTitle?: string
 }
 export type BarDrag = 'move' | 'in' | 'out' | 'slip'
 
@@ -109,7 +111,8 @@ export function Timeline({ className = '', span, fps, frame, onSeek, work, rows,
       {rows.map((r) => (
         <div key={r.id} className={`tl-row${r.selected ? ' selected' : ''}${r.className ? ` ${r.className}` : ''}`} data-row={r.id} {...dataOf(r.data)} title={r.title}
           onClick={() => { if (moved.current) { moved.current = false; return } r.onSelect?.() }} onContextMenu={r.onMenu}>
-          <span className="tl-label">{r.label}</span>
+          <span className="tl-label">{r.label}{r.onKey && <button type="button" className="tl-keybtn" title={r.keyTitle ?? `Key it here (frame ${frame})`} aria-label={`key ${typeof r.label === 'string' ? r.label : 'this row'} at the playhead`}
+            onClick={(e) => { e.stopPropagation(); r.onKey!() }} onPointerDown={(e) => e.stopPropagation()}>◆</button>}</span>
           <div className="tl-track">
             {r.bars?.map((b) => {
               const [f, t] = shown(r.id, b)

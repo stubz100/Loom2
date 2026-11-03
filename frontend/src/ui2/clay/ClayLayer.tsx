@@ -26,6 +26,7 @@ const ClayColumn = lazy(() => import('../../suites/stage/StageParts').then((m) =
 const ClayStrip = lazy(() => import('../../suites/stage/StageParts').then((m) => ({ default: m.Strip })))
 const ClayStage = lazy(() => import('../../suites/stage/StageParts').then((m) => ({ default: m.Stage })))
 const ClayFoot = lazy(() => import('../../suites/stage/StageParts').then((m) => ({ default: m.ClayFoot })))
+const SelectionInspector = lazy(() => import('../../suites/stage/StageParts').then((m) => ({ default: m.SelectionInspector })))   // C1: one selected thing, one editor
 const SkeletonBench = lazy(() => import('../../suites/stage/SkeletonBench'))
 const SkeletonParts = lazy(() => import('../../suites/stage/SkeletonBench').then((m) => ({ default: m.SkeletonParts })))
 const CastBody = lazy(() => import('../../suites/story/CastBody').then((m) => ({ default: m.CastBody })))
@@ -168,7 +169,8 @@ function Library() {
         : skel ? <Part label="The skeleton bench" fallback={<div className="w-empty">Loading the bench…</div>}><div className="w-skeleton" data-testid="clay-skeleton"><SkeletonBench /></div></Part>
         : <Tiles kind={kind} />}
     </section>
-    {skel ? <Part label="The skeleton bench" quiet="hide" fallback={<aside className="w-insp" />}><aside className="w-insp"><SkeletonParts /></aside></Part> : <LibraryInspector p={p} v={v} />}
+    {skel ? <Part label="The skeleton bench" quiet="hide" fallback={<aside className="w-insp" />}><aside className="w-insp"><SkeletonParts /></aside></Part>
+      : bench ? <Part label="The selection" quiet="hide" fallback={<aside className="w-insp" />}><aside className="w-insp" data-testid="clay-inspector"><SelectionInspector /></aside></Part> : <LibraryInspector p={p} v={v} />}
   </>
 }
 
@@ -216,6 +218,7 @@ function Scenes() {
     <section className="w-centre">
       <Suspense fallback={<div className="w-empty">Loading Clay…</div>}><div className="strip w-edit-strip"><ClayStrip /></div><div className="w-edit-stage" data-testid="clay-scene"><ClayStage /></div></Suspense>
     </section>
+    <Part label="The selection" quiet="hide" fallback={<aside className="w-insp" />}><aside className="w-insp" data-testid="clay-inspector"><SelectionInspector /></aside></Part>{/* C1 (26 §2 rule 3) */}
   </>
 }
 
@@ -225,7 +228,7 @@ export function ClayLayer() {
   useEffect(() => startClay(), [])
   if (!project?.open) return <div className="w-layer"><Rail /><section className="w-centre wide"><NoProject /></section></div>
   return (
-    <div className={`w-layer c-layer${rail === 'scenes' ? ' no-insp' : ''}`} data-testid="clay-layer" data-rail={rail}>
+    <div className="w-layer c-layer" data-testid="clay-layer" data-rail={rail}>
       <Rail />
       {rail === 'library' ? <Library /> : <Scenes />}
     </div>

@@ -4,6 +4,7 @@
 // words toggle, *Save the current as a preset…* (a name typed in place) and the host's verbs for the tile last clicked (`verbs(id)`:
 // a CommandRow of the host's own commands, so every verb is a button — D32). Mouse-first: the + opens and closes it; Esc and a click
 // outside close it; a tile's right-click keeps its menu.
+import type { DragPayload } from './drag'
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Plus, X } from 'lucide-react'
 import { PresetIcons, type PresetIcon } from './PresetIcons'
@@ -30,10 +31,11 @@ export interface PresetPanelProps {
   title?: string                                  // the + button's tooltip
   className?: string
   tools?: ReactNode                               // extra controls in the panel's head (the host's)
+  drag?: (id: string) => DragPayload | null       // C1: a tile dragged out of the panel (onto a viewport, by raycast)
 }
 
 export function PresetPanel({ label, items, selected, onPick, onContext, verbs, onSave, saveLabel = 'Save the current as a preset…', canSave = true, saveWhy, showText, onShowText,
-  size = 40, empty, chosen, title, className, tools }: PresetPanelProps) {
+  size = 40, empty, chosen, title, className, tools, drag }: PresetPanelProps) {
   const [open, setOpen] = useState(false)
   const [naming, setNaming] = useState<string | null>(null)
   const [focused, setFocused] = useState<string | null>(null)
@@ -71,7 +73,7 @@ export function PresetPanel({ label, items, selected, onPick, onContext, verbs, 
             {tools}
             <button type="button" className="quiet" title="Close" aria-label="close the presets" onClick={() => setOpen(false)}><X size={13} /></button></div>
           {items.length
-            ? <PresetIcons label={label} size={size} showText={showText} items={items} selected={selected}
+            ? <PresetIcons label={label} size={size} showText={showText} items={items} selected={selected} drag={drag}
                 onPick={(id, e) => { setFocused(id); onPick(id, e) }} onContext={(id, e) => { setFocused(id); onContext?.(id, e) }} />
             : <p className="hint">{empty ?? 'No presets yet.'}</p>}
           {onSave && (naming === null

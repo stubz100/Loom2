@@ -10,6 +10,14 @@
 .b-open span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
 .b-open .n { color: var(--fg3); font-variant-numeric: tabular-nums; }
 .b-node.page .b-open svg { color: var(--fg3); flex: none; }   /* B3 (D159): a page is a folder of its home */
+.b-kind { display: flex; justify-content: space-between; gap: 8px; padding: 1px 6px 1px 2px; font-size: 11px; color: var(--fg2); cursor: pointer; border-radius: 4px; border: 1px solid transparent; }   /* C6: a home's kinds */
+.b-kind:hover { color: var(--fg); }
+.b-kind.active { border-color: var(--accent); color: var(--fg); }
+.b-kind .n { color: var(--fg3); font-variant-numeric: tabular-nums; }
+.b-shelves { display: flex; gap: 4px; flex-wrap: wrap; }                                                      /* the home's kinds, beside the asset-kind chips */
+.b-shelves button { padding: 2px 8px; border-radius: 999px; font-size: 11px; background: transparent; border: 1px solid var(--line2); color: var(--fg2); }
+.b-shelves button.active { background: var(--bg3); color: var(--fg); }
+.b-shelves button i { font-style: normal; color: var(--fg3); margin-left: 3px; font-variant-numeric: tabular-nums; }
 .b-audio { display: flex; align-items: center; justify-content: center; height: 100%; padding: 6px; font-size: 11px; color: var(--fg2); text-align: center; }
 .b-player { width: 100%; }
 .w-bin { position: relative; }

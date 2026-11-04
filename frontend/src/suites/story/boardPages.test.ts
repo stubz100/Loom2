@@ -4,7 +4,7 @@ import type { BinNode } from '../../api/types'
 import { localTime } from '../../frame/time'
 import { boardPages } from './boardPages'
 
-const home = (id: string, path: string, children: BinNode[] = []): BinNode => ({ id, path, name: id, count: 0, total: 0, pages: [], gone: false, page: false, children })
+const home = (id: string, path: string, children: BinNode[] = []): BinNode => ({ id, path, name: id, count: 0, total: 0, pages: [], gone: false, page: false, kinds: [], children })
 
 describe('the walkthrough-2 register: Shots', () => {
   it("W27: the Board picker offers World's pages and this shot's, not another shot's, the Episode's or Imports", () => {

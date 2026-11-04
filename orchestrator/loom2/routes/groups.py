@@ -95,14 +95,24 @@ async def bin_home(svc: Svc, body: HomeAsk):
     return g.model_dump()
 
 
+class BinKind(BaseModel):
+    """C6 (D181, 04 §4.7): a shelf of a home — a kind the index can count (kinds.py), with its count."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    id: str
+    label: str
+    count: int
+
+
 class BinNode(BaseModel):
-    """U8 (05 §2.1): a home in the Bin's tree — its own things and its role pages' (`count`), with the homes under it (`total`)."""
+    """U8 (05 §2.1): a home in the Bin's tree — its own things and its role pages' (`count`), with the homes under it (`total`); C6: its
+    shelves (`kinds`) with their counts, the tree's third level."""
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
     id: str
     path: str
     name: str
     count: int
     total: int
+    kinds: list[BinKind] = Field(default_factory=list)
     pages: list[str] = Field(default_factory=list)   # its role pages (a version's reference set and candidates): a page id → this home
     gone: bool = False                               # B0 (R5): its record (an entity, a shot, a cut) was deleted; its things are still here
     page: bool = False                               # B3 (D159): an album page inside a home — a folder: its path is its home's and its id
@@ -121,6 +131,7 @@ class BinThing(BaseModel):
     roles: list[str] = Field(default_factory=list)   # hero, reference, a_pose_front, a_pose_back, set_picture, model, candidate, final, frame, clip …
     home_id: str | None = None
     path: str = ""                                   # its home's path (`imports` for a thing on no page)
+    shelf: str = "pictures"                          # C6 (D181): its kind — the shelf it sits on in its home (kinds.SHELF_ORDER)
 
 
 class BinThings(BaseModel):
@@ -185,13 +196,13 @@ async def bin_tree(svc: Svc):
 
 @router.get("/bin/homes/{gid}/items", response_model=BinThings)
 async def bin_home_items(svc: Svc, gid: str, cursor: str | None = None, limit: int = Query(200, ge=1, le=2000),
-                         kinds: list[AssetKind] = Query(default_factory=list)):
+                         kinds: list[AssetKind] = Query(default_factory=list), shelf: str | None = None):
     """U8 (05 §2.2): a home's things and everything below it, newest first, each with its roles and its home — B0: a page at a time
     (`cursor` from the last page's `next_cursor`), `kinds` keeping those kinds only."""
     from ..bins import home_page
     ws, _, _ = svc.require_project()
     try:
-        return await asyncio.to_thread(home_page, svc.require_groups(), ws, gid, cursor, limit, list(kinds))
+        return await asyncio.to_thread(home_page, svc.require_groups(), ws, gid, cursor, limit, list(kinds), shelf)   # C6: one shelf of the home
     except KeyError:
         raise HTTPException(404, "no such home")
 

@@ -357,22 +357,32 @@ def tree(groups: GroupStore, ws: Any = None) -> dict[str, Any]:
     and its role pages' (a version's reference set and candidates are roles inside it, not places), its total adds the homes under it;
     `imports` counts the things on no page too. B0: the counts come from the index (no thing is read); a record home is named as its
     record is now, and one whose record was deleted is `gone` (hidden once nothing is left in it). The Trash's count beside it."""
+    from .kinds import home_class, shelves
     counts = groups.cat.counts()
     placed = groups.cat.placed_counts()
+    by_shelf = groups.cat.shelf_counts()
     loose = counts.get("unprocessed", 0)
     names = _names(ws) if ws is not None else {}
     with groups._lock:
+
+        def kinds_of(ids: list[str], path: str) -> list[dict[str, Any]]:      # C6 (D181, 04 §4.7): the home's shelves with their counts
+            agg: dict[tuple[str | None, str], int] = {}
+            for i in ids:
+                for key, n in by_shelf.get(i, {}).items():
+                    agg[key] = agg.get(key, 0) + n
+            return shelves(agg, home_class(path))
 
         def folder(p: GroupRecord, path: str) -> dict[str, Any]:                 # B3: an album page inside a home, and the pages in it
             kids = [folder(k, f"{path}/{k.id}") for k in _sub_pages(groups, p)]
             count = placed.get(p.id, 0)
             return {"id": p.id, "path": path, "name": p.name, "count": count, "total": count + sum(k["total"] for k in kids), "gone": False,
-                    "page": True, "pages": [], "children": kids}
+                    "page": True, "pages": [], "children": kids, "kinds": kinds_of([p.id], path)}
 
         def node(g: GroupRecord) -> dict[str, Any] | None:
             pages, subs = _inside(groups, g)
             path = g.path or ""
             count = placed.get(g.id, 0) + sum(placed.get(p.id, 0) for p in pages) + (loose if path == "imports" else 0)
+            kinds = kinds_of([g.id, *[p.id for p in pages]], path)
             kids = [k for k in (node(h) for h in subs) if k is not None]
             folders = [folder(p, f"{path}/{p.id}") for p in pages if p.kind == "album"]
             gone = ws is not None and _is_record(path) and path not in names
@@ -380,7 +390,7 @@ def tree(groups: GroupStore, ws: Any = None) -> dict[str, Any]:
             if gone and not total:
                 return None
             return {"id": g.id, "path": path, "name": names.get(path, g.name), "count": count, "total": total, "gone": gone,
-                    "pages": [p.id for p in pages], "children": [*folders, *kids]}
+                    "pages": [p.id for p in pages], "children": [*folders, *kids], "kinds": kinds}
 
         def top(g: GroupRecord) -> bool:
             par = groups.groups.get(groups.parent.get(("group", g.id)) or "")
@@ -389,7 +399,8 @@ def tree(groups: GroupStore, ws: Any = None) -> dict[str, Any]:
         return {"homes": [n for n in (node(g) for g in tops) if n is not None], "trash": counts.get("trash", 0)}
 
 
-def home_page(groups: GroupStore, ws: Any, gid: str, cursor: str | None = None, limit: int = 200, kinds: list[str] | None = None) -> dict[str, Any]:
+def home_page(groups: GroupStore, ws: Any, gid: str, cursor: str | None = None, limit: int = 200, kinds: list[str] | None = None,
+              shelf: str | None = None) -> dict[str, Any]:
     """U8 (05 §2.2), paged in B0: what a home holds — its own things and its pages', and everything in the homes under it (a parent shows
     all below it), newest first, a page at a time (`next_cursor`), each with its roles and its home; `imports` holds the things on no
     page too. `kinds` keeps those kinds only. `total` comes with the first page."""
@@ -401,7 +412,10 @@ def home_page(groups: GroupStore, ws: Any, gid: str, cursor: str | None = None, 
         pages = _pages_of(groups, top) if h0 is None else {p.id: (h0, None) for p in [top, *_all_sub_pages(groups, top)]}   # B3: a page, alone
         imports = next((g for g in groups.groups.values() if g.kind == "bin" and g.path == "imports"), None)
         loose = h0 is None and imports is not None and imports.id in pages
-    page = groups.cat.list(AssetQuery(group_ids=list(pages), unplaced_too=loose, kinds=kinds or [], limit=limit, cursor=cursor))  # type: ignore[arg-type]
+    from .kinds import home_class, shelf_of
+    top_path = top.path or "" if h0 is None else (h0.path or "")
+    page = groups.cat.list(AssetQuery(group_ids=list(pages), unplaced_too=loose, kinds=kinds or [], limit=limit, cursor=cursor,
+                                      shelf=shelf, shelf_class=home_class(top_path)))  # type: ignore[arg-type]
     rec = _Records(ws)
     records: dict[str, tuple[dict[str, list[str]], bool] | None] = {}
     items = []
@@ -413,7 +427,8 @@ def home_page(groups: GroupStore, ws: Any, gid: str, cursor: str | None = None, 
                 continue
             if h.id not in records:
                 records[h.id] = _record_roles(ws, h.path or "", rec)
-            items.append({"asset": a, "roles": roles_of(a.id, role, records[h.id]), "home_id": h.id, "path": h.path or ""})
+            items.append({"asset": a, "roles": roles_of(a.id, role, records[h.id]), "home_id": h.id, "path": h.path or "",
+                          "shelf": shelf_of(a.lineage_kind, a.kind, home_class(h.path or ""))})   # C6: its kind, in its own home's class
     path = top.path or "" if h0 is None else f"{h0.path}/{top.id}"
     return {"home_id": top.id, "path": path, "items": items, "total": page.total, "next_cursor": page.next_cursor}
 
@@ -440,8 +455,10 @@ def thing(groups: GroupStore, ws: Any, aid: str) -> dict[str, Any] | None:
         if h is None:
             h = next((x for x in groups.groups.values() if x.kind == "bin" and x.path == "imports"), None)
             role = None
+    from .kinds import home_class, shelf_of
     roles = roles_of(aid, role, _record_roles(ws, h.path or "")) if h is not None and page else []
-    return {"asset": a, "roles": roles, "home_id": h.id if h else None, "path": h.path or "imports" if h else "imports"}
+    return {"asset": a, "roles": roles, "home_id": h.id if h else None, "path": h.path or "imports" if h else "imports",
+            "shelf": shelf_of(a.lineage_kind, a.kind, home_class(h.path or "imports" if h else "imports"))}
 
 
 def uses_of(ws: Any, aid: str) -> list[dict[str, Any]]:
@@ -647,6 +664,7 @@ def where(groups: GroupStore, aid: str) -> GroupRecord | None:
 def search(groups: GroupStore, q: str, limit: int = 200) -> dict[str, Any]:
     """U8 (05 §2.2): a search across every home — the prompt, the name and the tags (the catalogue's full-text search), and a seed when
     the words are a number — each thing with its home (`imports` when it is on no page)."""
+    from .kinds import home_class, shelf_of
     q = q.strip()
     if not q:
         return {"home_id": None, "path": "", "items": []}
@@ -660,7 +678,8 @@ def search(groups: GroupStore, q: str, limit: int = 200) -> dict[str, Any]:
             if a.trashed_at is not None:
                 continue
             h = where(groups, a.id) or imports
-            items.append({"asset": a, "roles": [], "home_id": h.id if h else None, "path": h.path if h else "imports"})
+            items.append({"asset": a, "roles": [], "home_id": h.id if h else None, "path": h.path if h else "imports",
+                          "shelf": shelf_of(a.lineage_kind, a.kind, home_class(h.path if h else "imports"))})   # C6: the search names the kind
     items.sort(key=lambda x: x["asset"].created_at, reverse=True)
     return {"home_id": None, "path": "", "items": items[:limit]}
 

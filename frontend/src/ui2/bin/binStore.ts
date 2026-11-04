@@ -24,6 +24,10 @@ export const ROLE_LABEL: Record<string, string> = { hero: '★ hero', reference:
 export const ROLE_WORDS: Record<string, string> = { hero: 'the hero', reference: 'a reference', a_pose_front: 'the A-pose (front)', a_pose_back: 'the A-pose (back)', a_pose_side: 'the A-pose (side)',
   set_picture: "the set's picture", model: 'the 3D model', final: 'the final', frame: "the shot's frame", clip: "the shot's clip", sample: "a style's sample", board: 'the board' }
 export const TRASH = 'trash'
+/** C6 (D181, 04 §4.7): the shelves' labels as the tree and the chips say them (kinds.py's). */
+export const SHELF_LABEL: Record<string, string> = { pictures: 'pictures', body: 'body', poses: 'poses', voice: 'voice', model: 'model', set: 'set', life: 'life', animatic: 'animatic', stills: 'stills',
+  passes: 'passes', takes: 'takes', composition: 'composition', final: 'final', clips: 'clips', movies: 'movies', sounds: 'sounds', working: 'working files' }
+export const shelfLabel = (s: string): string => SHELF_LABEL[s] ?? s
 /** B1: the tree's headings — they hold no things (a move or an import into one is refused, or goes to Imports). */
 export const HEADINGS = new Set(['world', 'world/character', 'world/prop', 'world/place', 'shots', 'episode'])
 export const PAGE = 200
@@ -60,6 +64,7 @@ interface BinState {
   homes: BinNode[]; trash: number
   open: string | null                       // a home's id, `trash`, or null (a search)
   items: BinThing[]; path: string; query: string; filter: KindFilter; loading: boolean
+  shelf: string | null                      // C6: one shelf of the open home (its kind rows and chips), null for the whole home
   selected: string | null                   // the thing the Inspector shows (the last clicked)
   selection: string[]                       // B1: every thing selected (the verbs act on all of them), the selected one among them
   pins: Asset[]                             // B1: up to four things pinned for compare (from any home)
@@ -71,7 +76,8 @@ interface BinState {
   viewing: boolean                          // U8b: the selected thing seen large over the grid (Esc or a click closes it)
   view: (on: boolean) => void
   loadTree: () => Promise<void>
-  openHome: (id: string) => Promise<void>
+  openHome: (id: string, shelf?: string | null) => Promise<void>
+  setShelf: (shelf: string | null) => Promise<void>
   loadMore: () => Promise<void>
   search: (q: string) => Promise<void>
   reload: () => Promise<void>
@@ -93,20 +99,20 @@ interface BinState {
 type Page = { items: BinThing[]; path: string; total: number | null; next: string | null }
 
 /** A page of the open place: a home's (GET /bin/homes/{id}/items) or the Trash's (GET /assets?folder=trash). */
-async function readPage(id: string, filter: KindFilter, cursor: string | null, limit: number): Promise<Page> {
+async function readPage(id: string, filter: KindFilter, cursor: string | null, limit: number, shelf: string | null = null): Promise<Page> {
   const kinds = kindsOf(filter)
   if (id === TRASH) {
     const r = await unwrap(http.GET('/assets', { params: { query: { folder: 'trash', limit, cursor: cursor ?? undefined, kinds } } }))
-    return { items: r.items.map((asset) => ({ asset, roles: [], home_id: null, path: TRASH })), path: TRASH, total: r.total ?? null, next: r.next_cursor ?? null }
+    return { items: r.items.map((asset) => ({ asset, roles: [], home_id: null, path: TRASH, shelf: 'pictures' })), path: TRASH, total: r.total ?? null, next: r.next_cursor ?? null }
   }
-  const r = await unwrap(http.GET('/bin/homes/{gid}/items', { params: { path: { gid: id }, query: { limit, cursor: cursor ?? undefined, kinds } } }))
+  const r = await unwrap(http.GET('/bin/homes/{gid}/items', { params: { path: { gid: id }, query: { limit, cursor: cursor ?? undefined, kinds, shelf: shelf ?? undefined } } }))
   return { items: r.items, path: r.path, total: r.total ?? null, next: r.next_cursor ?? null }
 }
 
 let seq = 0
 let more: Promise<void> | null = null
 export const useBin = create<BinState>()((set, get) => ({
-  homes: [], trash: 0, open: null, items: [], path: '', query: '', filter: 'all', selected: null, selection: [], pins: [], comparing: false, tile: readTile(),
+  homes: [], trash: 0, open: null, items: [], path: '', query: '', filter: 'all', shelf: null, selected: null, selection: [], pins: [], comparing: false, tile: readTile(),
   loading: false, total: null, next: null, expanded: { }, viewing: false,
   view: (viewing) => set({ viewing: viewing && !!get().selected }),
   loadTree: async () => {
@@ -117,15 +123,17 @@ export const useBin = create<BinState>()((set, get) => ({
     if (open && open !== TRASH && !homesById(t.homes).has(open)) set({ open: null, items: [], path: '', total: 0, next: null, selected: null, selection: [] })   // its home went (rehomed)
     if (get().open === null && !get().query && t.homes.length) await get().openHome(t.homes[0].id)
   },
-  openHome: async (id) => {
+  openHome: async (id, shelf) => {
     const n = ++seq
-    set({ open: id, query: '', loading: true })
+    const keep = shelf === undefined ? (get().open === id ? get().shelf : null) : shelf   // the home's shelf stays while it stays open; another home opens whole
+    set({ open: id, query: '', loading: true, shelf: keep })
     try {
-      const r = await readPage(id, get().filter, null, PAGE)
+      const r = await readPage(id, get().filter, null, PAGE, keep)
       if (n !== seq) return
       set({ items: r.items, path: r.path, total: r.total, next: r.next, ...kept(r.items, get()) })
     } finally { if (n === seq) set({ loading: false }) }
   },
+  setShelf: async (shelf) => { const o = get().open; if (o && o !== TRASH) await get().openHome(o, shelf) },
   loadMore: async () => {
     const { open, next, query } = get()
     if (!open || !next || query) return
@@ -133,7 +141,7 @@ export const useBin = create<BinState>()((set, get) => ({
     const n = seq
     more = (async () => {
       try {
-        const r = await readPage(open, get().filter, next, PAGE)
+        const r = await readPage(open, get().filter, next, PAGE, get().shelf)
         if (n !== seq || get().open !== open) return
         const have = new Set(get().items.map((x) => x.asset.id))
         set({ items: [...get().items, ...r.items.filter((x) => !have.has(x.asset.id))], next: r.next })
@@ -159,7 +167,7 @@ export const useBin = create<BinState>()((set, get) => ({
     if (query) { await get().search(query); return }
     if (!open) return
     const n = ++seq                                                  // the loaded window read again in one request (the scroll stays)
-    const r = await readPage(open, get().filter, null, Math.min(2000, Math.max(PAGE, get().items.length)))
+    const r = await readPage(open, get().filter, null, Math.min(2000, Math.max(PAGE, get().items.length)), get().shelf)
     if (n !== seq) return
     set({ items: r.items, path: r.path, total: r.total, next: r.next, ...kept(r.items, get()) })
   },

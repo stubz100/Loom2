@@ -160,7 +160,8 @@ def test_a_schema_2_index_and_old_manifests_lose_the_culling(tmp_path: Path):
     con.commit(); con.close()
     cat2 = Catalogue(cat.ws, [32], session_id="ses_now")
     cols = {r[1] for r in cat2._db.execute("PRAGMA table_info(assets)").fetchall()}
-    assert "state" not in cols and "rating" not in cols and cat2._meta("index_schema") == "3" and cat2.count() == 4
+    from loom2.catalogue import INDEX_SCHEMA_VERSION
+    assert "state" not in cols and "rating" not in cols and cat2._meta("index_schema") == str(INDEX_SCHEMA_VERSION) and cat2.count() == 4   # C6: schema 4 (lineage_kind)
     a = cat2.get(x["a"].id)
     assert a is not None and "state" not in a.model_dump() and a.tags == ["alley", "night"]
     assert x["a"].id in [i.id for i in cat2.list(AssetQuery()).items]                    # once rejected, it shows like any other

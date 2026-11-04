@@ -5945,6 +5945,18 @@ export interface components {
             /** Roles */
             roles: string[];
         };
+        /**
+         * BinKind
+         * @description C6 (D181, 04 §4.7): a shelf of a home — a kind the index can count (kinds.py), with its count.
+         */
+        BinKind: {
+            /** Count */
+            count: number;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+        };
         /** BinMove */
         BinMove: {
             /**
@@ -5978,7 +5990,8 @@ export interface components {
         };
         /**
          * BinNode
-         * @description U8 (05 §2.1): a home in the Bin's tree — its own things and its role pages' (`count`), with the homes under it (`total`).
+         * @description U8 (05 §2.1): a home in the Bin's tree — its own things and its role pages' (`count`), with the homes under it (`total`); C6: its
+         *     shelves (`kinds`) with their counts, the tree's third level.
          */
         BinNode: {
             /** Children */
@@ -5992,6 +6005,8 @@ export interface components {
             gone: boolean;
             /** Id */
             id: string;
+            /** Kinds */
+            kinds: components["schemas"]["BinKind"][];
             /** Name */
             name: string;
             /**
@@ -6044,6 +6059,11 @@ export interface components {
             path: string;
             /** Roles */
             roles: string[];
+            /**
+             * Shelf
+             * @default pictures
+             */
+            shelf: string;
         };
         /** BinThings */
         BinThings: {
@@ -16522,6 +16542,8 @@ export interface operations {
                 group_id?: string | null;
                 home_id?: string | null;
                 group_ids?: string[];
+                shelf?: string | null;
+                shelf_class?: string;
                 unplaced_too?: boolean;
                 job_id?: string | null;
                 sort?: "created_desc" | "created_asc" | "model" | "size_desc";
@@ -16671,6 +16693,8 @@ export interface operations {
                 group_id?: string | null;
                 home_id?: string | null;
                 group_ids?: string[];
+                shelf?: string | null;
+                shelf_class?: string;
                 unplaced_too?: boolean;
                 job_id?: string | null;
                 sort?: "created_desc" | "created_asc" | "model" | "size_desc";
@@ -17087,6 +17111,7 @@ export interface operations {
                 cursor?: string | null;
                 limit?: number;
                 kinds?: ("image" | "video" | "mask" | "document-render" | "mesh" | "audio")[];
+                shelf?: string | null;
             };
             header?: never;
             path: {

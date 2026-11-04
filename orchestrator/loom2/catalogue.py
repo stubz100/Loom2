@@ -26,7 +26,7 @@ from .fsio import StateError, _tmp_for, atomic_copy, atomic_move, atomic_write_j
 from .workspace import Workspace
 
 ASSET_SCHEMA_VERSION = 2                     # D66: `origin` (a version-1 manifest loads with none)
-INDEX_SCHEMA_VERSION = 3                     # D122: no `state` / `rating` columns (an older index is dropped and rebuilt)
+INDEX_SCHEMA_VERSION = 4                     # D122: no `state` / `rating` columns; C6: a `lineage_kind` column (an older index is dropped and rebuilt)
 log = logging.getLogger(__name__)
 
 AssetKind = Literal["image", "video", "mask", "document-render", "mesh", "audio"]     # mesh: P18 (D84), a GLB; audio: CN2 (D87), a WAV master
@@ -52,7 +52,7 @@ class AssetRecord(BaseModel):
     session_id: str | None = None
     root_id: str | None = None                  # lineage root (self when the asset has no parents)
     parents: list[str] = Field(default_factory=list)
-    lineage_kind: str | None = None             # C11: the edge kind towards the parents (frame-extract, …); None = the suite
+    lineage_kind: str | None = None             # C11: the edge kind towards the parents; C6 (D181): one of kinds.LINEAGE_KINDS — the Bin's shelf; None = the suite
     suite: str = "generate"
     model_id: str | None = None
     format: str | None = None
@@ -107,6 +107,8 @@ class AssetQuery(BaseModel):
     group_id: str | None = None                 # D34: the assets placed on that group's page
     home_id: str | None = None                  # U8 (D157, 05 §2.3): a Bin home — what is on its pages and in every home under it (the route expands it)
     group_ids: list[str] = Field(default_factory=list)   # U8: the pages a home's listing reads (set from home_id by the route)
+    shelf: str | None = None                    # C6 (D181): a Bin shelf (kinds.SHELF_ORDER) read in the class of the home (`shelf_class`)
+    shelf_class: str = "other"
     unplaced_too: bool = False                  # U8: with them, what is on no page (the imports home)
     job_id: str | None = None
     sort: Sort = "created_desc"
@@ -150,8 +152,9 @@ _DDL = """
 CREATE TABLE IF NOT EXISTS assets (
   id TEXT PRIMARY KEY, kind TEXT, path TEXT, w INTEGER, h INTEGER, aspect REAL, frames INTEGER, created_at TEXT, job_id TEXT, batch_id TEXT,
   session_id TEXT, root_id TEXT, model_id TEXT, seed INTEGER, prompt_text TEXT, suite TEXT, tags TEXT,
-  has_document INTEGER DEFAULT 0, trashed_at TEXT, bytes INTEGER, thumb_status TEXT, manifest TEXT
+  has_document INTEGER DEFAULT 0, trashed_at TEXT, bytes INTEGER, thumb_status TEXT, manifest TEXT, lineage_kind TEXT
 );
+CREATE INDEX IF NOT EXISTS assets_lineage_kind ON assets(lineage_kind);
 CREATE INDEX IF NOT EXISTS assets_created ON assets(created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS assets_job ON assets(job_id);
 CREATE INDEX IF NOT EXISTS assets_batch ON assets(batch_id);
@@ -257,7 +260,7 @@ class Catalogue:
         with self._lock:
             # an index from an older schema is dropped and rebuilt from the sidecars (the files are the truth)
             cols = {r[1] for r in self._db.execute("PRAGMA table_info(assets)").fetchall()}
-            stale = bool(cols) and ("root_id" not in cols or "state" in cols)      # D122: the columns state / rating went (index schema 3)
+            stale = bool(cols) and ("root_id" not in cols or "state" in cols or "lineage_kind" not in cols)   # D122: the columns state / rating went (index schema 3); C6: lineage_kind came (4)
             if stale:
                 self._db.executescript("DROP TABLE IF EXISTS assets; DROP TABLE IF EXISTS lineage; DROP TABLE IF EXISTS assets_fts; DROP TABLE IF EXISTS meta;")
             self._db.executescript(_DDL)
@@ -300,6 +303,10 @@ class Catalogue:
         src = Path(src)
         asset_id = fields.pop("id", None) or new_id("ast")
         ext = src.suffix.lower().lstrip(".") or "bin"
+        if fields.get("lineage_kind") is not None:                               # C6 (D181, Q12): a job lands on a shelf the Bin knows, or not at all
+            from .kinds import LINEAGE_KINDS
+            if fields["lineage_kind"] not in LINEAGE_KINDS:
+                raise ValueError(f"lineage kind {fields['lineage_kind']!r} is not in the Bin's vocabulary (loom2/kinds.py): name its shelf first")
         if in_place:
             dest = src
             dest.relative_to(self.ws.path)                            # must be inside the project
@@ -399,10 +406,10 @@ class Catalogue:
                 return
             self._db.execute(
                 "INSERT OR REPLACE INTO assets (id, kind, path, w, h, aspect, frames, created_at, job_id, batch_id, session_id, root_id, model_id, seed, prompt_text,"
-                " suite, tags, has_document, trashed_at, bytes, thumb_status, manifest) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " suite, tags, has_document, trashed_at, bytes, thumb_status, manifest, lineage_kind) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (rec.id, rec.kind, rec.path, rec.w, rec.h, aspect, rec.frames, rec.created_at, rec.job_id, rec.batch_id, rec.session_id, rec.root_id, rec.model_id,
                  rec.seed, rec.prompt_text, rec.suite, json.dumps(rec.tags), int(rec.has_document), rec.trashed_at, rec.bytes, rec.thumb_status,
-                 json.dumps(rec.model_dump(), default=str)))
+                 json.dumps(rec.model_dump(), default=str), rec.lineage_kind))
             if self.fts:
                 text = " ".join(x for x in (rec.prompt_text or "", _flatten_text(rec.prompt_json), " ".join(rec.tags), rec.model_id or "", str(rec.seed or "")) if x)
                 self._db.execute("DELETE FROM assets_fts WHERE id=?", (rec.id,))
@@ -467,6 +474,10 @@ class Catalogue:
             where.append("kind = ?"); args.append(q.kind)
         if q.kinds:
             where.append(f"kind IN ({','.join('?' * len(q.kinds))})"); args.extend(q.kinds)
+        if q.shelf:                                                                       # C6 (D181): a Bin shelf in the home's class
+            from .kinds import shelf_sql
+            frag, more = shelf_sql(q.shelf, q.shelf_class)
+            where.append(frag); args.extend(more)
         if q.suite:
             where.append("suite = ?"); args.append(q.suite)
         if q.model_id:
@@ -583,6 +594,16 @@ class Catalogue:
             where, args = self._where(AssetQuery(folder=folder))  # type: ignore[arg-type]
             with self._lock:
                 out[folder] = self._db.execute(f"SELECT COUNT(*) FROM assets WHERE {where}", args).fetchone()[0]
+        return out
+
+    def shelf_counts(self) -> dict[str, dict[tuple[str | None, str], int]]:
+        """C6 (D181): each page's live things by (lineage kind, asset kind), by its group id — the tree's shelves, no manifest read."""
+        with self._lock:
+            rows = self._db.execute("SELECT p.group_id, a.lineage_kind, a.kind, COUNT(*) FROM placements p JOIN assets a ON a.id = p.asset_id "
+                                    "WHERE a.trashed_at IS NULL GROUP BY p.group_id, a.lineage_kind, a.kind").fetchall()
+        out: dict[str, dict[tuple[str | None, str], int]] = {}
+        for gid, lk, kind, n in rows:
+            out.setdefault(gid, {})[(lk, kind)] = n
         return out
 
     def placed_counts(self) -> dict[str, int]:

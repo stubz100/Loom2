@@ -16353,3 +16353,37 @@ literals 0. The e2e: the C4 scenario (New shot asks a name, the Flow's Start, th
 
 **Next:** C6 (the Bin's kinds: the vocabulary in the orchestrator, the tree's third level with counts, sequences as one tile, the kinds' verbs,
 the drawer) — the last wave of propo02 04 §7; then the author's click-through.
+
+## 2026-11-04 10:12 — C6 (D181, propo02 04 §4.7; 05 Q12, Q13): the Bin's kinds — the vocabulary, the tree's third level, the kinds' verbs, the drawer
+
+**Built.** *The vocabulary (Q12).* `loom2/kinds.py`: the twenty lineage kinds the orchestrator writes are a closed list (`LINEAGE_KINDS`,
+`LineageKind`), each mapped to a **shelf** (`SHELF_OF_LINEAGE`: the passes, stills, composition, final, animatic, body, poses, model, set,
+life); a thing with no lineage kind sits by its asset kind read in the class of its home (`shelf_of`: a picture in a shot's home is a
+still, a video there a take, a mask a working file anywhere — Q13's working files a shelf shown always; a character's audio its voice, an
+episode's video a movie). `Catalogue.ingest_file` refuses a lineage kind outside the list — a job cannot land outside the shelves — and the
+test scans the source for every lineage kind written — as a keyword or as a dict's entry — against it (D60's way; the first full e2e
+run found three written as dict entries that a keyword scan had missed, `stage-shot`, `reangle` and `voice-clone`: a stage shot's still
+could not land until they joined the list). The index gained a `lineage_kind` column (index schema 4:
+an older index is rebuilt from the manifests at the next open) and `shelf_counts()` — each page's things by (lineage kind, asset kind) in one
+query, no manifest read (B0). *The tree's third level.* Every home (and album page) in `GET /bin/tree` carries its `kinds` with counts
+(`kinds.shelves` on its own pages: the home and its role pages); the Bin's tree shows them as rows under a home that is open or unfolded,
+one clicked opens the home on that shelf alone (`GET /bin/homes/{gid}/items?shelf=` — `AssetQuery.shelf` in the home's class, `shelf_sql`),
+again the whole home; the grid's head has the home's kinds as chips with counts beside the asset-kind chips. *The kind named.* Every thing
+the Bin lists says its shelf (`BinThing.shelf`, in its own home's class); the Inspector's *kind* row; a search's tiles wear the kind as their
+badge where no role is read. *The kinds' verbs (05 §2.3: the Bin makes nothing of its own).* `kindVerb` on the right-click, opening where
+the thing belongs: a pass → *Render the passes again ▸* (the shot's Clay), a take or a still → *Re-take ▸* (its Performance), a composition
+or final → *The composition ▸* (its Final), an animatic → *Record again ▸* (the shot, then Clay's Record mode), a set thing → *The set
+builder ▸*, a body thing → *The body ▸*, a model → *The model ▸* (the Library on the version), a voice → the version in World. *The drawer*
+shares the tree, kinds and all. *Not built, recorded:* a sequence as one tile — a final's pass, master and matte folders are not assets
+(the catalogue indexes files) and stay where the Final level shows them; the A-pose and the pictures' sub-kinds by role (hero, references,
+candidates) stay badges, since the index counts no role (B0); the grid shows one shelf or the whole home, not headed sections (the
+virtualised grid draws one list).
+
+**Checked.** Offline 819 (816 + 3: test_bin_kinds_c6 — the vocabulary closed and scanned from the source, an ingest outside it refused, the tree's kinds, one shelf's listing, the search's kind; test_catalogue_m2 reads the index schema's number from the code); Vitest 661 + 3 skipped (bin.test.ts: the kinds' verbs; the fixtures carry the kinds); typecheck, build and lint
+clean (61 warnings, as before); agent docs 9 / 0; settings audit 322 / 0 with 13 allowed; model literals 0; the OpenAPI document and the
+client types regenerated (BinKind, BinNode.kinds, BinThing.shelf, the shelf parameter). The e2e: the C6 scenario (a shot's home with a take and a still: the tree's kind rows with counts, one clicked shows that shelf alone and again the whole home, the chips, the Inspector's kind, a take's Re-take ▸, the drawer's tree with the kinds) 18 s alone; the whole suite twice: 71 + 19 — every failure mine: three kinds written as dict entries that the keyword scan missed (stage-shot, reangle, voice-clone) refused at ingest until they joined the vocabulary, and the shelf chips inside the same chip class the e2e's helper clicks (their own class now) — then 88 + 2, both load flakes passing alone (the recipe graph's Clay rail, the pose-driven shot's section scroll, 19–47 s).
+
+**Live on the walk's project:** the Bin's tree under shot 1 — *Shot* (stills 4 · passes 15, its stage's album page) and its *v2* (animatic 1 · stills 8 · passes 6 · takes 2 · final 2), Nora's version (pictures 4 · model 1), the place's (pictures 4 · set 32); *animatic* clicked: the one tile, the chips with the kind active, the Inspector's *kind animatic*, the right-click's *Record again ▸*; the index rebuilt for its new column at the project's open without a visible wait; the drawer's step of the driver timed out on its node (the e2e covers the drawer) — two pictures sent.
+
+**propo02's waves are all built** — C0, C1, C2, C2b, C2c, C3, C4, C5, C6, with E59, E60 and E61 run. **Next:** the author's click-through of
+the new Clay, Shots and Bin on Followed (propo02 05's status keeps the list), the W items still owed (W44 / W51 / W55) and the author's own.

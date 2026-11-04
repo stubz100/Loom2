@@ -3,9 +3,10 @@
 import { describe, expect, it } from 'vitest'
 import type { BinNode, BinThing } from '../../api/types'
 import { belongs, moveTargets } from './binCommands'
+import { kindVerb } from './binMenus'
 import { homesById, passes, pathLabel, subtreeIds, touches, TRASH, useBin } from './binStore'
 
-const node = (id: string, path: string, name: string, children: BinNode[] = [], pages: string[] = []): BinNode => ({ id, path, name, count: 0, total: 0, pages, children, gone: false, page: false })
+const node = (id: string, path: string, name: string, children: BinNode[] = [], pages: string[] = []): BinNode => ({ id, path, name, count: 0, total: 0, pages, children, gone: false, page: false, kinds: [] })
 const homes = [
   node('g_w', 'world', 'World', [node('g_c', 'world/character', 'Characters', [node('g_i', 'world/character/prf_1', 'Ines', [node('g_v', 'world/character/prf_1/v1', 'v1 · rain gear', [], ['g_ref'])])])]),
   node('g_s', 'shots', 'Shots', [node('g_sh', 'shots/sht_9', 'The seal', [node('g_sv', 'shots/sht_9/v1', 'v1')])]),
@@ -58,5 +59,21 @@ describe('the Bin holds up (B0, D159)', () => {
     expect([useBin.getState().total, useBin.getState().selected]).toEqual([1, null])
     useBin.getState().drop('a')
     expect(useBin.getState().items).toEqual([])
+  })
+})
+
+describe("the Bin's kinds (C6, D181)", () => {
+  const thing = (path: string, shelf: string) => ({ asset: { id: 'a', kind: 'image' }, roles: [], home_id: 'g', path, shelf }) as unknown as BinThing
+  it("gives a kind its own verb where the thing belongs, none for a free picture or a working file", () => {
+    expect(kindVerb(thing('shots/sht_9/v1', 'passes'))?.label).toBe('Render the passes again ▸')
+    expect(kindVerb(thing('shots/sht_9/v1', 'takes'))?.label).toBe('Re-take ▸')
+    expect(kindVerb(thing('shots/sht_9/v1', 'final'))?.label).toBe('The composition ▸')
+    expect(kindVerb(thing('shots/sht_9/v1', 'animatic'))?.label).toBe('Record again ▸')
+    expect(kindVerb(thing('world/place/prf_1/v1', 'set'))?.label).toBe('The set builder ▸')
+    expect(kindVerb(thing('world/character/prf_1/v1', 'body'))?.label).toBe('The body ▸')
+    expect(kindVerb(thing('world/prop/prf_1/v1', 'model'))?.label).toBe('The model ▸')
+    expect(kindVerb(thing('world/sketches', 'pictures'))).toBeNull()
+    expect(kindVerb(thing('world/place/prf_1/v1', 'working'))).toBeNull()
+    expect(kindVerb(thing('imports', 'set'))).toBeNull()                                          // a set thing on no version has no builder to open
   })
 })

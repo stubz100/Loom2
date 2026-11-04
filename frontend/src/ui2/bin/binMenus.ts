@@ -4,12 +4,42 @@ import { useEffect, useState } from 'react'
 import type { BinThing } from '../../api/types'
 import { handleKeyFor, sep, type MenuItem } from '../../frame/commands'
 import { listenFileDrop } from '../../shell/tauri'
-import { importInto, moveTargets } from './binCommands'
+import { belongs, importInto, moveTargets } from './binCommands'
+import { navigate } from '../../frame/router'
 import { selectedThings, TRASH, useBin } from './binStore'
 import { useSession } from '../../store/session'
 import { worldItems } from './verbs'
 
 /** The Bin's own verbs on the selection, as a menu (the drawer puts the verbs of where you are before them). */
+/** C6 (D181, 04 §4.7): a kind's own verb — it opens or queues where the thing belongs (05 §2.3: the Bin makes nothing of its own): a pass →
+ *  Render the passes again (the shot's Clay), a take or a still → Re-take (its Performance), a composition or final → the composition (its
+ *  Final), an animatic → Record again (Clay's Record mode), a set thing → the set builder, a body thing → the body, a model → the model
+ *  (the Library on the version), a voice → the version in World. Null for a kind with no home of making (a free picture, a working file). */
+export function kindVerb(it: BinThing): { label: string; run: () => void } | null {
+  const [top, a, c, d] = it.path.split('/')
+  const shot = top === 'shots' && a ? a : null
+  const vers = top === 'world' && c ? { profile: c, version: d || null } : null
+  const openShot = (level: 'clay' | 'performance' | 'final', then?: 'record') => () => {
+    void Promise.all([import('../shots/shotsStore'), import('../../suites/story/storyStore')]).then(async ([m, s]) => {
+      if (!s.useStory.getState().shots.some((x) => x.id === shot)) await s.useStory.getState().loadShots()
+      m.useShots.getState().open(shot!, level)
+      if (then === 'record') await m.recordInClay()
+    })
+  }
+  const openLib = (kind: 'figure' | 'prop' | 'set') => () => { navigate({ suite: 'stage' }); void import('../clay/clayStore').then((m) => m.useClay.getState().openLibrary(kind, vers!.profile, vers!.version)) }
+  switch (it.shelf) {
+    case 'passes': return shot ? { label: 'Render the passes again ▸', run: openShot('clay') } : null
+    case 'takes': case 'stills': return shot ? { label: 'Re-take ▸', run: openShot('performance') } : null
+    case 'composition': case 'final': return shot ? { label: 'The composition ▸', run: openShot('final') } : null
+    case 'animatic': return shot ? { label: 'Record again ▸', run: openShot('performance', 'record') } : null
+    case 'set': case 'life': return vers ? { label: 'The set builder ▸', run: openLib('set') } : null
+    case 'body': case 'poses': return vers ? { label: 'The body ▸', run: openLib('figure') } : null
+    case 'model': return vers ? { label: 'The model ▸', run: openLib('prop') } : null
+    case 'voice': return vers ? { label: 'The voice ▸', run: () => belongs(it.path)?.open() } : null
+    default: return null
+  }
+}
+
 export function binMenu(it: BinThing): MenuItem[] {
   const s = useBin.getState()
   if (s.open === TRASH || it.asset.trashed_at) return [{ cmd: 'bin.item.restore' }, { cmd: 'bin.item.purge' }, sep, { cmd: 'bin.trash.empty' }]
@@ -19,7 +49,8 @@ export function binMenu(it: BinThing): MenuItem[] {
   const pic = it.asset.kind === 'image' && !many
   const starts: MenuItem[] = pic ? [sep, { cmd: 'bin.item.edit' }, { cmd: 'bin.item.selectSubject' }, { cmd: 'bin.item.upscale' }, { cmd: 'bin.item.angle' },
     ...(useSession.getState().capabilities?.mesh?.model_id ? [{ cmd: 'bin.item.mesh' }] : [])] : []
-  return [{ cmd: 'bin.item.open' }, { cmd: 'bin.item.view' }, { label: 'Move to', items: moveTargets(s.homes, it.home_id ?? null) }, { cmd: 'bin.item.tag' },
+  const kind = many ? null : kindVerb(it)
+  return [{ cmd: 'bin.item.open' }, ...(kind ? [kind] : []), { cmd: 'bin.item.view' }, { label: 'Move to', items: moveTargets(s.homes, it.home_id ?? null) }, { cmd: 'bin.item.tag' },
     { cmd: 'bin.item.duplicate' }, { cmd: 'bin.item.pin', label: s.pins.some((a) => a.id === it.asset.id) ? 'Unpin' : undefined },
     ...(s.pins.length >= 2 ? [{ cmd: 'bin.compare' }] : []),
     ...starts,

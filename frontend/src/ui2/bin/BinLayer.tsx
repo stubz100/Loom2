@@ -22,13 +22,23 @@ import { BinCompare, BinLoupe } from './BinLoupe'
 import { BinTile } from './BinTile'
 import { PromptBlock } from '../PromptBlock'
 import { binMenu, gridKeys, useFileDrop } from './binMenus'
-import { FILTERS, HEADINGS, passes, pathLabel, ROLE_LABEL, ROLE_WORDS, selectedThings, startBin, TRASH, useBin } from './binStore'
+import { FILTERS, HEADINGS, passes, pathLabel, ROLE_LABEL, ROLE_WORDS, selectedThings, shelfLabel, startBin, TRASH, useBin } from './binStore'
 import '../world/world.css'
 import './bin.css'
 import { NoProject } from '../NoProject'
 
 /** B2 (D159): a home of the tree takes the tiles dropped on it (moved there, a role asked about first); a heading or a deleted record's
  *  home takes none. */
+/** C6 (D181, 04 §4.7): a home's kinds — its shelves with their counts, the tree's third level; one clicked opens the home on that shelf. */
+function Kinds({ n, depth }: { n: BinNode; depth: number }) {
+  const shelf = useBin((s) => (s.open === n.id && !s.query ? s.shelf : null))
+  if (!n.kinds.length) return null
+  return <>{n.kinds.map((k) => (
+    <div key={k.id} className={`b-kind${shelf === k.id ? ' active' : ''}`} style={{ paddingLeft: 4 + (depth + 1) * 14 + 16 }} data-path={n.path} data-kind={k.id} role="button" tabIndex={-1}
+      title={`${k.label} of ${n.name}: ${k.count}`} onClick={() => void useBin.getState().openHome(n.id, shelf === k.id ? null : k.id)}>
+      <span>{k.label}</span><span className="n">{k.count}</span></div>))}</>
+}
+
 function Node({ n, depth }: { n: BinNode; depth: number }) {
   const open = useBin((s) => s.open === n.id && !s.query)
   const expanded = useBin((s) => !!s.expanded[n.id])
@@ -42,6 +52,7 @@ function Node({ n, depth }: { n: BinNode; depth: number }) {
         {n.children.length ? <button className="b-chev" aria-label={expanded ? 'Fold' : 'Unfold'} onClick={() => useBin.getState().toggle(n.id)}>{expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</button> : <span className="b-chev" />}
         <button className="b-open" title={n.gone ? `${n.path} — deleted` : n.path} onClick={() => void useBin.getState().openHome(n.id)}><span>{n.page && <Folder size={12} />}{n.name}{n.gone ? ' · deleted' : ''}</span><span className="n">{n.total}</span></button>
       </div>
+      {(expanded || open) && <Kinds n={n} depth={depth} />}
       {expanded && n.children.map((k) => <Node key={k.id} n={k} depth={depth + 1} />)}
     </>
   )
@@ -83,6 +94,7 @@ function Grid() {
   const many = useBin((s) => s.selection.length)
   const focus = useBin((s) => s.items.findIndex((x) => x.asset.id === s.selected))
   const node = homeOf(useBin((s) => s.open))
+  const shelf = useBin((s) => s.shelf)
   const inTrash = useBin((s) => s.open === TRASH)
   const [cols, setCols] = useState(1)
   const el = useRef<HTMLDivElement | null>(null)
@@ -97,6 +109,8 @@ function Grid() {
           {total !== null && !loading && <span className="hint" data-testid="bin-count">{query ? shown.length : total}</span>}
           {many > 1 && <span className="hint" data-testid="bin-selected">· {many} selected</span>}
           <span className="w-chips">{FILTERS.map(([f, l]) => <button key={f} className={filter === f ? 'active' : ''} onClick={() => useBin.getState().setFilter(f)}>{l}</button>)}</span>
+          {!query && !inTrash && !!node?.kinds.length && <span className="b-shelves" data-testid="bin-shelves" title="the home's kinds (C6): one filters the grid, again shows the whole home">
+            {node.kinds.map((k) => <button key={k.id} className={shelf === k.id ? 'active' : ''} data-kind={k.id} onClick={() => void useBin.getState().setShelf(shelf === k.id ? null : k.id)}>{k.label} <i>{k.count}</i></button>)}</span>}
           <span className="spacer" />
           {pins > 0 && <><CommandButton id="bin.compare" text label={`Compare ${pins}`} /><CommandButton id="bin.unpinAll" /></>}
           <CommandButton id="bin.selectAll" />
@@ -198,6 +212,7 @@ function Inspector() {
       <Preview it={it} />
       <div className="kv"><span>home</span><span title={it.path}>{it.path ? pathLabel(homes, it.path) : '—'}</span></div>
       <div className="kv"><span>roles</span><span>{it.roles.join(' · ') || '—'}</span></div>
+      <div className="kv"><span>kind</span><span data-testid="bin-kind">{shelfLabel(it.shelf)}</span></div>{/* C6: its shelf in its home */}
       {made && <div className="kv"><span>made</span><span>{made}</span></div>}
       {run !== null && run > 1 && <div className="kv"><span>same run</span><span>{run} {a.kind === 'video' ? 'clips' : 'pictures'}</span></div>}
       {a.tags.length > 0 && <div className="kv"><span>tags</span><span>{a.tags.join(', ')}</span></div>}

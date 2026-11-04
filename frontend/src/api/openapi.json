@@ -1837,6 +1837,30 @@
         "title": "BinItem",
         "type": "object"
       },
+      "BinKind": {
+        "description": "C6 (D181, 04 §4.7): a shelf of a home — a kind the index can count (kinds.py), with its count.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "count"
+        ],
+        "title": "BinKind",
+        "type": "object"
+      },
       "BinMove": {
         "properties": {
           "confirm": {
@@ -1908,7 +1932,7 @@
         "type": "object"
       },
       "BinNode": {
-        "description": "U8 (05 §2.1): a home in the Bin's tree — its own things and its role pages' (`count`), with the homes under it (`total`).",
+        "description": "U8 (05 §2.1): a home in the Bin's tree — its own things and its role pages' (`count`), with the homes under it (`total`); C6: its\nshelves (`kinds`) with their counts, the tree's third level.",
         "properties": {
           "children": {
             "items": {
@@ -1929,6 +1953,13 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "kinds": {
+            "items": {
+              "$ref": "#/components/schemas/BinKind"
+            },
+            "title": "Kinds",
+            "type": "array"
           },
           "name": {
             "title": "Name",
@@ -1961,6 +1992,7 @@
           "name",
           "count",
           "total",
+          "kinds",
           "pages",
           "gone",
           "page",
@@ -2052,13 +2084,19 @@
             },
             "title": "Roles",
             "type": "array"
+          },
+          "shelf": {
+            "default": "pictures",
+            "title": "Shelf",
+            "type": "string"
           }
         },
         "required": [
           "asset",
           "roles",
           "home_id",
-          "path"
+          "path",
+          "shelf"
         ],
         "title": "BinThing",
         "type": "object"
@@ -28121,6 +28159,32 @@
           },
           {
             "in": "query",
+            "name": "shelf",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Shelf"
+            }
+          },
+          {
+            "in": "query",
+            "name": "shelf_class",
+            "required": false,
+            "schema": {
+              "default": "other",
+              "title": "Shelf Class",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "unplaced_too",
             "required": false,
             "schema": {
@@ -28765,6 +28829,32 @@
               },
               "title": "Group Ids",
               "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "shelf",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Shelf"
+            }
+          },
+          {
+            "in": "query",
+            "name": "shelf_class",
+            "required": false,
+            "schema": {
+              "default": "other",
+              "title": "Shelf Class",
+              "type": "string"
             }
           },
           {
@@ -29470,6 +29560,22 @@
               },
               "title": "Kinds",
               "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "shelf",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Shelf"
             }
           }
         ],

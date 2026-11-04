@@ -7,9 +7,9 @@ import type { BinThing } from '../../api/types'
 import { showMenu } from '../../frame/ContextMenu'
 import type { MenuItem } from '../../frame/commands'
 import { beginDrag, mediaOf } from '../../frame/drag'
-import { ROLE_LABEL, selectedThings, TRASH, useBin } from './binStore'
+import { ROLE_LABEL, selectedThings, shelfLabel, TRASH, useBin } from './binStore'
 
-const badgeOf = (it: BinThing): string | undefined => it.roles.map((r) => ROLE_LABEL[r]).find(Boolean)
+const badgeOf = (it: BinThing, searching: boolean): string | undefined => it.roles.map((r) => ROLE_LABEL[r]).find(Boolean) ?? (searching ? shelfLabel(it.shelf) : undefined)   // C6: the search names the kind
 
 export function BinTile({ it, menu, onDouble, corner }: {
   it: BinThing; menu: (it: BinThing) => MenuItem[]; onDouble: () => void; corner?: { icon?: ReactNode; label: string; run: () => void }
@@ -18,7 +18,8 @@ export function BinTile({ it, menu, onDouble, corner }: {
   const sel = useBin((s) => s.selection.includes(id))
   const primary = useBin((s) => s.selected === id)
   const pin = useBin((s) => s.pins.findIndex((a) => a.id === id) + 1)
-  const badge = badgeOf(it)
+  const searching = useBin((s) => !!s.query)
+  const badge = badgeOf(it, searching)
   return (
     <button className={`w-tile${sel || primary ? ' selected' : ''}${primary ? ' primary' : ''}`} data-id={id} title={it.asset.prompt_text ?? it.path}
       onClick={(e) => useBin.getState().select(id, e.shiftKey ? 'range' : e.ctrlKey || e.metaKey ? 'toggle' : 'single')}

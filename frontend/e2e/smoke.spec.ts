@@ -4503,3 +4503,68 @@ test('the shot page\'s ledger and the storyboard\'s play (D181, C4): a shot is n
   await player.locator('button', { hasText: 'Stop' }).click()
   await expect(player).toHaveCount(0)
 })
+
+test("the Bin's kinds (D181, C6 · propo02 04 §4.7): a shot's home lists its kinds with counts as the tree's third level and as chips — a take and a still; a kind clicked shows that shelf alone, again the whole home; the Inspector names the kind; the search's tiles carry it; a take's right-click offers Re-take ▸ where it belongs; the drawer's tree has the kinds too (Bin)", async ({ page }) => {
+  test.setTimeout(120_000)
+  const tag = Date.now().toString(36)
+  type JobLite = { id: string; status: string; result: { asset_ids?: string[] } }
+  const a = await api<{ id: string; shot_id: string }>('POST', '/story/flow/shots', { title: `Kinds ${tag}`, scene: 'new' })
+  const caps = await api<{ defaults: { i2v: string } }>('GET', '/capabilities')
+  const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
+  const job = (await api<{ jobs: { id: string }[] }>('POST', '/jobs', { recipe: { kind: 'i2v', model_id: caps.defaults.i2v, start_asset: img, width: 832, height: 480, frames: 9, fps: 16, prompt_text: `kinds ${tag}` }, stage: false,
+    origin: { suite: 'story', surface: 'for_shot', payload: { shot_id: a.shot_id, version: 'v1' } } })).jobs[0]
+  await expect.poll(async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.id === job.id)?.status, { timeout: 60_000 }).toBe('done')
+  const take = (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.id === job.id)!.result.asset_ids![0]
+  const still = (await api<{ ids: string[] }>('POST', '/assets/duplicate', { ids: [img] })).ids[0]                          // a picture put in the shot's home: a still there
+  type Node = { id: string; path: string; kinds: { id: string; count: number }[]; children: Node[] }
+  const flat = (ns: Node[]): Node[] => ns.flatMap((n) => [n, ...flat(n.children)])
+  const homeV1 = () => flat((await0 as unknown as { homes: Node[] }).homes).find((n) => n.path === `shots/${a.shot_id}/v1`)!
+  let await0 = await api<{ homes: Node[] }>('GET', '/bin/tree')
+  await api('POST', '/bin/move', { ids: [still], to: homeV1().id, confirm: true })
+  await0 = await api<{ homes: Node[] }>('GET', '/bin/tree')
+  expect(homeV1().kinds.map((k) => [k.id, k.count])).toEqual([['stills', 1], ['takes', 1]])                              // the third level, from the index
+  // the tree: the shot's home unfolded shows its kinds with counts; one clicked shows that shelf alone
+  await page.goto(`${appUrl()}#bin`)
+  const tree = page.locator('[data-testid="bin-tree"]')
+  const shot = tree.locator(`.b-node[data-path="shots/${a.shot_id}"]`)
+  await expect(shot).toContainText(`Kinds ${tag}`)
+  const chev = shot.locator('.b-chev[aria-label="Unfold"]')
+  if (await chev.count()) await chev.click()
+  const v1 = tree.locator(`.b-node[data-path="shots/${a.shot_id}/v1"]`)
+  await v1.locator('.b-open').click()
+  await expect(page.locator('[data-testid="bin-count"]')).toHaveText('2')
+  const takes = tree.locator(`.b-kind[data-path="shots/${a.shot_id}/v1"][data-kind="takes"]`)
+  await expect(takes).toContainText('takes'); await expect(takes).toContainText('1')
+  await expect(tree.locator(`.b-kind[data-path="shots/${a.shot_id}/v1"][data-kind="stills"]`)).toContainText('1')
+  await takes.click()
+  await expect(page.locator('[data-testid="bin-count"]')).toHaveText('1')
+  await expect(page.locator(`[data-testid="bin-grid"] .w-tile[data-id="${take}"]`)).toHaveCount(1)
+  await expect(page.locator(`[data-testid="bin-grid"] .w-tile[data-id="${still}"]`)).toHaveCount(0)
+  await expect(page.locator('[data-testid="bin-shelves"] button.active')).toHaveText(/takes/)
+  // the chips: the still's shelf, then the whole home again
+  await page.locator('[data-testid="bin-shelves"] button[data-kind="stills"]').click()
+  await expect(page.locator(`[data-testid="bin-grid"] .w-tile[data-id="${still}"]`)).toHaveCount(1)
+  await expect(page.locator('[data-testid="bin-count"]')).toHaveText('1')
+  await page.locator('[data-testid="bin-shelves"] button[data-kind="stills"]').click()
+  await expect(page.locator('[data-testid="bin-count"]')).toHaveText('2')
+  await expect(page.locator('[data-testid="bin-shelves"] button.active')).toHaveCount(0)
+  // the Inspector names the kind; the take's right-click offers its verb
+  const tile = page.locator(`[data-testid="bin-grid"] .w-tile[data-id="${take}"]`)
+  await tile.click()
+  await expect(page.locator('[data-testid="bin-kind"]')).toHaveText('takes')
+  await tile.click({ button: 'right' })
+  await expect(page.locator('.ctx-menu button.item', { hasText: 'Re-take ▸' })).toBeVisible()
+  await page.keyboard.press('Escape')
+  // the search's tiles carry the kind
+  await page.locator('.w-left .b-search').fill(`kinds ${tag}`)
+  await page.locator('.w-left .b-search').press('Enter')
+  await expect(page.locator(`[data-testid="bin-grid"] .w-tile[data-id="${take}"] .w-badge`)).toHaveText(/clip|takes/)
+  // the drawer's tree has the kinds too
+  await page.goto(`${appUrl()}#world`)
+  await page.locator('.dock .dock-tabs button', { hasText: 'Bin' }).click()
+  const homes = page.locator('[data-testid="bin-drawer-homes"]')
+  const dchev = homes.locator(`.b-node[data-path="shots/${a.shot_id}"] .b-chev[aria-label="Unfold"]`)
+  if (await dchev.count()) await dchev.click()
+  await homes.locator(`.b-node[data-path="shots/${a.shot_id}/v1"] .b-open`).click()
+  await expect(homes.locator(`.b-kind[data-path="shots/${a.shot_id}/v1"][data-kind="takes"]`)).toBeVisible()
+})

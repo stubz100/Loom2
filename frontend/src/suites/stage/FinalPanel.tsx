@@ -25,6 +25,8 @@ function statusText(l: FinalLayer, projecting: boolean, frames: number, filling:
       const pending = keys.find((k) => !k.asset_id)
       return pending ? `filling the keyframe at frame ${pending.frame} · ${keys.length} so far` : filling ? `filling · ${filling}` : `filling · ${keys.length} keyframe${keys.length === 1 ? '' : 's'}`
     }
+    const beats = (l.beats as unknown as { asset_id?: string | null }[] | undefined) ?? []              // D184 (C5): the generated plate's anchor stills
+    if (l.method === 'generated' && l.status === 'queued' && l.still_asset_id && beats.some((b) => !b.asset_id)) return `anchor stills ${beats.filter((b) => b.asset_id).length} / ${beats.length}`
     if (l.method === 'generated' && (l.status === 'queued' || l.status === 'running') && l.still_asset_id) return 'generating along the path'   // CA3: LTX on the depth
     if (l.status === 'queued') return 'the still is queued'
     if (l.status === 'running') return l.still_asset_id ? 'projecting next' : 'making the still'

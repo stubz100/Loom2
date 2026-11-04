@@ -253,6 +253,7 @@ class StageObject(BaseModel):
     detail: Literal["male", "female"] | None = None   # CA1: the Detailed level — the starter set's skinned mannequin follows the figure; U18 (CS1): every
                                                       # figure has one (a stored None reads as ♀, the Simple dummy retired); other kinds None
     shadow_proxy: str | None = None                # E23d (D105): a mesh asset shaped like the character, bound to the figure, that casts its shadow
+    exact: bool = True                             # D184 (C5): in a final the figure is its own layer, performed on its references (exact); off: on the plate, an extra
     path: list[list[float]] | None = None          # CA1: the figure's floor path, [x, z] points clicked on the floor (a library clip walks it)
     light: LightSpec | None = None                 # D110 (PS4): a light object's settings (None = E23c's key)
     lens_deg: float | None = None                  # SC3 (D120): an image set (preset `image`, asset_id the relief): the picture's horizontal field of view

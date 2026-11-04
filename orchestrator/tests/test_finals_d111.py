@@ -357,3 +357,31 @@ def test_the_matte_is_sam3_where_offered_else_the_subject_matte(tmp_path: Path):
     sub = graphs.build_matte_sequence(MatteSequence(final_id="f", layer_id="l", mode="subject"), roster, "v.mp4", "x")
     assert {n["class_type"] for n in sam.graph.values()} >= {"SAM3_Detect", "LoadVideo"} and "RemoveBackground" not in {n["class_type"] for n in sam.graph.values()}
     assert {n["class_type"] for n in sub.graph.values()} >= {"RemoveBackground", "LoadVideo"} and "SAM3_Detect" not in {n["class_type"] for n in sub.graph.values()}
+
+
+def test_the_plate_keeps_its_extras_through_the_route(tmp_path: Path):
+    """D184 (C5): the figures the author leaves on the plate come with the plate layer and stay on its record."""
+    from fastapi.testclient import TestClient
+    from loom2.api import create_app
+    from loom2.config import AppState
+    from PIL import Image
+    state = tmp_path / "state"
+    AppState(state).update_settings({"engine": {"python": str(tmp_path / "missing.exe"), "health_timeout_s": 1}, "models_root": str(tmp_path / "models"),
+                                     "mounted_model_trees": [], "variant": "full"})
+    app = create_app(state)
+    H = {"X-Loom-Token": app.state.services.app.token}
+    with TestClient(app) as cl:
+        cl.post("/project", json={"path": str(tmp_path / "proj"), "name": "S", "size_cap_gb": 10}, headers=H)
+        st = cl.post("/stages", json={"name": "Street"}, headers=H).json()
+        png = tmp_path / "grey.png"
+        Image.new("RGB", (64, 48), (128, 128, 128)).save(png)
+        sha = hashlib.sha256(png.read_bytes()).hexdigest()
+        assert cl.put(f"/blobs/{sha}", content=png.read_bytes(), headers={**H, "Content-Type": "image/png"}).status_code in (200, 201)
+        extras = [{"object_id": "fig_man", "profile_id": "prf_man", "version": "v1", "name": "Man with a newspaper"}]
+        body = {"name": "Shot", "stage_id": st["id"], "camera_id": st["cameras"][0]["id"], "stage_revision": st["revision"], "range": {"start": 0, "end": 3}, "rate": 16,
+                "size": {"w": 128, "h": 128}, "frames": 3, "layers": [{"id": "plate", "kind": "plate", "name": "Street", "method": "projected", "passes": {"depth": [sha] * 3, "clay": [sha] * 3}, "extras": extras},
+                                                                   {"id": "shadows", "kind": "shadows", "name": "Shadows", "passes": {"clay": [sha] * 3}}]}
+        r = cl.post("/finals", json=body, headers=H)
+        assert r.status_code == 200, r.text
+        plate = next(x for x in r.json()["layers"] if x["id"] == "plate")
+        assert plate["extras"] == extras and plate["beats"] == []

@@ -4347,3 +4347,58 @@ test('shells only (D183, C2c): a scene\'s Figures ＋ lists characters and no du
   await expect.poll(async () => Object.keys(await offsets()), { timeout: 15_000 }).toEqual([])
   await page.screenshot({ path: 'node_modules/.e2e/c2c-shells.png' })
 })
+
+test('the hybrid final (D184, C5): a figure unticked as exact rides on the plate — the dialog says so, the final has no layer for it; the plate generated along the path makes its anchor stills (every five seconds and the last frame) before its clip, the clip queued with them as beats; the Stage clip card counts the range\'s other stills as anchors (Shots)', async ({ page }) => {
+  test.setTimeout(240_000)
+  const made = await clayShot(page, `Hybrid ${Date.now().toString(36)}`)
+  await page.locator('.stage-empty button', { hasText: /^Add set · room$/ }).click()
+  const nora = await addCharacter(page)
+  const extra = await addCharacter(page)
+  // the extra: not exact — on the plate
+  const row = page.locator(`.outl-row[data-id="${extra.id}"], .outl-row`, { hasText: extra.name }).first()
+  if (!(await row.evaluate((r) => r.classList.contains('active')))) await row.click()
+  const exact = page.locator('[data-testid="figure-exact"] input[aria-label="exact — its own layer"]')
+  await expect(exact).toBeChecked()
+  await exact.click()
+  await expect(page.locator('[data-testid="figure-exact"]')).toContainText('on the plate')
+  type Doc = { id: string; objects: { id: string; name: string; exact?: boolean }[] }
+  const doc = async () => api<Doc>('GET', `/stages/${made.stage}`)
+  await expect.poll(async () => (await doc()).objects.find((o) => o.name === extra.name)?.exact, { timeout: 10_000 }).toBe(false)
+  expect((await doc()).objects.find((o) => o.name === nora.name)?.exact).toBe(true)
+  // six seconds at F16: 97 frames — anchors at 5 s and the last frame
+  await page.evaluate(() => (window as unknown as { __loom2Stage: { setRange: (a: number, b: number) => void } }).__loom2Stage.setRange(0, 144))
+  await perfCardOf(page, 'Final shot')
+  await page.locator('.final-section button', { hasText: /^Make the final shot/ }).click()
+  const dialog = page.locator('.modal.ask')
+  await expect(dialog).toContainText(/3 layers — the plate with 1 figure on it, 1 exact figure/)
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('.final-section .final-row')).toBeVisible({ timeout: 120_000 })
+  type Lay = { id: string; kind: string; method: string; status: string; still_asset_id: string | null; clip_id: string | null; extras: { object_id: string; profile_id: string | null }[]; beats: { frame: number; asset_id: string | null; job_id: string | null }[] }
+  type Fin = { id: string; frames: number; stage_id: string; layers: Lay[] }
+  const stage = (await doc()).id
+  const fin = (await api<{ items: Fin[] }>('GET', `/finals?stage_id=${stage}`)).items[0]
+  expect(fin.frames).toBe(97)
+  expect(fin.layers.map((l) => `${l.kind}:${l.id}`)).toEqual(['plate:plate', `figure:${fin.layers[1].id}`, 'shadows:shadows'])
+  expect(fin.layers[0].extras.map((x) => x.profile_id)).toEqual([extra.id])
+  // the plate generated along the path — the final's own choice with a figure on it (finalShot's rule); the chip's menu says so: the first
+  // still, then the anchors at frames 80 and 96, then the clip with them as beats
+  const plateOf = async () => (await api<Fin>('GET', `/finals/${fin.id}`)).layers.find((l) => l.id === 'plate')!
+  expect((await plateOf()).method).toBe('generated')
+  await page.locator('.final-section li[data-kind="plate"] button.plate-method').click()
+  await expect(page.locator('.ctx-menu button.item', { hasText: 'Generate it along the path again' })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await page.locator('.final-section li[data-kind="plate"] button', { hasText: 'Make the plate' }).click()
+  await expect.poll(async () => (await plateOf()).beats.map((b) => b.frame).join(','), { timeout: 20_000 }).toBe('80,96')
+  await expect.poll(async () => (await plateOf()).still_asset_id, { timeout: 60_000 }).toBeTruthy()
+  await expect.poll(async () => (await plateOf()).beats.every((b) => b.asset_id), { timeout: 120_000 }).toBe(true)
+  await expect.poll(async () => (await plateOf()).status, { timeout: 120_000 }).toBe('done')
+  const plate = await plateOf()
+  type JobLite = { id: string; recipe: { kind: string; beats?: { frame: number; asset_id: string }[]; prompt_text: string } }
+  const clip = (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.recipe.kind === 'i2v' && j.recipe.beats?.length === 2)!
+  expect(clip.recipe.beats!.map((b) => `${b.frame}:${b.asset_id}`)).toEqual(plate.beats.map((b) => `${b.frame}:${b.asset_id}`))
+  expect(clip.recipe.prompt_text).toContain('only the people the clay shows')                                    // the extra rides the plate
+  // the Stage clip card: a still made at another frame of the range is an anchor
+  await perfCardOf(page, 'Stage clip')
+  await expect(page.locator('[data-testid="clip-anchors"]')).toContainText('none')
+  await page.screenshot({ path: 'node_modules/.e2e/c5-hybrid.png' })
+})

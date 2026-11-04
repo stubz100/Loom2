@@ -27,6 +27,9 @@ BATCH, CARRY = 77, 5                              # E23a W1: 77-frame batches, t
 CHARACTER_TAIL = "moving exactly as the pose shows. Plain studio background, static camera."
 PLATE_LEAD = "The place is empty: there are no people and no objects in it."   # E28: a plate without the lead grew people; U4d (F38): not "the room … bare walls and floor" on a street
 PLATE_PATH_TAIL = "The camera moves slowly through the place; nothing in it moves."   # CA3: E34's clip prompt ended on the camera's move
+PLATE_LEAD_PEOPLE = "The place has only the people the clay shows, no one else and no objects."   # D184 (C5): a plate with the extras on it
+PLATE_PATH_TAIL_PEOPLE = "The people walk as the sequence shows; the camera moves slowly through the place."
+BEAT_SECONDS = 5                                  # D184 (C5): the generated plate's anchor stills — one every five seconds and the last frame
 PLATE_PATH_MAX = 257                               # CA3: LTX-2.3's longest clip (I2V.frames) — a longer plate is projected
 FILL_LEAD = ("Continue the surrounding surfaces seamlessly with the same materials and the same light; add nothing that is not already "
              "there. The place:")                  # PF1 (D135, E35d): a keyframe's Fill continues the place's surfaces, it does not re-describe it
@@ -77,6 +80,8 @@ class FinalLayer(BaseModel):
     error: str | None = None
     still_asset_id: str | None = None              # PS5b: the plate's still (a Klein Stage shot of the bare set at frame 0); SC3e: the set's picture
     clip_id: str | None = None                     # CA3 (D130): the plate generated along the path — its LTX clip (frames resized and trimmed into frames/)
+    extras: list[dict[str, Any]] = Field(default_factory=list)   # D184 (C5): the figures on the plate, not layers — [{object_id, profile_id, version, name}]
+    beats: list[dict[str, Any]] = Field(default_factory=list)    # D184 (C5): the generated plate's anchor stills — [{frame, asset_id, job_id}] by frame (E59 e)
     prompt: str | None = None                      # PF1 (D135): the plate's place prompt (its still's) — the keyframes' Fills continue its surfaces
     keys: list[dict[str, Any]] = Field(default_factory=list)   # PF1: the filled plate's keyframes — [{frame, asset_id, filled, job_id, heal}] by frame
     heal: bool = False                             # PF1 (Q29): the frames between keyframes healed by small keyframes of their own
@@ -576,13 +581,42 @@ def plate_path_guide(depth: list[Path], w: int, h: int, n: int, out: Path, fps: 
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def plate_path_recipe(f: "Final", model_id: str, still_id: str, guide_id: str, prompt: str, size: tuple[int, int], seed: int) -> dict[str, Any]:
+def plate_path_recipe(f: "Final", model_id: str, still_id: str, guide_id: str, prompt: str, size: tuple[int, int], seed: int,
+                      beats: list[dict[str, Any]] | None = None, people: bool = False) -> dict[str, Any]:
     """CA3 (D130, E34): the plate generated along the path — LTX-2.3 from the plate's still, the bare set's depth through the IC-LoRA from
-    frame 0 (Stage's guided method), at the final's rate, Draft."""
+    frame 0 (Stage's guided method), at the final's rate, Draft. D184 (C5): with the extras on it the lead and the tail say so, and the
+    anchor stills landed at the beats hold the place (and them) along the way — LTX keyframe beats at the clip's frame for each (E59 e)."""
     place = prompt.strip().rstrip(".")
-    return {"kind": "i2v", "model_id": model_id, "start_asset": still_id, "prompt_text": f"{PLATE_LEAD} {place + '. ' if place else ''}{PLATE_PATH_TAIL}",
-            "frames": plate_path_frames(f.frames), "fps": f.rate, "width": size[0], "height": size[1], "preset": "draft", "seeds": [seed],
-            "guide": {"asset_id": guide_id, "kind": "depth", "strength": 1.0}}
+    n = plate_path_frames(f.frames)
+    lead, tail = (PLATE_LEAD_PEOPLE, PLATE_PATH_TAIL_PEOPLE) if people else (PLATE_LEAD, PLATE_PATH_TAIL)
+    r: dict[str, Any] = {"kind": "i2v", "model_id": model_id, "start_asset": still_id, "prompt_text": f"{lead} {place + '. ' if place else ''}{tail}",
+                         "frames": n, "fps": f.rate, "width": size[0], "height": size[1], "preset": "draft", "seeds": [seed],
+                         "guide": {"asset_id": guide_id, "kind": "depth", "strength": 1.0}}
+    landed = [b for b in (beats or []) if b.get("asset_id") and 0 < int(b.get("frame", 0)) < f.frames]
+    if landed:
+        scale = (n - 1) / max(1, f.frames - 1)
+        r["beats"] = [{"frame": min(n - 1, round(int(b["frame"]) * scale)), "asset_id": b["asset_id"], "strength": 1.0} for b in landed]
+    return r
+
+
+def plate_beats_wanted(f: "Final") -> list[int]:
+    """D184 (C5): the frames (indices into the final's frames) a generated plate anchors with a still besides its first — one every
+    BEAT_SECONDS, and the last frame unless a beat is within half a second of it; none for a plate shorter than a second."""
+    if f.frames <= f.rate:
+        return []
+    step = BEAT_SECONDS * f.rate
+    beats = list(range(step, f.frames - 1, step))
+    last = f.frames - 1
+    if not beats or last - beats[-1] > f.rate // 2:
+        beats.append(last)
+    return beats
+
+
+def plate_still_text(words: str, extra: str, people: bool) -> str:
+    """The plate's still: the lead first (no people and no objects — or, D184, only the people the clay shows), the shot's own words, the
+    author's extra."""
+    lead = PLATE_LEAD_PEOPLE if people else PLATE_LEAD
+    return " ".join(x for x in (lead, words, extra if extra not in words else "") if x)
 
 
 def character_recipe(f: "Final", layer: "FinalLayer", model_id: str, prompt: str, batch: dict[str, int], clip_id: str | None) -> dict[str, Any]:

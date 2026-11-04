@@ -69,7 +69,7 @@ function newObject(cur: StageDoc, kind: Kind, preset: string | null = null, pos?
   const scale = kind === 'mannequin' ? (MANNEQUIN_PRESETS[preset ?? 'adult']?.scale ?? 1) : 1
   return { id: newId(kind === 'mannequin' ? 'fig' : kind), kind, name: `${NAMES[kind] ?? kind} ${cur.objects.filter((o) => o.kind === kind).length + 1}`, preset, asset_id: assetId,
     transform: { pos: pos ?? [0, 0, 0], rot: [0, yaw, 0], scale: [scale, scale, scale] }, parent: null, parent_joint: null,
-    locked: false, visible: true, colour_id: (cur.objects.length % 12) + 1, pose: kind === 'mannequin' ? { preset: 'stand', joints: {}, extra: {}, ground: 0, pins: {}, contacts: {}, gaze: null } : null, billboard: kind === 'plane', profile_id: null, version: null, body: null, detail: kind === 'mannequin' ? newDetail(cur.objects) : null, path: null, shadow_proxy: null,
+    locked: false, visible: true, exact: true, colour_id: (cur.objects.length % 12) + 1, pose: kind === 'mannequin' ? { preset: 'stand', joints: {}, extra: {}, ground: 0, pins: {}, contacts: {}, gaze: null } : null, billboard: kind === 'plane', profile_id: null, version: null, body: null, detail: kind === 'mannequin' ? newDetail(cur.objects) : null, path: null, shadow_proxy: null,
     light: kind === 'light' ? { ...NEW_LIGHT, target: [...NEW_LIGHT.target] } : null,
     lens_deg: null, plate_asset_id: null, floor_y: null, plate_camera_id: null, level: null, things: [], things_document_id: null, height_m: null, place_set: null }
 }
@@ -281,6 +281,7 @@ interface StageState {
   guideStale: () => boolean                                 // D121: no sequence, or one from another range, length or revision
   guideSize: () => [number, number]                         // the clip model's grid at the project's aspect
   renderGuide: () => Promise<boolean>
+  clipAnchors: () => { frame: number; asset_id: string; strength: number }[]
   animateShot: () => Promise<Job[] | null>
   // P18 (D84): the project's mesh assets (GLB props) for the Library
   meshes: Asset[]
@@ -652,14 +653,28 @@ export const useStage = create<StageState>()((set, get) => ({
       return true
     } catch (e) { s.toast(`Render sequence failed: ${(e as ApiError).detail ?? e}`, 'error'); return false } finally { set({ rendering: false, rendered: null }) }
   },
+  /** D184 (C5): the stage's stills rendered at other frames of the range than the start's — LTX keyframe beats at the clip's frame for each
+   *  (a still's frame is on its recipe, D184; a still from before carries none and anchors nothing). */
+  clipAnchors: () => {
+    const cur = get().current, g = get().guideEntry(), start = get().shotStart
+    if (!cur || !g) return []
+    const { start: a, end: b } = cur.range
+    const frameOf = (x: { params?: Record<string, unknown> | null }) => { const f = ((x.params?.recipe as { frame?: number } | undefined)?.frame); return typeof f === 'number' ? f : null }
+    const startFrame = frameOf(get().shots.find((x) => x.id === start) ?? {}) ?? a
+    const seen = new Set<number>()
+    return get().shots.filter((x) => x.kind !== 'video' && x.id !== start).map((x) => ({ id: x.id, frame: frameOf(x) })).filter((x): x is { id: string; frame: number } => x.frame != null && x.frame > a && x.frame <= b && x.frame !== startFrame)
+      .sort((x, y) => x.frame - y.frame).filter((x) => { const k = Math.round(((x.frame - a) / Math.max(1, b - a)) * (g.frames - 1)); if (seen.has(k) || k <= 0) return false; seen.add(k); return true })
+      .map((x) => ({ frame: Math.round(((x.frame - a) / Math.max(1, b - a)) * (g.frames - 1)), asset_id: x.id, strength: 1.0 }))
+  },
   animateShot: async () => {
     const s = useSession.getState()
     const cur = get().current, cam = get().activeCamera(), g = get().guideEntry(), start = get().shotStart
     const method = get().clipMethod
     const model = get().clipCaps()?.model_id
     if (!cur || !cam || !g || !start || !model) { s.toast(!g ? 'Render the sequence first' : !start ? (method === 'animate' ? 'Pick the character to perform it (click one of the results)' : 'Pick a frame to start from (click one of the results)') : 'No clip model in this build', 'error'); return null }
+    const beats = method === 'guided' ? get().clipAnchors() : []                             // D184 (C5): the range's other stills hold the clip at their frames (E59 e)
     const recipe = { kind: 'i2v', model_id: model, start_asset: start, prompt_text: get().shot.prompt_text.trim(), frames: g.frames, fps: g.fps, width: g.size.w, height: g.size.h,
-      preset: 'draft', guide: { asset_id: g.asset_id, kind: get().guideKind, strength: 1.0 }, seeds: [0] }
+      preset: 'draft', guide: { asset_id: g.asset_id, kind: get().guideKind, strength: 1.0 }, seeds: [0], ...(beats.length ? { beats } : {}) }
     try {
       const jobs = await unwrap(http.POST('/jobs', { body: { recipe: recipe as never, stage: false, origin: { suite: 'stage', surface: 'clip', ref: cur.id, payload: { camera_id: cam.id } } } }))
       s.toast(method === 'animate' ? `Queued ${cam.name} performed by the picked character: ${g.frames} frames (Animate)` : `Queued the clip of ${cam.name}: ${g.frames} frames on the ${get().guideKind} sequence`, 'success')
@@ -686,7 +701,7 @@ export const useStage = create<StageState>()((set, get) => ({
     const sh = get().shot
     const entry = get().passesEntry()
     const [width, height] = get().shotSize()
-    const recipe = { kind: 'stage_shot', stage_id: cur.id, camera_id: cam.id, passes: entry?.assets ?? { clay: 'pending', pose: 'pending' }, method: sh.method,
+    const recipe = { kind: 'stage_shot', frame: Math.round(get().frame), stage_id: cur.id, camera_id: cam.id, passes: entry?.assets ?? { clay: 'pending', pose: 'pending' }, method: sh.method,
       prompt_text: sh.prompt_text.trim(), refs: sh.refs.map((r) => ({ asset_id: r.asset_id, note: r.note ?? null })), mentions: get().figureMentions(), seeds: [0], width, height }   // D93 (C8): the bound figures
     try {
       const pv = await unwrap(http.POST('/recipes/preview', { body: { recipe: recipe as never } }))
@@ -737,7 +752,7 @@ export const useStage = create<StageState>()((set, get) => ({
     if (!entry) return null
     const sh = get().shot
     const [width, height] = get().shotSize()
-    const recipe = { kind: 'stage_shot', stage_id: cur.id, camera_id: cam.id, passes: entry.assets, method: sh.method, prompt_text: sh.prompt_text.trim(),
+    const recipe = { kind: 'stage_shot', frame: Math.round(get().frame), stage_id: cur.id, camera_id: cam.id, passes: entry.assets, method: sh.method, prompt_text: sh.prompt_text.trim(),
       refs: sh.refs.map((r) => ({ asset_id: r.asset_id, note: r.note ?? null })), mentions: get().figureMentions(), seeds: Array.from({ length: Math.max(1, Math.min(4, sh.count)) }, () => 0), width, height }   // D93 (C8)
     try {
       const jobs = await unwrap(http.POST('/jobs', { body: { recipe: recipe as never, stage: false, origin: { suite: 'stage', surface: 'shot', ref: cur.id, payload: { camera_id: cam.id } } } }))

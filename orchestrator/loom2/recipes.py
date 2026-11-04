@@ -376,6 +376,7 @@ class StageShot(BaseModel):
     height: int = 720
     te_id: str | None = None                      # Klein's encoder override (D31)
     empty: bool = False                           # D111 (PS5b): the bare set, a plate — the lead speaks of the empty space, no mannequins or people
+    frame: int | None = Field(None, ge=0)         # D184 (C5): the stage frame the passes were rendered at (the playhead) — a still at a beat anchors the stage clip
 
     @property
     def model_id(self) -> str:

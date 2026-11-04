@@ -36,6 +36,7 @@ class FinalLayerIn(BaseModel):
     wholebody: list[Any] | None = None             # D163: per frame, a Detailed figure's hands and feet (passes.ts WholeBody, None without them)
     body: dict[str, Any] | None = None             # CS3: a figure's body as its guide was drawn
     body_hashes: list[str] = Field(default_factory=list)   # CS3: per frame, the hash of the body the guide was drawn with
+    extras: list[dict[str, Any]] = Field(default_factory=list)   # D184 (C5): the plate's figures that are not exact — on it, in its passes, not layers
 
 
 class FinalCreate(BaseModel):
@@ -107,9 +108,10 @@ async def final_create(svc: Svc, body: FinalCreate):
     keypoints = {x.id: x.keypoints for x in body.layers if x.keypoints is not None}
     wholebody = {x.id: x.wholebody for x in body.layers if x.wholebody is not None}
     method = DEFAULT_METHOD | ({"plate": "picture"} if picture_plate(st) else {"plate": "set"} if built_plate(st) else {})   # CW7: a built set's plate is the set
-    pick = {x.id: method[x.kind] if x.kind == "plate" and method["plate"] in ("picture", "set") else x.method or method[x.kind] for x in body.layers}   # CA3: the client's plate method, a picture or built set's first
+    pick = {x.id: ("generated" if x.kind == "plate" and x.method == "generated" and x.extras                        # D184 (C5): figures on the plate — generated, built set or not
+                   else method[x.kind] if x.kind == "plate" and method["plate"] in ("picture", "set") else x.method or method[x.kind]) for x in body.layers}   # CA3: the client's plate method, a picture or built set's first
     data = body.model_dump(exclude={"layers"}) | {"layers": [FinalLayer(id=x.id, kind=x.kind, name=x.name, object_id=x.object_id, method=pick[x.id],  # type: ignore[arg-type]
-                                                                        profile_id=x.profile_id, version=x.version, body=x.body, body_hashes=x.body_hashes).model_dump() for x in body.layers]}
+                                                                        profile_id=x.profile_id, version=x.version, body=x.body, body_hashes=x.body_hashes, extras=x.extras).model_dump() for x in body.layers]}
     from ..shot_graph import stage_stamps
     data["stamps"] = stage_stamps(st, body.camera_id)                        # RC1: an edit marks only the layers it touches
     try:
@@ -168,6 +170,7 @@ class PlateBody(BaseModel):
     prompt_text: str = ""                          # what the place is; the lead (no people, no objects) goes first
     refs: list[dict[str, Any]] = Field(default_factory=list)   # the reference deck (a place's images, the World style's sample)
     seed: int = 0
+    beats: bool = True                             # D184 (C5): a generated plate anchors a still every BEAT_SECONDS and at its last frame
 
 
 class PlateQueued(BaseModel):
@@ -202,7 +205,7 @@ def _scene_plate(ws, f: Final) -> str | None:
 async def final_plate(svc: Svc, fid: str, body: PlateBody):
     """PS5b: the plate's still — the bare set's lit clay at frame 0 (from the final's plate pass) as a Stage shot's image 1 (Klein, the clay
     method), the lead first so the model draws no people or objects (they are layers). Stage then projects it along the camera path."""
-    from ..finals import FINAL_PLATE_SURFACE, PLATE_LEAD, plate_method_check
+    from ..finals import FINAL_PLATE_SURFACE, plate_beats_wanted, plate_method_check, plate_still_text
     from ..models import registry
     from ..origin import JobOrigin
     ws, cat, _ = svc.require_project()
@@ -244,16 +247,20 @@ async def final_plate(svc: Svc, fid: str, body: PlateBody):
         except KeyError:
             words = ""
     extra = body.prompt_text.strip()
-    text = " ".join(x for x in (PLATE_LEAD, words, extra if extra not in words else "") if x)
-    recipe = {"kind": "stage_shot", "stage_id": f.stage_id, "camera_id": f.camera_id, "passes": {"clay": rec.id}, "method": "clay", "empty": True,
-              "prompt_text": text, "refs": refs, "seeds": [body.seed], "width": w, "height": h}
+    people = bool(plate.extras)                                             # D184 (C5): the extras on the plate — the lead says so, their references ride along
+    text = plate_still_text(words, extra, people)
+    mentions = [{"profile_id": x.get("profile_id"), "version": x.get("version"), "figure": x.get("object_id")} for x in plate.extras if x.get("profile_id")]
+    recipe = {"kind": "stage_shot", "stage_id": f.stage_id, "camera_id": f.camera_id, "passes": {"clay": rec.id}, "method": "clay", "empty": not people,
+              "prompt_text": text, "refs": refs, "mentions": mentions, "seeds": [body.seed], "width": w, "height": h}
+    wanted = plate_beats_wanted(f) if plate.method == "generated" and body.beats else []
+    payload = {"prompt": extra, "text": text, "refs": refs, "mentions": mentions, "seed": body.seed, "size": [w, h], "people": people}
     try:
-        jobs = svc.queue.submit(recipe, origin=JobOrigin(suite="stage", surface=FINAL_PLATE_SURFACE, ref=fid, payload={"prompt": body.prompt_text.strip()}))
+        jobs = svc.queue.submit(recipe, origin=JobOrigin(suite="stage", surface=FINAL_PLATE_SURFACE, ref=fid, payload=payload))
     except ValueError as e:
         raise HTTPException(422, str(e))
     await svc.queue.flush()
     f = await asyncio.to_thread(store.add_job, fid, "plate", jobs[0].id, status="queued", error=None, clip_id=None, frames_done=0,
-                                prompt=body.prompt_text.strip(), keys=[])
+                                prompt=extra, keys=[], beats=[{"frame": k, "asset_id": None, "job_id": None} for k in wanted])
     svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
     return {"job_id": jobs[0].id, "pass_asset_id": rec.id, "scene_plate": first}
 

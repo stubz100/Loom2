@@ -687,9 +687,17 @@ function ClipSection() {
       </div>
       <div className="verbs"><CommandButton id="stage.clip.guide" text label={rendering ? 'Rendering…' : 'Render sequence'} /></div>
       {!shotStart && <p className="disabled-why">Pick the start above.</p>}
+      {method === 'guided' && <AnchorsLine />}
       {clipCap && <p className="hint">{clipCap.label} · ≈ {clipCap.seconds != null ? Math.round(clipCap.seconds) : '?'} s for {method === 'animate' ? '77 frames' : '121 frames'}{clipCap.health === 'missing' ? ' · weights missing — Models › Fetch' : ''}<Help text={method === 'animate' ? 'Wan Animate (E19): one figure in the camera; the picked result is the character.' : 'LTX-2.3 with its IC-LoRA (E11): the depth or pose sequence from the picked frame.'} /></p>}
     </div>
   )
+}
+
+/** D184 (C5): the stills of the range besides the start — the clip's anchors (LTX keyframe beats), so the people stay who they are. */
+function AnchorsLine() {
+  const n = useStage((s) => s.clipAnchors().length)                       // re-read on every store change; the count is what re-renders
+  return <div className="kv"><span>anchors</span><span className="hint" data-testid="clip-anchors">{n ? `${n} still${n === 1 ? '' : 's'} of the range hold the clip at their frames` : 'none — a still made at another frame of the range (Make a frame ▸ at that playhead) anchors the clip there'}
+    <Help text="E59: the depth sequence alone forgets who is who over ten seconds — a Klein still at 5 s and 10 s, the characters' references riding along, held the hero for the whole clip. The range's stills besides the start are sent as LTX keyframe beats at their frames." /></span></div>
 }
 
 /** D121 (26 §5.3): Performance's Stage clip card — the stage's start frame (picked among its stills, made in Image › From a stage), what the

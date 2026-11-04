@@ -8185,6 +8185,14 @@
             "title": "Batches",
             "type": "array"
           },
+          "beats": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Beats",
+            "type": "array"
+          },
           "body": {
             "anyOf": [
               {
@@ -8225,6 +8233,14 @@
               }
             ],
             "title": "Error"
+          },
+          "extras": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Extras",
+            "type": "array"
           },
           "frames_done": {
             "default": 0,
@@ -8508,6 +8524,8 @@
           "error",
           "still_asset_id",
           "clip_id",
+          "extras",
+          "beats",
           "prompt",
           "keys",
           "heal",
@@ -8551,6 +8569,14 @@
               "type": "string"
             },
             "title": "Body Hashes",
+            "type": "array"
+          },
+          "extras": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Extras",
             "type": "array"
           },
           "id": {
@@ -16840,6 +16866,11 @@
       },
       "PlateBody": {
         "properties": {
+          "beats": {
+            "default": true,
+            "title": "Beats",
+            "type": "boolean"
+          },
           "prompt_text": {
             "default": "",
             "title": "Prompt Text",
@@ -23357,6 +23388,11 @@
             ],
             "title": "Detail"
           },
+          "exact": {
+            "default": true,
+            "title": "Exact",
+            "type": "boolean"
+          },
           "floor_y": {
             "anyOf": [
               {
@@ -23616,6 +23652,7 @@
           "body",
           "detail",
           "shadow_proxy",
+          "exact",
           "path",
           "light",
           "lens_deg",

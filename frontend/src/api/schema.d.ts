@@ -8452,6 +8452,10 @@ export interface components {
             batches: {
                 [key: string]: unknown;
             }[];
+            /** Beats */
+            beats: {
+                [key: string]: unknown;
+            }[];
             /** Body */
             body: {
                 [key: string]: unknown;
@@ -8462,6 +8466,10 @@ export interface components {
             clip_id: string | null;
             /** Error */
             error: string | null;
+            /** Extras */
+            extras: {
+                [key: string]: unknown;
+            }[];
             /**
              * Frames Done
              * @default 0
@@ -8567,6 +8575,10 @@ export interface components {
             } | null;
             /** Body Hashes */
             body_hashes?: string[];
+            /** Extras */
+            extras?: {
+                [key: string]: unknown;
+            }[];
             /** Id */
             id: string;
             /** Keypoints */
@@ -11947,6 +11959,11 @@ export interface components {
         /** PlateBody */
         PlateBody: {
             /**
+             * Beats
+             * @default true
+             */
+            beats?: boolean;
+            /**
              * Prompt Text
              * @default
              */
@@ -14557,6 +14574,11 @@ export interface components {
             colour_id: number;
             /** Detail */
             detail: ("male" | "female") | null;
+            /**
+             * Exact
+             * @default true
+             */
+            exact: boolean;
             /** Floor Y */
             floor_y: number | null;
             /** Height M */

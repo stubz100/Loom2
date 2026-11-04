@@ -16204,3 +16204,47 @@ measured inside the wave before the overlay is kept as the way. Q5 answered by t
 **The stale task** the author saw: no process of mine was alive (a process list by command line: none of the drivers, servers, test runners
 or the engine) — an entry of the earlier context's orchestrator, started before the session's summary, that the terminal still listed;
 nothing to kill.
+
+## 2026-11-04 03:57 — C5 (D184, propo02 05): the hybrid is Performance's method — a figure marked *exact* or on the plate, the plate generated with anchors and the extras on it, Nora over a living street through the product path
+
+**Built.** *A figure's place in a final* — `StageObject.exact` (default on): its own layer, performed by Wan Animate on its references and
+matted over the plate; off, it rides on the plate as an extra. The figure's Inspector has the switch under *in a final* (FigureBinding:
+"exact — its own layer" / "on the plate — an extra"). *The plan* (finalShot.planFinal) lists the extras apart from the layers; the plate's
+passes (depth, clay) are rendered with the extras visible, the shadows' with everyone, each exact figure's alone as before; the plate layer
+carries `extras` [{object_id, profile_id, version, name}] (FinalLayerIn → FinalLayer); the dialog says "the plate with N figures on it, M
+exact figures". *The plate with figures on it is generated* — from the clay, built set or not (the client's choice and the create route's
+`pick` both keep `generated` when the plate has extras; before, a built set's plate was always the set rendered with every actor hidden).
+*The generated plate anchors itself* — `plate_beats_wanted(f)`: a still every BEAT_SECONDS (5) and the last frame, none under a second;
+the plate route initialises `FinalLayer.beats` [{frame, asset_id, job_id}] and puts what the anchor stills need on the first still's
+payload (the text, refs, mentions, seed, size, people); when a plate still lands the finisher (`_final_plate_result`) records it on the
+layer or on its beat, then `_plate_beat_still` queues the next anchor from the plate's clay pass at that frame (a Stage shot like the
+first, the extras riding along as mentions, `empty` false), and when every beat has its still `queue_plate_path` queues the clip with
+them as LTX keyframe beats at the clip's frames (`plate_path_recipe(..., beats, people)`, the lead and tail speaking of the people:
+PLATE_LEAD_PEOPLE / PLATE_PATH_TAIL_PEOPLE). The Final panel's plate row says "anchor stills k / n". *The Stage clip card's anchors* —
+a still made in Image › From a stage carries its frame (`StageShot.frame`, the playhead, on the still's record); the card counts the
+range's other stills as anchors (`stageStore.clipAnchors`, the *anchors* line) and *Render clip ▶* sends them as beats (E59 e). The OpenAPI
+document and the client types regenerated; `StageShot.frame` allowed in the settings audit as provenance.
+
+**Checked.** Offline 811 (809 + the anchors wanted, the anchor-still chain with extras on the test rig — the first still → beat 16 → beat
+32 → the clip with two beats and the people's lead — and the plate's extras through the create route), Vitest 657 + 3 skipped
+(finalShot.test.ts: an extra rides on the plate), typecheck, build and lint clean (61 warnings, as before), agent docs 9 / 0, settings
+audit 322 / 0 with 13 allowed, model literals 0. The e2e: the C5 scenario (a figure unticked rides on the plate — the dialog, the record's
+extras; a six-second final's generated plate makes its anchor stills at frames 80 and 96 before its clip, the clip queued with them as
+beats and the people's lead; the Stage clip card's anchors line) passes alone; the whole suite of 87 scenarios run alone after the C2c run: 86 under load in 10.9 min, the C5 scenario timing out on the plate chip's menu, which said *Generate it along the path again* — the plate generated already by the extras' rule — so the step now reads the method and that word (41.8 s alone); the lifecycle test V53/V54 flaked under the e2e's load and passes alone (8 s).
+
+**Live on the walk's shot 1 (v2), through the product path, alone on the GPU.** The man and the woman unticked in Clay (*on the plate — an
+extra*); *Make the final shot…* said "3 layers — the plate with 2 figures on it, 1 exact figure, 0 props and the shadows … the plate generated
+along the path from the clay with the figures on it"; the split 0.7 min (a built set: the plate's clay and depth with the two extras).
+*Make the plate ▶*: the still (Klein, the extras' sheets riding along), the anchors at frames 80 and 160 within a minute, the LTX clip —
+4.6 min for the plate; the man with his newspaper and the woman with her bags stable across the ten seconds, LTX adding a passer-by of its
+own between anchors. *Perform the owed layers ▶*: Nora in three Wan Animate batches, 8.1 min, her matte strayed on 67 frames and was made
+again by the other model (D164), then a face pass of 7 min. *Assemble ▶* 28 s (RIFE to 24 fps); the composition made; *Render the finished
+shot ▶* 12 s → clp_76ab9623, 241 frames at 24 fps. About 21 min of GPU for ten seconds with the face pass, 14 without, against the walk's
+23 — and the street alive. FaceSim against Nora's hero: the plate 0.014 (she is not on it — right), the assembly 0.039, the render 0.147
+after the face pass (the stills score 0.39–0.50: the number is blind at this face size, D164). What shows: Nora's light is flatter than
+the plate's warm late light, and her scale against the plate's people holds at the middle and drifts a little at the ends (the plate is a
+redraw of the clay, the layer is geometric). Both are the replacement mode's business: **E61 measured (engine/spikes/e61_replace.py): the batch's graph rebuilt from the job's own record by pipeline.finalize against the engine started by hand, the plate cropped frame by frame to Nora's window as paste_back reads it, her window matte dilated 6 px as the mask, the pinned node's background_video and character_mask wired. With the plate as the background — nobody where Nora goes — Wan Animate's replacement mode draws the street into her mask and no figure at all (191 s for the 77 frames: the mode replaces a person, it does not add one). With the final's assembly as the background (the overlay: a person to replace) it draws her again in the plate's warm light, integrated with the street, and spends the identity the overlay had — FaceSim 0.061 against the overlay's 0.174 on the same frames, 186 s, the layer's minutes once more for a relight. Not offered in C5; a relight pass is another tool, owed in 13 under D184. For the next spike, every job's compiled graph is now kept beside the queue (jobs/graphs/<job>.json, pipeline.finalize) — the engine's history goes with the engine.**
+
+**Left on the project:** shot 1 v2's final fin_3dfcdecf (the plate generated with anchors, Nora's layer, the assembly and the render
+clp_76ab9623), the walk's fin_92d559c1 untouched. Twelve pictures taken, five sent; E61's three sheets sent. **Next:** C3 (Record: the animatic, the still, the
+passes; the scene's length; the scene as the shot's record), then C4, C6; E60 waits on the weights' approval.

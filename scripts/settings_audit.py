@@ -72,6 +72,7 @@ ALLOW: dict[str, str] = {
     "T2I.tier": "the panel's tier label (recorded with the recipe); width / height carry the size the engine runs",
     "RecipeEnvelope.recipe": "the union's wrapper: recipes.parse_recipe unwraps it before any job code sees the recipe",
     "Settings.h3_licence_confirmed": "a UI gate (D17): Animate offers MiniMax H3 only once the author confirms the licence application",
+    "StageShot.frame": "provenance (D184, C5): the stage frame the passes were rendered at, kept with the recipe on the still's record — the Stage clip card reads it to place the still as an anchor; the job does not",
 }
 
 

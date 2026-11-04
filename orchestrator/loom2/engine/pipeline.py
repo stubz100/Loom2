@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import shutil
 import time
@@ -362,6 +363,12 @@ async def finalize(job: JobRecord, recipe: AnyRecipe, q: JobQueue) -> Submission
         q.check_cancel(job)
     compiled = compile_recipe(recipe, q.roster, object_info, job.seed, out_prefix=f"loom2/{job.id}", ref_files=ref_files, inputs=inputs or None,
                               variant=q.app.settings.variant)
+    try:                                                                   # D184 (E61): the graph as sent, kept beside the queue — a spike patches it
+        graphs = q.ws.queue_path.with_name("graphs")                       # after the engine's own history is gone (it goes with the engine)
+        graphs.mkdir(parents=True, exist_ok=True)
+        (graphs / f"{job.id}.json").write_text(json.dumps(compiled.graph), encoding="utf-8")
+    except Exception:  # noqa: BLE001 — a note for spikes, never the job's failure
+        pass
     return Submission(compiled=compiled, inputs=inputs)
 
 

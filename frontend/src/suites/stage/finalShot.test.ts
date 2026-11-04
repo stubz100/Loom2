@@ -9,7 +9,7 @@ import { batchCount, batchOf, bodyStamp, cameraTravel, framesAt, hasPictureSet, 
 import { useStage } from './stageStore'
 
 const obj = (id: string, kind: StageObject['kind'], extra: Partial<StageObject> = {}): StageObject => ({ id, kind, name: id, preset: null, asset_id: null, transform: { pos: [0, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] },
-  parent: null, parent_joint: null, locked: false, visible: true, colour_id: 1, pose: null, billboard: false, profile_id: null, version: null, body: null, detail: null, path: null, shadow_proxy: null, light: null, lens_deg: null, plate_asset_id: null, floor_y: null, plate_camera_id: null, level: null, things: [], things_document_id: null, height_m: null, place_set: null, ...extra })
+  parent: null, parent_joint: null, locked: false, visible: true, colour_id: 1, pose: null, billboard: false, profile_id: null, version: null, body: null, detail: null, path: null, shadow_proxy: null, exact: true, light: null, lens_deg: null, plate_asset_id: null, floor_y: null, plate_camera_id: null, level: null, things: [], things_document_id: null, height_m: null, place_set: null, ...extra })
 const doc = (objects: StageObject[], range = { start: 0, end: 48 }) => ({ objects, range }) as unknown as StageDoc
 
 describe('D111 (PS5a) planning the final', () => {
@@ -27,6 +27,12 @@ describe('D111 (PS5a) planning the final', () => {
     expect(p.layers[0].name).toBe('Room')
     expect(p.layers[1]).toMatchObject({ object_id: 'fig_m', profile_id: 'prf_m' })
     expect(p.layers[2]).toMatchObject({ object_id: 'chest', profile_id: 'prf_c', version: 'v2' })
+  })
+  it('D184 (C5): a figure that is not exact rides on the plate — no layer of its own, listed among the extras', () => {
+    const p = planFinal(doc([obj('set_a', 'set', { name: 'Street' }), obj('nora', 'mannequin', { name: 'Nora', profile_id: 'prf_n' }),
+      obj('man', 'mannequin', { name: 'Man', profile_id: 'prf_m', exact: false } as Partial<StageObject>), obj('woman', 'mannequin', { name: 'Woman', profile_id: 'prf_w', exact: false } as Partial<StageObject>)]), 16)
+    expect(p.layers.map((l) => l.id)).toEqual(['plate', 'nora', 'shadows'])
+    expect(p.extras.map((l) => `${l.id}:${l.profile_id}`)).toEqual(['man:prf_m', 'woman:prf_w'])
   })
   it("W40: a final covers its shot version's own range when it has one, else the stage's", async () => {
     const { useStory } = await import('../story/storyStore')

@@ -55,6 +55,8 @@ export function FigureCharacter({ o }: { o: StageObject }) {
         ? `from Cast — ${o.body.height_m.toFixed(2)} m · ${o.body.build}${o.body.attachments.length ? ` · ${o.body.attachments.map((a) => a.kind).join(', ')}` : ''}`
         : 'the default dummy (no body on the Cast sheet)'}</span></div>}{/* CA0: the sheet's body shapes this figure */}
       {p && <ShellLine o={o} p={p} />}{/* D183 (C2c): a character in Clay is its shell */}
+      {p && <div className="kv" data-testid="figure-exact"><span>in a final</span><span className="hint"><label title="On: its own layer — performed by Wan Animate on its references and matted over the plate (D184). Off: on the plate as an extra, drawn by the plate's own model from the clay — cheaper, its identity loose.">
+        <input type="checkbox" aria-label="exact — its own layer" checked={(o as { exact?: boolean }).exact !== false} onChange={(e) => st().updateObject(o.id, { exact: e.target.checked } as never)} /> {(o as { exact?: boolean }).exact !== false ? 'exact — its own layer' : 'on the plate — an extra'}</label></span></div>}
       {p && <div className="verbs"><CommandRow ids={['stage.figure.unbind', 'stage.figure.openInCast', 'stage.figure.skeleton', 'stage.object.freeCopy']} /></div>}
       {p && <div className="verbs" aria-label="skeleton keys"><CommandRow ids={['stage.skeleton.hold', 'stage.skeleton.cast']} /></div>}{/* CS3: a change of body in a shot is a key */}
       {!p && <div className="verbs"><CommandButton id="stage.object.prototype" text /></div>}{/* CW3: a free figure into an idea */}

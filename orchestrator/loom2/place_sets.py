@@ -203,6 +203,19 @@ def fill_order(ps: PlaceSet, only: list[str] | None = None) -> list[str]:
     return [f.id for f in sorted(faces, key=lambda f: (f.bad or 0.0, f.id))]
 
 
+def set_model(ps: Any, variant: str, kind: str = "inpaint") -> str:
+    """D186: the model a set's painting job runs — the set's card (`PlaceSet.model_id`) when it runs `kind` (the Fill mode for the Fills,
+    the walkers and the cleans; a refine for a crowd's start) and the variant offers it, else the kind's default (Klein 4B under `open`, D26)."""
+    from .models import registry
+    spec = registry.get((getattr(ps, "model_id", None) if ps is not None else None) or "")
+    if spec is not None and registry.offered(spec, variant):
+        if kind == "inpaint" and "fill" in spec.recipes.inpaint:
+            return spec.id
+        if kind == "i2i" and spec.recipes.i2i:
+            return spec.id
+    return registry.default_model(kind, variant)
+
+
 class NothingToFill(ValueError):
     """V32: no face of the order wants a Fill — and why: the route's 422 says it (it used to say "the bakes are gone" for a face whose
     mask is under the minimum, with the bakes right there)."""
@@ -228,7 +241,6 @@ def prepare_fill(q: Any, pid: str, vid: str, order: list[str], seed: int | None 
     in the origin; None when none does. `again`: a filled face is filled again from its bake. File and pixel work — a worker thread's."""
     from PIL import Image
 
-    from .models import registry
     from .story import StoryStore, compose_sheet
     if q.documents is None:
         raise ValueError("the Edit documents are not open")
@@ -270,7 +282,7 @@ def prepare_fill(q: Any, pid: str, vid: str, order: list[str], seed: int | None 
         od.dirty = True
         od.save()
         prompt = fill_prompt(fid, face.material, compose_sheet(v, name=p.name, cls=p.cls), ps.kind)
-        recipe = {"kind": "inpaint", "mode": "fill", "model_id": registry.default_model("inpaint", q.app.settings.variant),   # Klein 4B under `open` (D26)
+        recipe = {"kind": "inpaint", "mode": "fill", "model_id": set_model(ps, q.app.settings.variant),   # D186: the set's card; Klein 4B under `open` (D26)
                   "document_id": od.doc.id, "prompt_text": prompt, "seeds": [face_seed(seed, fid)], "expand": 6, "feather": 8}   # W21
         origin = JobOrigin(suite="story", surface=SET_FILL_SURFACE, ref=pid,
                            payload={"version": vid, "face": fid, "rest": order[k + 1:], "seed": seed, "document_id": od.doc.id, "again": again})
@@ -499,7 +511,6 @@ def prepare_crowd(q: Any, pid: str, vid: str, fid: str, from_m: float, to_m: flo
     work — a worker thread's. Raises ValueError when the face cannot take one."""
     from PIL import Image
 
-    from .models import registry
     from .recipes import matte_mode
     from .story import StoryStore
     if q.documents is None:
@@ -540,11 +551,11 @@ def prepare_crowd(q: Any, pid: str, vid: str, fid: str, from_m: float, to_m: flo
         od.selection = walker_places(w, h, to_m - from_m, height_m)
         od.doc.has_selection = True
         od.dirty = True
-        recipe = {"kind": "inpaint", "mode": "fill", "model_id": registry.default_model("inpaint", q.app.settings.variant), "document_id": od.doc.id,
+        recipe = {"kind": "inpaint", "mode": "fill", "model_id": set_model(ps, q.app.settings.variant), "document_id": od.doc.id,   # D186: the set's card
                   "prompt_text": walker_prompt(fid, face.material, words), "prompt_mode": "prompt_first", "feather": 4, "seeds": [seed]}
     else:
         start, _ = crowd_prompts(fid, face.material, words, walkers)
-        recipe = {"kind": "i2i", "model_id": registry.default_model("i2i", q.app.settings.variant), "document_id": od.doc.id, "source": "visible",
+        recipe = {"kind": "i2i", "model_id": set_model(ps, q.app.settings.variant, "i2i"), "document_id": od.doc.id, "source": "visible",   # D186: the card when it refines
                   "prompt_text": start, "strength": CROWD_STRENGTH, "match_colour": True, "seeds": [seed]}   # E51: the face's own colours kept (ΔE 0.01)
     od.save()
     origin = JobOrigin(suite="story", surface=CROWD_START_SURFACE, ref=pid,

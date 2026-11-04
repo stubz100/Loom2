@@ -51,7 +51,10 @@ def fake_models(root: Path) -> list[str]:
     specs += [s for s in registry.image_specs() if s.recipes.train]     # LT2: the LoRA bases (the fake trainer never loads them)
     specs += [s for s in registry.load().values() if s.recipes.keypoints]   # CA1b: SDPose + RT-DETR (the fake engine answers with an A-pose person)
     specs += [registry.get(registry.segment_model("text"))]                   # D111 (PS5d): SAM 3 mattes a character layer (the fake answers a mask a frame)
-    for rid in dict.fromkeys(r for s in specs for r in [*s.weights(), *([s.recipes.stage_lora] if s.recipes.stage_lora else []), *([s.recipes.guide_lora] if s.recipes.guide_lora else [])]):
+    from loom2.recipes import stage_models
+    specs += stage_models("clay")                                              # D186: the Still's card — every model the clay method may run on (dev with its Turbo LoRA)
+    for rid in dict.fromkeys(r for s in specs for r in [*s.weights(), *([s.recipes.stage_lora] if s.recipes.stage_lora else []), *([s.recipes.guide_lora] if s.recipes.guide_lora else []),
+                                                        *([s.sampling.turbo.lora] if s.sampling.turbo else [])]):
         e = ROSTER_BY_ID[rid]
         p = root / e.folder / e.name
         p.parent.mkdir(parents=True, exist_ok=True)

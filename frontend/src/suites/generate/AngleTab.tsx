@@ -7,6 +7,7 @@ import { useEffect } from 'react'
 import './generateCommands'
 import { api } from '../../api/client'
 import { CommandButton } from '../../frame/CommandButton'
+import { ModelCards } from '../../frame/ModelCards'
 import { PresetIcons } from '../../frame/PresetIcons'
 import { glyphFor } from '../../frame/presetGlyphs'
 import { markUsed, runCommand } from '../../frame/commands'
@@ -55,12 +56,13 @@ export function AngleTab() {
       <div className="angle-pad"><PresetIcons label="Camera move" size={48} items={MOVES.map((m) => ({ id: m.id, label: m.label, icon: glyphFor('move', m.id), hint: m.hint }))} selected={a.move} onPick={(id) => runCommand(`gen.angle.${id}`)} /></div>
       <p className="disabled-why">{MOVES.find((m) => m.id === a.move)?.hint}</p>
       <div className="gen-form" style={{ gridTemplateColumns: '84px 1fr' }}>
-        <label>method</label>
+        <label>model</label>
         <div>
-          <select value={a.method} onChange={(e) => g.setAngle({ method: e.target.value as AngleMethod })}>
-            <option value="auto">Auto ({rc ? rc.methods[rc.auto[a.move] ?? '']?.short ?? rc.auto[a.move] : '…'})</option>
-            {rc && Object.entries(rc.methods).map(([id, m]) => <option key={id} value={id}>{m.label}{m.seconds ? ` · ≈ ${Math.round(m.seconds)} s` : ''}</option>)}
-          </select>
+          {/* D186: the one card — Auto (the model E12 measured best for the move), then each method's model */}
+          <ModelCards label="angle model" testId="angle-models" time value={a.method}
+            items={[{ id: 'auto', label: `Auto · ${rc ? rc.methods[rc.auto[a.move] ?? '']?.short ?? rc.auto[a.move] ?? '…' : '…'}`, hint: 'the method E12 measured best for this move', health: rc ? rc.methods[rc.auto[a.move] ?? '']?.health : null, seconds: rc ? rc.methods[rc.auto[a.move] ?? '']?.seconds : null },
+              ...(rc ? Object.entries(rc.methods).map(([id, m]) => ({ id, label: m.short, hint: `${m.label}${m.hint ? ` — ${m.hint}` : ''}${m.moves.includes(a.move) ? '' : ' (not measured for this move)'}`, health: m.health, seconds: m.seconds })) : [])]}
+            onPick={(id) => g.setAngle({ method: id as AngleMethod })} />
           {methodCap && <span className="disabled-why"> {methodCap.hint ?? methodCap.label}{methodCap.moves.includes(a.move) ? '' : ' — not measured for this move'}</span>}
         </div>
         <label>keep</label>

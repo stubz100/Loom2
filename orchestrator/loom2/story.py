@@ -808,9 +808,13 @@ def cell_sentence(cell: dict[str, Any]) -> str:
     return f"{_SHOT.get(cell['shot'], cell['shot'])}, {_ANGLE.get(cell['angle'], cell['angle'])}, {cell['expression']} expression"
 
 
-def expand_spec(variant: str):
-    """The model Expand runs on in this build: the one that renders a stage's clay reference (D78 — Klein 9B under `full`, 4B under `open`,
-    measured at 12 s warm) — it takes the hero as a reference and renders the same person; failing that, the variant's t2i default."""
+def expand_spec(variant: str, model_id: str | None = None):
+    """The model Expand, the animation references and an idea's clay run on in this build: D186 — the Make column's card when it names a
+    FLUX.2-family model that takes references (it draws the same person from the hero); else the one that renders a stage's clay
+    reference (D78 — Klein 9B under `full`, 4B under `open`, measured at 12 s warm); failing that, the variant's t2i default."""
+    pick = registry.get(model_id or "")
+    if pick is not None and pick.graph in registry.FLUX_GRAPHS and pick.recipes.t2i and pick.inputs.refs_max >= 1 and registry.offered(pick, variant):
+        return pick
     for spec in registry.stage_specs():
         if spec.recipes.stage == "clay" and registry.offered(spec, variant):
             return spec
@@ -960,14 +964,14 @@ def anim_ref_sentence(cls: str, side: str) -> str:
 
 
 def plan_anim_ref(profile: Profile, version: ProfileVersion, side: str, variant: str, *, width: int, height: int, count: int, group_id: str,
-                  style_id: str | None = None) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+                  style_id: str | None = None, model_id: str | None = None) -> list[tuple[dict[str, Any], dict[str, Any]]]:
     """CA0: the T2I jobs that make a version's animation reference — the clay-reference model (as Expand: Klein 9B under `full`, 4B under
     `open`), the version's sheet composed (its colours bound) and its reference set as an @mention (pinned to the version, so its LoRA rides
     along and RC0 stamps it), the reference sentence, one seed each. The results land on the version's candidates page; the first becomes
     the reference while the version has none (the finisher). CW6 (D143): a place's is its set picture, the empty place its set is fitted to."""
     if side in ("back", "side") and profile.cls != "character":
         raise ValueError(f"only a character has a {side} view")
-    spec = expand_spec(variant)
+    spec = expand_spec(variant, model_id)                                 # D186: the Make column's card when it takes references
     if spec is None:
         raise ValueError("no model in this build makes an animation reference")
     sheet = compose_sheet(version, name=profile.name, cls=profile.cls)

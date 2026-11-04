@@ -291,7 +291,11 @@ class JobQueue:
         other recipes unchanged. The same resolution runs for a preview and a submit (T8: display == reality). D93 (C8): a StageShot's figures
         bound to characters bring their references within the method's room (resolve_figures)."""
         if isinstance(recipe, StageShot) and recipe.mentions:
-            spec = stage_spec(recipe.method, self.app.settings.variant)
+            from .recipes import stage_model_id
+            try:
+                spec = registry.get(stage_model_id(recipe, self.app.settings.variant))   # D186: the picked model's room, not the method default's
+            except ValueError:
+                spec = stage_spec(recipe.method, self.app.settings.variant)
             room = 1 if recipe.method == "refcontrol" else max(0, (spec.inputs.refs_max if spec else 1) - 1)
             return resolve_figures(recipe, self.groups, self.catalogue, room, StoryStore(self.ws) if self.ws else None)
         if not isinstance(recipe, T2I):
@@ -507,7 +511,12 @@ class JobQueue:
             from .voices import validate_tts
             validate_tts(self, recipe)
             return
-        for mid in [recipe.model_id, *([recipe.te_id] if getattr(recipe, "te_id", None) else [])]:
+        if isinstance(recipe, StageShot):
+            from .recipes import stage_model_id
+            main = stage_model_id(recipe, self.app.settings.variant)       # D186: the Still's pick resolved here — one the method cannot run is refused by name
+        else:
+            main = recipe.model_id
+        for mid in [main, *([recipe.te_id] if getattr(recipe, "te_id", None) else [])]:
             if mid not in ROSTER_BY_ID:
                 raise ValueError(f"unknown model id {mid!r}")
         check_recipe_loras(self.roster, recipe, self.app.settings.variant)   # LT1 (18 §3b): the slots' fit, by the model that will run
@@ -515,7 +524,7 @@ class JobQueue:
             from .trainer import validate_train
             validate_train(self, recipe)
             return
-        spec = registry.get(recipe.model_id)
+        spec = registry.get(main)
         if isinstance(recipe, T2I) and (spec is None or not spec.recipes.t2i):
             raise ValueError(f"no t2i preset for {recipe.model_id!r}")
         if getattr(recipe, "te_id", None):

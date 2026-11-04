@@ -20,7 +20,7 @@ const lay = (id: string, kind: string, status: string, done = 0): Lay => ({ id, 
 
 describe('D121: a level is a mode', () => {
   it('gives each level its own column sections', () => {
-    expect(DEFAULT_RAIL.stage.map((t) => t.id)).toEqual(['scene', 'motion', 'camera'])                       // C1 (D181): the scene and its shot are Clay's header
+    expect(DEFAULT_RAIL.stage.map((t) => t.id)).toEqual(['scene', 'motion', 'camera', 'still'])                       // C1 (D181): the scene and its shot are Clay's header
     expect(DEFAULT_RAIL.animate.map((t) => t.id)).toEqual(['shot', 'performance', 'clips'])                 // AW3: a clip's details under its row
     expect(DEFAULT_RAIL.final.map((t) => t.id)).toEqual(['shot', 'layers', 'output'])
   })

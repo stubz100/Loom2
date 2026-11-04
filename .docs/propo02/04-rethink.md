@@ -200,7 +200,7 @@ row has the look-through ◉; the pill at the top says which camera the view is 
 - **Record ▶ — the animatic:** the clay through the camera, lit by the scene's lights with their shadows, at the project's draft size, frame-stepped to a
   clip. It lands as the shot's *animatic* row and in the Bin under the shot. It costs seconds on the CPU, no GPU, and it is the storyboard's own
   deliverable: the cut can be assembled from animatics before any model runs (Q6).
-- **Capture — a still** through the camera at the playhead (today's *From a stage* still, Performance's start still).
+- **Capture — a still** through the camera at the playhead (today's *From a stage* still, Performance's start still). *Built as D186 (2026-11-04): the still form is Clay's *Still* section with the model card; World's From a stage is gone.*
 - **The passes** (depth, pose, masks, per figure and for the whole frame) — today's *Render the passes ▶*, run when a performance asks for them.
 
 **The scene's length.** A scene has a length, set when it is made (a default from the project, Q4), and the shot's range lies inside it; a block longer

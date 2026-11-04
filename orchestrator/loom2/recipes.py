@@ -377,26 +377,52 @@ class StageShot(BaseModel):
     te_id: str | None = None                      # Klein's encoder override (D31)
     empty: bool = False                           # D111 (PS5b): the bare set, a plate — the lead speaks of the empty space, no mannequins or people
     frame: int | None = Field(None, ge=0)         # D184 (C5): the stage frame the passes were rendered at (the playhead) — a still at a beat anchors the stage clip
+    model_id: str | None = None                   # D186: the model picked on the Still's card (one of stage_models(method)); None = the method's measured default
 
     @property
-    def model_id(self) -> str:
+    def model(self) -> str:
         """The model the method runs under `full`; the job code asks `stage_model_id(recipe, variant)` (under `open` clay runs Klein 4B)."""
         return stage_model_id(self)
 
 
 def stage_spec(method: str, variant: str = "full"):
-    """The first offered spec (by `order`) implementing a Stage method, or None."""
+    """The first offered spec (by `order`) implementing a Stage method, or None — the method's measured default (E10)."""
     for spec in registry.stage_specs():
         if spec.recipes.stage == method and registry.offered(spec, variant):
             return spec
     return None
 
 
+def stage_models(method: str, variant: str = "full") -> list:
+    """D186: the specs a Stage method may run on in this build, the measured default first — `clay` (image 1 the clay pass as a reference
+    latent, the deck after it) on any FLUX.2-family model that generates and takes at least one reference beside the pass; `refcontrol`
+    (the pose LoRA) on the specs that implement it. A model not in the list cannot run the method (its graph has no ReferenceLatent)."""
+    default = stage_spec(method, variant)
+    out = [default] if default is not None else []
+    for spec in sorted(registry.SPECS.values(), key=lambda s: s.order):
+        if spec in out or not registry.offered(spec, variant):
+            continue
+        if method == "refcontrol":
+            ok = spec.recipes.stage == "refcontrol"
+        else:
+            ok = spec.graph in registry.FLUX_GRAPHS and spec.recipes.t2i and spec.inputs.refs_max >= 2
+        if ok:
+            out.append(spec)
+    return out
+
+
 def stage_model_id(recipe: StageShot, variant: str = "full") -> str:
-    spec = stage_spec(recipe.method, variant)
-    if spec is None:
+    """The model that runs: the recipe's pick when the method can run on it (D186), else the method's measured default; a pick outside the
+    method's list is refused by name."""
+    allowed = stage_models(recipe.method, variant)
+    if recipe.model_id:
+        for spec in allowed:
+            if spec.id == recipe.model_id:
+                return spec.id
+        raise ValueError(f"{recipe.model_id!r} cannot run the Stage method {recipe.method!r} in this build — one of: {', '.join(s.id for s in allowed) or 'none'}")
+    if not allowed:
         raise ValueError(f"no model this build offers implements the Stage method {recipe.method!r}")
-    return spec.id
+    return allowed[0].id
 
 
 class ImageToMesh(BaseModel):

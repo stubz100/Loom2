@@ -230,6 +230,7 @@ class PlaceSet(BaseModel):
     things_document_id: str | None = None          # D180: the set picture's own document the things are found on (SAM 3's points)
     clean_job_id: str | None = None                # D180: the clean under the things while it runs
     keep_fills_key: str | None = None              # D180: the picture was cleaned since the bake for this key — a bake for it again keeps the Fills
+    model_id: str | None = None                    # D186: the set's painting model (the Library's card): its Fills, walkers and cleans; its crowds when it refines. None = the defaults
 
 
 class StageObject(BaseModel):

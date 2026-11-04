@@ -14,6 +14,24 @@ import { changeKind, dragTo, handles, outlines, rescale, type Handle, type Sourc
 import { autoBake, faceNoun, makeCrowd, makeWalkers, saveSet, setCamera, setPicture, setStatus, useCrowdForm, useSetBuilder, type PlaceSet } from './setBuilder'
 import { onStoryItem } from './storyCommands'
 import { PlaceThingsSheet, ThingRows } from './PlaceThingsSheet'
+import { ModelCards } from '../../frame/ModelCards'
+import { defaultFirstItems, imageModelItems } from '../../frame/modelCardItems'
+import { defaultModel } from '../../store/modelCaps'
+
+/** D186: the set's painting model — the one card: the FLUX.2-family models that Fill (its Fills, walkers and cleans; its crowds when the
+ *  model refines), the Fill default first; the default picked clears the set's own. Saved with the set (`PlaceSet.model_id`). */
+function SetModel({ ps, onEdit }: { ps: PlaceSet; onEdit: (next: PlaceSet) => void }) {
+  const caps = useSession((s) => s.capabilities)
+  const def = defaultModel('inpaint', caps)
+  const items = defaultFirstItems(imageModelItems(caps, (c) => ['flux2', 'klein'].includes(c.family) && Array.isArray(c.recipes.inpaint) && c.recipes.inpaint.includes('fill')), def)
+  if (!items.length) return null
+  return (
+    <div className="kv tall set-model" data-testid="set-models">
+      <span>painting model <Help text="The model that paints the set: Fill what the picture never saw, the walkers, the clean under its things — and the crowd's first picture when it refines (else the refine default). The Fill default first; FLUX.2 dev follows the faces' words more closely at its Turbo settings, ≈ 3× slower a face." /></span>
+      <ModelCards label="painting model" items={items} value={ps.model_id ?? def} onPick={(id) => onEdit({ ...ps, model_id: id === def ? null : id })} />
+    </div>
+  )
+}
 
 type Version = Profile['versions'][number]
 const KINDS: [SetKind, string][] = [['room', 'Room'], ['corridor', 'Corridor'], ['street', 'Street'], ['ground', 'Open ground']]
@@ -47,6 +65,7 @@ export function PlaceSetSection({ p, v }: { p: Profile; v: Version }) {
           : <div className="set-view empty" onContextMenu={(e) => showMenu(e, [{ cmd: 'cast.place.picture' }])}><span className="hint">set picture: none yet</span></div>}
         <div className="place-set-side">
           <span className={`hint${status.warn ? ' warn' : ''}`} data-status>{status.text}</span>
+          {ps && <SetModel ps={ps} onEdit={edit} />}{/* D186: the set's painting model */}
           {ps && cam && <>
             <div className="segmented set-kind" role="group" aria-label="the set's kind">
               {KINDS.map(([k, label]) => <button key={k} type="button" className={ps.kind === k ? 'active' : ''} aria-pressed={ps.kind === k}

@@ -16,6 +16,7 @@ import { handleKeysAt, markUsed, runCommand, sep, type MenuItem } from '../../fr
 import { inField, primaryInField } from '../../frame/fieldKeys'
 import { showMenu } from '../../frame/ContextMenu'
 import { navigate } from '../../frame/router'
+import { ModelCards } from '../../frame/ModelCards'
 import { onlyAssets, useDropTarget } from '../../frame/drag'
 import { shotRefDrop } from '../../frame/dropRules'
 import { api } from '../../api/client'
@@ -192,10 +193,11 @@ function ObjectRow({ o, selected }: { o: StageObject; selected: boolean }) {
 }
 
 // ------------------------------------------------------------------ D121 → C1 (D181): Clay's column, Inspector and foot
-const CLAY_SECTIONS = ['scene', 'motion', 'camera'] as const
+const CLAY_SECTIONS = ['scene', 'motion', 'camera', 'still'] as const
 
-/** D121 (26 §5.2) → C1: Clay's column — what stands on the scene, its motion, its camera; a bench or the line-up says so at the top (the
- *  scene and its shot are the layer's header; D121's Shot section and stepper are superseded by D181's ledger, C4). */
+/** D121 (26 §5.2) → C1: Clay's column — what stands on the scene, its motion, its camera, and (D186) its still: the stage still's form with
+ *  its model card; a bench or the line-up says so at the top (the scene and its shot are the layer's header; D121's Shot section and stepper
+ *  are superseded by D181's ledger, C4). */
 export function ClayColumn({ tab }: { tab: string }) {
   const project = useSession((s) => s.project)
   const bench = useStage((s) => !!s.current && s.current.purpose !== 'stage')
@@ -208,6 +210,7 @@ export function ClayColumn({ tab }: { tab: string }) {
       <Sec id="scene" title="Scene"><SceneTab /></Sec>
       <Sec id="motion" title="Motion"><PosesTab /></Sec>
       <Sec id="camera" title="Camera"><CamerasTab /></Sec>
+      {!bench && <Sec id="still" title="Still"><ShotTab /></Sec>}{/* D186: the stage still is Clay's (no still of a bench) */}
     </AnimColumn>
   )
 }
@@ -591,11 +594,11 @@ function Pins({ id, pose, doc }: { id: string; pose: StageObject['pose'] | null;
   )
 }
 
-// ST3 (16 §3e / §7): the generation form for the blocking — the method (D78: clay reference by default, exact pose as the switch), image 1
-// locked to the pass the method takes, the reference deck (D73), the prompt, the size tier and the candidates; the passes render on
-// Generate when stale (or by the button), the results land below with lineage to the passes.
-// D121: the form is Image › From a stage's alone (D95: stills are made in Image); the clip is Performance's Stage clip card, the final shot
-// its Final shot card. A still clicked here is the stage clip's start there.
+// ST3 (16 §3e / §7): the generation form for the blocking — the method (D78: clay reference by default, exact pose as the switch), D186's
+// model card (the method's models, the measured default first), image 1 locked to the pass the method takes, the reference deck (D73), the
+// prompt, the size tier and the candidates; the passes render on Generate when stale (or by the button), the results land below with
+// lineage to the passes. D186: the form is Clay's *Still* section (D121 had it in Image › From a stage); the clip is Performance's Stage clip
+// card, the final shot its Final shot card. A still clicked here is the stage clip's start there.
 /** D116: one step of the shot as a tree node — folded by its summary; the step's state and verb on the summary line (the verb's click
  *  does not fold it). */
 function Step({ id, title, state, verb, children }: { id: string; title: string; state?: React.ReactNode; verb?: React.ReactNode; children: React.ReactNode }) {
@@ -623,7 +626,8 @@ export function ShotTab() {
   const caps = useSession((s) => s.capabilities?.stage)
   const [w, h] = st().shotSize()                                   // derived from `shot.tier` and `current`, both subscribed above (a selector must not return a fresh tuple)
   const method = caps?.methods[sh.method]
-  const room = Math.max(0, (method?.max_refs ?? 3) - sh.refs.length)
+  const maxRefs = (pv?.params?.max_refs as number | undefined) ?? method?.models?.find((m) => m.id === (sh.model_id ?? method?.model_id))?.max_refs ?? method?.max_refs ?? 3   // D186: the picked model's room (dev: 9)
+  const room = Math.max(0, maxRefs - sh.refs.length)
   const figs = (pv?.params?.figures ?? []) as { figure: number; name?: string | null; refs: number[]; span?: string | null; skipped: number }[]   // D93 (C8): the server's resolution
   const figSlots = ((pv?.params?.ref_list ?? []) as { image: number; asset_id?: string | null; figure?: number | null }[]).filter((x) => x.figure)
     .map((x) => ({ ...x, figure: x.figure!, name: figs.find((f) => f.figure === x.figure)?.name ?? 'a character' }))
@@ -637,19 +641,23 @@ export function ShotTab() {
   return (
     <div className="stage-panel shot-tab tree">
       <div className="head"><b>Render</b><span className="hint">{cam ? `${cam.name} · ${cam.focal_mm} mm` : 'no camera'}</span><CameraShotVerb text={false} />
-        <Help text="A frame of the stage through its active camera: the method reads the scene from the pass (image 1); the references and the figures' characters give the look. The stage's clip and its final shot are made in Animate › Performance (D121)." /></div>
+        <Help text="A still of the scene through its active camera at the playhead: the method reads the scene from the pass (image 1), the model card says what draws it, the references and the figures' characters give the look. Render frame ▶ in the foot renders the passes first when they are stale. A still lands as the frame of every shot pointing at this camera; the stage's clip and its final shot are Shots › Performance's (D121, D186)." /></div>
       <Step id="frame" title="Frame" state={stills.length ? `${stills.length} rendered` : entry ? 'passes ready' : 'no passes'}
         verb={<CommandButton id="stage.shot.passes" text label={rendering ? 'Rendering…' : 'Render passes'} />}>
         <div className="kv tall"><span>method</span>
           <div className="method-list">
             {caps && Object.entries(caps.methods).map(([id, m]) => (
-              <button key={id} className={`method${sh.method === id ? ' active' : ''}`} onClick={() => st().setShot({ method: id })} title={m.hint ?? m.label}>
+              <button key={id} className={`method${sh.method === id ? ' active' : ''}`} onClick={() => st().setShot({ method: id, model_id: null })} title={m.hint ?? m.label}>
                 <b>{id === 'clay' ? 'Clay reference' : id === 'refcontrol' ? 'Exact pose' : m.label}</b>
                 <span>{m.short} · {m.seconds != null ? `≈ ${Math.round(m.seconds)} s` : 'unmeasured'}{m.health === 'missing' ? ' · weights missing' : ''}</span>
               </button>
             ))}
             {!caps && <span className="hint">No Stage method in this build.</span>}
           </div></div>
+        <div className="kv tall"><span>model <Help text="The models this method can run on, the measured one first (E10: Klein 9B keeps the blocking, 10/10). FLUX.2 dev takes image 1 and the references the same way at its Turbo settings and follows the prompt's words more closely, but reads image 1 more loosely: on the walk's shot it drew five people for the three figures blocked (D186, 2026-11-04). A model unmeasured on this method says so." /></span>
+          <ModelCards label="still model" testId="still-models" time
+            items={(method?.models ?? []).map((m) => ({ id: m.id, label: m.label, hint: m.hint, license: m.license, health: m.health, seconds: m.seconds, measured: m.measured }))}
+            value={sh.model_id ?? method?.model_id} onPick={(id) => st().setShot({ model_id: id === method?.model_id ? null : id })} /></div>{/* D186: the one card */}
         <div className="kv tall"><span>image 1 <Help text={`The ${image1} pass of this camera is the shot's first image: the method reads the scene from it.`} /></span>
           <div className="pass-row">
             <div className="ref-slot source locked" title={passId ? `the ${image1} pass, rendered at revision ${entry?.revision}` : 'render the passes first'}>
@@ -662,7 +670,7 @@ export function ShotTab() {
               {entry && stale && <label className="hint check"><input type="checkbox" checked={sh.use_as_is} onChange={(e) => st().setShot({ use_as_is: e.target.checked })} /> use as is</label>}
             </div>
           </div></div>
-        <div className="kv tall"><span>references{method ? <span className="hint"> · {method.max_refs}</span> : null}{sh.refs.length > 0 && <CommandButton id="stage.shot.clearRefs" size={13} />}</span>
+        <div className="kv tall"><span>references{method ? <span className="hint"> · {maxRefs}</span> : null}{sh.refs.length > 0 && <CommandButton id="stage.shot.clearRefs" size={13} />}</span>
           <div>
             <div ref={dropRef} className={`ref-slots shot-refs${over ? ' over' : ''}`}>
               {sh.refs.map((r, i) => (
@@ -681,7 +689,7 @@ export function ShotTab() {
             {figLines.length > 0 && <ul className="figure-lines" aria-label="the figures and their reference images">{figLines.map((t) => <li key={t}>{t}</li>)}
               {pv?.params?.bind_refs === false && <li className="muted">this method reads the figures' images by their notes — not bound in its prompt</li>}
               {/* journal 2026-10-17 18:03: exact pose (one reference slot) drew both figures as figure 1's character; clay carried each one's images */}
-              {figs.length > 1 && figs.some((f) => !f.refs?.length) && <li className="warn">this method has room for {method?.max_refs ?? 1} reference image{(method?.max_refs ?? 1) === 1 ? '' : 's'}: {figs.filter((f) => !f.refs?.length).map((f) => `figure ${f.figure}`).join(', ')} only get{figs.filter((f) => !f.refs?.length).length === 1 ? 's' : ''} words — for several characters use a method with more room (Clay reference)</li>}</ul>}
+              {figs.length > 1 && figs.some((f) => !f.refs?.length) && <li className="warn">this model has room for {maxRefs} reference image{maxRefs === 1 ? '' : 's'}: {figs.filter((f) => !f.refs?.length).map((f) => `figure ${f.figure}`).join(', ')} only get{figs.filter((f) => !f.refs?.length).length === 1 ? 's' : ''} words — for several characters use a method or a model with more room (Clay reference; FLUX.2 dev takes 9)</li>}</ul>}
             {!figLines.length && current.objects.some((o) => o.kind === 'mannequin') && <p className="hint">Figures not bound <Help text="Bind a figure to a Cast character (Inspector › character, or right-click ▸ Bind to a character): its reference images and sheet go into the frame, figure by figure, left to right." /></p>}
             {sh.method === 'refcontrol' && !sh.refs.length && <p className="disabled-why">Exact pose needs one reference image (image 2): drop a picture from the Bin on the deck.</p>}
           </div></div>
@@ -697,6 +705,7 @@ export function ShotTab() {
             {!stills.length && <span className="hint">None yet. <Help text="The frames of this stage land here and in the Bin (lineage: the pass and the references). Click one: it is the start of the stage's clip (Animate › Performance › Stage clip)." /></span>}
             <div className="shot-results">{stills.slice(0, 12).map((a) => <img key={a.id} className={`shot-thumb${shotStart === a.id ? ' start' : ''}`} src={api.thumbUrl(a.id, 256)} alt="" title={`${a.model_id ?? ''} · seed ${a.seed ?? ''} — click: the stage clip starts from this frame`} onClick={() => st().setShotStart(shotStart === a.id ? null : a.id)} />)}</div>
           </div></div>
+        <div className="still-foot" data-testid="still-foot"><StageFoot /></div>{/* D186: the still's own verb and estimate, in its section (Clay's foot stays the passes') */}
       </Step>
     </div>
   )
@@ -755,11 +764,11 @@ export function StageClipCard() {
   const clips = shots.filter((a) => a.kind === 'video')
   return (
     <div className="stage-panel stage-clip" data-card="clip">
-      <div className="kv tall"><span>start <Help text="The clip starts from one of the stage's frames — the stills made from it in Image › From a stage. With Wan Animate the picked frame is the character who performs." /></span>
+      <div className="kv tall"><span>start <Help text="The clip starts from one of the stage's stills — made in Clay's Still section (D186), by the model on its card. With Wan Animate the picked frame is the character who performs." /></span>
         <div>
           <div className="shot-results start-stills">{stills.slice(0, 12).map((a) => <img key={a.id} className={`shot-thumb${shotStart === a.id ? ' start' : ''}`} src={api.thumbUrl(a.id, 256)} alt="" title={`${a.model_id ?? ''} · seed ${a.seed ?? ''} — click: the clip starts from this frame`} onClick={() => st().setShotStart(shotStart === a.id ? null : a.id)} />)}</div>
-          {!stills.length && <span className="hint">No frame of this stage yet.</span>}
-          <div className="verbs"><CommandButton id="stage.frame.make" text label="Make a frame ▸" /></div>
+          {!stills.length && <span className="hint">No still of this stage yet.</span>}
+          <div className="verbs"><CommandButton id="stage.frame.make" text label="Make a still ▸" /></div>
         </div></div>
       <div className="kv tall"><span>prompt</span><textarea className="shot-prompt" rows={2} value={prompt} placeholder="what the scene is (the frame's prompt)" onChange={(e) => st().setShot({ prompt_text: e.target.value })} /></div>
       <ClipSection />
@@ -793,7 +802,8 @@ export function useStageLoad(): void {
   useEffect(() => { if (project?.open) { void st().load(); void st().loadPoses(); void st().loadMeshes(); void st().loadTemplates() } }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
 }
 
-/** Image › From a stage's foot (D95 AN1): New stage, else Render frame ×n with its estimate. */
+/** Clay's foot while the Still section is in view (D186; D95 AN1's Image › From a stage foot before it): New stage, else Render frame ×n
+ *  with its estimate and the model that runs. */
 export function StageFoot() {
   const current = useStage((s) => s.current)
   const rendering = useStage((s) => s.rendering)
@@ -1205,7 +1215,7 @@ function Viewport() {
       {current && rec && <div className="record-bar" data-testid="record-bar" onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}>
         <RecordButton />{/* C3 (D181): the animatic */}
         <CommandButton id="stage.frame.make" text label="Capture a still ▸" /><CommandButton id="stage.shot.passes" text label="Render the passes ▶" />
-        <Help text="Record: the scene through the shot's camera over its range, the editing chrome away. Record ▶ writes the animatic — the lit clay frame by frame on the CPU, a clip under the shot that the storyboard plays and Episode cuts until a performance replaces it. Capture a still makes a picture of this frame in Image (From a stage); the passes — clay, depth, pose, masks — are what the performances use." />
+        <Help text="Record: the scene through the shot's camera over its range, the editing chrome away. Record ▶ writes the animatic — the lit clay frame by frame on the CPU, a clip under the shot that the storyboard plays and Episode cuts until a performance replaces it. Capture a still opens the Still section: a picture of this frame by the model on its card (D186); the passes — clay, depth, pose, masks — are what the performances use." />
       </div>}
       {current && !rec && <div className="gizmo-bar" onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}>
         <CommandRow ids={['stage.tool.select', 'stage.tool.move', 'stage.tool.rotate', 'stage.tool.scale', 'stage.tool.path', 'gap', 'stage.snap', 'gap', 'stage.undo', 'stage.redo']} active={`stage.tool.${tool}`} />

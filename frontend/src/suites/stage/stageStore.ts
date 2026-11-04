@@ -114,11 +114,11 @@ const newDetail = (objects: StageObject[]): 'male' | 'female' => { const f = obj
 export interface PoseDef { preset?: string | null; joints: Record<string, number[]> }
 // ---- ST3 (16 §3e / §7): the Shot tab ----
 export interface ShotRef { asset_id: string; note?: string | null }
-export interface ShotState { method: string; prompt_text: string; refs: ShotRef[]; count: number; tier: 'draft' | 'full'; use_as_is: boolean }
+export interface ShotState { method: string; model_id: string | null; prompt_text: string; refs: ShotRef[]; count: number; tier: 'draft' | 'full'; use_as_is: boolean }   // D186: model_id — the Still's card (null: the method's measured default)
 export interface RenderedPasses { size: { w: number; h: number }; blobs: Record<string, Blob>; keypoints: number[][][]; legend: Record<string, string> }
 /** The document's record of a camera's rendered passes (stages/<id>.json `passes[]`). */
 export interface PassesEntry { camera_id: string; revision: number; size: { w: number; h: number }; assets: Record<string, string>; keypoints: unknown[]; legend: Record<string, unknown>; rendered_at?: string }
-export const DEFAULT_SHOT: ShotState = { method: 'clay', prompt_text: '', refs: [], count: 1, tier: 'draft', use_as_is: false }
+export const DEFAULT_SHOT: ShotState = { method: 'clay', model_id: null, prompt_text: '', refs: [], count: 1, tier: 'draft', use_as_is: false }
 const snap16 = (v: number) => Math.max(16, Math.round(v / 16) * 16)
 const snapTo = (v: number, m: number) => Math.max(m, Math.round(v / m) * m)
 // ---- ST4 (16 §8): keyframes and the clip ----
@@ -710,8 +710,8 @@ export const useStage = create<StageState>()((set, get) => ({
     const sh = get().shot
     const entry = get().passesEntry()
     const [width, height] = get().shotSize()
-    const recipe = { kind: 'stage_shot', frame: Math.round(get().frame), stage_id: cur.id, camera_id: cam.id, passes: entry?.assets ?? { clay: 'pending', pose: 'pending' }, method: sh.method,
-      prompt_text: sh.prompt_text.trim(), refs: sh.refs.map((r) => ({ asset_id: r.asset_id, note: r.note ?? null })), mentions: get().figureMentions(), seeds: [0], width, height }   // D93 (C8): the bound figures
+    const recipe = { kind: 'stage_shot', frame: Math.round(get().frame), stage_id: cur.id, camera_id: cam.id, passes: entry?.assets ?? { clay: 'pending', pose: 'pending' }, method: sh.method, model_id: sh.model_id,
+      prompt_text: sh.prompt_text.trim(), refs: sh.refs.map((r) => ({ asset_id: r.asset_id, note: r.note ?? null })), mentions: get().figureMentions(), seeds: [0], width, height }   // D93 (C8): the bound figures; D186: the card's model
     try {
       const pv = await unwrap(http.POST('/recipes/preview', { body: { recipe: recipe as never } }))
       if (seq === shotPreviewSeq) set({ shotPreview: isDocumentPreview(pv) ? pv : null, shotPreviewError: null })
@@ -761,8 +761,8 @@ export const useStage = create<StageState>()((set, get) => ({
     if (!entry) return null
     const sh = get().shot
     const [width, height] = get().shotSize()
-    const recipe = { kind: 'stage_shot', frame: Math.round(get().frame), stage_id: cur.id, camera_id: cam.id, passes: entry.assets, method: sh.method, prompt_text: sh.prompt_text.trim(),
-      refs: sh.refs.map((r) => ({ asset_id: r.asset_id, note: r.note ?? null })), mentions: get().figureMentions(), seeds: Array.from({ length: Math.max(1, Math.min(4, sh.count)) }, () => 0), width, height }   // D93 (C8)
+    const recipe = { kind: 'stage_shot', frame: Math.round(get().frame), stage_id: cur.id, camera_id: cam.id, passes: entry.assets, method: sh.method, model_id: sh.model_id, prompt_text: sh.prompt_text.trim(),
+      refs: sh.refs.map((r) => ({ asset_id: r.asset_id, note: r.note ?? null })), mentions: get().figureMentions(), seeds: Array.from({ length: Math.max(1, Math.min(4, sh.count)) }, () => 0), width, height }   // D93 (C8); D186: the card's model
     try {
       const jobs = await unwrap(http.POST('/jobs', { body: { recipe: recipe as never, stage: false, origin: { suite: 'stage', surface: 'shot', ref: cur.id, payload: { camera_id: cam.id } } } }))
       s.toast(`Queued ${jobs.jobs.length} frame${jobs.jobs.length > 1 ? 's' : ''} of ${cam.name}`, 'success')

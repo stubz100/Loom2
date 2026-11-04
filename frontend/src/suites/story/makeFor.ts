@@ -123,7 +123,7 @@ export async function makeFrameFor(s: Shot, v: ShotVersion, nodeId?: string | nu
       if (ids.length) refs = useGenerate.getState().addRefs(ids)
     } catch (e) { toast(`The board could not be read: ${(e as ApiError).detail ?? e}`, 'error') }
   }
-  useGenerate.setState({ source: 'prompt' })                              // D125 (I1): on Prompt, the chip in the column's head
+  // D186: Make is the prompt's alone (the stage still is Clay's); the chip in the column's head
   landOn('generate', 'prompt')
   const who = pre.subjects.length ? `; ${pre.subjects.length} subject${pre.subjects.length === 1 ? '' : 's'} from the speakers` : ''
   toast(`Generate for ${forLabel(f)} — the results come back as its takes${who}${over.length ? ` (${over.join('; ')})` : ''}${pre.place ? '; the scene is its place' : ''}${refs ? `; ${refs} reference${refs === 1 ? '' : 's'} from the board` : ''}`)

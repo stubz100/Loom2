@@ -20,6 +20,8 @@ import { byOrder } from '../../store/modelCaps'
 import { askConfirm, useSession } from '../../store/session'
 import { adjustmentMenu, filterMenu, layerMenu, MORE_TOOLS, TOOLS as TOOL_TABLE } from './editCommands'
 import { AI_OP_LABEL, aiModels, aiReason, aiRecipe, opCandidates, selectPlan, type AiCtx } from './aiRecipes'
+import { ModelCards } from '../../frame/ModelCards'
+import type { ModelCardItem } from '../../frame/modelCardItems'
 import { AiRunButton, BlendSelect, LatchButton, RendererButton, ValueField } from './widgets'
 import { blendLabel, typeLabel } from './labels'
 import { ColorBalanceEditor, CurvesEditor, LevelsEditor, Section } from './propsEditors'
@@ -495,13 +497,16 @@ function AiTab() {
   const health = c.health
   // C3 (D26) / D65: every model comes from /capabilities — the defaults are the variant's (open: Klein 4B, no hero, no SAM 3); aiRecipes.ts
   const capModels = caps?.models
-  const { contentAware, heroId, mode, i2iIds, upIds, refineModel, tiledIds, tiledModel, upscaleModel, kleinId, isHero, outpaintId } = aiModels(c)
-  const hero = aiModels(c).heroFor(p.op)
+  const { contentAware, mode, inpaintIds, outpaintIds, i2iIds, upIds, inpaintModel, outpaintModel, refineModel, tiledIds, tiledModel, upscaleModel, isHero, instructIds, instructModel } = aiModels(c)
   /** A refine model's name in the lists: the label's first part, + Turbo where the spec has one, the base models' CFG note. */
   const i2iName = (id: string, tiled = false) => { const m = capModels?.[id]; if (!m) return id
     const name = m.label.split(' · ')[0] + (m.turbo ? ' + Turbo' : '')
     return tiled ? name + (m.hint ? ` (${m.hint.split(',')[0]})` : '') : name + (!m.distilled && !m.cfg_fixed ? ' (CFG, negatives)' : '') }
-  const fam = (id: string) => { const f = capModels?.[id]?.family ?? ''; return f.charAt(0).toUpperCase() + f.slice(1) }
+  /** D186: the one card — an image model's (its label as the lists named it), a tool's (the upscalers), an instruct model's. */
+  const cards = (ids: string[], name: (id: string) => string = (id) => capModels?.[id]?.label.split(' · ')[0] ?? id): ModelCardItem[] => ids.map((id) => {
+    const m = capModels?.[id]; const t = caps?.tools?.[id]; const i = caps?.instruct?.models?.[id]
+    return { id, label: name(id), hint: m?.hint ?? i?.hint ?? (t ? t.label.split(' · ').slice(1).join(' · ') : null), license: m?.license ?? t?.license ?? i?.license, health: health(id), distilled: !!m?.distilled, seconds: i?.seconds ?? null } })
+  const candidatesFor = (id: string) => (isHero(id) ? 2 : 4)
   const revision = useEditor((s) => s.revision)
   // the engine image the orchestrator will build (edit_ai.plan_region): shown so a big region is a conscious choice
   const engineSize = useMemo(() => {
@@ -532,16 +537,17 @@ function AiTab() {
       {p.op === 'select' && <SelectControls />}
       {p.op !== 'select' && <div className="tool-opts">
         {p.op === 'inpaint' && <>
-          <label>mode</label><select value={mode} onChange={(e) => { const m = e.target.value as AiPanelState['mode']; setP({ mode: m, candidates: m === 'fill_hero' ? 2 : 4 }) }}>
-            <option value="fill" title="Klein + LanPaint (the default)">Fill</option><option value="fill_match" title="Klein ICM: continues the surrounding texture">Fill-Match · continues texture</option>{heroId && <option value="fill_hero" title={`${capModels?.[heroId]?.label.split(' · ')[0] ?? heroId} + LanPaint: slow, best detail`}>Fill Hero · slow, best detail</option>}<option value="remove" title="paints what is behind, from a background-only prompt">Remove</option>{contentAware && <option value="quick_remove" title="content-aware fill on the CPU: seconds, no GPU">Quick remove · CPU</option>}
+          <label>mode</label><select value={mode} onChange={(e) => { const m = e.target.value as AiPanelState['mode']; setP({ mode: m, candidates: candidatesFor(inpaintModel) }) }}>
+            <option value="fill" title="LanPaint on the model picked below (the default)">Fill</option><option value="fill_match" title="Klein ICM: continues the surrounding texture">Fill-Match · continues texture</option><option value="remove" title="paints what is behind, from a background-only prompt">Remove</option>{contentAware && <option value="quick_remove" title="content-aware fill on the CPU: seconds, no GPU">Quick remove · CPU</option>}
           </select>
+          {mode !== 'quick_remove' && <><label>model</label><ModelCards label="inpaint model" testId="ai-inpaint-models" items={cards(inpaintIds)} value={inpaintModel} onPick={(id) => setP({ inpaintModel: id, candidates: candidatesFor(id) })} /></>}{/* D186: Fill Hero = the hero model's card (dev + LanPaint: slow, best detail) */}
           {mode === 'remove' && contentAware && <><label /><label className="chk" title="the hole is content-aware filled (PhotoCraft, CPU) and the model starts from that instead of a grey hole — try it where Remove leaves an object's ghost"><input type="checkbox" checked={p.prefill} onChange={(e) => setP({ prefill: e.target.checked })} /> pre-fill the hole (content-aware)</label></>}
           {mode === 'quick_remove' && <Help className="full" text={"PhotoCraft's content-aware fill on the CPU — no model, no GPU, a few seconds; best on small or textured areas, it smears large ones."} />}
-          {mode !== 'quick_remove' && mode !== 'remove' && <RefSlotsAi model={mode === 'fill_hero' && heroId ? heroId : kleinId} />}
+          {mode !== 'quick_remove' && mode !== 'remove' && <RefSlotsAi model={inpaintModel} />}
           {mode !== 'quick_remove' && <><label>prompt</label><textarea value={p.prompt} rows={3} placeholder={p.mode === 'remove' ? 'what is behind: "wet cobblestones and a brick wall"' : 'what to paint there'} onChange={(e) => setP({ prompt: e.target.value })} />
 </>}
           {advanced('inpaint', <>
-          {mode !== 'quick_remove' && <EncoderPick model={kleinId} />}
+          {mode !== 'quick_remove' && <EncoderPick model={inpaintModel} />}
           {p.mode !== 'fill_match' && p.mode !== 'remove' && p.mode !== 'quick_remove' && <><label>LanPaint</label><div className="segmented"><button className={p.promptMode === 'image_first' ? 'active' : ''} onClick={() => setP({ promptMode: 'image_first' })}>image first</button><button className={p.promptMode === 'prompt_first' ? 'active' : ''} onClick={() => setP({ promptMode: 'prompt_first' })}>prompt first</button></div></>}
           <Slider label="margin" value={p.margin} min={0} max={100} step={1} unit="%" onChange={(v) => setP({ margin: v })} />
           <Slider label="min size" value={p.minSize} min={512} max={2048} step={64} unit="px" onChange={(v) => setP({ minSize: v })} />
@@ -554,15 +560,15 @@ function AiTab() {
         {p.op === 'outpaint' && <>
           <label>grow</label><div className="grow-grid">{(['left', 'top', 'right', 'bottom'] as const).map((k) => <span key={k} className="grow-cell"><small>{k}</small><ValueField bare label={`grow ${k}`} value={p.pad[k]} min={0} max={2048} step={16} unit="px" onChange={(v) => setP({ pad: { ...p.pad, [k]: v } })} /></span>)}</div>
           <label>prompt</label><textarea value={p.prompt} rows={3} placeholder="what continues beyond the edge" onChange={(e) => setP({ prompt: e.target.value })} />
-          <RefSlotsAi model={outpaintId} />
-          <label>model</label><div className="segmented"><button className={!hero ? 'active' : ''} onClick={() => setP({ outpaintHero: false, candidates: 4 })}>{fam(kleinId) || 'default'} + LanPaint</button>{heroId && <button className={hero ? 'active' : ''} onClick={() => setP({ outpaintHero: true, candidates: 2 })}>{capModels?.[heroId]?.short ?? heroId} (hero)</button>}</div>
+          <RefSlotsAi model={outpaintModel} />
+          <label>model</label><ModelCards label="outpaint model" testId="ai-outpaint-models" items={cards(outpaintIds)} value={outpaintModel} onPick={(id) => setP({ outpaintModel: id, candidates: candidatesFor(id) })} />{/* D186: LanPaint on the card's model; the hero (dev) is slow, best detail */}
           {advanced('outpaint', <>
-          <EncoderPick model={outpaintId} />
+          <EncoderPick model={outpaintModel} />
           <Slider label="feather" value={p.feather} min={0} max={64} step={1} unit="px" onChange={(v) => setP({ feather: v })} />
           </>)}
         </>}
         {p.op === 'refine' && <>
-          <label>model</label><select value={refineModel} onChange={(e) => setP({ refineModel: e.target.value, candidates: isHero(e.target.value) ? 2 : 4 })}>{i2iIds.map((id) => <option key={id} value={id}>{i2iName(id)}</option>)}</select>
+          <label>model</label><ModelCards label="refine model" testId="ai-refine-models" items={cards(i2iIds, (id) => i2iName(id))} value={refineModel} onPick={(id) => setP({ refineModel: id, candidates: candidatesFor(id) })} />{/* D186 */}
           <label>on</label><div className="segmented">{(['visible', 'active', 'selection'] as const).map((s) => <button key={s} className={p.refineSource === s ? 'active' : ''} onClick={() => setP({ refineSource: s })}>{s}</button>)}</div>
           <Slider label="strength" value={p.strength} min={0.1} max={0.8} step={0.01} onChange={(v) => setP({ strength: v })} />
           <label>prompt</label><textarea value={p.prompt} rows={3} placeholder="defaults to the source asset's prompt when empty" onChange={(e) => setP({ prompt: e.target.value })} />
@@ -574,17 +580,18 @@ function AiTab() {
           </>)}
         </>}
         {p.op === 'instruct' && <>
+          <label>model</label><ModelCards label="instruct model" testId="ai-instruct-models" time items={cards(instructIds, (id) => caps?.instruct?.models?.[id]?.label.split(' · ')[0] ?? id)} value={instructModel} onPick={(id) => setP({ instructModel: id })} />{/* D186 */}
           <label>on</label><div className="segmented">{(['visible', 'active'] as const).map((s) => <button key={s} className={p.instructSource === s ? 'active' : ''} onClick={() => setP({ instructSource: s })}>{s}</button>)}</div>
           <label>change</label><textarea value={p.prompt} rows={3} placeholder={'what to change: "make it dusk, the lamps lit", "snow on the street", "a lantern in her hand"'} onChange={(e) => setP({ prompt: e.target.value })} />
           <Help className="full" text={`${caps?.instruct?.models?.[caps.instruct.default ?? '']?.label ?? 'The edit model'} redraws the whole picture (or the active layer) from your instruction at about 1 megapixel and lands it as a new layer, ${caps?.instruct?.models?.[caps.instruct.default ?? '']?.seconds ?? 32} s a candidate. It follows meaning a mask cannot say — the time of day, the weather, a thing in a hand, a costume — and keeps the composition; for a precise area, Inpaint with a selection does better, and it does not remove things (Remove does).`} />
         </>}
         {p.op === 'upscale' && <>
-          <label>model</label><select value={upscaleModel} onChange={(e) => setP({ upscaleModel: e.target.value })}>{upIds.map((id) => <option key={id} value={id}>{caps?.tools[id]?.label ?? id} {health(id) === 'missing' ? '(not fetched)' : ''}</option>)}</select>
+          <label>model</label><ModelCards label="upscale model" testId="ai-upscale-models" items={cards(upIds, (id) => caps?.tools[id]?.label.split(' · ')[0] ?? id)} value={upscaleModel} onPick={(id) => setP({ upscaleModel: id })} />{/* D186 */}
           <label>on</label><div className="segmented">{(['visible', 'active'] as const).map((s) => <button key={s} className={p.upscaleSource === s ? 'active' : ''} onClick={() => setP({ upscaleSource: s })}>{s}</button>)}</div>
           <label>result</label><label className="chk"><input type="checkbox" checked={p.asLayer} onChange={(e) => setP({ asLayer: e.target.checked })} /> also add a 1× detail layer (the full-size image goes to the Bin)</label>
           <label>detail</label><label className="chk" title="re-samples every tile of the upscale at low strength (a tiled refine)"><input type="checkbox" checked={p.refineTiled} onChange={(e) => setP({ refineTiled: e.target.checked })} /> Upscale (detailed) — re-samples every tile at low strength</label>
           {p.refineTiled && <>
-            <label>model</label><select value={tiledModel} onChange={(e) => setP({ tiledModel: e.target.value })}>{tiledIds.map((id) => <option key={id} value={id}>{i2iName(id, true)}</option>)}</select>
+            <label>model</label><ModelCards label="tiled refine model" testId="ai-tiled-models" items={cards(tiledIds, (id) => i2iName(id, true))} value={tiledModel} onPick={(id) => setP({ tiledModel: id })} />{/* D186 */}
             <EncoderPick model={tiledModel} />
             <Slider label="strength" value={p.tiledStrength} min={0.05} max={0.6} step={0.01} onChange={(v) => setP({ tiledStrength: v })} />
             <Slider label="tile" value={p.tile} min={512} max={2048} step={64} unit="px" onChange={(v) => setP({ tile: v })} />

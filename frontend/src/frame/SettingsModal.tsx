@@ -3,7 +3,8 @@ import { Help } from './Help'
 import { Fragment, useState } from 'react'
 import type { Settings } from '../api/types'
 import { useSession } from '../store/session'
-import { sampleOptions, sampleValue } from '../suites/story/styleSamples'
+import { sampleValue } from '../suites/story/styleSamples'
+import { ModelCards } from './ModelCards'
 import { ROLE_NAMES, STRIP, TRACK_ROLES } from '../suites/story/episode/cut'
 import { About } from './About'
 import { THEMES, type Theme } from './theme'
@@ -62,9 +63,11 @@ export function SettingsModal() {
           <h4 id="settings-samples">Samples</h4>
           {/* D90 (02 §4.1, §6.3): the scenes the style samples and the look-preset icons are rendered on; blank = the default again */}
           <label>Sample model <Help text={"The model \"Make a sample image\" and the look-preset icons render on (D91) — a small, quick one is enough to show a look; one this build does not offer falls back to the default"} /></label>
-          <select aria-label="sample model" value={sampleValue(draft.samples.model_id, s.capabilities?.sample_models)} onChange={(e) => set({ samples: { ...draft.samples, model_id: e.target.value || null } })}>
-            {sampleOptions(s.capabilities?.sample_models).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
+          {/* D186: the one card — the sample models, the default first; the default picked clears the setting */}
+          <ModelCards label="sample model" testId="settings-sample-models" time
+            items={(s.capabilities?.sample_models ?? []).map((m) => ({ id: m.id, label: m.default ? `${m.label} · default` : m.label, license: m.license, health: m.health, seconds: m.seconds }))}
+            value={sampleValue(draft.samples.model_id, s.capabilities?.sample_models) || s.capabilities?.sample_models?.find((m) => m.default)?.id}
+            onPick={(id) => set({ samples: { ...draft.samples, model_id: s.capabilities?.sample_models?.find((m) => m.id === id)?.default ? null : id } })} />
           <label>Style sample <Help text={"The scene every style is rendered on by \"Make a sample image\" — its fragment is appended; the same scene for every style keeps the samples comparable"} /></label>
           <textarea rows={2} aria-label="style sample prompt" value={draft.samples.style_prompt} onChange={(e) => set({ samples: { ...draft.samples, style_prompt: e.target.value } })} />
           {Object.entries(draft.samples.swatch_prompts).map(([field, t]) => (

@@ -75,9 +75,9 @@ const placeTargets = (): string[] => { const n = node(); const g = sy().flowGrap
 /** Open a stage at a camera (Shots' "Open in Stage" and the Stage routes of Make ▸). D93 (C8): `speakers` — Make frame ▸ in Stage binds the
  *  shot's speakers to the stage's figures in screen order when the counts match, else says how to bind them. */
 function openStageAt(stageId: string, cam: string | null, speakers?: (Profile & { version?: string | null })[], where: 'image' | 'animate' = 'animate', card: 'clay' | 'clip' | 'final' = 'clay', start: string | null = null): void {
-  // D95 (AN1): a still from the stage is made in Image (From a stage); the stage itself in Animate's Clay, its clips in Performance's Stage clip card (D121).
+  // D186: a still from the stage is made in Clay's Still section (D95's Image › From a stage is gone); the stage itself in Clay, its clips in Performance's Stage clip card (D121).
   // D125 (A2): a card asked for opens on Performance (the stage clip with the shot's frame as its start, or the final shot), not on Clay
-  if (where === 'image') { void import('../generate/generateStore').then((g) => g.useGenerate.setState({ source: 'stage' })); navigate({ suite: 'generate' }) }
+  if (where === 'image') { const s = shot(), v = shotTarget(); void import('../../ui2/clay/clayStore').then((c) => c.useClay.getState().openScene(stageId, s && v ? { shot: s.id, version: v.id, camera: cam } : null, 'still')) }
   else { void import('../animate/routeStore').then((r) => r.useAnimRoute.getState().set(card === 'final' ? 'final' : 'clip')); navigate({ suite: card === 'clay' ? 'stage' : 'animate' }) }
   void import('../stage/stageStore').then((m) => { const st = m.useStage.getState(); const go = st.current?.id === stageId ? Promise.resolve() : st.open(stageId); void go.then(() => {
     if (cam) m.useStage.getState().setActiveCamera(cam)
@@ -464,7 +464,7 @@ const cmds: Command[] = [
   { id: 'cast.place.things.cleanAgain', scope: 'story', label: 'Clean the set picture again ▶', icon: Eraser, hint: 'D180: every thing cleaned again from the picture before any clean, another seed — where a shape was painted in a thing’s place',
     placement: ['panel'], when: () => isPlace() && !!version()?.place_set?.things.length && !!version()?.place_set?.things.every((t) => t.cleaned) && !setBusy(),
     run: () => { const p = profile(), v = version(); if (p && v) void import('./placeThingsStore').then((m) => m.usePlaceThings.getState().clean(p.id, v.id)) } },
-  { id: 'cast.place.fill', scope: 'story', label: 'Fill what the picture never saw ▶', icon: Paintbrush, hint: 'Klein paints each face the picture did not see well, the most seen first, with its material — about 45 s a face',
+  { id: 'cast.place.fill', scope: 'story', label: 'Fill what the picture never saw ▶', icon: Paintbrush, hint: 'the painting model paints each face the picture did not see well, the most seen first, with its material — about 45 s a face on Klein',
     placement: ['panel', 'context'], when: () => isPlace() && toFill().length > 0 && !setBusy(), run: () => void import('./setBuilder').then((m) => m.fillSet()) },
   { id: 'cast.place.fillFace', scope: 'story', label: 'Fill this face ▶', icon: Paintbrush, hint: 'a filled face is filled again from its bake, with another seed — name its material first for a cleaner surface',
     placement: ['context'], when: () => isPlace() && !!storyItem.face && fillable().includes(storyItem.face) && !setBusy(),
@@ -557,10 +557,9 @@ const cmds: Command[] = [
   // Stage routes open the version's camera (its results already become takes of the shots pointing at it)
   { id: 'story.shot.makeFrame', scope: 'story', label: 'Make frame in Image', icon: ImagePlus, placement: ['strip', 'inspector', 'context'], when: () => projectOpen() && !!shotTarget(),
     run: () => { const s = shot(); const v = shotTarget(); if (s && v) void makeFrameFor(s, v) } },
-  { id: 'story.shot.makeFrameStage', scope: 'story', label: 'Make frame from the stage (Image)', icon: Shapes, placement: ['strip', 'inspector', 'context'], when: () => !!shotTarget()?.stage_id,
+  { id: 'story.shot.makeFrameStage', scope: 'story', label: 'Make the still in Clay', icon: Shapes, placement: ['strip', 'inspector', 'context'], when: () => !!shotTarget()?.stage_id,
     run: () => { const s = shot(); const v = shotTarget(); if (!s || !v?.stage_id) return
-      useMakeFor.getState().set('generate', forShot(s, v))                 // D125 (I1): From a stage, with the chip on the shot (its stills come back by the camera)
-      openStageAt(v.stage_id, v.camera_id, shotSpeakers(s), 'image') } },
+      openStageAt(v.stage_id, v.camera_id, shotSpeakers(s), 'image') } },   // D186: Clay's Still on the shot's scene and camera (its stills come back by the camera)
   { id: 'story.shot.makeClip', scope: 'story', label: 'Make clip in Animate', icon: Film, placement: ['strip', 'inspector', 'context'], when: () => projectOpen() && !!shotTarget(),
     run: () => { const s = shot(); const v = shotTarget(); if (s && v) void makeClipFor(s, v) } },
   { id: 'story.shot.makeClipStage', scope: 'story', label: 'Make clip on the stage (Animate)', icon: Shapes, placement: ['strip', 'inspector', 'context'], when: () => !!shotTarget()?.stage_id,

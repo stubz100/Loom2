@@ -9,7 +9,8 @@ export interface RailTab { id: string; label: string; key?: string; icon: ReactN
 // Final finishes the composition; the Shot section heads all three
 const shot: RailTab = { id: 'shot', label: 'Shot', icon: <Clapperboard size={18} /> }
 const CLAY_RAIL: RailTab[] = [{ id: 'scene', label: 'Scene', icon: <Shapes size={18} /> },   // C1 (D181): no Shot section — the scene and its shot are Clay's header
-  { id: 'motion', label: 'Motion', icon: <PersonStanding size={18} /> }, { id: 'camera', label: 'Camera', icon: <Camera size={18} /> }]
+  { id: 'motion', label: 'Motion', icon: <PersonStanding size={18} /> }, { id: 'camera', label: 'Camera', icon: <Camera size={18} /> },
+  { id: 'still', label: 'Still', icon: <Aperture size={18} /> }]   // D186: the stage still is Clay's — its form and its model card, Render frame ▶ in the foot
 const PERFORMANCE_RAIL: RailTab[] = [shot, { id: 'performance', label: 'Performance', icon: <Aperture size={18} /> },
   { id: 'clips', label: 'Clips', icon: <Film size={18} /> }]   // AW3: a clip's details under its row, as a layer's at Final and a thing's at Clay
 const FINAL_RAIL: RailTab[] = [shot, { id: 'layers', label: 'Layers', icon: <Layers size={18} /> },   // AE2–3: the selected layer's editor under its row (UX9 U1)

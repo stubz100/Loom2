@@ -259,8 +259,24 @@ class ReangleCaps(Open):
     auto: dict[str, str]                           # move → the method `auto` picks
 
 
+class StageModelCaps(Open):
+    """D186: one model a Stage method may run on (the Still's card) — its health, its time on the method (measured, or its own estimate)."""
+    id: str
+    label: str
+    short: str
+    hint: str | None = None
+    license: str | None = None
+    health: str
+    missing: list[str]
+    seconds: float | None = None
+    measured: bool
+    max_refs: int                                  # references after image 1 on this model
+    approx_gb: float
+
+
 class StageMethodCaps(Open):
-    """P13 ST3 (D78): one Stage → image method — the model it runs, its health, E10's seconds, the pass it takes and the references it allows."""
+    """P13 ST3 (D78): one Stage → image method — the model it runs, its health, E10's seconds, the pass it takes and the references it allows;
+    D186: the models it may run on instead, the measured default first."""
     model_id: str
     label: str
     short: str
@@ -272,6 +288,7 @@ class StageMethodCaps(Open):
     image1: str                                    # the pass that is image 1: clay | pose
     max_refs: int                                  # references after image 1
     approx_gb: float
+    models: list[StageModelCaps] = []
 
 
 class StageClipCaps(Open):

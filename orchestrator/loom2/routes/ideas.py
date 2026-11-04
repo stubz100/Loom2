@@ -58,6 +58,10 @@ class ClayQueued(BaseModel):
     idea: Idea
 
 
+class ClayBody(BaseModel):
+    model_id: str | None = None                   # D186: the Make column's card (a FLUX.2-family model that takes references); None = the clay-reference model
+
+
 class KeepBody(BaseModel):
     variant_id: str
     profile_id: str | None = None                 # a new version of this Cast profile; None: a new profile (v1)
@@ -215,9 +219,10 @@ async def idea_variant_remove(svc: Svc, iid: str, vid: str):
 
 
 @router.post("/story/ideas/{iid}/variants/{vid}/clay", response_model=ClayQueued)
-async def idea_variant_clay(svc: Svc, iid: str, vid: str):
+async def idea_variant_clay(svc: Svc, iid: str, vid: str, body: ClayBody | None = None):
     """*Make the clay ▶* (06 §2.3): a character variant's figure — an A-pose picture drawn from it (about a minute), the body fitted to it —
-    and then its shell (Pixal3D, about four minutes, full only), queued one after another; the variant's clay follows each step."""
+    and then its shell (Pixal3D, about four minutes, full only), queued one after another; the variant's clay follows each step.
+    D186: the body names the Make column's model when it takes references."""
     ws, _, _ = svc.require_project()
     if svc.queue is None:
         raise HTTPException(409, "no queue")
@@ -235,7 +240,7 @@ async def idea_variant_clay(svc: Svc, iid: str, vid: str):
     h = 720
     w = max(64, round(h * fmt.width / fmt.height / 16) * 16)
     try:
-        recipe, origin = plan_clay(idea, v, svc.app.settings.variant, width=w, height=h)
+        recipe, origin = plan_clay(idea, v, svc.app.settings.variant, width=w, height=h, model_id=body.model_id if body else None)
         job = await start_step(svc.queue, ClayStep(iid, vid, recipe, origin, {"step": "drawing", "anim_ref_asset_id": None, "body": None, "body_points": None,
                                                                              "note": None, "shell_asset_id": None}))   # V22 / V30: staged until the marker is written
     except ValueError as e:

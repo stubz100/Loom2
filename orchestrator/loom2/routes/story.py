@@ -378,6 +378,7 @@ class AnimRefBody(BaseModel):
     count: int = Field(2, ge=1, le=4)
     stage: bool = False                           # queued staged (released from the Queue)
     style_id: str | None = None
+    model_id: str | None = None                   # D186: the Make column's card (a FLUX.2-family model that takes references); None = the clay-reference model
 
 
 class AnimRefPick(BaseModel):
@@ -414,7 +415,7 @@ async def profile_anim_ref_make(svc: Svc, pid: str, vid: str, body: AnimRefBody)
     if made:
         svc.group_changed([gid])
     try:
-        planned = plan_anim_ref(p, p.version(v.id), body.side, svc.app.settings.variant, width=w, height=h, count=body.count, group_id=gid, style_id=body.style_id)
+        planned = plan_anim_ref(p, p.version(v.id), body.side, svc.app.settings.variant, width=w, height=h, count=body.count, group_id=gid, style_id=body.style_id, model_id=body.model_id)
         jobs = []
         for recipe, origin in planned:
             jobs += svc.queue.submit(recipe, stage=body.stage, origin=JobOrigin.model_validate(origin))

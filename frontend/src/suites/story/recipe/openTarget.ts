@@ -22,9 +22,10 @@ export function openTarget(t: Target, shotId: string, version: string): void {
       return
     case 'final': navigate({ suite: 'final', tab: t.section }); return
     case 'image':
-      void Promise.all([import('../storyStore'), import('../makeFor')]).then(([st, mf]) => {
+      void Promise.all([import('../storyStore'), import('../makeFor'), import('../../../ui2/clay/clayStore')]).then(([st, mf, c]) => {
         const s = st.useStory.getState().shots.find((x) => x.id === shotId), v = s?.versions.find((x) => x.id === version)
-        if (s && v && v.state === 'open') void mf.makeFrameFor(s, v)
+        if (s && v && v.stage_id) void c.useClay.getState().openScene(v.stage_id, { shot: shotId, version, camera: v.camera_id ?? null }, 'still')   // D186: a stage still is Clay's
+        else if (s && v && v.state === 'open') void mf.makeFrameFor(s, v)                                                                         // a prompt picture: World's Make, for the shot
         else navigate({ suite: 'generate' })
       })
       return

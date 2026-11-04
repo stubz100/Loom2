@@ -6,14 +6,14 @@ import type { Capabilities } from '../../api/types'
 import { command, isEnabled, type MenuItem } from '../../frame/commands'
 import { useSession } from '../../store/session'
 import { AI_DEFAULT, useAiPanel, type AiOp, type AiPanelState } from './aiPanelStore'
-import { aiReason, aiRecipe, aiSeeds, opCandidates, rerunRecipe, selectPlan, subjectPlan, type AiCtx } from './aiRecipes'
+import { aiModels, aiReason, aiRecipe, aiSeeds, opCandidates, rerunRecipe, selectPlan, subjectPlan, type AiCtx } from './aiRecipes'
 import { aiCtx, canvasMenu, layerMenu, MORE_TOOLS, TOOLS } from './editCommands'
 import { useEditor, type DocumentStack, type Node } from './editorStore'
 
 const CAPS = {
   models: {
-    klein: { order: 0, label: 'Klein 4B', family: 'klein', recipes: { inpaint: true, i2i: true }, tiled_refine: true, max_refs: 4 },
-    hero: { order: 1, label: 'Hero', family: 'flux2', recipes: { inpaint: true, inpaint_hero: true, i2i: true }, tiled_refine: true, max_refs: 10 },
+    klein: { order: 0, label: 'Klein 4B', family: 'klein', recipes: { inpaint: ['fill', 'fill_match', 'remove', 'outpaint'], i2i: true }, tiled_refine: true, max_refs: 4 },
+    hero: { order: 1, label: 'Hero', family: 'flux2', recipes: { inpaint: ['fill', 'outpaint'], inpaint_hero: true, i2i: true }, tiled_refine: true, max_refs: 10 },
     zimage: { order: 2, label: 'Z-Image', family: 'zimage', recipes: { i2i: true }, tiled_refine: false, max_refs: 0 },
   },
   tools: {
@@ -60,15 +60,18 @@ describe('aiReason: why the AI tab refuses a run', () => {
 })
 
 describe('the recipes a run sends', () => {
-  it('inpaint: the variant\'s inpaint model, one seed per candidate; Fill Hero picks the hero model\'s count', () => {
+  it('inpaint: the variant\'s inpaint model, one seed per candidate; the hero model picked on the card (D186: Fill Hero) halves the count', () => {
     const r = aiRecipe(ctx({ hasSel: true }, { candidates: 3, seedMode: 'fixed', seed: 7, prompt: 'a lamp' }), 'inpaint') as unknown as Record<string, unknown>
     expect(r).toMatchObject({ kind: 'inpaint', mode: 'fill', model_id: 'klein', seeds: [7, 8, 9], prompt_text: 'a lamp', prefill: false })
-    expect(opCandidates(ctx({}, { mode: 'fill_hero' }), 'inpaint')).toBe(2)
+    expect(aiRecipe(ctx({ hasSel: true }, { inpaintModel: 'hero' }), 'inpaint')).toMatchObject({ mode: 'fill', model_id: 'hero' })
+    expect(opCandidates(ctx({}, { inpaintModel: 'hero' }), 'inpaint')).toBe(2)
     expect(opCandidates(ctx(), 'inpaint')).toBe(4)
     expect(opCandidates(ctx(), 'upscale')).toBe(1)
+    expect(aiModels(ctx()).inpaintIds).toEqual(['klein', 'hero'])                            // the FLUX.2 family's models that run the mode, the default first
+    expect(aiModels(ctx({}, { inpaintModel: 'zimage' })).inpaintModel).toBe('klein')          // a model that cannot fill falls back to the default
   })
-  it('outpaint uses the hero model only when chosen; refine and upscale carry the active layer', () => {
-    expect(aiRecipe(ctx({}, { outpaintHero: true }), 'outpaint')).toMatchObject({ kind: 'inpaint', mode: 'outpaint', model_id: 'hero' })
+  it('outpaint uses the hero model only when picked on its card; refine and upscale carry the active layer', () => {
+    expect(aiRecipe(ctx({}, { outpaintModel: 'hero' }), 'outpaint')).toMatchObject({ kind: 'inpaint', mode: 'outpaint', model_id: 'hero' })
     expect(aiRecipe(ctx(), 'outpaint')).toMatchObject({ model_id: 'klein' })
     expect(aiRecipe(ctx({}, { refineSource: 'active' }), 'refine')).toMatchObject({ kind: 'i2i', model_id: 'klein', source: 'active', layer_id: 'a' })
     expect(aiRecipe(ctx(), 'upscale')).toMatchObject({ kind: 'upscale', model_id: 'up', seeds: [0], refine: false })

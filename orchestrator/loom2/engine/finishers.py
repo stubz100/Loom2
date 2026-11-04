@@ -592,7 +592,7 @@ async def _plate_beat_still(q: JobQueue, job: JobRecord, fid: str, frame: int) -
         size = pl.get("size") or [1280, 720]
         recipe = {"kind": "stage_shot", "stage_id": f.stage_id, "camera_id": f.camera_id, "passes": {"clay": rec.id}, "method": "clay", "empty": not pl.get("people"),
                   "prompt_text": str(pl.get("text") or ""), "refs": list(pl.get("refs") or []), "mentions": list(pl.get("mentions") or []), "seeds": [int(pl.get("seed") or 0)],
-                  "width": int(size[0]), "height": int(size[1])}
+                  "width": int(size[0]), "height": int(size[1]), "model_id": pl.get("model_id") or None}   # D186: the first still's model, anchor by anchor
         nxt = q.submit(recipe, origin=JobOrigin(suite="stage", surface=FINAL_PLATE_SURFACE, ref=fid, payload={**pl, "beat": frame}))[0]
         beats = [{**b, "job_id": nxt.id} if int(b.get("frame", -1)) == frame else b for b in next(x for x in f.layers if x.id == "plate").beats]
         f = await asyncio.to_thread(store.add_job, fid, "plate", nxt.id, status="queued", error=None, beats=beats)

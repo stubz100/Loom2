@@ -227,11 +227,11 @@ async function clayOn(page: import('@playwright/test').Page, stageId: string, ti
   await freeView(page)
   return a.shot_id
 }
-/** B2a: a still from the open shot's stage — World's Sketches with its source *From a stage* (the frame form, Render frame in its foot). */
+/** D186 (B2a before it: World's Sketches › From a stage): a still of the open shot's stage — Clay's *Still* section (the frame form with its
+ *  model card, Render frame ▶ at its end). */
 async function fromStageIn(page: import('@playwright/test').Page): Promise<void> {
-  await page.locator('nav.tabs button.tab', { hasText: 'World' }).click()
-  await page.locator('.w-rail-btn[aria-label="Sketches"]').click()
-  await page.locator('[data-testid="world-sketches"] .gen-source .segmented button', { hasText: 'From a stage' }).click()
+  await toLevel(page, 'clay')
+  await section(page, 'still')
   await expect(page.locator('.shot-tab')).toBeVisible()
 }
 /** B2a: Clay's free view (Shots opens Clay through the shot's camera; the old shell opened the free view). */
@@ -1011,7 +1011,7 @@ test('a shot (P13 / ST3, D81): the Shot tab renders the five passes as stage-pas
   await addCharacter(page)                                                                       // D183: a character's figure
   await fromStageIn(page)                                                                                     // D121: the frame is made in Image
   await expect(page.locator('.shot-tab .method.active b')).toHaveText('Clay reference')
-  await expect(page.locator('[data-testid="world-sketches"] .w-foot .estimate')).toContainText(/Klein/, { timeout: 15_000 })      // the preview names the method's model
+  await expect(page.locator('.shot-tab .still-foot .estimate')).toContainText(/Klein/, { timeout: 15_000 })      // the preview names the method's model
   type Doc = { id: string; name: string; revision: number; group_id: string | null; passes: { camera_id: string; revision: number; assets: Record<string, string>; keypoints: number[][][]; legend: Record<string, string> }[] }
   const doc = async () => (await api<{ items: Doc[] }>('GET', '/stages')).items.find((s) => s.name === 'Courtyard')!
   await page.locator('.shot-tab button', { hasText: /^Render passes$/ }).click()
@@ -1030,7 +1030,7 @@ test('a shot (P13 / ST3, D81): the Shot tab renders the five passes as stage-pas
   await expect(page.locator('.shot-tab .pass-side .hint')).toContainText('current')
   // the shot: Generate ▶ queues the StageShot job with the passes as they are; the fake engine answers; the result carries the lineage
   await page.locator('.shot-tab .shot-prompt').fill('a sunlit courtyard, a woman in a red coat')
-  const go = page.locator('[data-testid="world-sketches"] .w-foot button.primary', { hasText: /^Render frame/ })
+  const go = page.locator('.shot-tab .still-foot button.primary', { hasText: /^Render frame/ })
   await expect(go).toBeEnabled({ timeout: 15_000 })
   await go.click()
   await expect(page.locator('.shot-tab .shot-thumb')).toHaveCount(1, { timeout: 45_000 })
@@ -1050,7 +1050,7 @@ test('a clip (P13 / ST4, D81): the camera is keyed on the timeline, the depth se
   await addCharacter(page)                                                                       // D183: a character's figure
   // a shot first (the clip starts from it) — D121: made in Image › From a stage
   await fromStageIn(page)
-  const go = page.locator('[data-testid="world-sketches"] .w-foot button.primary', { hasText: /^Render frame/ })
+  const go = page.locator('.shot-tab .still-foot button.primary', { hasText: /^Render frame/ })
   await expect(go).toBeEnabled({ timeout: 15_000 })
   await go.click()
   await expect(page.locator('.shot-tab .shot-thumb')).toHaveCount(1, { timeout: 45_000 })
@@ -1110,7 +1110,7 @@ test("a pose-driven shot (19 / CN4, D87): the Render tab's Animate method takes 
   await expect(page.locator('canvas.stage-canvas')).toBeVisible()
   await addCharacter(page)                                                                       // D183: a character's figure
   await fromStageIn(page)                                                                                     // D121: the frame in Image
-  const go = page.locator('[data-testid="world-sketches"] .w-foot button.primary', { hasText: /^Render frame/ })
+  const go = page.locator('.shot-tab .still-foot button.primary', { hasText: /^Render frame/ })
   await expect(go).toBeEnabled({ timeout: 15_000 })
   await go.click()
   await expect(page.locator('.shot-tab .shot-thumb')).toHaveCount(1, { timeout: 45_000 })
@@ -1634,7 +1634,7 @@ test('a shot from the camera (SY2, B2a): Clay\'s New shot from this camera makes
   await fromStageIn(page)
   await page.locator('.shot-tab button', { hasText: /^Render passes$/ }).click()
   await page.locator('.shot-tab .shot-prompt').fill('a gatehouse at dawn')
-  const go = page.locator('[data-testid="world-sketches"] .w-foot button.primary', { hasText: /^Render frame/ })
+  const go = page.locator('.shot-tab .still-foot button.primary', { hasText: /^Render frame/ })
   await expect(go).toBeEnabled({ timeout: 30_000 })
   await go.click()
   const shotOf = async () => api<Shot>('GET', `/story/shots/${shot.id}`)
@@ -2239,7 +2239,7 @@ test('figures bound to characters (D93 · C8): a figure picks a character in the
   await expect(page.locator('.shot-tab .figure-lines')).toContainText(`figure 1 · ${ana.name} → image 2`)
   await expect(page.locator('.shot-tab .prompt-preview')).toContainText(`figure 1 is ${ana.name} (reference image 2), a short woman in a red raincoat; figure 2 is ${bo.name} (reference image 3)`)
   await page.locator('.shot-tab button', { hasText: /^Render passes$/ }).click()
-  const go = page.locator('[data-testid="world-sketches"] .w-foot button.primary', { hasText: /^Render frame/ })
+  const go = page.locator('.shot-tab .still-foot button.primary', { hasText: /^Render frame/ })
   await expect(go).toBeEnabled({ timeout: 30_000 })
   await go.click()
   type JobLite = { status: string; result: { serialized_prompt?: string } | null; recipe: { kind: string; stage_id?: string; refs?: { asset_id: string; mention?: string | null }[]; mentions?: { figure?: string | null; profile_id?: string | null; asset_ids: string[] }[] } }
@@ -2393,7 +2393,7 @@ test("the Bin's Trash (B2a): a tile's right-click moves it to the trash, which c
   await expect(there).toHaveCount(0)
 })
 
-test('AN1 step 5 (D95): the Clay level adds an image plane from the Bin, renames it by right-click, shows the passes in Scene; Image · Make has From a stage (Shots, B2a)', async ({ page }) => {
+test('AN1 step 5 (D95): the Clay level adds an image plane from the Bin, renames it by right-click, shows the passes in Scene; the still is Clay\'s Still section, not Image\'s (Shots, B2a; D186)', async ({ page }) => {
   await clayShot(page, 'Plane test')
   const dialog = page.locator('.modal.ask')
   await section(page, 'scene')
@@ -2411,11 +2411,14 @@ test('AN1 step 5 (D95): the Clay level adds an image plane from the Bin, renames
   await dialog.locator('input').fill('Backdrop')
   await dialog.locator('button.primary').click()
   await expect(row.locator('.name')).toHaveText('Backdrop')
-  await fromStageIn(page)                                                                                    // #5: stills from the stage, in Sketches
-  await expect(page.locator('.from-stage select[aria-label="the stage"] option:checked')).toHaveText('Plane test')
-  await expect(page.locator('.from-stage select[aria-label="the camera"]')).toBeVisible()
-  await page.locator('[data-testid="world-sketches"] .gen-source .segmented button', { hasText: 'Prompt' }).click()
-  await expect(page.locator('.from-stage')).toHaveCount(0)
+  await fromStageIn(page)                                                                                    // #5 → D186: the stills of the stage, in Clay's Still section
+  await expect(page.locator('.shot-tab .head .hint')).toContainText(/mm/)                                  // the active camera
+  await expect(page.locator('[data-testid="still-models"] .model-card.active span').first()).toHaveText(/Klein/)   // the measured default first
+  await expect(page.locator('[data-testid="still-foot"] button.primary')).toHaveText(/^Render frame/)
+  await page.locator('nav.tabs button.tab', { hasText: 'World' }).click()
+  await page.locator('.w-rail-btn[aria-label="Sketches"]').click()
+  await expect(page.locator('[data-testid="world-sketches"]')).toBeVisible()
+  await expect(page.locator('[data-testid="world-sketches"] .gen-source')).toHaveCount(0)                  // World's Make is the prompt's alone
 })
 
 test("the bench and a prop's height (D142, CW4): Bench ▶ opens Clay for the character, bound, with its chip and the way back; a prop's height is read from its name, edited in Cast, and its model stands at it on its bench beside a 1.75 m figure (World’s Sheet, B2a)", async ({ page }) => {
@@ -4567,4 +4570,59 @@ test("the Bin's kinds (D181, C6 · propo02 04 §4.7): a shot's home lists its ki
   if (await dchev.count()) await dchev.click()
   await homes.locator(`.b-node[data-path="shots/${a.shot_id}/v1"] .b-open`).click()
   await expect(homes.locator(`.b-kind[data-path="shots/${a.shot_id}/v1"][data-kind="takes"]`)).toBeVisible()
+})
+
+test("the model card everywhere (D186): Clay's Still lists the clay method's models with Klein 9B first, FLUX.2 dev picked runs the still at its Turbo settings and the job says so; the Final shot's plate shares the pick; Edit's Inpaint has the cards and the hero model halves the candidates", async ({ page }) => {
+  test.setTimeout(150_000)
+  await clayShot(page, 'Cards')
+  await page.locator('.stage-empty button', { hasText: /Add set · room/ }).click()
+  await addCharacter(page)
+  await fromStageIn(page)
+  const caps = await api<{ models: Record<string, { label: string; recipes: { inpaint_hero?: boolean } }>; stage: { methods: Record<string, { model_id: string; models: { id: string; label: string; measured: boolean }[] }> }; defaults: { inpaint: string } }>('GET', '/capabilities')
+  const clay = caps.stage.methods.clay
+  const dev = Object.entries(caps.models).find(([, m]) => m.recipes.inpaint_hero)![0]                     // the hero model (dev), by its recipes — no model id in the test (D65)
+  expect(clay.models[0].id).toBe(clay.model_id); expect(clay.models[0].measured).toBe(true)                 // the measured default first
+  const cards = page.locator('[data-testid="still-models"] .model-card')
+  await expect(cards).toHaveCount(clay.models.length)
+  await expect(cards.first()).toHaveClass(/active/)
+  await page.locator(`[data-testid="still-models"] .model-card[data-model="${dev}"]`).click()
+  await expect(page.locator(`[data-testid="still-models"] .model-card[data-model="${dev}"]`)).toHaveClass(/active/)
+  await expect(page.locator('[data-testid="still-foot"] .estimate')).toContainText(new RegExp(caps.models[dev].label.split(' · ')[0]), { timeout: 15_000 })   // the preview names the pick (T8)
+  await page.locator('.shot-tab button', { hasText: /^Render passes$/ }).click()
+  await page.locator('.shot-tab .shot-prompt').fill('a sunlit courtyard')
+  const go = page.locator('[data-testid="still-foot"] button.primary', { hasText: /^Render frame/ })
+  await expect(go).toBeEnabled({ timeout: 30_000 })
+  const before = new Set((await api<{ items: { id: string }[] }>('GET', '/jobs')).items.map((j) => j.id))
+  await go.click()
+  type JobLite = { id: string; status: string; recipe: { kind: string; model_id?: string | null }; result: { compiled?: { model_id?: string; turbo?: boolean; guidance?: number | null; steps?: number } } | null }
+  const mine = async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => !before.has(j.id) && j.recipe.kind === 'stage_shot')
+  await expect.poll(async () => (await mine())?.status, { timeout: 60_000 }).toBe('done')
+  const job = (await mine())!
+  expect(job.recipe.model_id).toBe(dev)                                                                     // the recipe carries the pick
+  expect(job.result?.compiled).toMatchObject({ model_id: dev, turbo: true, guidance: 4, steps: 8 })         // and the graph ran it at its edit settings
+  // the Final shot's plate shares the Still's pick
+  await page.evaluate(() => (window as unknown as { __loom2Stage: { setRange: (a: number, b: number) => void } }).__loom2Stage.setRange(0, 8))
+  await perfCardOf(page, 'Final shot')
+  await page.locator('.final-section button', { hasText: /^Make the final shot/ }).click()
+  await page.locator('.modal.ask button.primary').click()
+  await expect(page.locator('.final-section .final-row')).toBeVisible({ timeout: 60_000 })
+  await expect(page.locator('[data-testid="final-plate-model"] .model-card.active')).toHaveAttribute('data-model', dev)
+  // Edit's AI tab: Inpaint's cards, the hero picked halves the candidates; Outpaint and Refine have theirs
+  await openShell(page, 'bin')
+  await openHome(page, 'world/sketches', 'pictures')
+  await binTiles(page).nth(8).click({ button: 'right' })
+  await page.locator('.ctx-menu button.item', { hasText: /^Select subject…/ }).click()
+  await expect.poll(() => editorTool(page), { timeout: 30_000 }).toMatchObject({ doc: true, tool: 'ai' })
+  await page.getByRole('button', { name: 'Inpaint', exact: true }).click()
+  const inpaint = page.locator('[data-testid="ai-inpaint-models"] .model-card')
+  await expect(inpaint.first()).toHaveAttribute('data-model', caps.defaults.inpaint)                       // the Fill default first
+  await expect(inpaint.first()).toHaveClass(/active/)
+  await page.locator(`[data-testid="ai-inpaint-models"] .model-card[data-model="${dev}"]`).click()
+  await expect(page.locator('.tool-opts').getByText(/^count/)).toBeVisible()
+  await expect(page.locator('button.primary', { hasText: /^AI ▶ Inpaint ×2$/ })).toHaveCount(1)              // the hero model: 2 candidates (Fill Hero, as a card)
+  await page.getByRole('button', { name: 'Outpaint', exact: true }).click()
+  await expect(page.locator('[data-testid="ai-outpaint-models"] .model-card').first()).toHaveClass(/active/)
+  await page.getByRole('button', { name: 'Refine', exact: true }).click()
+  await expect(page.locator('[data-testid="ai-refine-models"] .model-card.active')).toHaveCount(1)
+  await page.screenshot({ path: 'node_modules/.e2e/d186-cards.png' })
 })

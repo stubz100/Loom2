@@ -26,13 +26,13 @@ REFS = {"ast_hero": "alley-rain_s20261004.png", "ast_tavern": "alley-rain_s20261
 
 def test_methods_resolve_per_variant():
     clay = StageShot(stage_id="stg_1", camera_id="cam_1", passes=PASSES)
-    assert clay.method == "clay" and stage_model_id(clay) == clay.model_id == "klein-9b"
+    assert clay.method == "clay" and stage_model_id(clay) == clay.model == "klein-9b" and clay.model_id is None
     assert stage_model_id(clay, "open") == "klein-4b" and warm_group(clay, "open") == "klein-4b"      # D26: 9B is flux-nc
     exact = StageShot(stage_id="stg_1", camera_id="cam_1", passes=PASSES, method="refcontrol", refs=[RefImage(asset_id="ast_hero")])
     assert stage_model_id(exact) == "klein-base-9b" and warm_group(exact) == "klein-base-9b"
     with pytest.raises(ValueError):
         stage_model_id(exact, "open")                                                               # base 9B is not offered under open
-    assert parse_recipe({"kind": "stage_shot", "stage_id": "s", "camera_id": "c", "passes": {"clay": "a"}}).model_id == "klein-9b"
+    assert parse_recipe({"kind": "stage_shot", "stage_id": "s", "camera_id": "c", "passes": {"clay": "a"}}).model == "klein-9b"
     with pytest.raises(ValueError):
         parse_recipe({"kind": "stage_shot", "stage_id": "s", "camera_id": "c", "passes": {"clay": "a"}, "method": "depth"})
 
@@ -86,7 +86,7 @@ def test_weights_lineage_plan_and_preview(tmp_path: Path, object_info: dict):
     p2 = plan(exact)
     assert p2.estimate["seconds"] == 74.0 and p2.params["refs_dropped"] == 1 and p2.params["image1"] == "pose"
     p3 = plan(StageShot(stage_id="s", camera_id="c", passes=PASSES), "open")
-    assert p3.model_id == "klein-4b" and p3.estimate["seconds"] == 10.0 and "unmeasured" in p3.estimate["source"]
+    assert p3.model_id == "klein-4b" and p3.estimate["seconds"] == 17.6 and "unmeasured" in p3.estimate["source"]   # D186: the model's own figure scaled to the still's size
     with pytest.raises(graphs.CompileError):
         plan(StageShot(stage_id="s", camera_id="c", passes=PASSES, method="refcontrol"))
     ph = placeholder_inputs(clay, object_info)

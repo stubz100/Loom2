@@ -7,7 +7,7 @@
 // sheet is the scene, live; a "this shot" line after it), and a subject card can hold a Cast prop ("holds ▸").
 import { CaseSensitive, Hand, ImagePlus, Minus, Plus, X } from 'lucide-react'
 import { PosesSection } from './Poses'
-import { lazy, Suspense, useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import './generateCommands'
 import { api } from '../../api/client'
 import { CommandButton } from '../../frame/CommandButton'
@@ -19,7 +19,8 @@ import { PresetPanel } from '../../frame/PresetPanel'
 import { CommandRow } from '../../frame/CommandButton'
 import { aspectGlyph, fieldGlyph, tierGlyph } from '../../frame/presetGlyphs'
 import { useColumnSync } from '../../frame/columnSync'
-import { byOrder } from '../../store/modelCaps'
+import { ModelCards } from '../../frame/ModelCards'
+import { imageModelItems } from '../../frame/modelCardItems'
 import { askConfirm, useSession } from '../../store/session'
 import { appendValue, FIELD_LABEL, REPLACE, type FieldKey } from './fieldPresets'
 import { dropRefs, honoursNegative, onSubject, refDropFor, runOnSubject, useGenerate, type ModelCap, type Panel as PanelState, type Subject } from './generateStore'
@@ -428,7 +429,6 @@ export function ModelSection() {
   const g = useGenerate()
   const p = g.panel
   const caps = useSession((s) => s.capabilities)
-  const models = useSession((s) => s.models)
   const pv = g.preview
   const cap = caps?.models[p.model_id]
   const teOpts = cap?.te_options ?? []                                    // D31: an encoder picker only where the model has an alternate
@@ -445,18 +445,8 @@ export function ModelSection() {
   const sampling = p.steps !== null || p.guidance !== null || p.cfg !== null || !!p.sampler || !!p.scheduler || p.seed_mode !== 'random' || p.turbo
   return (
     <Section id="model" title="Model">
-      <div className="model-grid compact">
-        {byOrder(caps?.models).filter(([, c]) => c.recipes.t2i).map(([m, c]) => {   /* D89: Refine-only models (SD 3.5) are Edit's */
-          const r = models.find((x) => x.id === m)
-          const off = !c.wired
-          return (
-            <button key={m} className={`model-card${p.model_id === m ? ' active' : ''}${off ? ' off' : ''}`} onClick={() => !off && g.setModel(m)} disabled={off}
-              title={[c.hint, r?.license, c.health, c.distilled ? 'distilled' : '', off ? 'not available in this build' : ''].filter(Boolean).join(' · ')}>
-              <span>{c.label}</span><i className={`dot ${c.health === 'missing' ? 'warn' : 'ok'}`} />
-            </button>
-          )
-        })}
-      </div>
+      {/* D186: the one card (frame/ModelCards) — every model that generates; D89: Refine-only models (SD 3.5) are Edit's */}
+      <ModelCards items={imageModelItems(caps, (c) => !!c.recipes.t2i)} value={p.model_id} onPick={(m) => g.setModel(m)} testId="gen-models" />
       {cap?.turbo && <label className="chk" style={{ marginTop: 6 }}><input type="checkbox" checked={p.turbo} onChange={(e) => g.set({ turbo: e.target.checked, steps: null })} /> 8-step Turbo LoRA{p.turbo && <> · strength <input type="number" step={0.05} min={0} max={2} value={p.turbo_strength} onChange={(e) => g.set({ turbo_strength: Number(e.target.value) })} style={{ width: 64 }} /></>}</label>}
       <details className="advanced" open={sampling}>
         <summary>Sampling</summary>
@@ -591,34 +581,13 @@ function showPreview(): void {
 }
 
 // ------------------------------------------------------------------ the column and its rail sync
-// D95 (AN1, UX0 #5): the source at the top of Make — the prompt, or a stage's stills (the stage's own form, loaded with its code)
-const FromStage = lazy(() => import('../stage/FromStage'))
-function SourceSwitch() {
-  const source = useGenerate((g) => g.source)
-  return (
-    <div className="gen-source">
-      <span className="segmented" role="group" aria-label="Make from">
-        <button type="button" className={source === 'prompt' ? 'active' : ''} aria-pressed={source === 'prompt'} onClick={() => useGenerate.setState({ source: 'prompt' })} title="Make from the prompt, references and look">Prompt</button>
-        <button type="button" className={source === 'stage' ? 'active' : ''} aria-pressed={source === 'stage'} onClick={() => useGenerate.setState({ source: 'stage' })} title="Stills from a stage: its figures and camera (the stage itself is edited in Shots · Clay)">From a stage</button>
-      </span>
-    </div>
-  )
-}
-
+// D95 (AN1, UX0 #5) → D186: the stills of a stage are made in Clay's *Still* section; Make is the prompt's alone (World = Make | Edit)
 export function GenerateColumn({ tab }: { tab: string }) {
   const host = useRef<HTMLDivElement>(null)
-  const source = useGenerate((g) => g.source)
   useColumnSync(host, 'generate', SECTION_IDS, 'gen-sec-', tab)        // the rail and the scroll, both ways (frame/columnSync.ts)
-  if (source === 'stage') return (
-    <div ref={host} className="gen-column">
-      <ForChip maker="generate" /><SourceSwitch />
-      <Suspense fallback={<span className="hint">Loading the stage…</span>}><FromStage /></Suspense>
-    </div>
-  )
   return (
     <div ref={host} className="gen-column">
       <ForChip maker="generate" />{/* D90 (02 §5): opened for a shot — the results come back as its takes */}
-      <SourceSwitch />
       <SavedSection />
       <PromptSection />
       <RefsSection />

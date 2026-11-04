@@ -28,6 +28,7 @@ from ..edit_ai import RegionPlan, crop_inputs, dilate, layer_plan, outpaint_inpu
 from ..recipes import I2I, I2V, T2I, TTS, AssembleFinal, CompRender, ImageToMesh, ImageToSet, Inpaint, Instruct, Keypoints, LayerPass, MatteSequence, Reangle, Render, Segment, StageShot, Upscale, reangle_method, reangle_model_id, stage_model_id, warm_group, TrainLora
 from ..models import registry
 from ..roster import Roster
+from .graphs import STAGE_DRAFT_PX, STAGE_GUEST_REF_STEP_S  # D186: a guest model's stage estimate
 from .graphs import (kept_refs, CompileError, Compiled, compile_recipe, doc_estimate_seconds, effective_params, estimate_i2v_seconds, estimate_seconds,
                      estimate_vram_gb, i2v_params, reangle_prompt, recipe_weights, stage_binds, stage_bindings, stage_pass_for, stage_prompt, stage_refs)
 
@@ -182,9 +183,19 @@ def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = 
                   "max_refs": 1 if recipe.method == "refcontrol" else max(0, (spec.inputs.refs_max if spec else 1) - 1),
                   "refs_dropped": max(0, len(recipe.refs) - len(kept)), "bind_refs": stage_binds(recipe, spec), "figures": figs,
                   "ref_list": [{"image": i + 2, "asset_id": r.asset_id, "figure": next((b["figure"] for b in figs if (i + 2) in b["refs"]), None)} for i, r in enumerate(kept)]}
-        measured = spec.recipes.stage_seconds if spec else None
-        est = {"seconds": measured if measured is not None else (spec.estimates.base_seconds if spec else None),
-               "source": "baseline (E10 2026-10-12, warm)" if measured is not None else "the model's base estimate (this method is unmeasured on it)"}
+        own = bool(spec and spec.recipes.stage == recipe.method)       # D186: a guest model runs the method at its edit settings (dev: Turbo, 8 steps)
+        measured = spec.recipes.stage_seconds if spec and own else None
+        guest = None
+        if spec is not None:                                           # the model's own figure at 960×544, scaled to the still's size, plus its reference latents
+            base = spec.estimates.turbo_seconds if spec.sampling.turbo and spec.estimates.turbo_seconds else spec.estimates.base_seconds
+            steps = int(spec.recipes.stage_steps or spec.sampling.steps) if own else int(spec.sampling.edit_steps if spec.sampling.edit_steps is not None else spec.sampling.steps)
+            px = recipe.width * recipe.height
+            load = px / 512 ** 2 + 4.0 * len(kept)                     # image 1 at the still's size; each reference ≈ 1 MP (four 512² units)
+            guest = round(base * px / (960 * 544) + (load * STAGE_GUEST_REF_STEP_S * steps if not own else 0.0), 1)   # STAGE_DRAFT_PX scales the card's figure (capabilities)
+        est = {"seconds": measured if measured is not None else guest,
+               "source": "baseline (E10 2026-10-12, warm)" if measured is not None
+               else ("the model's own figure at the still's size, its reference latents added (one measurement on the walk's shot, 2026-11-04: 125 s with four)" if not own
+                     else "the model's own estimate (this method is unmeasured on it)")}
     else:
         keep = ("mode", "model_id", "source", "strength", "margin_pct", "min_size", "feather", "expand", "blend", "refine", "refine_model_id", "as_layer", "op", "max_size")
         params = {k: v for k, v in recipe.model_dump().items() if k in keep}
@@ -269,7 +280,7 @@ def preview_problems(recipe: AnyRecipe, roster: Roster, object_info: dict | None
                            variant=variant)
     except NotImplementedError:                                  # V14: train_lora, tts — no engine graph, nothing to check (was a 500)
         return []
-    except (CompileError, KeyError, ValueError) as e:
+    except (CompileError, KeyError, ValueError, FileNotFoundError) as e:   # D186: a weight not fetched is a problem the preview says, not a 500 (the card names it)
         return [str(e)]
     return c.problems
 

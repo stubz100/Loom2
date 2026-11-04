@@ -285,7 +285,6 @@ export interface GenerateState {
   show: 'batch' | 'session' | 'all'; lastBatch: string | null; pinned: string[]
   angle: AngleState; anglePreview: DocumentPreview | null; anglePreviewError: string | null
   angleOpen: boolean                                       // D90 (02 §6.1): New angle is a sheet on an image, not a Generate tab
-  source: 'prompt' | 'stage'                               // D95 (AN1, UX0 #5): Make from the prompt, or From a stage (stills; the stage is edited in Animate)
   presetText: Record<string, boolean>                      // D90 (02 §6.3): the sections that show the words under their preset icons
   setPresetText: (section: string, on: boolean) => void
   /** LT1: what the slots may hold for the panel's model (GET /loras); loadLoras prunes slots that do not fit after a model change. */
@@ -438,7 +437,7 @@ export const useGenerate = create<GenerateState>()(
   persist(
     (set, get) => ({
       panel: DEFAULT_PANEL, preview: null, previewError: null, previewing: false, presets: [], lastPreset: null, appliedPreset: null, show: 'batch', lastBatch: null, pinned: [], castAsk: null, run: 'generate', poses: { cells: [], expressions: ['neutral'] },
-      angle: DEFAULT_ANGLE, anglePreview: null, anglePreviewError: null, lorasAvailable: [], angleOpen: false, source: 'prompt', presetText: {},
+      angle: DEFAULT_ANGLE, anglePreview: null, anglePreviewError: null, lorasAvailable: [], angleOpen: false, presetText: {},
       setPresetText: (section, on) => set({ presetText: { ...get().presetText, [section]: on } }),
 
       loadLoras: async (modelId) => {
@@ -795,3 +794,11 @@ useSession.subscribe((s, prev) => { if (s.capabilities && s.capabilities !== pre
 
 /** U1 (D157, 06 §5.3): the Make panel per context (World: an entity version, a sketch) — saved on leaving, restored on returning. */
 export const makeContext = contextSlot<Panel>(() => structuredClone(useGenerate.getState().panel), (p) => useGenerate.getState().set(p))
+
+/** D186: the model the Make column's card names when it draws from references (a FLUX.2-family model with reference slots) — the
+ *  animation references and an idea's clay are made on it; null when the card names another family (the server's clay-reference model). */
+export function referenceModel(): string | null {
+  const mid = useGenerate.getState().panel.model_id
+  const cap = useSession.getState().capabilities?.models[mid]
+  return cap && ['flux2', 'klein'].includes(cap.family) && (cap.max_refs ?? 0) >= 1 && cap.wired ? mid : null
+}

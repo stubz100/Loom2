@@ -606,7 +606,8 @@ export const useStory = create<StoryState>()((set, get) => {
       const p = get().profile(); const v = get().version(); if (!p || !v) return
       await get().settleProfiles()                                                                  // M3: the A-pose reads the sheet as it is now
       try {
-        const r = await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/anim-ref', { params: { path: { pid: p.id, vid: v.id } }, body: { side, count: 2 } }))
+        const model_id = (await import('../generate/generateStore')).referenceModel()               // D186: the Make column's card when it draws from references
+        const r = await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/anim-ref', { params: { path: { pid: p.id, vid: v.id } }, body: { side, count: 2, model_id } }))
         useSession.getState().toast(`${r.job_ids.length} ${side === 'back' ? 'back views' : side === 'side' ? 'side views' : p.cls === 'place' ? 'set pictures' : 'animation references'} queued for ${p.name} — they land among its candidates; pick the ${side === 'back' ? 'back' : side === 'side' ? 'side' : p.cls === 'place' ? 'set picture' : 'front'} from them in Build`, 'info')   // D161: nothing is picked for the author; D175: the side
         if (!v.candidates_group_id) await get().loadProfiles()
       } catch (e) { toast(`Animation reference: ${detail(e)}`) }

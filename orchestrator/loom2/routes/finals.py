@@ -171,6 +171,7 @@ class PlateBody(BaseModel):
     refs: list[dict[str, Any]] = Field(default_factory=list)   # the reference deck (a place's images, the World style's sample)
     seed: int = 0
     beats: bool = True                             # D184 (C5): a generated plate anchors a still every BEAT_SECONDS and at its last frame
+    model_id: str | None = None                    # D186: the Still's model card (one of the clay method's models); None = the measured default
 
 
 class PlateQueued(BaseModel):
@@ -251,16 +252,16 @@ async def final_plate(svc: Svc, fid: str, body: PlateBody):
     text = plate_still_text(words, extra, people)
     mentions = [{"profile_id": x.get("profile_id"), "version": x.get("version"), "figure": x.get("object_id")} for x in plate.extras if x.get("profile_id")]
     recipe = {"kind": "stage_shot", "stage_id": f.stage_id, "camera_id": f.camera_id, "passes": {"clay": rec.id}, "method": "clay", "empty": not people,
-              "prompt_text": text, "refs": refs, "mentions": mentions, "seeds": [body.seed], "width": w, "height": h}
+              "prompt_text": text, "refs": refs, "mentions": mentions, "seeds": [body.seed], "width": w, "height": h, "model_id": body.model_id}   # D186: the Still's card
     wanted = plate_beats_wanted(f) if plate.method == "generated" and body.beats else []
-    payload = {"prompt": extra, "text": text, "refs": refs, "mentions": mentions, "seed": body.seed, "size": [w, h], "people": people}
+    payload = {"prompt": extra, "text": text, "refs": refs, "mentions": mentions, "seed": body.seed, "size": [w, h], "people": people, "model_id": body.model_id}
     try:
         jobs = svc.queue.submit(recipe, origin=JobOrigin(suite="stage", surface=FINAL_PLATE_SURFACE, ref=fid, payload=payload))
     except ValueError as e:
         raise HTTPException(422, str(e))
     await svc.queue.flush()
     f = await asyncio.to_thread(store.add_job, fid, "plate", jobs[0].id, status="queued", error=None, clip_id=None, frames_done=0,
-                                prompt=extra, keys=[], beats=[{"frame": k, "asset_id": None, "job_id": None} for k in wanted])
+                                prompt=extra, model_id=body.model_id, keys=[], beats=[{"frame": k, "asset_id": None, "job_id": None} for k in wanted])
     svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
     return {"job_id": jobs[0].id, "pass_asset_id": rec.id, "scene_plate": first}
 
@@ -389,8 +390,10 @@ async def final_plate_key(svc: Svc, fid: str, body: KeyBody):
             return od
         od = await asyncio.to_thread(document)
         seed = plate.seed or secrets.randbelow(2**31 - 2) + 1
+        pm = registry.get(plate.model_id or "")                                 # D186: the plate's model fills its keyframes when it fills; else the Fill default (Klein 4B under `open`, D26)
+        fill_model = pm.id if pm is not None and "fill" in pm.recipes.inpaint and registry.offered(pm, svc.app.settings.variant) else registry.default_model("inpaint", svc.app.settings.variant)
         try:
-            job = q.submit({"kind": "inpaint", "mode": "fill", "model_id": registry.default_model("inpaint", svc.app.settings.variant),   # Klein 4B under `open` (D26)
+            job = q.submit({"kind": "inpaint", "mode": "fill", "model_id": fill_model,
                             "document_id": od.doc.id, "prompt_text": plate_fill_prompt(plate.prompt), "seeds": [seed], "expand": 48, "feather": 32},
                            origin=JobOrigin(suite="stage", surface=FINAL_PLATE_KEY_SURFACE, ref=fid, payload={"frame": body.frame, "document_id": od.doc.id}))[0]
         except ValueError as e:

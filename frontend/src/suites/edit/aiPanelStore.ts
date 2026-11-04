@@ -11,12 +11,15 @@ export type SelOp = 'replace' | 'add' | 'subtract' | 'intersect'
 export interface AiRef { asset_id: string; note?: string }
 
 export interface AiPanelState {
-  op: AiOp; mode: 'fill' | 'fill_match' | 'fill_hero' | 'remove' | 'quick_remove'; prompt: string; candidates: number; seedMode: 'random' | 'fixed'; seed: number
+  // D186: the Fill Hero mode and the outpaint's (hero) switch folded into the model cards — `inpaintModel` / `outpaintModel` ('' = the variant's
+  // inpaint default; the hero model picked is Fill Hero), as `refineModel` always was
+  op: AiOp; mode: 'fill' | 'fill_match' | 'remove' | 'quick_remove'; prompt: string; candidates: number; seedMode: 'random' | 'fixed'; seed: number
   margin: number; minSize: number; feather: number; expand: number; promptMode: 'image_first' | 'prompt_first'
+  inpaintModel: string; outpaintModel: string
   refineModel: string; strength: number; refineSource: 'visible' | 'active' | 'selection'
   upscaleModel: string; upscaleSource: 'visible' | 'active'; asLayer: boolean
   refineTiled: boolean; tiledModel: string; tiledStrength: number; tile: number; overlap: number
-  pad: { left: number; top: number; right: number; bottom: number }; outpaintHero: boolean
+  pad: { left: number; top: number; right: number; bottom: number }
   teId: string | null                        // D31: text encoder behind the recipes (null = the model's default; else one of its te_options)
   // AI Select (M5 slice 2): a subject matte tool or a prompted one (text / points / box), joined with the selection.
   // D65: model ids come from /capabilities — '' (or null) means the recipe kind's default for this variant, resolved when used.
@@ -26,16 +29,18 @@ export interface AiPanelState {
   matchColour: boolean                       // D48 (Refine): map the result's colour statistics onto the original's
   prefill: boolean                           // D62 (Remove): the hole content-aware filled before the engine sees it
   instructSource: 'visible' | 'active'       // D151 (Instruct): the whole picture, or the active layer alone
+  instructModel: string | null               // D186: the edit-by-instruction model's card (null = the build's default)
   refs: AiRef[]                              // D152: the reference deck — sent with inpaint / outpaint / refine where the model takes references
   refMaxPx: number                           // D152: references are downscaled to fit this square before upload
 }
 
 export const AI_DEFAULT: AiPanelState = {
   op: 'inpaint', mode: 'fill', prompt: '', candidates: 4, seedMode: 'random', seed: 1, margin: 25, minSize: 1024, feather: 8, expand: 0, promptMode: 'image_first',
+  inpaintModel: '', outpaintModel: '',
   refineModel: '', strength: 0.3, refineSource: 'visible', upscaleModel: '', upscaleSource: 'visible', asLayer: true,
   refineTiled: false, tiledModel: '', tiledStrength: 0.25, tile: 1024, overlap: 128,
-  pad: { left: 0, top: 0, right: 256, bottom: 0 }, outpaintHero: false, teId: null,
-  selModel: null, selMode: 'subject', selText: '', selThreshold: 0.5, selOp: 'replace', selExpand: 0, selFeather: 2, selRefine: false, blend: 'feather', matchColour: false, prefill: false, instructSource: 'visible', refs: [], refMaxPx: 1024,
+  pad: { left: 0, top: 0, right: 256, bottom: 0 }, teId: null,
+  selModel: null, selMode: 'subject', selText: '', selThreshold: 0.5, selOp: 'replace', selExpand: 0, selFeather: 2, selRefine: false, blend: 'feather', matchColour: false, prefill: false, instructSource: 'visible', instructModel: null, refs: [], refMaxPx: 1024,
 }
 
 const OP_KEY = 'loom2.edit.aiOp'

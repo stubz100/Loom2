@@ -557,6 +557,7 @@
   "summary": {
    "camera_id": "c",
    "cfg": 1.0,
+   "guidance": null,
    "height": 720,
    "image1": "clay",
    "method": "clay",
@@ -566,6 +567,7 @@
    "seed": 1,
    "stage_id": "s",
    "steps": 4,
+   "turbo": false,
    "width": 1280
   }
  },
@@ -575,6 +577,7 @@
   "summary": {
    "camera_id": "c",
    "cfg": 4.0,
+   "guidance": null,
    "height": 720,
    "image1": "pose",
    "method": "refcontrol",
@@ -584,6 +587,7 @@
    "seed": 1,
    "stage_id": "s",
    "steps": 30,
+   "turbo": false,
    "width": 1280
   }
  },

@@ -244,3 +244,5 @@
 .path-fields .vec input { width: 100%; min-width: 0; }
 .scene-length { display: inline-flex; align-items: center; gap: 4px; }   /* C3 (Q4): the length fields */
 .scene-length input { width: 56px; }
+.shot-tab .still-foot { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line2); }   /* D186: the still's verb in its section */
+.shot-tab .kv .model-grid { margin: 0; }

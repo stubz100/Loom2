@@ -32,6 +32,7 @@ import { Player } from './Player'
 import { Timeline as TimelineView, TransportBar, type TLMarker, type TLRow } from './Timeline'
 import { AnimColumn, Sec } from './column'
 import './animate.css'
+import '../../frame/modelCards.css'   // D186: the model cards' base rules
 import { onlyAssets, useDropTarget, type DragPayload } from '../../frame/drag'
 import { beatDrop, endDrop, startDrop } from '../../frame/dropRules'
 import { navigate } from '../../frame/router'

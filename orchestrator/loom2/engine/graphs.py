@@ -1129,7 +1129,7 @@ def build_stage_shot(recipe: StageShot, roster: Roster, seed: int, out_prefix: s
     except ValueError as e:
         raise CompileError(str(e)) from e
     spec = registry.get(mid)
-    if spec is None or spec.recipes.stage != recipe.method:
+    if spec is None:                                                            # stage_model_id resolved the pick against the method's models (D186)
         raise CompileError(f"no spec implements the Stage method {recipe.method!r}")
     key = stage_pass_for(recipe.method)
     pass_name = inputs.get(key)
@@ -1142,9 +1142,12 @@ def build_stage_shot(recipe: StageShot, roster: Roster, seed: int, out_prefix: s
     mult = spec.geometry.size_mult
     w, h = max(mult, (recipe.width // mult) * mult), max(mult, (recipe.height // mult) * mult)
     g: dict[str, Any] = {}
-    model_link = _flux2_loaders(g, roster, mid, spec, None, recipe.te_id)
-    steps = int(spec.recipes.stage_steps or spec.sampling.steps)
-    cfg = float(spec.recipes.stage_cfg if spec.recipes.stage_cfg is not None else spec.sampling.cfg)
+    model_link = _flux2_loaders(g, roster, mid, spec, None, recipe.te_id)      # D186: a guest's Turbo LoRA (dev) chains here, as in the Edit graphs
+    own = spec.recipes.stage == recipe.method                                   # E10's measured graph; a guest (D186) runs at its edit settings
+    sm = spec.sampling
+    steps = int(spec.recipes.stage_steps or sm.steps) if own else int(sm.edit_steps if sm.edit_steps is not None else sm.steps)
+    cfg = float(spec.recipes.stage_cfg if spec.recipes.stage_cfg is not None else sm.cfg) if own else float(sm.cfg)
+    guidance = None if own else float(sm.edit_guidance if sm.edit_guidance is not None else sm.guidance)   # FluxGuidance only on a guest (Klein's measured graph has none)
     if recipe.method == "refcontrol":
         if not spec.recipes.stage_lora:
             raise CompileError("the exact-pose spec names no pose LoRA")
@@ -1152,7 +1155,7 @@ def build_stage_shot(recipe: StageShot, roster: Roster, seed: int, out_prefix: s
         g["4"] = {"class_type": "LoraLoaderModelOnly", "inputs": {"model": model_link, "lora_name": lora, "strength_model": 0.9}}
         model_link = ["4", 0]
     g["5"] = {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["2", 0]}}
-    g["6"] = {"class_type": "CLIPTextEncode", "inputs": {"text": "" if spec.sampling.distilled else STAGE_NEG, "clip": ["2", 0]}}
+    g["6"] = {"class_type": "CLIPTextEncode", "inputs": {"text": "" if (sm.distilled or cfg <= 1.0) else STAGE_NEG, "clip": ["2", 0]}}
     g["100"] = {"class_type": "LoadImage", "inputs": {"image": pass_name}}
     g["7"] = {"class_type": "VAEEncode", "inputs": {"pixels": ["100", 0], "vae": ["3", 0]}}
     g["8"] = {"class_type": "ReferenceLatent", "inputs": {"conditioning": ["5", 0], "latent": ["7", 0]}}          # image 1: the pass
@@ -1177,6 +1180,9 @@ def build_stage_shot(recipe: StageShot, roster: Roster, seed: int, out_prefix: s
         g[str(nid)] = {"class_type": "ReferenceLatent", "inputs": {"conditioning": cond, "latent": lat}}
         cond = [str(nid), 0]
         nid += 1
+    if guidance is not None:                                                    # D186: a guest's guidance embedding (dev: 4.0 at its 8 Turbo steps)
+        g["12"] = {"class_type": "FluxGuidance", "inputs": {"conditioning": cond, "guidance": guidance}}
+        cond = ["12", 0]
     g["9"] = {"class_type": "EmptyFlux2LatentImage", "inputs": {"width": w, "height": h, "batch_size": 1}}
     g["10"] = {"class_type": "KSampler", "inputs": {"model": model_link, "seed": int(seed), "steps": steps, "cfg": cfg,
                                                   "sampler_name": spec.sampling.sampler, "scheduler": spec.sampling.scheduler,
@@ -1184,7 +1190,8 @@ def build_stage_shot(recipe: StageShot, roster: Roster, seed: int, out_prefix: s
     g["11"] = {"class_type": "VAEDecode", "inputs": {"samples": ["10", 0], "vae": ["3", 0]}}
     g["99"] = {"class_type": "SaveImage", "inputs": {"images": ["11", 0], "filename_prefix": out_prefix}}
     summary = {"model_id": mid, "method": recipe.method, "stage_id": recipe.stage_id, "camera_id": recipe.camera_id, "image1": key, "steps": steps,
-               "cfg": cfg, "seed": int(seed), "width": w, "height": h, "refs": len(refs), "refs_dropped": max(0, len(recipe.refs) - len(refs))}
+               "cfg": cfg, "guidance": guidance, "turbo": bool(sm.turbo), "seed": int(seed), "width": w, "height": h, "refs": len(refs),
+               "refs_dropped": max(0, len(recipe.refs) - len(refs))}
     return Compiled(graph=g, output_node="99", summary=summary, serialized_prompt=prompt)
 
 
@@ -1783,7 +1790,7 @@ def recipe_weights(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V | Reang
         ids += model_ids(reangle_model_id(recipe, variant), False)     # the spec's extras carry the Lightning and angles LoRAs
     elif isinstance(recipe, StageShot):
         mid = stage_model_id(recipe, variant)
-        ids += model_ids(mid, False)
+        ids += model_ids(mid, True)                                    # D186: _flux2_loaders chains a guest's Turbo LoRA (dev), as in the Edit graphs; Klein has none
         spec = registry.get(mid)
         if spec is not None and spec.recipes.stage_lora:
             ids.append(spec.recipes.stage_lora)                        # ST3: the pose LoRA rides only on the Stage graph
@@ -1833,6 +1840,9 @@ def ref_load(n: int, ref_max_px: int) -> float:
 
 
 REF_SPILL = 4.0                                   # F27: FLUX.2 dev's 8 refs at ≤ 1024² ran ≈ 4× the linear estimate (117 s/it) once they spilled
+STAGE_DRAFT_PX = 1280 * 720                       # D186: the Still's Draft size (shotSize: 720 high at the project's aspect) a guest's card time is scaled to
+STAGE_GUEST_REF_STEP_S = 0.35                     # D186 (rig 2026-11-04): a guest's reference latents on the clay method, seconds per 512² unit per step —
+                                                  # dev Turbo at 1280×720 with the pass and four ≈ 1 MP references took 125 s warm (70 s the size-scaled base)
 
 
 def estimate_seconds(recipe: T2I, history: list[dict] | None = None) -> dict[str, Any]:

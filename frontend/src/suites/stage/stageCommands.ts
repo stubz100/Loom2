@@ -13,7 +13,6 @@ import { canHold, HAND_LABEL, holders } from './held'
 import { profilesForMentions, useStory } from '../story/storyStore'
 import { useMakeFor } from '../../store/origin'
 import { useMotion } from './motion/motionStore'
-import { navigate } from '../../frame/router'
 
 const hasStage = () => !!st().current
 const sel = () => st().object(st().selected)
@@ -178,9 +177,11 @@ registerCommands([
   { id: 'stage.clip.guide', scope: 'stage', label: 'Render the sequence', icon: Layers, placement: ['panel', 'context'], when: () => hasStage() && !!st().activeCamera() && !st().rendering, run: () => void st().renderGuide() },
   { id: 'stage.clip.animate', scope: 'stage', label: 'Render clip', icon: Clapperboard, placement: ['panel', 'context'], when: () => hasStage() && !!st().activeCamera() && !!st().shotStart && !st().rendering && !!st().clipCaps(),
     run: () => void (async () => { if ((!st().guideEntry() || st().guideStale()) && !(await st().renderGuide())) return; await st().animateShot() })() },   // D121: the sequence first when missing or stale
-  // D121: the stills of a stage are made in Image (D95) — the stage clip's start picker sends there; pose mode by the figure, not by the column
-  { id: 'stage.frame.make', scope: 'stage', label: 'Make a frame (Image · From a stage)', icon: Aperture, placement: ['panel'], when: hasStage,
-    run: () => { void import('../generate/generateStore').then((g) => g.useGenerate.setState({ source: 'stage' })); navigate({ suite: 'generate' }) } },
+  // D186: the stills of a stage are made in Clay's Still section (D121's Image › From a stage is gone) — the stage clip's start picker and
+  // the Record bar send there; pose mode by the figure, not by the column
+  { id: 'stage.frame.make', scope: 'stage', label: 'Make a still (Clay · Still)', icon: Aperture, placement: ['panel'], when: hasStage,
+    hint: 'the Still section: its method and model, image 1 (the pass), the references and the prompt — Render frame ▶ in the foot',
+    run: () => { const cur = st().current; if (cur) void import('../../ui2/clay/clayStore').then((c) => c.useClay.getState().openScene(cur.id, undefined, 'still')) } },
   { id: 'stage.pose.mode', scope: 'stage', label: 'Pose the figure', hint: 'its joints and hands in the viewport; again (Done) to stop', icon: PersonStanding, placement: ['toolbar', 'context'],
     when: () => sel()?.kind === 'mannequin', run: () => st().setPosing(!st().posing) },
   // D111 (PS5): the finished scene split into layers (the passes rendered here; the layers are made from them on the queue)

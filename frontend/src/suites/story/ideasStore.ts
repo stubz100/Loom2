@@ -72,7 +72,8 @@ export const useIdeas = create<IdeasState>()((set, get) => {
     },
     makeClay: async (id, vid) => {
       try {
-        const r = await unwrap(http.POST('/story/ideas/{iid}/variants/{vid}/clay', { params: { path: { iid: id, vid } } }))
+        const model_id = (await import('../generate/generateStore')).referenceModel()               // D186: the Make column's card when it draws from references
+        const r = await unwrap(http.POST('/story/ideas/{iid}/variants/{vid}/clay', { params: { path: { iid: id, vid } }, body: { model_id } }))
         put(r.idea)
         toast('Making the clay: the A-pose picture, then the fit (about a minute), then the shell in the background (minutes)', 'info')
       } catch (e) { toast(`Make the clay: ${detail(e)}`) }

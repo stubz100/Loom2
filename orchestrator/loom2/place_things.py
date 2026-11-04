@@ -331,8 +331,11 @@ async def clean_job(q: Any, store: Any, documents: Any, catalogue: Any, pid: str
     """The set picture cleaned under its things: a Fill on its document (as SC3's clean plate; E57: on the ferry's whole mask Fill left fog
     and water where Remove painted a boathouse and content-aware fill smeared a roof), its words an instruction naming them (E58); the
     landing makes the cleaned picture the set's, and the faces are baked from it again (keeping their Fills)."""
+    from .place_sets import set_model
     prep = await asyncio.to_thread(prepare_clean, store, documents, catalogue, pid, vid, q.job_live)
-    recipe = {"kind": "inpaint", "mode": "fill", "document_id": prep["document_id"], "prompt_text": clean_prompt(prep["names"]), "feather": 8}
+    _, ps = await asyncio.to_thread(_place_set, store, pid, vid)
+    recipe = {"kind": "inpaint", "mode": "fill", "model_id": set_model(ps, q.app.settings.variant),   # D186: the set's card
+              "document_id": prep["document_id"], "prompt_text": clean_prompt(prep["names"]), "feather": 8}
     origin = JobOrigin(suite="story", surface=CLEAN_SURFACE, ref=pid, payload={"version": vid, "things": prep["things"], "picture": prep["picture"]})
     return await _staged(q, store, pid, vid, recipe, origin, lambda x, jid: setattr(x, "clean_job_id", jid)), prep
 

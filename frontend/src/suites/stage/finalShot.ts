@@ -269,7 +269,8 @@ export function keysFrom(doc: StageDoc, objectId: string, old: StageObject['body
  *  (O4: in a scene, the scene's first plate leads them — `scene_plate`). */
 export async function makePlate(f: Final): Promise<{ scene_plate?: string | null }> {
   const shot = st().shot
-  return unwrap(http.POST('/finals/{fid}/plate', { params: { path: { fid: f.id } }, body: { prompt_text: shot.prompt_text, refs: shot.refs.map((r) => ({ asset_id: r.asset_id, note: r.note ?? null })) as never, seed: 0 } }))
+  return unwrap(http.POST('/finals/{fid}/plate', { params: { path: { fid: f.id } }, body: { prompt_text: shot.prompt_text, refs: shot.refs.map((r) => ({ asset_id: r.asset_id, note: r.note ?? null })) as never, seed: 0,
+    model_id: shot.model_id } }))   // D186: the Still's card — the plate is a still of the scene
 }
 
 function loadImage(url: string): Promise<HTMLImageElement> {

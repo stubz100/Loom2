@@ -11,7 +11,8 @@ import { useSession } from '../../store/session'
 import { showMenu } from '../../frame/ContextMenu'
 import { assembling, batchCount, matteWarning, nextFinalStep, ofShot, PLATE_PATH_MAX, readyToAssemble, rendering, skeletonChange, useFinals, useFinalsPoll } from './finalShot'
 import { askConfirm } from '../../store/session'
-import { useStage } from './stageStore'
+import { ModelCards } from '../../frame/ModelCards'
+import { st, useStage } from './stageStore'
 import { useStory } from '../story/storyStore'
 
 const KIND_LABEL: Record<string, string> = { plate: 'plate', figure: 'character', prop: 'prop', shadows: 'shadows' }
@@ -184,6 +185,7 @@ function FinalRow({ f }: { f: Final }) {
       { label: 'Delete this final', danger: true, run: () => void useFinals.getState().remove(f.id) }]) }}>
       <div className="final-head"><b>{f.name}</b><span className="hint">{f.frames} frames at {f.rate} fps · {f.size.w}×{f.size.h} · frames {f.range.start}–{f.range.end}</span></div>
       <ul className="final-layers">{f.layers.map((l) => <LayerRow key={l.id} f={f} l={l} />)}</ul>
+      {f.layers.some((l) => l.id === 'plate' && l.method !== 'picture' && l.method !== 'set') && <PlateModel />}{/* D186: the plate's still runs on the Still's card */}
       {plan && plan.layers.length > 0 && <div className="final-plan" data-plan>
         <span className="hint" title={`the cost from ${plan.source}`}>{plan.seconds_owed > 0 ? `the performances owe ≈ ${Math.max(1, Math.round(plan.seconds_owed / 60))} min on the GPU` : 'every performance made'}</span>
         {unperformed > 0 && <button className="quiet" data-stage-runs onClick={() => void useFinals.getState().stagePerformances(f.id)}
@@ -206,6 +208,21 @@ function FinalRow({ f }: { f: Final }) {
         {comp && <span className="hint" data-comp-rev>composition · revision {comp.revision}{comp.stale ? ' · stale: the final changed' : ''}{comp.clip_id ? ` · rendered at revision ${comp.rendered_revision}` : ''}</span>}
         {f.assembly && <span className="hint">{f.assembly.frames as number} frames{f.assembly.conform ? ' · 24 fps (RIFE)' : ''} · offsets {Object.entries((f.assembly.offsets_px ?? {}) as Record<string, number[]>).map(([k, v]) => `${k} ${v[0]}/${v[1]}`).join(', ') || '—'}</span>}
       </div>
+    </div>
+  )
+}
+
+/** D186: the plate's model — the Still's card (the plate is a still of the scene: Make the plate sends the Still form's prompt, references
+ *  and model); the clay method's models, the measured default first. */
+function PlateModel() {
+  const sh = useStage((s) => s.shot)
+  const method = useSession((s) => s.capabilities?.stage?.methods?.clay)
+  const items = (method?.models ?? []).map((m) => ({ id: m.id, label: m.label, hint: m.hint, license: m.license, health: m.health, seconds: m.seconds, measured: m.measured }))
+  if (!items.length) return null
+  return (
+    <div className="kv tall final-plate-model" data-testid="final-plate-model">
+      <span>plate model <Help text="The model that draws the plate's still (and its anchors along the path, and the Fills of its keyframes when it fills) — the Still section's card in Clay, shared with the stage's stills. The measured one first; FLUX.2 dev follows the place's words more closely at its Turbo settings." /></span>
+      <ModelCards label="plate model" time items={items} value={sh.model_id ?? method?.model_id} onPick={(id) => st().setShot({ model_id: id === method?.model_id ? null : id })} />
     </div>
   )
 }

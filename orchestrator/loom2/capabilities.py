@@ -4,7 +4,7 @@ and every model gains `recipes` / `inputs` / `geometry` blocks the panels gate t
 """
 from __future__ import annotations
 
-from .engine.graphs import STAGE_HINTS, stage_pass_for, te_alternates, te_label, te_options
+from .engine.graphs import STAGE_DRAFT_PX, STAGE_HINTS, stage_pass_for, te_alternates, te_label, te_options
 from .engine.image_families import family
 from .models import registry
 from .models.spec import ModelSpec
@@ -118,6 +118,7 @@ def _reangle(svc: Services, variant: str) -> dict:
 def _stage(svc: Services, variant: str) -> dict:
     """Stage → image (P13 ST3): each method with the model it runs in this build, its health, E10's measured seconds (or none), the
     pass it takes as image 1 and how many references follow — the Shot tab shows the method and its time before the job is queued."""
+    from .recipes import stage_models
     methods = {}
     for spec in registry.stage_specs():                               # by order: the first offered spec of a method is the one that runs
         m = spec.recipes.stage
@@ -126,11 +127,22 @@ def _stage(svc: Services, variant: str) -> dict:
         needs = spec.weights() + ([spec.recipes.stage_lora] if spec.recipes.stage_lora else [])
         healths = {x: svc.roster.resolve(x).health for x in needs}
         missing = [ROSTER_BY_ID[x].name for x, hh in healths.items() if hh in ("missing", "retired")]
+        models = []                                                   # D186: the models the method may run on, the measured default first (the Still's card)
+        for g in stage_models(m, variant):
+            gn = g.weights() + ([g.recipes.stage_lora] if g.recipes.stage_lora else [])
+            gh = {x: svc.roster.resolve(x).health for x in gn}
+            gm = [ROSTER_BY_ID[x].name for x, hh in gh.items() if hh in ("missing", "retired")]
+            own = g.recipes.stage == m
+            models.append({"id": g.id, "label": g.label, "short": g.short or g.label, "hint": g.hint, "license": ROSTER_BY_ID[g.id].license,
+                           "health": "missing" if gm else ("verified" if all(h == "verified" for h in gh.values()) else "present"), "missing": gm,
+                           "seconds": g.recipes.stage_seconds if own and g.recipes.stage_seconds is not None else round((g.estimates.turbo_seconds if g.sampling.turbo and g.estimates.turbo_seconds else g.estimates.base_seconds) * STAGE_DRAFT_PX / (960 * 544), 1),   # a guest: its own figure at the Draft still (the references add to it)
+                           "measured": own and g.recipes.stage_seconds is not None, "max_refs": 1 if m == "refcontrol" else max(0, g.inputs.refs_max - 1),
+                           "approx_gb": round(sum((ROSTER_BY_ID[x].approx_gb or 0) for x in gn), 1)})
         methods[m] = {"model_id": spec.id, "label": spec.label, "short": spec.short or spec.label, "hint": STAGE_HINTS.get(m),
                       "health": "missing" if missing else ("verified" if all(h == "verified" for h in healths.values()) else "present"),
                       "missing": missing, "seconds": spec.recipes.stage_seconds, "measured": spec.recipes.stage_seconds is not None,
                       "image1": stage_pass_for(m), "max_refs": 1 if m == "refcontrol" else max(0, spec.inputs.refs_max - 1),
-                      "approx_gb": round(sum((ROSTER_BY_ID[x].approx_gb or 0) for x in needs), 1)}
+                      "approx_gb": round(sum((ROSTER_BY_ID[x].approx_gb or 0) for x in needs), 1), "models": models}
     clip = None
     for spec in registry.video_specs():                               # ST4 (D76): the first offered video model with an IC-LoRA animates the stage
         if not spec.recipes.guide_lora or not _offered(spec, variant):

@@ -70,7 +70,7 @@ interface ClayState {
   closeAnimation: () => void
   selectAnimation: (ref: AnimRef | null) => void
   /** The editor on a scene (the stage), through the shot's camera when opened from a shot; `from` left out keeps the way back it had. */
-  openScene: (stageId: string, from?: From | null) => Promise<void>
+  openScene: (stageId: string, from?: From | null, section?: 'still') => Promise<void>   // D186: `section` — the column section to land on (the Still's form)
   backToShot: () => Promise<void>
 }
 
@@ -137,14 +137,14 @@ export const useClay = create<ClayState>()((set, get) => ({
     writeHash(libraryHash('animation', null, false))
   },
   selectAnimation: (animSel) => set({ animSel }),
-  openScene: async (stageId, from) => {
+  openScene: async (stageId, from, section) => {
     set({ rail: 'scenes', view: 'page', ...(from !== undefined ? { from } : {}) })
     const m = await import('../../suites/stage/stageStore')
     const sg = m.useStage.getState()
     if (sg.current?.id !== stageId) await sg.open(stageId)
     if (from?.camera) { m.useStage.getState().setActiveCamera(from.camera); m.useStage.getState().setView('camera') }   // 04 §3: the shot's camera by default
     if (from?.record) m.useStage.getState().setMode('record')                                                              // C3: Record again ▸ from the shot's row
-    navigate({ suite: 'stage' })
+    navigate(section ? { suite: 'stage', tab: section } : { suite: 'stage' })                                              // D186: *Start still ▸* lands on the Still section
     writeHash(`#clay/scene/${stageId}`)
   },
   backToShot: async () => {

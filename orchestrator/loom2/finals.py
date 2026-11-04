@@ -83,6 +83,7 @@ class FinalLayer(BaseModel):
     extras: list[dict[str, Any]] = Field(default_factory=list)   # D184 (C5): the figures on the plate, not layers — [{object_id, profile_id, version, name}]
     beats: list[dict[str, Any]] = Field(default_factory=list)    # D184 (C5): the generated plate's anchor stills — [{frame, asset_id, job_id}] by frame (E59 e)
     prompt: str | None = None                      # PF1 (D135): the plate's place prompt (its still's) — the keyframes' Fills continue its surfaces
+    model_id: str | None = None                    # D186: the plate's model (the Still's card) — its still, its anchors and its keyframes' Fills run on it
     keys: list[dict[str, Any]] = Field(default_factory=list)   # PF1: the filled plate's keyframes — [{frame, asset_id, filled, job_id, heal}] by frame
     heal: bool = False                             # PF1 (Q29): the frames between keyframes healed by small keyframes of their own
     frames_done: int = 0                           # the layer's own sequence on disk (`frames/`): the projected plate, a character's performance …

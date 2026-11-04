@@ -25,7 +25,7 @@ export function stageSteps(i: StepInput): Step[] {
     { id: 'passes', label: 'passes', state: passes, cmd: 'anim.step.passes',
       tip: `The passes of ${i.camera ?? 'the active camera'}: ${i.passes ? `${i.passes.n} at ${i.passes.size}${i.passes.stale ? ', the scene moved on' : ', current'}` : 'none yet'} — Clay renders them (its foot)` },
     { id: 'frame', label: 'frame', state: i.frameRunning ? 'running' : i.stills ? 'fresh' : 'none', count: i.stills ? String(i.stills) : undefined, cmd: 'stage.frame.make',
-      tip: `The stage's frames: ${i.stills || 'none yet'} — made in Image › From a stage; one of them starts the stage clip` },
+      tip: `The stage's stills: ${i.stills || 'none yet'} — made in Clay's Still section; one of them starts the stage clip` },
     { id: 'clip', label: 'clip', state: i.clipRunning ? 'running' : i.clips ? 'fresh' : 'none', count: i.clips ? String(i.clips) : undefined, cmd: 'anim.step.clip',
       tip: `The stage's clips: ${i.clips || 'none yet'} — Performance › Stage clip (the sequence animated from a frame)` },
     { id: 'final', label: 'final', state: final, count: i.final && !i.final.assembled ? `${i.final.done}/${i.final.layers}` : undefined, cmd: 'anim.step.final',

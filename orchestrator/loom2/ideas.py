@@ -307,13 +307,14 @@ class IdeaStore:
 
 
 # ---- Make the clay ▶ (CW1; 06 §2.3): a character variant's figure, then its shell ----------------------------------------------------
-def plan_clay(idea: Idea, v: Variant, variant: str, *, width: int, height: int) -> tuple[dict[str, Any], JobOrigin]:
-    """The first step: the A-pose picture drawn from the variant (the clay-reference model with the variant's picture as reference 1, the
-    subject from its prompt and CA0's reference sentence, D140's open hands). Its landing queues the fit, the fit the shell."""
+def plan_clay(idea: Idea, v: Variant, variant: str, *, width: int, height: int, model_id: str | None = None) -> tuple[dict[str, Any], JobOrigin]:
+    """The first step: the A-pose picture drawn from the variant (the clay-reference model — D186: the Make column's card when it takes
+    references — with the variant's picture as reference 1, the subject from its prompt and CA0's reference sentence, D140's open hands).
+    Its landing queues the fit, the fit the shell."""
     from .story import anim_ref_sentence, expand_spec
     if idea.cls != "character":
         raise ValueError("Make the clay ▶ gives a character's variant its figure — a prop's model and a place's set come with CW4 and CW6")
-    spec = expand_spec(variant)
+    spec = expand_spec(variant, model_id)
     if spec is None:
         raise ValueError("no model in this build draws the A-pose picture")
     subject = draft_sheet(v.made_from.prompt).get("appearance") or idea.name

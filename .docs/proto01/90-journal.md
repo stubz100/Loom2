@@ -16387,3 +16387,53 @@ client types regenerated (BinKind, BinNode.kinds, BinThing.shelf, the shelf para
 
 **propo02's waves are all built** — C0, C1, C2, C2b, C2c, C3, C4, C5, C6, with E59, E60 and E61 run. **Next:** the author's click-through of
 the new Clay, Shots and Bin on Followed (propo02 05's status keeps the list), the W items still owed (W44 / W51 / W55) and the author's own.
+
+## 2026-11-04 13:56 — D186: the model card everywhere, and the stage still is Clay's
+
+**The ask** (the author, on their own project stubz002, after the Start still verb had landed them on World's character page): "if we make
+sketches from clay stages, they should be in Clay"; "model selection only exists in world/char… everywhere else, klein 9b is the locked
+model, which is capable but not as good as flux.2 dev in prompt adherence. Can we go through the application and add the same card from
+world/character/model everywhere, where we see image generation?" — recorded as D186 (12:52) before the work.
+
+**Built.** *One card.* `frontend/src/frame/ModelCards.tsx` (+ `modelCards.css`, the rules moved out of generate.css; `modelCardItems.ts`
+builds the items from /capabilities — D65: no model id in code) is the Make column's card, now rendered by `ModelSection` and by every
+surface that generates a picture: **Clay › Still** — the stage still's form (`ShotTab`) is a section of Clay's scene column (the rail tab
+*Still*, `CLAY_SECTIONS` + `still`), with the method's models as cards (`/capabilities.stage.methods[m].models`, `StageModelCaps`: the
+measured default first, each with its health, licence, time and whether that time was measured on this method) and *Render frame ▶* with
+its estimate at the section's end (`.still-foot`; Clay's foot stays the passes'); *Start still ▸* (the recipe graph's image node,
+`openTarget`), *Make the still in Clay* (Shots' strip and Inspector), *Capture a still ▸* (the Record bar) and *Make a still ▸* (the Stage
+clip card) all open it on the shot's scene and camera (`useClay.openScene(stage, from, 'still')`); World's *From a stage* source is gone
+(`SourceSwitch`, `FromStage.tsx`, `useGenerate.source`). **The Final shot's plate** (`PlateModel` in FinalPanel) shows the same card
+bound to the same pick — the plate is a still of the scene, so Make the plate sends the Still form's model with its prompt and references
+(`PlateBody.model_id` → the recipe, the job's payload and `FinalLayer.model_id`; the generated plate's anchors (`_plate_beat_still`) and a
+filled plate's keyframe Fills follow it). **Edit's AI tab**: Inpaint, Outpaint, Refine, Instruct, Upscale and the detailed upscale's refine
+each show the cards of the models that run them (`aiModels`: the FLUX.2 family's models with the mode for the Fill modes, the i2i models,
+the instruct models, the upscalers; the default first) — *Fill Hero* and the outpaint's *(hero)* switch are gone: the hero model (dev)
+picked on the card is Fill Hero and halves the candidates (`aiPanelStore.inpaintModel / outpaintModel / instructModel`). **The Library's
+set** (`SetModel` in CastSet): the set's painting model, saved on the set (`PlaceSet.model_id`) and read by `place_sets.set_model` for its
+Fills, walkers and the cleans under its things, and for a crowd's start when it refines (else the refine default). **The animation
+references and an idea's clay** send the Make column's model when it draws from references (`generateStore.referenceModel()`;
+`AnimRefBody.model_id`, the ideas clay route's `ClayBody`; `story.expand_spec(variant, model_id)`). **The Angle sheet** shows Auto and the
+methods' models as cards; **Settings › Samples** the sample models. *The server*: `StageShot.model_id` (None = the method's measured
+default), `recipes.stage_models(method, variant)` (clay: the measured default, then every FLUX.2-family model that generates and takes a
+reference beside the pass — under `full` Klein 9B, dev, Klein 9B base, 9B KV, 4B, 4B base; refcontrol: the pose LoRA's base), `stage_model_id`
+refusing a pick outside the list by name (the queue resolves it at submission — `_validate_models`; the preview says it); `build_stage_shot`
+runs a guest at its edit settings — dev: the Turbo LoRA (through `_flux2_loaders`, listed in `recipe_weights`), 8 steps, FluxGuidance 4.0,
+CFG 1, no negative, image 1 and the deck as reference latents within its 9 slots — and Klein's E10 graph is untouched (the parity snapshot
+gained the two new summary keys only, `guidance` and `turbo`); the plan's estimate is the measured E10 figure on the method's own model, else
+the model's own (dev: its Turbo 40 s) and says it is unmeasured; `queue.resolve_mentions` gives the figures the picked model's room. A
+weight not fetched is a problem the preview says, not a 500 (`preview_problems` catches FileNotFoundError — the card names the model).
+
+**Checked.** Offline 823 (822 + 1 file, test_model_cards_d186: the lists per method and variant, the pick and its refusals, the dev graph
+against the engine's contract, the plan, /capabilities, set_model, expand_spec and plan_anim_ref; test_stage_shot_d81 reads `.model` for the
+resolved id; the graph parity snapshot rewritten for the two summary keys); Vitest 667 (664 + 3, ModelCards.test.tsx; aiRecipes.test.ts
+on the cards; modes.test on the four Clay sections); typecheck, build and lint clean (61 warnings, as before — the card's helpers in their
+own module); agents 9 / 0; settings audit 323 / 0; model literals 0; the OpenAPI document and the client types regenerated. The e2e:
+the whole suite twice — 90 + 1 (the new scenario: its last step read the job's compiled summary at the wrong key, and picking dev raised a 500 in the e2e state where dev's weights are absent; both fixed — `preview_problems` catches FileNotFoundError, `scripts/e2e_setup.py` writes placeholders for the clay method's models and a Turbo LoRA) then 89 + 2 under the offline suite's load in 15.4 min (the cut's tracks and the hybrid final, the known load flakes — both passing alone, 55 s); the D186 scenario — Clay's Still lists the clay method's models with Klein 9B first, dev picked runs the still at its Turbo settings (the compiled summary: model_id dev, turbo, guidance 4, 8 steps), the Final shot's plate card shares the pick, Edit's Inpaint cards with the hero halving the candidates, Outpaint's and Refine's — 20 s alone; `fromStageIn` is Clay › Still now, the foot `.shot-tab .still-foot`.
+
+**On the rig (Followed, the walk's shot 1, through the product path):** the author's path — Shots › Performance › Stage clip › *Make a still ▸* opens Clay on the Still section with the shot's scene and camera: the cards Klein 9B ≈ 12 s (measured) · FLUX.2 dev ≈ 71 s · Klein 9B base ≈ 88 s · 9B KV ≈ 32 s · 4B ≈ 18 s · 4B base ≈ 53 s (unmeasured, scaled to the Draft still), Klein 9B active; dev picked, the foot's estimate names it; *Render frame ▶* on the stale passes rendered them (1280×720, revision 147) and queued the still: job_6497e33e done in **151 s with the engine's cold start** (the first dev job of the session: ≈ 15 s a Turbo step), a second one **125 s warm** (job_24761caa) — the recipe carries `model_id` dev, the summary says turbo, guidance 4.0, 8 steps, 5 reference latents (the clay pass and Nora's four). **The picture** (ast_e8c1b19c): dev follows the words — the green coat with the scarf, the man with his newspaper, the shopping bags, the cobbled street between the fronts — but reads image 1 loosely: **five people in a frontal line-up for the three figures blocked** (the man and the woman doubled), the clay's spacing and walk gone; Klein 9B keeps the blocking (E10, 10/10). So dev is offered as a guest with that note on the Still's help, and the estimate learned from the run: a guest's time is its own figure scaled to the still's size plus its reference latents at 0.35 s per 512² unit per step (`STAGE_GUEST_REF_STEP_S`; the measured case lands on 125 s), the card's time the figure at the Draft still. The other surfaces, live: the Final shot's plate card (Klein 9B active after a reload — the pick lives in the session, as the Still's prompt and references do), Edit's Inpaint cards (Klein 9B first, dev picked → AI ▶ Inpaint ×2), Outpaint's, Refine's and Instruct's, the Library's set card on the Cobbled street (Klein 9B first), the Angle sheet's three (Auto · Qwen edit ≈ 32 s, Klein 9B ≈ 18 s, Qwen edit), Settings › Samples' three (Klein 4B · default, Lumina 2, SD 3.5 Medium), World's Sketches without a source switch; no page error. Seven pictures sent.
+
+**Not built, recorded.** A stage image set's clean plate (Clay's *Make the things*) and the LoRA check images stay on their defaults (the
+first has no record to carry a pick, the second runs on the LoRA's base); the Stage clip and the performances are video models with their
+own cards (D121); the plate's keyframe Fills follow the plate's model only when it fills. **Next:** the author's click-through of the Still
+section and the cards on their own project; the W items still owed (W44 / W51 / W55).

@@ -3430,6 +3430,7 @@ export interface paths {
          * Idea Variant Clay
          * @description *Make the clay ▶* (06 §2.3): a character variant's figure — an A-pose picture drawn from it (about a minute), the body fitted to it —
          *     and then its shell (Pixal3D, about four minutes, full only), queued one after another; the variant's clay follows each step.
+         *     D186: the body names the Make column's model when it takes references.
          */
         post: operations["idea_variant_clay_story_ideas__iid__variants__vid__clay_post"];
         delete?: never;
@@ -5315,6 +5316,8 @@ export interface components {
              * @default 2
              */
             count?: number;
+            /** Model Id */
+            model_id?: string | null;
             /**
              * Side
              * @default front
@@ -6648,6 +6651,11 @@ export interface components {
         ChangedGroups: {
             /** Changed */
             changed: string[];
+        };
+        /** ClayBody */
+        ClayBody: {
+            /** Model Id */
+            model_id?: string | null;
         };
         /**
          * ClayIn
@@ -8619,6 +8627,8 @@ export interface components {
              * @enum {string}
              */
             method: "projected" | "generated" | "filled" | "picture" | "set" | "move" | "rendered" | "drawn" | "stage";
+            /** Model Id */
+            model_id: string | null;
             /** Name */
             name: string;
             /** Object Id */
@@ -11823,6 +11833,8 @@ export interface components {
              * @enum {string}
              */
             kind?: "room" | "street" | "corridor" | "ground";
+            /** Model Id */
+            model_id?: string | null;
             /** Parts */
             parts?: {
                 [key: string]: boolean;
@@ -11858,6 +11870,8 @@ export interface components {
              * @enum {string}
              */
             kind: "room" | "street" | "corridor" | "ground";
+            /** Model Id */
+            model_id: string | null;
             /** Parts */
             parts: {
                 [key: string]: boolean;
@@ -12064,6 +12078,8 @@ export interface components {
              * @default true
              */
             beats?: boolean;
+            /** Model Id */
+            model_id?: string | null;
             /**
              * Prompt Text
              * @default
@@ -14649,7 +14665,8 @@ export interface components {
         };
         /**
          * StageMethodCaps
-         * @description P13 ST3 (D78): one Stage → image method — the model it runs, its health, E10's seconds, the pass it takes and the references it allows.
+         * @description P13 ST3 (D78): one Stage → image method — the model it runs, its health, E10's seconds, the pass it takes and the references it allows;
+         *     D186: the models it may run on instead, the measured default first.
          */
         StageMethodCaps: {
             /** Approx Gb */
@@ -14670,6 +14687,41 @@ export interface components {
             missing: string[];
             /** Model Id */
             model_id: string;
+            /**
+             * Models
+             * @default []
+             */
+            models?: components["schemas"]["StageModelCaps"][];
+            /** Seconds */
+            seconds?: number | null;
+            /** Short */
+            short: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * StageModelCaps
+         * @description D186: one model a Stage method may run on (the Still's card) — its health, its time on the method (measured, or its own estimate).
+         */
+        StageModelCaps: {
+            /** Approx Gb */
+            approx_gb: number;
+            /** Health */
+            health: string;
+            /** Hint */
+            hint?: string | null;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** License */
+            license?: string | null;
+            /** Max Refs */
+            max_refs: number;
+            /** Measured */
+            measured: boolean;
+            /** Missing */
+            missing: string[];
             /** Seconds */
             seconds?: number | null;
             /** Short */
@@ -22969,7 +23021,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ClayBody"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

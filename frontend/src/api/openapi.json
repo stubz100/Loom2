@@ -205,6 +205,17 @@
             "title": "Count",
             "type": "integer"
           },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
           "side": {
             "default": "front",
             "enum": [
@@ -3462,6 +3473,23 @@
           "changed"
         ],
         "title": "ChangedGroups",
+        "type": "object"
+      },
+      "ClayBody": {
+        "properties": {
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          }
+        },
+        "title": "ClayBody",
         "type": "object"
       },
       "ClayIn": {
@@ -8468,6 +8496,17 @@
             "title": "Method",
             "type": "string"
           },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -8649,6 +8688,7 @@
           "extras",
           "beats",
           "prompt",
+          "model_id",
           "keys",
           "heal",
           "frames_done",
@@ -16351,6 +16391,17 @@
             "title": "Kind",
             "type": "string"
           },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
           "parts": {
             "additionalProperties": {
               "type": "boolean"
@@ -16448,6 +16499,17 @@
             "title": "Kind",
             "type": "string"
           },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
           "parts": {
             "additionalProperties": {
               "type": "boolean"
@@ -16498,7 +16560,8 @@
           "things",
           "things_document_id",
           "clean_job_id",
-          "keep_fills_key"
+          "keep_fills_key",
+          "model_id"
         ],
         "title": "PlaceSet",
         "type": "object"
@@ -16992,6 +17055,17 @@
             "default": true,
             "title": "Beats",
             "type": "boolean"
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
           },
           "prompt_text": {
             "default": "",
@@ -23428,7 +23502,7 @@
       },
       "StageMethodCaps": {
         "additionalProperties": true,
-        "description": "P13 ST3 (D78): one Stage → image method — the model it runs, its health, E10's seconds, the pass it takes and the references it allows.",
+        "description": "P13 ST3 (D78): one Stage → image method — the model it runs, its health, E10's seconds, the pass it takes and the references it allows;\nD186: the models it may run on instead, the measured default first.",
         "properties": {
           "approx_gb": {
             "title": "Approx Gb",
@@ -23476,6 +23550,14 @@
             "title": "Model Id",
             "type": "string"
           },
+          "models": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/StageModelCaps"
+            },
+            "title": "Models",
+            "type": "array"
+          },
           "seconds": {
             "anyOf": [
               {
@@ -23504,6 +23586,92 @@
           "approx_gb"
         ],
         "title": "StageMethodCaps",
+        "type": "object"
+      },
+      "StageModelCaps": {
+        "additionalProperties": true,
+        "description": "D186: one model a Stage method may run on (the Still's card) — its health, its time on the method (measured, or its own estimate).",
+        "properties": {
+          "approx_gb": {
+            "title": "Approx Gb",
+            "type": "number"
+          },
+          "health": {
+            "title": "Health",
+            "type": "string"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "license": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License"
+          },
+          "max_refs": {
+            "title": "Max Refs",
+            "type": "integer"
+          },
+          "measured": {
+            "title": "Measured",
+            "type": "boolean"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seconds"
+          },
+          "short": {
+            "title": "Short",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "short",
+          "health",
+          "missing",
+          "measured",
+          "max_refs",
+          "approx_gb"
+        ],
+        "title": "StageModelCaps",
         "type": "object"
       },
       "StageObject": {
@@ -37859,7 +38027,7 @@
     },
     "/story/ideas/{iid}/variants/{vid}/clay": {
       "post": {
-        "description": "*Make the clay ▶* (06 §2.3): a character variant's figure — an A-pose picture drawn from it (about a minute), the body fitted to it —\nand then its shell (Pixal3D, about four minutes, full only), queued one after another; the variant's clay follows each step.",
+        "description": "*Make the clay ▶* (06 §2.3): a character variant's figure — an A-pose picture drawn from it (about a minute), the body fitted to it —\nand then its shell (Pixal3D, about four minutes, full only), queued one after another; the variant's clay follows each step.\nD186: the body names the Make column's model when it takes references.",
         "operationId": "idea_variant_clay_story_ideas__iid__variants__vid__clay_post",
         "parameters": [
           {
@@ -37881,6 +38049,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ClayBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {

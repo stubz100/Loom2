@@ -1,6 +1,6 @@
 # proto01_rig · Rigging the hands, and humanoids that are not human
 
-Status: **proposal, 2026-11-04; answered the same day → D187** (§8); **legs and shoes added → D188** (§9). Spike E62 runs first. Read from the code at `055315e`.
+Status: **proposal, 2026-11-04; answered the same day → D187** (§8); **legs and shoes added → D188** (§9); **E62 run the same evening** (§10). Read from the code at `055315e`.
 
 ## 1. The request
 
@@ -156,3 +156,63 @@ one of Followed's shells bound with an ankle and a ball and bent 30° at each, i
 | **Q9** | Digitigrade legs: with the feet now, or with Q7's later study (tails, wings)? | Later, with Q7: it adds a joint to the leg's chain, which the guide's COCO-18 legs do not have. |
 | **Q10** | A *stiff sole* switch for boots and clogs? | Yes, a foot's switch; off by default. |
 
+## 10. E62 (2026-11-04): what the spike measured
+
+Run through the product path on the rig, one GPU job at a time: `engine/spikes/e62_hands.py`, outputs in `engine/spikes/out/e62/`.
+
+**a · Hand pictures.** Twelve hand pictures (Followed's three characters, a ghoul, a dwarf and a four-fingered goblin; Klein 9B and FLUX.2
+dev at 1024², Klein 21–24 s warm, dev 51–54 s), each read by SDPose four ways — the product's keypoints job (RT-DETR boxes the people), the
+same graph without the boxes, and the picture shrunk to 50 % and 30 % of the canvas — and matted by BiRefNet.
+
+| Finding | Measured |
+| --- | --- |
+| **A hand picture made with the character's references draws the character.** | Nora's (her four references riding along): Nora full-length with a hand beside her; dev three Noras. |
+| **So does the character's whole sheet in the words.** | Nora's sheet as words: Klein drew Nora raising a hand, dev two giant hands beside her. Words about the hand alone gave close-ups every time (the humanoids'). |
+| **SDPose reads a close-up hand badly at its size, well when it is small.** | Confidence 0.44–0.57 on 300–490 px palms, chains crossing; at 30 % of the canvas 0.84–0.99 (the man 0.94, the woman 0.97, Nora 0.99, the ghoul 0.91, the dwarf 0.89), chains along each finger to its tip. Reading without boxes alone: 0.46–0.57. |
+| **The measures tell the hands apart.** | Middle finger ÷ palm: humans 0.68–0.71, the dwarf 0.69, the ghoul 0.79 (Klein) and 0.99 (dev). Finger width ÷ length: the ghoul 0.13–0.18, the man 0.24, the dwarf 0.29–0.38, the woman 0.36. |
+| **Neither model draws four fingers when asked.** | The goblin's hand came back with five on both; SDPose always reads five and its fifth chain wanders off the hand. A finger count is set by hand (Q4). |
+| **Klein makes the cleaner close-up.** | A flat hand on plain grey; dev put the man and the woman behind their hands and drew the ghoul's as bare bones. |
+
+**c (a) · Feet pictures.** Followed's three, the ghoul's bare clawed feet, the dwarf's boots, stilettos, read the same ways.
+
+| Finding | Measured |
+| --- | --- |
+| **The side-view figure reads the feet as it is.** | Followed's three came back full-length from the side (the sheet's words again); SDPose's foot points without boxes 0.78–0.92 — the side-view reference (D175) may already serve. |
+| **Feet close-ups read best at 30–50 %.** | 0.82–0.89 on the humanoids' (0.26–0.61 at their size). |
+| **The heel-to-toe pitch tells the shoes apart.** | The dwarf's boots 2–6°, flat shoes 6–11°, bare clawed feet 15–20°, stilettos 30–55°. |
+
+**b · Does Wan Animate draw the fingers the guide gives? Yes.** The ghoul made through the product path (its picture and A-pose on FLUX.2
+dev, the body fitted, the shell — 250 s), a scene with its figure and the CC0 *Spell_Simple_Idle_Loop* (the hands raised in front), the
+final shot made (51 frames at 16 fps, the figure in a window, so its guide is drawn on the server from the stored keypoints). Performed twice
+on seed 62: **A** with the mannequin's hands as Stage stored them (165 s with its matte), **B** with every finger lengthened 1.5× from its
+knuckle in the stored keypoints (145 s). In A the raised hand is a short claw curled toward the palm; in B the same seed draws long bony
+fingers stretched across the chest — the reference's claws on both. The guide's hands decide the drawn hands: **R5 stays**.
+
+**c (b) · Does a shell's shoe bend?** A prototype (`frontend/src/spikes/e62Feet.ts`, no GPU): the shell bound as the shots bind it, an
+ankle and a ball added to each leg, the shell weighed again by bone heat, each bent 30°.
+
+| Finding | Measured |
+| --- | --- |
+| **The shell's own shoe bends acceptably by bone heat** where the ankle and the ball sit right. | Nora's heeled boots and the woman's shoes: the toe tips down and up at the ankle, the toes roll at the ball; the shoe's triangles stretch 1.02–1.24 at the 99th percentile (worst 1.41) for 30° at the ankle, 1.06–1.09 (worst 1.23) at the ball. |
+| **The foot cannot be found on the shell by itself.** | Under the man's trouser hems and the ghoul's robe the search took cloth on the floor 27–28 cm behind the ankle for a heel, and the ankle bone swung the trouser leg. The heel, the ball and the toe come from a side picture's points, corrected by hand (F2, F4). |
+| **Pixal3D gives the shoe's shape as the picture has it.** | Nora's sheet says flat boots; her A-pose and shell have heels. A raised heel at rest (F2) follows the shell. |
+
+![The hand pictures read: at their size, without boxes, at 50 % and 30 %](img/e62a-hands-read.jpg)
+
+![The humanoids' hands and feet, without boxes and at 30 %](img/e62a-humanoids.jpg)
+
+![The ghoul's raised hand: A the mannequin's hands in the guide, B the fingers 1.5× longer](img/e62b-guide-fingers.jpg)
+
+![Followed's shoes bent at an ankle and a ball](img/e62c-shoes-bent.jpg)
+
+### What E62 changes in the build
+
+- **R1 / F1:** a hand picture and a feet picture are made from **words about the hand or the shoes alone** — never the character's
+  references, never its whole sheet — prefilled from the sheet's hand and shoe words (skin, nails, rings, gloves; the shoes) and edited
+  freely (Q4: its own words). Klein 9B by default (the clean close-up); the Make column's card can change it (D186).
+- **Reading:** SDPose without boxes, the picture shrunk to 30 % of its canvas for a hand, 30–50 % for feet. The side-view reference (D175)
+  already gives the feet's points on a full figure and is read too.
+- **Q4:** the finger count is the author's, set by hand — neither model draws four fingers when asked, and SDPose always reads five.
+- **R5** (the guide from the character's hands) is kept: Wan Animate follows it.
+- **F3** (the shell's own shoe, rigged) is kept: bone heat bends it; its points come from the pictures and the Feet & legs view, not from
+  the shell's geometry.

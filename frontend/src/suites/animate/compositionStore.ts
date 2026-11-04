@@ -99,6 +99,8 @@ interface CompState {
   /** Show this final's composition at the Final level (its record and composition loaded, the first frame asked for); the level itself is
    *  the `final` suite (D121) — the caller switches to it. */
   open: (finalId: string) => Promise<void>
+  /** C4 (P23): nothing open — a shot without a composition shows none, not the last shot's. */
+  close: () => void
   /** Load the final and its composition again; a new revision drops the cached frames. */
   reload: () => Promise<void>
   setFrame: (n: number) => void
@@ -617,6 +619,7 @@ export const useComposition = create<CompState>((set, get) => {
     // ---- AE2d: timing ----
     setTiming: (id, patch) => get().command('layer.timing', { layers: [id], ...patch }, 'Timing'),
     slip: (id, delta) => get().command('layer.slip', { layers: [id], delta }, 'Slip'),
+    close: () => set({ finalId: null, final: null, comp: null, frame: 0, playing: false, shown: null, fetching: false, filled: 0, error: null, layers: [], selected: null }),
     open: async (finalId) => {
       if (get().finalId !== finalId) { get().togglePlay(false); set({ finalId, frame: 0, shown: null, comp: null, final: null }) }
       await get().reload()

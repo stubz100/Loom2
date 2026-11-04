@@ -3777,8 +3777,9 @@ test('Shots in the new shell (U4a–d, D157 · proto01_UI2 04 §2–3, §6–7):
   await expect(page.locator('[data-testid="clay-scene-header"]')).toContainText(`Quay ${tag}`)
   await page.locator('[data-testid="clay-scene-header"] button', { hasText: `← Quay ${tag}` }).click()       // ← Back to the shot: Shots, where it was left
   await expect(head).toContainText(`Quay ${tag}`)
-  await page.locator('.s-new button').click()
+  await page.locator('.s-new button', { hasText: 'New shot' }).click()
   await page.locator('.ctx-menu button', { hasText: 'New shot in the same scene' }).click()
+  await page.locator('.modal.ask input').fill('Close on her'); await page.locator('.modal.ask button.primary').click()   // C4 (P12): a shot is named as it is made
   const shots = async () => (await api<{ items: ShotLite[] }>('GET', '/story/shots')).items
   const stage = (await shots()).find((s) => s.id === a.shot_id)!.versions[0].stage_id
   await expect.poll(async () => (await shots()).filter((s) => s.versions[0].stage_id === stage).length, { timeout: 10_000 }).toBe(3)   // coverage: a third camera on the scene's stage
@@ -4460,4 +4461,45 @@ test('Record (D181, C3): a scene has a length and the shot\'s range lies inside 
   await expect(row).toContainText('stale since the scene changed')
   await row.locator('button', { hasText: 'Record again ▸' }).click()
   await expect(page.locator('[data-testid="record-bar"]')).toBeVisible()
+})
+
+test('the shot page\'s ledger and the storyboard\'s play (D181, C4): a shot is named at New shot and the storyboard\'s Flow begins at a Start the server wires (P12, P25); the header\'s performance row sets the method and its final row says what there is; Play walks the cards\' current pictures over the centre and stops; Final shows nothing of another shot (P23) (Shots)', async ({ page }) => {
+  await openShell(page, 'shots')
+  type Graph = { graph: { start: string | null; edges: { from: string; to: string }[]; nodes: { id: string }[] } }
+  const first = (await api<Graph>('GET', '/story/flow')).graph
+  // ＋ New shot asks the name; the first card's Flow gets a Start wired to it
+  await page.locator('.s-new button', { hasText: 'New shot' }).click()
+  await page.locator('.ctx-menu button', { hasText: 'New shot in a new scene' }).click()
+  const ask = page.locator('.modal.ask')
+  await expect(ask).toContainText('New shot in a new scene')
+  await ask.locator('input').fill('The quay'); await ask.locator('button.primary').click()
+  await expect(page.locator('[data-testid="clay-layer"]')).toBeVisible()                                     // a new shot opens its scene in Clay
+  const g = (await api<Graph>('GET', '/story/flow')).graph
+  expect(g.start).toBeTruthy()
+  const shots = (await api<{ items: { id: string; name: string; owner_node: string | null; current: string; versions: { id: string; method: string | null; stage_id: string | null }[] }[] }>('GET', '/story/shots')).items
+  const mine = shots.find((x) => x.name === 'The quay' || (x.owner_node && g.nodes.some((n) => n.id === x.owner_node)))!
+  expect(g.edges.some((e) => e.from === g.start && e.to === mine.owner_node) || first.start !== null).toBe(true)   // Start → the first shot (a Flow with a Start already keeps it)
+  // the ledger: the performance row's method ▾, the final row
+  await page.locator('nav.tabs button.tab', { hasText: 'Shots' }).click()
+  await expect(page.locator('[data-testid="shots-header"]')).toContainText('The quay')
+  const perf = page.locator('[data-testid="shots-row-performance"]')
+  await expect(perf).toHaveAttribute('data-method', 'layered')
+  await expect(perf).toContainText('no take yet')
+  await perf.locator('button', { hasText: 'Layered' }).click()
+  await page.locator('.ctx-menu button', { hasText: 'One pass' }).click()
+  await expect.poll(async () => (await api<{ versions: { method: string | null }[] }>('GET', `/story/shots/${mine.id}`)).versions[0].method, { timeout: 10_000 }).toBe('one_pass')
+  await expect(perf).toHaveAttribute('data-method', 'one_pass')
+  const fin = page.locator('[data-testid="shots-row-final"]')
+  await expect(fin).toHaveAttribute('data-state', 'none')
+  await expect(fin).toContainText('no final yet')
+  await fin.locator('button', { hasText: 'Final ▸' }).click()
+  await expect(page.locator('[data-testid="shots-layer"]')).toHaveAttribute('data-level', 'final')
+  await expect(page.locator('[data-testid="shots-final-strip"]')).toBeVisible()
+  // Play: the cards' current pictures in order over the centre — this shot has nothing yet, the player says so; Stop
+  await page.locator('.s-new button', { hasText: 'Play' }).click()
+  const player = page.locator('[data-testid="shots-player"]')
+  await expect(player).toBeVisible()
+  await expect(page.locator('.s-card.playing')).toHaveCount(1)
+  await player.locator('button', { hasText: 'Stop' }).click()
+  await expect(player).toHaveCount(0)
 })

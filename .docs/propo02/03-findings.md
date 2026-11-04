@@ -19,8 +19,8 @@ kind of change the study might weigh (a question, not a decision). Earlier walkt
 | P9 | Shots › Clay › the path | **A path is only floor clicks.** No numeric point, no edit of a point after the click, no snap to the pavement or the kerb; a click on a front lands on its foot. The driver had to aim its clicks from calibration clicks read back through the API — a person would aim by eye and get what they get. |
 | P10 | Shots › Clay › Apply | **A clip lands at the playhead,** silently: shot 2's first walk went to frames 96–174 of a 0–96 shot because the playhead was at 96. |
 | P11 | Shots › Clay › Key object | **It keys whatever is selected:** a right-click in the viewport had selected the set, and *Key object* put a key on the set. |
-| P12 | Shots › storyboard, header | **Shots have no names.** Both are *Shot*; the header reads *1 · Shot* on the second one; no name is asked at *New shot*. |
-| P13 | Shots › header › scene | **Re-scening leaves stages behind.** Each *New shot in a new scene* makes a bare stage ("Scene"), and binding the place makes another; four stages exist for two shots. |
+| P12 | Shots › storyboard, header | ~~fixed C4~~ **Shots have no names.** Both are *Shot*; the header reads *1 · Shot* on the second one; no name is asked at *New shot*. |
+| P13 | Shots › header › scene | ~~fixed C4~~ **Re-scening leaves stages behind.** Each *New shot in a new scene* makes a bare stage ("Scene"), and binding the place makes another; four stages exist for two shots. |
 | P14 | Shots › Clay › Motion library | **The library has walks and idles, nothing for the story:** no look over the shoulder, no hurried walk, no push through a door; speed is six fixed steps (×0.5 … ×2); Walk_Loop at ×1 is a 0.75 m/s stroll. |
 | P15 | World › Characters › readiness | **"carried" is read from one phrasing:** *a folded newspaper under his arm* raised *⚠ carried*; *a canvas shopping bag in each hand* did not. |
 | P16 | Shots › Performance › Make the final shot | **The final's size, fps and plate source are told, not offered:** 848×480 at 16 fps from the built set. The dialog states them; nothing chooses them. |
@@ -32,9 +32,9 @@ kind of change the study might weigh (a question, not a decision). Earlier walkt
 | P21 | Shots › Final | **The glance reads as a stand.** In the render Nora stops at frame 135, hands at her sides, the head turned a little; the walk resumes after. The over-the-shoulder look the scene asked for is not there (P8). |
 | P22 | Shots › Performance › identity | **Nora scores 0.19,** the lowest of the three, in a ×1.9 window, and the row only says *low*. At 848×480 her face is a few dozen pixels for most of the shot; the two face passes (4–5 min each) ran and the number stayed. |
 
-| P23 | Shots › Final | **Shot 2's Final showed shot 1's composition.** After shot 2's assembly, rail › Final opened on *shot · 161 frames at 16 fps* with shot 1's layers (the man, the woman) under shot 2's URL; *Mark the shot final* read *no clip yet — Make clip ▸*. A trip to Performance and back, then a reload, brought shot 2's own. (W50 / W53 for stages that are not shared.) |
-| P24 | Episode | **A cut before the assembly, and no reason when it is disabled.** *Assemble from the Flow…* is greyed until *New cut…* is used (*no cut open*), and stays greyed with the cut open; its hover says only what it would do. |
-| P25 | Shots › Flow, Episode | **A Flow made from the storyboard has no route.** *＋ New shot* adds Shot nodes with no edges and no Start node, so *Assemble from the Flow…* has nothing to walk; the cut was made with each shot's *+ Add to the end of the cut*. |
+| P23 | Shots › Final | ~~fixed C4~~ **Shot 2's Final showed shot 1's composition.** After shot 2's assembly, rail › Final opened on *shot · 161 frames at 16 fps* with shot 1's layers (the man, the woman) under shot 2's URL; *Mark the shot final* read *no clip yet — Make clip ▸*. A trip to Performance and back, then a reload, brought shot 2's own. (W50 / W53 for stages that are not shared.) |
+| P24 | Episode | ~~fixed C4 (with P25; the hint says)~~ **A cut before the assembly, and no reason when it is disabled.** *Assemble from the Flow…* is greyed until *New cut…* is used (*no cut open*), and stays greyed with the cut open; its hover says only what it would do. |
+| P25 | Shots › Flow, Episode | ~~fixed C4~~ **A Flow made from the storyboard has no route.** *＋ New shot* adds Shot nodes with no edges and no Start node, so *Assemble from the Flow…* has nothing to walk; the cut was made with each shot's *+ Add to the end of the cut*. |
 
 ## 2. What the scene still lacks
 

@@ -1,7 +1,7 @@
 // U4 (D157, proto01_UI2 04): Shots' place in the hash, the old suite each level reads with, the levels old places are, the storyboard's cards.
 import { describe, expect, it } from 'vitest'
 import type { FlowGraph, FlowNode, Profile, Shot, ShotVersion } from '../../api/types'
-import { nextLevel, routeRows } from './route'
+import { boardPlaylist, nextLevel, routeRows, type RouteRow } from './route'
 import { animaticState, cameraUsers, castOf, type StageLite } from './scene'
 import { clampLength, sceneLength, sceneSeconds } from '../../suites/stage/sceneLength'
 import { levelOf, placeOfHash, suiteOf } from './shotsStore'
@@ -108,5 +108,15 @@ describe('Record and the scene\'s length (C3, D181)', () => {
     expect(sceneSeconds({ length: 36, range: { start: 0, end: 10 }, size: { fps: 24 } })).toBe('1.5')
     expect(clampLength({ length: 120, range: { start: 0, end: 150 }, size: { fps: 24 } }, 2)).toBe(151)
     expect(clampLength({ length: 120, range: { start: 0, end: 10 }, size: { fps: 24 } }, 99)).toBe(480)
+  })
+})
+
+describe('the storyboard plays (C4, 04 §4.4)', () => {
+  const row = (id: string, v: Partial<ShotVersion>, n: number): RouteRow => ({ shot: shot(id, null, v), node: null, group: null, n, label: id, v: shot(id, null, v).versions[0], thumb: null, dots: { clay: 'na', performance: 'na', final: 'na' } })
+  it("plays each card's current picture in order — the render, else the take, else the animatic, else the still — for the shot's length", () => {
+    const rows = [row('a', { clip_id: 'clp_r' }, 1), row('b', { clip_id: 'clp_t' }, 2), row('c', { animatic: { clip_id: 'clp_a', asset_id: 'ast_a', frames: 48, fps: 24, size: {}, stage_id: 'stg', stage_revision: 1, recorded_at: '' } } as Partial<ShotVersion>, 3), row('d', { frame_asset_id: 'ast_f' }, 4), row('e', {}, 5)]
+    const clips = { clp_r: { asset_id: 'ast_r', frames: 241, fps: 24, model_id: 'composition' }, clp_t: { asset_id: 'ast_t', frames: 161, fps: 16, model_id: 'test-animate' } }
+    const list = boardPlaylist(rows, clips, { a: { length_s: 10.04 }, b: { length_s: 10.06 } })
+    expect(list.map((x) => [x.n, x.kind, x.asset, x.seconds])).toEqual([[1, 'final', 'ast_r', 10.04], [2, 'performance', 'ast_t', 10.06], [3, 'animatic', 'ast_a', 2], [4, 'still', 'ast_f', 2], [5, 'none', null, 2]])
   })
 })

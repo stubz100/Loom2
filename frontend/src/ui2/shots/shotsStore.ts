@@ -5,7 +5,7 @@
 import { create } from 'zustand'
 import { http, unwrap } from '../../api/client'
 import { navigate, onNavigate, type Place } from '../../frame/router'
-import { useSession } from '../../store/session'
+import { askText, useSession } from '../../store/session'
 import { useStory } from '../../suites/story/storyStore'
 import type { FinalOwed } from '../../api/types'
 
@@ -52,6 +52,10 @@ interface ShotsState {
   owed: Owed | null
   toggleWords: () => void
   setWordsFor: (w: WordsFor) => void
+  /** C4 (04 §4.4): the storyboard playing — each card's current picture in order (the final, else the performance, else the animatic). */
+  playing: boolean
+  playingShot: string | null
+  setPlaying: (on: boolean) => void
 }
 
 /** U6b–c (04 §4): a shot's method is its version's (`ShotVersion.method`), shown as Performance's card — Layered the Final shot card (the
@@ -105,13 +109,19 @@ async function followOwed(): Promise<void> {
 }
 
 /** The card picked becomes the open version's method (a final version keeps its own). */
-async function keepMethod(card: Card): Promise<void> {
+const keepMethod = (card: Card): Promise<void> => setShotMethod(METHOD[card])
+
+export const METHOD_LABEL: Record<Method, string> = { layered: 'Layered', one_pass: 'One pass', start_still: 'From the start still', speaking: 'Speaking' }
+export const METHODS: Method[] = ['layered', 'one_pass', 'start_still']
+/** C4 (04 §4.4, the performance row's method ▾): the open version's method written on its record; Performance's card follows when open. */
+export async function setShotMethod(method: Method): Promise<void> {
   const st = useStory.getState(), s = st.shot(), v = st.shotVersion()
-  if (!s || !v || v.state !== 'open' || (v.method ?? 'layered') === METHOD[card]) return
+  if (!s || !v || v.state !== 'open' || (v.method ?? 'layered') === method) return
   try {
-    const next = await unwrap(http.PATCH('/story/shots/{sid}', { params: { path: { sid: s.id } }, body: { revision: s.revision, versions: [{ id: v.id, method: METHOD[card] }] } as never }))
+    const next = await unwrap(http.PATCH('/story/shots/{sid}', { params: { path: { sid: s.id } }, body: { revision: s.revision, versions: [{ id: v.id, method }] } as never }))
     useStory.setState({ shots: useStory.getState().shots.map((x) => (x.id === next.id ? next : x)) })
-  } catch { /* the card stays; the method is written with the next pick */ }
+    if (useShots.getState().level === 'performance') { const { useAnimRoute } = await import('../../suites/animate/routeStore'); useAnimRoute.getState().set(CARD[method] ?? 'final') }
+  } catch (e) { useSession.getState().toast(`Method: ${(e as { detail?: string }).detail ?? e}`, 'error') }
 }
 
 /** U6b: Performance and Final act on this shot (F41) — Animate's For chip is the open shot version, its method's card is open, and the
@@ -142,6 +152,7 @@ async function openShotFinal(): Promise<void> {
   await useFinals.getState().load()
   const { finals, compositions } = useFinals.getState()
   const mine = finals.filter((f) => f.shot_id === s.id && (!f.shot_version || f.shot_version === v.id) && compositions[f.id]).sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0]
+  if (!mine && useComposition.getState().finalId) useComposition.getState().close()   // C4 (P23): not the last shot's composition under this shot's name
   if (mine && useComposition.getState().finalId !== mine.id) await useComposition.getState().open(mine.id)
   if (mine && !(useComposition.getState().comp?.audio ?? []).length) await useComposition.getState().layLines()   // U6c: the shot's lines on their lanes by themselves
 }
@@ -207,6 +218,8 @@ export const useShots = create<ShotsState>()((set, get) => ({
   wordsOpen: false, wordsFor: 'still', owed: null,
   toggleWords: () => set({ wordsOpen: !get().wordsOpen }),
   setWordsFor: (wordsFor) => set({ wordsFor }),
+  playing: false, playingShot: null,
+  setPlaying: (playing) => set({ playing, ...(playing ? {} : { playingShot: null }) }),
 }))
 
 /** Mounted with the Shots layer: once a project is open, the Flow, the shots and the board's facts, then the place from the hash — unless a
@@ -245,14 +258,19 @@ export function startShots(): () => void {
   return () => { off(); follow() }
 }
 
-/** U4 (G12): a new Shot after the open one — in a new scene, or the same scene as the shot before (a new camera on its stage). */
+/** U4 (G12): a new Shot after the open one — in a new scene, or the same scene as the shot before (a new camera on its stage). C4 (P12): it
+ *  is named as it is made (the storyboard's card, the Flow's node and the scene after it); P25: the server wires a Start before the first. */
 export async function newShot(scene: 'new' | 'same'): Promise<void> {
   const st = useStory.getState()
   const after = st.shot()?.owner_node ?? null
   const at = useShots.getState().level === 'flow' ? st.addAt : null                 // W30: the Flow canvas's right-click point — read before the await (the menu's close clears it)
+  const n0 = st.shots.length + 1
+  const title = await askText({ title: scene === 'same' ? 'New shot in the same scene' : 'New shot in a new scene', placeholder: 'shot name', initial: `Shot ${n0}`,
+    text: scene === 'same' ? "Coverage: a new camera on this shot's scene, copied from its camera." : "A Shot after this one with a scene and a stage of its own — the place's set when the shot before has a place." })
+  if (!title?.trim()) return
   if (scene === 'same') await flushClay()
   try {
-    const n = await unwrap(http.POST('/story/flow/shots', { body: { title: '', after, scene, ...(at ? { x: at.x, y: at.y, connect: false } : {}) } }))
+    const n = await unwrap(http.POST('/story/flow/shots', { body: { title: title.trim(), after, scene, ...(at ? { x: at.x, y: at.y, connect: false } : {}) } }))
     await Promise.all([st.loadFlow(), st.loadShots()])
     void useStory.getState().loadBoard()
     if (at) { useStory.getState().selectNode(n.id); return }                         // W29: it stays in the Flow, the new node selected, unwired

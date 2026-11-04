@@ -134,7 +134,7 @@ registerCommands([
   { id: 'story.episode.new', scope: 'story', label: 'New cut…', icon: Plus, placement: ['panel', 'context'],
     run: () => void askText({ title: 'New cut', text: 'One cut of the episode: a single lane at the project frame rate; shots and clips come from the bins.', placeholder: 'cut name', initial: 'Cut' }).then((n) => { if (n?.trim()) void sq().create(n.trim()) }) },
   // D125 (S13, S14): the cut from the Flow, its changed shots, one export for Resolve
-  { id: 'story.episode.assemble', scope: 'story', label: 'Assemble from the Flow…', icon: Workflow, hint: 'a new cut of one route: every shot in order at its approved take, stamped — the sheet asks at each Choice',
+  { id: 'story.episode.assemble', scope: 'story', label: 'Assemble from the Flow…', icon: Workflow, hint: "a new cut of one route from the Flow's Start (a storyboard's Flow gets one with its first shot, C4): every shot in order at its approved take, stamped — the sheet asks at each Choice; no cut need be open first",
     placement: ['panel', 'context'], when: () => !!useStory.getState().flowGraph?.start, run: () => sq().setAssembleFor({ tlId: null }) },
   { id: 'story.episode.reassemble', scope: 'story', label: 'Assemble again…', icon: Workflow, hint: 'the cut rebuilt from its route (the picks can change); trims and dissolves stay where the same shots follow each other',
     placement: ['inspector', 'context'], when: () => hasSeq() && !!sq().current?.route && !!useStory.getState().flowGraph?.start, run: () => sq().setAssembleFor({ tlId: sq().current!.id }) },

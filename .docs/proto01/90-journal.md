@@ -16319,3 +16319,37 @@ CPU, through the library that exists — and the only models that do it today ar
 source in the Animations library waits for a model on open motion data; until then the story motions are *Save as animation…* and the CC0
 libraries (Q7's fallback). The weights are deleted; the spike venv (1.1 GB, no weights) stays under engine/spikes/out/ until the next clean
 of that folder; the script is kept for the day a clean model appears.
+
+## 2026-11-04 09:21 — C4 (D181, propo02 04 §4.4; 05 Q8, Q9; findings P12, P13, P23–P25): the shot page's ledger and the storyboard's play
+
+**Built.** *The ledger (Q8).* The Shots header is the shot's ledger — one row a thing, name · state · one fact · one verb: description, lines,
+scene, cast (as they were), animatic (C3), and now **performance** (the method as a ▾ that writes `ShotVersion.method` — `setShotMethod`,
+Performance's card following when open; the take in use with its frames and its FaceSim identity where the clip has one; what the final
+still owes with *Perform ▶ · ≈ N min*; *takes ▸* to the Performance level) and **final** (the newest final made for the version — its layers
+done, assembled, or the render as the shot's clip with its time and size — marked final or not; *open the composition ▸* / *Final ▸*;
+*Mark final ✓* when the clip is there). The row's editor stays beneath it: the level's column (Performance's cards and clips, Final's
+layers) is what the row's verb opens — read as the row's editor at the level, not folded into the centre (Q8's wording), the viewer keeps
+the centre. The level dots on the card are the rows' states as before. *The storyboard plays (04 §4.4).* ▶ Play on the strip (and the
+strip's right-click): `boardPlaylist` walks the route's cards and shows each one's current picture over the centre for the shot's length —
+the final's render where there is one (the version's clip when it is a composition's render), else the performance's take, else the
+animatic, else the frame still, else a word — a video for its own length, a still for the card's; the card playing is marked on the
+strip; next ▸, ■ Stop, the end stops it. ArtCraft's filmstrip on loom2's records: the animatic cut before Episode has anything. *The Flow
+behind a toggle (Q9)* is read as what the rail already does: the storyboard strip is the main view at every level and the Flow canvas is
+the rail's Flow level; *the route from the order* is the server's now (P25). *The fixes carried.* P12: a shot is named as it is made —
+*＋ New shot* asks the name (Shot N offered), the card, the node and the scene take it. P25: a Flow made from the storyboard has a Start —
+`make_shot` makes one and wires it to the chain's first shot when the Flow has none, so *Assemble from the Flow…* has a route (its hint says
+where the route begins and that no cut need be open, P24; the command never needed a cut since U7b). P13: *A new scene at a World place* on
+a shot whose scene was the bare stage *New shot* made deletes that bare stage once nothing looks through it (`_drop_bare_stage`: no objects,
+no version, no scene). P23: the Final level clears its composition when the shot opened has none (`useComposition.close`), so a shot never
+shows another shot's layers under its name. P17 was C0's. Two layout faults the taller header brought, found by the e2e and fixed in the
+product: the ledger scrolls within half the left column (`.w-head` bounded) so the level's editor keeps its room at any window height, and a
+thing scrolled into view in a section lands below its sticky head, not under it (`scroll-margin-top`).
+
+**Checked.** Offline 816 (814 + 2: test_shot_page_c4 — the Start wired for a storyboard's Flow and chained after, no bare stage left behind; two U2 tests' edge sets gained the Start); Vitest 660 + 3 skipped (shots.test.ts: the playlist; the command audit found Play owed a right-click home — the
+storyboard's menu); typecheck, build and lint clean (61 warnings, as before); agent docs 9 / 0; settings audit 322 / 0 with 13 allowed; model
+literals 0. The e2e: the C4 scenario (New shot asks a name, the Flow's Start, the performance row's method ▾ writing one_pass, the final row's Final ▸ to the level, Play over the centre with the card marked, Stop) with the Shots scenario 16 s alone; the whole suite twice: 86 + 3 — one real: the taller header left the level's editor no room at the e2e's window height and the foot covered the column's button (the ledger now scrolls within half the column; a thing scrolled into view lands below a section's sticky head), two load flakes (the recipe graph's Clay rail, the skeleton bench's drag; both pass alone) — then 89 / 89 in 7.1 min; after it the rows' test ids renamed off the centre's, the story dev hook extended with the clip and card maps and the player loading the board as it mounts, the five touched scenarios 28 s alone.
+
+**Live on the walk's project:** the ledger on shot 1 — *performance* Layered ▾ · the render · 241 f at 24 fps · takes ▸; *final* rendered 10:27 · 848×480 · not marked · open the composition ▸ · Mark final ✓; *animatic* current — the method menu (Layered ✓ · One pass · From the start still); ▶ Play on the strip: shot 1's render over the centre with its card marked, next ▸ shot 2's render, ■ Stop (the first run showed shot 2 empty: its clip not in the client yet at the click — the player now loads the board as it mounts, and the second run played both); no page errors; two pictures sent.
+
+**Next:** C6 (the Bin's kinds: the vocabulary in the orchestrator, the tree's third level with counts, sequences as one tile, the kinds' verbs,
+the drawer) — the last wave of propo02 04 §7; then the author's click-through.

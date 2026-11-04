@@ -1,6 +1,6 @@
 // U4 (D157, proto01_UI2 04 §8): Shots' commands (rule 3: every action a command with a mouse home; keys are accelerators). They act on the
 // shot the header shows (the Story store's selection) and the level the rail shows.
-import { Box, Clapperboard, GitBranch, List, MonitorPlay, Plus, SquarePlus, Text, Workflow } from 'lucide-react'
+import { Box, Clapperboard, GitBranch, List, MonitorPlay, Play, Plus, SquarePlus, Text, Workflow } from 'lucide-react'
 import { registerCommands } from '../../frame/commands'
 import { useSession } from '../../store/session'
 import { useStory } from '../../suites/story/storyStore'
@@ -34,6 +34,11 @@ registerCommands([
     run: () => { const o = useShots.getState().owed; if (!o) return
       void import('../../suites/stage/finalShot').then(({ useFinals }) => useFinals.getState().performOwed(o.fid)) } },
   { id: 'shots.toFinal', scope: 'shots', label: 'To Final ▸', icon: MonitorPlay, placement: ['panel'], when: () => !!shot(), run: level('final') },
+  // C4 (04 §4.4): the storyboard plays — each card's current picture in order, the animatic cut before Episode has anything
+  { id: 'shots.board.play', scope: 'shots', label: 'Play the storyboard', icon: Play, placement: ['strip', 'context'], when: () => open() && !useShots.getState().playing,
+    hint: "every card's current picture in order — the final where there is one, else the performance, else the animatic — for the shot's length",
+    run: () => useShots.getState().setPlaying(true) },
+  { id: 'shots.board.stop', scope: 'shots', label: 'Stop', icon: Play, placement: ['strip'], when: () => useShots.getState().playing, run: () => useShots.getState().setPlaying(false) },
   // G12 (04 §7): a new shot after the open one
   { id: 'shots.new.scene', scope: 'shots', label: 'New shot in a new scene', icon: SquarePlus, placement: ['strip', 'context'], when: open,
     hint: 'a Shot node after this one, with a scene and a stage of its own — the place\'s set when the shot before has a place',

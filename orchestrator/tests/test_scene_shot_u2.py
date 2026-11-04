@@ -93,8 +93,9 @@ def test_new_shot_in_one_call(tmp_path: Path):
         vc = cl.get(f"/story/shots/{cover['shot_id']}").json()["versions"][0]
         assert vc["stage_id"] == stage.id and vc["camera_id"] != v1["camera_id"] and len(StageStore(ws).get(stage.id).cameras) == 2
         assert cover["scene_id"] == first["scene_id"] and third["scene_id"] != first["scene_id"]
-        edges = {(e["from"], e["to"]) for e in cl.get("/story/flow").json()["graph"]["edges"]}
-        assert edges == {(first["id"], cover["id"]), (cover["id"], third["id"])}          # put between the shot and the one it led to
+        g = cl.get("/story/flow").json()["graph"]
+        edges = {(e["from"], e["to"]) for e in g["edges"]}
+        assert g["start"] and edges == {(g["start"], first["id"]), (first["id"], cover["id"]), (cover["id"], third["id"])}   # put between the shot and the one it led to; C4 (P25): a Start before the first
         assert cl.post("/story/flow/shots", json={"after": "node_nope"}).status_code == 404
         bare = cl.post("/story/flow/nodes", json={"type": "shot", "title": "No stage"}).json()
         assert cl.post("/story/flow/shots", json={"after": bare["id"], "scene": "same"}).status_code == 422   # no scene on a stage to share
@@ -108,9 +109,10 @@ def test_a_new_shot_from_the_flow_canvas_lands_where_it_was_asked_and_stands_alo
         assert cl.post("/project", json={"path": str(tmp_path / "p"), "name": "p", "size_cap_gb": 10}).status_code == 200
         first = cl.post("/story/flow/shots", json={"title": "The seal"}).json()
         nxt = cl.post("/story/flow/shots", json={"title": "Choice", "after": first["id"]}).json()
-        before = {(e["from"], e["to"]) for e in cl.get("/story/flow").json()["graph"]["edges"]}
+        g0 = cl.get("/story/flow").json()["graph"]
+        before = {(e["from"], e["to"]) for e in g0["edges"]}
         here = cl.post("/story/flow/shots", json={"after": first["id"], "scene": "same", "x": 900, "y": 620, "connect": False}).json()
         g = cl.get("/story/flow").json()["graph"]
-        assert {(e["from"], e["to"]) for e in g["edges"]} == before == {(first["id"], nxt["id"])}   # The seal → Choice kept
+        assert {(e["from"], e["to"]) for e in g["edges"]} == before == {(g0["start"], first["id"]), (first["id"], nxt["id"])}   # Start → The seal → Choice kept
         node = next(n for n in g["nodes"] if n["id"] == here["id"])
         assert (node["x"], node["y"]) == (900, 620) and here["scene_id"] == first["scene_id"]

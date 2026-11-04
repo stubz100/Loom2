@@ -32,5 +32,25 @@ export function routeRows(x: RouteInput): RouteRow[] {
   })
 }
 
+export interface PlayItem { shot: string; n: number; label: string; kind: 'final' | 'performance' | 'animatic' | 'still' | 'none'; asset: string | null; seconds: number }
+
+/** C4 (04 §4.4, "the storyboard plays"): each card's current picture in the route's order — the final's render where there is one (the
+ *  version's clip when it is a composition's render), else the performance's take, else the animatic, else the frame still — for the
+ *  shot's length (the card's, else the picture's own, else two seconds). ArtCraft's filmstrip on loom2's records: the animatic cut before
+ *  Episode has anything. */
+export function boardPlaylist(rows: RouteRow[], clipsById: Record<string, Pick<Clip, 'asset_id' | 'frames' | 'fps' | 'model_id'>>, cards: Record<string, Pick<ShotCard, 'length_s'>>): PlayItem[] {
+  return rows.map((r) => {
+    const v = r.v
+    const clip = v.clip_id ? clipsById[v.clip_id] : undefined
+    const a = (v as { animatic?: { asset_id: string | null; frames: number; fps: number } | null }).animatic
+    const length = cards[r.shot.id]?.length_s ?? null
+    const secs = (own: number | null) => Math.max(0.5, length ?? own ?? 2)
+    if (clip?.asset_id) return { shot: r.shot.id, n: r.n, label: r.label, kind: clip.model_id === 'composition' ? 'final' : 'performance', asset: clip.asset_id, seconds: secs(clip.fps ? clip.frames / clip.fps : null) }
+    if (a?.asset_id) return { shot: r.shot.id, n: r.n, label: r.label, kind: 'animatic', asset: a.asset_id, seconds: secs(a.fps ? a.frames / a.fps : null) }
+    if (v.frame_asset_id) return { shot: r.shot.id, n: r.n, label: r.label, kind: 'still', asset: v.frame_asset_id, seconds: secs(null) }
+    return { shot: r.shot.id, n: r.n, label: r.label, kind: 'none', asset: null, seconds: secs(null) }
+  })
+}
+
 /** The level a shot opens on from the storyboard: the first one it still owes (Clay first), else its Final. */
 export const nextLevel = (d: Dots): ShotLevel => d.clay !== 'done' ? 'clay' : d.performance !== 'done' && d.performance !== 'na' ? 'performance' : 'final'

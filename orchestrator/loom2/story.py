@@ -1967,6 +1967,13 @@ class _FlowMixin:
                 self._join([n.id], scene_id)
             self._scene_stage(scene_id, st.id, only_if_none=True)
             self.set_source(n.shot_id, "v1", st.id, cam.id, st.revision)    # type: ignore[attr-defined, arg-type]
+            if connect and not any(r.type == "start" for r in self._records().values()):   # C4 (P25): a Flow made from the storyboard has a Start — the route Episode walks begins there
+                g = self.flow_graph()
+                head = prev.id if prev is not None and not any(e.to == prev.id for e in g.edges) else n.id   # the chain's first node, else this one
+                hx, hy = next(((p.x, p.y) for p in g.nodes if p.id == head), (x, y))
+                start = self.create_node("start", "Start", hx - 340.0, hy, with_shot=False)
+                g = self.flow_graph()
+                self.put_graph({"revision": g.revision, "edges": [*[e.model_dump(by_alias=True) for e in g.edges], {"from": start.id, "port": "out", "to": head}]})
             if connect and prev is not None and prev.type in ("start", "hub", "shot", "action"):
                 g = self.flow_graph()
                 nxt = [e for e in g.edges if e.from_ == prev.id and e.port == "out"]
@@ -2004,12 +2011,30 @@ class _FlowMixin:
             if place_id and (prof is None or prof.cls != "place"):
                 raise ValueError(f"{place_id} is not a World place")
             name = holder.title.strip() or (prof.name if prof is not None and prof.cls == "place" else "Scene")
+            old_stage = holder.shot.version(vid).stage_id
             st = StageStore(self.ws).scene_stage(name, prof if prof is not None and prof.cls == "place" else None)   # type: ignore[attr-defined]
             if place_id and holder.place_id != place_id:
                 self.patch_node(holder.id, {"place_id": place_id})
             s = self.create_scene(name, [holder.id])
             self._scene_stage(s.id, st.id)
-            return self.set_source(sid, vid, st.id, st.cameras[0].id, st.revision)
+            out = self.set_source(sid, vid, st.id, st.cameras[0].id, st.revision)
+            if old_stage and old_stage != st.id:
+                self._drop_bare_stage(old_stage)                              # C4 (P13): the bare stage the shot leaves goes with it
+            return out
+
+    def _drop_bare_stage(self, stage_id: str) -> bool:
+        """C4 (propo02 P13): a stage with nothing on it (a camera only) that no shot version looks through and no scene names any more is
+        deleted — *New shot in a new scene* then *A new scene at a World place* left one behind per shot."""
+        from .stages import StageStore
+        stages = StageStore(self.ws)                                          # type: ignore[attr-defined]
+        st = stages.get(stage_id)
+        if st is None or st.purpose != "stage" or st.objects:
+            return False
+        if any(v.stage_id == stage_id for r in self._records().values() if r.shot is not None for v in r.shot.versions):
+            return False
+        if any(sc.stage_id == stage_id for sc in self.scene_book().scenes):
+            return False
+        return stages.delete(stage_id)
 
     def create_scene(self, name: str, node_ids: list[str]) -> Scene:
         """A scene around the nodes (they leave the scene they were in)."""

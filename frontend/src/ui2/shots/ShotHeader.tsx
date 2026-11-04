@@ -10,9 +10,9 @@ import { lineSpans, linesOutlast } from '../../suites/stage/tracks'
 import { useWorld } from '../world/worldStore'
 import { api } from '../../api/client'
 import { animaticState, cameraUsers, castOf, extendRange, rescene, setRange, useRouteRows, useShotStage, type CastMember } from './scene'
-import { flushClay, recordInClay, useShots } from './shotsStore'
+import { flushClay, METHOD_LABEL, METHODS, newestFinal, recordInClay, setShotMethod, useShots } from './shotsStore'
 import { ShotWords } from './ShotWords'
-import type { ShotVersion } from '../../api/types'
+import type { Shot, ShotVersion } from '../../api/types'
 
 const LinesEditor = lazy(() => import('../../suites/story/StoryParts').then((m) => ({ default: m.LinesEditor })))
 
@@ -55,6 +55,43 @@ function AnimaticRow({ a, stage, open }: { a: NonNullable<ShotVersion['animatic'
       </> : <span className="w-val">none yet</span>}
       {open && <button className="link" onClick={() => void recordInClay()} title="Clay's Record mode on the shot's scene: Record ▶ writes the animatic">{a ? 'Record again ▸' : 'Record ▸'}</button>}
       {playing && a?.asset_id && <video className="s-animatic-player" src={api.assetUrl(a.asset_id)} controls autoPlay loop />}
+    </span>
+  )
+}
+
+/** C4 (D181, 04 §4.4; Q8): the ledger's *performance* row — the method (▾ sets it), the take in use with its identity, what the final owes;
+ *  Perform ▶ with its minutes, takes ▸ (the Performance level, its editor beneath). */
+function PerformanceRow({ v, open }: { v: ShotVersion; open: boolean }) {
+  const clip = useStory((st) => (v.clip_id ? st.clipsById[v.clip_id] : undefined))
+  const owed = useShots((x) => x.owed)
+  const method = (v.method ?? 'layered') as keyof typeof METHOD_LABEL
+  const ident = clip?.identity && typeof (clip.identity as { mean?: unknown }).mean === 'number' ? ` · identity ${((clip.identity as { mean: number }).mean).toFixed(2)}` : ''
+  const take = clip ? `${clip.model_id === 'composition' ? 'the render' : 'take'} · ${clip.frames} f at ${clip.fps} fps${ident}` : v.clip_id ? 'a take' : 'no take yet'
+  const items = (): MenuItem[] => METHODS.map((m) => ({ label: METHOD_LABEL[m], checked: method === m, disabled: !open, run: () => void setShotMethod(m) }))
+  return (
+    <span className="s-ledger" data-testid="shots-row-performance" data-method={method}>
+      <MenuButton label={METHOD_LABEL[method]} items={items} text />
+      <span className="w-val">· {take}{owed?.queued ? ` · ${owed.queued} owed` : ''}</span>
+      {owed?.queued ? <CommandButton id="shots.performOwed" text label={`Perform ▶ · ≈ ${owed.minutes} min`} /> : null}
+      <button className="link" onClick={() => useShots.getState().setLevel('performance')} title="The Performance level: the takes, the method's card, the clips">takes ▸</button>
+    </span>
+  )
+}
+
+/** C4 (04 §4.4): the ledger's *final* row — the newest final made for the version (its layers, its assembly), the render as the shot's clip,
+ *  marked or not; Render ▶ and open the composition ▸ at the Final level, Mark final ✓. */
+function FinalRow({ s, v, open }: { s: Shot; v: ShotVersion; open: boolean }) {
+  const finals = useStory((st) => st.boardFinals)
+  const clip = useStory((st) => (v.clip_id ? st.clipsById[v.clip_id] : undefined))
+  const f = newestFinal(finals as { id: string; shot_id?: string | null; shot_version?: string | null; created_at: string; revision?: number; layers: { status: string }[]; clip_id: string | null; assembled_at?: string | null }[], s.id, v.id)
+  const rendered = clip && clip.model_id === 'composition' ? `rendered ${new Date(clip.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · ${clip.w}×${clip.h}` : null
+  const fact = rendered ?? (f ? (f.clip_id ? 'assembled, not rendered' : `${f.layers.filter((l) => l.status === 'done').length} / ${f.layers.length} layers`) : 'no final yet')
+  const marked = v.state === 'final'
+  return (
+    <span className="s-ledger" data-testid="shots-row-final" data-state={marked ? 'marked' : rendered ? 'rendered' : f ? 'made' : 'none'}>
+      <span className="w-val">{fact} · {marked ? 'marked final ✓' : 'not marked'}</span>
+      <button className="link" onClick={() => useShots.getState().setLevel('final')} title={f ? "The Final level: the composition's layers, blends and mattes; Render the finished shot ▶" : 'The Final level — Performance makes the final shot first'}>{f ? 'open the composition ▸' : 'Final ▸'}</button>
+      {open && v.clip_id && !marked && <CommandButton id="story.shot.finalize" text label="Mark final ✓" />}
     </span>
   )
 }
@@ -118,6 +155,10 @@ export function ShotHeader() {
           {open && level !== 'clay' && <CommandButton id="shots.level.clay" text label="Add in Clay ▸" />}
         </span>
       </div>}
+      {v.stage_id && <div className="w-field"><span>performance <Help text="How the moving picture is made — Layered (the scene split into layers, each character performed and matted), One pass (the stage's sequence animated from a still), From the start still — the take in use and what the final still owes. ▾ sets the method; takes ▸ opens the Performance level." /></span>
+        <PerformanceRow v={v} open={open} /></div>}{/* C4 (04 §4.4): the ledger */}
+      {v.stage_id && <div className="w-field"><span>final <Help text="The newest final made for this version — its layers, its assembly, the render as the shot's clip — and whether the shot is marked final (the Flow and the Episode bind that clip)." /></span>
+        <FinalRow s={s} v={v} open={open} /></div>}
       {v.stage_id && <div className="w-field"><span>animatic <Help text="Record ▶ in Clay's Record mode writes the scene's lit clay through the shot's camera over its range as a clip, on the CPU: the storyboard plays it and Episode cuts it until a performance replaces it. Stale: the scene changed since it was recorded." /></span>
         <AnimaticRow a={v.animatic ?? null} stage={stage ? { id: stage.id, revision: stage.revision } : null} open={open} /></div>}{/* C3 (D181) */}
       <ShotWords stageRev={stage?.revision} />

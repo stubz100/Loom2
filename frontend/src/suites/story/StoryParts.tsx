@@ -62,7 +62,7 @@ const SkeletonParts = lazy(() => import('../stage/SkeletonBench').then((m) => ({
 
 function devHook(): Record<string, unknown> {
   const w = window as unknown as { __loom2Story?: Record<string, unknown> }
-  w.__loom2Story ??= { state: () => ({ world: sy().world, selected: sy().selected, section: sy().section, profileId: sy().profileId, versionId: sy().versionId, refPage: sy().refPage, candPage: sy().candPage }),
+  w.__loom2Story ??= { state: () => ({ world: sy().world, selected: sy().selected, section: sy().section, profileId: sy().profileId, versionId: sy().versionId, refPage: sy().refPage, candPage: sy().candPage, shotId: sy().shotId, clipsById: Object.keys(sy().clipsById), cards: Object.keys(sy().cards) }),   // C4: what the storyboard's play reads
     load: () => sy().load(), flush: () => sy().flush(),
     addStyle: (name?: string) => sy().addStyle(name), setStyle: (id: string, patch: Partial<WorldStyle>) => sy().setStyle(id, patch), edit: (patch: Record<string, unknown>) => sy().edit(patch as never),
     // SY1

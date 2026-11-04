@@ -1,14 +1,14 @@
 // U4 (D157, proto01_UI2 04 §2): Shots — what happens, shot by shot, refined level by level. The storyboard strip shows the route's shots
 // with their level dots; the rail is Flow, then the open shot's Clay (C0, D181: a jump to Clay's layer, the scene through the shot's camera)
 // · Performance · Final; the left column is the shot's header (§2.1) and the level's sections; the centre the level's viewer.
-import { lazy, Suspense, useEffect } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { api } from '../../api/client'
 import { CommandButton, MenuButton } from '../../frame/CommandButton'
 import { showMenu } from '../../frame/ContextMenu'
 import { command, isEnabled, runCommand, type MenuItem } from '../../frame/commands'
 import { useSession } from '../../store/session'
 import { useStory } from '../../suites/story/storyStore'
-import { DOT } from './route'
+import { boardPlaylist, DOT, type PlayItem } from './route'
 import { useRouteRows } from './scene'
 import { ShotHeader } from './ShotHeader'
 import { LEVELS, owedTitle, startShots, useShots } from './shotsStore'
@@ -34,22 +34,48 @@ const FinalStrip = lazy(() => import('../../suites/animate/FinalSuite').then((m)
 const FinalStage = lazy(() => import('../../suites/animate/FinalSuite').then((m) => ({ default: m.FinalSuite.Stage })))
 const FinalFoot = lazy(() => import('../../suites/animate/FinalSuite').then((m) => ({ default: m.FinalSuite.PrimaryAction! })))
 
-const NEW_SHOT: MenuItem[] = [{ cmd: 'shots.new.scene' }, { cmd: 'shots.new.same' }]
+const NEW_SHOT: MenuItem[] = [{ cmd: 'shots.new.scene' }, { cmd: 'shots.new.same' }, { sep: true }, { cmd: 'shots.board.play' }]   // C4: the storyboard's right-click plays it too
+
+/** C4 (04 §4.4, "the storyboard plays"): the cards' current pictures in order over the centre — a video plays for its length, a still
+ *  holds for the shot's; the card playing is marked on the strip; ■ or the end stops it. */
+function BoardPlayer() {
+  const route = useRouteRows()
+  const clipsById = useStory((s) => s.clipsById)
+  const cards = useStory((s) => s.cards)
+  const [i, setI] = useState(0)
+  const list = boardPlaylist(route, clipsById, cards)
+  const item: PlayItem | undefined = list[i]
+  useEffect(() => { if (item && item.kind !== 'final' && item.kind !== 'performance' && item.kind !== 'animatic') { const t = window.setTimeout(() => setI((k) => k + 1), item.seconds * 1000); return () => window.clearTimeout(t) } }, [i, item])
+  useEffect(() => { void useStory.getState().loadBoard() }, [])                      // the cards' clips and lengths, fresh for the play
+  useEffect(() => { if (!item) useShots.getState().setPlaying(false) }, [item])
+  useEffect(() => { useShots.setState({ playingShot: item?.shot ?? null }) }, [item])
+  if (!item) return null
+  const video = item.kind === 'final' || item.kind === 'performance' || item.kind === 'animatic'
+  return (
+    <div className="s-player" data-testid="shots-player" data-kind={item.kind} data-n={item.n}>
+      {video && item.asset ? <video key={`${item.shot}:${item.asset}`} src={api.assetUrl(item.asset)} autoPlay muted onEnded={() => setI((k) => k + 1)} onError={() => setI((k) => k + 1)} />
+        : item.asset ? <img key={item.shot} src={api.thumbUrl(item.asset, 1024)} alt="" /> : <div className="s-player-empty">{item.n} · {item.label} — nothing to show yet</div>}
+      <div className="s-player-bar"><span>{item.n} · {item.label} · {item.kind === 'none' ? 'empty' : item.kind}</span><span className="spacer" />
+        <button type="button" onClick={() => setI((k) => k + 1)} title="The next card">next ▸</button><CommandButton id="shots.board.stop" text label="■ Stop" /></div>
+    </div>
+  )
+}
 
 function Storyboard() {
   const route = useRouteRows()
   const shotId = useStory((s) => s.shotId)
+  const playingShot = useShots((s) => s.playingShot)
   return (
     <div className="s-board" data-testid="shots-storyboard" onContextMenu={(e) => { if (e.target === e.currentTarget) showMenu(e, NEW_SHOT) }}>
       {route.map((r) => (
-        <button key={r.shot.id} className={`s-card${shotId === r.shot.id ? ' active' : ''}`} data-id={r.shot.id} title={r.group ? `${r.group} · ${r.label}` : r.label}
+        <button key={r.shot.id} className={`s-card${shotId === r.shot.id ? ' active' : ''}${playingShot === r.shot.id ? ' playing' : ''}`} data-id={r.shot.id} title={r.group ? `${r.group} · ${r.label}` : r.label}
           onClick={() => useShots.getState().open(r.shot.id)} onContextMenu={(e) => { useShots.getState().open(r.shot.id); showMenu(e, NEW_SHOT) }}>
           <span className="s-thumb">{r.thumb ? <img src={api.thumbUrl(r.thumb, 256)} alt="" draggable={false} /> : null}</span>
           <span className="s-name"><b>{r.n}</b> {r.label}</span>
           <span className="s-dots" title="Clay · Performance · Final">{DOT[r.dots.clay]}{DOT[r.dots.performance]}{DOT[r.dots.final]}</span>
         </button>
       ))}
-      <div className="s-new"><MenuButton label="＋ New shot" items={() => NEW_SHOT} text /></div>
+      <div className="s-new"><MenuButton label="＋ New shot" items={() => NEW_SHOT} text /><CommandButton id="shots.board.play" text label="▶ Play" /></div>
     </div>
   )
 }
@@ -84,6 +110,8 @@ function Centre() {
   const level = useShots((s) => s.level)
   const graph = useSession((s) => !!s.ui.graph)                                       // B2a: the Graph over the level (the rail's toggle)
   const v = useStory((st) => st.shotVersion())
+  const playing = useShots((s) => s.playing)
+  if (playing) return <div className="s-clay"><BoardPlayer /></div>                     // C4: the storyboard playing takes the centre
   if (level === 'flow') return <Suspense fallback={null}><ShotsFlow paneItems={[...NEW_SHOT, { sep: true }]} /></Suspense>
   if (!v?.stage_id) return <div className="s-clay"><div className="w-empty">No scene yet <CommandButton id="shots.scene.new" text /></div>{graph && <Suspense fallback={null}><AnimateGraph /></Suspense>}</div>   // the recipe needs no scene
   const [Strip, Stage] = level === 'performance' ? [PerfStrip, PerfStage] : [FinalStrip, FinalStage]

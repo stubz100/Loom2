@@ -1,6 +1,6 @@
 # proto01_rig · Rigging the hands, and humanoids that are not human
 
-Status: **proposal, 2026-11-04**, for the author's answers (§7). Nothing is built. Read from the code at `055315e`.
+Status: **proposal, 2026-11-04; answered the same day → D187** (§8). Spike E62 runs first. Read from the code at `055315e`.
 
 ## 1. The request
 
@@ -106,3 +106,22 @@ No weights to fetch: SDPose, BiRefNet and Wan Animate are installed.
 | **Q6** | The *Humanoid* switch (R6)? | Yes. |
 | **Q7** | Joints the rig does not have (a moving tail, wings, extra arms, digitigrade legs): now or later? | Later, a study of its own; attachments stay rigid until then. |
 | **Q8** | Run E62 (GPU jobs only, one at a time, no downloads)? | Yes, before any wave. |
+
+## 8. The author's answers (2026-11-04 19:34 → D187)
+
+> I like your proposal! Answers:
+> Q1: dedicated hand picture - should be included among the reference pictures, like the A-Pose, but also available as a sketching element
+> Q4: yes - also, should be separately promptable
+> Q8: yes
+
+| # | Answer |
+| --- | --- |
+| **Q1** | A dedicated hand picture, among the reference pictures like the A-pose — **and a framing in World › Sketches** for sketching hands freely. |
+| **Q2** | As recommended: one hand fitted and mirrored, *Unlink* for hands that differ. |
+| **Q3** | As recommended: the capsule clay hand. |
+| **Q4** | Yes, a finger count a hand — **and the hand picture has words of its own**, prompted apart from the character's sheet. |
+| **Q5** | As recommended: a claw length a hand, a finger may override it. |
+| **Q6** | As recommended: the *Humanoid* switch. |
+| **Q7** | As recommended: later, a study of its own. |
+| **Q8** | Yes: E62 before any wave. |
+

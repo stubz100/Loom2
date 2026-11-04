@@ -16437,3 +16437,21 @@ the whole suite twice — 90 + 1 (the new scenario: its last step read the job's
 first has no record to carry a pick, the second runs on the LoRA's base); the Stage clip and the performances are video models with their
 own cards (D121); the plate's keyframe Fills follow the plate's model only when it fills. **Next:** the author's click-through of the Still
 section and the cards on their own project; the W items still owed (W44 / W51 / W55).
+
+## 2026-11-04 14:39 — D186 follow-up: a clay still carries the scene's place
+
+**The author** (on the dev still sent at 13:56): "The still doesn't contain the background." True of every stage still so far: image 1 is the
+grey clay (the set as grey blocks), the references are the figures' pictures, and nothing names the place — the model invents a street of
+its own. The plate route never had the fault (O4: the scene's plate leads its deck; the shot's words carry the place's sheet), the Still did.
+
+**Built.** `mentions.stage_place_ref` (the queue runs it for every clay still, preview and submit alike — T8): the set picture of the Cast
+place the scene's set is bound to (`place_sets.set_picture`: the set picture, else the place's hero; a picture set its own picture) is
+prepended to the deck as image 2 with the note *the place — <name>: its walls, floor, light and materials* (`mention: place:<name>`), so the
+prompt says "Image 2 shows the place — Cobbled street: …" before the figures' images, which follow within the room left; not for the exact
+pose (image 2 is the character's), not twice (a re-run; the author's own picture of it in the deck wins). The Still's deck shows the slot
+(`place · <name>`, `data-testid="still-place-slot"`) before the author's own and the figures'; the plan's `ref_list` carries each
+reference's `mention` for it. Offline 824 (+ 1, the place first, said in the prompt, not twice, not for the exact pose, a picture set's
+picture; test_places_props_figures_d93c reads the ref list without its mention); typecheck and lint clean (61); the stage-related suites
+green (113 + the one adapted).
+
+**On the rig (Followed, the walk's shot 1, Klein 9B — the measured default):** through the product path (Shots › Performance › Stage clip › *Make a still ▸*): the Still's deck opened with the new slot *place · Cobbled street* as image 2 before Nora's four, the prompt's reads line saying "Image 2 shows the place — Cobbled street: its walls, floor, light and materials." after the clay lead; *Render frame ▶* re-rendered the stale passes and queued the still: job_b2f4d3e4 done in 48 s with the engine's start (Klein 9B's 12 s warm) — **the picture (ast_099dabd8) is the Cobbled street**: the bakery's window, the bookshop with its bell, the pharmacy's lettering, the shutters and the cobbles of the set picture, with the three figures as blocked (Nora in the green coat left, the man with his newspaper centre, the woman with her bags right). The dev still of 13:56 had invented a street; the fault was the Still's, not the model's. The picture sent.

@@ -220,5 +220,5 @@ def test_the_preview_route_resolves_bound_figures(tmp_path: Path):
         assert r.status_code == 200 and r.json()["objects"][0]["profile_id"] == mara["id"]
         recipe = {"kind": "stage_shot", "stage_id": s["id"], "camera_id": "cam", "passes": {"clay": "pending"}, "mentions": [{"profile_id": mara["id"], "figure": "fig_a"}]}
         pv = cl.post("/recipes/preview", json={"recipe": recipe}).json()
-        assert pv["params"]["figures"][0]["refs"] == [2] and pv["params"]["ref_list"] == [{"image": 2, "asset_id": hero, "figure": 1}]
+        assert pv["params"]["figures"][0]["refs"] == [2] and [{k: v for k, v in x.items() if k != "mention"} for x in pv["params"]["ref_list"]] == [{"image": 2, "asset_id": hero, "figure": 1}]   # D186: + mention
         assert "figure 1 is Mara (reference image 2), a wiry courier" in pv["params"]["prompt"]

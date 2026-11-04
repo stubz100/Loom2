@@ -182,7 +182,8 @@ def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = 
                   "image1": stage_pass_for(recipe.method), "width": recipe.width, "height": recipe.height, "refs": len(kept),
                   "max_refs": 1 if recipe.method == "refcontrol" else max(0, (spec.inputs.refs_max if spec else 1) - 1),
                   "refs_dropped": max(0, len(recipe.refs) - len(kept)), "bind_refs": stage_binds(recipe, spec), "figures": figs,
-                  "ref_list": [{"image": i + 2, "asset_id": r.asset_id, "figure": next((b["figure"] for b in figs if (i + 2) in b["refs"]), None)} for i, r in enumerate(kept)]}
+                  "ref_list": [{"image": i + 2, "asset_id": r.asset_id, "figure": next((b["figure"] for b in figs if (i + 2) in b["refs"]), None),
+                                "mention": r.mention} for i, r in enumerate(kept)]}   # D186 follow-up: the place's slot is told by its mention ("place:<name>")
         own = bool(spec and spec.recipes.stage == recipe.method)       # D186: a guest model runs the method at its edit settings (dev: Turbo, 8 steps)
         measured = spec.recipes.stage_seconds if spec and own else None
         guest = None

@@ -290,14 +290,19 @@ class JobQueue:
         """D73: a T2I recipe's unresolved @mentions turned into references (mentions.py) and, D85, its Story style stamped (story.py);
         other recipes unchanged. The same resolution runs for a preview and a submit (T8: display == reality). D93 (C8): a StageShot's figures
         bound to characters bring their references within the method's room (resolve_figures)."""
-        if isinstance(recipe, StageShot) and recipe.mentions:
+        if isinstance(recipe, StageShot):
+            from .mentions import stage_place_ref
             from .recipes import stage_model_id
+            story = StoryStore(self.ws) if self.ws else None
+            recipe = stage_place_ref(recipe, self.ws, self.catalogue, story)       # D186 follow-up: the scene's place leads a clay still's deck
+            if not recipe.mentions:
+                return recipe
             try:
                 spec = registry.get(stage_model_id(recipe, self.app.settings.variant))   # D186: the picked model's room, not the method default's
             except ValueError:
                 spec = stage_spec(recipe.method, self.app.settings.variant)
             room = 1 if recipe.method == "refcontrol" else max(0, (spec.inputs.refs_max if spec else 1) - 1)
-            return resolve_figures(recipe, self.groups, self.catalogue, room, StoryStore(self.ws) if self.ws else None)
+            return resolve_figures(recipe, self.groups, self.catalogue, room, story)
         if not isinstance(recipe, T2I):
             return recipe
         if recipe.mentions:

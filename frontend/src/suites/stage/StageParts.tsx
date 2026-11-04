@@ -629,11 +629,14 @@ export function ShotTab() {
   const maxRefs = (pv?.params?.max_refs as number | undefined) ?? method?.models?.find((m) => m.id === (sh.model_id ?? method?.model_id))?.max_refs ?? method?.max_refs ?? 3   // D186: the picked model's room (dev: 9)
   const room = Math.max(0, maxRefs - sh.refs.length)
   const figs = (pv?.params?.figures ?? []) as { figure: number; name?: string | null; refs: number[]; span?: string | null; skipped: number }[]   // D93 (C8): the server's resolution
-  const figSlots = ((pv?.params?.ref_list ?? []) as { image: number; asset_id?: string | null; figure?: number | null }[]).filter((x) => x.figure)
-    .map((x) => ({ ...x, figure: x.figure!, name: figs.find((f) => f.figure === x.figure)?.name ?? 'a character' }))
+  const refList = (pv?.params?.ref_list ?? []) as { image: number; asset_id?: string | null; figure?: number | null; mention?: string | null }[]
+  const figSlots = refList.filter((x) => x.figure).map((x) => ({ ...x, figure: x.figure!, name: figs.find((f) => f.figure === x.figure)?.name ?? 'a character' }))
+  const placeSlots = refList.filter((x) => !x.figure && x.mention?.startsWith('place:') && !sh.refs.some((r) => r.asset_id === x.asset_id))   // D186 follow-up: the scene's place, added by the server
   const figLines = figs.map((f) => `figure ${f.figure} · ${f.name ?? 'a character'} → ${f.span ? f.span.replace('reference ', '') : 'no images (the sheet only)'}${f.skipped ? ` · ${f.skipped} of its set left out` : ''}`)
   const { ref: dropRef, over } = useDropTarget((d) => onlyAssets(d) && shotRefDrop(d, room).ok,
     (d) => { d.items.filter((i) => i.kind === 'asset' && i.media !== 'video').slice(0, room).forEach((i) => st().addShotRef(i.id)) }, (d) => shotRefDrop(d, room))
+  // D186 follow-up: the preview follows the scene (a set bound, a figure added) — the place slot, the figures' images
+  useEffect(() => { if (current) void st().refreshShotPreview() }, [current?.id, current?.revision]) // eslint-disable-line react-hooks/exhaustive-deps
   markUsed('stage.shot.generate'); markUsed('stage.shot.passes')
   if (!current) return <span className="hint">Open or make a stage in the Shot section.</span>
   const image1 = method?.image1 ?? 'clay'
@@ -673,9 +676,14 @@ export function ShotTab() {
         <div className="kv tall"><span>references{method ? <span className="hint"> · {maxRefs}</span> : null}{sh.refs.length > 0 && <CommandButton id="stage.shot.clearRefs" size={13} />}</span>
           <div>
             <div ref={dropRef} className={`ref-slots shot-refs${over ? ' over' : ''}`}>
+              {placeSlots.map((x) => (
+                <div key={`place-${x.image}`} className="ref-slot figure-slot place-slot" data-testid="still-place-slot" title={`image ${x.image}: the scene's place — its set picture, so the still keeps the background (added for the scene's set; put your own picture of it in the deck to use that instead)`}>
+                  {x.asset_id ? <img src={api.thumbUrl(x.asset_id, 256)} alt="" /> : null}<span className="n">{x.image}</span><span className="fig-badge">place · {x.mention!.slice(6)}</span>
+                </div>
+              ))}
               {sh.refs.map((r, i) => (
-                <div key={r.asset_id} className="ref-slot" title={`reference image ${i + 2}`}>
-                  <img src={api.thumbUrl(r.asset_id, 256)} alt="" /><span className="n">{i + 2}</span>
+                <div key={r.asset_id} className="ref-slot" title={`reference image ${i + 2 + placeSlots.length}`}>
+                  <img src={api.thumbUrl(r.asset_id, 256)} alt="" /><span className="n">{i + 2 + placeSlots.length}</span>
                   <button className="quiet x" title="Remove" onClick={() => st().removeShotRef(r.asset_id)}>✕</button>
                 </div>
               ))}
@@ -684,7 +692,7 @@ export function ShotTab() {
                   {x.asset_id ? <img src={api.thumbUrl(x.asset_id, 256)} alt="" /> : null}<span className="n">{x.image}</span><span className="fig-badge">fig {x.figure} · {x.name}</span>
                 </div>
               ))}
-              {room - figSlots.length > 0 && <div className="ref-slot" title="drop a picture from the Bin here"><span className="empty">{sh.refs.length + figSlots.length + 2}</span></div>}
+              {room - figSlots.length - placeSlots.length > 0 && <div className="ref-slot" title="drop a picture from the Bin here"><span className="empty">{sh.refs.length + figSlots.length + placeSlots.length + 2}</span></div>}
             </div>
             {figLines.length > 0 && <ul className="figure-lines" aria-label="the figures and their reference images">{figLines.map((t) => <li key={t}>{t}</li>)}
               {pv?.params?.bind_refs === false && <li className="muted">this method reads the figures' images by their notes — not bound in its prompt</li>}

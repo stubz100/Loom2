@@ -109,3 +109,30 @@ def test_the_sets_painting_model_and_the_reference_model(tmp_path: Path):
     planned = plan_anim_ref(p, p.version(), "front", "full", width=1280, height=720, count=1, group_id="grp_c", model_id=DEV)
     assert planned[0][0]["model_id"] == DEV
     assert plan_anim_ref(p, p.version(), "front", "full", width=1280, height=720, count=1, group_id="grp_c")[0][0]["model_id"] == "klein-9b"
+
+
+def test_a_clay_still_leads_its_deck_with_the_scenes_place(tmp_path: Path):
+    """D186 follow-up (the author: "the still doesn't contain the background"): the set picture of the Cast place the scene's set is bound to
+    is the still's image 2, said as the place in the prompt; not for the exact pose, not twice, not without a place."""
+    from loom2.engine.graphs import stage_prompt
+    from loom2.mentions import stage_place_ref
+    from loom2.stages import StageObject, StageStore
+    ws, cat, groups, _ = _setup(tmp_path)
+    st = StoryStore(ws)
+    hero = cat.ingest_file(_png(tmp_path / "quay.png")).id
+    quay = st.create_profile("Quay", "place", groups, hero_asset_id=hero, appearance="a stone quay at dusk")
+    stage = StageStore(ws).create("Harbour")
+    bare = StageShot(stage_id=stage.id, camera_id=stage.cameras[0].id, passes=PASSES, refs=[RefImage(asset_id="ast_hero", note="the hero")])
+    assert stage_place_ref(bare, ws, cat, st).refs == bare.refs                                                     # no set yet: untouched
+    stage.objects.append(StageObject(id="set_1", kind="set", name="Quay", preset="built", profile_id=quay.id, version="v1"))
+    StageStore(ws).save(stage)
+    r = stage_place_ref(bare, ws, cat, st)
+    assert [x.asset_id for x in r.refs] == [hero, "ast_hero"] and r.refs[0].mention == "place:Quay"                 # the place first (image 2), the author's deck after
+    assert "Image 2 shows the place — Quay: its walls, floor, light and materials." in stage_prompt(r) and "Image 3 shows the hero." in stage_prompt(r)
+    assert stage_place_ref(r, ws, cat, st).refs == r.refs                                                           # not twice
+    exact = StageShot(stage_id=stage.id, camera_id=stage.cameras[0].id, passes=PASSES, method="refcontrol", refs=[RefImage(asset_id="ast_hero")])
+    assert stage_place_ref(exact, ws, cat, st).refs == exact.refs                                                   # the exact pose's image 2 is the character's
+    # a picture set (SC3): its picture
+    stage.objects[-1] = StageObject(id="set_2", kind="set", name="Pier", preset="image", plate_asset_id=hero)
+    StageStore(ws).save(stage)
+    assert stage_place_ref(bare, ws, cat, st).refs[0].mention == "place:Pier"

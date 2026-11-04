@@ -2616,6 +2616,11 @@ test("places in Clay (CW7): Sets' + lists the Cast places that have a set — a 
   await expect(row.locator('.bound-tag')).toContainText(`Dock house ${tag}`)
   await page.waitForTimeout(800)                                                                   // the faces' textures arrive
   await page.screenshot({ path: 'node_modules/.e2e/cw7-clay-set.png' })
+  // D186 follow-up: a still of the scene carries the place — its set's picture as image 2, shown in the Still's deck before the author's own
+  await fromStageIn(page)
+  await expect(page.locator('[data-testid="still-place-slot"] .fig-badge')).toHaveText(`place · Dock house ${tag}`, { timeout: 20_000 })
+  await expect(page.locator('.shot-tab .prompt-preview')).toContainText(`Image 2 shows the place — Dock house ${tag}: its walls, floor, light and materials.`)
+  await section(page, 'scene')
   // a free copy beside it
   await row.locator('.name').click({ button: 'right' })
   await page.locator('.ctx-menu button.item', { hasText: /^Make a free copy/ }).click()

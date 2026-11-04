@@ -195,3 +195,41 @@ def resolve_figures(recipe: StageShot, groups: GroupStore | None, catalogue: Cat
     todo = [m for m in pinned if m.revision is None]
     refs, stamped = _fill(recipe.refs, pinned, todo, groups, catalogue, room, stubs, {}, lambda m, i: (i,))
     return recipe.model_copy(update={"refs": refs, "mentions": stamped})
+
+
+def stage_place_ref(recipe: StageShot, ws: Any, catalogue: "Catalogue | None", story: "StoryStore | None") -> StageShot:
+    """D186 follow-up (the author, 2026-11-04: "the still doesn't contain the background"): a clay still carries the scene's place as its
+    first reference — the set picture of the Cast place its set is bound to (else the place's hero; an image set its picture), noted as the
+    place so the prompt says "Image 2 shows the place — <name>: its walls, floor, light and materials" — as the plate route leads its deck with
+    the scene's plate (O4). The figures' images follow within the room left. Not for the exact-pose method (image 2 is the character's);
+    not added twice (a re-run, or the author's own deck already holding it)."""
+    if recipe.method != "clay" or ws is None or catalogue is None:
+        return recipe
+    from .stages import StageStore
+    st = StageStore(ws).get(recipe.stage_id)
+    if st is None:
+        return recipe
+    pic: str | None = None
+    name = ""
+    for o in st.objects:
+        if o.kind != "set" or not o.visible:
+            continue
+        if o.profile_id and story is not None:
+            p = story.profile(o.profile_id)
+            if p is not None:
+                try:
+                    v = p.version(o.version)
+                except KeyError:
+                    v = None
+                if v is not None:
+                    from .place_sets import set_picture
+                    fitted = v.place_set.sources[0].asset_id if v.place_set is not None and v.place_set.sources else None   # the picture its set was fitted to
+                    pic, name = fitted or set_picture(v), p.name
+        if pic is None and o.preset == "image" and o.plate_asset_id:              # SC3: a picture set — the picture itself
+            pic, name = o.plate_asset_id, o.name
+        if pic:
+            break
+    if not pic or catalogue.get(pic) is None or any(r.asset_id == pic for r in recipe.refs):
+        return recipe
+    ref = RefImage(asset_id=pic, note=f"the place — {name}: its walls, floor, light and materials", mention=f"place:{name}")
+    return recipe.model_copy(update={"refs": [ref, *recipe.refs]})

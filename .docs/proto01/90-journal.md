@@ -16285,3 +16285,37 @@ the client types regenerated; the route snapshot +2 (`POST …/animatic`, `PUT /
 
 **Next:** C4 (the shot page's ledger and the storyboard's play; the rows' editors in the centre; the Flow behind the toggle with the route from
 the order; P12, P13, P17, P23–P25), then C6 (the Bin's kinds); E60 waits on the weights' approval (D17).
+
+## 2026-11-04 08:15 — D185 and E60 (propo02 04 §7, 05 Q7): text-to-motion on the mannequin, measured under the licence stance
+
+**The approval (D185, the author: "I'll go with your recommendation").** Animation data is licensed like weights: AMASS's licence is
+non-commercial research, education or artistic use and forbids training models for commercial use; HumanML3D and Motion-X inherit it, so
+every text-to-motion checkpoint trained on them carries the data's terms whatever the weights say — nothing AMASS-derived ships in loom2.
+E60 reads OpenT2M's data terms first; failing that, an Apache-2.0 HumanML3D checkpoint is fetched for the measurement only and deleted.
+
+**OpenT2M (CVPR 2026) is not the clean path.** Its 2800 hours are web-video motion estimates (WHAM on Kinetics-700 and InternVid) plus
+Motion-X, PoseTrack and 3DPW — the last three non-commercial — and no licence, code or weights are released (the project page links the
+organisation only; the paper says "freely available to researchers"). Closed for now; a model trained on open motion data has yet to appear.
+
+**The measurement: CMDM (LY Corporation, CVPR 2026 — the code CC0, the weights Apache-2.0, trained on HumanML3D).** Fetched to
+F:/loom2-models/_spikes/e60 (587 MB: a 305 MB VAE, a 310 MB causal DiT; DistilBERT as its text encoder from the hub), run in a Python 3.10
+venv of its own with CPU torch (`engine/spikes/out/e60/.venv`; its pins are CUDA-only, ROCm has no 3.10 wheel here) — no GPU job. Six
+samples for three story lines (two each, 120 frames at 20 fps): "walks forward, then looks back over their shoulder while walking on",
+"walks forward, stops, and waves with the right hand", "walks to a chair and sits down" — **39 s on the CPU for all six**. The model does
+what the words say: the walk with the look back (1.7–2.7 m of travel, the torso turning in the last two seconds), the stop and the
+right-hand wave (0.7–1.2 m), the walk and the sit (the hips from 0.95 to 0.68–0.73 m). The sheets are the record (`engine/spikes/out/e60/`).
+
+**Into loom2 through the product path.** The output is HumanML3D's 22 joints as positions; `engine/spikes/e60_motion.py` writes each sample
+as a glb with a Mixamo-named skeleton (a T-pose at the sample's limb lengths, the per-bone shortest-arc rotation from the rest direction to
+the frame's, the hips carrying the travel) — the rig the motion library already retargets (`motion/retarget.ts` RIGS.mixamo), so no
+loom2 code changed: the six glbs imported with *Import…* (Settings › Motion's local folder, POST /motion/import), listed on the Library's
+Animations tiles as local files ("your own files"), one opened on the animation bench — the dummy walking the described walk as its one
+block (5.9 s, root motion kept; the figure's track, Make it mine on offer). Screenshots and the sheets sent. One note for the record: the
+browser kept the first import's bytes for an hour (`/motion/files/{id}` is cached), so a glb re-made under the same name shows its old
+clip name until the file is renamed.
+
+**What E60 says.** Text-to-motion works for the storyboard's grain — a line of words to a six-second clip on the mannequin in seconds on the
+CPU, through the library that exists — and the only models that do it today are trained on data loom2 may not ship (D185). The *Described*
+source in the Animations library waits for a model on open motion data; until then the story motions are *Save as animation…* and the CC0
+libraries (Q7's fallback). The weights are deleted; the spike venv (1.1 GB, no weights) stays under engine/spikes/out/ until the next clean
+of that folder; the script is kept for the day a clean model appears.

@@ -17,6 +17,7 @@ import { NoProject } from '../NoProject'
 import { Part } from '../Part'
 import { clayReadiness } from './readiness'
 import { classOfKind, KINDS, shotsOnStage, startClay, useClay, useOpenScene, useScenes, type LibKind } from './clayStore'
+import { sceneSeconds } from '../../suites/stage/sceneLength'
 import './clayCommands'
 import '../world/world.css'
 import './clay.css'
@@ -243,7 +244,7 @@ function ScenesHeader() {
     <div className="w-head c-scene-head" data-testid="clay-scene-header">
       <div className="w-head-row">
         <MenuButton label={scene ? scene.name : scenes.length ? 'Pick a scene' : 'No scene yet'} items={menu} text />
-        {scene && <span className="w-val">{((scene.range?.end ?? 120) - (scene.range?.start ?? 0)) / (scene.size?.fps ?? 24) > 0 ? `${(((scene.range?.end ?? 120) - (scene.range?.start ?? 0)) / (scene.size?.fps ?? 24)).toFixed(1)} s` : ''}</span>}
+        {scene && <span className="w-val" title="the scene's length (its Inspector sets it)">{sceneSeconds(scene)} s</span>}{/* C3 (Q4) */}
         <span className="spacer" />
         {from && <CommandButton id="clay.scene.back" text label={fromShot ? `← ${label(fromShot)}` : '← Back to the shot'} />}
       </div>

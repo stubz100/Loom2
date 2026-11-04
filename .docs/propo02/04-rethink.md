@@ -2,7 +2,7 @@
 # 04 · The rethink: Clay as a layer of its own, the shot as a card that lists what it owns, the Bin by kind
 
 Written 2026-11-03 after the author looked at the scene ([03](03-findings.md) §3). **Status: accepted as D181 the same day** — the author took every
-recommendation in §6 as the answer ([05](05-answers.md)); §8 is the decision as recorded. C0, C1, C2, C2b and C2c were built on 2026-11-03, C5 (D184, the hybrid) on 2026-11-04 ([05](05-answers.md) keeps the status). The ArtCraft study is read again for it
+recommendation in §6 as the answer ([05](05-answers.md)); §8 is the decision as recorded. C0, C1, C2, C2b and C2c were built on 2026-11-03, C5 (D184, the hybrid) and C3 (Record: the animatic, the scene's length) on 2026-11-04 ([05](05-answers.md) keeps the status). The ArtCraft study is read again for it
 ([artcraft 04 §2](../artcraft/04-creative-surfaces.md), [26 §2](../proto01_animate/26-animate-modes.md)); its licence allows ideas, not files.
 
 ## 0. The author's four points

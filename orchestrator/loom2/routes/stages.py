@@ -73,8 +73,9 @@ async def stage_bench(svc: Svc, body: BenchOpen):
 @router.post("/stages", response_model=Stage)
 async def stage_create(svc: Svc, body: StageCreate):
     ws, _, _ = svc.require_project()
-    fmt = ws.load().format
-    st = await asyncio.to_thread(StageStore(ws).create, body.name, {"w": fmt.width, "h": fmt.height, "fps": fmt.fps})
+    rec = ws.load()
+    fmt = rec.format
+    st = await asyncio.to_thread(StageStore(ws).create, body.name, {"w": fmt.width, "h": fmt.height, "fps": fmt.fps}, rec.scene_seconds)   # C3 (Q4)
     svc.hub.broadcast("stage.updated", {"id": st.id, "revision": st.revision})
     return st.model_dump()
 

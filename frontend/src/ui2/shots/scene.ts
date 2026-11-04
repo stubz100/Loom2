@@ -10,6 +10,7 @@ import { clayReadiness } from '../clay/readiness'
 import { readiness } from '../world/readiness'
 import { routeRows } from './route'
 import { flushClay } from './shotsStore'
+import { SCENE_SECONDS_MAX, sceneLength } from '../../suites/stage/sceneLength'
 
 /** The route's rows, from the Story store's records. */
 export function useRouteRows() {
@@ -24,13 +25,13 @@ export function useRouteRows() {
 }
 
 export interface StageLite {
-  id: string; name: string; revision: number; fps: number; range: { start: number; end: number }
+  id: string; name: string; revision: number; fps: number; range: { start: number; end: number }; length: number   // C3 (Q4): the scene's length in frames
   cameras: { id: string; name: string }[]
   objects: { id: string; kind: string; name: string; profile_id: string | null; version: string | null; visible: boolean }[]
 }
 
-export const liteOf = (d: Pick<StageDoc, 'id' | 'name' | 'revision' | 'size' | 'range' | 'cameras' | 'objects'>): StageLite => ({
-  id: d.id, name: d.name, revision: d.revision, fps: d.size?.fps ?? 24, range: { start: d.range?.start ?? 0, end: d.range?.end ?? 120 },
+export const liteOf = (d: Pick<StageDoc, 'id' | 'name' | 'revision' | 'size' | 'range' | 'cameras' | 'objects'> & { length?: number }): StageLite => ({
+  id: d.id, name: d.name, revision: d.revision, fps: d.size?.fps ?? 24, range: { start: d.range?.start ?? 0, end: d.range?.end ?? 120 }, length: sceneLength({ length: d.length, range: d.range, size: d.size }),
   cameras: d.cameras.map((c) => ({ id: c.id, name: c.name })),
   objects: d.objects.map((o) => ({ id: o.id, kind: o.kind, name: o.name, profile_id: o.profile_id ?? null, version: (o as { version?: string | null }).version ?? null, visible: o.visible !== false })),
 })
@@ -50,6 +51,14 @@ export function useShotStage(stageId: string | null): StageLite | null {
     return () => { live = false; off?.() }
   }, [stageId, shots])
   return doc && doc.id === stageId ? doc : null
+}
+
+/** C3 (D181, 04 §4.4): the animatic row's state — none yet, current, or stale since the scene changed (its revision moved past the
+ *  recording's; advisory, as a version's). */
+export function animaticState(a: { stage_id: string; stage_revision: number } | null | undefined, stage: { id: string; revision: number } | null): 'none' | 'current' | 'stale' {
+  if (!a) return 'none'
+  if (!stage || stage.id !== a.stage_id) return 'current'
+  return stage.revision > a.stage_revision ? 'stale' : 'current'
 }
 
 /** Each camera of the stage with the shot that looks through it (a shot's current version first), for the camera menu. */
@@ -86,6 +95,24 @@ export async function rescene(scene: 'new' | 'same', opts: { like?: string | nul
     await Promise.all([useStory.getState().loadFlow(), useStory.getState().loadShotDetails()])
     return true
   } catch (e) { useSession.getState().toast(`Scene: ${(e as { detail?: string }).detail ?? e}`, 'error'); return false }
+}
+
+/** C3 (Q4, F37 · F39): *Extend to the lines* — the scene lengthened first when the lines run past it (the author's explicit ask, never the
+ *  range by itself; 20 s the cap), through the open stage store when the scene is open in Clay, else the record; then the shot's range. */
+export async function extendRange(range: { start: number; end: number }, stage: StageLite | null): Promise<void> {
+  if (stage && range.end >= stage.length) {
+    const want = range.end + 1
+    if (want > SCENE_SECONDS_MAX * stage.fps) { useSession.getState().toast(`The lines run past ${SCENE_SECONDS_MAX} s — a scene is at most that long`, 'error'); return }
+    try {
+      const { useStage } = await import('../../suites/stage/stageStore')
+      if (useStage.getState().current?.id === stage.id) { useStage.getState().setLength(want); await useStage.getState().flush() }
+      else {
+        const doc = await unwrap(http.GET('/stages/{st_id}', { params: { path: { st_id: stage.id } } }))
+        await unwrap(http.PUT('/stages/{st_id}', { params: { path: { st_id: stage.id } }, body: { ...doc, length: want } as never }))
+      }
+    } catch (e) { useSession.getState().toast(`Scene: ${(e as { detail?: string }).detail ?? e}`, 'error'); return }
+  }
+  await setRange(range)
 }
 
 /** The shot's range on its scene's timeline (null: the stage's whole range). */

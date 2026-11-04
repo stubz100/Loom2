@@ -304,6 +304,21 @@ class ShotTake(BaseModel):
     at: str = Field(default_factory=utc_now)
 
 
+class Animatic(BaseModel):
+    """C3 (D181, 04 §4.3, §4.6; Q6): Record ▶'s clip — the scene's lit clay through the shot's camera over its range, frame-stepped on the
+    CPU; stamped with the scene's revision so the row can say *stale*. The storyboard's first deliverable; Episode cuts it (U7) when the
+    version has no clip of its own."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    clip_id: str
+    asset_id: str | None = None                   # the proxy's Catalogue asset (the Bin's tile, the row's player)
+    frames: int
+    fps: int
+    size: dict[str, int] = Field(default_factory=dict)
+    stage_id: str
+    stage_revision: int
+    recorded_at: str = Field(default_factory=utc_now)
+
+
 class ShotVersion(BaseModel):
     """One version of a shot (loom R62): where it is made (a stage camera, or nothing — a clip from Animate), the frame and the one clip it
     owns, every take tried; `final` fixes the clip the Flow and the Episode bind (one per version, loom R166). `stage_revision` is the
@@ -326,6 +341,7 @@ class ShotVersion(BaseModel):
     method: Literal["layered", "one_pass", "start_still", "speaking"] | None = None   # U6c (04 §4): how Performance makes it; None = layered
     stage_stamps: dict[str, str] | None = None    # D178 (W56): the stage as it read it, part by part (shot_graph.stage_stamps), at `stamps_revision`
     stamps_revision: int | None = None
+    animatic: Animatic | None = None              # C3 (D181, §4.6, Q6): the lit clay recorded through the camera, a clip under the shot's home
 
 
 def version_stage_stale(v: ShotVersion, stage: Any) -> bool:
@@ -1028,6 +1044,18 @@ class _ShotMixin:
                     v = v.model_copy(update={"stage_stamps": stage_stamps(st, v.camera_id), "stamps_revision": st.revision})
             out.append(v)
         return r.model_copy(update={"shot": r.shot.model_copy(update={"versions": out})})
+
+    def set_animatic(self, sid: str, vid: str, a: Animatic | None) -> Shot:
+        """C3: the version's animatic — the newest recording (an earlier one stays a clip in the Bin; files are truth)."""
+        s = self.shot(sid)
+        if s is None:
+            raise KeyError(sid)
+        v = s.version(vid)
+        v.animatic = a
+        s.revision += 1
+        s.updated_at = utc_now()
+        self.save_shot(s)
+        return s
 
     def save_shot(self, s: Shot) -> None:
         """A shot's view written back as it is: its versions and current version into its node, its name as the node's title."""
@@ -1743,7 +1771,7 @@ class _FlowMixin:
             raise KeyError(v.stage_id)
         copy = stages.create(f"{st.name} · {cur.name}", dict(st.size))
         copy = stages.put(copy.id, {"revision": copy.revision, "objects": [o.model_dump() for o in st.objects], "cameras": [c.model_dump() for c in st.cameras],
-                                    "active_camera": v.camera_id, "keyframes": st.keyframes, "range": st.range.model_dump(), "ambient": st.ambient})
+                                    "active_camera": v.camera_id, "keyframes": st.keyframes, "range": st.range.model_dump(), "length": st.length, "ambient": st.ambient})   # C3: the copy as long as its source
         return self.set_source(sid, vid, copy.id, v.camera_id, copy.revision)   # type: ignore[attr-defined]
 
     def _prune_book(self) -> None:

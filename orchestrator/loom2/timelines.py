@@ -216,7 +216,10 @@ def final_of(shot: Any, finals: list[Any]) -> tuple[str, str | None]:
         f = next((f for f in mine if (f.shot_version or shot.current) == v.id), None)
         if f is not None:
             return f.clip_id
-        return v.clip_id if v.method in CLIP_METHODS and v.clip_id else None
+        if v.method in CLIP_METHODS and v.clip_id:
+            return v.clip_id
+        a = getattr(v, "animatic", None)
+        return a.clip_id if a is not None else None                     # C3 (Q6): the animatic — the cut before any model runs
     if marked is not None and (c := of(marked)):
         return marked.id, c
     if mine:

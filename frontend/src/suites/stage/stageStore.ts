@@ -17,6 +17,7 @@ import { chainOf, clearArms, endsOf, mirrorPins, pinPose, poseContact, type End,
 import { docFrames, mirrorContacts, portable, resolvePins, toContact, type Contact, type Contacts, type Gaze } from './motion/contacts'
 import { setShellPoints } from './proxy'
 import type { Keypoint, WholeBody } from './passes'
+import { clampLength, sceneLength, sceneSeconds } from './sceneLength'
 import { profilesForMentions, useStory, versionPointsOfShell } from '../story/storyStore'
 import { navigate, type Layer } from '../../frame/router'
 import { contextSlot } from '../../store/contexts'
@@ -238,6 +239,7 @@ interface StageState {
   setFrame: (f: number) => void
   setPlaying: (on: boolean) => void
   setRange: (start: number, end: number) => void
+  setLength: (frames: number) => void                       // C3 (Q4): the scene's length in frames (never below its range, never past the cap)
   keyCamera: () => void
   keyObject: (id: string) => void
   /** CA1: the figure's level — Simple (null) or Detailed (the starter set's male / female mannequin follows its joints). */
@@ -508,7 +510,14 @@ export const useStage = create<StageState>()((set, get) => ({
   sampledDoc: () => { const cur = get().current; return cur ? sampleDoc(cur, get().frame) : null },
   setFrame: (f) => set({ frame: Math.max(0, Math.min(100000, Math.round(f))) }),
   setPlaying: (playing) => set({ playing }),
-  setRange: (start, end) => { const s = Math.max(0, Math.round(start)); const e = Math.max(s + 1, Math.round(end)); get().apply((d) => ({ ...d, range: { start: s, end: e } }), 'range') },
+  setRange: (start, end) => {
+    const cur = get().current
+    const last = cur ? sceneLength(cur) - 1 : Number.POSITIVE_INFINITY                   // C3 (Q4, F37): the range lies inside the scene — the scene is lengthened first
+    let s = Math.max(0, Math.round(start)), e = Math.max(s + 1, Math.round(end))
+    if (e > last) { e = last; s = Math.min(s, Math.max(0, e - 1)); useSession.getState().toast(`The scene is ${sceneSeconds(cur!)} s long — lengthen it in the Inspector first`, 'info') }
+    get().apply((d) => ({ ...d, range: { start: s, end: e } }), 'range')
+  },
+  setLength: (frames) => get().apply((d) => ({ ...d, length: clampLength(d, frames / Math.max(1, d.size.fps)) }), 'length'),
   keyCamera: () => {
     const sd = get().sampledDoc(); const cam = sd?.cameras.find((c) => c.id === sd.active_camera)
     if (!sd || !cam) return

@@ -160,13 +160,16 @@ async function openClay(): Promise<void> {
 }
 
 /** C0 (D181): the shot's Clay — its scene in Clay's editor, through its camera, with *← Back to the shot*. */
-async function openInClay(): Promise<void> {
+/** C3 (D181): the shot's scene in Clay's Record mode — Record ▸ / Record again ▸ on the header's animatic row. */
+export const recordInClay = (): Promise<void> => openInClay(true)
+
+async function openInClay(record = false): Promise<void> {
   const s = useStory.getState().shot(), v = useStory.getState().shotVersion()
   if (!s || !v) return
   if (!v.stage_id) { useSession.getState().toast('The shot has no scene yet — give it one in the header', 'info'); return }
   await openClay()
   const { useClay } = await import('../clay/clayStore')
-  await useClay.getState().openScene(v.stage_id, { shot: s.id, version: v.id, camera: v.camera_id ?? null })
+  await useClay.getState().openScene(v.stage_id, { shot: s.id, version: v.id, camera: v.camera_id ?? null, record })
 }
 
 /** Before a server change to the open stage (a camera copied for a shot): Clay's pending save goes first. */

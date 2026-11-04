@@ -451,6 +451,90 @@
         "title": "AnimatePanels",
         "type": "object"
       },
+      "Animatic": {
+        "description": "C3 (D181, 04 §4.3, §4.6; Q6): Record ▶'s clip — the scene's lit clay through the shot's camera over its range, frame-stepped on the\nCPU; stamped with the scene's revision so the row can say *stale*. The storyboard's first deliverable; Episode cuts it (U7) when the\nversion has no clip of its own.",
+        "properties": {
+          "asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Id"
+          },
+          "clip_id": {
+            "title": "Clip Id",
+            "type": "string"
+          },
+          "fps": {
+            "title": "Fps",
+            "type": "integer"
+          },
+          "frames": {
+            "title": "Frames",
+            "type": "integer"
+          },
+          "recorded_at": {
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "size": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Size",
+            "type": "object"
+          },
+          "stage_id": {
+            "title": "Stage Id",
+            "type": "string"
+          },
+          "stage_revision": {
+            "title": "Stage Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "clip_id",
+          "asset_id",
+          "frames",
+          "fps",
+          "size",
+          "stage_id",
+          "stage_revision",
+          "recorded_at"
+        ],
+        "title": "Animatic",
+        "type": "object"
+      },
+      "AnimaticIn": {
+        "description": "C3 (D181, 04 §4.3; Q6): Record ▶ — the frames the client rendered (the lit clay through the shot's camera, its range, the draft\nsize), each a PNG already put through `PUT /blobs/{sha}`, in order.",
+        "properties": {
+          "fps": {
+            "default": 24,
+            "maximum": 120.0,
+            "minimum": 1.0,
+            "title": "Fps",
+            "type": "integer"
+          },
+          "frames": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Frames",
+            "type": "array"
+          }
+        },
+        "required": [
+          "frames"
+        ],
+        "title": "AnimaticIn",
+        "type": "object"
+      },
       "AnimationBenchAsk": {
         "properties": {
           "frames": {
@@ -18118,6 +18202,20 @@
         "title": "ProjectCreate",
         "type": "object"
       },
+      "ProjectDefaults": {
+        "description": "C3 (D181, Q4): what a new scene starts with.",
+        "properties": {
+          "scene_seconds": {
+            "default": 5,
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Scene Seconds",
+            "type": "integer"
+          }
+        },
+        "title": "ProjectDefaults",
+        "type": "object"
+      },
       "ProjectFormat": {
         "description": "The target the project finalises to (fixed at creation) and the working tier it defaults to (D18).",
         "properties": {
@@ -18269,6 +18367,17 @@
               }
             ],
             "title": "Path"
+          },
+          "scene_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scene Seconds"
           },
           "size_cap_gb": {
             "anyOf": [
@@ -21940,6 +22049,7 @@
                 "enum": [
                   "clip",
                   "final",
+                  "animatic",
                   "lines"
                 ],
                 "type": "string"
@@ -22451,6 +22561,16 @@
       "ShotVersion": {
         "description": "One version of a shot (loom R62): where it is made (a stage camera, or nothing — a clip from Animate), the frame and the one clip it\nowns, every take tried; `final` fixes the clip the Flow and the Episode bind (one per version, loom R166). `stage_revision` is the\nstage's revision when the frame or clip was taken — a later edit of the stage makes the version stale (advisory).",
         "properties": {
+          "animatic": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Animatic"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "camera_id": {
             "anyOf": [
               {
@@ -22642,7 +22762,8 @@
           "words",
           "method",
           "stage_stamps",
-          "stamps_revision"
+          "stamps_revision",
+          "animatic"
         ],
         "title": "ShotVersion",
         "type": "object"
@@ -22819,6 +22940,12 @@
             "title": "Keyframes",
             "type": "object"
           },
+          "length": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Length",
+            "type": "integer"
+          },
           "name": {
             "default": "Stage",
             "title": "Name",
@@ -22898,6 +23025,7 @@
           "keyframes",
           "tracks",
           "range",
+          "length",
           "passes",
           "ambient",
           "group_id",
@@ -34860,6 +34988,48 @@
         ]
       }
     },
+    "/project/defaults": {
+      "put": {
+        "description": "C3 (Q4): the length a new scene starts with — a project record, written through the workspace (files are truth).",
+        "operationId": "project_defaults_put_project_defaults_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectDefaults"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectInfo"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Project Defaults Put",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
     "/project/open": {
       "post": {
         "operationId": "project_open_project_open_post",
@@ -40933,6 +41103,68 @@
           }
         },
         "summary": "Shot New Version",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/shots/{sid}/versions/{vid}/animatic": {
+      "post": {
+        "description": "C3: the animatic as a clip of the project (its master the frames, a proxy encoded now, the proxy a video asset in the shot's home,\nthe Bin's tile), on the version with the scene's revision — the row says *stale* once the scene moves on. No GPU, no job.",
+        "operationId": "shot_animatic_story_shots__sid__versions__vid__animatic_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "title": "Sid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnimaticIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Shot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Shot Animatic",
         "tags": [
           "story"
         ]

@@ -16248,3 +16248,40 @@ redraw of the clay, the layer is geometric). Both are the replacement mode's bus
 **Left on the project:** shot 1 v2's final fin_3dfcdecf (the plate generated with anchors, Nora's layer, the assembly and the render
 clp_76ab9623), the walk's fin_92d559c1 untouched. Twelve pictures taken, five sent; E61's three sheets sent. **Next:** C3 (Record: the animatic, the still, the
 passes; the scene's length; the scene as the shot's record), then C4, C6; E60 waits on the weights' approval.
+
+## 2026-11-04 04:51 — C3 (D181, propo02 04 §4.3, §4.6; 05 Q4, Q6): Record — the animatic, the still, the passes; the scene's length
+
+**Built.** *The scene's length (Q4).* `Stage.length` (frames): a new scene starts at the project's default — `ProjectRecord.scene_seconds`
+(5 s; `PUT /project/defaults` sets it, 20 s the cap; `GET /project` says it) — through every path that makes a stage (`StageStore.create`,
+a place's `scene_stage`; a camera copy is as long as its source); `scene_length(st)` reads a scene from before C3 (length 0) as what it
+already spans; `check` refuses a length past the cap and a stage range past the length ("lengthen the scene first", F37), and the shot
+PATCH route refuses a version range past its scene's length (422; the header's range field toasts it); the client's `setRange` clamps to
+the length with a toast; the Inspector with nothing selected has the *length* field in seconds (never below the range, 20 s at most) and
+*new scenes* (the project's default, written through the route); the timeline's ruler runs to the length (a block past it is shown past it);
+the Scenes header says the length. F37 meets F39 at the header's *Extend to the lines*: the lines running past the scene, that click
+lengthens the scene first (through the open stage store when the scene is open in Clay, else the record; the cap refused with a word) and
+then the range — the author's explicit ask, not the range growing by itself (`scene.extendRange`); the e2e found it (the Shots scenario's
+extend refused, 48 frames kept). *Record ▶ (Q6).* `stage.record.animatic` on the record bar with "≈ N s" (the open shot's range on the
+scene, else the scene's): `animatic.ts` renders the scene's `beauty` pass — every object in its own material, the lights with their
+shadows, the backdrops — through the shot's camera at the scene's fps and the draft size, frame by frame on the CPU (the viewport's own
+renderer, no job), uploads the frames as blobs and posts `POST /story/shots/{sid}/versions/{vid}/animatic`: a clip of the project
+(`model_id animatic`, its master the frames, a proxy encoded now), the proxy a video asset with `lineage_kind animatic` landing in the
+shot's home (U2e's `shots/<sid>/<vid>` — the Bin under the shot), and `ShotVersion.animatic` {clip, asset, frames, fps, size, stage,
+stage_revision, recorded_at}; a second recording replaces the row's clip and keeps the first in the Bin (files are truth). *The row
+(04 §4.4).* The Shots header's *animatic* row: ▶ N frames (a player under the row), recorded when, *current* or *stale since the scene
+changed* (the scene's revision past the recording's, `animaticState` — advisory, as a version's), *Record ▸ / Record again ▸* opening the
+scene in Clay's Record mode (`From.record`, `shotsStore.recordInClay`). *The cards and the cut.* A shot's card reads the animatic's length
+and picture when it has no clip or final (`length_from animatic`, the card's thumb), and Episode's `final_of` lays the animatic when the
+version has nothing else — the cut from animatics before any model runs (Q6). *The still and the passes* stay what Record has offered since
+C1 (Capture a still ▸, Render the passes ▶). *The scene as the shot's record (§4.6)* is read as the scene carrying its length and serving
+its shots (the Scenes header, the shot's header); the file move to `shots/<nn>/scene.json` is not made — a stage file keyed by id serves
+coverage the same way and every record that names a stage keeps working; recorded here as the reading, the author's to overturn.
+
+**Checked.** Offline 814 (811 + 3: test_record_c3 — the scene's length and the stage's range inside it, the project's default and the shot's range through the routes, Record's clip under the shot with the cards and final_of reading it); Vitest 659 + 3 skipped (shots.test.ts: the animatic's state, the scene's length); typecheck, build and
+lint clean (61 warnings, as before); agent docs 9 / 0; settings audit 322 / 0 with 13 allowed; model literals 0; the OpenAPI document and
+the client types regenerated; the route snapshot +2 (`POST …/animatic`, `PUT /project/defaults`). The e2e: the C3 scenario — a scene at the project's default length, a shot range past it refused with the header's word, the scene lengthened in Clay's Inspector, Record ▶ writing twelve frames as the animatic (the clip, its asset in the shot's home, the cards), the row current then stale once the scene changed, Record again ▸ back in Record mode — 19 s alone; the whole suite twice under load: 86 + 2, both the new rule's — the Shots scenario's *Extend to the lines* refused (now scene.extendRange lengthens the scene first) and the C5 scenario's range past the default length (the scenario lengthens the scene first) — then 87 + 1, the C5 scenario over its 240 s budget under the whole suite's load (42 s alone; its budget raised to 420 s, not run under load again).
+
+**Live on the walk's shot 1 (Followed), through the product path:** the header's row *none yet · Record ▸*; Record ▸ opened the scene in Clay's Record mode (the bar *Record ▶ · ≈ 10.0 s*, the Scenes header *10.0 s* — a scene from before C3 reads as its range); Record ▶ wrote the 241 frames (24 fps, 1280×720 — the three shells and the built set lit through the shot's camera) in 24 s on the CPU as clip clp_6dac1280, its proxy ast_b47ee8b6 under the shot in the Bin; the row *■ 241 frames · recorded 04:49 · current* playing it under the header; the card's length still from the shot's own clip (E59's take — the animatic comes last); the Inspector's *length 10.0 s · 241 frames* and *new scenes 5 s · the project's default*; no page errors. Six pictures taken, five sent with the animatic's sheet. The scene file stays where it is (§4.6's move not made, see above).
+
+**Next:** C4 (the shot page's ledger and the storyboard's play; the rows' editors in the centre; the Flow behind the toggle with the route from
+the order; P12, P13, P17, P23–P25), then C6 (the Bin's kinds); E60 waits on the weights' approval (D17).

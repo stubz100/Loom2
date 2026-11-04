@@ -2369,6 +2369,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/project/defaults": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Project Defaults Put
+         * @description C3 (Q4): the length a new scene starts with — a project record, written through the workspace (files are truth).
+         */
+        put: operations["project_defaults_put_project_defaults_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/project/open": {
         parameters: {
             query?: never;
@@ -4461,6 +4481,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/shots/{sid}/versions/{vid}/animatic": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Shot Animatic
+         * @description C3: the animatic as a clip of the project (its master the frames, a proxy encoded now, the proxy a video asset in the shot's home,
+         *     the Bin's tile), on the version with the scene's revision — the row says *stale* once the scene moves on. No GPU, no job.
+         */
+        post: operations["shot_animatic_story_shots__sid__versions__vid__animatic_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/shots/{sid}/versions/{vid}/finalize": {
         parameters: {
             query?: never;
@@ -5396,6 +5437,46 @@ export interface components {
              * @default 1
              */
             schema_version: number;
+        };
+        /**
+         * Animatic
+         * @description C3 (D181, 04 §4.3, §4.6; Q6): Record ▶'s clip — the scene's lit clay through the shot's camera over its range, frame-stepped on the
+         *     CPU; stamped with the scene's revision so the row can say *stale*. The storyboard's first deliverable; Episode cuts it (U7) when the
+         *     version has no clip of its own.
+         */
+        Animatic: {
+            /** Asset Id */
+            asset_id: string | null;
+            /** Clip Id */
+            clip_id: string;
+            /** Fps */
+            fps: number;
+            /** Frames */
+            frames: number;
+            /** Recorded At */
+            recorded_at: string;
+            /** Size */
+            size: {
+                [key: string]: number;
+            };
+            /** Stage Id */
+            stage_id: string;
+            /** Stage Revision */
+            stage_revision: number;
+        };
+        /**
+         * AnimaticIn
+         * @description C3 (D181, 04 §4.3; Q6): Record ▶ — the frames the client rendered (the lit clay through the shot's camera, its range, the draft
+         *     size), each a PNG already put through `PUT /blobs/{sha}`, in order.
+         */
+        AnimaticIn: {
+            /**
+             * Fps
+             * @default 24
+             */
+            fps?: number;
+            /** Frames */
+            frames: string[];
         };
         /** AnimationBenchAsk */
         AnimationBenchAsk: {
@@ -12428,6 +12509,17 @@ export interface components {
             size_cap_gb?: number;
         };
         /**
+         * ProjectDefaults
+         * @description C3 (D181, Q4): what a new scene starts with.
+         */
+        ProjectDefaults: {
+            /**
+             * Scene Seconds
+             * @default 5
+             */
+            scene_seconds?: number;
+        };
+        /**
          * ProjectFormat
          * @description The target the project finalises to (fixed at creation) and the working tier it defaults to (D18).
          */
@@ -12484,6 +12576,8 @@ export interface components {
             open: boolean;
             /** Path */
             path?: string | null;
+            /** Scene Seconds */
+            scene_seconds?: number | null;
             /** Size Cap Gb */
             size_cap_gb?: number | null;
             /** Usage Gb */
@@ -14040,7 +14134,7 @@ export interface components {
          */
         ShotCard: {
             /** Length From */
-            length_from: ("clip" | "final" | "lines") | null;
+            length_from: ("clip" | "final" | "animatic" | "lines") | null;
             /** Length S */
             length_s: number | null;
             /** Node Id */
@@ -14237,6 +14331,7 @@ export interface components {
          *     stage's revision when the frame or clip was taken — a later edit of the stage makes the version stale (advisory).
          */
         ShotVersion: {
+            animatic: components["schemas"]["Animatic"] | null;
             /** Camera Id */
             camera_id: string | null;
             /** Clip Id */
@@ -14358,6 +14453,11 @@ export interface components {
             keyframes: {
                 [key: string]: unknown;
             };
+            /**
+             * Length
+             * @default 0
+             */
+            length: number;
             /**
              * Name
              * @default Stage
@@ -20810,6 +20910,39 @@ export interface operations {
             };
         };
     };
+    project_defaults_put_project_defaults_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectDefaults"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     project_open_project_open_post: {
         parameters: {
             query?: never;
@@ -24971,6 +25104,42 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Shot"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    shot_animatic_story_shots__sid__versions__vid__animatic_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnimaticIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

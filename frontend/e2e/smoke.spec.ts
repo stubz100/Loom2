@@ -4349,7 +4349,7 @@ test('shells only (D183, C2c): a scene\'s Figures ＋ lists characters and no du
 })
 
 test('the hybrid final (D184, C5): a figure unticked as exact rides on the plate — the dialog says so, the final has no layer for it; the plate generated along the path makes its anchor stills (every five seconds and the last frame) before its clip, the clip queued with them as beats; the Stage clip card counts the range\'s other stills as anchors (Shots)', async ({ page }) => {
-  test.setTimeout(240_000)
+  test.setTimeout(420_000)                                                                   // the plate's chain on the fake engine and the layer's passes: long under the whole suite's load
   const made = await clayShot(page, `Hybrid ${Date.now().toString(36)}`)
   await page.locator('.stage-empty button', { hasText: /^Add set · room$/ }).click()
   const nora = await addCharacter(page)
@@ -4366,6 +4366,7 @@ test('the hybrid final (D184, C5): a figure unticked as exact rides on the plate
   await expect.poll(async () => (await doc()).objects.find((o) => o.name === extra.name)?.exact, { timeout: 10_000 }).toBe(false)
   expect((await doc()).objects.find((o) => o.name === nora.name)?.exact).toBe(true)
   // six seconds at F16: 97 frames — anchors at 5 s and the last frame
+  await page.evaluate(() => (window as unknown as { __loom2Stage: { setLength: (n: number) => void } }).__loom2Stage.setLength(192))   // C3 (Q4, F37): the scene lengthened first (8 s), then the range
   await page.evaluate(() => (window as unknown as { __loom2Stage: { setRange: (a: number, b: number) => void } }).__loom2Stage.setRange(0, 144))
   await perfCardOf(page, 'Final shot')
   await page.locator('.final-section button', { hasText: /^Make the final shot/ }).click()
@@ -4401,4 +4402,62 @@ test('the hybrid final (D184, C5): a figure unticked as exact rides on the plate
   await perfCardOf(page, 'Stage clip')
   await expect(page.locator('[data-testid="clip-anchors"]')).toContainText('none')
   await page.screenshot({ path: 'node_modules/.e2e/c5-hybrid.png' })
+})
+
+test('Record (D181, C3): a scene has a length and the shot\'s range lies inside it — a range past it is refused until the scene is lengthened in Clay\'s Inspector; Record ▶ in Record mode writes the animatic as a clip under the shot, the header\'s row plays it and says current, then stale once the scene changed; Record again ▸ opens Clay in Record mode (Clay · Shots)', async ({ page }) => {
+  const { shot, stage } = await clayShot(page, 'Record')
+  type Doc = { length: number; range: { start: number; end: number }; size: { fps: number }; revision: number; objects: unknown[]; ambient: number | null }
+  const doc = await api<Doc>('GET', `/stages/${stage}`)
+  expect(doc.length).toBe(5 * doc.size.fps)                                                                       // Q4: the project's default
+  expect(doc.range).toEqual({ start: 0, end: 5 * doc.size.fps - 1 })
+  // the shot's range inside the scene: past it refused (F37), the header says why
+  await openShell(page, `shots/${shot}/performance`)
+  await expect(page.locator('[data-testid="shots-animatic"]')).toHaveAttribute('data-state', 'none')
+  const end = page.locator('[data-testid="shots-range"] input[aria-label="range end"]')
+  await end.fill('500'); await end.press('Enter')
+  await expect(page.locator('.toast', { hasText: 'lengthen the scene' })).toBeVisible()
+  await page.reload(); await expect(page.locator('[data-testid="shots-animatic"]')).toBeVisible()                 // the refusal's toast away
+  await end.fill('11'); await end.press('Enter')
+  await expect.poll(async () => (await api<{ versions: { range: { end: number } | null }[] }>('GET', `/story/shots/${shot}`)).versions[0].range?.end).toBe(11)
+  // Record ▸ → Clay in Record mode; the scene lengthened in the Inspector (nothing selected: the scene's own facts)
+  await page.locator('[data-testid="shots-animatic"] button', { hasText: 'Record ▸' }).click()
+  await expect(page.locator('[data-testid="clay-layer"]')).toBeVisible()
+  await expect(page.locator('[data-testid="record-bar"]')).toBeVisible()
+  await expect(page.locator('[data-testid="clay-scene-header"]')).toContainText('5.0 s')
+  await page.locator('.mode-pill button', { hasText: 'Build' }).click()
+  const box = (await page.locator('canvas.stage-canvas').boundingBox())!
+  await page.mouse.click(box.x + 60, box.y + box.height - 40)                                                     // empty floor, bottom-left: nothing selected
+  const len = page.locator('[data-testid="scene-length"] input')
+  await len.fill('8'); await len.press('Enter')
+  await expect.poll(async () => (await api<Doc>('GET', `/stages/${stage}`)).length, { timeout: 15_000 }).toBe(8 * doc.size.fps)
+  await expect(page.locator('[data-testid="clay-scene-header"]')).toContainText('8.0 s')
+  // Record ▶: the shot's twelve frames as the animatic — a clip of the project, its proxy under the shot, the version stamped
+  await page.locator('.mode-pill button', { hasText: 'Record' }).click()
+  await expect(page.locator('[data-testid="record-bar"] button', { hasText: 'Record ▶ · ≈ 0.5 s' })).toBeVisible()
+  await page.locator('[data-testid="record-bar"] button', { hasText: /^Record ▶/ }).click()
+  type An = { clip_id: string; asset_id: string | null; frames: number; fps: number; stage_id: string; stage_revision: number }
+  const animatic = async () => (await api<{ versions: { animatic: An | null }[] }>('GET', `/story/shots/${shot}`)).versions[0].animatic
+  await expect.poll(async () => (await animatic())?.frames ?? 0, { timeout: 120_000 }).toBe(12)
+  const an = (await animatic())!
+  const rev = (await api<Doc>('GET', `/stages/${stage}`)).revision
+  expect(an.stage_id).toBe(stage); expect(an.stage_revision).toBe(rev); expect(an.fps).toBe(doc.size.fps)
+  const asset = await api<{ kind: string; lineage_kind: string | null; origin: { payload: { shot_id: string } } | null }>('GET', `/assets/${an.asset_id}`)
+  expect(asset.kind).toBe('video'); expect(asset.lineage_kind).toBe('animatic'); expect(asset.origin?.payload.shot_id).toBe(shot)
+  const cards = await api<{ items: { shot_id: string; length_from: string | null; take_asset_id: string | null }[] }>('GET', '/story/shots/cards')
+  const card = cards.items.find((x) => x.shot_id === shot)!
+  expect(card.length_from).toBe('animatic'); expect(card.take_asset_id).toBe(an.asset_id)
+  // the header's row: current, played here; stale once the scene changed; Record again ▸
+  await openShell(page, `shots/${shot}/performance`)
+  const row = page.locator('[data-testid="shots-animatic"]')
+  await expect(row).toHaveAttribute('data-state', 'current')
+  await expect(row).toContainText('12 frames')
+  await row.locator('button', { hasText: '12 frames' }).click()
+  await expect(row.locator('video')).toBeVisible()
+  const now = await api<Doc>('GET', `/stages/${stage}`)
+  await api('PUT', `/stages/${stage}`, { ...now, ambient: 1.3 })                                                 // the scene moved on
+  await page.reload(); await expect(row).toBeVisible()                                                           // (a hash-only goto keeps the page and its cached scene)
+  await expect(row).toHaveAttribute('data-state', 'stale')
+  await expect(row).toContainText('stale since the scene changed')
+  await row.locator('button', { hasText: 'Record again ▸' }).click()
+  await expect(page.locator('[data-testid="record-bar"]')).toBeVisible()
 })

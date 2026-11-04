@@ -12,6 +12,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .fsio import StateError, atomic_write_json, free_space_gb, new_id, read_json, utc_now
 
+SCENE_SECONDS_DEFAULT = 5                           # C3 (D181, Q4): a new scene's length, the project's default
+SCENE_SECONDS_MAX = 20                              # Q4's cap: a scene is a shot's worth, not an act
+
 PROJECT_SCHEMA_VERSION = 1
 SUBDIRS = ("assets", "thumbs", "documents", "clips", "masks", "timelines", "stages", "jobs", "jobs/logs", "_temp")   # engine output lives under <app state>/engine_out (06 §4); timelines: P17 / D83; stages: P13 / D81
 Tier = Literal["thumb", "draft", "hd", "full"]
@@ -46,6 +49,7 @@ class ProjectRecord(BaseModel):
     format: ProjectFormat = Field(default_factory=ProjectFormat)
     size_cap_gb: float = DEFAULT_SIZE_CAP_GB
     variant_created_with: str = "full"
+    scene_seconds: int = Field(SCENE_SECONDS_DEFAULT, ge=1, le=SCENE_SECONDS_MAX)   # C3 (Q4): the length a new scene starts with
 
     @model_validator(mode="after")
     def _checks(self) -> "ProjectRecord":
@@ -152,6 +156,6 @@ class Workspace:
         rec = self.load()
         return {
             "open": True, "path": str(self.path), "id": rec.id, "name": rec.name,
-            "format": rec.format.model_dump(), "size_cap_gb": rec.size_cap_gb,
+            "format": rec.format.model_dump(), "size_cap_gb": rec.size_cap_gb, "scene_seconds": rec.scene_seconds,
             "free_space_gb": round(free_space_gb(self.path), 1), "created_at": rec.created_at,
         }

@@ -46,7 +46,7 @@ export function shotsOnStage<T extends { id: string; name: string; current: stri
   return shots.filter((s) => (s.versions.find((v) => v.id === s.current) ?? s.versions[0])?.stage_id === stageId)
 }
 
-export interface From { shot: string; version: string; camera: string | null }
+export interface From { shot: string; version: string; camera: string | null; record?: boolean }   // C3: opened to record (Record mode at once)
 
 interface ClayState {
   rail: ClayRail
@@ -143,6 +143,7 @@ export const useClay = create<ClayState>()((set, get) => ({
     const sg = m.useStage.getState()
     if (sg.current?.id !== stageId) await sg.open(stageId)
     if (from?.camera) { m.useStage.getState().setActiveCamera(from.camera); m.useStage.getState().setView('camera') }   // 04 §3: the shot's camera by default
+    if (from?.record) m.useStage.getState().setMode('record')                                                              // C3: Record again ▸ from the shot's row
     navigate({ suite: 'stage' })
     writeHash(`#clay/scene/${stageId}`)
   },
@@ -155,7 +156,7 @@ export const useClay = create<ClayState>()((set, get) => ({
 }))
 
 /** The scene open in the editor, read without loading the stage store into the layer: null until it is. */
-export function useOpenScene(): Pick<StageDoc, 'id' | 'name' | 'purpose' | 'objects' | 'cameras' | 'range' | 'size'> | null {
+export function useOpenScene(): Pick<StageDoc, 'id' | 'name' | 'purpose' | 'objects' | 'cameras' | 'range' | 'size' | 'length'> | null {
   const [doc, setDoc] = useState<StageDoc | null>(null)
   useEffect(() => {
     let live = true, off: (() => void) | undefined

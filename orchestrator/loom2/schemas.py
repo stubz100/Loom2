@@ -559,6 +559,7 @@ class ProjectInfo(Open):
     assets: int | None = None
     usage_gb: float | None = None
     jobs_indexed: int | None = None
+    scene_seconds: int | None = None                # C3 (Q4): the length a new scene starts with (PUT /project/defaults)
 
 
 class Recents(Out):
@@ -797,7 +798,7 @@ class ShotCard(Out):
     route: str
     take_asset_id: str | None
     length_s: float | None
-    length_from: Literal["clip", "final", "lines"] | None
+    length_from: Literal["clip", "final", "animatic", "lines"] | None   # C3 (Q6): the animatic before any model runs
     stale: int
     owed: int
     stale_steps: list[str] = []                     # U0 (FE#3): the board's steps that are stale (frame, stage, clip, final, lipsync)

@@ -39,6 +39,10 @@ import { blocksReady, useBlocks, type MotionBlock } from './blocks'
 import { awayStretches, lineSpans } from './tracks'
 import { Timeline as TimelineView, TransportBar, type TLRow } from '../animate/Timeline'
 import { keyRuns, stageSpan } from '../animate/timelineMath'
+import { useClay } from '../../ui2/clay/clayStore'
+import { animaticPlan } from './animatic'
+import { SCENE_SECONDS_MAX, clampLength, fpsOf, sceneLength, sceneSeconds } from './sceneLength'
+import { http, unwrap } from '../../api/client'
 import { JOINTS, MANNEQUIN_PRESETS, POSE_NAMES, PROP_PRESETS, SET_PRESETS, type Joint } from './builders'
 import { ThingsSheet } from './ThingsSheet'
 import { useThings } from './thingsStore'
@@ -64,7 +68,7 @@ function devHook(): Record<string, unknown> {
     // ST4: the clip path
     setFrame: (f: number) => st().setFrame(f), keyCamera: () => st().keyCamera(),
     sampleAt: async (f: number) => { const d = st().current; if (!d) return null; await blocksReady(d); return sampleDoc(d, f) },   /* U5: the document at a frame, its clip blocks evaluated */
-    setRange: (a: number, b: number) => st().setRange(a, b), setGuideKind: (k: 'depth' | 'pose') => st().setGuideKind(k),
+    setRange: (a: number, b: number) => st().setRange(a, b), setLength: (n: number) => st().setLength(n), setGuideKind: (k: 'depth' | 'pose') => st().setGuideKind(k),   // C3 (Q4): the scene's length
     renderGuide: () => st().renderGuide(), setShotStart: (id: string | null) => st().setShotStart(id), animateShot: () => st().animateShot(),
     updateCamera: (id: string, patch: Partial<StageCamera>) => st().updateCamera(id, patch), setTransform: (id: string, t: { pos: number[]; rot: number[]; scale: number[] }) => st().setTransform(id, t),
     frameAll: () => st().frameView(null),
@@ -232,9 +236,48 @@ export function SelectionInspector() {
       <div className="kv"><span>objects</span><span>{current.objects.length}</span></div>
       <div className="kv"><span>cameras</span><span>{current.cameras.length}{cam ? ` · ★ ${cam.name}` : ''}</span></div>
       <div className="kv"><span>range</span><span>{current.range.start}–{current.range.end} · {current.size.fps} fps</span></div>
+      <SceneLengthFields doc={current} />{/* C3 (Q4) */}
       <span className="hint">Click a thing in the viewport or the outliner: its editor shows here.</span>
     </div>
   )
+}
+
+/** C3 (D181, 04 §4.3): Record ▶ with the seconds it will make — the open shot's range on the scene (Clay opened from the shot), else the
+ *  scene's; the command says whose the animatic is when no shot opened the scene. */
+function RecordButton() {
+  const current = useStage((s) => s.current)
+  const rendering = useStage((s) => s.rendering)
+  const from = useClay((s) => s.from)
+  useStory((s) => s.shots)                                                                 // the shot's range follows its record
+  if (!current) return null
+  const plan = animaticPlan(current, from ? { shot: from.shot, version: from.version } : null)
+  return <CommandButton id="stage.record.animatic" text label={rendering ? 'Recording…' : `Record ▶ · ≈ ${plan.seconds} s`} className="primary" />
+}
+
+/** C3 (Q4): the scene's length in seconds (never below its range, 20 s the cap) and the project's default for new scenes. */
+function SceneLengthFields({ doc }: { doc: StageDoc }) {
+  const [text, setText] = useState<string | null>(null)
+  const project = useSession((s) => s.project)
+  const [def, setDef] = useState<string | null>(null)
+  const fps = fpsOf(doc)
+  const commit = () => {
+    const v = Number(text)
+    setText(null)
+    if (Number.isFinite(v) && v > 0 && clampLength(doc, v) !== sceneLength(doc)) st().setLength(clampLength(doc, v))
+  }
+  const commitDefault = async () => {
+    const v = Math.round(Number(def))
+    setDef(null)
+    if (!Number.isFinite(v) || v < 1 || v > SCENE_SECONDS_MAX || v === project?.scene_seconds) return
+    try { useSession.setState({ project: await unwrap(http.PUT('/project/defaults', { body: { scene_seconds: v } })) }) } catch (e) { useSession.getState().toast(`Default: ${(e as { detail?: string }).detail ?? e}`, 'error') }
+  }
+  const key = (ev: React.KeyboardEvent) => { if (ev.key === 'Enter') (ev.target as HTMLInputElement).blur() }
+  return <>
+    <div className="kv"><span>length <Help text="The scene's length: its timeline. The stage's range and the shots' ranges lie inside it; it never grows by itself (F37) — a block or a line past the end is shown past it. 20 s at most: a scene is a shot's worth." /></span>
+      <span className="scene-length" data-testid="scene-length"><input type="number" min={(doc.range.end + 1) / fps} max={SCENE_SECONDS_MAX} step={0.5} aria-label="scene length (s)" value={text ?? sceneSeconds(doc)} onChange={(e) => setText(e.target.value)} onBlur={commit} onKeyDown={key} /> s · {sceneLength(doc)} frames</span></div>
+    <div className="kv"><span>new scenes</span>
+      <span className="scene-length"><input type="number" min={1} max={SCENE_SECONDS_MAX} step={1} aria-label="new scenes (s)" value={def ?? String(project?.scene_seconds ?? 5)} onChange={(e) => setDef(e.target.value)} onBlur={() => void commitDefault()} onKeyDown={key} /> s · the project's default</span></div>
+  </>
 }
 
 /** D121: the Clay level's foot — Render passes ▶ (Ctrl+Enter) for the active camera, with their state at a glance (D95 UX0 #16's row);
@@ -867,7 +910,7 @@ function Timeline() {
   const objects = current.objects.filter((o) => (o.kind === 'mannequin' && o.visible) || (k.objects[o.id] ?? []).length > 0 || (tracks[o.id] ?? []).length > 0 || (!!o.parent_joint && !!o.parent))   // C2: every figure has its track (a clip is dropped on it)
   const skeletons = current.objects.filter((o) => (k.skeleton?.[o.id] ?? []).length > 0)        // CS3: the figures with skeleton keys
   const blockEnd = (b: MotionBlock) => b.start + Math.max(1, b.length) - 1
-  const span = stageSpan(end, [...camKeys, ...objects.flatMap((o) => (k.objects[o.id] ?? []).map((x) => x.frame)), ...objects.flatMap((o) => (tracks[o.id] ?? []).map(blockEnd)),
+  const span = stageSpan(Math.max(end, sceneLength(current) - 1), [...camKeys, ...objects.flatMap((o) => (k.objects[o.id] ?? []).map((x) => x.frame)), ...objects.flatMap((o) => (tracks[o.id] ?? []).map(blockEnd)),
     ...skeletons.flatMap((o) => k.skeleton![o.id].map((x) => x.frame + x.transition))])
   markUsed('stage.anim.keyCamera'); markUsed('stage.anim.keyObject'); markUsed('stage.anim.removeKey')
   const row = (id: string, label: string, frames: number[], sel: boolean, onSelect: () => void, onKey?: () => void): TLRow => {   // C1 (P11): the row's own key
@@ -1160,8 +1203,9 @@ function Viewport() {
         <CommandButton id="stage.mode.build" text active={!rec} /><CommandButton id="stage.mode.record" text active={rec} />
       </div>}
       {current && rec && <div className="record-bar" data-testid="record-bar" onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}>
+        <RecordButton />{/* C3 (D181): the animatic */}
         <CommandButton id="stage.frame.make" text label="Capture a still ▸" /><CommandButton id="stage.shot.passes" text label="Render the passes ▶" />
-        <Help text="Record: the scene through the shot's camera over its range, the editing chrome away. Capture a still makes a picture of this frame in Image (From a stage); the passes — clay, depth, pose, masks — are what the performances use. The animatic, the lit clay recorded as a clip, comes with C3." />
+        <Help text="Record: the scene through the shot's camera over its range, the editing chrome away. Record ▶ writes the animatic — the lit clay frame by frame on the CPU, a clip under the shot that the storyboard plays and Episode cuts until a performance replaces it. Capture a still makes a picture of this frame in Image (From a stage); the passes — clay, depth, pose, masks — are what the performances use." />
       </div>}
       {current && !rec && <div className="gizmo-bar" onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}>
         <CommandRow ids={['stage.tool.select', 'stage.tool.move', 'stage.tool.rotate', 'stage.tool.scale', 'stage.tool.path', 'gap', 'stage.snap', 'gap', 'stage.undo', 'stage.redo']} active={`stage.tool.${tool}`} />

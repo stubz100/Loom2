@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .body import Body
 from .fsio import atomic_write_json, new_id, plain_name, read_json, utc_now
-from .workspace import Workspace
+from .workspace import SCENE_SECONDS_DEFAULT, SCENE_SECONDS_MAX, Workspace
 
 STAGE_SCHEMA_VERSION = 4                           # 2 (D108): a set is architecture; schema 1's set blocks are read as props;
                                                    # 3 (proto01_UIcast CS1, S3): a figure's body is of the adult dummy (body.rebase_body);
@@ -339,6 +339,7 @@ class Stage(BaseModel):
     keyframes: dict[str, Any] = Field(default_factory=lambda: {"camera": {}, "objects": {}})  # ST4
     tracks: dict[str, list[MotionBlock]] = Field(default_factory=dict)                         # U5 (G8): each figure's clip blocks, by its object id
     range: StageRange = Field(default_factory=StageRange)
+    length: int = Field(0, ge=0)                                                               # C3 (D181, Q4): the scene's length in frames — the timeline is 0 … length − 1 and the ranges lie inside; 0: a scene from before C3 (scene_length reads it)
     passes: list[dict[str, Any]] = Field(default_factory=list)                                 # ST3: {camera_id, revision, size, assets, keypoints, legend, rendered_at}
     ambient: float | None = Field(None, ge=0.0, le=5.0)                                        # D110 (PS4): the sky light's strength; None = 0.85 with lights, 1.1 without
     group_id: str | None = None                                                                # ST3: the album page the passes and shots are placed on (server-set)
@@ -433,9 +434,22 @@ def _migrate_sets(raw: dict[str, Any]) -> dict[str, Any]:
     return {**raw, "objects": objs, "schema_version": 2}
 
 
+def scene_length(st: Stage) -> int:
+    """C3 (Q4): the scene's length in frames — as set, or for a scene from before C3 the larger of its range and the default (F37: a
+    length set never grows by itself; one never set reads as what the scene already spans)."""
+    fps = max(1, int(st.size.get("fps", 24)))
+    return st.length or max(st.range.end + 1, SCENE_SECONDS_DEFAULT * fps)
+
+
 def check(st: Stage) -> None:
     """The invariants a saved document keeps: unique ids, parents that exist and never cycle, the active camera present, a 36 mm
-    sensor is the default but any positive one is allowed, focal lengths in the lens range."""
+    sensor is the default but any positive one is allowed, focal lengths in the lens range; C3 (Q4): the length within the cap and the
+    range inside it."""
+    fps = max(1, int(st.size.get("fps", 24)))
+    if st.length > SCENE_SECONDS_MAX * fps:
+        raise ValueError(f"a scene is at most {SCENE_SECONDS_MAX} s long ({SCENE_SECONDS_MAX * fps} frames at {fps} fps)")
+    if st.length and st.range.end >= st.length:
+        raise ValueError(f"the range runs to frame {st.range.end} but the scene is {st.length} frames long — lengthen the scene first (F37: its length never grows by itself)")
     for o in st.objects:
         if o.kind == "set" and o.preset == "built" and o.place_set is None:
             raise ValueError(f"object {o.id}: a built set needs its place_set (CW6)")
@@ -533,7 +547,9 @@ class StageStore:
         if ps.sources:
             c = ps.sources[0].camera
             cam = StageCamera(id=new_id("cam"), name="Camera 1", pos=list(c.pos), target=list(c.target), roll=c.roll, focal_mm=c.focal_mm, sensor_mm=c.sensor_mm)
-        st = Stage(id=new_id("stg"), name=name.strip() or "Stage", size=size or {"w": 1920, "h": 1080, "fps": 24}, objects=objects, cameras=[cam], active_camera=cam.id)
+        size = size or {"w": 1920, "h": 1080, "fps": 24}
+        length = self.new_length(size)                                        # C3 (Q4): the project's default length
+        st = Stage(id=new_id("stg"), name=name.strip() or "Stage", size=size, objects=objects, cameras=[cam], active_camera=cam.id, length=length, range=StageRange(start=0, end=length - 1))
         check(st)
         self.save(st)
         return st
@@ -593,10 +609,22 @@ class StageStore:
         self.save(st)
         return st
 
-    def create(self, name: str = "Stage", size: dict[str, int] | None = None) -> Stage:
-        """A new stage with one camera (35 mm, eye level) looking at the origin — a shot is always framed by something."""
+    def new_length(self, size: dict[str, int], seconds: float | None = None) -> int:
+        """C3 (Q4): a new scene's length in frames — `seconds`, else the project's default (project.json's scene_seconds)."""
+        if seconds is None:
+            try:
+                seconds = self.ws.load().scene_seconds
+            except Exception:  # noqa: BLE001 — a workspace without a project record (a bench in a test): the default
+                seconds = SCENE_SECONDS_DEFAULT
+        return max(2, round(float(seconds) * max(1, int(size.get("fps", 24)))))
+
+    def create(self, name: str = "Stage", size: dict[str, int] | None = None, seconds: float | None = None) -> Stage:
+        """A new stage with one camera (35 mm, eye level) looking at the origin — a shot is always framed by something. C3 (Q4): its length
+        is `seconds`, else the project's default; the range is the whole scene."""
         cam = StageCamera(id=new_id("cam"), name="Camera 1")
-        st = Stage(id=new_id("stg"), name=name.strip() or "Stage", size=size or {"w": 1920, "h": 1080, "fps": 24}, cameras=[cam], active_camera=cam.id)
+        size = size or {"w": 1920, "h": 1080, "fps": 24}
+        length = self.new_length(size, seconds)
+        st = Stage(id=new_id("stg"), name=name.strip() or "Stage", size=size, cameras=[cam], active_camera=cam.id, length=length, range=StageRange(start=0, end=length - 1))
         self.save(st)
         return st
 
@@ -608,7 +636,7 @@ class StageStore:
         base = data.get("revision")
         if base is not None and int(base) != cur.revision:
             raise StaleStage(f"the stage is at revision {cur.revision}, the change is based on {base} — reload it first")
-        keep = ("name", "size", "objects", "cameras", "active_camera", "keyframes", "tracks", "range", "passes", "ambient")
+        keep = ("name", "size", "objects", "cameras", "active_camera", "keyframes", "tracks", "range", "length", "passes", "ambient")
         merged = {**cur.model_dump(), **{k: v for k, v in data.items() if k in keep}, "id": st_id, "schema_version": STAGE_SCHEMA_VERSION,
                   "revision": cur.revision + 1, "created_at": cur.created_at, "updated_at": utc_now()}
         alive = {o.get("id") for o in merged.get("objects") or [] if isinstance(o, dict)}

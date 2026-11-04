@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..library import AnimatePanels, SavedPanels, put_animate_panels, put_panels, read_animate_panels, read_panels, StageTemplates, put_stage_templates, read_stage_templates
 from ..schemas import ProjectInfo, Recents
@@ -53,6 +53,26 @@ async def project_get(svc: Svc):
         return info | {"assets": 0, "usage_gb": 0.0, "jobs_indexed": 0}
     count, usage, jobs = await asyncio.to_thread(lambda: (cat.count(), cat.usage_bytes(), cat.jobs_indexed()))
     return info | {"assets": count, "usage_gb": round(usage / 2**30, 2), "jobs_indexed": jobs}
+
+
+class ProjectDefaults(BaseModel):
+    """C3 (D181, Q4): what a new scene starts with."""
+    scene_seconds: int = Field(5, ge=1, le=20)
+
+
+@router.put("/project/defaults", response_model=ProjectInfo, response_model_exclude_unset=True)
+async def project_defaults_put(svc: Svc, body: ProjectDefaults):
+    """C3 (Q4): the length a new scene starts with — a project record, written through the workspace (files are truth)."""
+    ws, _, _ = svc.require_project()
+
+    def write() -> dict:
+        rec = ws.load()
+        rec.scene_seconds = body.scene_seconds
+        ws.save(rec)
+        return ws.info()
+    info = await asyncio.to_thread(write)
+    svc.hub.broadcast("project.changed", {"scene_seconds": body.scene_seconds})
+    return info | {"assets": 0, "usage_gb": 0.0, "jobs_indexed": 0}
 
 
 @router.get("/project/presets", response_model=SavedPanels)

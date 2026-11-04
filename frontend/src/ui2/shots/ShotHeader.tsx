@@ -8,9 +8,11 @@ import { navigate } from '../../frame/router'
 import { useStory } from '../../suites/story/storyStore'
 import { lineSpans, linesOutlast } from '../../suites/stage/tracks'
 import { useWorld } from '../world/worldStore'
-import { cameraUsers, castOf, rescene, setRange, useRouteRows, useShotStage, type CastMember } from './scene'
-import { flushClay, useShots } from './shotsStore'
+import { api } from '../../api/client'
+import { animaticState, cameraUsers, castOf, extendRange, rescene, setRange, useRouteRows, useShotStage, type CastMember } from './scene'
+import { flushClay, recordInClay, useShots } from './shotsStore'
 import { ShotWords } from './ShotWords'
+import type { ShotVersion } from '../../api/types'
 
 const LinesEditor = lazy(() => import('../../suites/story/StoryParts').then((m) => ({ default: m.LinesEditor })))
 
@@ -35,6 +37,24 @@ function RangeField({ start, end, fps, whole }: { start: number; end: number; fp
       <input type="number" min={0} aria-label="range end" value={b ?? end} onChange={(e) => setB(e.target.value)} onBlur={commit} onKeyDown={key} />
       <span className="w-val">{((end - start) / fps).toFixed(1)} s{whole ? ' · the stage\'s range' : ''}</span>
       {!whole && <button className="link" title="Back to the stage's whole range" onClick={() => void setRange(null)}>whole</button>}
+    </span>
+  )
+}
+
+/** C3 (D181, 04 §4.3–4.4; Q6): the animatic row — ▶ plays it here, its frames, when it was recorded, current or stale since the scene
+ *  changed; Record ▸ (again) opens the scene in Clay's Record mode. */
+function AnimaticRow({ a, stage, open }: { a: NonNullable<ShotVersion['animatic']> | null; stage: { id: string; revision: number } | null; open: boolean }) {
+  const [playing, setPlaying] = useState(false)
+  const state = animaticState(a, stage)
+  const when = a ? new Date(a.recorded_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
+  return (
+    <span className="s-animatic" data-testid="shots-animatic" data-state={state}>
+      {a ? <>
+        <button className="link" disabled={!a.asset_id} title={playing ? 'Stop' : 'Play the animatic here'} onClick={() => setPlaying(!playing)}>{playing ? '■' : '▶'} {a.frames} frames</button>
+        <span className="w-val">· recorded {when} · </span><span className={state === 'stale' ? 's-stale' : 'w-val'}>{state === 'stale' ? 'stale since the scene changed' : 'current'}</span>
+      </> : <span className="w-val">none yet</span>}
+      {open && <button className="link" onClick={() => void recordInClay()} title="Clay's Record mode on the shot's scene: Record ▶ writes the animatic">{a ? 'Record again ▸' : 'Record ▸'}</button>}
+      {playing && a?.asset_id && <video className="s-animatic-player" src={api.assetUrl(a.asset_id)} controls autoPlay loop />}
     </span>
   )
 }
@@ -87,7 +107,7 @@ export function ShotHeader() {
           <MenuButton label={cam?.name ?? 'no camera'} items={camMenu} text />
           {range && stage && <RangeField start={range.start} end={range.end} fps={stage.fps} whole={!v.range} />}
           {need !== null && range && <span className="s-outlast" data-testid="shots-outlast">the lines run {((need - range.start + 1) / fps).toFixed(1)} s, the shot {((range.end - range.start + 1) / fps).toFixed(1)} s
-            {open && <button className="link" onClick={() => void setRange({ start: range.start, end: need })}>Extend to the lines</button>}</span>}
+            {open && <button className="link" title="The shot's range to the lines' end — the scene lengthened first when they run past it (C3)" onClick={() => void extendRange({ start: range.start, end: need }, stage)}>Extend to the lines</button>}</span>}
         </span> : <span className="w-val">{scene ? `${scene.name} — no stage yet` : 'no scene yet'} <MenuButton label={scene ? 'Give it a stage' : 'Give it a scene'} items={sceneMenu} text /></span>}
       </div>
       {stage && <div className="w-field"><span>cast <Help text="What stands on the shot's stage, from World: add a figure or a prop in Clay's Scene section. A member that is not ready for Clay says what it lacks; a click opens it in World." /></span>
@@ -98,6 +118,8 @@ export function ShotHeader() {
           {open && level !== 'clay' && <CommandButton id="shots.level.clay" text label="Add in Clay ▸" />}
         </span>
       </div>}
+      {v.stage_id && <div className="w-field"><span>animatic <Help text="Record ▶ in Clay's Record mode writes the scene's lit clay through the shot's camera over its range as a clip, on the CPU: the storyboard plays it and Episode cuts it until a performance replaces it. Stale: the scene changed since it was recorded." /></span>
+        <AnimaticRow a={v.animatic ?? null} stage={stage ? { id: stage.id, revision: stage.revision } : null} open={open} /></div>}{/* C3 (D181) */}
       <ShotWords stageRev={stage?.revision} />
     </div>
   )

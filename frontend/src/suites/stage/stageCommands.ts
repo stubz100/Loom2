@@ -193,7 +193,15 @@ registerCommands([
   { id: 'stage.mode.build', scope: 'stage', label: 'Build', icon: Hammer, placement: ['toolbar'], when: hasStage, run: () => st().setMode('build'),
     hint: 'arrange the scene — the outliner, the gizmos, the pose and camera tools' },
   { id: 'stage.mode.record', scope: 'stage', label: 'Record', icon: Video, placement: ['toolbar'], when: () => hasStage() && !!st().activeCamera(), run: () => st().setMode('record'),
-    hint: "the scene through the shot's camera over its range, nothing else on screen: capture a still, render the passes" },
+    hint: "the scene through the shot's camera over its range, nothing else on screen: record the animatic, capture a still, render the passes" },
+  // C3 (D181, 04 §4.3; Q6): the animatic — the lit clay through the shot's camera over its range, frame by frame on the CPU, the shot's clip until a performance replaces it
+  { id: 'stage.record.animatic', scope: 'stage', label: 'Record ▶', icon: Video, placement: ['panel'], when: () => hasStage() && st().mode === 'record' && !!st().activeCamera() && !st().rendering,
+    hint: "the animatic: the scene's lit clay through the shot's camera over the shot's range, frame-stepped to a clip on the CPU — the storyboard's first deliverable, before any GPU minute",
+    run: () => void import('../../ui2/clay/clayStore').then(async ({ useClay }) => {
+      const f = useClay.getState().from
+      if (!f) { useSession.getState().toast("Open the scene from its shot (Shots › Clay): the animatic is the shot's", 'info'); return }
+      await (await import('./animatic')).recordAnimatic({ shot: f.shot, version: f.version })
+    }) },
   { id: 'stage.object.standHere', scope: 'stage', label: 'Stand it here', icon: MapPin, placement: ['context'], hint: 'the selected thing moved to where you right-clicked on the floor',
     when: () => !!sel() && !sel()!.locked && !!st().menuAt, run: () => { const o = sel(), at = st().menuAt; if (o && at) st().setTransform(o.id, { ...o.transform, pos: [at[0], at[1], at[2]] }) } },
   { id: 'stage.undo', scope: 'stage', label: 'Undo', icon: Undo2, keys: 'Ctrl+Z', placement: ['toolbar', 'context'], when: () => st().undo.length > 0, run: () => st().undoEdit() },

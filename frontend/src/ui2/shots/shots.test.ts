@@ -2,7 +2,8 @@
 import { describe, expect, it } from 'vitest'
 import type { FlowGraph, FlowNode, Profile, Shot, ShotVersion } from '../../api/types'
 import { nextLevel, routeRows } from './route'
-import { cameraUsers, castOf, type StageLite } from './scene'
+import { animaticState, cameraUsers, castOf, type StageLite } from './scene'
+import { clampLength, sceneLength, sceneSeconds } from '../../suites/stage/sceneLength'
 import { levelOf, placeOfHash, suiteOf } from './shotsStore'
 
 const node = (id: string, type: FlowNode['type'], extra: Partial<FlowNode> = {}): FlowNode =>
@@ -48,7 +49,7 @@ describe('the storyboard (U4)', () => {
 })
 
 describe("the header's scene (U4c)", () => {
-  const stage: StageLite = { id: 'stg', name: 'Pier', revision: 3, fps: 24, range: { start: 0, end: 96 }, cameras: [{ id: 'c1', name: 'Camera 1' }, { id: 'c2', name: 'Camera 1 2' }],
+  const stage: StageLite = { id: 'stg', name: 'Pier', revision: 3, fps: 24, range: { start: 0, end: 96 }, length: 120, cameras: [{ id: 'c1', name: 'Camera 1' }, { id: 'c2', name: 'Camera 1 2' }],
     objects: [{ id: 'o1', kind: 'mannequin', name: 'Figure 1', profile_id: 'prf_ines', version: null, visible: true }, { id: 'o2', kind: 'mannequin', name: 'Figure 2', profile_id: null, version: null, visible: true },
       { id: 'o3', kind: 'mesh', name: 'Lantern', profile_id: 'prf_lamp', version: 'v1', visible: true }, { id: 'o4', kind: 'mesh', name: 'Crate', profile_id: null, version: null, visible: true },
       { id: 'o5', kind: 'set', name: 'Pier', profile_id: null, version: null, visible: true }] }
@@ -88,5 +89,24 @@ describe('the owed work (U6c, D164)', () => {
     expect(owedRunText([{ kind: 'perform', job_id: 'j1' }, { kind: 'perform', job_id: 'j2' }, { kind: 'face', job_id: null }, { kind: 'lipsync', job_id: 'j3' }], []))
       .toBe('Queued: 2 performances, 1 face pass after its matte, 1 lip-sync')
     expect(owedRunText([], [{ kind: 'face', layer: 'fig', why: 'Tomas has no matte yet — matte it first' }])).toBe('Nothing queued · face pass of fig refused: Tomas has no matte yet — matte it first')
+  })
+})
+
+describe('Record and the scene\'s length (C3, D181)', () => {
+  it('reads the animatic row\'s state: none, current, stale once the scene\'s revision moved past the recording', () => {
+    const a = { stage_id: 'stg_1', stage_revision: 4 }
+    expect(animaticState(null, { id: 'stg_1', revision: 9 })).toBe('none')
+    expect(animaticState(a, null)).toBe('current')
+    expect(animaticState(a, { id: 'stg_1', revision: 4 })).toBe('current')
+    expect(animaticState(a, { id: 'stg_1', revision: 5 })).toBe('stale')
+    expect(animaticState(a, { id: 'stg_2', revision: 50 })).toBe('current')                 // another scene: nothing to compare
+  })
+  it('reads a scene\'s length: as set, else what it spans (a scene from before C3), never below its range nor past 20 s', () => {
+    expect(sceneLength({ length: 120, range: { start: 0, end: 119 }, size: { fps: 24 } })).toBe(120)
+    expect(sceneLength({ length: 0, range: { start: 0, end: 120 }, size: { fps: 24 } })).toBe(121)
+    expect(sceneLength({ length: 0, range: { start: 0, end: 30 }, size: { fps: 24 } })).toBe(120)
+    expect(sceneSeconds({ length: 36, range: { start: 0, end: 10 }, size: { fps: 24 } })).toBe('1.5')
+    expect(clampLength({ length: 120, range: { start: 0, end: 150 }, size: { fps: 24 } }, 2)).toBe(151)
+    expect(clampLength({ length: 120, range: { start: 0, end: 10 }, size: { fps: 24 } }, 99)).toBe(480)
   })
 })

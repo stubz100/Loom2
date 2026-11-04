@@ -242,3 +242,5 @@
 /* C2 (P9): the path's points as numbers in the Inspector */
 .path-fields .path-point > span:first-child { color: var(--fg3); text-align: right; padding-right: 4px; }
 .path-fields .vec input { width: 100%; min-width: 0; }
+.scene-length { display: inline-flex; align-items: center; gap: 4px; }   /* C3 (Q4): the length fields */
+.scene-length input { width: 56px; }

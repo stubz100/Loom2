@@ -23,7 +23,7 @@ from ..stages import PlaceSet, Pose, SetFace, StageStore, encode_guide
 from ..shot_recipe import TEMPLATES, StampReader, Template, recipe_state, rerun_recipe, stale_plan, used_run
 from ..shot_graph import ShotGraph, clay_rows, final_for, shot_graph
 from ..shot_prompt import ShotPrompt, shot_prompt
-from ..story import FOR_SHOT, version_stage_stale, NODE_TYPES, VISUAL_TYPES, has_lines, node_type, StaleScenes, CastUse, cast_uses, body_fit_origin, fit_if_untouched, model_source, prop_model_origin, shell_origin, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
+from ..story import FOR_SHOT, Animatic, version_stage_stale, NODE_TYPES, VISUAL_TYPES, has_lines, node_type, StaleScenes, CastUse, cast_uses, body_fit_origin, fit_if_untouched, model_source, prop_model_origin, shell_origin, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
 from ..voices import VoiceRecord, VoiceStore, check_voice
 from .deps import Svc
 
@@ -1523,11 +1523,14 @@ def _cards(svc, ws) -> dict:
             length, src = c.frames / float(c.fps), "clip"
         elif fin is not None and fin.rate:
             length, src = fin.frames / float(fin.rate), "final"
+        elif v.animatic is not None and v.animatic.fps:                                       # C3 (Q6): the animatic's length, before any model runs
+            length, src = v.animatic.frames / float(v.animatic.fps), "animatic"
         elif node is not None and cat is not None:
             secs = [a.duration_s for a in (cat.get(ln.audio_asset_id) for ln in node.lines if ln.audio_asset_id) if a is not None and a.duration_s]
             if secs:
                 length, src = float(sum(secs)), "lines"
-        items.append({"shot_id": s.id, "node_id": s.owner_node, "version": v.id, "route": g.route, "take_asset_id": v.frame_asset_id or (c.asset_id if c else None),
+        items.append({"shot_id": s.id, "node_id": s.owner_node, "version": v.id, "route": g.route,
+                      "take_asset_id": v.frame_asset_id or (c.asset_id if c else None) or (v.animatic.asset_id if v.animatic is not None else None),   # C3: the card's picture, the animatic last
                       "length_s": round(length, 2) if length is not None else None, "length_from": src, "stale": g.stale, "owed": g.owed,
                       "stale_steps": _stale_steps(g, v, st)})
     return {"items": items, "guide_s": SHOT_GUIDE_S}
@@ -1563,9 +1566,30 @@ async def shot_get(svc: Svc, sid: str):
     return s.model_dump()
 
 
+def _range_inside_scene(ws, sid: str, body: dict) -> None:
+    """C3 (Q4, F37): a version's range lies inside its scene's length — the scene is lengthened first, never by the range."""
+    from ..stages import scene_length
+    patches = [p for p in (body.get("versions") or []) if isinstance(p, dict) and isinstance(p.get("range"), dict)]
+    if not patches:
+        return
+    s = StoryStore(ws).shot(sid)
+    if s is None:
+        return
+    stages = StageStore(ws)
+    for p in patches:
+        v = next((x for x in s.versions if x.id == p.get("id")), None)
+        st = stages.get(p.get("stage_id") or v.stage_id) if v is not None and (p.get("stage_id") or v.stage_id) else None
+        if st is None:
+            continue
+        n = scene_length(st)
+        if int(p["range"].get("end", -1)) >= n:
+            raise HTTPException(422, f"the range runs to frame {p['range'].get('end')} but the scene {st.name} is {n} frames long ({n / max(1, int(st.size.get('fps', 24))):.1f} s) — lengthen the scene in Clay first")
+
+
 @router.patch("/story/shots/{sid}", response_model=Shot)
 async def shot_patch(svc: Svc, sid: str, body: dict):
     ws, _, _ = svc.require_project()
+    await asyncio.to_thread(_range_inside_scene, ws, sid, body)
     try:
         s = await asyncio.to_thread(StoryStore(ws).patch_shot, sid, body)
     except KeyError:
@@ -1574,6 +1598,69 @@ async def shot_patch(svc: Svc, sid: str, body: dict):
         raise HTTPException(409, str(e))
     except ValueError as e:
         raise HTTPException(422, str(e))
+    _shot_changed(svc, s)
+    return s.model_dump()
+
+
+class AnimaticIn(BaseModel):
+    """C3 (D181, 04 §4.3; Q6): Record ▶ — the frames the client rendered (the lit clay through the shot's camera, its range, the draft
+    size), each a PNG already put through `PUT /blobs/{sha}`, in order."""
+    frames: list[str] = Field(min_length=1)
+    fps: int = Field(24, ge=1, le=120)
+
+
+@router.post("/story/shots/{sid}/versions/{vid}/animatic", response_model=Shot)
+async def shot_animatic(svc: Svc, sid: str, vid: str, body: AnimaticIn):
+    """C3: the animatic as a clip of the project (its master the frames, a proxy encoded now, the proxy a video asset in the shot's home,
+    the Bin's tile), on the version with the scene's revision — the row says *stale* once the scene moves on. No GPU, no job."""
+    import shutil
+    from ..bins import land
+    ws, cat, _ = svc.require_project()
+    store = StoryStore(ws)
+    s = await asyncio.to_thread(store.shot, sid)
+    if s is None:
+        raise HTTPException(404, "shot not found")
+    try:
+        v = s.version(vid)
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    if not v.stage_id:
+        raise HTTPException(422, "the shot has no scene yet — the animatic is the scene through its camera")
+    st = await asyncio.to_thread(StageStore(ws).get, v.stage_id)
+    if st is None:
+        raise HTTPException(422, "the shot's scene is gone")
+    from .finals import _blob
+    blobs = [_blob(ws, sha) for sha in body.frames]
+    origin = JobOrigin(suite="stage", surface=FOR_SHOT, ref=sid, payload={"shot_id": sid, "version": vid, "animatic": True})
+
+    def make() -> tuple[Shot, Any]:
+        clips = ClipStore(ws)
+        tmp = ws.temp_dir / "animatic" / new_id("tmp")
+        tmp.mkdir(parents=True, exist_ok=True)
+        frames = []
+        for i, b in enumerate(blobs):
+            p = tmp / f"{i:06d}.png"
+            shutil.copyfile(b, p)                                           # a blob is shared by its hash: copied, the clip moves its own
+            frames.append(p)
+        rec = clips.create(frames, model_id="animatic", preset="draft", prompt=s.name, seed=0, fps=body.fps, start_asset_id="", beats=[],
+                           params={"animatic": True, "shot_id": sid, "version": vid, "stage_id": st.id, "stage_revision": st.revision, "camera_id": v.camera_id})
+        shutil.rmtree(tmp, ignore_errors=True)
+        rec = clips.encode_proxy(rec)
+        asset = cat.ingest_file(ws.path / rec.proxy_path, kind="video", in_place=True, suite="stage", model_id="animatic", prompt_text=s.name,
+                                params={"clip_id": rec.id, "animatic": True, "shot_id": sid, "version": vid, "stage_id": st.id, "stage_revision": st.revision},
+                                lineage_kind="animatic", frames=rec.frames, w=rec.w, h=rec.h, origin=origin)
+        asset = cat.make_thumbs(asset, clips.frame_path(rec.id, 0))
+        rec.asset_id = asset.id
+        clips.save(rec)
+        if svc.groups is not None:
+            land(svc.groups, ws, origin, [asset.id])                        # the shot's home (U2e): the Bin under the shot
+        a = Animatic(clip_id=rec.id, asset_id=asset.id, frames=rec.frames, fps=rec.fps, size={"w": rec.w, "h": rec.h}, stage_id=st.id, stage_revision=st.revision)
+        return store.set_animatic(sid, vid, a), asset
+    try:
+        s, asset = await asyncio.to_thread(make)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    svc.hub.broadcast("asset.created", asset.model_dump())
     _shot_changed(svc, s)
     return s.model_dump()
 

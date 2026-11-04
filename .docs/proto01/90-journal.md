@@ -16455,3 +16455,35 @@ picture; test_places_props_figures_d93c reads the ref list without its mention);
 green (113 + the one adapted).
 
 **On the rig (Followed, the walk's shot 1, Klein 9B — the measured default):** through the product path (Shots › Performance › Stage clip › *Make a still ▸*): the Still's deck opened with the new slot *place · Cobbled street* as image 2 before Nora's four, the prompt's reads line saying "Image 2 shows the place — Cobbled street: its walls, floor, light and materials." after the clay lead; *Render frame ▶* re-rendered the stale passes and queued the still: job_b2f4d3e4 done in 48 s with the engine's start (Klein 9B's 12 s warm) — **the picture (ast_099dabd8) is the Cobbled street**: the bakery's window, the bookshop with its bell, the pharmacy's lettering, the shutters and the cobbles of the set picture, with the three figures as blocked (Nora in the green coat left, the man with his newspaper centre, the woman with her bags right). The dev still of 13:56 had invented a street; the fault was the Still's, not the model's. The picture sent.
+
+## 2026-11-04 19:11 — CS3 fix: a shell has one hand per arm (the shell's own hands folded by its picture's hands)
+
+**The author:** "the clay shells have 2 hands — somehow you can still see the dummy hands. Can we check if the clay shells still have the
+dummy inside?" **Checked on Followed's three shells on their benches:** the dummy's body is not drawn — CS3 cuts the Detailed mannequin to
+its hands (`handsOnly`) and hides the Simple shapes; its hands are kept on purpose, as the hand rig (D129's holds, the hand presets). What
+showed twice was the shell's own hands: Pixal3D's hands were meant to fold into the wrists (`proxy.collapseHands`, CS3) and folded nothing.
+A temporary count in the browser (removed) gave the reasons — on Nora 17 089 vertices nearest her forearms, **0 folded**: (1) the forearm's
+segment ends at the fingertips (it carries the hand, 0.18 m) while the fold measured "beyond the wrist" from that end, so no hand vertex
+ever qualified (its test used a segment ending at the wrist); (2) the skeleton is fitted flat in the picture's plane while the shell's hands
+have depth — Nora's reach 19 cm in front of it, the man's 29 — so the "along the forearm" cone, measured in 3D, rejected them all; (3) the
+shell's own wrist is not the skeleton's: the cross-sections along each forearm put the start of the shell's hand 5 cm before the computed
+wrist on Nora, 1–2 cm on the woman, at it on the man, with the bags and the newspaper fused around the hands.
+
+**Built.** The shell's own picture says where its hands are: the stored body points carry SDPose's 21 keypoints a hand, and the shell is
+placed by that picture (D140), so `pictureFrame` (split out of `placeByPicture`) maps a picture pixel into the figure's frame and
+`handRegion` makes each hand's outline in the picture plane — the keypoints' convex hull grown 3 cm around the wrist and 7 cm beyond it
+toward the fingers (Pixal3D's hands are fuller than the joints' centres: the man's hangs 5 cm below its outline, Nora's 3.5 cm). A shell
+vertex nearest a forearm, inside that outline and within 40 cm of the plane, moves to the skeleton's wrist, where the hand rig's hand is
+drawn. Without the picture's hands (an old version, a hand unseen) the fold keeps its cone, now measured in the picture's plane from the
+wrist the hand's length back from the segment's end. The bind is in the browser at every load, so every existing shell is fixed without
+being made again.
+
+**Checked.** Vitest 666 + 3 skipped (proxy.test: the wrist the hand's length back; a hand in front of the plane folds in the plane, not in
+3D; the outline — inside at any depth, 2.5 cm beside the fingers, 6 cm past the fingertips' keypoint, not 6 cm up the forearm behind the
+wrist, no region for unseen points — and the fold by it: the hand to the skeleton's wrist, the cuff kept, the coat beside it kept);
+typecheck, build and lint clean (61 warnings, as before); the shell scenarios of the e2e alone 5 / 5 in 54 s (shells only, the skeleton bench, the skeleton changed, the bench and a prop's height, the pose editor). **On the benches (Followed):**
+Nora 7 429 vertices folded, the woman 9 551, the man 8 328 — one hand per arm on all three: Nora's hands gone under her sleeves, the woman's
+bags held by the rig's hands (a thin handle reaching the wrist), the man's right hand gone but a small edge at the cuff, his newspaper kept.
+**Left:** on Nora the rig's hand sits a few centimetres past the end of her sleeve, where her own hand filled the space; a closer join
+(the rig's hand moved to the shell's wrist, or the cuff's margin tuned per shell) is a follow-up if the author wants it. The before/after
+sheet sent.

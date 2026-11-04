@@ -46,11 +46,14 @@ export const setShellPoints = (fn: (assetId: string) => StancePoints) => { point
 export const shellStance = (assetId: string) => stanceOf(pointsOfShell(assetId))
 export const shellPoints = (assetId: string) => pointsOfShell(assetId) as BindOptions['points']
 
+/** The hand's length past the wrist on the forearm's segment (segmentEnd: the hand rides on the forearm). */
+export const HAND_M = 0.18
+
 /** Each joint's segment, from the joint to where its part ends, in the joint's own frame (−Y down the limb). */
 function segmentEnd(j: Joint, limbs: Limbs): THREE.Vector3 {
   switch (j) {
     case 'r_shoulder': case 'l_shoulder': return new THREE.Vector3(0, -limbs.upper_arm, 0)
-    case 'r_elbow': case 'l_elbow': return new THREE.Vector3(0, -limbs.forearm - 0.18, 0)          // the hand rides on the forearm
+    case 'r_elbow': case 'l_elbow': return new THREE.Vector3(0, -limbs.forearm - HAND_M, 0)       // the hand rides on the forearm
     case 'r_hip': case 'l_hip': return new THREE.Vector3(0, -limbs.thigh, 0)
     case 'r_knee': case 'l_knee': return new THREE.Vector3(0, -limbs.shin - 0.06, 0.08)              // the foot rides on the shin
     case 'spine': return new THREE.Vector3(0, 0.42, 0)
@@ -184,7 +187,7 @@ export interface BindOptions {
   hands?: boolean
   /** D140: the points the figure was fitted to (its reference's) and the figure's 18 markers — with the GLB's figure box (the cut-out
    *  Pixal3D was given, `extras.loom2.figure_box`) the shell is placed by its picture. */
-  points?: { pose?: number[][]; canvas?: number[] } | null; markers?: THREE.Object3D[]
+  points?: { pose?: number[][]; canvas?: number[]; hand_left?: number[][]; hand_right?: number[][] } | null; markers?: THREE.Object3D[]
 }
 
 /** D140: the shell's placement from its picture, in the figure's own frame (it faces +Z, its left at +X, its floor at y 0): the figure
@@ -192,7 +195,7 @@ export interface BindOptions {
  *  has it and the arms where it has them (E36 scaled the shell from the floor to the head's top + 0.16 instead: the bench's overlay showed
  *  the dancer's arms 8 cm low under her bun). Not by the ankles: SDPose's sit ≈ 10 cm over the soles (the ankle bone, the shoe), the
  *  dummy's 4 cm. Null without a box, a nose or the markers. */
-function placeByPicture(model: THREE.Object3D, box: THREE.Box3, figureRoot: THREE.Object3D, root: THREE.Object3D, opts: BindOptions): THREE.Matrix4 | null {
+function pictureFrame(model: THREE.Object3D, figureRoot: THREE.Object3D, root: THREE.Object3D, opts: BindOptions): PictureFrame | null {
   const fb = (model.userData?.loom2 as { figure_box?: number[] } | undefined)?.figure_box
   const nose = opts.points?.pose?.[0]
   if (!fb || fb.length < 6 || !nose || (nose[2] ?? 0) < 0.3 || !opts.markers?.length) return null
@@ -201,20 +204,86 @@ function placeByPicture(model: THREE.Object3D, box: THREE.Box3, figureRoot: THRE
   const cv = opts.points?.canvas, kx = cv?.length === 2 ? cv[0] / fb[4] : 1, ky = cv?.length === 2 ? cv[1] / fb[5] : 1   // the fit's picture size against the matte's
   const [x0, y0, x1, y1] = [fb[0] * kx, fb[1] * ky, fb[2] * kx, fb[3] * ky]
   const n = at(opts.markers[0])
-  const size = box.getSize(new THREE.Vector3())
-  if (!(y1 > nose[1]) || n.y <= 0 || size.y < 1e-6) return null
+  if (!(y1 > nose[1]) || n.y <= 0) return null
   const k = n.y / (y1 - nose[1])                                             // metres per pixel: the nose's height over the soles
-  const s = ((y1 - y0) * k) / size.y
-  const x = n.x + ((x0 + x1) / 2 - nose[0]) * k                              // the picture's x runs as the figure's (facing the camera)
-  return figureRoot.matrixWorld.clone().multiply(new THREE.Matrix4().compose(new THREE.Vector3(x, 0, at(root).z), new THREE.Quaternion(), new THREE.Vector3(s, s, s))
+  const z = at(root).z
+  return { box: [x0, y0, x1, y1], k, toFigure: (px, py) => new THREE.Vector3(n.x + (px - nose[0]) * k, (y1 - py) * k, z) }   // the picture's x runs as the figure's (facing the camera)
+}
+/** D140: the picture's pixels in the figure's own frame — the nose on the figure's nose, the soles on its floor, `k` metres a pixel. */
+interface PictureFrame { box: number[]; k: number; toFigure: (px: number, py: number) => THREE.Vector3 }
+
+function placeByPicture(pf: PictureFrame | null, box: THREE.Box3, figureRoot: THREE.Object3D): THREE.Matrix4 | null {
+  const size = box.getSize(new THREE.Vector3())
+  if (!pf || size.y < 1e-6) return null
+  const [x0, y0, x1, y1] = pf.box
+  const s = ((y1 - y0) * pf.k) / size.y
+  const c = pf.toFigure((x0 + x1) / 2, y1)
+  return figureRoot.matrixWorld.clone().multiply(new THREE.Matrix4().compose(new THREE.Vector3(c.x, 0, c.z), new THREE.Quaternion(), new THREE.Vector3(s, s, s))
     .multiply(new THREE.Matrix4().makeTranslation(-(box.min.x + box.max.x) / 2, -box.min.y, -(box.min.z + box.max.z) / 2)))
 }
 
-/** The shell's hands into its wrists: a vertex whose nearest part is a forearm, beyond the wrist, within 25 cm of it and along the
- *  forearm's line (not a coat's side beside a hanging hand), moves to the wrist. */
-export function collapseHands(pos: THREE.BufferAttribute, segs: Segment[]): number {
+/** The hands of the shell's own picture as regions of the figure's picture plane (its x, y): each hand's keypoints (SDPose wholebody,
+ *  21 a hand, the wrist first) seen with confidence, their convex hull grown by `margin` around the wrist and by `far` beyond it, toward
+ *  the fingers — the keypoints are the joints' centres and Pixal3D's hands are fuller (on Followed the man's hangs 5 cm below its outline,
+ *  Nora's 3.5 cm), while the sleeve's cuff behind the wrist is kept. A predicate on a point of the figure's frame (its z is not read: the
+ *  hands' depth is the shell's own). Null without a hand's points. */
+export function handRegion(hands: (number[][] | undefined)[], toFigure: (px: number, py: number) => THREE.Vector3, margin = 0.03, far = 0.07): ((p: THREE.Vector3) => boolean) | null {
+  const regions = hands.map((pts) => (pts ?? []).filter((q) => (q[2] ?? 0) >= 0.3).map((q) => { const v = toFigure(q[0], q[1]); return [v.x, v.y] as [number, number] }))
+    .filter((pts) => pts.length >= 5).map((pts) => {
+      const w = pts[0], cx = pts.reduce((a, q) => a + q[0], 0) / pts.length, cy = pts.reduce((a, q) => a + q[1], 0) / pts.length
+      const L = Math.hypot(cx - w[0], cy - w[1]) || 1
+      return { hull: hull2d(pts), w, dir: [(cx - w[0]) / L, (cy - w[1]) / L] }                  // the wrist and the way the hand points
+    })
+  if (!regions.length) return null
+  return (p) => regions.some(({ hull, w, dir }) => {
+    if (inside2d(hull, p.x, p.y)) return true
+    const e = edge2d(hull, p.x, p.y)
+    return e <= margin || (e <= far && (p.x - w[0]) * dir[0] + (p.y - w[1]) * dir[1] > 0)
+  })
+}
+function hull2d(pts: [number, number][]): [number, number][] {                // Andrew's monotone chain
+  const a = [...pts].sort((m, n) => m[0] - n[0] || m[1] - n[1])
+  const cross = (o: number[], p: number[], q: number[]) => (p[0] - o[0]) * (q[1] - o[1]) - (p[1] - o[1]) * (q[0] - o[0])
+  const lower: [number, number][] = [], upper: [number, number][] = []
+  for (const p of a) { while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop(); lower.push(p) }
+  for (const p of [...a].reverse()) { while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop(); upper.push(p) }
+  return [...lower.slice(0, -1), ...upper.slice(0, -1)]
+}
+function inside2d(h: [number, number][], x: number, y: number): boolean {
+  if (h.length < 3) return false
+  let sign = 0
+  for (let i = 0; i < h.length; i++) {
+    const [ax, ay] = h[i], [bx, by] = h[(i + 1) % h.length]
+    const c = (bx - ax) * (y - ay) - (by - ay) * (x - ax)
+    if (c !== 0) { if (sign === 0) sign = Math.sign(c); else if (Math.sign(c) !== sign) return false }
+  }
+  return true
+}
+function edge2d(h: [number, number][], x: number, y: number): number {
+  let best = Infinity
+  for (let i = 0; i < h.length; i++) {
+    const [ax, ay] = h[i], [bx, by] = h[(i + 1) % h.length], dx = bx - ax, dy = by - ay
+    const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / Math.max(1e-12, dx * dx + dy * dy)))
+    best = Math.min(best, Math.hypot(x - (ax + t * dx), y - (ay + t * dy)))
+  }
+  return best
+}
+
+/** The shell's hands into the skeleton's wrists, where the hand rig's hands are drawn (CS3). A vertex whose nearest part is a forearm
+ *  moves to that forearm's wrist when it is in `inHand` — the hands of the shell's own picture (handRegion: its keypoints' outline, so
+ *  exactly the hand wherever the fitted skeleton's wrist sits) — or, without the picture's hands, when it is beyond the wrist, within
+ *  25 cm of it and along the forearm's line (not a coat's side beside a hanging hand). The first fold folded nothing (the author,
+ *  2026-11-04: "the clay shells have 2 hands"): the forearm's segment ends at the fingertips (the hand rides on it, HAND_M) while it
+ *  measured "beyond" from that end; the skeleton is fitted flat in the picture's plane while the shell's hands have depth (Nora's reach
+ *  19 cm in front of it, the man's 29) — so the line is measured in that plane, `depth` being the figure's facing axis (its local +z in
+ *  the world), and the depth itself only bounded; and the shell's own wrist is not the skeleton's (Nora's hand starts 5 cm before it,
+ *  the man's at it), which only the picture's hands tell. */
+const DEPTH_M = 0.3
+const HAND_DEPTH_M = 0.4                                                       // the picture's hands: a hand reaching forward (the man's, 29 cm)
+export function collapseHands(pos: THREE.BufferAttribute, segs: Segment[], depth?: THREE.Vector3, inHand?: ((world: THREE.Vector3) => boolean) | null): number {
   const fore = segs.filter((g) => g.j === 'r_elbow' || g.j === 'l_elbow')
-  const v = new THREE.Vector3(), d = new THREE.Vector3()
+  const v = new THREE.Vector3(), d = new THREE.Vector3(), wrist = new THREE.Vector3(), axis = new THREE.Vector3()
+  const flat = (x: THREE.Vector3) => (depth ? x.addScaledVector(depth, -x.dot(depth)) : x)       // into the picture's plane
   let n = 0
   for (let i = 0; i < pos.count; i++) {
     v.fromBufferAttribute(pos, i)
@@ -222,9 +291,18 @@ export function collapseHands(pos: THREE.BufferAttribute, segs: Segment[]): numb
     for (const g of segs) { const dist = pointSegment(v, g.a, g.b); if (dist < best) { best = dist; near = g } }
     if (!near || !fore.includes(near)) continue
     const ab = near.b.clone().sub(near.a), L = ab.length()
-    d.copy(v).sub(near.b)
-    if (d.dot(ab) <= 0 || d.length() > 0.25 || d.angleTo(ab) > THREE.MathUtils.degToRad(50) || L < 1e-6) continue
-    pos.setXYZ(i, near.b.x, near.b.y, near.b.z); n++
+    if (L < 1e-6) continue
+    wrist.copy(near.b).addScaledVector(ab, -Math.min(HAND_M, L * 0.5) / L)            // the wrist: the hand's length back from the segment's end
+    d.copy(v).sub(wrist)
+    if (depth && Math.abs(d.dot(depth)) > (inHand ? HAND_DEPTH_M : DEPTH_M)) continue
+    if (inHand) {                                                              // the picture's hands known: exactly what they cover, wherever the skeleton's wrist sits
+      if (!inHand(v)) continue
+      pos.setXYZ(i, wrist.x, wrist.y, wrist.z); n++
+      continue
+    }
+    flat(d); flat(axis.copy(ab))
+    if (d.dot(axis) <= 0 || d.length() > 0.25 || d.angleTo(axis) > THREE.MathUtils.degToRad(50)) continue
+    pos.setXYZ(i, wrist.x, wrist.y, wrist.z); n++
   }
   pos.needsUpdate = true
   return n
@@ -252,8 +330,12 @@ export function bindProxy(model: THREE.Object3D, J: Record<Joint, THREE.Object3D
   const size = box.getSize(new THREE.Vector3()), mid = box.getCenter(new THREE.Vector3())
   const s = (topY - floorY) / Math.max(1e-6, size.y)
   const turn = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), right.clone().negate())
-  const place = placeByPicture(model, box, figureRoot, J.root, opts) ?? new THREE.Matrix4().compose(new THREE.Vector3(centre.x, floorY, centre.z), turn, new THREE.Vector3(s, s, s))
+  const pf = pictureFrame(model, figureRoot, J.root, opts)
+  const place = placeByPicture(pf, box, figureRoot) ?? new THREE.Matrix4().compose(new THREE.Vector3(centre.x, floorY, centre.z), turn, new THREE.Vector3(s, s, s))
     .multiply(new THREE.Matrix4().makeTranslation(-mid.x, -box.min.y, -mid.z))
+  const region = opts.hands && pf ? handRegion([opts.points?.hand_left, opts.points?.hand_right], pf.toFigure) : null   // the shell's own hands, from its picture
+  const toFig = figureRoot.matrixWorld.clone().invert(), tmp = new THREE.Vector3()
+  const inHand = region ? (w: THREE.Vector3) => region(tmp.copy(w).applyMatrix4(toFig)) : null
   const bones = JOINTS.map((j) => J[j])
   const skeleton = new THREE.Skeleton(bones as unknown as THREE.Bone[])
   skeleton.calculateInverses()                                             // the bind pose: the stance, now
@@ -265,7 +347,7 @@ export function bindProxy(model: THREE.Object3D, J: Record<Joint, THREE.Object3D
     const g = (m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone())
     g.applyMatrix4(place.clone().multiply(m.matrixWorld))
     for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && !(opts.visible && k === 'color')) g.deleteAttribute(k)
-    if (opts.hands) collapseHands(g.attributes.position as THREE.BufferAttribute, segs)
+    if (opts.hands) collapseHands(g.attributes.position as THREE.BufferAttribute, segs, new THREE.Vector3(0, 0, 1).transformDirection(figureRoot.matrixWorld), inHand)   // the figure faces its +z
     const { idx, wts } = (opts.weights ?? 'heat') === 'heat' ? heatWeights(g.attributes.position, segs) : proximityWeights(g.attributes.position, segs)
     g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(idx, 4))
     g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(wts, 4))

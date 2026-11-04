@@ -32,7 +32,7 @@ const writeHash = (rail: WorldRail, entity: string | null, version: string | nul
 /** A creation passes the role filter (the chips over the grid). */
 export function passes(it: Pick<BinItem, 'roles'>, f: RoleFilter): boolean {
   if (f === 'all') return true
-  if (f === 'a_pose') return it.roles.some((r) => r === 'a_pose_front' || r === 'a_pose_back' || r === 'a_pose_side')
+  if (f === 'a_pose') return it.roles.some((r) => r === 'a_pose_front' || r === 'a_pose_back' || r === 'a_pose_side' || r === 'hand_picture' || r === 'feet_picture')   // RG1: the rig's pictures
   if (f === 'reference') return it.roles.some((r) => r === 'reference' || r === 'hero')
   return it.roles.includes(f)
 }

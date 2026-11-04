@@ -17,7 +17,8 @@ import { Help } from '../../frame/Help'
 import { useStory } from '../../suites/story/storyStore'
 import { CastSheet } from '../../suites/story/CastSheet'
 import { WorldRefs } from './WorldRefs'
-import { activeFraming, enterMake, FRAMINGS, linkEntity, REF_FRAMINGS, refFrame, refTree, type RefFraming } from './make'
+import { activeFraming, enterMake, FRAMINGS, linkEntity, partOf, REF_FRAMINGS, refFrame, refTree, type RefFraming } from './make'
+import { sheetWords } from './refWords'
 import '../../suites/generate/generate.css'
 import '../../suites/story/story.css'
 
@@ -44,10 +45,16 @@ export function WorldMake() {
   const frameRef = (f: RefFraming) => {                                 // D162: the server's sentence — nothing is queued; D177: an A-pose's frame is a 2:3 portrait
     if (active?.id === f.id) { g.set({ ref_framing: null }); return }  // D169: a second click turns it off, the words stay
     g.set({ ref_framing: f.id })
-    g.setTree(refTree(p.cls, refs?.[p.cls]?.[f.side] ?? '', panel.tree.camera))
-    const [w, h] = refFrame(p.cls, panel.width, panel.height)
+    g.setTree(refTree(p.cls, refs?.[p.cls]?.[f.side] ?? '', panel.tree.camera, f.side))
+    const [w, h] = refFrame(p.cls, panel.width, panel.height, f.side)
     if (w !== panel.width || h !== panel.height) g.set({ width: w, height: h, tier: 'custom' })
+    const klein = useSession.getState().capabilities?.story?.model_id                 // RG1 (E62 a): Klein draws the clean close-up; the card may change it
+    if (partOf(f.id) && klein && panel.model_id !== klein) g.setModel(klein)
   }
+  const part = reference ? partOf(reference.id) : null                 // RG1 (D187, D188): a hand or feet picture — its own words, not the sheet's
+  const partField = part === 'hand' ? 'hand_words' : 'feet_words'
+  const ownWords = v && part ? (v[partField] ?? '') : ''
+  const fromSheet = v && part ? sheetWords(v.appearance, v.outfit, v.marks, part) : ''
   const run = async () => {
     if (reference) {                                                    // a reference framing: that reference's make, its pictures Build's candidates
       const gid = await useStory.getState().ensureCandidates(p.id, vid)
@@ -62,13 +69,18 @@ export function WorldMake() {
   const secs = pv?.estimate.seconds ? Math.round(pv.estimate.seconds * panel.count) : null
   const tree = (
     <div className="w-make-tree">
-      <label className="w-field"><span>this picture <Help text="Words for this run only, after the sheet above (soaked, hood up)." /></span>
-        <textarea rows={2} value={note} aria-label="this picture only" placeholder="soaked, hood up" onChange={(e) => setNote(e.target.value)} /></label>
+      {part ? <label className="w-field" data-testid="part-words"><span>{part === 'hand' ? 'the hand' : 'the feet'} <Help text={part === 'hand'
+        ? "The hand picture's own words: the skin, the fingers, the nails or claws, rings, gloves. The sheet and the references are not sent — they draw the whole person (E62). Blank: the sheet's words about the hands, shown greyed."
+        : "The feet picture's own words: the shoes or boots, the heels, the hems, bare feet. The sheet and the references are not sent. Blank: the sheet's words about the feet, shown greyed."} /></span>
+        <textarea rows={2} value={ownWords} aria-label={`${part} words`} disabled={!open} placeholder={fromSheet || (part === 'hand' ? 'long bony grey fingers with black claws' : 'black riding boots with a 5 cm heel')}
+          onChange={(e) => useStory.getState().setSheet({ [partField]: e.target.value })} /></label>
+      : <label className="w-field"><span>this picture <Help text="Words for this run only, after the sheet above (soaked, hood up)." /></span>
+        <textarea rows={2} value={note} aria-label="this picture only" placeholder="soaked, hood up" onChange={(e) => setNote(e.target.value)} /></label>}
       <div className="w-field"><span>framing <Help text="A chip fills the framing words; write your own instead. Nothing is queued here. An A-pose (or a prop's reference view, a place's set picture) is a switch: on, the next run makes that reference, 16:9, its pictures landing below the sheet to pick from. Its words may be edited and it stays on; click it again to turn it off. A set picture looks down the place (its set is fitted to the floor and the walls receding); the side a shot faces is painted in Clay's Library." /></span>
         <div className="w-framing"><div className="w-chips left">
           {FRAMINGS[p.cls].map((f) => <button key={f.id} className={active?.id === f.id ? 'active' : ''} aria-pressed={active?.id === f.id} onClick={() => { g.set({ ref_framing: null }); g.setTree({ ...f.tree, camera: { ...panel.tree.camera, ...(f.tree.camera ?? {}) } }) }}>{f.label}</button>)}
           {refFramings.map((f) => <button key={f.id} className={active?.id === f.id ? 'active' : ''} aria-pressed={active?.id === f.id} onClick={() => frameRef(f)}
-            title={active?.id === f.id ? `on: the run makes ${p.name}'s ${f.label} — click to turn it off` : `the run makes ${p.name}'s ${f.label}, ${p.cls === 'character' ? 'a tall 2:3 frame' : '16:9'}${p.cls === 'place' ? '' : ', without the Look'}; its pictures land below the sheet, to pick from`}>{f.label}</button>)}
+            title={active?.id === f.id ? `on: the run makes ${p.name}'s ${f.label} — click to turn it off` : partOf(f.id) ? `the run makes ${p.name}'s ${f.label} picture from its own words (not the sheet), square, on Klein; picked below the sheet, it is read at once` : `the run makes ${p.name}'s ${f.label}, ${p.cls === 'character' ? 'a tall 2:3 frame' : '16:9'}${p.cls === 'place' ? '' : ', without the Look'}; its pictures land below the sheet, to pick from`}>{f.label}</button>)}
         </div>
         <textarea rows={2} value={words} aria-label="framing words" placeholder="your own framing — three-quarter view from below, the head turned away …" onChange={(e) => g.setTree({ composition: e.target.value })} /></div></div>
     </div>

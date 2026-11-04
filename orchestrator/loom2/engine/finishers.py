@@ -932,7 +932,8 @@ def _shell_result(q: JobQueue, job: JobRecord, asset_id: str) -> None:
 
 class KeypointsFinisher:
     """CA1b (D104): the people SDPose found go on the job's result (largest first); a `body_fit` job fits its Cast version's body to the
-    largest one. Nothing enters the Catalogue."""
+    largest one. Nothing enters the Catalogue. RG1 (D187, D188): a read on a shrunk picture comes back in the picture's own pixels; a
+    `hand_fit` / `feet_fit` job writes the version's hand or foot shape from it and the subject matte beside it (then deleted)."""
     frees_cache = False
     free_force = False
 
@@ -946,7 +947,19 @@ class KeypointsFinisher:
         people = sorted(frame.get("people") or [], key=lambda p: -sum((p.get("pose_keypoints_2d") or [])[2::3]))
         job.result["people"] = people
         job.result["canvas"] = [frame.get("canvas_width"), frame.get("canvas_height")]
+        if recipe.inset < 0.999 and all(job.result["canvas"]):
+            from ..hands import unshrink
+            people = unshrink(people, job.result["canvas"], recipe.inset)          # RG1: back in the picture's own pixels
+            job.result["people"] = people
         job.log_tail.append(f"{len(people)} {'person' if len(people) == 1 else 'people'} found")
+        mask = None
+        if recipe.matte:                                                           # RG1: the subject matte beside the read
+            mp = next((output_path(q, f) for f in files if f.get("filename")), None)
+            if mp is not None and mp.is_file():
+                mask = await asyncio.to_thread(_read_mask, mp)
+        from ..story import PART_FIT_SURFACES
+        if job.origin and job.origin.surface in PART_FIT_SURFACES:
+            await asyncio.to_thread(_part_fit_result, q, job, recipe, people, mask, PART_FIT_SURFACES[job.origin.surface])
         if job.origin and job.origin.surface == BODY_FIT_SURFACE:
             p = await asyncio.to_thread(_body_fit_result, q, job, recipe, people)
             from ..story import shell_after_fit                                            # D183 (C2c): the shell follows the fit by itself
@@ -957,6 +970,54 @@ class KeypointsFinisher:
                 job.log_tail.append(f"the shell was not queued: {e}")
         if job.origin and job.origin.surface == IDEA_CLAY_SURFACE:                             # CW1: an idea variant's fit → its shell
             await ideas.start_next(q, job, await asyncio.to_thread(ideas.clay_fit_landed, q, job, recipe, people))   # V22: submitted on the loop
+
+
+def _read_mask(path: Path) -> Any:
+    """RG1: the subject matte as a bool array (the picture's pixels); the file goes — nothing of a read is kept but what it measured."""
+    import numpy as np
+    from PIL import Image
+    with Image.open(path) as im:
+        m = np.asarray(im.convert("L")) > 127
+    try:
+        path.unlink()
+    except OSError:
+        pass
+    return m
+
+
+def _part_fit_result(q: JobQueue, job: JobRecord, recipe: Keypoints, people: list[dict], mask: Any, part: str) -> None:
+    """RG1 (D187 R2, D188 F2): the version's hand (or foot) shape read from its picture — the right one, mirrored to the left unless the
+    author unlinked it; the count and the claws stay the author's. A read that sees no hand (or foot) surely enough fails the job and says
+    why on the version (its note), the last good read kept. A picture swapped meanwhile is not written over."""
+    from ..hands import fit_foot, fit_hand
+    from ..story import StoryStore, part_source
+    store = StoryStore(q.ws)
+    pid, payload = str(job.origin.ref or ""), job.origin.payload or {}
+    vid, src = str(payload.get("version") or ""), str(payload.get("from") or recipe.asset_id)
+    cur = store.profile(pid)
+    if cur is None:
+        raise ValueError(f"the profile {pid} is gone")
+    v = cur.version(vid)
+    if part_source(v, part) != src:
+        job.log_tail.append(f"the {part} picture changed meanwhile — this read is not written")
+        return
+    body, canvas = v.body, job.result.get("canvas")
+    try:
+        if part == "hand":
+            shape, report, pts = fit_hand(people, mask, body.hand_shape.right if body is not None and body.hand_shape else None)
+            points: dict[str, Any] = {"from": src, "canvas": canvas, "hand": pts, "report": report}
+        else:
+            shape, report, got = fit_foot(people, mask, body.foot_shape.right if body is not None and body.foot_shape else None)
+            points = {"from": src, "canvas": canvas, **got, "report": report}
+    except ValueError as e:
+        p = store.set_part_fit(pid, vid, part, note=str(e))
+        q.hub.broadcast("story.changed", {"kind": "profile", "id": p.id, "revision": p.revision})
+        raise
+    p = store.set_part_fit(pid, vid, part, shape=shape, points=points)
+    job.result[part] = report
+    job.log_tail.append(f"{part} read ({report['conf']:.2f} sure)" + (f": the middle finger {report['middle_palm']} palms, {len(report['widths'])} widths from the matte"
+                                                                     if part == "hand" else f": pitch {report['pitch']}°, the heel {report['heel_up']} up"))
+    q.hub.broadcast("story.changed", {"kind": "profile", "id": p.id, "revision": p.revision})
 
 
 def _body_fit_result(q: JobQueue, job: JobRecord, recipe: Keypoints, people: list[dict]) -> Any:

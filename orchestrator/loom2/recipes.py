@@ -515,6 +515,10 @@ class Keypoints(BaseModel):
     kind: Literal["keypoints"] = "keypoints"
     asset_id: str
     model_id: str = _default("keypoints")
+    boxes: bool = True                             # RG1 (E62 a): False — SDPose reads the whole picture (a lone hand or foot has no person to box)
+    inset: float = Field(1.0, ge=0.2, le=1.0)      # RG1 (E62 a): the picture shrunk to this share of its canvas, centred on its border's colour
+    #                                                (a hand reads at 0.84–0.99 at 30 %, 0.44–0.57 at its size); the points come back in its pixels
+    matte: bool = False                            # RG1: BiRefNet's subject matte of the picture saved beside (the fingers' widths, the floor)
 
 
 class MatteSequence(BaseModel):

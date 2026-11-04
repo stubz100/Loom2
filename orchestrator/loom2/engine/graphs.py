@@ -1412,23 +1412,42 @@ def build_segment(recipe: Segment, roster: Roster, out_prefix: str, image_name: 
     return Compiled(graph=g, output_node="99", summary=summary | {"op": recipe.op, "expand": recipe.expand, "feather": recipe.feather}, serialized_prompt=recipe.text)
 
 
-def build_keypoints(recipe: Keypoints, roster: Roster, image_name: str) -> Compiled:
+def build_keypoints(recipe: Keypoints, roster: Roster, image_name: str, read_name: str | None = None, out_prefix: str = "loom2/keypoints") -> Compiled:
     """CA1b (D104): E10's scorer as a job — RT-DETR boxes the people, SDPose wholebody reads each one; PreviewAny returns the keypoints as
-    text (the finisher parses them; nothing is saved to the Catalogue)."""
+    text (the finisher parses them; nothing is saved to the Catalogue). RG1 (E62 a): without the boxes SDPose reads the whole picture — the
+    shrunk one when there is one (`read_name`) — and BiRefNet's subject matte of the picture itself is saved beside (the finisher reads it)."""
     spec = registry.get(recipe.model_id)
     if spec is None or not spec.recipes.keypoints:
         raise CompileError(f"{recipe.model_id!r} does not read body keypoints")
     _, ckpt = roster.require(spec.id)
-    _, det = roster.require(spec.roles.extra["detector"])
-    g: dict[str, Any] = {
-        "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": ckpt}},
-        "2": {"class_type": "UNETLoader", "inputs": {"unet_name": det, "weight_dtype": "default"}},
-        "3": {"class_type": "LoadImage", "inputs": {"image": image_name}},
-        "4": {"class_type": "RTDETR_detect", "inputs": {"model": ["2", 0], "image": ["3", 0], "threshold": 0.4, "class_name": "person", "max_detections": 6}},
-        "5": {"class_type": "SDPoseKeypointExtractor", "inputs": {"model": ["1", 0], "vae": ["1", 2], "image": ["3", 0], "batch_size": 1, "bboxes": ["4", 0]}},
-        "6": {"class_type": "PreviewAny", "inputs": {"source": ["5", 0]}},
-    }
-    return Compiled(graph=g, output_node="6", summary={"model_id": spec.id, "detector": spec.roles.extra["detector"], "asset_id": recipe.asset_id})
+    g: dict[str, Any] = {"1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": ckpt}}}
+    summary: dict[str, Any] = {"model_id": spec.id, "asset_id": recipe.asset_id}
+    if recipe.boxes:
+        _, det = roster.require(spec.roles.extra["detector"])
+        g["2"] = {"class_type": "UNETLoader", "inputs": {"unet_name": det, "weight_dtype": "default"}}
+    g["3"] = {"class_type": "LoadImage", "inputs": {"image": image_name}}
+    src = "3"
+    if read_name:
+        g["30"] = {"class_type": "LoadImage", "inputs": {"image": read_name}}
+        src = "30"
+    sd: dict[str, Any] = {"model": ["1", 0], "vae": ["1", 2], "image": [src, 0], "batch_size": 1}
+    if recipe.boxes:
+        g["4"] = {"class_type": "RTDETR_detect", "inputs": {"model": ["2", 0], "image": [src, 0], "threshold": 0.4, "class_name": "person", "max_detections": 6}}
+        sd["bboxes"] = ["4", 0]
+        summary["detector"] = spec.roles.extra["detector"]
+    g["5"] = {"class_type": "SDPoseKeypointExtractor", "inputs": sd}
+    g["6"] = {"class_type": "PreviewAny", "inputs": {"source": ["5", 0]}}
+    if recipe.inset < 0.999:
+        summary["inset"] = recipe.inset
+    if recipe.matte:
+        mid = registry.segment_model("subject")
+        _, name = roster.require(mid)
+        g["40"] = {"class_type": "LoadBackgroundRemovalModel", "inputs": {"bg_removal_name": name}}
+        g["41"] = {"class_type": "RemoveBackground", "inputs": {"bg_removal_model": ["40", 0], "image": ["3", 0]}}
+        g["42"] = {"class_type": "MaskToImage", "inputs": {"mask": ["41", 0]}}
+        g["43"] = {"class_type": "SaveImage", "inputs": {"images": ["42", 0], "filename_prefix": out_prefix}}
+        summary["matte"] = mid
+    return Compiled(graph=g, output_node="6", summary=summary)
 
 
 def build_matte_sequence(recipe: MatteSequence, roster: Roster, video_name: str, out_prefix: str) -> Compiled:
@@ -1698,7 +1717,7 @@ def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V | Reangle | Instr
         i = inputs or {}
         if "image" not in i:
             raise CompileError("keypoints needs the uploaded image (pipeline.prepare_keypoints)")
-        c = build_keypoints(recipe, roster, i["image"])
+        c = build_keypoints(recipe, roster, i["image"], i.get("read"), out_prefix)
     elif isinstance(recipe, MatteSequence):
         i = inputs or {}
         if "video" not in i:
@@ -1755,7 +1774,11 @@ def recipe_weights(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V | Reang
         return []                                                     # CN2: the TTS models live in HF_HOME, not the roster
     if isinstance(recipe, (ImageToMesh, ImageToSet, Keypoints, MatteSequence)):
         spec = registry.get(recipe.model_id)
-        return spec.weights() if spec else [recipe.model_id]           # P18: the transformer, both VAEs, DINOv3, MoGe, BiRefNet; CA1b: SDPose + RT-DETR
+        ids = spec.weights() if spec else [recipe.model_id]            # P18: the transformer, both VAEs, DINOv3, MoGe, BiRefNet; CA1b: SDPose + RT-DETR
+        if isinstance(recipe, Keypoints) and recipe.matte:             # RG1: the subject matte beside the read
+            m = registry.get(registry.segment_model("subject"))
+            ids = [*ids, *(x for x in (m.weights() if m else []) if x not in ids)]
+        return ids
     if isinstance(recipe, LayerPass):                                 # D118: the pass's model (the creative one rides its IC-LoRA)
         if recipe.step is not None and recipe.step.stage == "mouth":
             return []                                                 # AE4d: the lip-sync model lives in its own venv, not the roster

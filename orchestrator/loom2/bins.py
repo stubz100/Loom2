@@ -88,6 +88,7 @@ def version_bin(groups: GroupStore, profile: Any, vid: str) -> dict[str, Any]:
     ranked: list[tuple[str | None, str]] = [(v.hero_asset_id, "hero")]                  # the roles by class, the first the tile's badge
     if profile.cls == "character":
         ranked += [(v.anim_ref_asset_id, "a_pose_front"), (v.anim_ref_back_asset_id, "a_pose_back"), (v.anim_ref_side_asset_id, "a_pose_side"),   # D175
+                   (v.hand_ref_asset_id, "hand_picture"), (v.feet_ref_asset_id, "feet_picture"),                                        # RG1
                    (v.shell_asset_id, "model")]
     elif profile.cls == "prop":
         ranked += [(v.model_asset_id, "model")]
@@ -217,7 +218,7 @@ def _inside(groups: GroupStore, g: GroupRecord) -> tuple[list[GroupRecord], list
 
 
 MADE = {"model", "set_picture", "final", "clip"}         # B0 (D159 Q5): a role a job built its record on — the thing stays with it
-CHOSEN = {"hero", "a_pose_front", "a_pose_back", "frame"}   # a role the author chose — moved out of its home, it is dropped (asked first)
+CHOSEN = {"hero", "a_pose_front", "a_pose_back", "a_pose_side", "hand_picture", "feet_picture", "frame"}   # a role the author chose — moved out of its home, it is dropped (asked first; RG1: the side view, the hand and feet pictures too)
 
 
 class _Records:
@@ -275,6 +276,8 @@ def _record_roles(ws: Any, path: str, rec: _Records | None = None) -> tuple[dict
             add(v.anim_ref_asset_id, "a_pose_front")
             add(v.anim_ref_back_asset_id, "a_pose_back")
             add(v.anim_ref_side_asset_id, "a_pose_side")                       # D175
+            add(v.hand_ref_asset_id, "hand_picture")                            # RG1 (D187, D188)
+            add(v.feet_ref_asset_id, "feet_picture")
             add(v.shell_asset_id, "model")
         elif prof.cls == "prop":
             add(v.model_asset_id, "model")
@@ -470,6 +473,7 @@ def uses_of(ws: Any, aid: str) -> list[dict[str, Any]]:
     for p in rec.st.profiles():
         for v in p.versions:
             named = [("hero", v.hero_asset_id), ("a_pose_front", v.anim_ref_asset_id), ("a_pose_back", v.anim_ref_back_asset_id), ("a_pose_side", v.anim_ref_side_asset_id),
+                     ("hand_picture", v.hand_ref_asset_id), ("feet_picture", v.feet_ref_asset_id),                                        # RG1
                      ("model", getattr(v, "shell_asset_id", None)), ("model", getattr(v, "model_asset_id", None)),
                      *[("set_picture", src.asset_id) for src in (v.place_set.sources if v.place_set is not None else [])]]
             for role, x in named:
@@ -605,8 +609,8 @@ def _drop_role(st: Any, path: str, aid: str, role: str) -> None:
             return
         if role == "hero":
             st.patch_profile(prof.id, {"versions": [{"id": parts[3], "hero_asset_id": None}]})
-        elif role in ("a_pose_front", "a_pose_back"):
-            st.set_anim_ref(prof.id, parts[3], "back" if role == "a_pose_back" else "front", None)
+        elif role in ("a_pose_front", "a_pose_back", "a_pose_side", "hand_picture", "feet_picture"):   # RG1: the hand and feet pictures too
+            st.set_anim_ref(prof.id, parts[3], {"a_pose_back": "back", "a_pose_side": "side", "hand_picture": "hand", "feet_picture": "feet"}.get(role, "front"), None)
     elif parts[0] == "shots" and len(parts) == 3 and role == "frame":
         vid = parts[2]
 

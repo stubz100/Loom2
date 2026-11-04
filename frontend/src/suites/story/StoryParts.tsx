@@ -556,7 +556,7 @@ function TemplateRows() {
 function candidateMenu(id: string): MenuItem[] {
   const s = sy()
   if (!s.picked.includes(id)) s.pick(id)
-  return [{ cmd: 'story.cast.addRef' }, { cmd: 'story.cast.setHero' }, sep, { cmd: 'story.cast.useAsAnimRef' }, { cmd: 'story.cast.useAsAnimRefBack' }, { cmd: 'story.cast.useAsAnimRefSide' }, { cmd: 'cast.place.usePicture' }, sep, { cmd: 'story.cast.openCandidates' }]
+  return [{ cmd: 'story.cast.addRef' }, { cmd: 'story.cast.setHero' }, sep, { cmd: 'story.cast.useAsAnimRef' }, { cmd: 'story.cast.useAsAnimRefBack' }, { cmd: 'story.cast.useAsAnimRefSide' }, { cmd: 'story.cast.useAsHandRef' }, { cmd: 'story.cast.useAsFeetRef' }, { cmd: 'cast.place.usePicture' }, sep, { cmd: 'story.cast.openCandidates' }]
 }
 
 function Candidate({ a, picked }: { a: Asset; picked: boolean }) {
@@ -593,7 +593,7 @@ function CastPage() {
   const filterIsProp = useStory((s) => s.castFilter === 'prop')
   const castUses = useStory((s) => s.castUses)
   markUsed('story.cast.addRef'); markUsed('story.cast.setHero'); markUsed('story.cast.openCandidates'); markUsed('story.cast.openGroup'); markUsed('story.cast.delete')
-  markUsed('story.cast.useAsAnimRef'); markUsed('story.cast.useAsAnimRefBack'); markUsed('story.cast.useAsAnimRefSide')   // the candidates' menus (the animation reference's section is in CastParts)
+  markUsed('story.cast.useAsAnimRef'); markUsed('story.cast.useAsAnimRefBack'); markUsed('story.cast.useAsAnimRefSide'); markUsed('story.cast.useAsHandRef'); markUsed('story.cast.useAsFeetRef')   // the candidates' menus (the animation reference's section is in CastParts)
   const p = profiles.find((x) => x.id === profileId)
   if (!p) return filterIsProp
     ? <div className="story-empty"><div>Pick a prop on the left, or make one. A prop is made like a character: its look and reference images first, then its 3D model, which Animate places in the scene. <b>Make a prop…</b> on a picture in the Bin puts the image in as the hero.<div className="quick-cards"><CommandButton id="story.cast.newProp" text /></div></div></div>

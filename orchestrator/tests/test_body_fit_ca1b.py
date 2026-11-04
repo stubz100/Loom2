@@ -192,7 +192,7 @@ def test_the_fit_route(tmp_path: Path):
         r = cl.post(f"/story/profiles/{p['id']}/versions/v1/body/fit")
         assert r.status_code == 200, r.text                                                             # under `open` too: MIT / Apache weights
         j = next(x for x in cl.get("/jobs").json()["items"] if x["id"] == r.json()["job_id"])
-        assert j["recipe"] == {"kind": "keypoints", "asset_id": ref, "model_id": "sdpose-wholebody"} and j["origin"]["surface"] == "body_fit"
+        assert j["recipe"] == {"kind": "keypoints", "asset_id": ref, "model_id": "sdpose-wholebody", "boxes": True, "inset": 1.0, "matte": False} and j["origin"]["surface"] == "body_fit"   # RG1: the boxes, as before
         assert cl.post(f"/story/profiles/{p['id']}/versions/v9/body/fit").status_code == 404
         prop = cl.post("/story/profiles", json={"name": "Box", "cls": "prop"}).json()
         assert cl.post(f"/story/profiles/{prop['id']}/versions/v1/body/fit").status_code == 422

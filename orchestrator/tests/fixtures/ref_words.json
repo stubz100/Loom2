@@ -1,0 +1,15 @@
+{
+  "_comment": "RG1 (D187 Q4, D188): the sheet's clauses a hand or feet picture's words start from (orchestrator hands.sheet_words; the client's copy frontend/src/ui2/world/refWords.ts is held to the same cases).",
+  "cases": [
+    {"appearance": "a gaunt grey ghoul, long bony fingers with black claws, pale skin", "outfit": "tall riding boots, a long black robe", "marks": "a silver ring on her left hand",
+     "hand": "a gaunt grey ghoul, long bony fingers, black claws, pale skin, a silver ring on her left hand", "feet": "a gaunt grey ghoul, pale skin, tall riding boots, a long black robe"},
+    {"appearance": "Nora, 30, short dark hair, freckles", "outfit": "a yellow raincoat over jeans and green wellington boots", "marks": "",
+     "hand": "", "feet": "a yellow raincoat over jeans and green wellington boots"},
+    {"appearance": "A stocky dwarf with a braided red beard; thick calloused hands", "outfit": "wearing a leather apron and heavy round-toed boots", "marks": "",
+     "hand": "A stocky dwarf, thick calloused hands", "feet": "A stocky dwarf, wearing a leather apron and heavy round-toed boots"},
+    {"appearance": "an old man in a grey coat", "outfit": "", "marks": "", "hand": "an old man in a grey coat", "feet": "an old man in a grey coat"},
+    {"appearance": "The Hand of Glory", "outfit": "", "marks": "", "hand": "The Hand of Glory", "feet": "The Hand of Glory"},
+    {"appearance": "barefoot, scaly green skin. Webbed fingers", "outfit": "", "marks": "", "hand": "scaly green skin, Webbed fingers", "feet": "barefoot, scaly green skin"},
+    {"appearance": "Gloved hands; gloved hands", "outfit": "", "marks": "", "hand": "Gloved hands", "feet": ""}
+  ]
+}

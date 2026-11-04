@@ -10,6 +10,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .hands import Feet, Hands
+
 BodyBuild = Literal["slim", "average", "broad", "heavy"]
 AttachmentKind = Literal["tail", "horns", "ears", "wings", "antennae", "hat", "backpack", "other"]
 BodyJoint = Literal["root", "spine", "head", "r_shoulder", "l_shoulder", "r_elbow", "l_elbow"]
@@ -68,6 +70,9 @@ class Body(BaseModel):
     joint_offsets: dict[str, list[float]] = Field(default_factory=dict)   # D183 (C2c): a joint placed on the shell by hand — metres from where
     #                                                                       the fitted body puts it, in its parent's frame (builders.ts applies it;
     #                                                                       the bench writes it); the fit leaves them, *Reset* clears them
+    hand_shape: Hands | None = None                # RG1 (D187): the character's own hands, read from its hand picture (hands.py); None = the
+    #                                                mannequin's; the size stays `hands`, fitted from the A-pose's palm
+    foot_shape: Feet | None = None                 # RG1 (D188): its own feet, read from its feet picture (or the A-pose side view); None = the mannequin's
 
     @field_validator("joint_offsets")
     @classmethod
@@ -131,9 +136,9 @@ def body_from_words(text: str) -> dict[str, Any]:
 
 def seed_body(body: Body | None, words: str) -> Body:
     """D168: the body the fit starts from — the author's when they set one, else Body's defaults moved by what the sheet's words say."""
-    if body is not None and body != Body():
+    if body is not None and body.model_copy(update={"hand_shape": None, "foot_shape": None}) != Body():
         return body
-    return Body(**body_from_words(words))
+    return Body(**body_from_words(words), **({"hand_shape": body.hand_shape, "foot_shape": body.foot_shape} if body is not None else {}))   # RG1: read hands kept
 
 
 # ---- CA1b (D104): the body fitted to the character's animation reference -------------------------------------------------------------

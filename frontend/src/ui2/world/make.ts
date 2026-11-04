@@ -24,16 +24,24 @@ export const FRAMINGS: Record<ProfileClass, { id: string; label: string; tree: P
 
 /** D162: a class's reference framing — the words its reference is made with (the server's sentence, `/capabilities.story.references`):
  *  a character's A-pose front and back, a prop's reference view, a place's set picture. With one on, the run is that reference's make. */
-export interface RefFraming { id: string; label: string; side: 'front' | 'back' | 'side' }
+export type RefSide = 'front' | 'back' | 'side' | 'hand' | 'feet'
+export interface RefFraming { id: string; label: string; side: RefSide }
 export const REF_FRAMINGS: Record<ProfileClass, RefFraming[]> = {
-  character: [{ id: 'apose_front', label: 'A-pose front', side: 'front' }, { id: 'apose_back', label: 'A-pose back', side: 'back' }, { id: 'apose_side', label: 'A-pose side', side: 'side' }],   // D175
+  character: [{ id: 'apose_front', label: 'A-pose front', side: 'front' }, { id: 'apose_back', label: 'A-pose back', side: 'back' }, { id: 'apose_side', label: 'A-pose side', side: 'side' },   // D175
+    { id: 'hand', label: 'hand', side: 'hand' }, { id: 'feet', label: 'feet & shoes', side: 'feet' }],   // RG1 (D187, D188): words of their own, no sheet, no references
   prop: [{ id: 'reference', label: 'reference view', side: 'front' }],
   place: [{ id: 'set_picture', label: 'set picture', side: 'front' }],
 }
-export type References = Partial<Record<string, Partial<Record<'front' | 'back' | 'side', string>>>>
+export type References = Partial<Record<string, Partial<Record<RefSide, string>>>>
+/** RG1: the part a reference framing makes — a hand or feet picture (its words its own, E62 a) — or null for an A-pose and the rest. */
+export const partOf = (framing: string | null | undefined): 'hand' | 'feet' | null => (framing === 'hand' || framing === 'feet' ? framing : null)
+/** RG1 (E62 a): a hand or feet picture is square at 1024² — where E62 measured its read. */
+export const PART_PX = 1024
 
-/** The tree a reference framing writes: its sentence as the framing words, the camera's distance (a place: wide, at eye level). */
-export function refTree(cls: ProfileClass, sentence: string, camera: Tree['camera']): Partial<Tree> {
+/** The tree a reference framing writes: its sentence as the framing words, the camera's distance (a place: wide, at eye level). RG1: a hand
+ *  or feet picture's camera is its sentence's (the run sends the words alone). */
+export function refTree(cls: ProfileClass, sentence: string, camera: Tree['camera'], side?: RefSide): Partial<Tree> {
+  if (side === 'hand' || side === 'feet') return { composition: sentence }
   return { composition: sentence, camera: { ...camera, ...(cls === 'place' ? { distance: 'wide shot', angle: 'eye level' } : { distance: 'full shot' }) } }
 }
 
@@ -58,8 +66,10 @@ export function to23(width: number, height: number): [number, number] {
   const h = snap(Math.sqrt((width * height * 3) / 2))
   return [snap((h * 2) / 3), h]
 }
-/** D177: the frame a reference framing sets — a character's A-pose a 2:3 portrait, a prop's view and a set picture 16:9. */
-export const refFrame = (cls: ProfileClass, width: number, height: number): [number, number] => (cls === 'character' ? to23(width, height) : to169(width, height))
+/** D177: the frame a reference framing sets — a character's A-pose a 2:3 portrait, a prop's view and a set picture 16:9; RG1: a hand or
+ *  feet picture square at 1024². */
+export const refFrame = (cls: ProfileClass, width: number, height: number, side?: RefSide): [number, number] =>
+  (side === 'hand' || side === 'feet' ? [PART_PX, PART_PX] : cls === 'character' ? to23(width, height) : to169(width, height))
 
 /** The size at 16:9 with about the same pixels (a reference is 16:9), each side a multiple of 16. */
 export function to169(width: number, height: number): [number, number] {

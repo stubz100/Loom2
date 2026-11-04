@@ -183,6 +183,8 @@ class FakeComfy:
                 im = Image.new("RGB", (w, h), (0, 0, 0))
                 im.paste((255, 255, 255), (w * 2 // 5, h // 5, w * 3 // 5, h * 9 // 10))
                 im.save(out_dir / fname)
+            elif getattr(self, "matte", None) is not None and any(n.get("class_type") == "RemoveBackground" for n in graph.values()):
+                self.matte.save(out_dir / fname)                 # RG1: the subject matte a test drew (a hand, a foot)
             else:
                 col = self.color if not vid else (self.color[0], (i * 29) % 256, self.color[2], 255)      # frames differ, so the proxy encode is real work
                 Image.new("RGBA", (w, h), col).save(out_dir / fname)
@@ -200,7 +202,8 @@ class FakeComfy:
         preview = next((k for k, n in graph.items() if n.get("class_type") == "PreviewAny"), None)
         if preview and any(n.get("class_type") == "SDPoseKeypointExtractor" for n in graph.values()):
             people = getattr(self, "people", None) or [fake_person()]                       # CA1b: the keypoints graph answers with text only
-            outputs = {preview: {"text": [json.dumps([{"people": people, "canvas_width": 832, "canvas_height": 480}])]}}
+            outputs = {preview: {"text": [json.dumps([{"people": people, "canvas_width": 832, "canvas_height": 480}])]},
+                       **({"99": {"images": images}} if any(n.get("class_type") == "RemoveBackground" for n in graph.values()) else {})}   # RG1: the matte beside
         self.histories[pid] = {"outputs": outputs, "status": {"completed": True, "status_str": "success"}}
         await self._send({"type": "executing", "data": {"prompt_id": pid, "node": None}})
         await self._send({"type": "execution_success", "data": {"prompt_id": pid}})

@@ -1,6 +1,6 @@
 # proto01_rig · Rigging the hands, and humanoids that are not human
 
-Status: **proposal, 2026-11-04; answered the same day → D187** (§8); **legs and shoes added → D188** (§9); **E62 run the same evening** (§10). Read from the code at `055315e`.
+Status: **proposal, 2026-11-04; answered the same day → D187** (§8); **legs and shoes added → D188** (§9); **E62 run the same evening** (§10); **RG1 built** (§11). Read from the code at `055315e`.
 
 ## 1. The request
 
@@ -216,3 +216,45 @@ ankle and a ball added to each leg, the shell weighed again by bone heat, each b
 - **R5** (the guide from the character's hands) is kept: Wan Animate follows it.
 - **F3** (the shell's own shoe, rigged) is kept: bone heat bends it; its points come from the pictures and the Feet & legs view, not from
   the shell's geometry.
+
+## 11. RG1 built (2026-11-04): the body record carries hands and feet
+
+What the author sees, in World › Make for a character:
+
+- **Two more reference framings** beside the A-pose's front, back and side: *hand* and *feet & shoes*. Switched on, the framing words are
+  the hand's (or the feet's) sentence, the frame is square at 1024², the model card moves to Klein 9B (it can be changed), and the
+  *this picture* field becomes **the hand** (or **the feet**): the picture's own words, kept on the version (Q4). Blank, the sheet's words
+  about the hands or the feet are used, shown greyed. The run sends no subject, no mention and no Look — References says "@Ghoul left out
+  of the hand picture".
+- **Two more slots** in the animation reference: *hand* and *feet*, each with its make (*Make hand-picture candidates ▶*, *Make
+  feet-picture candidates ▶*), its read (*Read the hand ▶*, *Read the feet ▶*) and its clear, on the slot's right-click. A candidate made
+  as a hand offers *Hand* (one made as feet, *Feet*); picking it reads it at once. The slot says what the read saw in a few words —
+  "hand · 5 fingers · middle 0.83 palms", "feet · read · pitch 12°", "reading…", or "Not read — make candidates?" with the reason in its
+  tooltip.
+- The readiness line counts the two pictures (optional), the Bin badges them *hand* and *feet*, and trashing one lets its slot go.
+- **World › Sketches** has the same two framings as chips above the prompt (Q1): the sentence, square, Klein; the words are the author's.
+
+What the server keeps: the version's `hand_ref_asset_id`, `feet_ref_asset_id`, `hand_words`, `feet_words`, the points each read saw
+(`hand_points`, `feet_points`) and a note when a read failed; the body's `hand_shape` (a hand in palm lengths: each finger's base, angle,
+three segments and width; the count and the claws the author's — the left mirrored until unlinked) and `foot_shape` (in foot lengths:
+the pitch, the ankle's height and place, the heel's and toe's heights, the ball's place, the foot against the leg when read on a full
+figure). The read is one keypoints job of a few seconds: SDPose without person boxes on the picture shrunk to 30 % of its canvas (a hand)
+or 40 % (a feet picture), BiRefNet's matte beside it for the widths and the floor. Picking a side view while there is no feet picture
+reads the feet from it. Nothing is drawn differently yet — RG2 builds the clay hand and the guide from these shapes.
+
+**Two rules the rig changed** (the ghoul, `F:/loom2-projects/_e62`):
+
+| Seen | Rule |
+| --- | --- |
+| With the sheet's hand clauses alone ("very large hands, very long thin bony fingers and long black claws") Klein drew a human hand with black stiletto nails; led by "A gaunt grey ghoul" it drew a grey, bony, clawed one, still a close-up. | The prefilled words are led by the sheet's first clause when it says what the character is (it starts with *a*, *an* or *the*); a name ("Nora") does not lead. |
+| Klein drew the ghoul's feet from three-quarters front; SDPose was surer of the far foot, whose heel then read 0.75 foot lengths over the near foot's floor. | The near foot is measured when it was read surely enough (the lowest in the picture); else the surest. The far foot read pitch 15.5°, the near 12.4° (heel 0.35 up). |
+
+Measured on the rig (Klein 9B warm, one job at a time): two hand pictures in 34 s (25 s and 9 s), two feet pictures in 32 s (22 s and
+9 s), a read 2–4 s (18 s as the engine's first job after a restart).
+The ghoul's hands: one candidate read 0.72 sure (Klein drew a sixth digit and SDPose's index chain wandered), the other 0.84 — the middle
+finger 0.83 palms, the fingers 0.14 palms wide (E62: 0.79 and 0.13–0.18). The author picks the candidate that looks right; the count is set
+by hand (Q4, RG3).
+
+![The ghoul's hand and feet pictures, the picked ones with their reads](img/rg1-ghoul-read.jpg)
+
+![World › Make with the hand framing on](img/rg1-world-make-hand.jpg)

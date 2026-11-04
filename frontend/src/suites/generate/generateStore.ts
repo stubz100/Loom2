@@ -16,6 +16,7 @@ import { profilesForMentions as profilesNow, styleFor } from '../story/storyStor
 import type { Profile } from '../../api/types'
 import { castOrigin, keptSubject, needsLook, sentIndex } from './subjectCast'
 import { adoptDescription, composeSheet, versionOf } from './sheet'
+import { partPrompt, partWords } from '../../ui2/world/refWords'
 import { navigate } from '../../frame/router'
 import { contextSlot } from '../../store/contexts'
 
@@ -209,7 +210,8 @@ export function recipeFromPanel(p: Panel, seeds?: number[]): T2IRecipe {
   if (p.prompt_mode === 'tree') prompt_json = cleanTree(p.tree)
   else if (p.prompt_mode === 'json') { try { prompt_json = JSON.parse(p.json_text || '{}') } catch { prompt_json = undefined } }
   const seedList = seeds ?? Array.from({ length: p.count }, (_, i) => (p.seed_mode === 'random' ? 0 : p.seed_mode === 'fixed' ? p.seed : p.seed + i))
-  return {
+  const part = p.prompt_mode === 'tree' && (p.ref_framing === 'hand' || p.ref_framing === 'feet') ? p.ref_framing : null
+  const base: T2IRecipe = {
     kind: 't2i', model_id, prompt_mode: p.prompt_mode, prompt_json, prompt_text: p.prompt_mode === 'text' ? p.text : (p.prompt_mode === 'tree' ? p.text : ''), negative: honoursNegative(cap) ? p.negative : '',
     width: p.width, height: p.height, steps: p.steps, guidance: p.guidance, cfg: p.cfg, sampler: p.sampler, scheduler: p.scheduler, turbo: p.turbo && (cap?.turbo ?? true),
     turbo_strength: p.turbo_strength, weight_dtype: p.weight_dtype, te_device: p.te_device, te_id: p.te_id, base_shift: shift ? p.base_shift : null, max_shift: shift ? p.max_shift : null, tiled_vae: p.tiled_vae, tile_size: p.tile_size,
@@ -225,6 +227,12 @@ export function recipeFromPanel(p: Panel, seeds?: number[]): T2IRecipe {
       return base }),
     style_id: p.ref_framing && p.ref_framing !== 'set_picture' ? null : styleFor(p.style_id),            // D85: resolved to its fragment by the server at preview and submit; D176: a reference make leaves the Look out (a set picture keeps it)
   }
+  if (!part) return base
+  // RG1 (D187, D188; E62 a): a hand or feet picture is the framing's sentence and the picture's own words (the linked version's, else its
+  // sheet's clauses about the hand or the feet) — no subject, no mention (its references drew the whole person), no Look
+  const sub = (p.tree.subjects ?? []).find((s) => !!s.profile_id)
+  const v = sub ? versionOf(profilesNow().find((x) => x.id === sub.profile_id), sub.version) : undefined
+  return { ...base, prompt_mode: 'text', prompt_json: undefined, prompt_text: partPrompt(p.tree.composition ?? '', v ? partWords(v, part) : ''), mentions: [], style_id: null }
 }
 
 export function panelFromRecipe(r: Record<string, unknown>, keepSeeds = false): Partial<Panel> {

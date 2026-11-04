@@ -4,10 +4,11 @@ import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import { api, http, unwrap } from '../../api/client'
 import type { Profile } from '../../api/types'
 import { CommandButton } from '../../frame/CommandButton'
-import { command, markUsed, runCommand } from '../../frame/commands'
+import { command, markUsed, runCommand, type MenuItem } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import { Help } from '../../frame/Help'
 import { useSession } from '../../store/session'
+import { partRead } from './partRead'
 import { latestModelJob, modelSource, modelStale, NOT_WHOLE, SEVERAL, sy } from './storyStore'
 
 const ModelView = lazy(() => import('../stage/ModelView'))
@@ -47,17 +48,31 @@ export function PropModel({ p, v }: { p: Profile; v: Profile['versions'][number]
   )
 }
 
+type RefSlot = 'front' | 'back' | 'side' | 'hand' | 'feet'
+const SLOT_MENU: Record<RefSlot, MenuItem[]> = {
+  front: [{ cmd: 'story.cast.makeAnimRef' }, { cmd: 'story.cast.fitBody' }, { cmd: 'story.cast.clearAnimRef' }],
+  back: [{ cmd: 'story.cast.makeAnimRefBack' }, { cmd: 'story.cast.clearAnimRefBack' }],
+  side: [{ cmd: 'story.cast.makeAnimRefSide' }, { cmd: 'story.cast.readFeet' }, { cmd: 'story.cast.clearAnimRefSide' }],
+  hand: [{ cmd: 'story.cast.makeHandRef' }, { cmd: 'story.cast.readHand' }, { cmd: 'story.cast.clearHandRef' }],          // RG1
+  feet: [{ cmd: 'story.cast.makeFeetRef' }, { cmd: 'story.cast.readFeet' }, { cmd: 'story.cast.clearFeetRef' }],
+}
+const SLOT_CLEAR: Record<RefSlot, string> = { front: 'story.cast.clearAnimRef', back: 'story.cast.clearAnimRefBack', side: 'story.cast.clearAnimRefSide',
+  hand: 'story.cast.clearHandRef', feet: 'story.cast.clearFeetRef' }
+
 /** CA0 → D161: the version's animation reference slots, the makes (runs: their pictures are candidates, `children` lists them to pick from)
  *  and a filled slot's ✕ (the picture stays a candidate). */
 export function AnimRef({ p, v, children }: { p: Profile; v: Profile['versions'][number]; children?: ReactNode }) {
-  const slot = (side: 'front' | 'back' | 'side', id: string | null | undefined, label: string) => (
-    <div className={`anim-ref-slot${id ? '' : ' empty'}`} data-side={side}
-      onContextMenu={(e) => showMenu(e, side === 'back' ? [{ cmd: 'story.cast.makeAnimRefBack' }, { cmd: 'story.cast.clearAnimRefBack' }]
-        : side === 'side' ? [{ cmd: 'story.cast.makeAnimRefSide' }, { cmd: 'story.cast.clearAnimRefSide' }]
-        : [{ cmd: 'story.cast.makeAnimRef' }, { cmd: 'story.cast.fitBody' }, { cmd: 'story.cast.clearAnimRef' }])}>
+  const jobs = useSession((s) => s.jobs)
+  const slot = (side: RefSlot, id: string | null | undefined, label: string) => {
+    const read = side === 'hand' || side === 'feet' ? partRead(v, side, jobs, p.id) : null      // RG1: what the read of the picture says, in a few words
+    return (
+    <div className={`anim-ref-slot${id ? '' : ' empty'}`} data-side={side} data-read={read?.state}
+      onContextMenu={(e) => showMenu(e, SLOT_MENU[side])}>
       {id ? <img src={api.thumbUrl(id, 512)} alt={label} /> : <span className="hint">{label}: none yet</span>}
-      <span className="cell">{label}</span>
-      {id && <span className="slot-clear"><CommandButton id={side === 'back' ? 'story.cast.clearAnimRefBack' : side === 'side' ? 'story.cast.clearAnimRefSide' : 'story.cast.clearAnimRef'} className="quiet" size={12} /></span>}
+      <span className="cell">{read && id ? `${label} · ${read.text}` : label}</span>
+      {id && read?.state === 'failed' && <button type="button" className="link ref-note" data-note="part" title={read.note ?? ''}
+        onClick={(e) => { e.stopPropagation(); runCommand(side === 'hand' ? 'story.cast.makeHandRef' : 'story.cast.makeFeetRef') }}>Not read — make candidates?</button>}
+      {id && <span className="slot-clear"><CommandButton id={SLOT_CLEAR[side]} className="quiet" size={12} /></span>}
       {side === 'front' && id && v.anim_ref_note === 'arms_close' && <button type="button" className="link ref-note" data-note="arms_close"
         title="The body is fitted and the shell made only on an A-pose — the arms clear of the body, the fingers straight and spread (D139, D140): draw the reference again, then fit the body"
         onClick={(e) => { e.stopPropagation(); runCommand('story.cast.makeAnimRef') }}>The arms touch the body — draw it again?</button>}   {/* proto01_UIcast S8 */}
@@ -69,7 +84,7 @@ export function AnimRef({ p, v, children }: { p: Profile; v: Profile['versions']
         title="The arms are held level (a T-pose); the A-pose holds them about 30° out — the fit took it, but the shell and Wan Animate follow the arms as drawn"
         onClick={(e) => { e.stopPropagation(); runCommand('story.cast.makeAnimRef') }}>Arms level (a T-pose) — make candidates?</button>}   {/* W11 */}
     </div>
-  )
+  ) }
   return (
     <section className="anim-ref">
       <h3>Animation reference <Help text={p.cls === 'prop' ? 'The prop alone, a three-quarter view, 16:9.' : 'Full body, A-pose, 16:9, plain ground — what Wan Animate is given.'} /></h3>
@@ -77,11 +92,15 @@ export function AnimRef({ p, v, children }: { p: Profile; v: Profile['versions']
         {slot('front', v.anim_ref_asset_id, p.cls === 'prop' ? 'reference' : 'front')}
         {p.cls === 'character' && slot('back', v.anim_ref_back_asset_id, 'back (optional)')}
         {p.cls === 'character' && slot('side', v.anim_ref_side_asset_id, 'side (optional)')}
+        {p.cls === 'character' && slot('hand', v.hand_ref_asset_id, 'hand')}{/* RG1 (D187, D188) */}
+        {p.cls === 'character' && slot('feet', v.feet_ref_asset_id, 'feet')}
         {p.cls === 'character' && <AnimTestSlot clipId={v.anim_test_clip_id ?? null} />}
         <div className="verbs">
           <CommandButton id="story.cast.makeAnimRef" text label={withRun('story.cast.makeAnimRef', 2)} />
           {p.cls === 'character' && <CommandButton id="story.cast.makeAnimRefBack" text label={withRun('story.cast.makeAnimRefBack', 2)} />}
           {p.cls === 'character' && <CommandButton id="story.cast.makeAnimRefSide" text label={withRun('story.cast.makeAnimRefSide', 2)} />}
+          {p.cls === 'character' && <CommandButton id="story.cast.makeHandRef" text label={withRun('story.cast.makeHandRef', 2)} />}
+          {p.cls === 'character' && <CommandButton id="story.cast.makeFeetRef" text label={withRun('story.cast.makeFeetRef', 2)} />}
           {p.cls === 'character' && <CommandButton id="story.cast.testAnimRef" text />}
         </div>
       </div>

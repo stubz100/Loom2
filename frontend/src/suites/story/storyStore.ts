@@ -218,12 +218,15 @@ export interface StoryState {
   patchProfile: (patch: { name?: string; cls?: ProfileClass; current?: string; voice_id?: string | null }) => Promise<void>
   /** D93 (B4): the shown version's sheet (appearance, outfit, colours, marks) and (B5) its label — shown at once, saved after a pause with
    *  the name in one body, one save at a time (B14); a final version takes only its label. */
-  setSheet: (patch: Partial<Pick<ProfileVersion, 'appearance' | 'outfit' | 'colours' | 'marks' | 'label' | 'body' | 'height_m'>>) => void
+  setSheet: (patch: Partial<Pick<ProfileVersion, 'appearance' | 'outfit' | 'colours' | 'marks' | 'label' | 'body' | 'height_m' | 'hand_words' | 'feet_words'>>) => void
   /** D90 (B14): the name as typed — shown at once, saved after a pause (as the stub). */
   renameProfile: (name: string) => void
   setHero: (assetId: string | null) => Promise<void>
   /** CA0 (01 step 2): make the version's animation reference (or its back view) — two candidates, the first used while none is set. */
-  makeAnimRef: (side: 'front' | 'back' | 'side') => Promise<void>
+  makeAnimRef: (side: 'front' | 'back' | 'side' | 'hand' | 'feet') => Promise<void>
+  /** RG1 (D187, D188): read the version's hand from its hand picture (the feet from the feet picture, else the A-pose side view) — a short
+   *  keypoints job; the shape lands on the body. */
+  readPart: (part: 'hand' | 'feet') => Promise<void>
   /** CA1b (D104): fit the version's body to its animation reference (a short keypoints job; the profile updates when it lands). */
   fitBody: () => Promise<void>
   /** D110 (PS2): make the prop version's 3D model from its animation reference (else its hero) — image → mesh, stood upright, minutes. */
@@ -234,7 +237,7 @@ export interface StoryState {
   /** D128: a prop version's 3D model imported from a GLB file on this machine. */
   importModel: (path: string) => Promise<void>
   /** CA0: the author's pick (an image in the Catalogue) or null to clear it; a final version takes it too. */
-  setAnimRef: (side: 'front' | 'back' | 'side', assetId: string | null) => Promise<void>
+  setAnimRef: (side: 'front' | 'back' | 'side' | 'hand' | 'feet', assetId: string | null) => Promise<void>
   newVersion: () => Promise<void>
   lockVersion: () => Promise<void>
   deleteProfile: () => Promise<void>
@@ -606,11 +609,21 @@ export const useStory = create<StoryState>()((set, get) => {
       const p = get().profile(); const v = get().version(); if (!p || !v) return
       await get().settleProfiles()                                                                  // M3: the A-pose reads the sheet as it is now
       try {
-        const model_id = (await import('../generate/generateStore')).referenceModel()               // D186: the Make column's card when it draws from references
+        const part = side === 'hand' || side === 'feet'
+        const model_id = part ? undefined : (await import('../generate/generateStore')).referenceModel()   // D186: the Make column's card when it draws from references; RG1: a hand or feet picture on Klein (E62 a)
         const r = await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/anim-ref', { params: { path: { pid: p.id, vid: v.id } }, body: { side, count: 2, model_id } }))
-        useSession.getState().toast(`${r.job_ids.length} ${side === 'back' ? 'back views' : side === 'side' ? 'side views' : p.cls === 'place' ? 'set pictures' : 'animation references'} queued for ${p.name} — they land among its candidates; pick the ${side === 'back' ? 'back' : side === 'side' ? 'side' : p.cls === 'place' ? 'set picture' : 'front'} from them in Build`, 'info')   // D161: nothing is picked for the author; D175: the side
+        const what = side === 'back' ? 'back views' : side === 'side' ? 'side views' : side === 'hand' ? 'hand pictures' : side === 'feet' ? 'feet pictures' : p.cls === 'place' ? 'set pictures' : 'animation references'
+        const pick = side === 'back' ? 'back' : side === 'side' ? 'side' : side === 'hand' ? 'hand' : side === 'feet' ? 'feet' : p.cls === 'place' ? 'set picture' : 'front'
+        useSession.getState().toast(`${r.job_ids.length} ${what} queued for ${p.name} — they land among its candidates; pick the ${pick} from them`, 'info')   // D161: nothing is picked for the author; D175: the side
         if (!v.candidates_group_id) await get().loadProfiles()
       } catch (e) { toast(`Animation reference: ${detail(e)}`) }
+    },
+    readPart: async (part) => {
+      const p = get().profile(); const v = get().version(); if (!p || !v) return
+      try {
+        await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/parts/{part}/fit', { params: { path: { pid: p.id, vid: v.id, part } } }))
+        useSession.getState().toast(`Reading ${p.name}'s ${part === 'hand' ? 'hand' : 'feet'} — the shape lands on the body in a few seconds`, 'info')
+      } catch (e) { toast(`Read the ${part}: ${detail(e)}`) }
     },
     fitBody: async () => {
       const p = get().profile(); const v = get().version(); if (!p || !v) return

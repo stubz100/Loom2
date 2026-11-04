@@ -17,25 +17,28 @@ type Version = Profile['versions'][number]
  *  (its verbs are World's commands on the creation, which a button selects first). */
 export function Candidates({ p, v }: { p: Profile; v: Version }) {
   const bin = useWorld((s) => s.bin)
-  const picked = new Set([v.anim_ref_asset_id, v.anim_ref_back_asset_id, v.anim_ref_side_asset_id].filter(Boolean))
+  const picked = new Set([v.anim_ref_asset_id, v.anim_ref_back_asset_id, v.anim_ref_side_asset_id, v.hand_ref_asset_id, v.feet_ref_asset_id].filter(Boolean))
   const items = (bin?.items ?? []).filter((x) => x.asset.origin?.surface === 'anim_ref' && !picked.has(x.asset.id))
   const place = p.cls === 'place'
   const verbs = place ? ['world.creation.setPicture'] : p.cls === 'character' ? ['world.creation.aposeFront', 'world.creation.aposeBack', 'world.creation.aposeSide'] : ['world.creation.aposeFront']
+  const PART: Record<string, string> = { hand: 'world.creation.handPicture', feet: 'world.creation.feetPicture' }    // RG1: a hand or feet picture is used as that
   const run = (id: string, cmd: string) => { useWorld.getState().select(id); runCommand(cmd) }
-  for (const c of [...verbs, 'world.creation.trash']) markUsed(c)
+  for (const c of [...verbs, ...Object.values(PART), 'world.creation.trash']) markUsed(c)
   return (
     <div className="anim-ref-cands" data-testid="anim-ref-candidates">
       <span className="hint">{items.length ? `${items.length} to pick from` : 'no candidates'}<Help text={place
         ? 'What Make set-picture candidates ▶ made: pick the set picture, or discard what is no good. Nothing is picked for you.'
-        : 'What the make made: pick the front (and the back), or discard what is no good. Nothing is picked for you; picking the front of a body never touched fits the body to it, in Clay\'s Library.'} /></span>
+        : 'What the make made: pick the front (and the back, the side), or discard what is no good. Nothing is picked for you; picking the front of a body never touched fits the body to it, in Clay\'s Library. A hand or feet picture is read as soon as it is picked: its fingers, its heel and toe.'} /></span>
       {items.map((it) => {
         const side = (it.asset.origin?.payload as { side?: string } | undefined)?.side
+        const part = side ? PART[side] : undefined
         return (
           <div key={it.asset.id} className="anim-ref-cand" data-id={it.asset.id} data-side={side ?? 'front'}
-            onContextMenu={(e) => { useWorld.getState().select(it.asset.id); showMenu(e, [...verbs.map((cmd) => ({ cmd })), { sep: true }, { cmd: 'world.creation.trash', label: 'Discard' }]) }}>
+            onContextMenu={(e) => { useWorld.getState().select(it.asset.id); showMenu(e, [...(part ? [part] : verbs).map((cmd) => ({ cmd })), { sep: true }, { cmd: 'world.creation.trash', label: 'Discard' }]) }}>
             <img src={api.thumbUrl(it.asset.id, 256)} alt="" draggable={false} />
             <span className="anim-ref-cand-verbs">
-              {place ? <button type="button" onClick={() => run(it.asset.id, 'world.creation.setPicture')}>Use as the set picture</button> : <>
+              {part ? <button type="button" onClick={() => run(it.asset.id, part)}>{side === 'hand' ? 'Hand' : 'Feet'}</button>
+                : place ? <button type="button" onClick={() => run(it.asset.id, 'world.creation.setPicture')}>Use as the set picture</button> : <>
                 <button type="button" onClick={() => run(it.asset.id, 'world.creation.aposeFront')}>{p.cls === 'prop' ? 'Use' : 'Front'}</button>
                 {p.cls === 'character' && <button type="button" onClick={() => run(it.asset.id, 'world.creation.aposeBack')}>Back</button>}
                 {p.cls === 'character' && <button type="button" onClick={() => run(it.asset.id, 'world.creation.aposeSide')}>Side</button>}</>}

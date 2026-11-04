@@ -1,3 +1,5 @@
+import type { components } from '../../api/schema'
+
 // CA0 (D94, proto01_animate 01 §9): a character's body — on the Cast sheet, copied onto the bound Stage figure, where builders.mannequin
 // shapes the dummy from it. No three.js here: Cast (Story's bundle) draws its silhouette from the same numbers the dummy is built with.
 /** CA0 (01 §9): a character's body from its Cast sheet (the server's `body.Body`) — height in metres, proportions as factors of the default
@@ -11,6 +13,8 @@ export interface Body {
   head_forward: number; shoulder_drop: number; feet_out: number             // CS2: the head carried forward (°), the shoulders' drop (×), the feet out (°)
   locks: string[]                                                          // CS2: the factors *Fit again* leaves as the author set them
   attachments: { kind: 'tail' | 'horns' | 'ears' | 'wings' | 'antennae' | 'hat' | 'backpack' | 'other'; joint: string | null; size: number; note: string }[]
+  hand_shape?: components['schemas']['Hands-Output'] | null                       // RG1 (D187): its own hands, read from its hand picture (hands.py); null = the mannequin's
+  foot_shape?: components['schemas']['Feet-Output'] | null                        // RG1 (D188): its own feet, read from its feet picture (or the A-pose side view)
   joint_offsets?: Record<string, number[]>                                 // D183 (C2c): a joint placed on the shell by hand — from where the fitted body
   //                                                                          puts it, in its parent's frame, in the figure's own units (the 1.75 m adult's)
 }

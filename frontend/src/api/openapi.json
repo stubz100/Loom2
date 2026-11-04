@@ -221,7 +221,9 @@
             "enum": [
               "front",
               "back",
-              "side"
+              "side",
+              "hand",
+              "feet"
             ],
             "title": "Side",
             "type": "string"
@@ -241,6 +243,18 @@
               }
             ],
             "title": "Style Id"
+          },
+          "words": {
+            "anyOf": [
+              {
+                "maxLength": 400,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Words"
           }
         },
         "title": "AnimRefBody",
@@ -264,7 +278,9 @@
             "enum": [
               "front",
               "back",
-              "side"
+              "side",
+              "hand",
+              "feet"
             ],
             "title": "Side",
             "type": "string"
@@ -2457,8 +2473,28 @@
             "title": "Figure",
             "type": "string"
           },
+          "foot_shape": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Feet-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "hand_rest": {
             "$ref": "#/components/schemas/HandRest-Input"
+          },
+          "hand_shape": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Hands-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "hands": {
             "default": 1.0,
@@ -2618,8 +2654,28 @@
             "title": "Figure",
             "type": "string"
           },
+          "foot_shape": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Feet-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "hand_rest": {
             "$ref": "#/components/schemas/HandRest-Output"
+          },
+          "hand_shape": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Hands-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "hands": {
             "default": 1.0,
@@ -2738,7 +2794,9 @@
           "feet_out",
           "locks",
           "attachments",
-          "joint_offsets"
+          "joint_offsets",
+          "hand_shape",
+          "foot_shape"
         ],
         "title": "Body",
         "type": "object"
@@ -7791,6 +7849,50 @@
         "title": "FaceSimCaps",
         "type": "object"
       },
+      "Feet-Input": {
+        "description": "F2: one foot fitted and mirrored, as the hands (Q2).",
+        "properties": {
+          "left": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FootShape-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "right": {
+            "$ref": "#/components/schemas/FootShape-Input"
+          }
+        },
+        "title": "Feet",
+        "type": "object"
+      },
+      "Feet-Output": {
+        "description": "F2: one foot fitted and mirrored, as the hands (Q2).",
+        "properties": {
+          "left": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FootShape-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "right": {
+            "$ref": "#/components/schemas/FootShape-Output"
+          }
+        },
+        "required": [
+          "right",
+          "left"
+        ],
+        "title": "Feet",
+        "type": "object"
+      },
       "FetchRequest": {
         "properties": {
           "model_id": {
@@ -9011,6 +9113,121 @@
         "title": "FinalPlan",
         "type": "object"
       },
+      "Finger-Input": {
+        "description": "One finger (or the thumb) in palm lengths, in the palm's frame (+x toward the thumb).",
+        "properties": {
+          "angle": {
+            "default": 0.0,
+            "maximum": 150.0,
+            "minimum": -150.0,
+            "title": "Angle",
+            "type": "number"
+          },
+          "base": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Base",
+            "type": "array"
+          },
+          "claw": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claw"
+          },
+          "lengths": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "title": "Lengths",
+            "type": "array"
+          },
+          "width": {
+            "default": 0.19,
+            "maximum": 0.8,
+            "minimum": 0.03,
+            "title": "Width",
+            "type": "number"
+          }
+        },
+        "required": [
+          "base",
+          "lengths"
+        ],
+        "title": "Finger",
+        "type": "object"
+      },
+      "Finger-Output": {
+        "description": "One finger (or the thumb) in palm lengths, in the palm's frame (+x toward the thumb).",
+        "properties": {
+          "angle": {
+            "default": 0.0,
+            "maximum": 150.0,
+            "minimum": -150.0,
+            "title": "Angle",
+            "type": "number"
+          },
+          "base": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Base",
+            "type": "array"
+          },
+          "claw": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claw"
+          },
+          "lengths": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "title": "Lengths",
+            "type": "array"
+          },
+          "width": {
+            "default": 0.19,
+            "maximum": 0.8,
+            "minimum": 0.03,
+            "title": "Width",
+            "type": "number"
+          }
+        },
+        "required": [
+          "base",
+          "angle",
+          "lengths",
+          "width",
+          "claw"
+        ],
+        "title": "Finger",
+        "type": "object"
+      },
       "FlattenRequest": {
         "properties": {
           "name": {
@@ -9613,6 +9830,139 @@
           "candidates"
         ],
         "title": "FoldedIdea",
+        "type": "object"
+      },
+      "FootShape-Input": {
+        "description": "F2: one foot, in foot lengths (the heel point to the big toe), seen from the side.",
+        "properties": {
+          "ankle_at": {
+            "default": 0.2,
+            "maximum": 1.0,
+            "minimum": -0.5,
+            "title": "Ankle At",
+            "type": "number"
+          },
+          "ankle_up": {
+            "default": 0.44,
+            "maximum": 2.0,
+            "minimum": 0.05,
+            "title": "Ankle Up",
+            "type": "number"
+          },
+          "ball_at": {
+            "default": 0.72,
+            "maximum": 0.95,
+            "minimum": 0.3,
+            "title": "Ball At",
+            "type": "number"
+          },
+          "heel_up": {
+            "default": 0.25,
+            "maximum": 1.5,
+            "minimum": 0.0,
+            "title": "Heel Up",
+            "type": "number"
+          },
+          "length_leg": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.05,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Length Leg"
+          },
+          "pitch": {
+            "default": 6.0,
+            "maximum": 75.0,
+            "minimum": -30.0,
+            "title": "Pitch",
+            "type": "number"
+          },
+          "toe_up": {
+            "default": 0.15,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Toe Up",
+            "type": "number"
+          }
+        },
+        "title": "FootShape",
+        "type": "object"
+      },
+      "FootShape-Output": {
+        "description": "F2: one foot, in foot lengths (the heel point to the big toe), seen from the side.",
+        "properties": {
+          "ankle_at": {
+            "default": 0.2,
+            "maximum": 1.0,
+            "minimum": -0.5,
+            "title": "Ankle At",
+            "type": "number"
+          },
+          "ankle_up": {
+            "default": 0.44,
+            "maximum": 2.0,
+            "minimum": 0.05,
+            "title": "Ankle Up",
+            "type": "number"
+          },
+          "ball_at": {
+            "default": 0.72,
+            "maximum": 0.95,
+            "minimum": 0.3,
+            "title": "Ball At",
+            "type": "number"
+          },
+          "heel_up": {
+            "default": 0.25,
+            "maximum": 1.5,
+            "minimum": 0.0,
+            "title": "Heel Up",
+            "type": "number"
+          },
+          "length_leg": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.05,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Length Leg"
+          },
+          "pitch": {
+            "default": 6.0,
+            "maximum": 75.0,
+            "minimum": -30.0,
+            "title": "Pitch",
+            "type": "number"
+          },
+          "toe_up": {
+            "default": 0.15,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Toe Up",
+            "type": "number"
+          }
+        },
+        "required": [
+          "pitch",
+          "ankle_up",
+          "ankle_at",
+          "heel_up",
+          "toe_up",
+          "ball_at",
+          "length_leg"
+        ],
+        "title": "FootShape",
         "type": "object"
       },
       "FramesBody": {
@@ -10887,6 +11237,150 @@
           "thumb"
         ],
         "title": "HandRest",
+        "type": "object"
+      },
+      "HandShape-Input": {
+        "description": "R2: one hand's own skeleton, in palm lengths.",
+        "properties": {
+          "claw": {
+            "default": 0.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Claw",
+            "type": "number"
+          },
+          "count": {
+            "default": 5,
+            "enum": [
+              3,
+              4,
+              5
+            ],
+            "title": "Count",
+            "type": "integer"
+          },
+          "fingers": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Finger-Input"
+            },
+            "propertyNames": {
+              "enum": [
+                "thumb",
+                "index",
+                "middle",
+                "ring",
+                "pinky"
+              ]
+            },
+            "title": "Fingers",
+            "type": "object"
+          },
+          "palm_width": {
+            "default": 0.66,
+            "maximum": 1.5,
+            "minimum": 0.2,
+            "title": "Palm Width",
+            "type": "number"
+          }
+        },
+        "title": "HandShape",
+        "type": "object"
+      },
+      "HandShape-Output": {
+        "description": "R2: one hand's own skeleton, in palm lengths.",
+        "properties": {
+          "claw": {
+            "default": 0.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Claw",
+            "type": "number"
+          },
+          "count": {
+            "default": 5,
+            "enum": [
+              3,
+              4,
+              5
+            ],
+            "title": "Count",
+            "type": "integer"
+          },
+          "fingers": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Finger-Output"
+            },
+            "propertyNames": {
+              "enum": [
+                "thumb",
+                "index",
+                "middle",
+                "ring",
+                "pinky"
+              ]
+            },
+            "title": "Fingers",
+            "type": "object"
+          },
+          "palm_width": {
+            "default": 0.66,
+            "maximum": 1.5,
+            "minimum": 0.2,
+            "title": "Palm Width",
+            "type": "number"
+          }
+        },
+        "required": [
+          "count",
+          "palm_width",
+          "claw",
+          "fingers"
+        ],
+        "title": "HandShape",
+        "type": "object"
+      },
+      "Hands-Input": {
+        "description": "Q2: one hand fitted and mirrored — `left` None is the right mirrored; *Unlink* gives the left a shape of its own.",
+        "properties": {
+          "left": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HandShape-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "right": {
+            "$ref": "#/components/schemas/HandShape-Input"
+          }
+        },
+        "title": "Hands",
+        "type": "object"
+      },
+      "Hands-Output": {
+        "description": "Q2: one hand fitted and mirrored — `left` None is the right mirrored; *Unlink* gives the left a shape of its own.",
+        "properties": {
+          "left": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HandShape-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "right": {
+            "$ref": "#/components/schemas/HandShape-Output"
+          }
+        },
+        "required": [
+          "right",
+          "left"
+        ],
+        "title": "Hands",
         "type": "object"
       },
       "HealBody": {
@@ -16124,6 +16618,24 @@
         "title": "OwnBody",
         "type": "object"
       },
+      "PartFitQueued": {
+        "properties": {
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "asset_id"
+        ],
+        "title": "PartFitQueued",
+        "type": "object"
+      },
       "PassBody": {
         "description": "D118 (AE4a): a pass on the layer — the preset and its strength; a seed given is a re-run with another. AE4c: `face` and `lipsync`\n(the strength unused).",
         "properties": {
@@ -18037,6 +18549,46 @@
             ],
             "title": "Derived From"
           },
+          "feet_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feet Note"
+          },
+          "feet_points": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feet Points"
+          },
+          "feet_ref_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feet Ref Asset Id"
+          },
+          "feet_words": {
+            "default": "",
+            "maxLength": 400,
+            "title": "Feet Words",
+            "type": "string"
+          },
           "from_idea": {
             "anyOf": [
               {
@@ -18049,6 +18601,46 @@
           },
           "group_id": {
             "title": "Group Id",
+            "type": "string"
+          },
+          "hand_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hand Note"
+          },
+          "hand_points": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hand Points"
+          },
+          "hand_ref_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hand Ref Asset Id"
+          },
+          "hand_words": {
+            "default": "",
+            "maxLength": 400,
+            "title": "Hand Words",
             "type": "string"
           },
           "height_m": {
@@ -18218,6 +18810,14 @@
           "anim_ref_asset_id",
           "anim_ref_back_asset_id",
           "anim_ref_side_asset_id",
+          "hand_ref_asset_id",
+          "feet_ref_asset_id",
+          "hand_words",
+          "feet_words",
+          "hand_points",
+          "feet_points",
+          "hand_note",
+          "feet_note",
           "body_fit_from",
           "body_points",
           "anim_ref_note",
@@ -39483,6 +40083,71 @@
           }
         },
         "summary": "Profile Model Import",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/profiles/{pid}/versions/{vid}/parts/{part}/fit": {
+      "post": {
+        "description": "RG1 (D187 R2, D188 F2): read the version's hand from its hand picture (the feet from its feet picture, else its A-pose side view) —\nSDPose without boxes on the picture shrunk into its canvas, BiRefNet's matte beside it; the finisher writes the shape on the body.",
+        "operationId": "profile_part_fit_story_profiles__pid__versions__vid__parts__part__fit_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part",
+            "required": true,
+            "schema": {
+              "enum": [
+                "hand",
+                "feet"
+              ],
+              "title": "Part",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartFitQueued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Part Fit",
         "tags": [
           "story"
         ]

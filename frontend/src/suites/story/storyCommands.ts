@@ -1,6 +1,6 @@
 // 17 (D85): the Story suite's verbs — every one has a mouse home (the panel's buttons, the editor rows' tools, the Inspector, right-click
 // menus) per D32; Delete and the arrows are accelerators. SY1 adds the Cast tab's verbs (new profile, expand, add to the reference set, lock, copy, open).
-import { Paintbrush, RefreshCw, Eraser, CopyPlus, Hammer, Lightbulb, Group, Ungroup, Workflow, ArrowDown, ArrowLeft, Box, Ruler, ArrowUp, BookOpen, BookPlus, ChevronLeft, ChevronRight, Pencil, UserRoundPlus, Users, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImageOff, ImagePlus, ImageUp, Link, ListChecks, ListPlus, Lock, MapPinPlus, Maximize, Mic, PackagePlus, Palette, PersonStanding, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
+import { Footprints, Hand, ScanSearch, Paintbrush, RefreshCw, Eraser, CopyPlus, Hammer, Lightbulb, Group, Ungroup, Workflow, ArrowDown, ArrowLeft, Box, Ruler, ArrowUp, BookOpen, BookPlus, ChevronLeft, ChevronRight, Pencil, UserRoundPlus, Users, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImageOff, ImagePlus, ImageUp, Link, ListChecks, ListPlus, Lock, MapPinPlus, Maximize, Mic, PackagePlus, Palette, PersonStanding, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
 import { command, isEnabled, registerCommands, runCommand, sep, type Command, type MenuItem, type OnItem } from '../../frame/commands'
 import { nextOwed, readinessOf, type ReadyCell, type ReadyItem } from './castReady'
 import { linesToVoice, spineTodo } from './episodeVerbs'
@@ -418,6 +418,26 @@ const cmds: Command[] = [
     placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character' && !!useSession.getState().capabilities?.story?.model_id, run: () => void sy().makeAnimRef('back') },
   { id: 'story.cast.makeAnimRefSide', scope: 'story', label: 'Make side-view candidates ▶', icon: PersonStanding, hint: 'queues two of the same A-pose in profile, facing left — pick the side from them, for a character seen from the side (the braid, the hood, what hangs behind)',
     placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character' && !!useSession.getState().capabilities?.story?.model_id, run: () => void sy().makeAnimRef('side') },
+  // RG1 (D187, D188; proto01_rig 00 §8–10): the hand and feet pictures — made from words of their own (no sheet, no references, on Klein),
+  // picked by hand, read at once (SDPose on the picture shrunk into its canvas, the matte beside); the shape lands on the body
+  { id: 'story.cast.makeHandRef', scope: 'story', label: 'Make hand-picture candidates ▶', icon: Hand,
+    hint: "queues two pictures of a right hand alone, palm to the camera, the fingers spread — from the hand's own words (else the sheet's about the hands); pick the hand from them",
+    placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character' && !!useSession.getState().capabilities?.story?.model_id, run: () => void sy().makeAnimRef('hand') },
+  { id: 'story.cast.makeFeetRef', scope: 'story', label: 'Make feet-picture candidates ▶', icon: Footprints,
+    hint: "queues two pictures of the feet and shoes from the side, from the knees down — from the feet's own words (else the sheet's about the shoes); pick the feet from them",
+    placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character' && !!useSession.getState().capabilities?.story?.model_id, run: () => void sy().makeAnimRef('feet') },
+  { id: 'story.cast.readHand', scope: 'story', label: 'Read the hand ▶', icon: ScanSearch, hint: "SDPose reads the hand picture again (a few seconds): each finger's length, place and width",
+    placement: ['inspector', 'context'], when: () => profile()?.cls === 'character' && !!version()?.hand_ref_asset_id, run: () => void sy().readPart('hand') },
+  { id: 'story.cast.readFeet', scope: 'story', label: 'Read the feet ▶', icon: ScanSearch, hint: 'SDPose reads the feet picture again — else the A-pose side view (a few seconds): the heel, the toe, the ankle',
+    placement: ['inspector', 'context'], when: () => profile()?.cls === 'character' && !!(version()?.feet_ref_asset_id ?? version()?.anim_ref_side_asset_id), run: () => void sy().readPart('feet') },
+  { id: 'story.cast.useAsHandRef', scope: 'story', label: 'Use as the hand picture', icon: Hand, placement: ['context', 'inspector'], when: () => profile()?.cls === 'character' && picked().length === 1,
+    run: () => void sy().setAnimRef('hand', picked()[0]) },
+  { id: 'story.cast.useAsFeetRef', scope: 'story', label: 'Use as the feet picture', icon: Footprints, placement: ['context', 'inspector'], when: () => profile()?.cls === 'character' && picked().length === 1,
+    run: () => void sy().setAnimRef('feet', picked()[0]) },
+  { id: 'story.cast.clearHandRef', scope: 'story', label: 'Clear the hand picture', icon: X, placement: ['inspector', 'context'], when: () => !!version()?.hand_ref_asset_id,
+    run: () => void sy().setAnimRef('hand', null) },
+  { id: 'story.cast.clearFeetRef', scope: 'story', label: 'Clear the feet picture', icon: X, placement: ['inspector', 'context'], when: () => !!version()?.feet_ref_asset_id,
+    run: () => void sy().setAnimRef('feet', null) },
   { id: 'story.cast.useAsAnimRef', scope: 'story', label: 'Use as the animation reference', icon: PersonStanding, placement: ['context', 'inspector'], when: () => animRefable() && picked().length === 1,
     run: () => void sy().setAnimRef('front', picked()[0]) },
   { id: 'story.cast.useAsAnimRefBack', scope: 'story', label: 'Use as the back view', icon: PersonStanding, placement: ['context', 'inspector'], when: () => profile()?.cls === 'character' && picked().length === 1,

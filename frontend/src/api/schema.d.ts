@@ -3887,6 +3887,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/profiles/{pid}/versions/{vid}/parts/{part}/fit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Profile Part Fit
+         * @description RG1 (D187 R2, D188 F2): read the version's hand from its hand picture (the feet from its feet picture, else its A-pose side view) —
+         *     SDPose without boxes on the picture shrunk into its canvas, BiRefNet's matte beside it; the finisher writes the shape on the body.
+         */
+        post: operations["profile_part_fit_story_profiles__pid__versions__vid__parts__part__fit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/profiles/{pid}/versions/{vid}/poses/{name}": {
         parameters: {
             query?: never;
@@ -5323,7 +5344,7 @@ export interface components {
              * @default front
              * @enum {string}
              */
-            side?: "front" | "back" | "side";
+            side?: "front" | "back" | "side" | "hand" | "feet";
             /**
              * Stage
              * @default false
@@ -5331,6 +5352,8 @@ export interface components {
             stage?: boolean;
             /** Style Id */
             style_id?: string | null;
+            /** Words */
+            words?: string | null;
         };
         /** AnimRefPick */
         AnimRefPick: {
@@ -5341,7 +5364,7 @@ export interface components {
              * @default front
              * @enum {string}
              */
-            side?: "front" | "back" | "side";
+            side?: "front" | "back" | "side" | "hand" | "feet";
         };
         /** AnimRefQueued */
         AnimRefQueued: {
@@ -6215,7 +6238,9 @@ export interface components {
              * @enum {string}
              */
             figure?: "female" | "male";
+            foot_shape?: components["schemas"]["Feet-Input"] | null;
             hand_rest?: components["schemas"]["HandRest-Input"];
+            hand_shape?: components["schemas"]["Hands-Input"] | null;
             /**
              * Hands
              * @default 1
@@ -6318,7 +6343,9 @@ export interface components {
              * @enum {string}
              */
             figure: "female" | "male";
+            foot_shape: components["schemas"]["Feet-Output"] | null;
             hand_rest: components["schemas"]["HandRest-Output"];
+            hand_shape: components["schemas"]["Hands-Output"] | null;
             /**
              * Hands
              * @default 1
@@ -8325,6 +8352,22 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * Feet
+         * @description F2: one foot fitted and mirrored, as the hands (Q2).
+         */
+        "Feet-Input": {
+            left?: components["schemas"]["FootShape-Input"] | null;
+            right?: components["schemas"]["FootShape-Input"];
+        };
+        /**
+         * Feet
+         * @description F2: one foot fitted and mirrored, as the hands (Q2).
+         */
+        "Feet-Output": {
+            left: components["schemas"]["FootShape-Output"] | null;
+            right: components["schemas"]["FootShape-Output"];
+        };
         /** FetchRequest */
         FetchRequest: {
             /** Model Id */
@@ -8770,6 +8813,50 @@ export interface components {
             /** Source */
             source: string;
         };
+        /**
+         * Finger
+         * @description One finger (or the thumb) in palm lengths, in the palm's frame (+x toward the thumb).
+         */
+        "Finger-Input": {
+            /**
+             * Angle
+             * @default 0
+             */
+            angle?: number;
+            /** Base */
+            base: number[];
+            /** Claw */
+            claw?: number | null;
+            /** Lengths */
+            lengths: number[];
+            /**
+             * Width
+             * @default 0.19
+             */
+            width?: number;
+        };
+        /**
+         * Finger
+         * @description One finger (or the thumb) in palm lengths, in the palm's frame (+x toward the thumb).
+         */
+        "Finger-Output": {
+            /**
+             * Angle
+             * @default 0
+             */
+            angle: number;
+            /** Base */
+            base: number[];
+            /** Claw */
+            claw: number | null;
+            /** Lengths */
+            lengths: number[];
+            /**
+             * Width
+             * @default 0.19
+             */
+            width: number;
+        };
         /** FlattenRequest */
         FlattenRequest: {
             /** Name */
@@ -9013,6 +9100,82 @@ export interface components {
             name: string;
             /** Profile Id */
             profile_id: string;
+        };
+        /**
+         * FootShape
+         * @description F2: one foot, in foot lengths (the heel point to the big toe), seen from the side.
+         */
+        "FootShape-Input": {
+            /**
+             * Ankle At
+             * @default 0.2
+             */
+            ankle_at?: number;
+            /**
+             * Ankle Up
+             * @default 0.44
+             */
+            ankle_up?: number;
+            /**
+             * Ball At
+             * @default 0.72
+             */
+            ball_at?: number;
+            /**
+             * Heel Up
+             * @default 0.25
+             */
+            heel_up?: number;
+            /** Length Leg */
+            length_leg?: number | null;
+            /**
+             * Pitch
+             * @default 6
+             */
+            pitch?: number;
+            /**
+             * Toe Up
+             * @default 0.15
+             */
+            toe_up?: number;
+        };
+        /**
+         * FootShape
+         * @description F2: one foot, in foot lengths (the heel point to the big toe), seen from the side.
+         */
+        "FootShape-Output": {
+            /**
+             * Ankle At
+             * @default 0.2
+             */
+            ankle_at: number;
+            /**
+             * Ankle Up
+             * @default 0.44
+             */
+            ankle_up: number;
+            /**
+             * Ball At
+             * @default 0.72
+             */
+            ball_at: number;
+            /**
+             * Heel Up
+             * @default 0.25
+             */
+            heel_up: number;
+            /** Length Leg */
+            length_leg: number | null;
+            /**
+             * Pitch
+             * @default 6
+             */
+            pitch: number;
+            /**
+             * Toe Up
+             * @default 0.15
+             */
+            toe_up: number;
         };
         /** FramesBody */
         FramesBody: {
@@ -9538,6 +9701,74 @@ export interface components {
              * @default 0
              */
             thumb: number;
+        };
+        /**
+         * HandShape
+         * @description R2: one hand's own skeleton, in palm lengths.
+         */
+        "HandShape-Input": {
+            /**
+             * Claw
+             * @default 0
+             */
+            claw?: number;
+            /**
+             * Count
+             * @default 5
+             * @enum {integer}
+             */
+            count?: 3 | 4 | 5;
+            /** Fingers */
+            fingers?: {
+                [key: string]: components["schemas"]["Finger-Input"];
+            };
+            /**
+             * Palm Width
+             * @default 0.66
+             */
+            palm_width?: number;
+        };
+        /**
+         * HandShape
+         * @description R2: one hand's own skeleton, in palm lengths.
+         */
+        "HandShape-Output": {
+            /**
+             * Claw
+             * @default 0
+             */
+            claw: number;
+            /**
+             * Count
+             * @default 5
+             * @enum {integer}
+             */
+            count: 3 | 4 | 5;
+            /** Fingers */
+            fingers: {
+                [key: string]: components["schemas"]["Finger-Output"];
+            };
+            /**
+             * Palm Width
+             * @default 0.66
+             */
+            palm_width: number;
+        };
+        /**
+         * Hands
+         * @description Q2: one hand fitted and mirrored — `left` None is the right mirrored; *Unlink* gives the left a shape of its own.
+         */
+        "Hands-Input": {
+            left?: components["schemas"]["HandShape-Input"] | null;
+            right?: components["schemas"]["HandShape-Input"];
+        };
+        /**
+         * Hands
+         * @description Q2: one hand fitted and mirrored — `left` None is the right mirrored; *Unlink* gives the left a shape of its own.
+         */
+        "Hands-Output": {
+            left: components["schemas"]["HandShape-Output"] | null;
+            right: components["schemas"]["HandShape-Output"];
         };
         /** HealBody */
         HealBody: {
@@ -11712,6 +11943,13 @@ export interface components {
              */
             part?: "cast";
         };
+        /** PartFitQueued */
+        PartFitQueued: {
+            /** Asset Id */
+            asset_id: string;
+            /** Job Id */
+            job_id: string;
+        };
         /**
          * PassBody
          * @description D118 (AE4a): a pass on the layer — the preset and its strength; a seed given is a re-run with another. AE4c: `face` and `lipsync`
@@ -12457,9 +12695,35 @@ export interface components {
             created_at: string;
             /** Derived From */
             derived_from: string | null;
+            /** Feet Note */
+            feet_note: string | null;
+            /** Feet Points */
+            feet_points: {
+                [key: string]: unknown;
+            } | null;
+            /** Feet Ref Asset Id */
+            feet_ref_asset_id: string | null;
+            /**
+             * Feet Words
+             * @default
+             */
+            feet_words: string;
             from_idea: components["schemas"]["IdeaRef"] | null;
             /** Group Id */
             group_id: string;
+            /** Hand Note */
+            hand_note: string | null;
+            /** Hand Points */
+            hand_points: {
+                [key: string]: unknown;
+            } | null;
+            /** Hand Ref Asset Id */
+            hand_ref_asset_id: string | null;
+            /**
+             * Hand Words
+             * @default
+             */
+            hand_words: string;
             /** Height M */
             height_m: number | null;
             /** Hero Asset Id */
@@ -23971,6 +24235,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Profile"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_part_fit_story_profiles__pid__versions__vid__parts__part__fit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+                part: "hand" | "feet";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartFitQueued"];
                 };
             };
             /** @description Validation Error */

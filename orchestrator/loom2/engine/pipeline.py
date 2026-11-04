@@ -870,13 +870,35 @@ async def prepare_face_pass(job: JobRecord, recipe: LayerPass, q: JobQueue) -> d
 
 
 async def prepare_keypoints(job: JobRecord, recipe: Keypoints, q: JobQueue) -> dict[str, Any]:
-    """CA1b: upload the image as PNG (≤ 2048 px: SDPose crops each person box itself)."""
+    """CA1b: upload the image as PNG (≤ 2048 px: SDPose crops each person box itself). RG1 (E62 a): with an inset, the picture shrunk into
+    its canvas is uploaded too — SDPose reads that one, the matte the picture itself."""
     a = q.catalogue.get(recipe.asset_id)
     src = q.catalogue.abs_path(a) if a else None
     if not src or not Path(src).is_file() or (a is not None and a.kind != "image"):
         raise ValueError(f"the image ({recipe.asset_id}) is missing from the Catalogue")
     fitted = await asyncio.to_thread(fit_reference, q, Path(src), 2048, f"kp-{recipe.asset_id}")
-    return {"image": await q.engine.client.upload_image(fitted)}
+    out = {"image": await q.engine.client.upload_image(fitted)}
+    if recipe.inset < 0.999:
+        shrunk = await asyncio.to_thread(inset_image, fitted, recipe.inset)
+        out["read"] = await q.engine.client.upload_image(shrunk)
+        job.log_tail.append(f"read shrunk to {round(recipe.inset * 100)} % of its canvas" + ("" if recipe.boxes else ", without person boxes"))
+    return out
+
+
+def inset_image(src: Path, inset: float) -> Path:
+    """RG1 (E62 a): the picture shrunk to `inset` of its canvas, centred on the median colour of its top and bottom rows (its plain ground) —
+    hands.unshrink maps the points read on it back."""
+    out = src.with_name(f"{src.stem}-in{round(inset * 100)}.png")
+    with Image.open(src) as im:
+        im = im.convert("RGB")
+        w, h = im.size
+        a = np.asarray(im)
+        bg = tuple(int(x) for x in np.median(np.concatenate([a[0], a[-1]]), axis=0))
+        canvas = Image.new("RGB", (w, h), bg)
+        small = im.resize((round(w * inset), round(h * inset)), Image.LANCZOS)
+        canvas.paste(small, ((w - small.width) // 2, (h - small.height) // 2))
+        canvas.save(out, "PNG")
+    return out
 
 
 async def prepare_mesh(job: JobRecord, recipe: ImageToMesh, q: JobQueue) -> dict[str, Any]:

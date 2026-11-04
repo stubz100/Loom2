@@ -13,7 +13,7 @@ const v = (extra: Partial<ProfileVersion> = {}): ProfileVersion => ({ id: 'v1', 
 describe('U3 → C0: the readiness line (the pictures; the 3D is Clay\'s, clay.test.ts)', () => {
   it('a character owes its hero, references and A-pose front; the back and side views and the voice are optional', () => {
     const r = readiness({ cls: 'character', voice_id: null }, v(), 0)
-    expect(r.items.map((x) => `${x.id}:${x.state}`)).toEqual(['hero:owed', 'references:owed', 'a_pose_front:owed', 'a_pose_back:optional', 'a_pose_side:optional', 'voice:optional'])
+    expect(r.items.map((x) => `${x.id}:${x.state}`)).toEqual(['hero:owed', 'references:owed', 'a_pose_front:owed', 'a_pose_back:optional', 'a_pose_side:optional', 'hand_picture:optional', 'feet_picture:optional', 'voice:optional'])
     expect(r.line).toBe('3 to go')
     const done = readiness({ cls: 'character', voice_id: 'vce_1' }, v({ hero_asset_id: 'a', anim_ref_asset_id: 'b' }), 3)
     expect([done.line, done.items.find((x) => x.id === 'references')!.detail]).toEqual(['Pictures done', '3'])
@@ -72,7 +72,7 @@ describe('D162: the framing row', () => {
     expect(activeFraming('prop', 'The object alone', {})).toBeNull()                                     // a build without the sentence
   })
   it('D175: a character has a side view among its reference framings', () => {
-    expect(REF_FRAMINGS.character.map((f) => f.id)).toEqual(['apose_front', 'apose_back', 'apose_side'])
+    expect(REF_FRAMINGS.character.map((f) => f.id)).toEqual(['apose_front', 'apose_back', 'apose_side', 'hand', 'feet'])   // RG1: the hand and feet pictures
     expect(activeFraming('character', 'in profile, facing left', { character: { side: 'in profile, facing left' } })?.ref).toMatchObject({ id: 'apose_side', side: 'side' })
   })
   it('D169: a reference framing switched on stays on while its words are edited; off is off; a panel from before reads the words', () => {

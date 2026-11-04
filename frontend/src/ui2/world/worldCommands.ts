@@ -1,6 +1,6 @@
 // U3 (D157, proto01_UI2 03 §8): World's commands (rule 3: every action a command with a mouse home; keys are accelerators). They act on the
 // entity and version the header shows (the Story store's selection) and on the creation selected in the bin.
-import { ArrowLeft, Box, CopyPlus, ImagePlus, Lock, Pencil, PersonStanding, Plus, Sparkles, Star, Trash2, UserRoundPlus } from 'lucide-react'
+import { ArrowLeft, Box, CopyPlus, Footprints, Hand, ImagePlus, Lock, Pencil, PersonStanding, Plus, Sparkles, Star, Trash2, UserRoundPlus } from 'lucide-react'
 import { http, unwrap } from '../../api/client'
 import { registerCommands } from '../../frame/commands'
 import { navigate } from '../../frame/router'
@@ -32,6 +32,12 @@ registerCommands([
   { id: 'world.creation.aposeSide', scope: 'world', label: 'Use as the A-pose side', icon: PersonStanding, placement: ['inspector', 'context'],
     hint: 'its optional side view, facing left (a character performed in profile: the braid, the hood, what hangs behind)', when: () => !!selected() && sy().profile()?.cls === 'character',
     run: () => { const s = selected(); if (s) void sy().setAnimRef('side', s.asset.id) } },
+  { id: 'world.creation.handPicture', scope: 'world', label: 'Use as the hand picture', icon: Hand, placement: ['inspector', 'context'],   // RG1 (D187)
+    hint: 'its own hand: SDPose reads each finger from it at once (a few seconds)', when: () => !!selected() && sy().profile()?.cls === 'character',
+    run: () => { const s = selected(); if (s) void sy().setAnimRef('hand', s.asset.id) } },
+  { id: 'world.creation.feetPicture', scope: 'world', label: 'Use as the feet picture', icon: Footprints, placement: ['inspector', 'context'],   // RG1 (D188)
+    hint: 'its own feet and shoes from the side: the heel, the toe and the ankle are read from it at once', when: () => !!selected() && sy().profile()?.cls === 'character',
+    run: () => { const s = selected(); if (s) void sy().setAnimRef('feet', s.asset.id) } },
   { id: 'world.mode.make', scope: 'world', label: 'Make', icon: Sparkles, placement: ['panel'], when: () => w().mode !== 'make',
     run: () => { w().setMode('make'); navigate({ suite: 'generate' }) } },
   { id: 'world.mode.edit', scope: 'world', label: 'Edit', icon: Pencil, placement: ['panel', 'inspector', 'context'], when: () => !!selected(),

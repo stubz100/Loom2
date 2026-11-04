@@ -23,7 +23,7 @@ from ..stages import PlaceSet, Pose, SetFace, StageStore, encode_guide
 from ..shot_recipe import TEMPLATES, StampReader, Template, recipe_state, rerun_recipe, stale_plan, used_run
 from ..shot_graph import ShotGraph, clay_rows, final_for, shot_graph
 from ..shot_prompt import ShotPrompt, shot_prompt
-from ..story import FOR_SHOT, Animatic, version_stage_stale, NODE_TYPES, VISUAL_TYPES, has_lines, node_type, StaleScenes, CastUse, cast_uses, body_fit_origin, fit_if_untouched, model_source, prop_model_origin, shell_origin, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
+from ..story import FOR_SHOT, Animatic, version_stage_stale, NODE_TYPES, VISUAL_TYPES, has_lines, node_type, StaleScenes, CastUse, cast_uses, body_fit_origin, fit_if_untouched, queue_part_fit, model_source, prop_model_origin, shell_origin, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
 from ..voices import VoiceRecord, VoiceStore, check_voice
 from .deps import Svc
 
@@ -374,15 +374,16 @@ async def profile_expand(svc: Svc, pid: str, body: ExpandBody):
 
 # ---- the animation reference (CA0, proto01_animate 01 step 2) ----------------------------------------------------------------------------
 class AnimRefBody(BaseModel):
-    side: Literal["front", "back", "side"] = "front"
+    side: Literal["front", "back", "side", "hand", "feet"] = "front"   # RG1 (D187, D188): the hand and the feet pictures
     count: int = Field(2, ge=1, le=4)
     stage: bool = False                           # queued staged (released from the Queue)
     style_id: str | None = None
     model_id: str | None = None                   # D186: the Make column's card (a FLUX.2-family model that takes references); None = the clay-reference model
+    words: str | None = Field(None, max_length=400)   # RG1 (Q4): the hand or feet picture's own words, kept on the version first; None = as they are
 
 
 class AnimRefPick(BaseModel):
-    side: Literal["front", "back", "side"] = "front"
+    side: Literal["front", "back", "side", "hand", "feet"] = "front"
     asset_id: str | None = None                   # None clears it
 
 
@@ -411,6 +412,11 @@ async def profile_anim_ref_make(svc: Svc, pid: str, vid: str, body: AnimRefBody)
     fmt = ws.load().format
     h = 720
     w = max(64, round(h * fmt.width / fmt.height / 16) * 16)
+    if body.words is not None and body.side in ("hand", "feet"):              # RG1 (Q4): the words go on the version first, as the sheet's do
+        try:
+            await asyncio.to_thread(store.patch_profile, pid, {"versions": [{"id": v.id, f"{body.side}_words": body.words.strip()}]})
+        except ValueError as e:
+            raise HTTPException(422, str(e))
     p, gid, made = await asyncio.to_thread(store.ensure_candidates, pid, v.id, groups)
     if made:
         svc.group_changed([gid])
@@ -1238,8 +1244,43 @@ async def profile_anim_ref_pick(svc: Svc, pid: str, vid: str, body: AnimRefPick)
             await asyncio.to_thread(fit_if_untouched, svc.queue, p, vid, body.asset_id)
         except Exception:  # noqa: BLE001 — the reference stands; the fit is offered by hand (Build's Fit the body)
             pass
+    # RG1: a hand or feet picture picked is read at once (a short keypoints job), and so is a side view while there is no feet picture
+    part = body.side if body.side in ("hand", "feet") else "feet" if body.side == "side" and not p.version(vid).feet_ref_asset_id else None
+    if body.asset_id and part and svc.queue is not None and p.cls == "character":
+        try:
+            await asyncio.to_thread(queue_part_fit, svc.queue, p, vid, part)
+            await svc.queue.flush()
+        except Exception:  # noqa: BLE001 — the picture stands; *Read the hand* is offered by hand
+            pass
     _changed(svc, p)
     return p.model_dump()
+
+
+class PartFitQueued(BaseModel):
+    job_id: str
+    asset_id: str
+
+
+@router.post("/story/profiles/{pid}/versions/{vid}/parts/{part}/fit", response_model=PartFitQueued)
+async def profile_part_fit(svc: Svc, pid: str, vid: str, part: Literal["hand", "feet"]):
+    """RG1 (D187 R2, D188 F2): read the version's hand from its hand picture (the feet from its feet picture, else its A-pose side view) —
+    SDPose without boxes on the picture shrunk into its canvas, BiRefNet's matte beside it; the finisher writes the shape on the body."""
+    ws, _, _ = svc.require_project()
+    if svc.queue is None:
+        raise HTTPException(409, "no queue")
+    p = await asyncio.to_thread(StoryStore(ws).profile, pid)
+    if p is None:
+        raise HTTPException(404, "profile not found")
+    try:
+        p.version(vid)
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    try:
+        job = await asyncio.to_thread(queue_part_fit, svc.queue, p, vid, part)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await svc.queue.flush()
+    return {"job_id": job.id, "asset_id": str(job.recipe.get("asset_id"))}
 
 
 # ---- LoRA training (LT2, 18 §3c) ------------------------------------------------------------------------------------------------------

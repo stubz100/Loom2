@@ -26,11 +26,14 @@ export function RefExtras() {
   const pv = g.preview
   const caps = useSession((s) => s.capabilities)
   const cap = caps?.models[p.model_id]
-  const ms = mentionsInUse(p)
+  const part = p.prompt_mode === 'tree' && (p.ref_framing === 'hand' || p.ref_framing === 'feet') ? p.ref_framing : null   // RG1: a hand or feet picture sends no mention (E62 a)
+  const left = part ? mentionsInUse(p) : []
+  const ms = part ? [] : mentionsInUse(p)
   const fromMentions = (pv?.ref_list ?? []).map((r, i) => ({ ...r, n: i + 1 })).filter((r) => r.mention && r.asset_id)
   const dropped = pv?.refs_dropped ?? 0
   return (
     <>
+      {left.length > 0 && <div className="hint mention-left" data-testid="mention-left">{left.map((m) => `@${m.name}`).join(', ')} left out of the {part === 'hand' ? 'hand' : 'feet'} picture</div>}
       {ms.length > 0 && (
         <div className="mention-chips">
           {ms.map((m) => {

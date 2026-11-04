@@ -154,6 +154,7 @@ class SheetColour(BaseModel):
 
 
 SHEET_FIELDS = ("appearance", "outfit", "colours", "marks", "body", "height_m")
+PART_WORDS = ("hand_words", "feet_words")       # RG1 (Q4): the hand and feet pictures' own words, patched like the sheet
 
 
 class IdeaRef(BaseModel):
@@ -185,6 +186,14 @@ class ProfileVersion(BaseModel):
     anim_ref_asset_id: str | None = None          # CA0 (01 step 2): the animation reference — full body, A-pose, 16:9, plain ground (a prop: alone, ¾ view)
     anim_ref_back_asset_id: str | None = None     # CA0: its optional back view (a shot that starts with the character turned away)
     anim_ref_side_asset_id: str | None = None     # D175 (E54): its optional side view, facing left (a character performed in profile)
+    hand_ref_asset_id: str | None = None          # RG1 (D187 R1): its hand picture — a right hand alone, palm to the camera (hands.py), picked by hand
+    feet_ref_asset_id: str | None = None          # RG1 (D188 F1): its feet picture — the feet and shoes from the side, from the knees down
+    hand_words: str = Field("", max_length=400)   # RG1 (Q4): the hand picture's own words (skin, nails, claws, rings, gloves) — blank: the sheet's (hands.sheet_words)
+    feet_words: str = Field("", max_length=400)   # RG1 (D188): the feet picture's own words (the shoes, the hems, bare feet)
+    hand_points: dict[str, Any] | None = None     # RG1: what the hand's read saw — {from, canvas, hand: 21 × [x, y, c], report} (the Hands view's points, RG3)
+    feet_points: dict[str, Any] | None = None     # RG1: what the feet's read saw — {from, canvas, foot: [big toe, small toe, heel], ankle, leg, floor, report}
+    hand_note: str | None = None                  # RG1: why the last hand read failed (a sentence); None = fine or not read
+    feet_note: str | None = None                  # RG1: why the last feet read failed
     body_fit_from: str | None = None              # CA1b (D104): the animation reference the body was last fitted to (an asset id); None = by hand
     body_points: dict[str, Any] | None = None     # proto01_UIcast CS1: SDPose's person on that reference ({canvas, pose, hand_left, hand_right, feet}) —
                                                   # the turn test's stance (S4), the skeleton bench's points (CS2)
@@ -846,6 +855,47 @@ def plan_expand(profile: Profile, version: ProfileVersion, preset: str, variant:
 
 
 BODY_FIT_SURFACE = "body_fit"                    # CA1b (D104): origin.surface of a keypoints job that fits a version's body; payload {version}
+HAND_FIT_SURFACE = "hand_fit"                    # RG1 (D187): origin.surface of a keypoints job reading a version's hand picture; payload {version, from}
+FEET_FIT_SURFACE = "feet_fit"                    # RG1 (D188): … its feet picture (else its A-pose side view); payload {version, from}
+PART_FIT_SURFACES = {HAND_FIT_SURFACE: "hand", FEET_FIT_SURFACE: "feet"}
+
+
+def part_words(v: ProfileVersion, part: str) -> str:
+    """RG1 (Q4): a hand or feet picture's words — the author's own, else the sheet's clauses about the hand or the feet (hands.sheet_words)."""
+    from .hands import sheet_words
+    own = (v.hand_words if part == "hand" else v.feet_words).strip()
+    return own or sheet_words(v.appearance, v.outfit, v.marks, "hand" if part == "hand" else "feet")
+
+
+def part_source(v: ProfileVersion, part: str) -> str | None:
+    """RG1: the picture a hand or the feet are read from — the hand picture; the feet picture, else the A-pose side view (E62 c: a side-view
+    figure reads its feet at 0.78–0.92)."""
+    return v.hand_ref_asset_id if part == "hand" else (v.feet_ref_asset_id or v.anim_ref_side_asset_id)
+
+
+def part_fit_recipe(v: ProfileVersion, part: str) -> dict[str, Any]:
+    """RG1 (E62 a, c): SDPose without person boxes, on the picture shrunk into its canvas (a hand to 30 %, a feet picture to 40 %; a full
+    figure as it is), with BiRefNet's subject matte beside it (the fingers' widths, the floor)."""
+    from .hands import FEET_INSET, HAND_INSET
+    src = part_source(v, part)
+    if not src:
+        raise ValueError(f"make the {part} picture first: the {'hand is' if part == 'hand' else 'feet are'} read from it")
+    inset = HAND_INSET if part == "hand" else FEET_INSET if src == v.feet_ref_asset_id else 1.0
+    return {"kind": "keypoints", "asset_id": src, "boxes": False, "inset": inset, "matte": True}
+
+
+def part_fit_origin(pid: str, vid: str, part: str, source: str) -> JobOrigin:
+    return JobOrigin(suite="story", surface=HAND_FIT_SURFACE if part == "hand" else FEET_FIT_SURFACE, ref=pid, payload={"version": vid, "from": source})
+
+
+def queue_part_fit(queue: Any, p: Any, vid: str, part: str) -> Any:
+    """RG1: read a character version's hand (or feet) from its picture — one short keypoints job; the finisher writes the shape on the body.
+    Returns the job."""
+    if p.cls != "character":
+        raise ValueError("only a character has hands and feet to read")
+    v = p.version(vid)
+    recipe = part_fit_recipe(v, part)
+    return queue.submit(recipe, origin=part_fit_origin(p.id, v.id, part, recipe["asset_id"]))[0]
 
 
 def body_fit_origin(pid: str, vid: str) -> JobOrigin:
@@ -934,7 +984,8 @@ def model_source(v: ProfileVersion) -> str | None:
 
 
 ANIM_REF_SURFACE = "anim_ref"                    # CA0: origin.surface of an animation-reference job; payload {version, side, group_id}
-AnimRefSide = Literal["front", "back", "side"]
+AnimRefSide = Literal["front", "back", "side", "hand", "feet"]   # RG1 (D187, D188): the hand and the feet pictures beside the A-pose
+PART_PX = 1024                                   # RG1: a hand or feet picture is square at 1024² (E62 a measured it there: Klein 21–24 s warm)
 
 
 def anim_ref_sentence(cls: str, side: str) -> str:
@@ -946,6 +997,9 @@ def anim_ref_sentence(cls: str, side: str) -> str:
         return ("The place itself, empty: a wide view from eye level, the camera level and about 1.6 m above the ground, the floor and the walls "
                 "(or the ground and the buildings' fronts) in view from side to side, nobody in it, no animals, nothing moving, nothing standing in "
                 "the middle of the floor, even light, the picture filling the whole frame edge to edge with no black bars, no text.")   # W65
+    if side in ("hand", "feet"):                                            # RG1 (D187, D188): a hand or the feet alone (E62's sentence)
+        from .hands import FEET_SENTENCE, HAND_SENTENCE
+        return HAND_SENTENCE if side == "hand" else FEET_SENTENCE
     if side == "side":                                                      # D175 (E54): what hangs behind (a braid, a hood) is seen
         return ("Full-body character reference, seen from the side in profile, facing left, standing in a neutral A-pose with both arms held "
                 "straight a little away from the body, the feet slightly apart, the whole figure from the top of the head to the feet visible and "
@@ -969,11 +1023,18 @@ def plan_anim_ref(profile: Profile, version: ProfileVersion, side: str, variant:
     `open`), the version's sheet composed (its colours bound) and its reference set as an @mention (pinned to the version, so its LoRA rides
     along and RC0 stamps it), the reference sentence, one seed each. The results land on the version's candidates page; the first becomes
     the reference while the version has none (the finisher). CW6 (D143): a place's is its set picture, the empty place its set is fitted to."""
-    if side in ("back", "side") and profile.cls != "character":
-        raise ValueError(f"only a character has a {side} view")
+    if side in ("back", "side", "hand", "feet") and profile.cls != "character":
+        raise ValueError(f"only a character has a {side} {'picture' if side in ('hand', 'feet') else 'view'}")
     spec = expand_spec(variant, model_id)                                 # D186: the Make column's card when it takes references
     if spec is None:
         raise ValueError("no model in this build makes an animation reference")
+    if side in ("hand", "feet"):                                         # RG1 (E62 a): the words about the hand or the shoes alone — no
+        from .hands import part_prompt                                    # mention (its references drew the whole person), no sheet, no Look
+        prompt = part_prompt(side, part_words(version, side))             # type: ignore[arg-type]
+        return [({"kind": "t2i", "model_id": spec.id, "prompt_mode": "text", "prompt_text": prompt, "width": PART_PX, "height": PART_PX, "seeds": [i],
+                  "style_id": None, "tier": "draft", "mentions": []},
+                 {"suite": "story", "surface": ANIM_REF_SURFACE, "ref": profile.id, "payload": {"version": version.id, "side": side, "group_id": group_id}})
+                for i in range(max(1, min(4, int(count))))]
     sheet = compose_sheet(version, name=profile.name, cls=profile.cls)
     lead = f"{sheet}. " if sheet else f"{profile.name}. "
     out = []
@@ -2397,10 +2458,10 @@ class StoryStore(_ShotMixin, _FlowMixin):
             if v is None:
                 raise ValueError(f"no version {patch.get('id')!r}")
             patch = {("appearance" if k == "stub" else k): x for k, x in patch.items()}
-            if v.state != "open" and any(k in patch for k in (*SHEET_FIELDS, "hero_asset_id")):
+            if v.state != "open" and any(k in patch for k in (*SHEET_FIELDS, *PART_WORDS, "hero_asset_id")):
                 raise ValueError(f"version {v.id} is locked — its fields are read-only; make a new version")
             i = versions.index(v)
-            versions[i] = ProfileVersion.model_validate({**v.model_dump(), **{k: patch[k] for k in (*SHEET_FIELDS, "hero_asset_id", "label") if k in patch}})
+            versions[i] = ProfileVersion.model_validate({**v.model_dump(), **{k: patch[k] for k in (*SHEET_FIELDS, *PART_WORDS, "hero_asset_id", "label") if k in patch}})
         merged = {**cur.model_dump(), **{k: v for k, v in data.items() if k in ("name", "cls", "current", "voice_id")}, "versions": [v.model_dump() for v in versions],
                   "id": pid, "schema_version": PROFILE_SCHEMA_VERSION, "revision": cur.revision + 1, "created_at": cur.created_at, "updated_at": utc_now()}
         p = Profile.model_validate(merged)
@@ -2415,18 +2476,23 @@ class StoryStore(_ShotMixin, _FlowMixin):
         cur = self.profile(pid)
         if cur is None:
             raise KeyError(pid)
-        field = {"back": "anim_ref_back_asset_id", "side": "anim_ref_side_asset_id"}.get(side, "anim_ref_asset_id")   # D175: the side view
+        field = {"back": "anim_ref_back_asset_id", "side": "anim_ref_side_asset_id",                 # D175: the side view
+                 "hand": "hand_ref_asset_id", "feet": "feet_ref_asset_id"}.get(side, "anim_ref_asset_id")   # RG1: the hand and feet pictures
         versions = [v.model_copy() for v in cur.versions]
         v = next((x for x in versions if x.id == vid), None)
         if v is None:
             raise KeyError(f"no version {vid!r}")
         if only_if_empty and getattr(v, field):
             return None
-        if side in ("back", "side") and cur.cls != "character":
-            raise ValueError(f"only a character has a {side} view")
+        if side in ("back", "side", "hand", "feet") and cur.cls != "character":
+            raise ValueError(f"only a character has a {side} {'picture' if side in ('hand', 'feet') else 'view'}")
         setattr(v, field, asset_id)
         if side == "front" and asset_id != v.body_fit_from:
             v.anim_ref_note = None                                   # S8: the note was about the reference it replaces
+        if side == "hand" and asset_id != (v.hand_points or {}).get("from"):
+            v.hand_note = None                                       # RG1: the note was about the picture it replaces
+        if side == "feet" and asset_id != (v.feet_points or {}).get("from"):
+            v.feet_note = None
         p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
         self.save_profile(p)
         return p
@@ -2509,6 +2575,35 @@ class StoryStore(_ShotMixin, _FlowMixin):
         if v is None:
             raise KeyError(f"no version {vid!r}")
         v.body, v.body_fit_from, v.body_points, v.anim_ref_note = body, asset_id, points, note
+        p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
+        self.save_profile(p)
+        return p
+
+    def set_part_fit(self, pid: str, vid: str, part: str, *, shape: Any = None, points: dict[str, Any] | None = None, note: str | None = None) -> Profile:
+        """RG1: a hand (or the feet) read from its picture — the shape on the body (the right one; a left the author unlinked stays its own,
+        Q2), the points read on the version; or, when the read failed, only the note why (`shape` None: the last good read stays). A product
+        of the version like the fitted body (no revision guard, a final version too)."""
+        from .hands import Feet, Hands
+        cur = self.profile(pid)
+        if cur is None:
+            raise KeyError(pid)
+        versions = [v.model_copy() for v in cur.versions]
+        v = next((x for x in versions if x.id == vid), None)
+        if v is None:
+            raise KeyError(f"no version {vid!r}")
+        if shape is not None:
+            body = v.body or Body()
+            if part == "hand":
+                body = body.model_copy(update={"hand_shape": Hands(right=shape, left=body.hand_shape.left if body.hand_shape else None)})
+                v.hand_points = points
+            else:
+                body = body.model_copy(update={"foot_shape": Feet(right=shape, left=body.foot_shape.left if body.foot_shape else None)})
+                v.feet_points = points
+            v.body = Body.model_validate(body.model_dump())
+        if part == "hand":
+            v.hand_note = note
+        else:
+            v.feet_note = note
         p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
         self.save_profile(p)
         return p

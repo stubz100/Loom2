@@ -1,8 +1,12 @@
 // U3d (D157, proto01_UI2 03 §7): World's Sketches — the brainstorm's pictures that belong to no one yet, in `bin/world/sketches`. Free
 // pictures are made with Image's whole column (the full prompt, the Library's words, here only) in a Make context of their own; a sketch's
-// *Prototype ▸* makes a draft entity of a class from it — the picture becomes its hero.
+// *Prototype ▸* makes a draft entity of a class from it — the picture becomes its hero. RG1 (D187 Q1, D188): a hand and a feet framing
+// to sketch hands and shoes freely — the reference framings' sentences, square, on Klein; the words are the author's own.
 import { useEffect } from 'react'
 import { api } from '../../api/client'
+import { Help } from '../../frame/Help'
+import { useSession } from '../../store/session'
+import { PART_PX } from './make'
 import { CommandButton } from '../../frame/CommandButton'
 import { showMenu } from '../../frame/ContextMenu'
 import type { MenuItem } from '../../frame/commands'
@@ -17,6 +21,27 @@ import '../bin/bin.css'
 const MENU: MenuItem[] = [{ cmd: 'world.sketch.character' }, { cmd: 'world.sketch.prop' }, { cmd: 'world.sketch.place' }, { sep: true }, { cmd: 'world.sketch.trash' }]
 
 // B2a's *From a stage* foot is gone (D186): a still of a stage is made in Clay's *Still* section, beside the scene it renders
+/** RG1 (D187 Q1, D188): the framings a hand or the feet are sketched with — a chip fills the framing words with the reference's sentence and
+ *  sets the square frame and Klein (E62 a: the clean close-up); nothing is queued, the words stay the author's to write. */
+function SketchFramings() {
+  const refs = useSession((s) => s.capabilities?.story?.references?.character)
+  const words = useGenerate((s) => s.panel.tree.composition ?? '')
+  const klein = useSession((s) => s.capabilities?.story?.model_id)
+  const chips = ([['hand', 'a hand'], ['feet', 'feet & shoes']] as const).filter(([k]) => !!refs?.[k])
+  if (!chips.length) return null
+  const put = (k: 'hand' | 'feet') => {
+    const g = useGenerate.getState()
+    g.setTree({ composition: refs?.[k] ?? '' })
+    g.set({ width: PART_PX, height: PART_PX, tier: 'custom' })
+    if (klein && g.panel.model_id !== klein) g.setModel(klein)
+  }
+  return (
+    <div className="w-field w-sketch-framing" data-testid="sketch-framings"><span>framing <Help text="A hand alone, palm to the camera, or the feet and shoes from the side — the words a character's hand or feet picture is made with, square, on Klein. Write the hand or the shoes in the prompt; nothing is queued here." /></span>
+      <div className="w-chips left">{chips.map(([k, label]) => <button key={k} className={words.trim() === refs?.[k]?.trim() ? 'active' : ''} aria-pressed={words.trim() === refs?.[k]?.trim()} onClick={() => put(k)}>{label}</button>)}</div>
+    </div>
+  )
+}
+
 export function SketchColumn() {
   const pv = useGenerate((s) => s.preview)
   const count = useGenerate((s) => s.panel.count)
@@ -24,6 +49,7 @@ export function SketchColumn() {
   const secs = pv?.estimate.seconds ? Math.round(pv.estimate.seconds * count) : null
   return (
     <div className="w-sketch-col" data-testid="world-sketches">
+      <SketchFramings />
       <div className="w-sketch-gen"><GenerateColumn tab="prompt" /></div>
       <div className="w-foot"><CommandButton id="world.sketch.make" text label={`Make ${count} sketch${count === 1 ? '' : 'es'} ▶${secs ? ` ≈ ${secs < 90 ? `${secs} s` : `${Math.round(secs / 60)} min`}` : ''}`} /></div>
     </div>

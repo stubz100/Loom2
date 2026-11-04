@@ -39,7 +39,7 @@ const SketchInspector = lazy(() => import('./WorldSketches').then((m) => ({ defa
 const RAIL_ICON: Record<WorldRail, typeof User> = { character: User, prop: Box, place: MapPin, look: Palette, sketches: PenLine }
 /** 03 §2: an item is its verb — the Cast command that makes it (they act on the entity the header shows: the Story store's selection). */
 // D161 → C0: a picture item opens Make, whose A-pose section makes and picks it (a click here queues nothing); the 3D is Clay's Library
-const READY_VERB: Record<string, string> = { ...Object.fromEntries(['a_pose_front', 'a_pose_back', 'a_pose_side', 'reference', 'set_picture'].map((k) => [k, 'world.mode.make'])),
+const READY_VERB: Record<string, string> = { ...Object.fromEntries(['a_pose_front', 'a_pose_back', 'a_pose_side', 'hand_picture', 'feet_picture', 'reference', 'set_picture'].map((k) => [k, 'world.mode.make'])),
   carried: 'world.carried.prop', tpose: 'world.mode.make' }                            // M4; W11
 /** M3, M4: what a warning chip says on hover. */
 const warnTitle = (x: ReadyItem) => (x.id === 'tpose'
@@ -47,7 +47,7 @@ const warnTitle = (x: ReadyItem) => (x.id === 'tpose'
   : x.id === 'carried'
   ? `${x.detail}: the A-pose leaves it out (its hands open, no props), so a performance has it only from the words and it comes and goes — a click makes it a Cast prop, which Clay's Hold ▸ puts in the hand`
   : `${x.detail} — made before the sheet said so: make it again, or set the colour back`)
-const BADGE: Record<string, string> = { hero: '★', reference: 'ref', a_pose_front: 'A·F', a_pose_back: 'A·B', a_pose_side: 'A·S', set_picture: 'set', model: '3D' }
+const BADGE: Record<string, string> = { hero: '★', reference: 'ref', a_pose_front: 'A·F', a_pose_back: 'A·B', a_pose_side: 'A·S', hand_picture: 'hand', feet_picture: 'feet', set_picture: 'set', model: '3D' }
 const FILTERS: [RoleFilter, string][] = [['all', 'all'], ['hero', 'hero'], ['reference', 'references'], ['a_pose', 'A-pose'], ['set_picture', 'set'], ['model', 'model'], ['candidate', 'candidates']]
 
 function Rail() {
@@ -105,7 +105,7 @@ function Tile({ it }: { it: BinItem }) {
   const sel = useWorld((s) => s.selected === it.asset.id)
   const badge = it.roles.map((r) => BADGE[r]).find(Boolean)
   const menu = (): MenuItem[] => [{ cmd: 'world.mode.edit' }, { sep: true }, { cmd: 'world.creation.hero' }, { cmd: 'world.creation.reference' }, { cmd: 'world.creation.candidate' },
-    { cmd: 'world.creation.aposeFront' }, { cmd: 'world.creation.aposeBack' }, { cmd: 'world.creation.aposeSide' }, { cmd: 'world.creation.setPicture' }, { sep: true }, { cmd: 'world.creation.trash' }, { cmd: 'world.creation.back' }]
+    { cmd: 'world.creation.aposeFront' }, { cmd: 'world.creation.aposeBack' }, { cmd: 'world.creation.aposeSide' }, { cmd: 'world.creation.handPicture' }, { cmd: 'world.creation.feetPicture' }, { cmd: 'world.creation.setPicture' }, { sep: true }, { cmd: 'world.creation.trash' }, { cmd: 'world.creation.back' }]
   return (
     <button className={`w-tile${sel ? ' selected' : ''}`} data-id={it.asset.id} title={it.asset.prompt_text ?? ''} onClick={() => useWorld.getState().select(sel ? null : it.asset.id)}
       onContextMenu={(e) => { useWorld.getState().select(it.asset.id); showMenu(e, menu()) }}>

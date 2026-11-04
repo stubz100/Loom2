@@ -246,6 +246,7 @@
  "POST /story/profiles/{pid}/versions/{vid}/lock",
  "POST /story/profiles/{pid}/versions/{vid}/model",
  "POST /story/profiles/{pid}/versions/{vid}/model/import",
+ "POST /story/profiles/{pid}/versions/{vid}/parts/{part}/fit",
  "POST /story/profiles/{pid}/versions/{vid}/set/crowd",
  "POST /story/profiles/{pid}/versions/{vid}/set/fill",
  "POST /story/profiles/{pid}/versions/{vid}/set/fit",

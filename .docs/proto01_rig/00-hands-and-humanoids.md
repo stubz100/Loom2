@@ -1,6 +1,6 @@
 # proto01_rig · Rigging the hands, and humanoids that are not human
 
-Status: **proposal, 2026-11-04; answered the same day → D187** (§8). Spike E62 runs first. Read from the code at `055315e`.
+Status: **proposal, 2026-11-04; answered the same day → D187** (§8); **legs and shoes added → D188** (§9). Spike E62 runs first. Read from the code at `055315e`.
 
 ## 1. The request
 
@@ -124,4 +124,35 @@ No weights to fetch: SDPose, BiRefNet and Wan Animate are installed.
 | **Q6** | As recommended: the *Humanoid* switch. |
 | **Q7** | As recommended: later, a study of its own. |
 | **Q8** | Yes: E62 before any wave. |
+
+## 9. Legs and shoes (the author, 2026-11-04 → D188)
+
+> We should do the same with legs/shoes
+
+**What loom2 has.** The legs are fitted from SDPose's hips, knees and ankles and placed by hand on the shell (D183's drags). There is **no
+ankle joint**: the shin's segment carries the foot (`segmentEnd`: the shin plus 6 cm down and 8 cm forward), so the shell's own shoe rides
+rigidly on the shin — it cannot flex at the ankle or roll on the ball. The guide's foot points (heel, big toe, small toe, D101) come from the
+mannequin's foot bones, scaled by one factor `feet` fitted from the toes' spread in the A-pose (S5), turned out by `feet_out`; on a shell the
+mannequin is cut to its hands, so those feet are not drawn — the clay's shoe and the guide's feet disagree whenever a clip rolls a foot.
+
+**A difference from the hands.** Pixal3D's hands are mittens; its shoes are shoes — a riding boot, a heel, a clog, bare clawed toes are the
+character. So the shoe is **kept and rigged**, not replaced.
+
+| | Proposal |
+| --- | --- |
+| **F1 · A feet picture** | A reference beside the hand picture: ‹character›'s legs and shoes from the side, standing, the whole foot and the heel in the picture — the side tells the sole's length, the heel's height and the toe's shape, which the A-pose's front view cannot. Among the references and as a framing in Sketches, with words of its own ("tall black riding boots with a 7 cm heel", "bare grey feet with long clawed toes"), as D187's hand picture. |
+| **F2 · A foot skeleton per character** | The shin ends at an **ankle**; the foot has a **heel**, a **ball** and a **toe tip**; a raised heel pitches the foot at rest. Read from the feet picture (the side) and the A-pose (the width), placed by hand on the shell; one foot fitted and mirrored, *Unlink* for feet that differ. |
+| **F3 · The shell's own shoe, rigged** | Bound by bone heat to the ankle and the ball, so it bends at the ankle and rolls on the ball as the clips' feet do; a *stiff sole* (a boot, a clog) bends at the ankle only. |
+| **F4 · The rigging screen's Feet & legs view** | The hips and knees placed on the shell (D183) and now the ankles; the heel, ball and toe dragged in the side view; a row a foot (length, heel height, toe) with locks; tried on a walk (the heel-to-toe roll) and a crouch. |
+| **F5 · The guide's feet** | The pose pass draws the heel, the big toe and the small toe from the placed foot, not the mannequin's. |
+| **F6 · Humanoid legs** | Their proportions by D187's *Humanoid* switch. A digitigrade leg (a creature walking on its toes, the heel high — a goat's, a werewolf's) is a new joint chain: Q9. |
+
+**E62 c.** (a) Can a feet picture be read: SDPose's six foot points on a side view, and the matte's length and heel height — Followed's three
+and three humanoids (the ghoul's bare clawed feet, the dwarf's heavy boots, a high-heeled shoe). (b) Does a shell's shoe hold up when bent:
+one of Followed's shells bound with an ankle and a ball and bent 30° at each, in the browser — no GPU.
+
+| # | Question | Recommendation |
+| --- | --- | --- |
+| **Q9** | Digitigrade legs: with the feet now, or with Q7's later study (tails, wings)? | Later, with Q7: it adds a joint to the leg's chain, which the guide's COCO-18 legs do not have. |
+| **Q10** | A *stiff sole* switch for boots and clogs? | Yes, a foot's switch; off by default. |
 

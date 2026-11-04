@@ -16487,3 +16487,19 @@ bags held by the rig's hands (a thin handle reaching the wrist), the man's right
 **Left:** on Nora the rig's hand sits a few centimetres past the end of her sleeve, where her own hand filled the space; a closer join
 (the rig's hand moved to the shell's wrist, or the cuff's margin tuned per shell) is a follow-up if the author wants it. The before/after
 sheet sent.
+
+## 2026-11-04 19:28 - proto01_rig 00: rigging the hands, and humanoids that are not human (a proposal)
+
+**The author** (after the shells' hands were fixed): a rigging screen to place the joints, "particularly for the hands"; humanoids that are
+not human must pose and move; hands vary - ghouls' large hands with elongated fingers, dwarfs' chunky fingers.
+
+**Measured** (no GPU): SDPose's hand points on Followed's three A-pose pictures, through each picture's scale, against the rig's hand (UAL2's
+mannequin, scaled by the one `hands` factor): the rig's palm is 13-31 % larger than theirs after its factor (Nora 10.2 cm against 9.0); the
+A-pose's fingers are foreshortened (Nora's middle finger reads 3.9 cm against the rig's 9.2) and a hand among bags is misread (the woman's
+right palm 0.4 cm wide) - the A-pose picture cannot measure fingers, and no single factor gives long thin or short thick ones.
+
+**Proposed** in `.docs/proto01_rig/00-hands-and-humanoids.md`: a *Hand* reference picture (R1); a hand skeleton per character - 21 joints,
+each finger's lengths, thickness and claw (R2); a clay hand built from it in place of the mannequin's (R3); a *Hands* view on the skeleton
+bench (R4); the guide drawing the character's own hands (R5); a *Humanoid* switch widening the body's ranges (R6). Spike E62 first (can a
+hand reference be read; does Wan Animate draw the fingers the guide gives), then waves RG1-RG4. Eight questions for the author (Q1-Q8).
+Nothing built.

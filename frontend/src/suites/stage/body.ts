@@ -12,6 +12,7 @@ export interface Body {
   hand_rest: { preset: 'open' | 'relaxed' | 'fist' | 'point' | 'grip' | 'pinch'; curl: number; spread: number; thumb: number }   // S2 (CS2: spread, thumb)
   head_forward: number; shoulder_drop: number; feet_out: number             // CS2: the head carried forward (°), the shoulders' drop (×), the feet out (°)
   locks: string[]                                                          // CS2: the factors *Fit again* leaves as the author set them
+  humanoid?: boolean                                                       // RG4 (D187 R6): a humanoid, not a human — wider ranges, no adult warnings
   attachments: { kind: 'tail' | 'horns' | 'ears' | 'wings' | 'antennae' | 'hat' | 'backpack' | 'other'; joint: string | null; size: number; note: string }[]
   hand_shape?: components['schemas']['Hands-Output'] | null                       // RG1 (D187): its own hands, read from its hand picture (hands.py); null = the mannequin's
   foot_shape?: components['schemas']['Feet-Output'] | null                        // RG1 (D188): its own feet, read from its feet picture (or the A-pose side view)
@@ -29,6 +30,12 @@ export const DEFAULT_BODY: Body = { height_m: 1.75, build: 'average', head: 1, t
   hips: 1, elbow: ELBOW_AT, knee: KNEE_AT, figure: 'female', hand_rest: { preset: 'relaxed', curl: 1, spread: 0, thumb: 0 }, head_forward: 0, shoulder_drop: 1,
   feet_out: 0, locks: [], attachments: [], joint_offsets: {} }
 export const BUILD_WIDTH: Record<Body['build'], number> = { slim: 0.85, average: 1, broad: 1.15, heavy: 1.3 }
+/** A factor's range on the sliders (body.py's fields): an adult's — and RG4 (D187 R6) a humanoid's, wider (arms to ×1.8, legs from ×0.4, the
+ *  head to ×3; body.py HUMAN_LIMITS keeps a human's fit within the adult's). */
+const RANGE: Record<string, [number, number]> = { head: [0.5, 2.5], neck: [0.5, 3], torso: [0.6, 1.6], shoulders: [0.6, 1.8], hips: [0.6, 1.6], elbow: [0.35, 0.65],
+  arms: [0.6, 1.6], knee: [0.35, 0.65], legs: [0.5, 1.6], hands: [0.5, 1.6], feet: [0.5, 1.6] }
+const HUMANOID: Record<string, [number, number]> = { head: [0.5, 3], arms: [0.6, 1.8], legs: [0.4, 1.6] }
+export const rangeOf = (b: { humanoid?: boolean } | null | undefined, k: string): [number, number] => (b?.humanoid ? HUMANOID[k] : undefined) ?? RANGE[k] ?? [0.5, 1.6]
 export type Limbs = { upper_arm: number; forearm: number; thigh: number; shin: number }
 
 /** The body's dimensions in the dummy's own units (before the height scale): limb lengths, the standing hip height, the head top. */

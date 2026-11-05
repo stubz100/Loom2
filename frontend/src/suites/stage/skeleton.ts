@@ -82,7 +82,7 @@ export function lengthCm(b: Body, key: RowKey): number {
   return Math.round(m * s * 1000) / 10
 }
 
-export const outside = (b: Body, r: Row) => { const v = Number(b[r.factor] ?? 1); return v < r.band[0] || v > r.band[1] }
+export const outside = (b: Body, r: Row) => { if (b.humanoid) return false; const v = Number(b[r.factor] ?? 1); return v < r.band[0] || v > r.band[1] }   // RG4: a humanoid has no adult's range
 
 // ---- a blue point dragged ---------------------------------------------------------------------------------------------------------------
 /** The factor a figure marker's drag sets, and its new value: `fig` the markers' (x, y) on the front plane, `to` where marker `k` was

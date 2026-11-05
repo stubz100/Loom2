@@ -1,6 +1,6 @@
 # proto01_rig · Rigging the hands, and humanoids that are not human
 
-Status: **proposal, 2026-11-04; answered the same day → D187** (§8); **legs and shoes added → D188** (§9); **E62 run the same evening** (§10); **RG1 built** (§11); **Q9, Q10 answered → D189, RG2 built** (§12); **RG3 built** (§13). Read from the code at `055315e`.
+Status: **proposal, 2026-11-04; answered the same day → D187** (§8); **legs and shoes added → D188** (§9); **E62 run the same evening** (§10); **RG1 built** (§11); **Q9, Q10 answered → D189, RG2 built** (§12); **RG3 built** (§13); **RG4 built** (§14) — the waves done. Read from the code at `055315e`.
 
 ## 1. The request
 
@@ -343,3 +343,16 @@ body cannot keep is said on the version.
 ![The ghoul's Hands: its picture's points, its clay hand, each finger](img/rg3-hands-view.jpg)
 
 ![The ghoul's Feet & legs: its feet picture's points, its shoe placed by hand on the shell](img/rg3-feet-view.jpg)
+
+## 14. RG4 built (2026-11-05): the Humanoid switch
+
+A character is a **human** or a **humanoid** (R6): a switch beside the figure (♀ / ♂) in the Library's body section and in the skeleton
+bench's parts. A humanoid's parts range wider — arms to ×1.8, legs from ×0.4, the head to ×3 — on the sliders and in the fit (`body.py`:
+the fields widened, `HUMAN_LIMITS` keeping a human's fit where it was), and no part of it turns amber for leaving an adult's range (the status
+says "a humanoid — no adult's ranges"). A body SDPose cannot read still starts from the parametric body and its joints are placed by hand
+(D183). Joints the rig does not have — a moving tail, wings, extra arms, a digitigrade leg — wait for Q7's study (D189).
+
+With RG4 the waves of D187 and D188 are built: the hand and feet pictures (RG1), the character's own hands and feet drawn, guided and rigged
+(RG2), the rigging screen's Hands and Feet & legs (RG3), the Humanoid switch (RG4).
+
+![The skeleton bench's Body: the reference, the guide with the ghoul's own fingers, the Inspector's human / humanoid switch](img/rg4-body-humanoid-switch.jpg)

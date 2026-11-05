@@ -97,3 +97,17 @@ def test_the_refit_route(tmp_path: Path):
         assert cl.post(f"/story/profiles/{p['id']}/versions/v1/parts/feet/refit", json={"points": {"foot": []}}).status_code == 422
         assert cl.post(f"/story/profiles/{p['id']}/versions/v9/parts/hand/refit", json={"points": {"hand": pts}}).status_code == 404
         assert cl.post(f"/story/profiles/prf_none/versions/v1/parts/hand/refit", json={"points": {"hand": pts}}).status_code == 404
+
+
+def test_a_humanoid_fits_past_an_adult_s_ranges_a_human_does_not():
+    """RG4 (D187 R6): the Humanoid switch — a ghoul's long arms and a dwarf's short legs fitted as the picture has them; a human's fit keeps
+    the ranges it had (the fields are widened for humanoids only)."""
+    from loom2.body import Body, dummy_ratios, fit_body
+    measured = dummy_ratios(Body(arms=1.75, legs=0.45, humanoid=True))
+    ghoul, _ = fit_body(measured, Body(humanoid=True))
+    human, _ = fit_body(measured, Body())
+    assert ghoul.arms > 1.65 and ghoul.legs < 0.5 and ghoul.humanoid
+    assert human.arms <= 1.6 and human.legs >= 0.5 and not human.humanoid
+    assert Body(arms=1.8, legs=0.4, head=3.0).arms == 1.8                    # the fields hold a humanoid's
+    with pytest.raises(ValueError):
+        Body(arms=1.9)

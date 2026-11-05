@@ -20,7 +20,7 @@ import { CommandButton } from '../../frame/CommandButton'
 import { Help } from '../../frame/Help'
 import { askConfirm, useSession } from '../../store/session'
 import { shellBlocked, shellFromArmsDown, useStory, versionPointsOfShell } from '../story/storyStore'
-import { DEFAULT_BODY, ENDS, placedCount, type Body, type End } from './body'
+import { DEFAULT_BODY, ENDS, placedCount, rangeOf, type Body, type End } from './body'
 import { JOINTS, mannequin, POSE_NAMES, POSES, type Joint, type Mannequin } from './builders'
 import { HAND_PRESETS, makeDetailed } from './detailed'
 import type { HandShapes } from './clayHand'
@@ -28,6 +28,7 @@ import { bindProxy, insideShell, setShellPoints, stanceOf } from './proxy'
 import { COCO, cropOf, defaultOf, disagreements, dragFactor, lengthCm, outside, pictureMap, ROWS, seen, setLocked, unlock, type Points, type RowKey, type XY } from './skeleton'
 import { handFromPicture, readPicture, setUi, ui, useUi } from './benchState'
 import { FeetPanes, FeetParts, HandParts, HandsPanes } from './RigBench'
+import { HumanoidSwitch } from './HumanoidSwitch'
 import { showMenu } from '../../frame/ContextMenu'
 import { cellOf } from '../story/coverage'
 
@@ -474,8 +475,7 @@ function GuidePane({ body, stance, refId, points, shell }: { body: Body; stance:
 }
 
 // ------------------------------------------------------------------ the parts (the Inspector)
-const BOUNDS: Partial<Record<keyof Body, [number, number]>> = { head: [0.5, 2.5], neck: [0.5, 3], torso: [0.6, 1.6], shoulders: [0.6, 1.8], hips: [0.6, 1.6], elbow: [0.35, 0.65],
-  arms: [0.6, 1.6], knee: [0.35, 0.65], legs: [0.5, 1.6], hands: [0.5, 1.6], feet: [0.5, 1.6] }
+
 
 export function SkeletonParts() {
   const p = useStory((s) => s.profile())
@@ -512,12 +512,13 @@ export function SkeletonParts() {
         <span>height</span><span className="mono">{b.height_m.toFixed(2)} m</span>
         <span>figure</span><span className="segmented" role="group" aria-label="figure">{(['female', 'male'] as const).map((k) => <button key={k} type="button" disabled={!open} className={b.figure === k ? 'active' : ''} onClick={() => set({ figure: k })}
           aria-label={`${k} figure`} title={`A ${k === 'female' ? 'woman' : 'man'}'s figure: the mannequin the skeleton is drawn on`}>{k === 'female' ? '♀' : '♂'}</button>)}</span>
+        <span>kind</span><HumanoidSwitch b={b} open={open} set={set} />
       </div>
       {groups.map((g) => (
         <div key={g} className="skel-group">
           <div className="grp">{g}</div>
           {ROWS.filter((r) => r.group === g).map((r) => {
-            const val = Number(b[r.factor] ?? defaultOf(r.factor)), [lo, hi] = BOUNDS[r.factor] ?? [0.5, 1.6], locked = (b.locks ?? []).includes(r.factor as string)
+            const val = Number(b[r.factor] ?? defaultOf(r.factor)), [lo, hi] = rangeOf(b, r.factor as string), locked = (b.locks ?? []).includes(r.factor as string)
             const pct = (x: number) => `${((x - lo) / (hi - lo)) * 100}%`
             return (
               <div key={r.key} className={`skel-row${outside(b, r) ? ' amber' : ''}${u.row === r.key ? ' sel' : ''}`} data-row={r.key} onClick={() => setUi({ row: r.key })}
@@ -564,7 +565,8 @@ export function SkeletonParts() {
             </div>)
         }) : <div className="hint">none yet</div>}
       </div>
-      {first ? <div className="skel-status warn">{first.label} {Number(b[first.factor]) > first.band[1] ? 'long' : 'short'} for an adult — check its points</div> : <div className="skel-status">every part in an adult's range</div>}
+      {b.humanoid ? <div className="skel-status" data-status="humanoid">a humanoid — no adult's ranges</div>
+        : first ? <div className="skel-status warn">{first.label} {Number(b[first.factor]) > first.band[1] ? 'long' : 'short'} for an adult — check its points</div> : <div className="skel-status">every part in an adult's range</div>}
       {others.length > 0 && open && <div className="kv"><span>copy from</span>
         <select aria-label="copy the skeleton from" value="" onChange={(e) => { const o = others.find((x) => x.id === e.target.value); const ob = o?.versions.find((y) => y.id === o.current)?.body
           if (ob) set({ ...Object.fromEntries((['head', 'neck', 'torso', 'shoulders', 'hips', 'arms', 'elbow', 'legs', 'knee', 'hands', 'feet', 'head_forward', 'shoulder_drop', 'feet_out'] as const).map((k) => [k, (ob as Body)[k]])), hand_rest: { ...b.hand_rest, ...(ob as Body).hand_rest } } as Partial<Body>) }}>

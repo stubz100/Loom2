@@ -1,6 +1,6 @@
 // CS2: the skeleton bench's arithmetic — the picture ↔ figure mapping, the red ticks, the rows in centimetres, a blue point dragged.
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_BODY } from './body'
+import { DEFAULT_BODY, rangeOf } from './body'
 import { cropOf, disagreements, dragFactor, lengthCm, outside, pictureMap, ROWS, setLocked, unlock, type XY } from './skeleton'
 
 // a figure on its front plane (metres, y up) and the same figure in a picture (pixels, y down, 400 px per metre, the feet at y 700)
@@ -45,5 +45,16 @@ describe('the skeleton bench (CS2)', () => {
     const locked = setLocked(DEFAULT_BODY, 'elbow', 0.56)
     expect(locked.locks).toEqual(['elbow']); expect(setLocked(locked, 'elbow', 0.5).locks).toEqual(['elbow'])
     expect(unlock(locked, 'elbow').locks).toEqual([])
+  })
+})
+
+describe('RG4 (D187 R6): the Humanoid switch', () => {
+  it('a humanoid ranges wider and no part of it is outside an adult\'s range', () => {
+    expect(rangeOf(DEFAULT_BODY, 'arms')).toEqual([0.6, 1.6]); expect(rangeOf({ ...DEFAULT_BODY, humanoid: true }, 'arms')).toEqual([0.6, 1.8])
+    expect(rangeOf({ humanoid: true }, 'legs')).toEqual([0.4, 1.6]); expect(rangeOf({ humanoid: true }, 'head')).toEqual([0.5, 3])
+    expect(rangeOf({ humanoid: true }, 'torso')).toEqual([0.6, 1.6])                       // the rest as an adult's
+    const neck = ROWS.find((r) => r.key === 'neck')!
+    expect(outside({ ...DEFAULT_BODY, neck: 1.54 }, neck)).toBe(true)
+    expect(outside({ ...DEFAULT_BODY, neck: 1.54, humanoid: true }, neck)).toBe(false)
   })
 })

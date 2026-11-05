@@ -5,14 +5,15 @@
 import { Plus, X } from 'lucide-react'
 import { Help } from '../../frame/Help'
 import type { Profile, ProfileVersion } from '../../api/types'
-import { BUILD_WIDTH, DEFAULT_BODY, ELBOW_AT, KNEE_AT, bodyDims, type Body } from '../stage/body'
+import { BUILD_WIDTH, DEFAULT_BODY, ELBOW_AT, KNEE_AT, bodyDims, rangeOf, type Body } from '../stage/body'
+import { HumanoidSwitch } from '../stage/HumanoidSwitch'
 import { CommandButton } from '../../frame/CommandButton'
 import { shellBlocked, shellFromArmsDown, useStory } from './storyStore'
 import { runCommand } from '../../frame/commands'
 
 const PROPORTIONS: [keyof Pick<Body, 'head' | 'neck' | 'torso' | 'shoulders' | 'hips' | 'arms' | 'legs' | 'hands' | 'feet'>, string, number, number][] = [
   ['head', 'head size', 0.5, 2.5], ['neck', 'neck length', 0.5, 3.0], ['torso', 'torso length', 0.6, 1.6], ['shoulders', 'shoulder width', 0.6, 1.8],
-  ['hips', 'hip width', 0.6, 1.6], ['arms', 'arm length', 0.6, 1.6], ['legs', 'leg length', 0.5, 1.6], ['hands', 'hand size', 0.5, 1.6], ['feet', 'foot size', 0.5, 1.6]]
+  ['hips', 'hip width', 0.6, 1.6], ['arms', 'arm length', 0.6, 1.6], ['legs', 'leg length', 0.5, 1.6], ['hands', 'hand size', 0.5, 1.6], ['feet', 'foot size', 0.5, 1.6]]   // the adult's; rangeOf widens a humanoid's (RG4)
 const HAND_RESTS: Body['hand_rest']['preset'][] = ['relaxed', 'open', 'fist', 'point', 'grip', 'pinch']
 const BUILDS: Body['build'][] = ['slim', 'average', 'broad', 'heavy']
 const KINDS: Body['attachments'][number]['kind'][] = ['tail', 'horns', 'ears', 'wings', 'antennae', 'hat', 'backpack', 'other']
@@ -60,10 +61,11 @@ export function CastBody({ p, v }: { p: Profile; v: ProfileVersion }) {
                 aria-label={`${k} figure`} title={`A ${k === 'female' ? 'woman' : 'man'}'s figure: the mannequin the body is drawn on and the proportions its fit starts from (D168 seeds it from the sheet's words)`}>{k === 'female' ? '♀' : '♂'}</button>)}
             </span>
           </div>
+          <div className="body-row"><span>kind <Help text={"A humanoid, not a human — a ghoul, a dwarf, a troll: its parts range wider (arms to ×1.8, legs from ×0.4, the head to ×3), its fit may go there, and nothing warns of an adult's range."} /></span><HumanoidSwitch b={b} open={open} set={set} /></div>{/* RG4 */}
           {PROPORTIONS.map(([k, label, lo, hi]) => (
             <div key={k} className="body-row">
               <span>{label}</span>
-              <input type="range" aria-label={label} min={lo} max={hi} step={0.05} value={b[k]} disabled={!open} onChange={(e) => set({ [k]: Number(e.target.value) } as Partial<Body>)} />
+              <input type="range" aria-label={label} min={rangeOf(b, k)[0] ?? lo} max={rangeOf(b, k)[1] ?? hi} step={0.05} value={b[k]} disabled={!open} onChange={(e) => set({ [k]: Number(e.target.value) } as Partial<Body>)} />
               <span className="mono">×{(b[k] ?? 1).toFixed(2)}</span>
             </div>
           ))}

@@ -50,13 +50,13 @@ class Body(BaseModel):
     height_m: float = Field(1.75, ge=0.3, le=4.0)
     build: BodyBuild = "average"
     figure: FigureKind = "female"                  # U18: the Detailed mannequin the character's figures are (♀ / ♂)
-    head: float = Field(1.0, ge=0.5, le=2.5)
+    head: float = Field(1.0, ge=0.5, le=3.0)       # RG4 (D187 R6): to 3 for a humanoid (a human's fit stays within 2.5: HUMAN_LIMITS)
     torso: float = Field(1.0, ge=0.6, le=1.6)
     shoulders: float = Field(1.0, ge=0.6, le=1.8)
     hips: float = Field(1.0, ge=0.6, le=1.6)       # S7: the hips' width (no longer the fit's fixed anchor)
-    arms: float = Field(1.0, ge=0.6, le=1.6)
+    arms: float = Field(1.0, ge=0.6, le=1.8)       # RG4: to 1.8 for a humanoid (a ghoul's reach); a human's fit within 1.6
     elbow: float = Field(ELBOW_AT, ge=0.35, le=0.65)   # S6: the elbow's place, the upper arm's share of the arm
-    legs: float = Field(1.0, ge=0.5, le=1.6)
+    legs: float = Field(1.0, ge=0.4, le=1.6)       # RG4: from 0.4 for a humanoid (a dwarf's legs); a human's fit from 0.5
     knee: float = Field(KNEE_AT, ge=0.35, le=0.65)     # S6: the knee's place, the thigh's share of the leg
     neck: float = Field(1.0, ge=0.5, le=3.0)       # CA1b (D104): the neck's length (the head above the shoulders); ×1 an adult's (S3)
     hands: float = Field(1.0, ge=0.5, le=1.6)      # CA1b: the Detailed figure's hands (the pose pass draws them, D101)
@@ -70,6 +70,8 @@ class Body(BaseModel):
     joint_offsets: dict[str, list[float]] = Field(default_factory=dict)   # D183 (C2c): a joint placed on the shell by hand — metres from where
     #                                                                       the fitted body puts it, in its parent's frame (builders.ts applies it;
     #                                                                       the bench writes it); the fit leaves them, *Reset* clears them
+    humanoid: bool = False                         # RG4 (D187 R6): a humanoid, not a human — the parts' ranges widened (arms to 1.8, legs
+    #                                                from 0.4, the head to 3) for the fit and the bench, no adult-range warnings
     hand_shape: Hands | None = None                # RG1 (D187): the character's own hands, read from its hand picture (hands.py); None = the
     #                                                mannequin's; the size stays `hands`, fitted from the A-pose's palm
     foot_shape: Feet | None = None                 # RG1 (D188): its own feet, read from its feet picture (or the A-pose side view); None = the mannequin's
@@ -149,6 +151,7 @@ A_POSE_DEG = 22.0             # the reference's stance (frontend stage/turnTest.
 FITTED = ("head_w", "head_neck", "torso", "shoulders", "hips", "leg", "arm", "palm", "elbow_at", "knee_at", "toes")
 # D140 measured the whole hand (wrist → the middle fingertip) too and did not keep it: SDPose reads a real straight hand at 1.43–1.76 palms
 # against the Detailed hand's 1.85–1.91, so the fit's hands came out 12–24 % smaller than from the palm on the same pictures (journal).
+HUMAN_LIMITS = {"head": (0.5, 2.5), "arms": (0.6, 1.6), "legs": (0.5, 1.6)}   # RG4: a human's fit within these; a humanoid's to the fields'
 PULL = 0.02                   # S7: the weight of each factor's pull toward its adult value, against log-ratio residuals (≈ 2 % of a measure)
 DEFAULTS = {"elbow": ELBOW_AT, "knee": KNEE_AT}
 
@@ -286,6 +289,8 @@ def fit_body(measured: dict[str, float], body: Body | None = None, locks: tuple[
     needs = {"head": "head_w", "hands": "palm", "elbow": "elbow_at", "knee": "knee_at", "feet": "toes"}
     keys = ("head", "neck", "torso", "shoulders", "hips", "legs", "arms", "elbow", "knee", "hands", "feet")
     lim = {k: (Body.model_fields[k].metadata[0].ge, Body.model_fields[k].metadata[1].le) for k in keys}
+    if not b.humanoid:                                                     # RG4: a human's fit keeps the ranges it had (the fields widened for humanoids)
+        lim.update(HUMAN_LIMITS)
     unknown = [k for k in keys if k not in locks and (k not in needs or needs[k] in measured) and (k != "feet" or TOES_PER_LEG)]
     meas = [k for k in FITTED if k in measured and k in dummy_ratios(b)]
     home = np.log([DEFAULTS.get(k, 1.0) for k in unknown])

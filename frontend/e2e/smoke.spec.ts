@@ -2905,6 +2905,12 @@ test("the rigging screen's hands and feet (RG3, D187 R4, D188 F4): a hand pictur
   await page.screenshot({ path: 'node_modules/.e2e/rg3-feet.png' })
   await bench.locator('[data-testid="rig-parts"] button', { hasText: 'Body' }).click()
   await expect(bench.locator('.skel-ref circle.white').first()).toBeVisible({ timeout: 15_000 })        // the body's view as it was
+  // RG4 (D187 R6): the Humanoid switch — the parts range wider, no adult's warning
+  await page.locator('.skel-parts [data-testid="humanoid"] button', { hasText: 'humanoid' }).click()
+  await expect.poll(async () => ((await ver()).body as { humanoid?: boolean } | null)?.humanoid ?? false, { timeout: 10_000 }).toBe(true)
+  await expect(page.locator('.skel-parts .skel-status')).toContainText('a humanoid')
+  await expect(page.locator('.skel-parts .skel-row[data-row="upper_arm"] input[type=range]')).toBeVisible()
+  expect(await page.locator('.skel-parts input[aria-label="leg length"]').getAttribute('min')).toBe('0.4')
 })
 
 test("the skeleton changed (proto01_UIcast CS3, D136 U19): a final's character layer stamps its body per frame; Cast's skeleton changing under it shows on the layer, nothing done by itself — Re-render draws the guide again and performs it; Apply from the playhead keys the skeleton (the frames before it held) and performs again (Shots, B2a)", async ({ page }) => {
@@ -4383,7 +4389,7 @@ test('shells only (D183, C2c): a scene\'s Figures ＋ lists characters and no du
   await expect(header.locator('button[aria-label^="Try it on"]')).toHaveAttribute('aria-label', `Try it on · ${who.name}`)
   type Anim = { name: string; try_on: string | null }
   await expect.poll(async () => (await api<{ items: Anim[] }>('GET', '/stages/animations')).items.find((x) => x.name === `Bow ${tag}`)?.try_on ?? null, { timeout: 10_000 }).toBe(who.id)
-  // the skeleton bench's 3D pane: the right elbow dragged a little is placed by hand; Reset puts it back — on an A-pose (the bench needs
+  // the skeleton bench's 3D pane: the left elbow (the nearer one: the side view looks from the figure's left) dragged a little is placed by hand; Reset puts it back — on an A-pose (the bench needs
   // the picture), its body fitted by itself (D161) and its shell queued by the fit (D183) and landed on the fake engine
   const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
   await api('PUT', `/story/profiles/${who.id}/versions/v1/anim-ref`, { side: 'front', asset_id: img })
@@ -4396,13 +4402,13 @@ test('shells only (D183, C2c): a scene\'s Figures ＋ lists characters and no du
   await expect(bench).toBeVisible()
   await bench.locator('.tools button', { hasText: /^side$/ }).click()
   type Hook = { __loom2SkeletonBench?: { screen: (key: string) => [number, number] | null } }
-  await expect.poll(() => page.evaluate(() => (window as unknown as Hook).__loom2SkeletonBench?.screen('r_elbow') ?? null), { timeout: 15_000 }).not.toBeNull()
-  const at = (await page.evaluate(() => (window as unknown as Hook).__loom2SkeletonBench!.screen('r_elbow')))!
+  await expect.poll(() => page.evaluate(() => (window as unknown as Hook).__loom2SkeletonBench?.screen('l_elbow') ?? null), { timeout: 15_000 }).not.toBeNull()
+  const at = (await page.evaluate(() => (window as unknown as Hook).__loom2SkeletonBench!.screen('l_elbow')))!
   await page.mouse.move(at[0], at[1]); await page.mouse.down(); await page.mouse.move(at[0] + 24, at[1] + 6, { steps: 8 }); await page.mouse.up()
   type Prof = { versions: { body: { joint_offsets?: Record<string, number[]> } | null }[] }
   const offsets = async () => (await api<Prof>('GET', `/story/profiles/${who.id}`)).versions[0].body?.joint_offsets ?? {}
-  await expect.poll(async () => Object.keys(await offsets()), { timeout: 15_000 }).toEqual(['r_elbow'])
-  expect(Math.hypot(...(await offsets()).r_elbow)).toBeGreaterThan(0.005)
+  await expect.poll(async () => Object.keys(await offsets()), { timeout: 15_000 }).toEqual(['l_elbow'])
+  expect(Math.hypot(...(await offsets()).l_elbow)).toBeGreaterThan(0.005)
   await expect(page.locator('[data-testid="placed-joints"]')).toContainText('1 placed by hand')
   await page.locator('[data-testid="placed-joints"] button', { hasText: 'Reset' }).click()
   await expect.poll(async () => Object.keys(await offsets()), { timeout: 15_000 }).toEqual([])

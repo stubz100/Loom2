@@ -6287,6 +6287,11 @@ export interface components {
              * @default 1
              */
             hips?: number;
+            /**
+             * Humanoid
+             * @default false
+             */
+            humanoid?: boolean;
             /** Joint Offsets */
             joint_offsets?: {
                 [key: string]: number[];
@@ -6392,6 +6397,11 @@ export interface components {
              * @default 1
              */
             hips: number;
+            /**
+             * Humanoid
+             * @default false
+             */
+            humanoid: boolean;
             /** Joint Offsets */
             joint_offsets: {
                 [key: string]: number[];

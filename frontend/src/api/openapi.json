@@ -2419,7 +2419,7 @@
         "properties": {
           "arms": {
             "default": 1.0,
-            "maximum": 1.6,
+            "maximum": 1.8,
             "minimum": 0.6,
             "title": "Arms",
             "type": "number"
@@ -2505,7 +2505,7 @@
           },
           "head": {
             "default": 1.0,
-            "maximum": 2.5,
+            "maximum": 3.0,
             "minimum": 0.5,
             "title": "Head",
             "type": "number"
@@ -2531,6 +2531,11 @@
             "title": "Hips",
             "type": "number"
           },
+          "humanoid": {
+            "default": false,
+            "title": "Humanoid",
+            "type": "boolean"
+          },
           "joint_offsets": {
             "additionalProperties": {
               "items": {
@@ -2551,7 +2556,7 @@
           "legs": {
             "default": 1.0,
             "maximum": 1.6,
-            "minimum": 0.5,
+            "minimum": 0.4,
             "title": "Legs",
             "type": "number"
           },
@@ -2600,7 +2605,7 @@
         "properties": {
           "arms": {
             "default": 1.0,
-            "maximum": 1.6,
+            "maximum": 1.8,
             "minimum": 0.6,
             "title": "Arms",
             "type": "number"
@@ -2686,7 +2691,7 @@
           },
           "head": {
             "default": 1.0,
-            "maximum": 2.5,
+            "maximum": 3.0,
             "minimum": 0.5,
             "title": "Head",
             "type": "number"
@@ -2712,6 +2717,11 @@
             "title": "Hips",
             "type": "number"
           },
+          "humanoid": {
+            "default": false,
+            "title": "Humanoid",
+            "type": "boolean"
+          },
           "joint_offsets": {
             "additionalProperties": {
               "items": {
@@ -2732,7 +2742,7 @@
           "legs": {
             "default": 1.0,
             "maximum": 1.6,
-            "minimum": 0.5,
+            "minimum": 0.4,
             "title": "Legs",
             "type": "number"
           },
@@ -2795,6 +2805,7 @@
           "locks",
           "attachments",
           "joint_offsets",
+          "humanoid",
           "hand_shape",
           "foot_shape"
         ],

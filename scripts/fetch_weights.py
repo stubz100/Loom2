@@ -144,6 +144,17 @@ MANIFEST = [
     dict(spike="e40", repo="Comfy-Org/SeedVR2", file="diffusion_models/seedvr2_3b_int8_convrot.safetensors", dest="diffusion_models", license="apache-2.0"),
     dict(spike="e40", repo="Comfy-Org/SeedVR2", file="diffusion_models/seedvr2_3b_fp8_e4m3fn.safetensors", dest="diffusion_models", license="apache-2.0",
          retired="E40 2026-10-28: equal to int8 convrot on the sheet and the numbers (Laplacian 308 against 334, the same seconds and peak); int8 — the template's — kept"),
+    # ---- E64 MiniMax H3 (D192): the hero clip's first + last frame model on the core's own nodes (ComfyUI v0.39.0 carries it); the ComfyUI
+    #      repackaging at precisions this card runs — the pruned transformer fp8 scaled (int8 convrot NaN / black on gfx1201, D30), the H3
+    #      encoder bf16 (no fp8 offered; NVFP4 is CUDA's), the video VAE fp16, the audio VAE (H3 makes sound with the picture), the 8-step turbo.
+    dict(spike="e64", repo="Comfy-Org/MiniMax-H3", file="diffusion_models/minimax_h3_fl2va_pruned_fp8_scaled.safetensors", dest="diffusion_models",
+         license="minimax-h3-community (the author, an individual without income from it: MiniMax's reply, D192)"),
+    dict(spike="e64", repo="Comfy-Org/MiniMax-H3", file="text_encoders/qwen3vl_32b_minimax_h3_bf16.safetensors", dest="text_encoders",
+         license="minimax-h3-community (D192)"),
+    dict(spike="e64", repo="Comfy-Org/MiniMax-H3", file="vae/minimax_h3_video_vae_fp16.safetensors", dest="vae", license="minimax-h3-community (D192)"),
+    dict(spike="e64", repo="Comfy-Org/MiniMax-H3", file="vae/minimax_h3_audio_vae_fp32.safetensors", dest="vae", license="minimax-h3-community (D192)"),
+    dict(spike="e64", repo="Comfy-Org/MiniMax-H3", file="loras/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors", dest="loras",
+         license="minimax-h3-community (a LoRA on H3, D192)"),
 ]
 
 

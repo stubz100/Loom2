@@ -1,6 +1,6 @@
 # proto01_rig · Rigging the hands, and humanoids that are not human
 
-Status: **proposal, 2026-11-04; answered the same day → D187** (§8); **legs and shoes added → D188** (§9); **E62 run the same evening** (§10); **RG1 built** (§11); **Q9, Q10 answered → D189, RG2 built** (§12). Read from the code at `055315e`.
+Status: **proposal, 2026-11-04; answered the same day → D187** (§8); **legs and shoes added → D188** (§9); **E62 run the same evening** (§10); **RG1 built** (§11); **Q9, Q10 answered → D189, RG2 built** (§12); **RG3 built** (§13). Read from the code at `055315e`.
 
 ## 1. The request
 
@@ -318,3 +318,28 @@ at heel strike and 1–1.5 cm at push-off than held, the shoes bent cleanly; the
 (its robe and splayed claws: 16 cm off) left on the shin. Not measured: Wan Animate on a walk with the rolling guide feet (no GPU run).
 
 ![Nora and the woman walking, the right foot from the side: the shoe and the guide's heel and toes turned by the clip, against held](img/rg2b-feet-walk.jpg)
+
+## 13. RG3 built (2026-11-05): the rigging screen's Hands and Feet & legs
+
+The skeleton bench (Clay's Library › a character › *Skeleton…*) has three parts in its strip: **Body** (as before), **Hands**, **Feet & legs**.
+
+- **Hands** (R4): the hand picture with SDPose's 21 points, each dragged where the finger really is, then *Fit the hand again* — a refit on
+  the CPU (`POST …/parts/hand/refit`) that keeps the count, the claws and the widths, and SDPose's own points beside (*Back to SDPose's
+  hand*); a hidden finger's points dimmed. Beside it the clay hand in 3D with the guide's 21 points, tried with the presets, right or left.
+  The Inspector: the finger count (5, 4, 3), the claws, each finger's length, width and own claw (right-click: the hand's again), *Unlink /
+  Link the left hand* (Q2), *Start from a human hand* for a character drawn without a hand picture, *Back to the mannequin's hand*.
+- **Feet & legs** (F4): the feet picture (or the A-pose side view) with the big toe, the small toe, the heel and the ankle, dragged and fitted
+  again the same way (the floor the read took kept). Beside it **the shoe on the shell** — see-through, from the foot's side, its rig's ankle,
+  heel, ball and toe: dragged onto the shoe they **place the foot by hand** (`FootShape.place`, metres from the ankle; the left mirrored while
+  linked), and the shoe is rigged to them whatever the shell's geometry — the man's trouser hems and the ghoul's robe (RG2b) are placed so.
+  It says the state in a few words ("rigged", "rigged · placed by hand", "the foot misses the shoe by 16 cm — drag its heel, ball and toe onto
+  it") and bends the shoe to try it (toes down, toes up, push-off). The Inspector: the stiff sole (D189), the foot's numbers (inert while
+  placed by hand), *Find the foot again*, *Unlink / Link the left foot*, *Start from a plain foot*.
+
+Found on the way: the fake engine's hand (its chains straight along the arm) made a finger point back toward the wrist; the shape refused
+the angle only when the body was saved, so the read failed without a word — a finger may now point any way (a misread can), and a read the
+body cannot keep is said on the version.
+
+![The ghoul's Hands: its picture's points, its clay hand, each finger](img/rg3-hands-view.jpg)
+
+![The ghoul's Feet & legs: its feet picture's points, its shoe placed by hand on the shell](img/rg3-feet-view.jpg)

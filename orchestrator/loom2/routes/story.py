@@ -1256,6 +1256,27 @@ async def profile_anim_ref_pick(svc: Svc, pid: str, vid: str, body: AnimRefPick)
     return p.model_dump()
 
 
+class PartRefit(BaseModel):
+    """RG3: the points dragged on a hand or feet picture — `hand` (21 × [x, y, c]) or `foot` ([big toe, small toe, heel]) with `ankle`,
+    `leg` and `floor` as the read kept them."""
+    points: dict[str, Any]
+
+
+@router.post("/story/profiles/{pid}/versions/{vid}/parts/{part}/refit", response_model=Profile)
+async def profile_part_refit(svc: Svc, pid: str, vid: str, part: Literal["hand", "feet"], body: PartRefit):
+    """RG3 (R4, F4, *Fit again*): the hand or the foot fitted again on the CPU to the points the author dragged; the count, the claws, the
+    widths, the stiff sole and a placement by hand stay."""
+    ws, _, _ = svc.require_project()
+    try:
+        p = await asyncio.to_thread(StoryStore(ws).refit_part, pid, vid, part, body.points)
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0]))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    _changed(svc, p)
+    return p.model_dump()
+
+
 class PartFitQueued(BaseModel):
     job_id: str
     asset_id: str

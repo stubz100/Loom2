@@ -2608,6 +2608,38 @@ class StoryStore(_ShotMixin, _FlowMixin):
         self.save_profile(p)
         return p
 
+    def refit_part(self, pid: str, vid: str, part: str, points: dict[str, Any]) -> Profile:
+        """RG3 (R4, F4): a hand (or a foot) fitted again on the CPU to points the author dragged on its picture — the hand's 21, or the foot's
+        big toe, small toe and heel with its ankle, its leg and the floor the read kept. The count, the claws, the widths (no matte), the
+        stiff sole and a placement by hand stay; SDPose's own points are kept beside (`sdpose`) to go back to."""
+        from .hands import fit_foot, fit_hand
+        cur = self.profile(pid)
+        if cur is None:
+            raise KeyError(pid)
+        v = cur.version(vid)
+        old = (v.hand_points if part == "hand" else v.feet_points) or {}
+        flat = lambda rows: [float(x) for r in rows for x in (list(r) + [1.0, 1.0, 1.0])[:3]]  # noqa: E731
+        body = v.body
+        if part == "hand":
+            hand = points.get("hand") or []
+            if len(hand) != 21:
+                raise ValueError("a hand is refitted to its 21 points")
+            shape, report, pts = fit_hand([{"hand_right_keypoints_2d": flat(hand)}], None, body.hand_shape.right if body is not None and body.hand_shape else None)
+            new = {**old, "hand": pts, "report": report, "sdpose": old.get("sdpose") or old.get("hand")}
+        else:
+            foot = points.get("foot") or []
+            if len(foot) != 3:
+                raise ValueError("a foot is refitted to its big toe, its small toe and its heel")
+            pose = [[0.0, 0.0, 0.0] for _ in range(18)]
+            leg = points.get("leg") or ([None, None, points["ankle"]] if points.get("ankle") else None)
+            for i, q in zip((8, 9, 10), leg or []):
+                if q:
+                    pose[i] = list(q)
+            person = {"foot_keypoints_2d": [0.0] * 9 + flat(foot), "pose_keypoints_2d": flat(pose)}
+            shape, report, got = fit_foot([person], None, body.foot_shape.right if body is not None and body.foot_shape else None, points.get("floor", old.get("floor")))
+            new = {**old, **got, "report": report, "sdpose": old.get("sdpose") or {k: old.get(k) for k in ("foot", "ankle", "leg", "floor")}}
+        return self.set_part_fit(pid, vid, part, shape=shape, points=new)
+
     def set_stance_note(self, pid: str, vid: str, note: str | None) -> Profile:
         """D140: what a fit read of the reference's stance, when it fitted nothing (an arms-down picture): the body, its points and the
         picture it was fitted to stay as they were."""

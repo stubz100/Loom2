@@ -2855,6 +2855,58 @@ test('the skeleton bench (proto01_UIcast CS2): Skeleton… opens the reference w
   await expect(page.locator('[data-testid="clay-tiles"]')).toBeVisible()                                      // the tiles back in the centre (C0)
 })
 
+test("the rigging screen's hands and feet (RG3, D187 R4, D188 F4): a hand picture picked is read; the skeleton bench's Hands shows its 21 points and the clay hand, a point dragged and Fit the hand again refits it with SDPose's kept; the count and Unlink from the Inspector; Feet & legs: no feet picture, Start from a plain foot, a stiff sole (Clay)", async ({ page }) => {
+  test.setTimeout(120_000)
+  const name = `Grisk ${Date.now().toString(36)}`
+  const src = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0]
+  const [ref, handPic] = (await api<{ ids: string[] }>('POST', '/assets/duplicate', { ids: [src.id, src.id] })).ids
+  type Shape = { count: number; fingers: Record<string, { lengths: number[] }> }
+  type V = { id: string; body: { hand_shape: { right: Shape; left: Shape | null } | null; foot_shape: { right: { stiff: boolean } } | null } | null; hand_points: { hand: number[][]; sdpose?: number[][] } | null }
+  const p = await api<{ id: string }>('POST', '/story/profiles', { name, cls: 'character', appearance: `${name}, a gaunt grey ghoul with long bony fingers` })
+  await api('PUT', `/story/profiles/${p.id}/versions/v1/anim-ref`, { side: 'front', asset_id: ref })
+  await api('PUT', `/story/profiles/${p.id}/versions/v1/anim-ref`, { side: 'hand', asset_id: handPic })   // RG1: picked, it is read at once
+  const ver = async () => (await api<{ versions: V[] }>('GET', `/story/profiles/${p.id}`)).versions[0]
+  await expect.poll(async () => (await ver()).hand_points?.hand.length ?? 0, { timeout: 60_000 }).toBe(21)
+  expect((await ver()).body!.hand_shape!.right.count).toBe(5)
+  await openLibrary(page, 'character', p.id)
+  await page.locator('.cast-body button', { hasText: /^Skeleton…/ }).click()
+  const bench = page.locator('.skel-bench')
+  await bench.locator('[data-testid="rig-parts"] button', { hasText: 'Hands' }).click()
+  const picture = bench.locator('[data-testid="rig-hand-picture"]')
+  await expect(picture.locator('circle.white')).toHaveCount(21, { timeout: 15_000 })
+  await expect(bench.locator('[data-testid="rig-hand-3d"] canvas')).toHaveCount(1)
+  await expect(page.locator('.skel-parts h4')).toContainText(`${name}'s hands`)
+  // a fingertip dragged out, then Fit the hand again: the finger longer, SDPose's points kept beside (the fake's fingertips share one place:
+  // the pinky's, drawn last, is the one under the pointer)
+  const before = (await ver()).body!.hand_shape!.right.fingers.pinky.lengths.reduce((a, x) => a + x, 0)
+  const tip = (await picture.locator('circle.white[data-k="20"]').boundingBox())!, wrist = (await picture.locator('circle.white[data-k="0"]').boundingBox())!
+  const len = Math.hypot(tip.x - wrist.x, tip.y - wrist.y) || 1, [dx, dy] = [((tip.x - wrist.x) / len) * 120, ((tip.y - wrist.y) / len) * 120]   // 120 px further out, away from the wrist
+  await page.mouse.move(tip.x + tip.width / 2, tip.y + tip.height / 2); await page.mouse.down()
+  await page.mouse.move(tip.x + tip.width / 2 + dx, tip.y + tip.height / 2 + dy, { steps: 6 }); await page.mouse.up()
+  await expect(picture).toContainText('points moved')
+  await picture.locator('button', { hasText: /^Fit the hand again/ }).click()
+  await expect.poll(async () => (await ver()).body!.hand_shape!.right.fingers.pinky.lengths.reduce((a, x) => a + x, 0), { timeout: 10_000 }).toBeGreaterThan(before + 0.05)
+  expect((await ver()).hand_points!.sdpose).toHaveLength(21)
+  // the Inspector: four fingers, then the left hand unlinked
+  await page.locator('[data-testid="rig-count"] button', { hasText: '4' }).click()
+  await expect.poll(async () => (await ver()).body!.hand_shape!.right.count, { timeout: 10_000 }).toBe(4)
+  await expect(picture.locator('circle.white.off')).toHaveCount(4)                                   // the pinky's points dimmed
+  await page.locator('.skel-parts button', { hasText: /^Unlink the left hand/ }).click()
+  await expect.poll(async () => (await ver()).body!.hand_shape!.left?.count ?? null, { timeout: 10_000 }).toBe(4)
+  await page.screenshot({ path: 'node_modules/.e2e/rg3-hands.png' })
+  // Feet & legs: no feet picture yet; a plain foot started by hand, its sole made stiff (D189)
+  await bench.locator('[data-testid="rig-parts"] button', { hasText: 'Feet & legs' }).click()
+  await expect(bench.locator('[data-testid="rig-feet-picture"]')).toContainText('No feet picture yet')
+  await page.locator('.skel-parts button', { hasText: /^Start from a plain foot/ }).click()
+  await expect.poll(async () => (await ver()).body?.foot_shape?.right.stiff ?? null, { timeout: 10_000 }).toBe(false)
+  await page.locator('[data-testid="rig-sole"] button', { hasText: 'stiff' }).click()
+  await expect.poll(async () => (await ver()).body?.foot_shape?.right.stiff ?? null, { timeout: 10_000 }).toBe(true)
+  await expect(bench.locator('[data-testid="rig-shoe-state"]')).toContainText(/rigged|misses the shoe/, { timeout: 20_000 })   // the fit made a (fake) shell: its shoe found or missed
+  await page.screenshot({ path: 'node_modules/.e2e/rg3-feet.png' })
+  await bench.locator('[data-testid="rig-parts"] button', { hasText: 'Body' }).click()
+  await expect(bench.locator('.skel-ref circle.white').first()).toBeVisible({ timeout: 15_000 })        // the body's view as it was
+})
+
 test("the skeleton changed (proto01_UIcast CS3, D136 U19): a final's character layer stamps its body per frame; Cast's skeleton changing under it shows on the layer, nothing done by itself — Re-render draws the guide again and performs it; Apply from the playhead keys the skeleton (the frames before it held) and performs again (Shots, B2a)", async ({ page }) => {
   test.setTimeout(150_000)
   const stageName = `Skeleton ${Date.now().toString(36)}`

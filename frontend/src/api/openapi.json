@@ -9118,8 +9118,8 @@
         "properties": {
           "angle": {
             "default": 0.0,
-            "maximum": 150.0,
-            "minimum": -150.0,
+            "maximum": 180.0,
+            "minimum": -180.0,
             "title": "Angle",
             "type": "number"
           },
@@ -9174,8 +9174,8 @@
         "properties": {
           "angle": {
             "default": 0.0,
-            "maximum": 150.0,
-            "minimum": -150.0,
+            "maximum": 180.0,
+            "minimum": -180.0,
             "title": "Angle",
             "type": "number"
           },
@@ -9883,6 +9883,23 @@
             "title": "Pitch",
             "type": "number"
           },
+          "place": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place"
+          },
           "stiff": {
             "default": false,
             "title": "Stiff",
@@ -9950,6 +9967,23 @@
             "title": "Pitch",
             "type": "number"
           },
+          "place": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place"
+          },
           "stiff": {
             "default": false,
             "title": "Stiff",
@@ -9971,7 +10005,8 @@
           "toe_up",
           "ball_at",
           "length_leg",
-          "stiff"
+          "stiff",
+          "place"
         ],
         "title": "FootShape",
         "type": "object"
@@ -16645,6 +16680,21 @@
           "asset_id"
         ],
         "title": "PartFitQueued",
+        "type": "object"
+      },
+      "PartRefit": {
+        "description": "RG3: the points dragged on a hand or feet picture — `hand` (21 × [x, y, c]) or `foot` ([big toe, small toe, heel]) with `ankle`,\n`leg` and `floor` as the read kept them.",
+        "properties": {
+          "points": {
+            "additionalProperties": true,
+            "title": "Points",
+            "type": "object"
+          }
+        },
+        "required": [
+          "points"
+        ],
+        "title": "PartRefit",
         "type": "object"
       },
       "PassBody": {
@@ -40159,6 +40209,81 @@
           }
         },
         "summary": "Profile Part Fit",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/profiles/{pid}/versions/{vid}/parts/{part}/refit": {
+      "post": {
+        "description": "RG3 (R4, F4, *Fit again*): the hand or the foot fitted again on the CPU to the points the author dragged; the count, the claws, the\nwidths, the stiff sole and a placement by hand stay.",
+        "operationId": "profile_part_refit_story_profiles__pid__versions__vid__parts__part__refit_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part",
+            "required": true,
+            "schema": {
+              "enum": [
+                "hand",
+                "feet"
+              ],
+              "title": "Part",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PartRefit"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Part Refit",
         "tags": [
           "story"
         ]

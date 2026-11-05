@@ -3908,6 +3908,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/profiles/{pid}/versions/{vid}/parts/{part}/refit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Profile Part Refit
+         * @description RG3 (R4, F4, *Fit again*): the hand or the foot fitted again on the CPU to the points the author dragged; the count, the claws, the
+         *     widths, the stiff sole and a placement by hand stay.
+         */
+        post: operations["profile_part_refit_story_profiles__pid__versions__vid__parts__part__refit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/profiles/{pid}/versions/{vid}/poses/{name}": {
         parameters: {
             query?: never;
@@ -9133,6 +9154,10 @@ export interface components {
              * @default 6
              */
             pitch?: number;
+            /** Place */
+            place?: {
+                [key: string]: number[];
+            } | null;
             /**
              * Stiff
              * @default false
@@ -9176,6 +9201,10 @@ export interface components {
              * @default 6
              */
             pitch: number;
+            /** Place */
+            place: {
+                [key: string]: number[];
+            } | null;
             /**
              * Stiff
              * @default false
@@ -11959,6 +11988,17 @@ export interface components {
             asset_id: string;
             /** Job Id */
             job_id: string;
+        };
+        /**
+         * PartRefit
+         * @description RG3: the points dragged on a hand or feet picture — `hand` (21 × [x, y, c]) or `foot` ([big toe, small toe, heel]) with `ankle`,
+         *     `leg` and `floor` as the read kept them.
+         */
+        PartRefit: {
+            /** Points */
+            points: {
+                [key: string]: unknown;
+            };
         };
         /**
          * PassBody
@@ -24278,6 +24318,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PartFitQueued"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_part_refit_story_profiles__pid__versions__vid__parts__part__refit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+                part: "hand" | "feet";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PartRefit"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Profile"];
                 };
             };
             /** @description Validation Error */

@@ -1013,7 +1013,12 @@ def _part_fit_result(q: JobQueue, job: JobRecord, recipe: Keypoints, people: lis
         p = store.set_part_fit(pid, vid, part, note=str(e))
         q.hub.broadcast("story.changed", {"kind": "profile", "id": p.id, "revision": p.revision})
         raise
-    p = store.set_part_fit(pid, vid, part, shape=shape, points=points)
+    try:
+        p = store.set_part_fit(pid, vid, part, shape=shape, points=points)
+    except ValueError as e:                                                    # a read the body cannot keep: said on the version, as a failed read
+        p = store.set_part_fit(pid, vid, part, note=f"the read could not be kept: {str(e).splitlines()[0]}")
+        q.hub.broadcast("story.changed", {"kind": "profile", "id": p.id, "revision": p.revision})
+        raise
     job.result[part] = report
     job.log_tail.append(f"{part} read ({report['conf']:.2f} sure)" + (f": the middle finger {report['middle_palm']} palms, {len(report['widths'])} widths from the matte"
                                                                      if part == "hand" else f": pitch {report['pitch']}°, the heel {report['heel_up']} up"))

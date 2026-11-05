@@ -12,8 +12,14 @@ import { seen, type Points, type RowKey, type XY } from './skeleton'
 import { stanceOf } from './proxy'
 
 /** The bench's state shared by its panes and the Inspector's parts (session only). */
-export interface BenchUi { pts: Points | null; forVersion: string | null; row: RowKey | null; moved: number[] }
-export const ui: BenchUi & { subs: Set<() => void> } = { pts: null, forVersion: null, row: null, moved: [], subs: new Set() }
+export interface BenchUi { pts: Points | null; forVersion: string | null; row: RowKey | null; moved: number[]
+  /** RG3 (R4, F4): the bench's part — the body (the twelve joints), the hands or the feet & legs. */
+  part: 'body' | 'hands' | 'feet'
+  /** RG3: the hand's 21 points and the foot's (big toe, small toe, heel; the ankle) as dragged — null: as the read keeps them. */
+  handPts: number[][] | null; footPts: { foot: number[][]; ankle: number[] | null; leg?: number[][] | null; floor?: number | null } | null
+  /** RG3: the hand or foot the Inspector edits while the left is unlinked, and the clay hand's preset to try. */
+  side: 'r' | 'l'; preset: string }
+export const ui: BenchUi & { subs: Set<() => void> } = { pts: null, forVersion: null, row: null, moved: [], part: 'body', handPts: null, footPts: null, side: 'r', preset: 'open', subs: new Set() }
 export function setUi(patch: Partial<BenchUi>) { Object.assign(ui, patch); for (const f of ui.subs) f() }
 export function useUi(): BenchUi { const [, tick] = useState(0); useEffect(() => { const f = () => tick((n) => n + 1); ui.subs.add(f); return () => { ui.subs.delete(f) } }, []); return ui }
 

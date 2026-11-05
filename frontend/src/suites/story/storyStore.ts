@@ -227,6 +227,9 @@ export interface StoryState {
   /** RG1 (D187, D188): read the version's hand from its hand picture (the feet from the feet picture, else the A-pose side view) — a short
    *  keypoints job; the shape lands on the body. */
   readPart: (part: 'hand' | 'feet') => Promise<void>
+  /** RG3 (R4, F4): *Fit again* — the hand or the foot fitted on the CPU to the points dragged on its picture (the count, claws, widths, stiff
+   *  sole and a placement by hand stay). */
+  refitPart: (part: 'hand' | 'feet', points: Record<string, unknown>) => Promise<boolean>
   /** CA1b (D104): fit the version's body to its animation reference (a short keypoints job; the profile updates when it lands). */
   fitBody: () => Promise<void>
   /** D110 (PS2): make the prop version's 3D model from its animation reference (else its hero) — image → mesh, stood upright, minutes. */
@@ -617,6 +620,13 @@ export const useStory = create<StoryState>()((set, get) => {
         useSession.getState().toast(`${r.job_ids.length} ${what} queued for ${p.name} — they land among its candidates; pick the ${pick} from them`, 'info')   // D161: nothing is picked for the author; D175: the side
         if (!v.candidates_group_id) await get().loadProfiles()
       } catch (e) { toast(`Animation reference: ${detail(e)}`) }
+    },
+    refitPart: async (part, points) => {
+      const p = get().profile(); const v = get().version(); if (!p || !v) return false
+      try {
+        replaceProfile(await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/parts/{part}/refit', { params: { path: { pid: p.id, vid: v.id, part } }, body: { points } })))
+        return true
+      } catch (e) { toast(`Fit the ${part} again: ${detail(e)}`); return false }
     },
     readPart: async (part) => {
       const p = get().profile(); const v = get().version(); if (!p || !v) return

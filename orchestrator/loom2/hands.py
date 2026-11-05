@@ -37,7 +37,7 @@ class Finger(BaseModel):
     """One finger (or the thumb) in palm lengths, in the palm's frame (+x toward the thumb)."""
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
     base: list[float] = Field(min_length=2, max_length=2)          # the knuckle (the thumb: its first joint)
-    angle: float = Field(0.0, ge=-150.0, le=150.0)                 # its first segment from +y, degrees, + toward the thumb
+    angle: float = Field(0.0, ge=-180.0, le=180.0)                 # its first segment from +y, degrees, + toward the thumb (any way: a misread may point back)
     lengths: list[float] = Field(min_length=3, max_length=3)       # its three segments, knuckle to tip
     width: float = Field(0.19, ge=0.03, le=0.8)
     claw: float | None = Field(None, ge=0.0, le=1.0)               # Q5: its own claw; None = the hand's
@@ -111,6 +111,23 @@ class FootShape(BaseModel):
     ball_at: float = Field(0.72, ge=0.3, le=0.95)                  # the ball along the foot (not read; placed by hand, F4)
     length_leg: float | None = Field(None, ge=0.05, le=1.0)        # the foot against the leg (hip → knee → ankle), from a full figure
     stiff: bool = False                                            # D189 (Q10): a stiff sole (a boot, a clog) — the shoe bends at the ankle only
+    place: dict[str, list[float]] | None = None                    # RG3 (F4): the heel, the ball and the toe placed by hand on the shell — metres
+    #                                                                from the ankle in the figure's frame (+x its left, +z ahead), the right foot's
+    #                                                                (the left mirrored unless unlinked); None = found from the shape and the shell
+
+    @field_validator("place")
+    @classmethod
+    def _place(cls, v: dict[str, list[float]] | None) -> dict[str, list[float]] | None:
+        if v is None:
+            return None
+        if set(v) != {"heel", "ball", "toe"}:
+            raise ValueError("a foot is placed by its heel, its ball and its toe")
+        out = {}
+        for k, xyz in v.items():
+            if len(xyz) != 3 or any(not isinstance(x, (int, float)) or abs(x) > 0.6 for x in xyz):
+                raise ValueError(f"{k}: three offsets of at most 0.6 m from the ankle")
+            out[k] = [round(float(x), 4) for x in xyz]
+        return out
 
 
 class Feet(BaseModel):
@@ -270,7 +287,7 @@ def fit_hand(people: list[dict], mask: Any = None, base: HandShape | None = None
             continue
         b0, b1 = to(ch[0]), to(ch[1])
         segs = [max(0.02, min(1.5, dist(ch[k], ch[k + 1]) / palm)) for k in range(3)]
-        fingers[name] = old.model_copy(update={"base": [round(b0[0] / palm, 3), round(b0[1] / palm, 3)],
+        fingers[name] = old.model_copy(update={"base": [round(max(-2.0, min(2.0, b0[0] / palm)), 3), round(max(-2.0, min(2.0, b0[1] / palm)), 3)],
                                                "angle": round(math.degrees(math.atan2(b1[0] - b0[0], b1[1] - b0[1])), 1),
                                                "lengths": [round(s, 3) for s in segs]})
         read.append(name)
@@ -295,10 +312,11 @@ def fit_hand(people: list[dict], mask: Any = None, base: HandShape | None = None
     return shape, report, [[round(x, 2), round(y, 2), round(c, 3)] for x, y, c in H]
 
 
-def fit_foot(people: list[dict], mask: Any = None, base: FootShape | None = None) -> tuple[FootShape, dict[str, Any], dict[str, Any]]:
+def fit_foot(people: list[dict], mask: Any = None, base: FootShape | None = None, floor_at: float | None = None) -> tuple[FootShape, dict[str, Any], dict[str, Any]]:
     """F2: a foot's shape from SDPose's foot points on a side view (the big toe, the small toe, the heel; the ankle when the body was read)
-    and the subject matte's lowest row as the floor (else the lowest foot point). The ball's place stays the base's. Returns the shape, a
-    report and the points used. Raises ValueError when no foot was read surely enough."""
+    and the subject matte's lowest row as the floor (else `floor_at`, the floor a read kept — RG3's refit —, else the lowest foot point). The
+    ball's place, the stiff sole and a placement by hand stay the base's. Returns the shape, a report and the points used. Raises ValueError
+    when no foot was read surely enough."""
     got = best_foot(people)
     if got is None:
         raise ValueError("no foot found in the picture")
@@ -311,7 +329,7 @@ def fit_foot(people: list[dict], mask: Any = None, base: FootShape | None = None
     length = math.hypot(big[0] - heel[0], big[1] - heel[1])
     if length < 8:
         raise ValueError("the foot is too small in the picture to measure")
-    floor = max(big[1], heel[1], small[1] if small[2] >= POINT_CONF else -1e9)
+    floor = float(floor_at) if floor_at is not None else max(big[1], heel[1], small[1] if small[2] >= POINT_CONF else -1e9)
     if mask is not None:
         rows = [y for y in range(mask.shape[0]) if mask[y].any()]
         if rows:

@@ -463,3 +463,16 @@
 .place-thing { display: flex; align-items: center; gap: 8px; }
 .place-thing img { width: 48px; height: 48px; object-fit: contain; background: var(--bg2); border-radius: var(--radius); }
 .place-thing .name { flex: 1; min-width: 0; }
+
+/* RG3 (D187 R4, D188 F4): the rigging screen's hands and feet */
+.skel-strip .rig-parts .cmd-btn { padding: 2px 8px; }
+.skel-pane .rig-pic { width: 100%; height: 100%; max-height: 100%; }
+.skel-pane .rig-pic circle.white { fill: rgba(255, 255, 255, 0.85); stroke: #111; cursor: grab; }
+.skel-pane .rig-pic circle.white.off { fill: rgba(120, 124, 136, 0.6); }
+.skel-pane .rig-pic .rig-floor { stroke: #4ad08a; stroke-dasharray: 6 4; }
+.skel-pane .rig-foot { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.skel-pane .rig-none { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding: 12px 0; }
+.skel-motions .sep { width: 10px; }
+.skel-parts .rig-finger { border-top: 1px solid var(--line2); padding-top: 2px; }
+.skel-parts .skel-row.sub > span:first-child { padding-left: 10px; color: var(--fg3); }
+.skel-panes[data-part] { min-height: min(74vh, 720px); grid-template-columns: 1.2fr 1fr; }   /* RG3: the hands and feet panes hold no picture of a set size: they take the bench's height */

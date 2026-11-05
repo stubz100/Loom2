@@ -27,6 +27,7 @@ import type { HandShapes } from './clayHand'
 import { bindProxy, insideShell, setShellPoints, stanceOf } from './proxy'
 import { COCO, cropOf, defaultOf, disagreements, dragFactor, lengthCm, outside, pictureMap, ROWS, seen, setLocked, unlock, type Points, type RowKey, type XY } from './skeleton'
 import { handFromPicture, readPicture, setUi, ui, useUi } from './benchState'
+import { FeetPanes, FeetParts, HandParts, HandsPanes } from './RigBench'
 import { showMenu } from '../../frame/ContextMenu'
 import { cellOf } from '../story/coverage'
 
@@ -120,8 +121,11 @@ export default function SkeletonBench() {
   const key = p && v ? `${p.id}/${v.id}` : null
   const fitted = v?.body_points ?? null
   useEffect(() => {                                                          // another character or version, or a new fit: its points
-    if (key) setUi({ pts: fitted ? JSON.parse(JSON.stringify(fitted)) : null, forVersion: key, moved: [] })
+    if (key) setUi({ pts: fitted ? JSON.parse(JSON.stringify(fitted)) : null, forVersion: key, moved: [], handPts: null, footPts: null })   // RG3: a new read drops the drags too
   }, [key, fitted])
+  const handRead = v?.hand_points ?? null, feetRead = v?.feet_points ?? null
+  useEffect(() => { setUi({ handPts: null }) }, [handRead])
+  useEffect(() => { setUi({ footPts: null }) }, [feetRead])
   const body = useMemo(() => bodyOf(v), [v])
   const stance = useMemo(() => stanceOf((u.pts ?? fitted) as never), [u.pts, fitted])
   if (!p || !v) return <div className="story-empty"><div>Pick a character on the left.</div></div>
@@ -130,17 +134,22 @@ export default function SkeletonBench() {
     <div className="skel-bench" data-profile={p.id}>
       <div className="skel-strip">
         <b>{p.name}</b><span className="muted">· {v.id} · skeleton</span>
-        <span className="segmented" role="group" aria-label="the reference's side">
-          {(['front', 'back'] as const).map((k) => <button key={k} type="button" className={side === k ? 'active' : ''} disabled={k === 'back' && !v.anim_ref_back_asset_id} onClick={() => setSide(k)}>{k}</button>)}
+        <span className="segmented rig-parts" role="group" aria-label="the part" data-testid="rig-parts">{/* RG3 (D187 R4, D188 F4) */}
+          <CommandButton id="cast.rig.body" text size={13} active={u.part === 'body'} /><CommandButton id="cast.rig.hands" text size={13} active={u.part === 'hands'} /><CommandButton id="cast.rig.feet" text size={13} active={u.part === 'feet'} />
         </span>
+        {u.part === 'body' && <span className="segmented" role="group" aria-label="the reference's side">
+          {(['front', 'back'] as const).map((k) => <button key={k} type="button" className={side === k ? 'active' : ''} disabled={k === 'back' && !v.anim_ref_back_asset_id} onClick={() => setSide(k)}>{k}</button>)}
+        </span>}
         <span className="spacer" />
         <CommandButton id="cast.skeleton.close" text size={13} />
       </div>
-      <div className="skel-panes">
+      {u.part === 'hands' ? <HandsPanes key={`h${p.id}/${v.id}`} v={v} body={body} />
+        : u.part === 'feet' ? <FeetPanes key={`f${p.id}/${v.id}`} v={v} body={body} />
+        : <div className="skel-panes">
         <RefPane key={`${p.id}/${v.id}`} v={v} body={body} stance={stance} side={side} />
         <GuidePane body={body} stance={stance} refId={v.anim_ref_asset_id ?? null} points={u.pts ?? vp} shell={v.shell_asset_id ?? null} />
-      </div>
-      <div className="skel-foot">
+      </div>}
+      {u.part === 'body' && <div className="skel-foot">
         <CommandButton id="cast.skeleton.fit" text />
         <CommandButton id="cast.skeleton.sdpose" text />
         <CommandButton id="cast.skeleton.mirror" text />
@@ -149,7 +158,7 @@ export default function SkeletonBench() {
         <span className="spacer" />
         <span className="muted">{u.moved.length ? `${u.moved.length} point${u.moved.length === 1 ? '' : 's'} moved` : 'SDPose\'s points'}{body.locks?.length ? ` · ${body.locks.length} locked` : ''}</span>
         <ShellState v={v} />
-      </div>
+      </div>}
     </div>
   )
 }
@@ -476,6 +485,8 @@ export function SkeletonParts() {
   const [busy, setBusy] = useState(false)
   const refPage = useStory((s) => s.refPage)
   if (!p || !v) return null
+  if (u.part === 'hands') return <div className="story-insp skel-parts"><h4>{p.name}'s hands</h4><HandParts v={v} /></div>        // RG3
+  if (u.part === 'feet') return <div className="story-insp skel-parts"><h4>{p.name}'s feet &amp; legs</h4><FeetParts v={v} /></div>
   const b = bodyOf(v)
   const open = v.state === 'open'
   const set = (patch: Partial<Body>) => { if (open) saveBody({ ...b, ...patch }) }

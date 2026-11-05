@@ -186,7 +186,10 @@ export function insideShell(meshes: THREE.Mesh[], p: THREE.Vector3): boolean {
   return hits.length > 0 && p.z <= hits[0].point.z + 1e-3 && p.z >= hits[hits.length - 1].point.z - 1e-3
 }
 /** RG2b (D188 F2, F3; D189): a foot's shape as the version keeps it (hands.FootShape) — in foot lengths, seen from the side. */
-export interface FootShape { pitch: number; ankle_up: number; ankle_at: number; heel_up: number; toe_up: number; ball_at: number; length_leg: number | null; stiff?: boolean }
+export interface FootShape { pitch: number; ankle_up: number; ankle_at: number; heel_up: number; toe_up: number; ball_at: number; length_leg: number | null; stiff?: boolean
+  /** RG3 (F4): the heel, the ball and the toe placed by hand — metres from the ankle in the figure's frame (+x its left, +z ahead), the
+   *  right foot's; the left mirrored while linked. Trusted: the shoe is rigged to them without the reach check. */
+  place?: { heel: number[]; ball: number[]; toe: number[] } | Record<string, number[]> | null }
 export interface FootShapes { right: FootShape; left?: FootShape | null }
 /** RG2b: a foot's length when its shape was not read on a whole figure — this share of the leg (hip → ankle) at ×1 feet (a 0.87 m leg, 26 cm). */
 export const FOOT_PER_LEG = 0.3
@@ -403,14 +406,22 @@ export function bindProxy(model: THREE.Object3D, J: Record<Joint, THREE.Object3D
       const heel = A.clone().addScaledVector(fwd, -shape.ankle_at * L); heel.y = floor + shape.heel_up * L
       const toe = heel.clone().addScaledVector(fwd, L); toe.y = floor + shape.toe_up * L
       const ballP = heel.clone().lerp(toe, shape.ball_at); ballP.y = floor + 0.03
-      const missed = Math.max(reach(toe), reach(ballP))
+      const place = shape.place as Record<'heel' | 'ball' | 'toe', number[]> | null | undefined
+      if (place?.heel && place.ball && place.toe) {                          // RG3 (F4): placed by hand on the shell — the author's, trusted
+        const q = figureRoot.getWorldQuaternion(new THREE.Quaternion())
+        const at = (k: 'heel' | 'ball' | 'toe') => { const o = new THREE.Vector3(...place[k]); if (side === 'l' && !opts.feet?.shape.left) o.x = -o.x; return A.clone().add(o.applyQuaternion(q)) }
+        heel.copy(at('heel')); ballP.copy(at('ball')); toe.copy(at('toe'))
+      }
+      const missed = place?.heel ? 0 : Math.max(reach(toe), reach(ballP))
       if (missed > FOOT_REACH) { footPoints[side] = { ankle: A.clone(), ball: ballP.clone(), toe: toe.clone(), heel: heel.clone(), rigged: false, missed }; continue }
       const k = segs.findIndex((g) => g.j === knee.name || g.j === (side === 'r' ? 'r_knee' : 'l_knee'))
       if (k >= 0) segs[k] = { ...segs[k], b: A.clone() }
       knee.updateMatrixWorld(true)
       const ankle = new THREE.Bone(); ankle.name = `${side}_ankle_rig`; knee.add(ankle); ankle.position.copy(knee.worldToLocal(A.clone()))
       ankle.updateMatrixWorld(true)
-      const axis = across.clone().applyQuaternion(ankle.getWorldQuaternion(new THREE.Quaternion()).invert())   // the side-to-side axis, in its frame
+      const way = toe.clone().sub(heel).setY(0)                              // the foot's own way (a placed foot may turn out)
+      const side2side = way.lengthSq() > 1e-6 ? way.normalize().cross(down).normalize() : across
+      const axis = side2side.clone().applyQuaternion(ankle.getWorldQuaternion(new THREE.Quaternion()).invert())   // the side-to-side axis, in its frame
       let ball: THREE.Bone | null = null
       if (shape.stiff) extraSegs.push({ j: side === 'r' ? 'r_knee' : 'l_knee', a: A.clone(), b: toe.clone() })
       else {

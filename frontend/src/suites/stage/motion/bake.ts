@@ -1,10 +1,13 @@
 // CA1 (proto01_animate 01 step 5: "bake to Stage keys at 24 fps, thinned"): a retargeted clip as the figure's object keys — placed where
 // the figure stands and facing its way, one key per frame, then thinned to the keys the linear in-between cannot rebuild within a tolerance.
 import type { ObjectKey } from '../anim'
-import type { MotionFrame } from './retarget'
+import { feetExtra, type MotionFrame } from './retarget'
 import { along, measure, type P2 } from './path'
 
 export interface Placement { pos: number[]; rot: number[]; scale: number[] }
+
+/** RG2b: a key's pose gains the frame's foot turns as `extra` (none without them). */
+export const withFeet = (f: Pick<MotionFrame, 'feet'>): { extra?: Record<string, number[]> } => { const extra = feetExtra(f); return extra ? { extra } : {} }
 
 /** One key per frame from `start`: the root motion turned by the figure's yaw and scaled with it, the joints as retargeted. */
 export function bakeKeys(frames: MotionFrame[], base: Placement, start: number): ObjectKey[] {
@@ -15,7 +18,7 @@ export function bakeKeys(frames: MotionFrame[], base: Placement, start: number):
     return {
       frame: start + i, ease: 'linear',
       transform: { pos: [base.pos[0] + (x * c + z * s) * k, base.pos[1] + y * k, base.pos[2] + (-x * s + z * c) * k], rot: [...base.rot], scale: [...base.scale] },
-      pose: { preset: 'stand', joints: Object.fromEntries(Object.entries(f.joints).map(([j, e]) => [j, e.map((v) => Math.round(v * 100) / 100)])) },
+      pose: { preset: 'stand', joints: Object.fromEntries(Object.entries(f.joints).map(([j, e]) => [j, e.map((v) => Math.round(v * 100) / 100)])), ...withFeet(f) },
     }
   })
 }
@@ -37,7 +40,7 @@ export function bakeAlongPath(frames: MotionFrame[], base: Placement, start: num
     if (i > 0) dist += ((f.offset[0] - frames[i - 1].offset[0]) * ux + (f.offset[2] - frames[i - 1].offset[2]) * uz) * k
     const a = along(m, Math.max(0, dist))
     out.push({ frame: start + i, ease: 'linear', transform: { pos: [a.pos[0], base.pos[1] + f.offset[1] * k, a.pos[1]], rot: [base.rot[0] ?? 0, a.yaw - turn, base.rot[2] ?? 0], scale: [...base.scale] },
-      pose: { preset: 'stand', joints: Object.fromEntries(Object.entries(f.joints).map(([j, e]) => [j, e.map((v) => Math.round(v * 100) / 100)])) } })
+      pose: { preset: 'stand', joints: Object.fromEntries(Object.entries(f.joints).map(([j, e]) => [j, e.map((v) => Math.round(v * 100) / 100)])), ...withFeet(f) } })
     if (dist >= m.length) break
   }
   return out
@@ -74,11 +77,13 @@ const lerpDeg = (a: number, b: number, w: number) => { let d = (b - a) % 360; if
 function rebuilt(a: ObjectKey, b: ObjectKey, m: ObjectKey, deg: number, metres: number): boolean {
   const w = (m.frame - a.frame) / (b.frame - a.frame)
   for (let i = 0; i < 3; i++) if (Math.abs(a.transform.pos[i] + (b.transform.pos[i] - a.transform.pos[i]) * w - m.transform.pos[i]) > metres) return false
-  const ja = a.pose?.joints ?? {}, jb = b.pose?.joints ?? {}, jm = m.pose?.joints ?? {}
-  for (const n of Object.keys(jm)) {
-    const ea = ja[n], eb = jb[n], em = jm[n]
-    if (!ea || !eb) return false
-    for (let i = 0; i < 3; i++) if (angleGap(lerpDeg(ea[i], eb[i], w), em[i]) > deg) return false
+  for (const field of ['joints', 'extra'] as const) {                        // RG2b: the feet's turns too — a thinned walk keeps its heel-to-toe roll
+    const ja = a.pose?.[field] ?? {}, jb = b.pose?.[field] ?? {}, jm = m.pose?.[field] ?? {}
+    for (const n of Object.keys(jm)) {
+      const ea = ja[n], eb = jb[n], em = jm[n]
+      if (!ea || !eb) return false
+      for (let i = 0; i < 3; i++) if (angleGap(lerpDeg(ea[i] ?? 0, eb[i] ?? 0, w), em[i] ?? 0) > deg) return false
+    }
   }
   return true
 }

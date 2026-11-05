@@ -104,7 +104,7 @@ export function footContact(frames: MotionFrame[], body?: Body | null): MotionFr
         joints[side === 'r' ? 'r_hip' : 'l_hip'] = t.hip; joints[side === 'r' ? 'r_knee' : 'l_knee'] = t.knee
       }
     }
-    return { joints, offset: [offset[0], Math.round(offset[1] * 1e4) / 1e4, offset[2]] }
+    return { ...f, joints, offset: [offset[0], Math.round(offset[1] * 1e4) / 1e4, offset[2]] as [number, number, number] }   // RG2b: the feet's turns kept
   })
 }
 

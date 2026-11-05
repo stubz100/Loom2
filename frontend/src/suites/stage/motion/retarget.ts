@@ -60,7 +60,22 @@ export function segmentFrame(dir: THREE.Vector3, forward: THREE.Vector3): THREE.
   return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z))
 }
 
-export interface MotionFrame { joints: Record<Joint, number[]>; offset: [number, number, number] }
+/** RG2b (D188 F3, F5): each foot's turn at the ankle and at the ball, in degrees, rig-independent — [ankle, ball]: the ankle the source
+ *  foot's forward tipped toward the shin's way down (toes down +), the ball the toes' forward tipped up from the foot's (a push-off +). The
+ *  twelve joints fold the ankle into the shin; these ride on a pose as `extra` (r_ankle, r_ball, l_ankle, l_ball), turning the Detailed
+ *  figure's feet (the guide's heel and toes) and a shell's rigged shoe. */
+export interface FootTurns { r: [number, number]; l: [number, number] }
+export interface MotionFrame { joints: Record<Joint, number[]>; offset: [number, number, number]; feet?: FootTurns }
+/** RG2b: the toe bone of each rig (the ball's turn); a rig without it gives the ankle alone. */
+export const TOES: Record<RigName, { r: string; l: string }> = {
+  unreal: { r: 'ball_r', l: 'ball_l' }, rigify: { r: 'DEF-toe.R', l: 'DEF-toe.L' }, mixamo: { r: 'mixamorig:RightToeBase', l: 'mixamorig:LeftToeBase' },
+}
+/** RG2b: a pose's `extra` from a frame's foot turns (rounded to a tenth of a degree); none without them. */
+export function feetExtra(f: Pick<MotionFrame, 'feet'>): Record<string, number[]> | undefined {
+  if (!f.feet) return undefined
+  const r = (v: number) => Math.round(v * 10) / 10 || 0
+  return { r_ankle: [r(f.feet.r[0]), 0, 0], r_ball: [r(f.feet.r[1]), 0, 0], l_ankle: [r(f.feet.l[0]), 0, 0], l_ball: [r(f.feet.l[1]), 0, 0] }
+}
 export interface Retargeted { rig: RigName; fps: number; duration: number; frames: MotionFrame[]; travel: number }
 export interface RetargetOptions {
   fps: number                                    // the stage's rate (24)
@@ -104,6 +119,9 @@ export function retarget(root: THREE.Object3D, clip: THREE.AnimationClip, opts: 
   const rig = detectRig(names)
   if (!rig) throw new Error('the clip\'s skeleton is not one the library knows (Quaternius Rigify / Unreal names, or Mixamo)')
   const bones = bonesOf(root, rig)
+  const byName = new Map<string, THREE.Object3D>()
+  root.traverse((o) => { const k = norm(o.name); if (!byName.has(k)) byName.set(k, o) })
+  const toes = { r: byName.get(norm(TOES[rig].r)) ?? null, l: byName.get(norm(TOES[rig].l)) ?? null }   // RG2b
   // rest pose: the file's own node transforms, before the clip plays
   const mixer = new THREE.AnimationMixer(root)
   const identity = new THREE.Quaternion()
@@ -113,6 +131,8 @@ export function retarget(root: THREE.Object3D, clip: THREE.AnimationClip, opts: 
   const turn = new THREE.Quaternion().setFromUnitVectors(right.lengthSq() > 0.5 ? right : new THREE.Vector3(-1, 0, 0), new THREE.Vector3(-1, 0, 0))
   const rest = snapshot(root, bones, turn)
   const restInv = Object.fromEntries(Object.entries(rest.rot).map(([k, q]) => [k, q.clone().invert()])) as Record<Part, THREE.Quaternion>
+  const toeRot = (b: THREE.Object3D) => { root.updateMatrixWorld(true); const q = new THREE.Quaternion(); new THREE.Matrix4().copy(root.matrixWorld).invert().multiply(b.matrixWorld).decompose(new THREE.Vector3(), q, new THREE.Vector3()); return turn.clone().multiply(q) }
+  const toeRestInv = { r: toes.r ? toeRot(toes.r).invert() : null, l: toes.l ? toeRot(toes.l).invert() : null }
   // rest alignment: the figure joint's rest direction onto the source bone's rest direction
   const align = new Map<Joint, THREE.Quaternion>()
   for (const l of LINKS) {
@@ -156,6 +176,21 @@ export function retarget(root: THREE.Object3D, clip: THREE.AnimationClip, opts: 
       const qk = segmentFrame(now.pos[foot].clone().sub(now.pos[calf]), fwd)
       if (qh && qk) { world.set(hipJ, qh); world.set(kneeJ, qk) }
     }
+    // RG2b: each foot's turn at the ankle (its forward against the shin's way down) and at the ball (the toes' forward against the foot's)
+    const turns = { r: [0, 0] as [number, number], l: [0, 0] as [number, number] }
+    for (const [side, calf, foot] of [['r', 'r_calf', 'r_foot'], ['l', 'l_calf', 'l_foot']] as const) {
+      const shin = now.pos[foot].clone().sub(now.pos[calf])
+      if (shin.lengthSq() < 1e-10) continue
+      shin.normalize()
+      const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(now.rot[foot].clone().multiply(restInv[foot]))
+      turns[side][0] = THREE.MathUtils.radToDeg(Math.asin(Math.max(-1, Math.min(1, fwd.dot(shin)))))
+      const toe = toes[side], inv = toeRestInv[side]
+      if (toe && inv) {
+        const toeFwd = new THREE.Vector3(0, 0, 1).applyQuaternion(toeRot(toe).multiply(inv))
+        const down = shin.clone().addScaledVector(fwd, -shin.dot(fwd))                   // the foot's own down (across its sole)
+        if (down.lengthSq() > 1e-10) turns[side][1] = THREE.MathUtils.radToDeg(Math.asin(Math.max(-1, Math.min(1, -toeFwd.dot(down.normalize())))))
+      }
+    }
     const joints = {} as Record<Joint, number[]>
     joints.root = eulerDeg(world.get('root')!)
     for (const l of LINKS) {
@@ -165,7 +200,7 @@ export function retarget(root: THREE.Object3D, clip: THREE.AnimationClip, opts: 
     start ??= now.pos.hips.clone()
     const d = now.pos.hips.clone().sub(start)
     const up = now.pos.hips.y - rest.pos.hips.y
-    frames.push({ joints, offset: [opts.inPlace ? 0 : d.x * s, up * s, opts.inPlace ? 0 : d.z * s] })
+    frames.push({ joints, offset: [opts.inPlace ? 0 : d.x * s, up * s, opts.inPlace ? 0 : d.z * s], feet: turns })
   }
   mixer.stopAllAction(); mixer.uncacheRoot(root)
   root.updateMatrixWorld(true)

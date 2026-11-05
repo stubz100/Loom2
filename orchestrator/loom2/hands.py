@@ -110,6 +110,7 @@ class FootShape(BaseModel):
     toe_up: float = Field(0.15, ge=0.0, le=1.0)                    # the big toe's point over the floor
     ball_at: float = Field(0.72, ge=0.3, le=0.95)                  # the ball along the foot (not read; placed by hand, F4)
     length_leg: float | None = Field(None, ge=0.05, le=1.0)        # the foot against the leg (hip → knee → ankle), from a full figure
+    stiff: bool = False                                            # D189 (Q10): a stiff sole (a boot, a clog) — the shoe bends at the ankle only
 
 
 class Feet(BaseModel):

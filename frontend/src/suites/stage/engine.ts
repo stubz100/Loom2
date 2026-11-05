@@ -20,7 +20,7 @@ import { clipFrame, crowdPlane, LIFT, PACKED } from './crowd'
 import { makeDetailed, type Detailed, type HandPreset } from './detailed'
 import type { HandShapes } from './clayHand'
 import { measure } from './motion/path'
-import { bindProxy, FACE_LANDMARKS, FEET_LANDMARKS, shellPoints, shellStance, type Landmark, type Proxy } from './proxy'
+import { bindProxy, FACE_LANDMARKS, FEET_LANDMARKS, shellPoints, shellStance, type FootShapes, type Landmark, type Proxy } from './proxy'
 import { depthMaterial, depthRangeFor, drawPose, maskColour, projectMarkers, toBlob, type Keypoint, type PassName, type WholeBody } from './passes'
 import type { RenderedPasses, Tool, Transform, View } from './stageStore'
 import { sizedExtent } from './meshSize'
@@ -843,7 +843,9 @@ export class StageEngine {
     this.track(new GLTFLoader().loadAsync(api.assetUrl(assetId)).then((gltf) => {
       if (this.disposed || this.entries.get(id) !== e || !e.figure) { disposeObject(gltf.scene); return }   // V78
       e.holder.updateMatrixWorld(true)
-      const px = bindProxy(gltf.scene, e.figure.joints, e.figure.limbs, e.holder, e.doc.pose ?? null, { stance: shellStance(assetId), visible: true, hands: true, points: shellPoints(assetId), markers: e.figure.markers })   // D140: placed by its picture   // CS2: in its reference's stance
+      const fb = (e.doc as { body?: { foot_shape?: FootShapes | null; feet?: number } | null }).body
+      const px = bindProxy(gltf.scene, e.figure.joints, e.figure.limbs, e.holder, e.doc.pose ?? null, { stance: shellStance(assetId), visible: true, hands: true, points: shellPoints(assetId), markers: e.figure.markers,
+        feet: fb?.foot_shape ? { shape: fb.foot_shape, size: fb.feet } : null })   // D140: placed by its picture   // CS2: in its reference's stance   // RG2b: its own feet
       for (const m of px.meshes) { m.material = this.clayMat; m.userData.stageId = id; m.visible = e.doc.visible; this.scene.add(m) }
       e.proxy = px
       ownTraverse(e.holder, id, (c) => { const m = c as THREE.Mesh; if (m.isMesh) m.castShadow = false })
@@ -1025,7 +1027,12 @@ export class StageEngine {
     return transformOf(e.holder.matrixWorld)
   }
   followAll(): void {
-    for (const e of this.entries.values()) if (e.detailed && e.figure) { e.holder.updateMatrixWorld(true); e.detailed.follow(e.figure.joints, e.doc.pose?.extra) }
+    for (const e of this.entries.values()) {
+      if (!e.figure || (!e.detailed && !e.proxy)) continue
+      e.holder.updateMatrixWorld(true)
+      e.detailed?.follow(e.figure.joints, e.doc.pose?.extra)
+      e.proxy?.feet(e.doc.pose?.extra)                                           // RG2b: the shell's shoe turns at its ankle and ball
+    }
   }
 
   // ---- ST3: the passes ------------------------------------------------------------------------------------------------------------

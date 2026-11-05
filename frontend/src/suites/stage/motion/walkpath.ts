@@ -7,7 +7,7 @@ import * as THREE from 'three'
 import type { ObjectKey } from '../anim'
 import type { Body } from '../body'
 import { applyPose, mannequin, POSES } from '../builders'
-import type { Placement } from './bake'
+import { withFeet, type Placement } from './bake'
 import { stance } from './footlock'
 import { along, measure, type Measured, type P2 } from './path'
 import type { MotionFrame } from './retarget'
@@ -76,7 +76,7 @@ export function walkAlong(frames: MotionFrame[], base: Placement, start: number,
     if (foot && (i === 0 || down[i - 1] !== foot || !pin)) { const a = rot(local[i][foot], yaw); pin = [rx + a[0], rz + a[1]] }
     if (!foot) pin = null
     out.push({ frame: start + i, ease: 'linear', transform: { pos: [rx, base.pos[1] + f.offset[1] * k, rz], rot: [base.rot[0] ?? 0, Math.round(yaw * 100) / 100, base.rot[2] ?? 0], scale: [...base.scale] },
-      pose: { preset: 'stand', joints: Object.fromEntries(Object.entries(f.joints).map(([j, e]) => [j, e.map((v) => Math.round(v * 100) / 100)])) } })
+      pose: { preset: 'stand', joints: Object.fromEntries(Object.entries(f.joints).map(([j, e]) => [j, e.map((v) => Math.round(v * 100) / 100)])), ...withFeet(f) } })
     if (progress >= m.length - 0.1) break
   }
   return out

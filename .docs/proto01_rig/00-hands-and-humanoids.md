@@ -1,6 +1,6 @@
 # proto01_rig · Rigging the hands, and humanoids that are not human
 
-Status: **proposal, 2026-11-04; answered the same day → D187** (§8); **legs and shoes added → D188** (§9); **E62 run the same evening** (§10); **RG1 built** (§11); **Q9, Q10 answered → D189, RG2a built** (§12). Read from the code at `055315e`.
+Status: **proposal, 2026-11-04; answered the same day → D187** (§8); **legs and shoes added → D188** (§9); **E62 run the same evening** (§10); **RG1 built** (§11); **Q9, Q10 answered → D189, RG2 built** (§12). Read from the code at `055315e`.
 
 ## 1. The request
 
@@ -295,3 +295,26 @@ shell's own (its folded mitten stretched between wrist and robe as the arm rises
 ![The ghoul's right hand, palm side: its own clay hand and the guide's points (left), the mannequin's (right), open and at rest](img/rg2-clay-hand.jpg)
 
 ![The ghoul's raised hand on seed 62: A the mannequin's hands, B fingers 1.5× by hand, C its own hand — guide and take](img/rg2-guide-own-hand.jpg)
+
+**RG2b, the feet** (F3, F5; D189), built the same morning:
+
+- **The clips' foot turns.** The retargeter reads, per frame and per foot, the **ankle's** turn (the source foot's forward tipped toward the
+  shin's way down, toes down +) and the **ball's** (the toes' forward tipped up from the foot's, a push-off +) — rig-independent, from the
+  foot and toe bones each rig has. They ride on the keys as a pose's `extra` (`r_ankle`, `r_ball`, `l_ankle`, `l_ball`): baked with every
+  clip, kept by the key thinning (a walk's heel-to-toe roll is not thinned away), swapped by a mirror, carried through the foot lock and the
+  ground contact. On the library's *Walk_Loop*: the ball 36° at push-off, the toes up 16° at heel strike, the other foot's toes down 28°.
+- **The guide's feet roll.** The Detailed figure turns its foot and ball bones by them about each foot's own side-to-side axis, so the pose
+  pass's heel and toes follow the clip's roll (F5) — for every character, not only those with a read foot.
+- **The shell's shoe is rigged where its foot can be found** (F3). From the foot's shape: an ankle at the figure's ankle (placed by hand
+  where D183 placed it), a heel, a ball and a toe — the foot's length from the shell's own sole when it has one on the floor in the foot's
+  corridor (within 6 cm of the ankle's line, ahead of it; E62 c found Nora's toe so), else from the shape or the leg. The shoe is weighed by
+  bone heat to an ankle and a ball bone (one for a stiff sole, D189's switch, `FootShape.stiff`) and turned with the pose. **Only where the
+  foot so placed lands on the shell** — its ball and toe within 6 cm of the surface; otherwise the shoe rides on the shin as before until
+  the foot is placed by hand (RG3's Feet & legs view).
+
+**Measured** (`engine/spikes/rg2_feet.cjs`, the real mannequin and shells, *Walk_Loop*, Nora's E62 foot read given to the check without
+writing it into Followed): Nora's and the woman's shoes rigged (their toes 2.5 cm and 1.7 cm from the shell), their toes 2.4–2.5 cm higher
+at heel strike and 1–1.5 cm at push-off than held, the shoes bent cleanly; the man's (his trouser hems: the toe 20 cm off) and the ghoul's
+(its robe and splayed claws: 16 cm off) left on the shin. Not measured: Wan Animate on a walk with the rolling guide feet (no GPU run).
+
+![Nora and the woman walking, the right foot from the side: the shoe and the guide's heel and toes turned by the clip, against held](img/rg2b-feet-walk.jpg)

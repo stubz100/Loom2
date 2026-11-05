@@ -70,7 +70,8 @@ async function libraryRun(doc: StageDoc, o: StageObject, b: MotionBlock, at: Sta
   const clip = { file: await fileOf(b.source.id), name: b.source.clip, duration: 0, rig: null, rootMotion: false }
   const r = await retargetClip(clip, { fps, start: b.trim_in, end: b.trim_out ?? undefined, speed: b.speed, hip: hipOf(o) })
   let raw = r.frames
-  if (b.mirror) raw = raw.map((f) => ({ ...f, joints: mirrorJoints(f.joints), offset: [-f.offset[0], f.offset[1], f.offset[2]] as [number, number, number] }))
+  if (b.mirror) raw = raw.map((f) => ({ ...f, joints: mirrorJoints(f.joints), offset: [-f.offset[0], f.offset[1], f.offset[2]] as [number, number, number],
+    ...(f.feet ? { feet: { r: f.feet.l, l: f.feet.r } } : {}) }))                     // RG2b: the feet swap sides (a pitch is its own mirror)
   const path = b.path && o.path && o.path.length >= 2 ? (o.path as number[][]).map((p) => [p[0], p[1]] as [number, number]) : null
   const lock = (fr: typeof raw) => { const locked = b.foot_lock ? footLock(fr, o.body as never) : fr; return b.ground ? footContact(locked, o.body as never) : locked }
   let frames = lock(raw)
@@ -82,6 +83,12 @@ async function libraryRun(doc: StageDoc, o: StageObject, b: MotionBlock, at: Sta
   if (times > 1) frames = lock(repeatLoop(raw, times))
   if (b.in_place && !path) frames = frames.map((f) => ({ ...f, offset: [0, f.offset[1], 0] as [number, number, number] }))
   return path ? (b.foot_lock ? walkAlong(frames, at.transform, b.start, path, o.body as never) : bakeAlongPath(frames, at.transform, b.start, path)) : bakeKeys(frames, at.transform, b.start)
+}
+
+/** RG2b: a mirrored pose's feet — the right's ankle and ball turns become the left's (a pitch is its own mirror); other turns as they are. */
+export function mirrorFeet(extra: Record<string, number[]>): Record<string, number[]> {
+  const swap: Record<string, string> = { r_ankle: 'l_ankle', l_ankle: 'r_ankle', r_ball: 'l_ball', l_ball: 'r_ball' }
+  return Object.fromEntries(Object.entries(extra).map(([k, v]) => [swap[k] ?? k, v]))
 }
 
 /** A template's block: its keys re-based to where the figure stands (its position and facing), the root scaled by the figure's hip over
@@ -102,7 +109,7 @@ export function templateRun(t: Pick<AnimationTemplate, 'frames' | 'hip' | 'keys'
       if (b.in_place) { dx = 0; dz = 0 }
       const pos = [at.transform.pos[0] + dx * c + dz * s, at.transform.pos[1] + (key.transform.pos[1] - first.pos[1]) * k, at.transform.pos[2] - dx * s + dz * c]
       const rot = [key.transform.rot[0], at.transform.rot[1] + ((b.mirror ? -1 : 1) * ((key.transform.rot[1] ?? 0) - (first.rot[1] ?? 0))), key.transform.rot[2]]
-      const pose = key.pose && b.mirror ? { ...key.pose, joints: mirrorJoints(key.pose.joints) } : key.pose
+      const pose = key.pose && b.mirror ? { ...key.pose, joints: mirrorJoints(key.pose.joints), ...(key.pose.extra ? { extra: mirrorFeet(key.pose.extra) } : {}) } : key.pose
       out.push({ ...key, frame: b.start + Math.round((key.frame + i * (t.frames - 1)) / b.speed), transform: { pos, rot, scale: at.transform.scale }, pose })
     }
   }

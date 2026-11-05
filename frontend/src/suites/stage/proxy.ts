@@ -163,6 +163,10 @@ export function heatWeights(pos: THREE.BufferAttribute | THREE.InterleavedBuffer
 
 export interface Proxy {
   meshes: THREE.SkinnedMesh[]; dispose: () => void; segments: Segment[]; ms: number
+  /** RG2b: the shoe's ankle and ball turned by a pose's extra (r_ankle, r_ball, l_ankle, l_ball; degrees, toes down + at the ankle, up + at
+   *  the ball); nothing without a rigged foot. `points` the rig's ankle, ball and toe a foot (world, at bind) for the tests and the bench. */
+  feet: (extra?: Record<string, number[]> | null) => void
+  footPoints: Partial<Record<'r' | 'l', { ankle: THREE.Vector3; ball: THREE.Vector3 | null; toe: THREE.Vector3; heel: THREE.Vector3; rigged: boolean; missed: number }>>
   /** CS3 (06 §2.5): the pose pass's points as landmarks on the shell — each marker moved, in the bind pose, onto the shell's outermost
    *  surface along its ray within 25 cm (`front`: the nose, the eyes, the toes; `back`: the heels; `right` / `left`: the ears), where it
    *  stays with its joint; `now` is the figure's pose to return to; `follow` moves what follows the joints (the Detailed mannequin, which
@@ -181,6 +185,13 @@ export function insideShell(meshes: THREE.Mesh[], p: THREE.Vector3): boolean {
   const hits = new THREE.Raycaster(new THREE.Vector3(p.x, p.y, p.z + 50), new THREE.Vector3(0, 0, -1)).intersectObjects(meshes, false)
   return hits.length > 0 && p.z <= hits[0].point.z + 1e-3 && p.z >= hits[hits.length - 1].point.z - 1e-3
 }
+/** RG2b (D188 F2, F3; D189): a foot's shape as the version keeps it (hands.FootShape) — in foot lengths, seen from the side. */
+export interface FootShape { pitch: number; ankle_up: number; ankle_at: number; heel_up: number; toe_up: number; ball_at: number; length_leg: number | null; stiff?: boolean }
+export interface FootShapes { right: FootShape; left?: FootShape | null }
+/** RG2b: a foot's length when its shape was not read on a whole figure — this share of the leg (hip → ankle) at ×1 feet (a 0.87 m leg, 26 cm). */
+export const FOOT_PER_LEG = 0.3
+/** RG2b: how near the shell's surface a placed foot's ball and toe must lie for its shoe to be rigged (metres). */
+export const FOOT_REACH = 0.06
 export interface BindOptions {
   weights?: Weighting; stance?: Record<string, number[]> | null; visible?: boolean
   /** CS3 (06 §2.5): the character's hand rig draws the hands — the shell's own (Pixal3D's mittens) collapse into the wrists. */
@@ -188,6 +199,9 @@ export interface BindOptions {
   /** D140: the points the figure was fitted to (its reference's) and the figure's 18 markers — with the GLB's figure box (the cut-out
    *  Pixal3D was given, `extras.loom2.figure_box`) the shell is placed by its picture. */
   points?: { pose?: number[][]; canvas?: number[]; hand_left?: number[][]; hand_right?: number[][] } | null; markers?: THREE.Object3D[]
+  /** RG2b (D188 F3): the character's own feet — the shell's shoe rigged at an ankle and a ball placed from them (a stiff sole at the ankle
+   *  alone), turned by a pose's r_ankle / r_ball (feet()); `size` the body's feet factor. Without, the shoe rides on the shin as before. */
+  feet?: { shape: FootShapes; size?: number } | null
 }
 
 /** D140: the shell's placement from its picture, in the figure's own frame (it faces +Z, its left at +X, its floor at y 0): the figure
@@ -336,11 +350,7 @@ export function bindProxy(model: THREE.Object3D, J: Record<Joint, THREE.Object3D
   const region = opts.hands && pf ? handRegion([opts.points?.hand_left, opts.points?.hand_right], pf.toFigure) : null   // the shell's own hands, from its picture
   const toFig = figureRoot.matrixWorld.clone().invert(), tmp = new THREE.Vector3()
   const inHand = region ? (w: THREE.Vector3) => region(tmp.copy(w).applyMatrix4(toFig)) : null
-  const bones = JOINTS.map((j) => J[j])
-  const skeleton = new THREE.Skeleton(bones as unknown as THREE.Bone[])
-  skeleton.calculateInverses()                                             // the bind pose: the stance, now
-  const material = opts.visible ? new THREE.MeshLambertMaterial({ color: 0xb4b4b8 }) : new THREE.MeshBasicMaterial({ color: 0x888888, colorWrite: false, depthWrite: false })
-  const meshes: THREE.SkinnedMesh[] = []
+  const placed: THREE.BufferGeometry[] = []                                // the shell's geometry, placed (and its mittens folded), before weighting
   model.traverse((o) => {
     const m = o as THREE.Mesh
     if (!m.isMesh || !m.geometry) return
@@ -348,7 +358,78 @@ export function bindProxy(model: THREE.Object3D, J: Record<Joint, THREE.Object3D
     g.applyMatrix4(place.clone().multiply(m.matrixWorld))
     for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && !(opts.visible && k === 'color')) g.deleteAttribute(k)
     if (opts.hands) collapseHands(g.attributes.position as THREE.BufferAttribute, segs, new THREE.Vector3(0, 0, 1).transformDirection(figureRoot.matrixWorld), inHand)   // the figure faces its +z
-    const { idx, wts } = (opts.weights ?? 'heat') === 'heat' ? heatWeights(g.attributes.position, segs) : proximityWeights(g.attributes.position, segs)
+    placed.push(g)
+  })
+  const reach = (p: THREE.Vector3): number => {                            // how far the shell's surface is from a point
+    let best = Infinity
+    const v = new THREE.Vector3()
+    for (const g of placed) { const a = g.attributes.position; for (let i = 0; i < a.count; i++) { const d2 = v.fromBufferAttribute(a, i).distanceToSquared(p); if (d2 < best) best = d2 } }
+    return Math.sqrt(best)
+  }
+  // RG2b (D188 F2, F3): the shoe rigged — an ankle at the shin's end (the figure's ankle marker, placed by hand when D183 placed it) and a
+  // ball, both from the foot's shape in foot lengths; the shin's segment then ends at the ankle, the foot's two (one for a stiff sole, D189)
+  // follow it; bone heat weighs the shoe to them as to the rest (E62 c: 99th-percentile stretch 1.02–1.24 at 30° where the points sit right).
+  // Only where the foot so placed lands on the shell — its ball and toe within FOOT_REACH of its surface: under a robe or a trouser hem, or a
+  // foot turned out or splayed (the ghoul's: its low geometry 13 cm outward and behind the ankle), the points miss the shoe (E62 c), the
+  // shoe would hang on the ankle alone, and it rides on the shin as before until its foot is placed by hand (RG3, the Feet & legs view)
+  const footRig: { side: 'r' | 'l'; ankle: THREE.Bone; ball: THREE.Bone | null; axis: THREE.Vector3 }[] = []
+  const footPoints: Proxy['footPoints'] = {}
+  const extraSegs: Segment[] = []
+  if (opts.feet?.shape) {
+    const fwd = new THREE.Vector3(0, 0, 1).transformDirection(figureRoot.matrixWorld).setY(0)
+    if (fwd.lengthSq() < 1e-10) fwd.set(0, 0, 1)
+    fwd.normalize()
+    const floor = new THREE.Vector3().applyMatrix4(figureRoot.matrixWorld).y
+    const down = new THREE.Vector3(0, -1, 0), across = fwd.clone().cross(down).normalize()
+    for (const side of ['r', 'l'] as const) {
+      const shape = side === 'l' && opts.feet.shape.left ? opts.feet.shape.left : opts.feet.shape.right
+      const knee = J[side === 'r' ? 'r_knee' : 'l_knee'], hip = J[side === 'r' ? 'r_hip' : 'l_hip']
+      const marker = opts.markers?.[side === 'r' ? 10 : 13]
+      const A = marker ? marker.getWorldPosition(new THREE.Vector3()) : new THREE.Vector3(0, -limbs.shin, 0).applyMatrix4(knee.matrixWorld)
+      const kneeW = knee.getWorldPosition(new THREE.Vector3())
+      const leg = hip.getWorldPosition(new THREE.Vector3()).distanceTo(kneeW) + kneeW.distanceTo(A)
+      // the foot's length: the shell's own sole when it has one in the foot's corridor (on the floor, within 6 cm of the ankle's line, ahead —
+      // E62 c found Nora's toe so), the toe at its 98th percentile ahead; else from the shape (on a whole figure) or the leg
+      const ahead: number[] = []
+      const rel = new THREE.Vector3()
+      for (const g of placed) { const a = g.attributes.position; for (let i = 0; i < a.count; i++) {
+        rel.fromBufferAttribute(a, i).sub(A)
+        const t = rel.dot(fwd)
+        if (rel.y + A.y < floor + 0.025 && Math.abs(rel.dot(across)) < 0.06 && t > 0 && t < 0.45) ahead.push(t)   // a sole touches the floor (a hem does not)
+      } }
+      ahead.sort((x, y) => x - y)
+      const toeAhead = ahead.length >= 20 ? ahead[Math.floor(0.98 * (ahead.length - 1))] : 0
+      const L = toeAhead > 0.03 ? toeAhead / Math.max(0.3, 1 - shape.ankle_at) : shape.length_leg ? shape.length_leg * leg : FOOT_PER_LEG * leg * (opts.feet.size ?? 1)
+      const heel = A.clone().addScaledVector(fwd, -shape.ankle_at * L); heel.y = floor + shape.heel_up * L
+      const toe = heel.clone().addScaledVector(fwd, L); toe.y = floor + shape.toe_up * L
+      const ballP = heel.clone().lerp(toe, shape.ball_at); ballP.y = floor + 0.03
+      const missed = Math.max(reach(toe), reach(ballP))
+      if (missed > FOOT_REACH) { footPoints[side] = { ankle: A.clone(), ball: ballP.clone(), toe: toe.clone(), heel: heel.clone(), rigged: false, missed }; continue }
+      const k = segs.findIndex((g) => g.j === knee.name || g.j === (side === 'r' ? 'r_knee' : 'l_knee'))
+      if (k >= 0) segs[k] = { ...segs[k], b: A.clone() }
+      knee.updateMatrixWorld(true)
+      const ankle = new THREE.Bone(); ankle.name = `${side}_ankle_rig`; knee.add(ankle); ankle.position.copy(knee.worldToLocal(A.clone()))
+      ankle.updateMatrixWorld(true)
+      const axis = across.clone().applyQuaternion(ankle.getWorldQuaternion(new THREE.Quaternion()).invert())   // the side-to-side axis, in its frame
+      let ball: THREE.Bone | null = null
+      if (shape.stiff) extraSegs.push({ j: side === 'r' ? 'r_knee' : 'l_knee', a: A.clone(), b: toe.clone() })
+      else {
+        ball = new THREE.Bone(); ball.name = `${side}_ball_rig`; ankle.add(ball); ball.position.copy(ankle.worldToLocal(ballP.clone())); ball.updateMatrixWorld(true)
+        extraSegs.push({ j: side === 'r' ? 'r_knee' : 'l_knee', a: A.clone(), b: ballP.clone() }, { j: side === 'r' ? 'r_knee' : 'l_knee', a: ballP.clone(), b: toe.clone() })
+      }
+      footRig.push({ side, ankle, ball, axis })
+      footPoints[side] = { ankle: A.clone(), ball: ball ? ballP.clone() : null, toe: toe.clone(), heel: heel.clone(), rigged: true, missed }
+    }
+  }
+  const footBones = footRig.flatMap((f) => (f.ball ? [f.ankle, f.ball] : [f.ankle]))
+  const bones = [...JOINTS.map((j) => J[j]), ...footBones]
+  const skeleton = new THREE.Skeleton(bones as unknown as THREE.Bone[])
+  skeleton.calculateInverses()                                             // the bind pose: the stance, now
+  const material = opts.visible ? new THREE.MeshLambertMaterial({ color: 0xb4b4b8 }) : new THREE.MeshBasicMaterial({ color: 0x888888, colorWrite: false, depthWrite: false })
+  const meshes: THREE.SkinnedMesh[] = []
+  for (const g of placed) {
+    const all = [...segs, ...extraSegs]                                      // RG2b: the feet's segments after the twelve, as their bones are
+    const { idx, wts } = (opts.weights ?? 'heat') === 'heat' ? heatWeights(g.attributes.position, all) : proximityWeights(g.attributes.position, all)
     g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(idx, 4))
     g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(wts, 4))
     const sm = new THREE.SkinnedMesh(g, material)
@@ -357,13 +438,14 @@ export function bindProxy(model: THREE.Object3D, J: Record<Joint, THREE.Object3D
     sm.frustumCulled = false
     sm.userData.proxy = !opts.visible
     meshes.push(sm)
-  })
+  }
   const ms = performance.now() - t0
   // back to the figure's own pose
   applyPose(J, POSES[pose?.preset ?? 'stand'] ?? POSES.stand, pose?.joints, pose?.ground ?? 0)
   figureRoot.updateMatrixWorld(true)
   const landmark = (list: Landmark[], now: { preset?: string | null; joints?: Record<string, number[]>; ground?: number } | null, follow?: () => void) => {
     applyPose(J, POSES.stand, opts.stance ?? A_POSE)                       // the bind pose: the geometry's own positions
+    feet(null)                                                             // RG2b: the shoe at its bind too
     figureRoot.updateMatrixWorld(true); follow?.(); figureRoot.updateMatrixWorld(true)
     const plain = meshes.map((m) => new THREE.Mesh(m.geometry, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide })))
     const side = J.r_shoulder.getWorldPosition(new THREE.Vector3()).sub(J.l_shoulder.getWorldPosition(new THREE.Vector3())).setY(0).normalize()   // the figure's right
@@ -384,5 +466,13 @@ export function bindProxy(model: THREE.Object3D, J: Record<Joint, THREE.Object3D
     figureRoot.updateMatrixWorld(true); follow?.(); figureRoot.updateMatrixWorld(true)
     return () => list.forEach(({ m }, i) => { m.position.copy(before[i]) })
   }
-  return { meshes, segments: segs, ms, landmark, dispose: () => { for (const m of meshes) { m.geometry.dispose(); m.removeFromParent() } material.dispose() } }
+  const rad = THREE.MathUtils.degToRad
+  const feet = (extra?: Record<string, number[]> | null) => {
+    for (const f of footRig) {
+      f.ankle.quaternion.setFromAxisAngle(f.axis, rad(extra?.[`${f.side}_ankle`]?.[0] ?? 0))
+      f.ball?.quaternion.setFromAxisAngle(f.axis.clone().negate(), rad(extra?.[`${f.side}_ball`]?.[0] ?? 0))   // toes up +
+    }
+  }
+  return { meshes, segments: segs, ms, landmark, feet, footPoints,
+    dispose: () => { for (const m of meshes) { m.geometry.dispose(); m.removeFromParent() } for (const f of footRig) f.ankle.removeFromParent(); material.dispose() } }
 }

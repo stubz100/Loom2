@@ -9883,6 +9883,11 @@
             "title": "Pitch",
             "type": "number"
           },
+          "stiff": {
+            "default": false,
+            "title": "Stiff",
+            "type": "boolean"
+          },
           "toe_up": {
             "default": 0.15,
             "maximum": 1.0,
@@ -9945,6 +9950,11 @@
             "title": "Pitch",
             "type": "number"
           },
+          "stiff": {
+            "default": false,
+            "title": "Stiff",
+            "type": "boolean"
+          },
           "toe_up": {
             "default": 0.15,
             "maximum": 1.0,
@@ -9960,7 +9970,8 @@
           "heel_up",
           "toe_up",
           "ball_at",
-          "length_leg"
+          "length_leg",
+          "stiff"
         ],
         "title": "FootShape",
         "type": "object"

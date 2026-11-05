@@ -9134,6 +9134,11 @@ export interface components {
              */
             pitch?: number;
             /**
+             * Stiff
+             * @default false
+             */
+            stiff?: boolean;
+            /**
              * Toe Up
              * @default 0.15
              */
@@ -9171,6 +9176,11 @@ export interface components {
              * @default 6
              */
             pitch: number;
+            /**
+             * Stiff
+             * @default false
+             */
+            stiff: boolean;
             /**
              * Toe Up
              * @default 0.15

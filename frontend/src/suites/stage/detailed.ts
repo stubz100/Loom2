@@ -186,6 +186,9 @@ export function makeDetailed(mannequin: THREE.Object3D, rig: RigName, parent: TH
   const linked = new Set(LINKS.map((l) => norm(RIGS[rig][l.bone])).concat(norm(RIGS[rig].hips), spineChain.map((b) => norm(b.name))))
   const parentWorldQ = new THREE.Quaternion(), figQ = new THREE.Quaternion(), tmp = new THREE.Quaternion()
   const restHand: Record<string, number[]> = {}                             // S2: filled once the curl axes are known (below)
+  // RG2b (D188 F3, F5): each foot's turn at the ankle and the ball (a pose's extra r_ankle, r_ball, l_ankle, l_ball — the clips' foot turns,
+  // rig-independent): about the foot's own side-to-side axis, toes down + at the ankle, toes up + at the ball; filled below, read by follow
+  const footAxes: Partial<Record<'r' | 'l', { foot: THREE.Object3D; ankle: THREE.Vector3; ball: THREE.Object3D | null; toe: THREE.Vector3 | null }>> = {}
 
   /** Set a bone's world rotation (given in the figure's frame) through its parent's current world rotation. */
   const setWorld = (b: THREE.Object3D, inFigRot: THREE.Quaternion) => {
@@ -207,6 +210,13 @@ export function makeDetailed(mannequin: THREE.Object3D, rig: RigName, parent: TH
       o.quaternion.copy(r)
       if (e) o.quaternion.multiply(tmp.setFromEuler(new THREE.Euler(rad(e[0]), rad(e[1]), rad(e[2]), 'YXZ')))
     })
+    for (const side of ['r', 'l'] as const) {                               // RG2b: the feet's own turns, on their rest (and their turn out)
+      const fa = footAxes[side]
+      if (!fa) continue
+      const a = extra?.[`${side}_ankle`]?.[0], b = extra?.[`${side}_ball`]?.[0]
+      if (a) fa.foot.quaternion.multiply(tmp.setFromAxisAngle(fa.ankle, rad(a)))
+      if (b && fa.ball && fa.toe) fa.ball.quaternion.multiply(tmp.setFromAxisAngle(fa.toe, rad(b)))
+    }
     parent.updateMatrixWorld(true)
     // the pelvis: the figure root's turn and place
     const hips = part('hips')
@@ -278,6 +288,14 @@ export function makeDetailed(mannequin: THREE.Object3D, rig: RigName, parent: TH
   const toeBones: Record<RigName, (s: 'r' | 'l') => [string, string | null]> = {
     unreal: (s) => [`ball_${s}`, `ball_leaf_${s}`], rigify: (s) => [`DEF-toe.${s.toUpperCase()}`, null],
     mixamo: (s) => [`mixamorig:${s === 'r' ? 'Right' : 'Left'}ToeBase`, `mixamorig:${s === 'r' ? 'Right' : 'Left'}Toe_End`],
+  }
+  for (const side of ['r', 'l'] as const) {                                 // RG2b: the side-to-side axes, in each bone's rest frame
+    const foot = part(side === 'r' ? 'r_foot' : 'l_foot')
+    const ball = bones.get(norm(toeBones[rig](side)[0])) ?? null
+    const fwd = (ball ? inFig(ball) : inFig(foot).add(new THREE.Vector3(0, 0, 0.1))).sub(inFig(foot)).setY(0)
+    if (fwd.lengthSq() < 1e-10) fwd.set(0, 0, 1)
+    const across = fwd.normalize().clone().cross(new THREE.Vector3(0, -1, 0)).normalize()   // turning about it takes the forward down
+    footAxes[side] = { foot, ankle: across.clone().applyQuaternion(rotIn(foot).invert()), ball, toe: ball ? across.clone().negate().applyQuaternion(rotIn(ball).invert()) : null }
   }
   let wholebody: Detailed['wholebody'] = null
   const hasFingers = (['r', 'l'] as const).every((s) => FINGER_NAMES.every((f) => bones.get(norm(fingerBone(rig, s, f, 3)))))

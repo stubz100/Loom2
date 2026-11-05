@@ -200,7 +200,7 @@ composition" instruction. Tiled refine (Ultimate-SD-Upscale pattern) with Klein 
 | Wan 2.2 TI2V-5B | 5B dense | 720p 24 fps | community node only | FaceSim 0.379 | fp8 8–10 GB | Apache-2.0; RDNA4 colour corruption reported on ROCm 7.2.1 |
 | **LTX-2.3** (Mar 2026) | 22B, Gemma-3-12B | up to 4K, 24/48 fps, 121 f | **keyframes at arbitrary indices** (`LTXVAddGuide`, per-guide strength), FLF template | softer faces than Wan; fastest open model; IC-LoRA pose/depth/canny control | **fp8 transformer 23.5 GB streamed from RAM: 4.7 s/it, 141 s per 121 f @ 1024×576 (E5b)**; GGUF Q4_K_M 14 GB runs at 68–81 s/it on this card — struck; Gemma-3 fp8 12.3 GB offloaded; distilled 8 steps | LTX Community (< $10M ARR) |
 | LTX-2.5 (Aug 2026) | 22B, Gemma-4-12B | 1920×1088, 121 f, multishot, HDR | yes | AA Elo 1038 (Fast) | official ≥ 34 GB; community GGUF Q4 15.7 GB + Gemma-4 Q4 8.4 GB; no 16 GB numbers yet | LTX Community |
-| **MiniMax H3** (Aug 2026) | 33B (~20B loaded), Qwen3-VL-32B | 768p, 24 fps, 4–15 s | **native first + last frame** (FL2VA), ≤ 9 refs (Ref2VA) | top open-weights Elo 1181; **measured on a 9070 XT Windows: 864×480, 5 s, 20 steps = 13 m 39 s**, faces close to source | GGUF Q4_0 11.4 GB, spills to RAM (64 GB recommended) | Community licence with **application required for USA/EU/UK/KR users** |
+| **MiniMax H3** (Aug 2026) | 33B (~20B loaded), Qwen3-VL-32B | 768p, 24 fps, 4–15 s | **native first + last frame** (FL2VA), ≤ 9 refs (Ref2VA) | top open-weights Elo 1181; faces close to source; **E64 (2026-11-05): the best of the three on bench 03** — gradual rise, end pose reached, moon and roofline held, sound with the picture | **E64: the fp8 scaled FL2VA transformer (21 GB) and the Qwen3-VL-32B encoder in bf16 (51.5 GB) streamed from RAM by Dynamic VRAM: 864×480 × 124 f @ 24 (5.2 s with sound) in 138 s warm / 151 s cold (8 turbo steps, 13 s/it), 1024×576 in 241 s, 1344×768 in 21 min; VRAM peak 8.4–9.7 GB**; the weights memory-mapped (128 GB holds them); a third party's GGUF Q4_0: 13 m 39 s at 20 steps — struck | Community licence excluding the EU / UK / KR / USA; **the author's use on MiniMax's answer (D192)** |
 | HunyuanVideo 1.5 (Nov 2025) | 8.3B | 480p/720p, 24 fps, 121 f | **no** | best motion naturalness; step-distilled 8–12 steps | fp8 / GGUF Q4 7–11 GB | Tencent community (territorial terms) |
 | Kandinsky 5.0 Lite/Pro | 2B / 19B | 768×512, 24 fps | no | — | easy (Lite) | MIT |
 | SkyReels V3 R2V | 14B (Wan-derived) | 720p 24 fps | no FLF | reference-to-video with 1–4 refs | 24 GB recommended; fp8 + offload | Skywork licence |
@@ -238,9 +238,11 @@ composition" instruction. Tiled refine (Ultimate-SD-Upscale pattern) with Klein 
   primary for identity (D8) and LTX is the **preview / beat-driven** engine. Reasons unchanged: fastest open
   model on this rig once streamed, arbitrary keyframe conditioning maps directly onto "boards → beats",
   IC-LoRA pose/depth for driven motion, LTX-2.5 upgrade path.
-- **"Hero clip" tier: MiniMax H3 FL2VA** (proven on this exact GPU/OS; native first+last; highest quality;
-  ≈ 3× slower). **Enabled (D17)**: the author is EU-located, eligible and willing to complete the community-licence
-  application; the tier unlocks in Settings once the application is confirmed filed.
+- **"Hero clip" tier: MiniMax H3 FL2VA** (native first+last; highest quality; **E64 2026-11-05: 138 s per 5 s
+  Draft clip with its sound on this card — 1.3× Wan's Draft, quicker than LTX's; 576p 241 s; 768p 21 min, not
+  offered; the 8-step turbo LoRA kept, 20 steps without it show nothing more at Draft**). **Enabled (D17, D192)**:
+  the author is EU-located; MiniMax answered the author's application that an individual without income from it
+  needs no authorization — Settings' H3 confirmation records that answer (D192), the files are in `F:/loom2-models`.
 - **Not selected for MVP:** HunyuanVideo 1.5 (no end frame), Wan 2.2 5B (identity, RDNA4 colour bug),
   Kandinsky/SkyReels/CogVideoX (stale or no FLF), MAGI-2 (307 GB).
 - **Post-MVP character animation:** Wan2.2-Animate-14B GGUF (pose/driving video → character), watching
@@ -254,7 +256,7 @@ provenance); they may serve the first smoke test only.
 Wan 2.2 FLF gives the most identity-faithful boundary frames but can morph through the middle of long gaps
 (keep ≤ 81 frames; escalate to Fun-InP). LTX keyframes give more direction control (mid-frames, per-beat
 strength) but "more conservative interpolations" when the two boards differ a lot. H3 has native FL
-conditioning with the best quality at ~3× the cost. The Animate suite exposes these as **Wan (faithful) ·
+conditioning with the best quality at ≈ 1.3× Wan's Draft time (E64). The Animate suite exposes these as **Wan (faithful) ·
 LTX (fast, beats) · H3 (hero)** with the same start/end/prompt contract.
 
 ## 6. Evaluation protocol (binding for every "done")

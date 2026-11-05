@@ -5,7 +5,7 @@ rooftop: crouch to stand) at its H3 size (864×480, 5 s at 24 fps), the frames f
 task in E4 / E5. One job on the GPU (the engine started by hand, nothing else queued): the wall time, the VRAM low-water mark from
 /system_stats every 2 s, the engine's resident memory; the clip to out/e64/.
 
-    orchestrator/.venv/Scripts/python.exe engine/spikes/e64_h3.py [steps] [seconds] [--no-lora]
+    engine/.venv/Scripts/python.exe engine/spikes/e64_h3.py [steps] [seconds] [--no-lora] [--size=WxH] [--seed=N]   # psutil is in the engine's venv
 """
 from __future__ import annotations
 
@@ -72,7 +72,7 @@ def graph(first: str, last: str, prompt: str, steps: int, length: int, lora: boo
         "14": {"class_type": "VAEDecode", "inputs": {"samples": ["13", 0], "vae": ["4", 0]}},
         "15": {"class_type": "VAEDecodeAudio", "inputs": {"samples": ["13", 0], "vae": ["5", 0]}},
         "16": {"class_type": "CreateVideo", "inputs": {"images": ["14", 0], "audio": ["15", 0], "fps": 24}},
-        "17": {"class_type": "SaveVideo", "inputs": {"video": ["16", 0], "filename_prefix": f"e64/h3_{steps}s{'_turbo' if lora else ''}", "format": "auto", "codec": "auto"}},
+        "17": {"class_type": "SaveVideo", "inputs": {"video": ["16", 0], "filename_prefix": f"e64/h3_{w}x{h}_{steps}s{'_turbo' if lora else ''}", "format": "mp4", "codec": "h264"}},
     }
     if lora:
         g["2"] = {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ["1", 0], "lora_name": "minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors", "strength_model": 1.0}}
@@ -91,24 +91,31 @@ def main() -> None:
     steps = int(args[0]) if args else 8
     seconds = float(args[1]) if len(args) > 1 else 5.0
     lora = "--no-lora" not in sys.argv
+    size = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--size=")), "864x480")
+    w, h = (int(x) for x in size.lower().split("x"))
     task = next(t for t in json.loads((BENCH / "tasks.json").read_text(encoding="utf-8"))["tasks"] if t["id"] == TASK)
     stats = http("/system_stats")
     dev = (stats.get("devices") or [{}])[0]
     total, free0 = dev.get("vram_total", 0), dev.get("vram_free", 0)
     print("engine", stats.get("system", {}).get("comfyui_version"), dev.get("name"), f"VRAM {total / 2**30:.1f} GB, free {free0 / 2**30:.1f}")
-    first = upload(BENCH / task["start"], "e64-first.png")
-    last = upload(BENCH / task["end"], "e64-last.png")
+    tag = time.strftime("%H%M%S")                                         # a new name each run: a new job, nothing cached from the last
+    first = upload(BENCH / task["start"], f"e64-first-{tag}.png")
+    last = upload(BENCH / task["end"], f"e64-last-{tag}.png")
     length = frames_for(seconds)
-    g = graph(first, last, task["prompt"], steps, length, lora)
-    low = {"free": free0, "rss": 0}
+    seed = int(next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--seed=")), "64"))
+    g = graph(first, last, task["prompt"], steps, length, lora, seed=seed, w=w, h=h)
+    ram0 = stats.get("system", {}).get("ram_free", 0)
+    low = {"free": free0, "rss": 0, "ram": ram0}
     proc = engine_proc()
     done = threading.Event()
 
     def watch() -> None:
         while not done.is_set():
             try:
-                f = (http("/system_stats", timeout=10).get("devices") or [{}])[0].get("vram_free", free0)
+                st = http("/system_stats", timeout=10)
+                f = (st.get("devices") or [{}])[0].get("vram_free", free0)
                 low["free"] = min(low["free"], f)
+                low["ram"] = min(low["ram"], st.get("system", {}).get("ram_free", ram0))
                 if proc:
                     low["rss"] = max(low["rss"], proc.memory_info().rss)
             except Exception:
@@ -119,26 +126,28 @@ def main() -> None:
     t0 = time.time()
     pid = http("/prompt", {"prompt": g})["prompt_id"]
     print("queued", pid, f"{length} frames, {steps} steps, turbo LoRA {lora}", flush=True)
-    h = None
+    hd = None
     while time.time() - t0 < 7200:
         hist = http(f"/history/{pid}", timeout=30)
         if pid in hist:
             st = hist[pid].get("status", {})
             if st.get("status_str") == "error" or hist[pid].get("outputs"):
-                h = hist[pid]; break
+                hd = hist[pid]; break
         time.sleep(3)
     wall = time.time() - t0
     done.set(); th.join(timeout=5)
-    res = {"task": TASK, "steps": steps, "frames": length, "seconds_clip": round(length / 24, 2), "lora": lora, "wall_s": round(wall, 1),
-           "vram_peak_gb": round((total - low["free"]) / 2**30, 2), "engine_rss_peak_gb": round(low["rss"] / 2**30, 2)}
-    if not h or h.get("status", {}).get("status_str") == "error":
-        res["error"] = json.dumps((h or {}).get("status", {}))[:1500]
+    res = {"when": time.strftime("%Y-%m-%d %H:%M"), "task": TASK, "size": f"{w}x{h}", "seed": seed, "steps": steps, "frames": length, "seconds_clip": round(length / 24, 2), "lora": lora, "wall_s": round(wall, 1),
+           "vram_peak_gb": round((total - low["free"]) / 2**30, 2), "engine_rss_peak_gb": round(low["rss"] / 2**30, 2),
+           "ram_taken_peak_gb": round((ram0 - low["ram"]) / 2**30, 1)}
+    if not hd or hd.get("status", {}).get("status_str") == "error":
+        res["error"] = json.dumps((hd or {}).get("status", {}))[:1500]
     else:
-        msgs = h.get("status", {}).get("messages") or []
+        msgs = hd.get("status", {}).get("messages") or []
+        res["cached"] = sorted({n for m in msgs if isinstance(m, list) and m[0] == "execution_cached" for n in m[1].get("nodes", [])}, key=int)
         ts = {m[0]: m[1].get("timestamp") for m in msgs if isinstance(m, list) and len(m) > 1 and isinstance(m[1], dict)}
         if ts.get("execution_start") and ts.get("execution_success"):
             res["engine_s"] = round((ts["execution_success"] - ts["execution_start"]) / 1000, 1)
-        for out in h["outputs"].values():
+        for out in hd["outputs"].values():
             for v in (out.get("images") or []) + (out.get("videos") or []) + (out.get("gifs") or []):
                 q = urllib.parse.urlencode({"filename": v["filename"], "subfolder": v.get("subfolder", ""), "type": v.get("type", "output")})
                 with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/view?{q}", timeout=120) as r:

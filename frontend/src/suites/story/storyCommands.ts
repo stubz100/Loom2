@@ -413,10 +413,8 @@ const cmds: Command[] = [
     placement: ['panel'], when: () => sy().skeleton && profile()?.cls === 'character' && !!version(),
     run: () => void import('../stage/benchState').then((m) => { const part = m.ui.part === 'hands' ? 'hand' : m.ui.part === 'feet' ? 'feet' : null
       if (part) void sy().makeAnimRef(part, { model_id: m.ui.partModel ?? useSession.getState().capabilities?.story?.model_id ?? null, count: m.ui.partCount }) }) },
-  { id: 'cast.rig.handFit', scope: 'story', label: 'Fit the hand again ▶', icon: Ruler, hint: 'the hand fitted to its points as they are now — SDPose\'s, with those you moved; the count, claws and widths stay',
-    placement: ['panel', 'context'], when: () => sy().skeleton && openVersion() && !!version()?.hand_points,
-    run: () => void import('../stage/benchState').then((m) => { const pts = m.ui.handPts ?? (version()?.hand_points as { hand?: number[][] } | null)?.hand; if (pts) void sy().refitPart('hand', { hand: pts }).then((ok) => { if (ok) m.setUi({ handPts: null }) }) }) },
-  { id: 'cast.rig.handSdpose', scope: 'story', label: "Back to SDPose's hand", icon: RotateCcw, placement: ['panel', 'context'],
+  // D191: no *Fit the hand again* — a point dropped on the hand picture is fitted and kept at once (RigBench)
+  { id: 'cast.rig.handSdpose', scope: 'story', label: "Back to SDPose's hand", icon: RotateCcw, hint: 'the points as SDPose read them, the hand fitted to them and kept', placement: ['panel', 'context'],
     when: () => sy().skeleton && openVersion() && !!(version()?.hand_points as { sdpose?: unknown } | null)?.sdpose,
     run: () => { const sd = (version()?.hand_points as { sdpose?: number[][] } | null)?.sdpose; if (sd) void sy().refitPart('hand', { hand: sd }).then(() => void import('../stage/benchState').then((m) => m.setUi({ handPts: null }))) } },
   { id: 'cast.rig.handHuman', scope: 'story', label: 'Start from a human hand', icon: Hand, hint: 'a hand of its own to shape by hand, without a hand picture (the human proportions loom2 reads)',
@@ -431,12 +429,8 @@ const cmds: Command[] = [
   { id: 'cast.rig.handLink', scope: 'story', label: 'Link the left hand', icon: Link, hint: 'the left hand the right one mirrored again (its own shape is dropped)',
     placement: ['panel', 'context'], when: () => sy().skeleton && openVersion() && !!(version()?.body as { hand_shape?: { left?: unknown } } | null)?.hand_shape?.left,
     run: () => void import('../stage/rigEdit').then((m) => { const v = version(); const h = (v?.body as { hand_shape?: never } | null)?.hand_shape; if (v && h) { sy().setSheet({ body: { ...(v.body ?? {}), hand_shape: m.linkHands(h) } as never }); void import('../stage/benchState').then((b) => b.setUi({ side: 'r' })) } }) },
-  { id: 'cast.rig.feetFit', scope: 'story', label: 'Fit the foot again ▶', icon: Ruler, hint: "the foot fitted to its points as they are now — SDPose's, with those you moved; the stiff sole and a placement by hand stay",
-    placement: ['panel', 'context'], when: () => sy().skeleton && openVersion() && !!version()?.feet_points,
-    run: () => void import('../stage/benchState').then((m) => { const fp = version()?.feet_points as { foot?: number[][]; ankle?: number[] | null; leg?: number[][] | null; floor?: number | null } | null
-      const pts = m.ui.footPts ?? (fp?.foot ? { foot: fp.foot, ankle: fp.ankle ?? null, leg: fp.leg ?? null, floor: fp.floor ?? null } : null)
-      if (pts) void sy().refitPart('feet', pts as Record<string, unknown>).then((ok) => { if (ok) m.setUi({ footPts: null }) }) }) },
-  { id: 'cast.rig.feetSdpose', scope: 'story', label: "Back to SDPose's foot", icon: RotateCcw, placement: ['panel', 'context'],
+  // D191: no *Fit the foot again* — a point dropped on the feet picture is fitted and kept at once (RigBench)
+  { id: 'cast.rig.feetSdpose', scope: 'story', label: "Back to SDPose's foot", icon: RotateCcw, hint: 'the points as SDPose read them, the foot fitted to them and kept (a placement by hand and the stiff sole stay)', placement: ['panel', 'context'],
     when: () => sy().skeleton && openVersion() && !!(version()?.feet_points as { sdpose?: unknown } | null)?.sdpose,
     run: () => { const sd = (version()?.feet_points as { sdpose?: Record<string, unknown> } | null)?.sdpose; if (sd) void sy().refitPart('feet', sd).then(() => void import('../stage/benchState').then((m) => m.setUi({ footPts: null }))) } },
   { id: 'cast.rig.feetPlain', scope: 'story', label: 'Start from a plain foot', icon: Footprints, hint: 'a foot of its own to shape and place by hand, without a feet picture',
@@ -455,13 +449,13 @@ const cmds: Command[] = [
     placement: ['panel', 'context'], when: () => sy().skeleton && openVersion() && !!(version()?.body as { foot_shape?: { right?: { place?: unknown } } } | null)?.foot_shape?.right?.place,
     run: () => void import('../stage/rigEdit').then((m) => { const v = version(); const f = (v?.body as { foot_shape?: never } | null)?.foot_shape; if (v && f) sy().setSheet({ body: { ...(v.body ?? {}), foot_shape: m.setFoot(m.setFoot(f, 'r', { place: null }), 'l', { place: null }) } as never }) }) },
   { id: 'cast.skeleton.close', scope: 'story', label: 'Figure', icon: ChevronLeft, hint: "the character's body page: its sizes, the fit, the shell (D190: Figure | Skeleton)", placement: ['panel'], when: () => sy().skeleton, run: () => sy().setSkeleton(false) },
-  { id: 'cast.skeleton.fit', scope: 'story', label: 'Fit again ▶', icon: Ruler, hint: "the body fitted to the points as they are now — SDPose's, with those you moved; the locked parts stay",
-    placement: ['panel', 'context'], when: () => sy().skeleton && openVersion() && !!version()?.body_points && !fitBlocked(version()),
-    run: () => void import('../stage/benchState').then((m) => { const pts = m.bench.points(); if (pts) void sy().refitBody(pts as never) }) },
-  { id: 'cast.skeleton.sdpose', scope: 'story', label: "Back to SDPose's points", icon: RotateCcw, placement: ['panel', 'context'], when: () => sy().skeleton && !!version()?.body_points,
-    run: () => { const v = version(); if (v) void import('../stage/benchState').then((m) => m.bench.resetPoints(v)) } },
-  { id: 'cast.skeleton.mirror', scope: 'story', label: 'Mirror left to right', icon: Copy, hint: 'the side you moved last, onto the other', placement: ['panel', 'context'], when: () => sy().skeleton && !!version()?.body_points,
-    run: () => void import('../stage/benchState').then((m) => m.bench.mirror()) },
+  // D191: no *Fit again* — a point dropped on the reference is fitted and kept at once (SkeletonBench); these two are kept at once too
+  { id: 'cast.skeleton.sdpose', scope: 'story', label: "Back to SDPose's points", icon: RotateCcw, hint: 'the points as SDPose read them, the body fitted to them and kept (the locked parts stay)', placement: ['panel', 'context'],
+    when: () => sy().skeleton && openVersion() && !!version()?.body_points && !fitBlocked(version()),
+    run: () => { const v = version(); if (v) void import('../stage/benchState').then((m) => { m.bench.resetPoints(v); const pts = m.bench.points(); if (pts) void sy().refitBody(pts as never) }) } },
+  { id: 'cast.skeleton.mirror', scope: 'story', label: 'Mirror left to right', icon: Copy, hint: 'the side you moved last onto the other, the body fitted and kept', placement: ['panel', 'context'],
+    when: () => sy().skeleton && openVersion() && !!version()?.body_points && !fitBlocked(version()),
+    run: () => void import('../stage/benchState').then((m) => { if (!m.bench.mirror()) return; const pts = m.bench.points(); if (pts) void sy().refitBody(pts as never) }) },
   { id: 'cast.skeleton.test', scope: 'story', label: 'Test in motion ▶', icon: Play, hint: "the turn test on the shots' own guide (a GPU job; its cost is asked first)", placement: ['panel'],
     when: () => sy().skeleton && !!version()?.anim_ref_asset_id, run: () => runCommand('story.cast.testAnimRef') },
   { id: 'cast.shell.make', scope: 'story', label: 'Make the shell ▶', icon: Shapes,

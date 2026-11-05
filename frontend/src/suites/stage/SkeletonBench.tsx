@@ -1,7 +1,7 @@
 // CS2 (proto01_UIcast 03 §3.2, 06 §2.4; D136 U6/U7/U17): the skeleton bench — Cast's Skeleton view of a character, lazily loaded with the
 // stage's code. Two panes (D140: the figure pane folded into the reference's — the shell is made front-on from this picture):
 //   the reference   SDPose's points (white rings) and the figure's markers (blue dots) over the animation reference, a red tick where they
-//                   part by more than 3 % of the height; a white point dragged corrects what SDPose read (*Fit again* refits), a blue one
+//                   part by more than 3 % of the height; a white point dragged corrects what SDPose read (D191: fitted and kept when let go), a blue one
 //                   sets the part it ends there and locks it. Under them the shell (or the Detailed figure) in x-ray and the skeleton, a
 //                   joint the shell's volume does not hold in red, a joint clicked picks its row; *side* turns the pane to the figure in
 //                   3D, from the side, orbited;
@@ -19,14 +19,14 @@ import type { Profile, StageCamera, StageDoc, StageObject } from '../../api/type
 import { CommandButton } from '../../frame/CommandButton'
 import { Help } from '../../frame/Help'
 import { askConfirm, useSession } from '../../store/session'
-import { shellBlocked, shellFromArmsDown, useStory, versionPointsOfShell } from '../story/storyStore'
+import { fitBlocked, shellBlocked, shellFromArmsDown, useStory, versionPointsOfShell } from '../story/storyStore'
 import { DEFAULT_BODY, ENDS, placedCount, rangeOf, type Body, type End } from './body'
 import { JOINTS, mannequin, POSE_NAMES, POSES, type Joint, type Mannequin } from './builders'
 import { HAND_PRESETS, makeDetailed } from './detailed'
 import type { HandShapes } from './clayHand'
 import { bindProxy, insideShell, setShellPoints, stanceOf } from './proxy'
 import { COCO, cropOf, defaultOf, disagreements, dragFactor, lengthCm, outside, pictureMap, ROWS, seen, setLocked, unlock, type Points, type RowKey, type XY } from './skeleton'
-import { handFromPicture, readPicture, setUi, ui, useUi } from './benchState'
+import { bench, handFromPicture, movedOf, readPicture, setUi, ui, useUi } from './benchState'
 import { FeetPanes, FeetParts, HandParts, HandsPanes } from './RigBench'
 import { HumanoidSwitch } from './HumanoidSwitch'
 import { showMenu } from '../../frame/ContextMenu'
@@ -122,7 +122,7 @@ export default function SkeletonBench() {
   const key = p && v ? `${p.id}/${v.id}` : null
   const fitted = v?.body_points ?? null
   useEffect(() => {                                                          // another character or version, or a new fit: its points
-    if (key) setUi({ pts: fitted ? JSON.parse(JSON.stringify(fitted)) : null, forVersion: key, moved: [], handPts: null, footPts: null })   // RG3: a new read drops the drags too
+    if (key) setUi({ pts: fitted ? JSON.parse(JSON.stringify(fitted)) : null, forVersion: key, moved: movedOf(fitted as Points | null), handPts: null, footPts: null })   // RG3: a new read drops the drags too; D191: the moved ones are those apart from SDPose's
   }, [key, fitted])
   const handRead = v?.hand_points ?? null, feetRead = v?.feet_points ?? null
   useEffect(() => { setUi({ handPts: null }) }, [handRead])
@@ -147,13 +147,12 @@ export default function SkeletonBench() {
         <GuidePane body={body} stance={stance} refId={v.anim_ref_asset_id ?? null} points={u.pts ?? vp} shell={v.shell_asset_id ?? null} />
       </div>}
       {u.part === 'body' && <div className="skel-foot">
-        <CommandButton id="cast.skeleton.fit" text />
         <CommandButton id="cast.skeleton.sdpose" text />
         <CommandButton id="cast.skeleton.mirror" text />
         <CommandButton id="cast.skeleton.test" text />
         <CommandButton id="cast.shell.make" text />
         <span className="spacer" />
-        <span className="muted">{u.moved.length ? `${u.moved.length} point${u.moved.length === 1 ? '' : 's'} moved` : 'SDPose\'s points'}{body.locks?.length ? ` · ${body.locks.length} locked` : ''}</span>
+        <span className="muted" data-testid="skel-kept">{u.moved.length ? `${u.moved.length} point${u.moved.length === 1 ? '' : 's'} moved by hand` : 'SDPose\'s points'}{body.locks?.length ? ` · ${body.locks.length} locked` : ''}</span>
         <ShellState v={v} />
       </div>}
     </div>
@@ -196,9 +195,11 @@ function RefPane({ v, body, stance, side }: { v: Profile['versions'][number]; bo
       const list = (next as unknown as Record<string, number[][]>)[drag.key]
       list[drag.k] = [Math.round(drag.at[0] * 10) / 10, Math.round(drag.at[1] * 10) / 10, list[drag.k]?.[2] ?? 1]
       setUi({ pts: next, moved: drag.key === 'pose' && !ui.moved.includes(drag.k) ? [...ui.moved, drag.k] : ui.moved })
+      if (v.state === 'open' && !fitBlocked(v)) void useStory.getState().refitBody(next as never).then((ok) => {   // D191: fitted and kept as it is let go
+        if (!ok) { const was = (v.body_points ?? null) as Points | null; setUi({ pts: was ? JSON.parse(JSON.stringify(was)) : null, moved: movedOf(was) }) } })
     } else if (map) {
       const f = dragFactor(body, fig, drag.k, map.toFig(drag.at))
-      if (f) { saveBody(setLocked(body, f.factor, f.value)); useSession.getState().toast(`${f.factor} set to ×${f.value.toFixed(2)} and locked — Fit again keeps it`, 'info') }
+      if (f) { saveBody(setLocked(body, f.factor, f.value)); useSession.getState().toast(`${f.factor} set to ×${f.value.toFixed(2)} and locked — the fit keeps it`, 'info') }
     }
     setDrag(null)
   }
@@ -226,7 +227,7 @@ function RefPane({ v, body, stance, side }: { v: Profile['versions'][number]; bo
     </div>
   )
   return (
-    <div className="skel-pane ref" aria-label="the reference" onContextMenu={(e) => { e.preventDefault(); showMenu(e, [{ cmd: 'cast.skeleton.fit' }, { cmd: 'cast.skeleton.sdpose' }, { cmd: 'cast.skeleton.mirror' }, { cmd: 'cast.shell.make' }]) }}>
+    <div className="skel-pane ref" aria-label="the reference" onContextMenu={(e) => { e.preventDefault(); showMenu(e, [{ cmd: 'cast.skeleton.sdpose' }, { cmd: 'cast.skeleton.mirror' }, { cmd: 'cast.shell.make' }]) }}>
       <span className="lab">the reference · SDPose's points ○ · the figure's ●</span>
       {tools}
       <div className="skel-ref">
@@ -244,7 +245,7 @@ function RefPane({ v, body, stance, side }: { v: Profile['versions'][number]; bo
             if (!seen(pt)) return null
             const q = drag?.kind === 'white' && drag.key === key && drag.k === k ? drag.at : [pt[0], pt[1]]
             return <circle key={`${key}${k}`} cx={q[0]} cy={q[1]} r={key === 'pose' ? r : r * 0.55} className={`white${key === 'pose' && ui.moved.includes(k) ? ' moved' : ''}`} data-k={k}
-              onPointerDown={(e) => { (e.target as Element).setPointerCapture?.(e.pointerId); setDrag({ kind: 'white', key, k, at: at(e) }) }}><title>{`${key === 'pose' ? COCO[k] : key} — SDPose's: drag where it is, then Fit again`}</title></circle>
+              onPointerDown={(e) => { (e.target as Element).setPointerCapture?.(e.pointerId); setDrag({ kind: 'white', key, k, at: at(e) }) }}><title>{`${key === 'pose' ? COCO[k] : key} — SDPose's: drag where it is; the body is fitted and kept when you let go`}</title></circle>
           }))}
           {map && fig.map((f, k) => { const q = drag?.kind === 'blue' && drag.k === k ? drag.at : map.toPic(f)
             return <circle key={`b${k}`} cx={q[0]} cy={q[1]} r={r * 0.5} className="blue" data-k={k}
@@ -503,7 +504,7 @@ export function SkeletonParts() {
     : [{ label: 'no pictures in the reference set yet', disabled: true, run: () => undefined }])
   return (
     <div className="story-insp skel-parts">
-      <h4>{p.name}'s skeleton <Help text={"Each part as a length at the figure's height, the factor of the default adult in its tooltip. The grey band is an adult's range: outside it the row turns amber — a child or a creature is yours to decide. A lock keeps a part through Fit again."} /></h4>
+      <h4>{p.name}'s skeleton <Help text={"Each part as a length at the figure's height, the factor of the default adult in its tooltip. The grey band is an adult's range: outside it the row turns amber — a child or a creature is yours to decide. A lock keeps a part through the fit (a point moved on the reference fits the body again); unlocked, the fit takes it back at once."} /></h4>
       <div className="kv">
         <span>height</span><span className="mono">{b.height_m.toFixed(2)} m</span>
         <span>figure</span><span className="segmented" role="group" aria-label="figure">{(['female', 'male'] as const).map((k) => <button key={k} type="button" disabled={!open} className={b.figure === k ? 'active' : ''} onClick={() => set({ figure: k })}
@@ -524,8 +525,10 @@ export function SkeletonParts() {
                   style={{ ['--band-lo' as string]: pct(r.band[0]), ['--band-hi' as string]: pct(r.band[1]) }}
                   onChange={(e) => saveBody(setLocked(b, r.factor, Number(e.target.value)))} />
                 <span className="mono">{lengthCm(b, r.key).toFixed(1)} cm</span>
-                <button type="button" className="quiet lock" aria-pressed={locked} disabled={!open} title={locked ? 'Locked: Fit again leaves it' : 'Fit again sets it'}
-                  onClick={(e) => { e.stopPropagation(); saveBody(locked ? unlock(b, r.factor) : setLocked(b, r.factor, val)) }}>{locked ? <Lock size={12} /> : <LockOpen size={12} />}</button>
+                <button type="button" className="quiet lock" aria-pressed={locked} disabled={!open} title={locked ? 'Locked: the fit leaves it — click to let the fit set it' : 'The fit sets it — click to keep it as it is'}
+                  onClick={(e) => { e.stopPropagation(); if (!locked) { saveBody(setLocked(b, r.factor, val)); return }
+                    saveBody(unlock(b, r.factor))                                      // D191: unlocked, the fit takes it back at once
+                    const pts = bench.points() ?? (v.body_points as Points | null); if (pts && !fitBlocked(v)) void useStory.getState().refitBody(pts as never) }}>{locked ? <Lock size={12} /> : <LockOpen size={12} />}</button>
               </div>
             )
           })}

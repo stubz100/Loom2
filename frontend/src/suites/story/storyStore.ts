@@ -624,6 +624,7 @@ export const useStory = create<StoryState>()((set, get) => {
     },
     refitPart: async (part, points) => {
       const p = get().profile(); const v = get().version(); if (!p || !v) return false
+      await patchWith({})                                                    // D191: an edit still queued goes first (a refit replaces the body)
       try {
         replaceProfile(await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/parts/{part}/refit', { params: { path: { pid: p.id, vid: v.id, part } }, body: { points } })))
         return true
@@ -653,6 +654,7 @@ export const useStory = create<StoryState>()((set, get) => {
     setSkeleton: (on) => set({ skeleton: on }),
     refitBody: async (points) => {
       const p = get().profile(); const v = get().version(); if (!p || !v) return false
+      await patchWith({})                                                    // D191: an edit still queued (an unlock) goes first
       try {
         const r = await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/body/refit', { params: { path: { pid: p.id, vid: v.id } }, body: { points: points as never } }))
         replaceProfile(r.profile as Profile)

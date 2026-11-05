@@ -1,6 +1,6 @@
 # proto01_rig · Rigging the hands, and humanoids that are not human
 
-Status: **proposal, 2026-11-04; answered the same day → D187** (§8); **legs and shoes added → D188** (§9); **E62 run the same evening** (§10); **RG1 built** (§11); **Q9, Q10 answered → D189, RG2 built** (§12); **RG3 built** (§13); **RG4 built** (§14) — the waves done; **D190: Figure | Skeleton, the pictures picked and made in the panel** (§15). Read from the code at `055315e`.
+Status: **proposal, 2026-11-04; answered the same day → D187** (§8); **legs and shoes added → D188** (§9); **E62 run the same evening** (§10); **RG1 built** (§11); **Q9, Q10 answered → D189, RG2 built** (§12); **RG3 built** (§13); **RG4 built** (§14) — the waves done; **D190: Figure | Skeleton, the pictures picked and made in the panel** (§15); **D191: kept when let go, the shell in depth, the thumbs, the shoe's ankle** (§16). Read from the code at `055315e`.
 
 ## 1. The request
 
@@ -389,3 +389,52 @@ automatically assigned". Recorded as D190, then built:
 ![Skeleton › Hands: the part in the panel, the hand picture in use and the ones to pick from, the words, the model cards, how many](img/d190-skeleton-hands.jpg)
 
 ![Skeleton › Feet & legs: the feet picture picked, the A-pose offered beside the feet pictures made, the make on any model](img/d190-skeleton-feet.jpg)
+
+## 16. D191 (2026-11-05): kept when let go; the shell in depth; the thumbs; the shoe's ankle
+
+The author, on char01 (stubz002): "The clay hands twist their thumbs backwards on hand poses"; "Saving the hand/foot skeleton adjustments (I
+think it works with 'fit the hand again' - which is ambiguous) is difficult to find"; "The feet points on the right panel (not the image on
+the left) were quite far out, and one of them cannot be moved (green)"; "figure image and shell are not aligned 100% - not sure if it doesn't
+lead to distortions later"; "I wonder if there should be a palm and back hand image also (feet - from left and right)?"; "With feet, the image
+normally shows 2 feet, is this causing issues with the fitting?". Looked at on a copy of the project (`_rg5`, without its clips), measured
+(`engine/spikes/rg5_depth.cjs`, `rg5_thumb.cjs`), recorded as D191, built:
+
+- **The shell in depth — the cause of the far-out feet, and of the misalignment.** From the front the shell is placed by its picture (the nose,
+  the soles) and matches it to a few centimetres; from the side its depth was the middle of its bounding box, which hands held forward pull
+  forward. char01's shell sat 12 cm behind its skeleton: the knees in front of the trouser legs, the shoulders in front of the jacket, the
+  ankles at the toes — 9 joints outside the shell (*7 joints outside the shell* on the bench). That does distort: the bone heat weighs each
+  vertex to the bones nearest it, so a knee in front of the leg bends the trousers about a point in front of them. `bindProxy` now moves the
+  shell along the figure's facing to where the most joints lie inside it, centred among them (`depthFit`). Measured on every character with a
+  shell: char01 9 → 1 joints outside (moved 12 cm), the man with the newspaper 4 → 1 (11 cm), the woman 0 → 0, Nora 1 → 1, the ghoul 4 → 4 (the
+  ones left have no shell along their line at all — Nora's right ankle, the ghoul's legs under the robe). Every scene's shell binds so.
+- **The feet points.** With the ankle at the toes, the heel, ball and toe found from it fell short and ahead of the shoe. With the shell in
+  place they land on it (*Find the foot again* on char01: rigged). A foot placed by hand is now measured too — its toe against the sole's tip:
+  char01's placement, made while the shell was 12 cm off, says *placed by hand 18 cm off the shoe — drag them onto it or Find the foot again*.
+- **The green point** is the skeleton's own ankle, and it is now dragged like the heel, ball and toe: it is placed by hand as Body › side
+  places it (D183's joint offsets; both ankles, the other mirrored, while the feet are linked), a foot placed by hand staying where it is on
+  the shoe (its offsets take the move back).
+- **No save step.** A point let go on the reference, the hand picture or the feet picture is fitted on the CPU (≈ 70 ms) and kept: *Fit
+  again*, *Fit the hand again* and *Fit the foot again* are gone. *Back to SDPose's …* and *Mirror left to right* are kept at once; unlocking a
+  part fits it from the points again. The foot of each picture says what is kept — *SDPose's points*, or *14 points moved by hand · kept*
+  (char01's hand: the moves made with *Fit the hand again* were saved). A refit first sends any edit still queued (an unlock, a slider).
+- **The thumbs.** A finger's curl turned it toward *index → pinky × its own way* — the palm's normal for a finger along the palm, but for a
+  thumb read spread wide (char01's 61°, standing off the palm as the mannequin's does) a direction along the palm toward the wrist: a fist moved
+  char01's thumb tip 0.84 palm lengths toward the wrist and none toward the palm; the ghoul's 0.99. Every finger now curls toward the palm's one
+  normal, and the thumb also a little across the palm and toward the fingers (0.35 and 0.6 for each 1 toward the palm): a fist's thumb lies over
+  the fingers, a pinch's tip comes to 0.52 palm lengths of the index's (was 1.37). The mannequin's own hands follow the same rule. The clay hand
+  view is framed on the palm, so a fist no longer pulls the camera into the fingers.
+- **Palm and back pictures; left and right feet — not added.** The hand's skeleton is lengths and angles in the palm's plane, which one picture
+  of either face gives (the back of the hand gives the same numbers mirrored); the widths come from the matte. The foot's shape is a profile,
+  which the other side gives again; the left is the right mirrored until it is unlinked. A second picture would pay only for a character
+  whose two sides differ (a hook, a peg leg) — until one does, *Unlink* and shape the other side by hand.
+- **Two feet in the feet picture.** The read takes both feet SDPose finds and measures the near one — the lowest, standing on the floor —
+  when it is sure of it (char01's: the near shoe's heel, toes and ankle). The points drawn over the picture show which was taken; feet that
+  overlap can swap a point between them, dragged back by hand (now kept as it is let go).
+
+![Body › side: before, the shell 12 cm behind the skeleton (9 joints outside); after, the skeleton inside it](img/d191-shell-depth.jpg)
+
+![The shoe: before, the ankle at the toes; after, the old placement 18 cm off the shoe; after Find the foot again](img/d191-feet.jpg)
+
+![The thumb before and now: a fist, a pinch, at rest](img/d191-thumb.jpg)
+
+![Skeleton › Hands: no Fit button; the picture's foot says what is kept](img/d191-hands.jpg)

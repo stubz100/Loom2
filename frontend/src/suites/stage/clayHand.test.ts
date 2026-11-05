@@ -10,7 +10,7 @@ import { projectMarkers } from './passes'
 
 const FINGERS = ['thumb', 'index', 'middle', 'ring', 'pinky'] as const
 
-function synthetic(): THREE.Object3D {
+function synthetic(thumbLift = 0): THREE.Object3D {
   const root = new THREE.Group(); root.name = 'Armature'
   const bone = (name: string, parent: THREE.Object3D, x: number, y: number, z: number) => { const b = new THREE.Bone(); b.name = name; b.position.set(x, y, z); parent.add(b); return b }
   const pelvis = bone('pelvis', root, 0, 1, 0)
@@ -25,7 +25,7 @@ function synthetic(): THREE.Object3D {
     for (const f of FINGERS) {
       const [x, z] = base[f]
       let b = bone(`${f}_01_${side}`, hand, sx * x, 0, z)
-      b = bone(`${f}_02_${side}`, b, sx * 0.035, 0, f === 'thumb' ? 0.01 : 0)
+      b = bone(`${f}_02_${side}`, b, sx * 0.035, f === 'thumb' ? -thumbLift : 0, f === 'thumb' ? 0.01 : 0)   // D191: a thumb may stand off the palm (below it), as the mannequin's
       b = bone(`${f}_03_${side}`, b, sx * 0.025, 0, 0)
       bone(`${f}_04_leaf_${side}`, b, sx * 0.02, 0, 0)
     }
@@ -45,11 +45,11 @@ function ghoul(count: 3 | 4 | 5 = 5, claw = 0.2): HandShape {
   return { count, palm_width: 0.66, claw, fingers }
 }
 
-function build(shape: HandShapes | null) {
+function build(shape: HandShapes | null, thumbLift = 0) {
   const fig = mannequin(new THREE.MeshBasicMaterial(), POSES.stand)
   const holder = new THREE.Group(); holder.add(fig.root)
   holder.updateMatrixWorld(true)
-  const d = makeDetailed(synthetic(), 'unreal', holder, fig.joints, fig.limbs, { handShape: shape })
+  const d = makeDetailed(synthetic(thumbLift), 'unreal', holder, fig.joints, fig.limbs, { handShape: shape })
   holder.updateMatrixWorld(true)
   return { d, fig, holder }
 }
@@ -93,6 +93,23 @@ describe('RG2: the character\'s own hands', () => {
     expect(W(tip).distanceTo(W(cap))).toBeCloseTo(before, 5)
     d.handsOnly(false)
     expect(d.clayHands.every((m) => !m.visible)).toBe(true)
+  })
+
+  it('D191: a thumb read spread wide curls into the palm, across it and toward the fingers — not back toward the wrist', () => {
+    const spread = ghoul(5, 0); spread.fingers.thumb = { ...spread.fingers.thumb!, angle: 65 }
+    const { d, fig, holder } = build({ right: spread, left: null }, 0.03)
+    for (const side of ['r', 'l'] as const) {
+      const marks = side === 'r' ? d.wholebody!.right : d.wholebody!.left
+      const at = (preset: 'open' | 'fist') => { d.follow(fig.joints, { ...d.handPreset('r', preset), ...d.handPreset('l', preset) }); holder.updateMatrixWorld(true); return marks.map(W) }
+      const open = at('open'), fist = at('fist')
+      const palm = open[0].distanceTo(open[9]), ey = open[9].clone().sub(open[0]).normalize()
+      const ex = open[5].clone().sub(open[17]); ex.addScaledVector(ey, -ex.dot(ey)).normalize()     // toward the thumb's side
+      const n = fist[8].clone().sub(open[8]); n.addScaledVector(ey, -n.dot(ey)).addScaledVector(ex, -n.dot(ex)).normalize()   // the palm's side: where the index curls
+      const moved = fist[4].clone().sub(open[4])
+      expect(moved.dot(n) / palm, `${side}: into the palm`).toBeGreaterThan(0.02)
+      expect(-moved.dot(ex) / palm, `${side}: across it`).toBeGreaterThan(0.3)
+      expect(moved.dot(ey) / palm, `${side}: not back toward the wrist`).toBeGreaterThan(-0.3)
+    }
   })
 
   it('without a shape the mannequin\'s hands stay as they were', () => {

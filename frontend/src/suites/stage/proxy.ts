@@ -163,6 +163,8 @@ export function heatWeights(pos: THREE.BufferAttribute | THREE.InterleavedBuffer
 
 export interface Proxy {
   meshes: THREE.SkinnedMesh[]; dispose: () => void; segments: Segment[]; ms: number
+  /** D191: how far the shell was moved along the figure's facing to sit on its joints (metres, + ahead). */
+  depth: number
   /** RG2b: the shoe's ankle and ball turned by a pose's extra (r_ankle, r_ball, l_ankle, l_ball; degrees, toes down + at the ankle, up + at
    *  the ball); nothing without a rigged foot. `points` the rig's ankle, ball and toe a foot (world, at bind) for the tests and the bench. */
   feet: (extra?: Record<string, number[]> | null) => void
@@ -185,6 +187,43 @@ export function insideShell(meshes: THREE.Mesh[], p: THREE.Vector3): boolean {
   const hits = new THREE.Raycaster(new THREE.Vector3(p.x, p.y, p.z + 50), new THREE.Vector3(0, 0, -1)).intersectObjects(meshes, false)
   return hits.length > 0 && p.z <= hits[0].point.z + 1e-3 && p.z >= hits[hits.length - 1].point.z - 1e-3
 }
+/** D191: how far to move a shell along the figure's facing (metres, + ahead) so that the most of `points` (the joints, in the figure's frame)
+ *  lie inside it as insideShell sees it — between where a line along the figure's depth through each enters the shell and leaves it — the
+ *  move centred among them (the largest least margin), the smallest move among equals; 0 when no line meets the shell. `geoms` are placed
+ *  (world), `toFigure` takes the world into the figure's frame. */
+export function depthFit(geoms: THREE.BufferGeometry[], points: THREE.Vector3[], toFigure: THREE.Matrix4, reach = 0.35): number {
+  const front = points.map(() => -Infinity), back = points.map(() => Infinity)
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3()
+  for (const g of geoms) {
+    const pos = g.attributes.position
+    for (let i = 0; i + 2 < pos.count; i += 3) {
+      a.fromBufferAttribute(pos, i).applyMatrix4(toFigure); b.fromBufferAttribute(pos, i + 1).applyMatrix4(toFigure); c.fromBufferAttribute(pos, i + 2).applyMatrix4(toFigure)
+      const x0 = Math.min(a.x, b.x, c.x), x1 = Math.max(a.x, b.x, c.x), y0 = Math.min(a.y, b.y, c.y), y1 = Math.max(a.y, b.y, c.y)
+      const det = (b.y - c.y) * (a.x - c.x) + (c.x - b.x) * (a.y - c.y)
+      if (Math.abs(det) < 1e-14) continue                                      // edge-on to the depth: no crossing
+      for (let k = 0; k < points.length; k++) {
+        const p = points[k]
+        if (p.x < x0 || p.x > x1 || p.y < y0 || p.y > y1) continue
+        const u = ((b.y - c.y) * (p.x - c.x) + (c.x - b.x) * (p.y - c.y)) / det, v = ((c.y - a.y) * (p.x - c.x) + (a.x - c.x) * (p.y - c.y)) / det, w = 1 - u - v
+        if (u < 0 || v < 0 || w < 0) continue
+        const z = u * a.z + v * b.z + w * c.z
+        if (z > front[k]) front[k] = z
+        if (z < back[k]) back[k] = z
+      }
+    }
+  }
+  // the shell moved by s holds point k when back + s ≤ z ≤ front + s: s within [z − front, z − back]
+  const spans = points.map((p, k) => (front[k] > back[k] ? [p.z - front[k], p.z - back[k]] : null)).filter((x): x is number[] => !!x)
+  if (!spans.length) return 0
+  let best = { n: -1, margin: -Infinity, s: 0 }
+  for (let s = -reach; s <= reach + 1e-9; s += 0.002) {
+    let n = 0, margin = Infinity
+    for (const [lo, hi] of spans) if (s >= lo && s <= hi) { n++; margin = Math.min(margin, s - lo, hi - s) }
+    if (n > best.n || (n === best.n && (margin > best.margin + 1e-6 || (Math.abs(margin - best.margin) <= 1e-6 && Math.abs(s) < Math.abs(best.s))))) best = { n, margin, s }
+  }
+  return Math.round(best.s * 1000) / 1000
+}
+
 /** RG2b (D188 F2, F3; D189): a foot's shape as the version keeps it (hands.FootShape) — in foot lengths, seen from the side. */
 export interface FootShape { pitch: number; ankle_up: number; ankle_at: number; heel_up: number; toe_up: number; ball_at: number; length_leg: number | null; stiff?: boolean
   /** RG3 (F4): the heel, the ball and the toe placed by hand — metres from the ankle in the figure's frame (+x its left, +z ahead), the
@@ -360,9 +399,17 @@ export function bindProxy(model: THREE.Object3D, J: Record<Joint, THREE.Object3D
     const g = (m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone())
     g.applyMatrix4(place.clone().multiply(m.matrixWorld))
     for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && !(opts.visible && k === 'color')) g.deleteAttribute(k)
-    if (opts.hands) collapseHands(g.attributes.position as THREE.BufferAttribute, segs, new THREE.Vector3(0, 0, 1).transformDirection(figureRoot.matrixWorld), inHand)   // the figure faces its +z
     placed.push(g)
   })
+  // D191: the depth — the front places the shell by its picture, but its depth was its box's middle, which hands held forward pull forward
+  // (char01's shell sat 12 cm behind its skeleton, 9 joints outside it); it is set where the most joints lie inside it, centred among them
+  const facing = new THREE.Vector3(0, 0, 1).transformDirection(figureRoot.matrixWorld)   // the figure faces its +z
+  const toFigure = figureRoot.matrixWorld.clone().invert()
+  const inner = [...JOINTS.map((j) => J[j]), ...[10, 13].map((k) => opts.markers?.[k]).filter((x): x is THREE.Object3D => !!x)]
+    .map((o) => o.getWorldPosition(new THREE.Vector3()).applyMatrix4(toFigure))
+  const depth = depthFit(placed, inner, toFigure)
+  if (depth) { const t = facing.clone().multiplyScalar(depth); for (const g of placed) g.translate(t.x, t.y, t.z) }
+  if (opts.hands) for (const g of placed) collapseHands(g.attributes.position as THREE.BufferAttribute, segs, facing, inHand)
   const reach = (p: THREE.Vector3): number => {                            // how far the shell's surface is from a point
     let best = Infinity
     const v = new THREE.Vector3()
@@ -412,8 +459,9 @@ export function bindProxy(model: THREE.Object3D, J: Record<Joint, THREE.Object3D
         const at = (k: 'heel' | 'ball' | 'toe') => { const o = new THREE.Vector3(...place[k]); if (side === 'l' && !opts.feet?.shape.left) o.x = -o.x; return A.clone().add(o.applyQuaternion(q)) }
         heel.copy(at('heel')); ballP.copy(at('ball')); toe.copy(at('toe'))
       }
-      const missed = place?.heel ? 0 : Math.max(reach(toe), reach(ballP))
-      if (missed > FOOT_REACH) { footPoints[side] = { ankle: A.clone(), ball: ballP.clone(), toe: toe.clone(), heel: heel.clone(), rigged: false, missed }; continue }
+      // D191: a placed foot measured too (the shell may have moved since it was placed): near the surface, and its toe at the sole's tip
+      const missed = Math.max(reach(toe), reach(ballP), place?.heel && toeAhead > 0.03 ? Math.abs(toe.clone().sub(A).dot(fwd) - toeAhead) : 0)
+      if (!place?.heel && missed > FOOT_REACH) { footPoints[side] = { ankle: A.clone(), ball: ballP.clone(), toe: toe.clone(), heel: heel.clone(), rigged: false, missed }; continue }
       const k = segs.findIndex((g) => g.j === knee.name || g.j === (side === 'r' ? 'r_knee' : 'l_knee'))
       if (k >= 0) segs[k] = { ...segs[k], b: A.clone() }
       knee.updateMatrixWorld(true)
@@ -484,6 +532,6 @@ export function bindProxy(model: THREE.Object3D, J: Record<Joint, THREE.Object3D
       f.ball?.quaternion.setFromAxisAngle(f.axis.clone().negate(), rad(extra?.[`${f.side}_ball`]?.[0] ?? 0))   // toes up +
     }
   }
-  return { meshes, segments: segs, ms, landmark, feet, footPoints,
+  return { meshes, segments: segs, ms, landmark, feet, footPoints, depth,
     dispose: () => { for (const m of meshes) { m.geometry.dispose(); m.removeFromParent() } for (const f of footRig) f.ankle.removeFromParent(); material.dispose() } }
 }

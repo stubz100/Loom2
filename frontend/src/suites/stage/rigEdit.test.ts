@@ -7,7 +7,7 @@ import { DEFAULT_BODY } from './body'
 import { mannequin, POSES } from './builders'
 import type { HandShapes } from './clayHand'
 import { A_POSE, bindProxy, type FootShapes } from './proxy'
-import { footOf, handOf, humanHand, linkFeet, linkHands, linked, placeOffset, plainFoot, setClaw, setCount, setFinger, setFoot, unlinkFeet, unlinkHands } from './rigEdit'
+import { footOf, handOf, humanHand, linkFeet, linkHands, linked, moveAnkle, placeOffset, plainFoot, setClaw, setCount, setFinger, setFoot, unlinkFeet, unlinkHands } from './rigEdit'
 
 describe('RG3: the hands\' edits', () => {
   it('a count, a claw and a finger\'s length (its segments scaled together) on the right while linked', () => {
@@ -60,5 +60,26 @@ describe('RG3: the feet\'s edits', () => {
     expect(l.toe.clone().sub(l.ankle).toArray().map((x) => +x.toFixed(3))).toEqual([-0.01, -0.03, 0.2])   // mirrored
     expect(px.meshes[0].skeleton.bones.length).toBe(12 + 4)
     px.dispose()
+  })
+})
+
+describe("D191: the shoe view's ankle", () => {
+  const same = (_: 'r' | 'l', m: number[]) => m                               // the ankle's parent turned with the figure: a move is the same there
+  const place = { heel: [0, -0.03, -0.05], ball: [0.01, -0.035, 0.12], toe: [0.01, -0.03, 0.2] }
+  it('linked: both ankles placed by hand, the other mirrored; a foot placed by hand stays where it is on the shoe', () => {
+    const b = { ...DEFAULT_BODY, joint_offsets: { r_ankle: [0.01, 0, 0] }, foot_shape: { right: { ...plainFoot(), place }, left: null } as never }
+    const out = moveAnkle(b, 'r', [0.02, 0.01, 0.1], same)
+    expect(out.joint_offsets).toEqual({ r_ankle: [0.03, 0.01, 0.1], l_ankle: [-0.02, 0.01, 0.1] })
+    const pl = (out.foot_shape as FootShapes).right.place as typeof place
+    expect(pl.toe).toEqual([-0.01, -0.04, 0.1])                               // the ankle's move taken back: the toe where it was
+    expect(pl.heel).toEqual([-0.02, -0.04, -0.15])
+  })
+  it("unlinked: that ankle only, that foot's placement only; without a foot of its own, that ankle only", () => {
+    const f = { right: { ...plainFoot(), place }, left: { ...plainFoot(), place } }
+    const out = moveAnkle({ ...DEFAULT_BODY, foot_shape: f as never }, 'l', [0, 0, -0.05], same)
+    expect(out.joint_offsets).toEqual({ l_ankle: [0, 0, -0.05] })
+    expect(((out.foot_shape as FootShapes).left!.place as typeof place).toe).toEqual([0.01, -0.03, 0.25])
+    expect(((out.foot_shape as FootShapes).right.place as typeof place).toe).toEqual(place.toe)
+    expect(moveAnkle({ ...DEFAULT_BODY }, 'r', [0, 0.02, 0], same).joint_offsets).toEqual({ r_ankle: [0, 0.02, 0] })
   })
 })

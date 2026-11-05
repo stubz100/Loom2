@@ -5,7 +5,7 @@ import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_BODY } from './body'
 import { mannequin, POSES } from './builders'
-import { A_POSE, bindProxy, collapseHands, FACE_LANDMARKS, HAND_M, handRegion, heatWeights, proximityWeights, type Segment } from './proxy'
+import { A_POSE, bindProxy, collapseHands, depthFit, FACE_LANDMARKS, HAND_M, handRegion, heatWeights, insideShell, proximityWeights, type Segment } from './proxy'
 
 const soup = (geo: THREE.BufferGeometry) => (geo.index ? geo.toNonIndexed() : geo).attributes.position as THREE.BufferAttribute
 const weightOf = (s: { idx: Uint16Array; wts: Float32Array }, i: number, seg: number) => { let w = 0; for (let k = 0; k < 4; k++) if (s.idx[i * 4 + k] === seg) w += s.wts[i * 4 + k]; return w }
@@ -89,5 +89,36 @@ describe('the shell as the figure (CS3)', () => {
     expect(at(0).distanceTo(fig.joints.head.getWorldPosition(new THREE.Vector3()))).toBeCloseTo(nose.clone().setZ(front).distanceTo(fig.joints.head.getWorldPosition(new THREE.Vector3())), 1)   // it turns with the head
     undo(); fig.joints.neck.rotation.y = 0; root.updateMatrixWorld(true)
     expect(at(0).distanceTo(nose)).toBeLessThan(1e-6)
+  })
+})
+
+describe('D191: the shell in depth', () => {
+  // a body 25 cm deep standing 12 cm behind its joints, and hands held 40 cm forward: the box's middle is pulled ahead of the body
+  const body = () => new THREE.BoxGeometry(0.34, 1.6, 0.25, 4, 16, 2).translate(0, 0.85, -0.12)
+  const hands = () => new THREE.BoxGeometry(0.7, 0.1, 0.1).translate(0, 1.0, 0.35)
+  const soupOf = (...gs: THREE.BufferGeometry[]) => gs.map((g) => g.toNonIndexed())
+
+  it('moves the shell where the most joints lie inside it, centred among them; nothing through a point is no vote', () => {
+    const pts = [[0, 0.5, 0], [0, 1.0, 0], [0.05, 1.3, 0], [2, 1, 0]].map((p) => new THREE.Vector3(...p))   // the last: no shell through it
+    const s = depthFit(soupOf(body(), hands()), pts, new THREE.Matrix4())
+    expect(s).toBeCloseTo(0.12, 2)                                            // the body's middle onto the joints, the hands' box ignored
+    expect(depthFit([], pts, new THREE.Matrix4())).toBe(0)
+    const turned = new THREE.Matrix4().makeRotationY(Math.PI / 2)             // the figure's frame: a figure turned on the stage
+    const g = soupOf(body(), hands()).map((x) => x.applyMatrix4(turned))
+    expect(depthFit(g, pts, turned.clone().invert())).toBeCloseTo(0.12, 2)
+  })
+
+  it('a shell bound to a figure holds its joints though its hands reach forward', () => {
+    const fig = mannequin(new THREE.MeshBasicMaterial(), POSES.stand, A_POSE, DEFAULT_BODY)
+    const root = new THREE.Group(); root.add(fig.root); root.updateMatrixWorld(true)
+    const statue = new THREE.Group()
+    statue.add(new THREE.Mesh(new THREE.BoxGeometry(0.42, 1.75, 0.26, 6, 30, 4).translate(0, 0.875, 0)), new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.1, 0.12).translate(0, 0.9, 0.5)))
+    const px = bindProxy(statue, fig.joints, fig.limbs, root, { preset: 'stand', joints: A_POSE }, { visible: true, markers: fig.markers })
+    expect(px.depth).toBeGreaterThan(0.15)                                    // the box's middle was 19 cm ahead of the body's: moved back onto it
+    const plain = px.meshes.map((m) => new THREE.Mesh(m.geometry, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide })))
+    plain.forEach((m) => m.updateMatrixWorld(true))
+    const inside = (['root', 'spine', 'r_hip', 'l_hip', 'r_knee', 'l_knee'] as const).filter((j) => insideShell(plain, fig.joints[j].getWorldPosition(new THREE.Vector3())))
+    expect(inside.length).toBe(6)
+    px.dispose()
   })
 })

@@ -2,6 +2,7 @@
 // (body.hand_shape, body.foot_shape; orchestrator hands.py): the finger count, the claws, a finger's length and width, a foot's numbers, its
 // stiff sole (D189) and its placement by hand, the left unlinked from the right or linked back (Q2). The Inspector saves the result.
 import type { FingerName, FingerShape, HandShape, HandShapes } from './clayHand'
+import type { Body } from './body'
 import type { FootShape, FootShapes } from './proxy'
 
 export type Side = 'r' | 'l'
@@ -72,4 +73,31 @@ export function placeOffset(at: [number, number, number], ankle: [number, number
   const o = [at[0] - ankle[0], at[1] - ankle[1], at[2] - ankle[2]]
   if (side === 'l' && isLinked) o[0] = -o[0]
   return o.map((x) => Math.round(Math.max(-0.6, Math.min(0.6, x)) * 10000) / 10000)
+}
+
+/** D191: the shoe view's ankle dragged by `move` (metres, the figure's frame) — the skeleton's ankle placed by hand as Body › side places it
+ *  (D183's joint_offsets: `toLocal` turns a move into the ankle's parent's frame); while the feet are linked both ankles move, the other
+ *  mirrored. A foot placed by hand (its heel, ball and toe in metres from its ankle) takes the move back, so it stays where it is on the shoe. */
+export function moveAnkle(b: Body, side: Side, move: number[], toLocal: (side: Side, move: number[]) => number[]): Body {
+  const feet = (b.foot_shape as FootShapes | null | undefined) ?? null
+  const both = !!feet && linked(feet)
+  const mirror = (v: number[]) => [-v[0], v[1], v[2]]
+  const moves: Partial<Record<Side, number[]>> = both ? { [side]: move, [side === 'r' ? 'l' : 'r']: mirror(move) } : { [side]: move }
+  const offsets = { ...(b.joint_offsets ?? {}) }
+  for (const [k, m] of Object.entries(moves) as [Side, number[]][]) {
+    const was = offsets[`${k}_ankle`] ?? [0, 0, 0], d = toLocal(k, m)
+    offsets[`${k}_ankle`] = was.map((x, i) => Math.max(-0.6, Math.min(0.6, Math.round((x + d[i]) * 10000) / 10000)))
+  }
+  if (!feet) return { ...b, joint_offsets: offsets }
+  const back = (f: FootShape, m: number[]): FootShape => {
+    const pl = f.place as Record<'heel' | 'ball' | 'toe', number[]> | null | undefined
+    if (!pl?.heel || !pl.ball || !pl.toe) return f
+    const at = (k: 'heel' | 'ball' | 'toe') => pl[k].map((x, i) => Math.round(Math.max(-0.6, Math.min(0.6, x - m[i])) * 10000) / 10000)
+    return { ...f, place: { heel: at('heel'), ball: at('ball'), toe: at('toe') } }
+  }
+  const next = clone(feet)
+  if (both) next.right = back(next.right, moves.r!)                         // linked: the right's placement is both (the left mirrored)
+  else if (side === 'l' && next.left) next.left = back(next.left, move)
+  else next.right = back(next.right, move)
+  return { ...b, joint_offsets: offsets, foot_shape: next as never }
 }

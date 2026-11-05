@@ -34,6 +34,10 @@ export interface Detailed {
 export const HAND_PRESETS = ['open', 'relaxed', 'fist', 'point', 'grip', 'pinch'] as const
 export type HandPreset = (typeof HAND_PRESETS)[number]
 const FINGER_NAMES = ['thumb', 'index', 'middle', 'ring', 'pinky'] as const
+/** D191: a thumb curls toward the palm's side, and for each unit of it this much across the palm (toward the pinky) and toward the fingers — a
+ *  fist's thumb lies over the fingers, a pinch's meets the index (char01: 0.52 palms apart, was 1.37). */
+const THUMB_ACROSS = 0.35
+const THUMB_UP = 0.6
 type Finger = (typeof FINGER_NAMES)[number]
 /** Curl in degrees per finger joint (knuckle, middle, tip) for each preset; the thumb's three joints too. */
 const CURL: Record<HandPreset, Record<Finger, [number, number, number]>> = {
@@ -230,25 +234,32 @@ export function makeDetailed(mannequin: THREE.Object3D, rig: RigName, parent: TH
     for (const b of spineChain) setWorld(b, spineTurn.clone().multiply(spineRest.get(b.uuid)!))
     for (const l of LINKS) if (l.joint !== 'spine') setWorld(part(l.bone), rotIn(Jt[l.joint]).multiply(alignInv.get(l.joint)!).multiply(restRot.get(l.bone)!))
   }
-  // the curl axis of each finger joint, in its own rest frame: across the finger and the palm's normal (index → pinky × the finger's way,
-  // turned per side so that a positive curl closes the hand)
+  // the curl axis of each finger joint, in its own rest frame: across the finger, square to the palm's side (the palm's normal, turned per
+  // side so that a positive curl closes the hand). D191: the palm's one normal for every finger — it was index → pinky × the finger's own
+  // way, which for a thumb read spread wide (char01's 61°) lies along the palm and curled the thumb back toward the wrist; the thumb now
+  // curls toward the palm, across it and toward the fingers (THUMB_ACROSS, THUMB_UP)
   const curlAxis = new Map<string, THREE.Vector3>()
   const fanAxis = new Map<string, THREE.Vector3>()                          // CS2: the palm's normal in each knuckle's rest frame (the fingers' spread)
   for (const side of ['r', 'l'] as const) {
     const hand = part(side === 'r' ? 'r_hand' : 'l_hand')
     const b = (f: Finger, k: number) => bones.get(norm(fingerBone(rig, side, f, k)))
-    const i1 = b('index', 1), p1 = b('pinky', 1)
+    const i1 = b('index', 1), p1 = b('pinky', 1), m1 = b('middle', 1)
     if (!i1 || !p1) continue
     const across = inFig(i1).sub(inFig(p1))
+    const up = (m1 ? inFig(m1) : inFig(i1).lerp(inFig(p1), 0.5)).sub(inFig(hand)).normalize()            // the wrist to the knuckles
+    const normal = (side === 'r' ? across.clone().cross(up) : up.clone().cross(across)).normalize()     // the palm's side
+    const toPinky = across.clone().addScaledVector(up, -across.dot(up)).normalize().negate()
     for (const f of FINGER_NAMES) for (const k of [1, 2, 3]) {
       const bone = b(f, k), next = b(f, k + 1) ?? bone?.children[0]
       if (!bone) continue
       const d = (next ? inFig(next) : inFig(bone).add(inFig(bone).sub(inFig(b(f, k - 1) ?? hand)))).sub(inFig(bone)).normalize()
-      const palm = side === 'r' ? across.clone().cross(d) : d.clone().cross(across)
+      const toward = f === 'thumb' ? normal.clone().addScaledVector(toPinky, THUMB_ACROSS).addScaledVector(up, THUMB_UP) : normal.clone()
+      const palm = toward.addScaledVector(d, -toward.dot(d))
+      if (palm.lengthSq() < 1e-8) continue                                    // a finger along the palm's normal: no curl to give it
       const axisFig = d.clone().cross(palm.normalize()).normalize()
       const restQ = rotIn(bone)
       curlAxis.set(bone.name, axisFig.applyQuaternion(restQ.clone().invert()))
-      if (k === 1) fanAxis.set(bone.name, palm.clone().normalize().applyQuaternion(restQ.clone().invert()))
+      if (k === 1) fanAxis.set(bone.name, normal.clone().addScaledVector(d, -normal.dot(d)).normalize().applyQuaternion(restQ.clone().invert()))   // spread about the palm's normal
     }
   }
   const FAN: Record<Finger, number> = { thumb: 0, index: 1, middle: 0, ring: -1, pinky: -2 }   // CS2: each finger's share of the spread

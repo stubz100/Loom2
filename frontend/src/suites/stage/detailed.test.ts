@@ -68,9 +68,11 @@ describe('the Detailed level follows the figure (CA1)', () => {
     const holder = new THREE.Group(); holder.add(fig.root); holder.updateMatrixWorld(true)
     const d = makeDetailed(rig, 'unreal', holder, fig.joints, fig.limbs)
     d.handsOnly(true)
-    expect(Array.from(g.index!.array)).toEqual([0, 1, 2])
+    expect(Array.from(skin.geometry.index!.array)).toEqual([0, 1, 2])
+    expect(Array.from(g.index!.array)).toEqual([0, 1, 2, 3, 4, 5])               // RG2: the clones' shared geometry is not cut — this figure's own index is
+    expect(skin.geometry.attributes.position).toBe(g.attributes.position)       // over the same attributes
     d.handsOnly(false)
-    expect(Array.from(g.index!.array)).toEqual([0, 1, 2, 3, 4, 5])
+    expect(Array.from(skin.geometry.index!.array)).toEqual([0, 1, 2, 3, 4, 5])
   })
   it('keeps following when the pose changes, and turns a bone of its own', () => {
     const mat = new THREE.MeshBasicMaterial()

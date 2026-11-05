@@ -8,6 +8,7 @@
 // hand and foot points it carries start at the figure's wrist and ankle points; (S2) its fingers rest as the character's hands do.
 import * as THREE from 'three'
 import type { Joint, Limbs } from './builders'
+import { buildClayHand, fingerPoints, shapeOf, shownFingers, type HandShapes, type PalmFrame } from './clayHand'
 import { LINKS, RIGS, norm, type Part, type RigName } from './motion/retarget'
 
 export interface Detailed {
@@ -23,8 +24,11 @@ export interface Detailed {
   wholebody: { feet: THREE.Object3D[]; left: THREE.Object3D[]; right: THREE.Object3D[] } | null
   /** CS3 (proto01_UIcast 06 §2.5): drawn as its hands only — the character's shell is its body, and Pixal3D's hands are mittens, so the
    *  hand rig keeps its fingers. Each skinned mesh keeps the triangles whose three corners are weighted mostly (≥ 0.5) to a hand's bones;
-   *  false gives the whole mannequin back. A cut of the geometry, so every pass (an override material) draws the hands alone too. */
+   *  false gives the whole mannequin back. A cut of the geometry, so every pass (an override material) draws the hands alone too. RG2
+   *  (D187 R3): a character with its own hands (`handShape`) is drawn with its clay hands instead — the mannequin then shows nothing. */
   handsOnly: (on: boolean) => void
+  /** RG2: the clay hands built from the character's hand shape (empty without one). */
+  clayHands: THREE.Mesh[]
 }
 
 export const HAND_PRESETS = ['open', 'relaxed', 'fist', 'point', 'grip', 'pinch'] as const
@@ -53,7 +57,8 @@ const rad = THREE.MathUtils.degToRad
 /** The default dummy's leg (hip joint → ankle, builders.ts at ×1): the size the starter mannequin's head is drawn for. */
 const DEFAULT_LEG = 0.87
 /** What a figure's body gives its Detailed mannequin beyond the limb lengths (body.ts; none: the default adult, relaxed hands). */
-export interface DetailedBody { hands?: number; feet?: number; head?: number; handRest?: { preset: HandPreset; curl: number; spread?: number; thumb?: number } | null; feetOut?: number }
+export interface DetailedBody { hands?: number; feet?: number; head?: number; handRest?: { preset: HandPreset; curl: number; spread?: number; thumb?: number } | null; feetOut?: number
+  handShape?: HandShapes | null }                                         // RG2 (D187): the character's own hands (body.hand_shape)
 
 function bonesOf(root: THREE.Object3D): Map<string, THREE.Object3D> {
   const m = new Map<string, THREE.Object3D>()
@@ -129,6 +134,37 @@ export function makeDetailed(mannequin: THREE.Object3D, rig: RigName, parent: TH
   for (const p of ['r_hand', 'l_hand'] as Part[]) part(p).scale.multiplyScalar(size.hands ?? 1)
   for (const p of ['r_foot', 'l_foot'] as Part[]) part(p).scale.multiplyScalar(size.feet ?? 1)
   object.updateMatrixWorld(true)
+  // RG2 (D187 R2, R5): the character's own hands — each finger's bones moved to its knuckle, its direction and its lengths, in palm lengths
+  // of the rig's palm at the character's size (`hands`, fitted from the A-pose's palm); the curl axes, the presets and the guide's markers
+  // below are then the character's. A finger keeps the rig's own lift off the palm (a thumb stands off it) and its knuckle's depth.
+  type Chain = { bones: THREE.Object3D[]; points: THREE.Vector3[] }
+  const shaped: Partial<Record<'r' | 'l', { pf: PalmFrame; chains: Partial<Record<Finger, Chain>> }>> = {}
+  if (size.handShape) for (const side of ['r', 'l'] as const) {
+    const hand = part(side === 'r' ? 'r_hand' : 'l_hand')
+    const fb = (f: Finger, k: number) => bones.get(norm(fingerBone(rig, side, f, k)))
+    const m1 = fb('middle', 1), i1 = fb('index', 1), p1 = fb('pinky', 1), t2 = fb('thumb', 2) ?? fb('thumb', 1)
+    if (!m1 || !i1 || !p1 || !t2) continue
+    const W = inFig(hand), L = W.distanceTo(inFig(m1))
+    if (L < 1e-6) continue
+    const ey = inFig(m1).sub(W).normalize()
+    const ex = inFig(i1).sub(inFig(p1))
+    ex.addScaledVector(ey, -ex.dot(ey)).normalize()
+    if (inFig(t2).sub(W).dot(ex) < 0) ex.negate()                            // +x toward the thumb, as the shape is read (hands.py)
+    const pf: PalmFrame = { wrist: W, ex, ey, n: ex.clone().cross(ey).normalize(), L }
+    const shape = shapeOf(size.handShape, side)
+    const chains: Partial<Record<Finger, Chain>> = {}
+    for (const f of FINGER_NAMES) {
+      const fs = shape.fingers[f], js = [1, 2, 3].map((k) => fb(f, k))
+      if (!fs || js.some((b) => !b)) continue
+      const k0 = inFig(js[0]!), lift = inFig(js[1]!).sub(k0).normalize().dot(pf.n), depth = k0.clone().sub(W).dot(pf.n)
+      const pts = fingerPoints(fs, pf, lift, depth)
+      js.forEach((b, k) => put(b!, pts[k]))
+      const leaf = fb(f, 4)
+      if (leaf) put(leaf, pts[3])
+      chains[f] = { bones: js as THREE.Object3D[], points: pts }
+    }
+    shaped[side] = { pf, chains }
+  }
   // rest rotations and directions in the figure's frame
   const figInv = new THREE.Quaternion()
   const restRot = new Map<string, THREE.Quaternion>()
@@ -254,8 +290,9 @@ export function makeDetailed(mannequin: THREE.Object3D, rig: RigName, parent: TH
         const js = [1, 2, 3].map((k) => bones.get(norm(fingerBone(rig, side, f, k)))!)
         for (const j of js) hands[side].push(markerAt(j, inFig(j)))
         const leaf = bones.get(norm(fingerBone(rig, side, f, 4)))
-        const tip = leaf ? inFig(leaf) : inFig(js[2]).add(inFig(js[2]).sub(inFig(js[1])).multiplyScalar(0.8))
+        const tip = shaped[side]?.chains[f]?.points[3] ?? (leaf ? inFig(leaf) : inFig(js[2]).add(inFig(js[2]).sub(inFig(js[1])).multiplyScalar(0.8)))
         hands[side].push(markerAt(js[2], tip))
+        if (size.handShape && !shownFingers(shapeOf(size.handShape, side)).includes(f)) for (const m of hands[side].slice(-4)) m.userData.hidden = true   // Q4: the guide leaves it out
       }
     }
     const feet: THREE.Object3D[] = []
@@ -278,17 +315,37 @@ export function makeDetailed(mannequin: THREE.Object3D, rig: RigName, parent: TH
     }
     wholebody = { feet, left: hands.l, right: hands.r }
   }
+  // RG2 (D187 R3): the clay hands on the shaped bones, hidden until the figure is drawn as its shell (handsOnly)
+  const clayMat = ((): THREE.Material => { let mat: THREE.Material | null = null; mannequin.traverse((o) => { const m = o as THREE.Mesh; if (!mat && m.isMesh) mat = Array.isArray(m.material) ? m.material[0] : m.material }); return mat ?? new THREE.MeshLambertMaterial({ color: 0xb4b4b8 }) })()
+  const figScale = parent.getWorldScale(new THREE.Vector3()).x
+  const toLocal = (bone: THREE.Object3D, figPoint: THREE.Vector3) => { bone.updateWorldMatrix(true, false); return bone.worldToLocal(figPoint.clone().applyMatrix4(parent.matrixWorld)) }
+  const scaleOf = (bone: THREE.Object3D) => figScale / Math.max(1e-9, bone.getWorldScale(new THREE.Vector3()).x)
+  const clayHands: THREE.Mesh[] = []
+  for (const side of ['r', 'l'] as const) {
+    const sh = shaped[side]
+    if (size.handShape && sh) clayHands.push(...buildClayHand(shapeOf(size.handShape, side), sh.pf, part(side === 'r' ? 'r_hand' : 'l_hand'), sh.chains, toLocal, scaleOf, clayMat))
+  }
+  for (const m of clayHands) { m.visible = false; m.castShadow = true; m.receiveShadow = true }
   const handBones = new Set<THREE.Object3D>()
   for (const h of [part('r_hand'), part('l_hand')]) h.traverse((b) => { handBones.add(b) })
   const whole = new Map<THREE.BufferGeometry, THREE.BufferAttribute | null>()
+  const owned = new WeakSet<THREE.Mesh>()
   const handsOnly = (on: boolean) => {
     object.traverse((o) => {
       const m = o as THREE.SkinnedMesh
       if (!m.isSkinnedMesh) return
+      if (!owned.has(m)) {                                                     // RG2: the clones share one geometry (SkeletonUtils) — this figure's
+        const src = m.geometry, own = new THREE.BufferGeometry()               // cut must not cut the others': its own index over the shared attributes
+        for (const k of Object.keys(src.attributes)) own.setAttribute(k, src.attributes[k])
+        own.setIndex(src.index); for (const gr of src.groups) own.addGroup(gr.start, gr.count, gr.materialIndex)
+        own.boundingBox = src.boundingBox?.clone() ?? null; own.boundingSphere = src.boundingSphere?.clone() ?? null
+        m.geometry = own; owned.add(m)
+      }
       const g = m.geometry
       if (!whole.has(g)) whole.set(g, g.index)
       const full = whole.get(g) ?? null
       if (!on) { g.setIndex(full); return }
+      if (clayHands.length) { g.setIndex([]); return }                     // RG2: its own clay hands stand in for the mannequin's
       const si = g.attributes.skinIndex, sw = g.attributes.skinWeight, n = g.attributes.position.count
       const hand = m.skeleton.bones.map((b) => handBones.has(b))
       const weight = new Float32Array(n)
@@ -298,7 +355,8 @@ export function makeDetailed(mannequin: THREE.Object3D, rig: RigName, parent: TH
       for (let t = 0; t + 2 < tri.length; t += 3) if (weight[tri[t]] >= 0.5 && weight[tri[t + 1]] >= 0.5 && weight[tri[t + 2]] >= 0.5) kept.push(tri[t], tri[t + 1], tri[t + 2])
       g.setIndex(kept)
     })
+    for (const m of clayHands) m.visible = on
   }
   follow(J)
-  return { object, bones, follow, handPreset, wholebody, handsOnly }
+  return { object, bones, follow, handPreset, wholebody, handsOnly, clayHands }
 }

@@ -18,6 +18,7 @@ import { gazeTarget, resolvePins, type Contacts, type Frames, type Gaze } from '
 import { normalOf, placeSet, setFaces, type Face, type PlaceSetDoc } from './placeSet'
 import { clipFrame, crowdPlane, LIFT, PACKED } from './crowd'
 import { makeDetailed, type Detailed, type HandPreset } from './detailed'
+import type { HandShapes } from './clayHand'
 import { measure } from './motion/path'
 import { bindProxy, FACE_LANDMARKS, FEET_LANDMARKS, shellPoints, shellStance, type Landmark, type Proxy } from './proxy'
 import { depthMaterial, depthRangeFor, drawPose, maskColour, projectMarkers, toBlob, type Keypoint, type PassName, type WholeBody } from './passes'
@@ -871,7 +872,8 @@ export class StageEngine {
       if (this.disposed || this.entries.get(id) !== e || !e.figure) return
       e.holder.updateMatrixWorld(true)
       const b = e.doc.body
-      const d = makeDetailed(root, rig, e.figure.joints.root.parent!, e.figure.joints, e.figure.limbs, { hands: b?.hands, feet: b?.feet, head: b?.head, handRest: b?.hand_rest ?? null, feetOut: b?.feet_out ?? 0 })   // CS1 (S1, S2); CS2
+      const d = makeDetailed(root, rig, e.figure.joints.root.parent!, e.figure.joints, e.figure.limbs, { hands: b?.hands, feet: b?.feet, head: b?.head, handRest: b?.hand_rest ?? null, feetOut: b?.feet_out ?? 0,
+        handShape: (b?.hand_shape as HandShapes | null | undefined) ?? null })   // CS1 (S1, S2); CS2; RG2 (D187): its own hands
       d.object.traverse((c) => { c.userData.stageId = id; const m = c as THREE.Mesh; if (m.isMesh) { m.castShadow = !e.proxy; m.receiveShadow = true } })
       const inside = (o: THREE.Object3D) => { for (let p: THREE.Object3D | null = o; p; p = p.parent) if (p === d.object) return true; return false }
       e.figure.root.traverse((c) => { const mesh = c as THREE.Mesh; if (mesh.isMesh && !mesh.userData.joint && !mesh.userData.ik && !mesh.userData.pin && !inside(mesh)) mesh.visible = false })

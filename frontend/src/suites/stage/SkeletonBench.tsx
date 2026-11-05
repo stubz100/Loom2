@@ -23,6 +23,7 @@ import { shellBlocked, shellFromArmsDown, useStory, versionPointsOfShell } from 
 import { DEFAULT_BODY, ENDS, placedCount, type Body, type End } from './body'
 import { JOINTS, mannequin, POSE_NAMES, POSES, type Joint, type Mannequin } from './builders'
 import { HAND_PRESETS, makeDetailed } from './detailed'
+import type { HandShapes } from './clayHand'
 import { bindProxy, insideShell, setShellPoints, stanceOf } from './proxy'
 import { COCO, cropOf, defaultOf, disagreements, dragFactor, lengthCm, outside, pictureMap, ROWS, seen, setLocked, unlock, type Points, type RowKey, type XY } from './skeleton'
 import { handFromPicture, readPicture, setUi, ui, useUi } from './benchState'
@@ -85,7 +86,7 @@ function useOverlay(body: Body, stance: Record<string, number[]>, look: Look, sh
         } else {
           const { mannequinClone } = await import('./motion/mannequins')
           const { root, rig } = await mannequinClone(body.figure ?? 'female', clay)
-          const d = makeDetailed(root, rig, fig.joints.root.parent!, fig.joints, fig.limbs, { hands: body.hands, feet: body.feet, head: body.head, handRest: body.hand_rest, feetOut: body.feet_out })
+          const d = makeDetailed(root, rig, fig.joints.root.parent!, fig.joints, fig.limbs, { hands: body.hands, feet: body.feet, head: body.head, handRest: body.hand_rest, feetOut: body.feet_out, handShape: (body.hand_shape as HandShapes | null | undefined) ?? null })
           d.follow(fig.joints, null)
         }
         const tl = map.toFig([0, 0]), br = map.toFig([w, h])
@@ -377,7 +378,7 @@ function FigurePane({ body, stance, shell, look, points }: { body: Body; stance:
         setOutside([])
         void import('./motion/mannequins').then((m) => m.mannequinClone(body.figure ?? 'female', clay)).then(({ root, rig }) => {
           if (!live) return
-          const d = makeDetailed(root, rig, fig.joints.root.parent!, fig.joints, fig.limbs, { hands: body.hands, feet: body.feet, head: body.head, handRest: body.hand_rest, feetOut: body.feet_out })
+          const d = makeDetailed(root, rig, fig.joints.root.parent!, fig.joints, fig.limbs, { hands: body.hands, feet: body.feet, head: body.head, handRest: body.hand_rest, feetOut: body.feet_out, handShape: (body.hand_shape as HandShapes | null | undefined) ?? null })
           d.follow(fig.joints, null)
           d.object.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) { (m.material as THREE.MeshLambertMaterial).transparent = true; (m.material as THREE.MeshLambertMaterial).opacity = 0.55 } })
         }).catch(() => { fig.root.traverse((o) => { if ((o as THREE.Mesh).isMesh && !o.userData.joint) o.visible = true }) })   // no starter set: the boxes

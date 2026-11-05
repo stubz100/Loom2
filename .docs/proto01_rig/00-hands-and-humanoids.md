@@ -1,6 +1,6 @@
 # proto01_rig · Rigging the hands, and humanoids that are not human
 
-Status: **proposal, 2026-11-04; answered the same day → D187** (§8); **legs and shoes added → D188** (§9); **E62 run the same evening** (§10); **RG1 built** (§11). Read from the code at `055315e`.
+Status: **proposal, 2026-11-04; answered the same day → D187** (§8); **legs and shoes added → D188** (§9); **E62 run the same evening** (§10); **RG1 built** (§11); **Q9, Q10 answered → D189, RG2a built** (§12). Read from the code at `055315e`.
 
 ## 1. The request
 
@@ -258,3 +258,40 @@ by hand (Q4, RG3).
 ![The ghoul's hand and feet pictures, the picked ones with their reads](img/rg1-ghoul-read.jpg)
 
 ![World › Make with the hand framing on](img/rg1-world-make-hand.jpg)
+
+## 12. Q9 and Q10 answered; RG2a built (2026-11-05): the character's own hands drawn and guided
+
+**The author, 2026-11-05:** "Answer to questions as per your recommendation, continue" → **D189**: digitigrade legs wait for Q7's later
+study (until then a humanoid leg with a raised heel); each foot has a *stiff sole* switch, off by default, bending the shoe at the ankle
+only (`FootShape.stiff`, set in the Feet & legs view; RG2b's rig honours it).
+
+**RG2 is built in two parts.** Clips fold the ankles into the shins (the retargeter keeps the twelve joints and turns each foot only to
+point the knee's hinge), so nothing flexes a foot today and a rigged shoe would not bend. **RG2a** builds the hands now; **RG2b** carries the
+ankle's and the ball's turn from the clips (a channel of the pose of its own, rig-independent) and binds the shell's shoe to them.
+
+**RG2a, the hands** (R3, R5):
+
+- **The finger bones are the character's.** On the Detailed level, each finger's bones move to its knuckle, its direction and its three
+  lengths from `body.hand_shape`, in palm lengths of the rig's palm at the character's size (`hands`); a finger keeps the rig's own lift off
+  the palm, so a thumb still stands off it. The curl axes, the hand presets (open, relaxed, fist, point, grip, pinch), the rest hand and
+  every key then turn the character's own fingers — and the guide's 21 points ride on them, so **the pose pass draws the character's
+  hands** (R5). A hidden finger (Q4's count) has its points drawn at confidence 0, which the guide skips (client and server alike).
+- **The clay hand** (R3, `stage/clayHand.ts`): a palm slab (the hull of the wrist's sides and the shown fingers' bases, 0.3 palm thick),
+  each finger three tapered capsules of its width, a claw a cone at the tip (the hand's claw, a finger's own when set). Every piece rides on
+  its bone; drawn on a shell in place of the mannequin's hand, in clay, in every pass.
+- A character without a read hand keeps the mannequin's hand and the guide it had; the skeleton bench's rest-hand fit and its views take the
+  character's hand too.
+- **Found on the way:** the mannequin's clones share one geometry, so cutting one figure to its hands (CS3) cut every figure's — a figure
+  next to a shell lost its body, and the clay hand would have hidden every other character's hands. Each figure now cuts its own index over
+  the shared attributes.
+
+**Measured** (the ghoul, `F:/loom2-projects/_e62`): on the real mannequin the guide's middle finger is 0.833 palms with its own hand (its
+read) against the mannequin's 0.91, the index 0.715 against 0.868 (`engine/spikes/rg2_hands.cjs`). Its final layer — "the skeleton
+changed" since its hand was read — re-rendered through the product (the guide drawn again from Clay, performed on its seed 62, Wan Animate
+128 s, the matte 25 s): **C**, its own hand, draws long, bony, spread fingers with their claws — between E62's A (the mannequin's hand, a
+short curled claw) and B (the fingers stretched 1.5× by hand). The long thin rod from the raised hand to the waist in the clay pass is the
+shell's own (its folded mitten stretched between wrist and robe as the arm rises), there before RG2.
+
+![The ghoul's right hand, palm side: its own clay hand and the guide's points (left), the mannequin's (right), open and at rest](img/rg2-clay-hand.jpg)
+
+![The ghoul's raised hand on seed 62: A the mannequin's hands, B fingers 1.5× by hand, C its own hand — guide and take](img/rg2-guide-own-hand.jpg)

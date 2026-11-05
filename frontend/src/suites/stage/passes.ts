@@ -56,7 +56,9 @@ export function projectPoints(points: THREE.Vector3[][], cam: THREE.Camera, w: n
 
 /** Each figure's 18 markers (world positions after updateMatrixWorld) projected. */
 export function projectMarkers(markers: THREE.Object3D[][], cam: THREE.Camera, w: number, h: number): Keypoint[][] {
-  return projectPoints(markers.map((ms) => ms.map((m) => m.getWorldPosition(new THREE.Vector3()))), cam, w, h)
+  const out = projectPoints(markers.map((ms) => ms.map((m) => m.getWorldPosition(new THREE.Vector3()))), cam, w, h)
+  markers.forEach((ms, i) => ms.forEach((m, k) => { if (m.userData.hidden) out[i][k] = [out[i][k][0], out[i][k][1], 0] }))   // RG2 (Q4): a hidden finger is not drawn
+  return out
 }
 
 /** OpenPose COCO-18 as the ControlNet preprocessors draw it: limbs as soft ellipses, joints as dots, on black. */

@@ -62,7 +62,8 @@ describe('RG1: the slot says what the read saw', () => {
     expect(partRead(read, 'hand', job('done'), 'prf_g')).toEqual({ state: 'read', text: '4 fingers · middle 0.90 palms' })
     expect(partRead(v({ hand_ref_asset_id: 'ast_h', hand_note: 'no hand found in the picture' }), 'hand', {}, 'prf_g')).toEqual({ state: 'failed', text: 'not read', note: 'no hand found in the picture' })
     expect(partRead(v({ hand_ref_asset_id: 'ast_2', hand_points: { from: 'ast_h' } }), 'hand', {}, 'prf_g').state).toBe('unread')   // a newer picture
-    const feet = v({ anim_ref_side_asset_id: 'ast_s', feet_points: { from: 'ast_s' }, body: { foot_shape: { right: { pitch: 6.4 }, left: null } } as never })
+    expect(partRead(v({ anim_ref_side_asset_id: 'ast_s', feet_points: { from: 'ast_s' } }), 'feet', {}, 'prf_g').state).toBe('unread')   // D190: the side view is not the feet picture by itself
+    const feet = v({ anim_ref_side_asset_id: 'ast_s', feet_ref_asset_id: 'ast_s', feet_points: { from: 'ast_s' }, body: { foot_shape: { right: { pitch: 6.4 }, left: null } } as never })
     expect(partRead(feet, 'feet', {}, 'prf_g')).toEqual({ state: 'read', text: 'read from the side view · pitch 6°' })
   })
 })

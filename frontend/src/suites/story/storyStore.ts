@@ -223,7 +223,7 @@ export interface StoryState {
   renameProfile: (name: string) => void
   setHero: (assetId: string | null) => Promise<void>
   /** CA0 (01 step 2): make the version's animation reference (or its back view) — two candidates, the first used while none is set. */
-  makeAnimRef: (side: 'front' | 'back' | 'side' | 'hand' | 'feet') => Promise<void>
+  makeAnimRef: (side: 'front' | 'back' | 'side' | 'hand' | 'feet', opts?: { model_id?: string | null; count?: number }) => Promise<void>   // D190: the skeleton panel's card and count
   /** RG1 (D187, D188): read the version's hand from its hand picture (the feet from the feet picture, else the A-pose side view) — a short
    *  keypoints job; the shape lands on the body. */
   readPart: (part: 'hand' | 'feet') => Promise<void>
@@ -608,13 +608,14 @@ export const useStory = create<StoryState>()((set, get) => {
       updateProfile({ ...p, name })
       if (name.trim()) queueProfile(p.id, { name: name.trim() })                                     // a blank name is not sent (the server refuses it)
     },
-    makeAnimRef: async (side) => {
+    makeAnimRef: async (side, opts) => {
       const p = get().profile(); const v = get().version(); if (!p || !v) return
       await get().settleProfiles()                                                                  // M3: the A-pose reads the sheet as it is now
       try {
         const part = side === 'hand' || side === 'feet'
-        const model_id = part ? undefined : (await import('../generate/generateStore')).referenceModel()   // D186: the Make column's card when it draws from references; RG1: a hand or feet picture on Klein (E62 a)
-        const r = await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/anim-ref', { params: { path: { pid: p.id, vid: v.id } }, body: { side, count: 2, model_id } }))
+        const gen = await import('../generate/generateStore')
+        const model_id = opts?.model_id !== undefined ? opts.model_id : part ? gen.partModel() : gen.referenceModel()   // D186: the Make column's card when it draws from references; D190: a hand or feet picture on the card picked (any t2i)
+        const r = await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/anim-ref', { params: { path: { pid: p.id, vid: v.id } }, body: { side, count: opts?.count ?? 2, model_id } }))
         const what = side === 'back' ? 'back views' : side === 'side' ? 'side views' : side === 'hand' ? 'hand pictures' : side === 'feet' ? 'feet pictures' : p.cls === 'place' ? 'set pictures' : 'animation references'
         const pick = side === 'back' ? 'back' : side === 'side' ? 'side' : side === 'hand' ? 'hand' : side === 'feet' ? 'feet' : p.cls === 'place' ? 'set picture' : 'front'
         useSession.getState().toast(`${r.job_ids.length} ${what} queued for ${p.name} — they land among its candidates; pick the ${pick} from them`, 'info')   // D161: nothing is picked for the author; D175: the side

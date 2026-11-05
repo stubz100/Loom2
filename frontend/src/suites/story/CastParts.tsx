@@ -9,6 +9,7 @@ import { showMenu } from '../../frame/ContextMenu'
 import { Help } from '../../frame/Help'
 import { useSession } from '../../store/session'
 import { partRead } from './partRead'
+import { partModel } from '../generate/generateStore'
 import { latestModelJob, modelSource, modelStale, NOT_WHOLE, SEVERAL, sy } from './storyStore'
 
 const ModelView = lazy(() => import('../stage/ModelView'))
@@ -52,7 +53,7 @@ type RefSlot = 'front' | 'back' | 'side' | 'hand' | 'feet'
 const SLOT_MENU: Record<RefSlot, MenuItem[]> = {
   front: [{ cmd: 'story.cast.makeAnimRef' }, { cmd: 'story.cast.fitBody' }, { cmd: 'story.cast.clearAnimRef' }],
   back: [{ cmd: 'story.cast.makeAnimRefBack' }, { cmd: 'story.cast.clearAnimRefBack' }],
-  side: [{ cmd: 'story.cast.makeAnimRefSide' }, { cmd: 'story.cast.readFeet' }, { cmd: 'story.cast.clearAnimRefSide' }],
+  side: [{ cmd: 'story.cast.makeAnimRefSide' }, { cmd: 'story.cast.sideAsFeet' }, { cmd: 'story.cast.clearAnimRefSide' }],
   hand: [{ cmd: 'story.cast.makeHandRef' }, { cmd: 'story.cast.readHand' }, { cmd: 'story.cast.clearHandRef' }],          // RG1
   feet: [{ cmd: 'story.cast.makeFeetRef' }, { cmd: 'story.cast.readFeet' }, { cmd: 'story.cast.clearFeetRef' }],
 }
@@ -109,10 +110,13 @@ export function AnimRef({ p, v, children }: { p: Profile; v: Profile['versions']
   )
 }
 
-/** W10: a run button says what it queues before it does — the model, how many, the time with the model warm. */
+/** W10: a run button says what it queues before it does — the model, how many, the time with the model warm. D190: a hand or feet picture
+ *  runs on World's Make column card (any text-to-image model), named here; the time is said for the measured model only. */
 function withRun(id: string, n: number): string | undefined {
-  const label = command(id)?.label, st = useSession.getState().capabilities?.story
+  const caps = useSession.getState().capabilities, label = command(id)?.label, st = caps?.story
   if (!label || !st?.model_id) return undefined
+  const part = id === 'story.cast.makeHandRef' || id === 'story.cast.makeFeetRef' ? partModel() : null
+  if (part && part !== st.model_id) return `${label} · ${caps?.models[part]?.label ?? part} · ${n}`
   const s = (st.seconds ?? 0) * n
   return `${label} · ${st.short ?? st.label ?? st.model_id} · ${n} · ${s ? `≈ ${s < 90 ? `${Math.round(s)} s` : `${Math.round(s / 60)} min`}` : 'time unknown'}`
 }

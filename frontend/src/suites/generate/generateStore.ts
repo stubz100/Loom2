@@ -805,6 +805,14 @@ export const makeContext = contextSlot<Panel>(() => structuredClone(useGenerate.
 
 /** D186: the model the Make column's card names when it draws from references (a FLUX.2-family model with reference slots) — the
  *  animation references and an idea's clay are made on it; null when the card names another family (the server's clay-reference model). */
+/** D190: the model a hand or feet picture is made on from World's Make — the column's card, any wired text-to-image model (the picture is
+ *  made from words alone); else null, the server's clay-reference model. */
+export function partModel(): string | null {
+  const mid = useGenerate.getState().panel.model_id
+  const cap = useSession.getState().capabilities?.models[mid]
+  return cap && cap.wired && cap.recipes.t2i ? mid : null
+}
+
 export function referenceModel(): string | null {
   const mid = useGenerate.getState().panel.model_id
   const cap = useSession.getState().capabilities?.models[mid]

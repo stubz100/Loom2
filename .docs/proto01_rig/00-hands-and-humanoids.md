@@ -1,6 +1,6 @@
 # proto01_rig · Rigging the hands, and humanoids that are not human
 
-Status: **proposal, 2026-11-04; answered the same day → D187** (§8); **legs and shoes added → D188** (§9); **E62 run the same evening** (§10); **RG1 built** (§11); **Q9, Q10 answered → D189, RG2 built** (§12); **RG3 built** (§13); **RG4 built** (§14) — the waves done. Read from the code at `055315e`.
+Status: **proposal, 2026-11-04; answered the same day → D187** (§8); **legs and shoes added → D188** (§9); **E62 run the same evening** (§10); **RG1 built** (§11); **Q9, Q10 answered → D189, RG2 built** (§12); **RG3 built** (§13); **RG4 built** (§14) — the waves done; **D190: Figure | Skeleton, the pictures picked and made in the panel** (§15). Read from the code at `055315e`.
 
 ## 1. The request
 
@@ -356,3 +356,36 @@ With RG4 the waves of D187 and D188 are built: the hand and feet pictures (RG1),
 (RG2), the rigging screen's Hands and Feet & legs (RG3), the Humanoid switch (RG4).
 
 ![The skeleton bench's Body: the reference, the guide with the ghoul's own fingers, the Inspector's human / humanoid switch](img/rg4-body-humanoid-switch.jpg)
+
+## 15. D190 (2026-11-05): Figure | Skeleton, the rig's pictures picked and made in the panel
+
+The author, on the rigging screen: "getting into the skeleton editor is hidden at the bottom of the clay/character/body menu - then it is
+difficult to get back. This should be two parts of the same clay/character/body suite - like how you have build and make in
+world/character"; "The leg/hand creation still has the model fixed in the background - we should always enable a model picker for these
+operations - this should be part of the skeleton panel insted of a button on the viewport. Reference images should be pickable, not
+automatically assigned". Recorded as D190, then built:
+
+- **Figure | Skeleton.** A character opened in Clay's Library has the switch at the top of its column, as World's Make | Edit. *Figure* is the
+  body page (its sizes, the fit, the shell; the tiles behind it); *Skeleton* is the rigging screen in the centre, the skeleton panel in the
+  column and the parts in the Inspector. The *Skeleton…* buttons (the body section's and the page's) and *Back to the figure* are gone; the
+  hash keeps the side (`#clay/library/figure/<character>/<version>/skeleton`), so a link or a reload lands where the author was.
+- **The skeleton panel** (`suites/stage/RigPanel.tsx`). The part — Body · Hands · Feet & legs — is switched here (no longer in the viewport's
+  strip). *Body* shows the A-pose the skeleton is fitted to (picked in World) with the fit, the shell and Open in World. *Hands* and *Feet &
+  legs* hold the picture in use with what its read saw (*Read the hand ▶* or *the feet ▶*, *Clear*), the pictures to pick it from — those made as one, the
+  newest first; for the feet the A-pose views after them; the version's other pictures behind a link — and the make: the picture's own
+  words (blank: the sheet's, greyed), a **model card** (every text-to-image model of the build, the clay-reference model first — Klein 9B,
+  which E62 measured for the clean close-up), how many (1–4), and *Make n pictures ▶* with the time the Make column estimates. The
+  viewport carries no make button: its empty picture pane says "pick or make one in the panel".
+- **Picked, not assigned.** A click on a picture uses it (it is read at once, as before); nothing is picked for the author. The A-pose side
+  view is no longer the feet picture by itself — picking a side view used to queue a feet read while there was no feet picture, and the
+  feet pane showed the side view in its place; now the side view is one of the pictures offered (right-click on World's side slot: *Use the
+  side view as the feet picture*). An A-pose view picked as a hand or feet picture is read whole, unshrunk (`part_fit_recipe`).
+- **The card's model runs** (T8). The server's part make (`plan_anim_ref` for a hand or the feet) takes any offered text-to-image model
+  (`story.part_spec`), where it had fallen back to Klein for anything outside the FLUX.2 family. World's own hand and feet makes (the
+  reference slots' buttons) run on the Make column's card and name it.
+
+![Clay's Library on the ghoul, Figure: the switch above the body page](img/d190-figure.jpg)
+
+![Skeleton › Hands: the part in the panel, the hand picture in use and the ones to pick from, the words, the model cards, how many](img/d190-skeleton-hands.jpg)
+
+![Skeleton › Feet & legs: the feet picture picked, the A-pose offered beside the feet pictures made, the make on any model](img/d190-skeleton-feet.jpg)

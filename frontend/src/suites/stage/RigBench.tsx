@@ -80,9 +80,9 @@ export function HandsPanes({ v, body }: { v: Version; body: Body }) {
   return (
     <div className="skel-panes" data-part="hands">
       <div className="skel-pane ref" aria-label="the hand picture" data-testid="rig-hand-picture"
-        onContextMenu={(e) => { e.preventDefault(); showMenu(e, [{ cmd: 'cast.rig.handFit' }, { cmd: 'cast.rig.handSdpose' }, { cmd: 'story.cast.readHand' }, { cmd: 'story.cast.makeHandRef' }]) }}>
+        onContextMenu={(e) => { e.preventDefault(); showMenu(e, [{ cmd: 'cast.rig.handFit' }, { cmd: 'cast.rig.handSdpose' }, { cmd: 'story.cast.readHand' }]) }}>
         <span className="lab">the hand picture · SDPose's points</span>
-        {!pic ? <div className="hint rig-none">No hand picture yet <Help text="World › Make, the hand framing: a hand alone, palm to the camera, from words of its own. Picked, it is read at once; its points then show here to correct." /> <CommandButton id="story.cast.makeHandRef" text /></div>
+        {!pic ? <div className="hint rig-none">No hand picture — pick or make one in the panel</div>
           : !pts || stale ? <div className="hint rig-none">{stale ? 'The hand picture is not read yet' : 'No hand read'} <CommandButton id="story.cast.readHand" text /></div>
           : <div className="skel-ref"><DragPicture src={api.assetUrl(pic)} w={w} h={h} view={view} points={pts} edges={edges} dim={(k) => { const f = FINGER_OF(k); return !!f && hidden.includes(f) }}
               onDrop={(k, at) => { const next = pts.map((q) => [...q]); next[k] = [Math.round(at[0] * 10) / 10, Math.round(at[1] * 10) / 10, 1]; setUi({ handPts: next }) }}
@@ -170,8 +170,8 @@ export function HandParts({ v }: { v: Version }) {
   const save = (next: HandShapes) => { if (open) saveBody({ ...b, hand_shape: next as never }) }
   if (!shape) return (
     <div className="skel-group" data-group="hands">
-      <div className="grp">The hands <Help text="No hand of its own: its figures and the guide take the mannequin's human hand. Read one from a hand picture (World › Make, the hand framing), or start from a human hand and shape it here — a ghoul's long fingers, a dwarf's thick ones, a goblin's four." /></div>
-      <div className="hands"><CommandButton id="cast.rig.handHuman" text /><CommandButton id="story.cast.makeHandRef" text /></div>
+      <div className="grp">The hands <Help text="No hand of its own: its figures and the guide take the mannequin's human hand. Read one from a hand picture (picked or made in the panel on the left), or start from a human hand and shape it here — a ghoul's long fingers, a dwarf's thick ones, a goblin's four." /></div>
+      <div className="hands"><CommandButton id="cast.rig.handHuman" text /></div>
     </div>
   )
   const hand = handOf(shape, side)
@@ -214,7 +214,7 @@ const FOOT_EDGES: [number, number, string][] = [[2, 0, '#ffc94a'], [0, 1, '#4ad0
 export function FeetPanes({ v, body }: { v: Version; body: Body }) {
   const u = useUi()
   const fp = v.feet_points as { foot?: number[][]; ankle?: number[] | null; leg?: number[][] | null; floor?: number | null; canvas?: number[]; from?: string; report?: { conf?: number; pitch?: number } } | null
-  const pic = v.feet_ref_asset_id ?? v.anim_ref_side_asset_id ?? null
+  const pic = v.feet_ref_asset_id ?? null                                    // D190: only the picture picked (the side view when picked as it)
   const dragged = u.footPts
   const cur = useMemo(() => dragged ?? (fp?.foot ? { foot: fp.foot, ankle: fp.ankle ?? null, leg: fp.leg ?? null, floor: fp.floor ?? null } : null), [dragged, fp])
   const pts = useMemo(() => (cur ? [...cur.foot, cur.ankle ?? [0, 0, 0]] : null), [cur])   // big toe, small toe, heel, the ankle
@@ -224,9 +224,9 @@ export function FeetPanes({ v, body }: { v: Version; body: Body }) {
   return (
     <div className="skel-panes" data-part="feet">
       <div className="skel-pane ref" aria-label="the feet picture" data-testid="rig-feet-picture"
-        onContextMenu={(e) => { e.preventDefault(); showMenu(e, [{ cmd: 'cast.rig.feetFit' }, { cmd: 'cast.rig.feetSdpose' }, { cmd: 'story.cast.readFeet' }, { cmd: 'story.cast.makeFeetRef' }]) }}>
-        <span className="lab">{v.feet_ref_asset_id ? 'the feet picture' : 'the A-pose side view'} · SDPose's points</span>
-        {!pic ? <div className="hint rig-none">No feet picture yet <Help text="World › Make, the feet & shoes framing: the feet from the side, from the knees down, from words of their own — or the A-pose side view. Picked, it is read at once." /> <CommandButton id="story.cast.makeFeetRef" text /></div>
+        onContextMenu={(e) => { e.preventDefault(); showMenu(e, [{ cmd: 'cast.rig.feetFit' }, { cmd: 'cast.rig.feetSdpose' }, { cmd: 'story.cast.readFeet' }]) }}>
+        <span className="lab">{pic && pic === v.anim_ref_side_asset_id ? 'the A-pose side view' : 'the feet picture'} · SDPose's points</span>
+        {!pic ? <div className="hint rig-none">No feet picture — pick or make one in the panel</div>
           : !pts || stale ? <div className="hint rig-none">{stale ? 'The feet picture is not read yet' : 'No foot read'} <CommandButton id="story.cast.readFeet" text /></div>
           : <div className="skel-ref"><DragPicture src={api.assetUrl(pic)} w={w} h={h} view={view} points={pts} edges={FOOT_EDGES}
               onDrop={(k, at) => { if (!cur) return; const q = [Math.round(at[0] * 10) / 10, Math.round(at[1] * 10) / 10, 1]
@@ -374,8 +374,8 @@ export function FeetParts({ v }: { v: Version }) {
   const side: Side = shape && !linked(shape) ? u.side : 'r'
   if (!shape) return (
     <div className="skel-group" data-group="feet">
-      <div className="grp">The feet <Help text="No foot of its own: the shoe rides on the shin and the guide's feet are the mannequin's. Read one from a feet picture (World › Make, the feet & shoes framing) or the A-pose side view, or start from a plain foot and place it on the shoe by hand." /></div>
-      <div className="hands"><CommandButton id="cast.rig.feetPlain" text /><CommandButton id="story.cast.makeFeetRef" text /></div>
+      <div className="grp">The feet <Help text="No foot of its own: the shoe rides on the shin and the guide's feet are the mannequin's. Read one from a feet picture (picked or made in the panel on the left — the A-pose side view may be picked as one), or start from a plain foot and place it on the shoe by hand." /></div>
+      <div className="hands"><CommandButton id="cast.rig.feetPlain" text /></div>
     </div>
   )
   const foot = footOf(shape, side)

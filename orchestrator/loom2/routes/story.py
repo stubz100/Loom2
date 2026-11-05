@@ -378,7 +378,7 @@ class AnimRefBody(BaseModel):
     count: int = Field(2, ge=1, le=4)
     stage: bool = False                           # queued staged (released from the Queue)
     style_id: str | None = None
-    model_id: str | None = None                   # D186: the Make column's card (a FLUX.2-family model that takes references); None = the clay-reference model
+    model_id: str | None = None                   # D186: the Make column's card (a FLUX.2-family model that takes references); None = the clay-reference model; D190: a hand or feet picture, any t2i model
     words: str | None = Field(None, max_length=400)   # RG1 (Q4): the hand or feet picture's own words, kept on the version first; None = as they are
 
 
@@ -1244,8 +1244,8 @@ async def profile_anim_ref_pick(svc: Svc, pid: str, vid: str, body: AnimRefPick)
             await asyncio.to_thread(fit_if_untouched, svc.queue, p, vid, body.asset_id)
         except Exception:  # noqa: BLE001 — the reference stands; the fit is offered by hand (Build's Fit the body)
             pass
-    # RG1: a hand or feet picture picked is read at once (a short keypoints job), and so is a side view while there is no feet picture
-    part = body.side if body.side in ("hand", "feet") else "feet" if body.side == "side" and not p.version(vid).feet_ref_asset_id else None
+    # RG1: a hand or feet picture picked is read at once (a short keypoints job); D190: only a picture picked as one — a side view is not
+    part = body.side if body.side in ("hand", "feet") else None
     if body.asset_id and part and svc.queue is not None and p.cls == "character":
         try:
             await asyncio.to_thread(queue_part_fit, svc.queue, p, vid, part)

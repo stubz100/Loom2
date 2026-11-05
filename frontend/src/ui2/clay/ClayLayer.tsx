@@ -30,6 +30,7 @@ const ClayFoot = lazy(() => import('../../suites/stage/StageParts').then((m) => 
 const SelectionInspector = lazy(() => import('../../suites/stage/StageParts').then((m) => ({ default: m.SelectionInspector })))   // C1: one selected thing, one editor
 const SkeletonBench = lazy(() => import('../../suites/stage/SkeletonBench'))
 const SkeletonParts = lazy(() => import('../../suites/stage/SkeletonBench').then((m) => ({ default: m.SkeletonParts })))
+const RigPanel = lazy(() => import('../../suites/stage/RigPanel'))                       // D190: the skeleton panel, the column on Skeleton
 const CastBody = lazy(() => import('../../suites/story/CastBody').then((m) => ({ default: m.CastBody })))
 const PropModel = lazy(() => import('../../suites/story/CastParts').then((m) => ({ default: m.PropModel })))
 const PlaceSetSection = lazy(() => import('../../suites/story/CastSet').then((m) => ({ default: m.PlaceSetSection })))
@@ -169,7 +170,7 @@ function Builder({ p, v }: { p: Profile; v: Version }) {
   return (
     <div className="w-sheet cast-page" data-testid="clay-builder">
       {p.cls === 'character' && <Part label="The body" quiet="line"><section className="w-build-body"><h3>Body <Help text="The figure Clay draws the character with: its height, build and proportions fitted to the A-pose (a World picture), its shell (the 3D model of the A-pose) and its skeleton. The A-pose itself is made and picked in World." /></h3>
-        <CastBody p={p} v={v} /><div className="w-verbs"><CommandButton id="cast.shell.make" text /><CommandButton id="cast.skeleton.open" text /></div></section></Part>}
+        <CastBody p={p} v={v} /><div className="w-verbs"><CommandButton id="cast.shell.make" text /></div></section></Part>}
       {p.cls === 'prop' && <Part label="The model" quiet="line"><PropModel p={p} v={v} /></Part>}
       {p.cls === 'place' && <Part label="The set" quiet="line" fallback={<section className="place-set" />}><PlaceSetSection p={p} v={v} /></Part>}
       <div className="w-verbs"><CommandButton id="clay.asset.world" text /></div>
@@ -210,7 +211,10 @@ function Library() {
   return <>
     <section className="w-left" data-testid="clay-library">
       <LibraryHeader />
-      <div className="w-panel">{bench ? <Suspense fallback={null}><ClayColumn tab="scene" /></Suspense> : p && v ? <Builder p={p} v={v} /> : <KindHint kind={kind} />}</div>
+      {!bench && p?.cls === 'character' && v && <FigureSwitch />}
+      <div className="w-panel">{bench ? <Suspense fallback={null}><ClayColumn tab="scene" /></Suspense>
+        : skel ? <Part label="The skeleton panel" fallback={<div className="w-empty">Loading…</div>}><RigPanel /></Part>
+        : p && v ? <Builder p={p} v={v} /> : <KindHint kind={kind} />}</div>
     </section>
     <section className="w-centre">
       {bench ? <Suspense fallback={<div className="w-empty">Loading Clay…</div>}><div className="strip w-edit-strip"><ClayStrip /></div><div className="w-edit-stage" data-testid={view === 'animation' ? 'clay-animation-bench' : 'clay-bench'}><ClayStage /></div></Suspense>
@@ -220,6 +224,16 @@ function Library() {
     {skel ? <Part label="The skeleton bench" quiet="hide" fallback={<aside className="w-insp" />}><aside className="w-insp"><SkeletonParts /></aside></Part>
       : bench ? <Part label="The selection" quiet="hide" fallback={<aside className="w-insp" />}><aside className="w-insp" data-testid="clay-inspector"><SelectionInspector /></aside></Part> : <LibraryInspector p={p} v={v} />}
   </>
+}
+
+/** D190: a character's body in two parts, as World's Make | Edit — the figure (its sizes, the fit, the shell; the tiles behind it) and the
+ *  skeleton (the rigging screen: the body's joints, its hands, its feet & legs). */
+function FigureSwitch() {
+  const skeleton = useStory((s) => s.skeleton)
+  return <div className="w-mode segmented" role="group" aria-label="Figure or Skeleton" data-testid="clay-figure-switch">
+    <button type="button" className={!skeleton ? 'active' : ''} aria-pressed={!skeleton} title="The figure: its sizes, the fit to the A-pose, the shell" onClick={() => runCommand('cast.skeleton.close')}>Figure</button>
+    <button type="button" className={skeleton ? 'active' : ''} aria-pressed={skeleton} title="The skeleton: the body's joints on the A-pose and the shell, the character's own hands, its feet & legs" onClick={() => runCommand('cast.skeleton.open')}>Skeleton</button>
+  </div>
 }
 
 function KindHint({ kind }: { kind: LibKind }) {

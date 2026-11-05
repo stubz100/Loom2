@@ -264,12 +264,20 @@ def test_the_pick_route_reads_the_picture_and_the_bin_names_it(tmp_path: Path):
         assert len(jobs) == 1 and jobs[0]["recipe"] == {"kind": "keypoints", "asset_id": pic, "model_id": "sdpose-wholebody", "boxes": False, "inset": 0.3, "matte": True}
         r = cl.post(f"/story/profiles/{p['id']}/versions/v1/parts/hand/fit")
         assert r.status_code == 200 and r.json()["asset_id"] == pic
-        side = app.state.services.catalogue.ingest_file(_png(tmp_path / "s.png")).id                 # a side view read for the feet while there is no feet picture
+        side = app.state.services.catalogue.ingest_file(_png(tmp_path / "s.png")).id                 # D190: a side view is not the feet picture by itself
         cl.put(f"/story/profiles/{p['id']}/versions/v1/anim-ref", json={"side": "side", "asset_id": side})
-        feet = [x for x in cl.get("/jobs").json()["items"] if x["origin"] and x["origin"]["surface"] == "feet_fit"]
-        assert len(feet) == 1 and feet[0]["recipe"]["asset_id"] == side and feet[0]["recipe"]["inset"] == 1.0
-        r = cl.post(f"/story/profiles/{p['id']}/versions/v1/anim-ref", json={"side": "feet", "count": 1, "words": "black riding boots"})
+        feet = lambda: [x for x in cl.get("/jobs").json()["items"] if x["origin"] and x["origin"]["surface"] == "feet_fit"]   # noqa: E731
+        assert not feet() and cl.post(f"/story/profiles/{p['id']}/versions/v1/parts/feet/fit").status_code == 422
+        cl.put(f"/story/profiles/{p['id']}/versions/v1/anim-ref", json={"side": "feet", "asset_id": side})   # picked as the feet picture: read whole
+        assert len(feet()) == 1 and feet()[0]["recipe"]["asset_id"] == side and feet()[0]["recipe"]["inset"] == 1.0
+        cl.put(f"/story/profiles/{p['id']}/versions/v1/anim-ref", json={"side": "feet", "asset_id": None})
+        r = cl.post(f"/story/profiles/{p['id']}/versions/v1/anim-ref", json={"side": "feet", "count": 1, "words": "black riding boots", "model_id": "zimage-bf16"})
         assert r.status_code == 200, r.text
+        made = [x for x in cl.get("/jobs").json()["items"] if x["origin"] and x["origin"]["surface"] == "anim_ref"]
+        assert [x["recipe"]["model_id"] for x in made] == ["zimage-bf16"]                          # D190: the card's model, not Klein behind it
+        r = cl.post(f"/story/profiles/{p['id']}/versions/v1/anim-ref", json={"side": "hand", "count": 1})
+        made = [x for x in cl.get("/jobs").json()["items"] if x["origin"] and x["origin"]["surface"] == "anim_ref"]
+        assert sorted(x["recipe"]["model_id"] for x in made) == ["klein-9b", "zimage-bf16"]       # no card named: the clay-reference model
         v = cl.get(f"/story/profiles/{p['id']}").json()["versions"][0]
         assert v["feet_words"] == "black riding boots"
         caps = cl.get("/capabilities").json()["story"]["references"]["character"]

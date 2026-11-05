@@ -18,8 +18,10 @@ export interface BenchUi { pts: Points | null; forVersion: string | null; row: R
   /** RG3: the hand's 21 points and the foot's (big toe, small toe, heel; the ankle) as dragged — null: as the read keeps them. */
   handPts: number[][] | null; footPts: { foot: number[][]; ankle: number[] | null; leg?: number[][] | null; floor?: number | null } | null
   /** RG3: the hand or foot the Inspector edits while the left is unlinked, and the clay hand's preset to try. */
-  side: 'r' | 'l'; preset: string }
-export const ui: BenchUi & { subs: Set<() => void> } = { pts: null, forVersion: null, row: null, moved: [], part: 'body', handPts: null, footPts: null, side: 'r', preset: 'open', subs: new Set() }
+  side: 'r' | 'l'; preset: string
+  /** D190: the skeleton panel's make — the model card picked (null: the clay-reference model, E62's Klein 9B) and how many pictures. */
+  partModel: string | null; partCount: number }
+export const ui: BenchUi & { subs: Set<() => void> } = { pts: null, forVersion: null, row: null, moved: [], part: 'body', handPts: null, footPts: null, side: 'r', preset: 'open', partModel: null, partCount: 2, subs: new Set() }
 export function setUi(patch: Partial<BenchUi>) { Object.assign(ui, patch); for (const f of ui.subs) f() }
 export function useUi(): BenchUi { const [, tick] = useState(0); useEffect(() => { const f = () => tick((n) => n + 1); ui.subs.add(f); return () => { ui.subs.delete(f) } }, []); return ui }
 

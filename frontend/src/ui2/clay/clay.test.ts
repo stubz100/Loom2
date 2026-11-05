@@ -31,6 +31,8 @@ describe('C0: the Library and the scenes', () => {
     expect(placeOfHash('#clay/library/set/prf_1/v2')).toMatchObject({ rail: 'library', kind: 'set', profile: 'prf_1', version: 'v2', bench: false })
     expect(placeOfHash('#clay/library/figure/prf_1/v1/bench')).toMatchObject({ kind: 'figure', profile: 'prf_1', version: 'v1', bench: true })
     expect(placeOfHash('#clay/library/prop')).toMatchObject({ kind: 'prop', profile: null, bench: false })
+    expect(placeOfHash('#clay/library/figure/prf_1/v1/skeleton')).toMatchObject({ kind: 'figure', profile: 'prf_1', version: 'v1', bench: false, skeleton: true })   // D190
+    expect(placeOfHash('#clay/library/figure/prf_1/v1')).toMatchObject({ skeleton: false })
     expect(placeOfHash('#clay')).toMatchObject({ rail: 'library', kind: 'figure', profile: null })
     expect(placeOfHash('#clay/scene/stg_1')).toMatchObject({ rail: 'scenes', stage: 'stg_1' })
     expect(placeOfHash('#world/character/prf_1')).toBeNull()

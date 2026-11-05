@@ -477,3 +477,26 @@
 .skel-parts .skel-row.sub > span:first-child { padding-left: 10px; color: var(--fg3); }
 .skel-bench .skel-panes { min-height: min(74vh, 720px); }   /* RG3: the panes hold no picture of a set size and Clay's Library sets the bench no height (the body's had collapsed to its labels since C0) */
 .skel-panes[data-part] { grid-template-columns: 1.2fr 1fr; }
+
+/* D190 (proto01_rig 00 §15): the skeleton panel — Clay's Library column on Skeleton: the part, the picture in use, the pictures to pick it
+   from, the make (words, model card, how many). */
+.rig-panel { display: flex; flex-direction: column; gap: 14px; padding: 10px 12px 16px; }
+.rig-panel .rig-parts { display: flex; }
+.rig-panel .rig-parts .cmd-btn { flex: 1; justify-content: center; }
+.rig-sec { display: flex; flex-direction: column; gap: 8px; }
+.rig-sec h4 { margin: 0; font-size: 12px; color: var(--fg2); display: flex; align-items: center; gap: 4px; }
+.rig-sec .w-field { display: flex; flex-direction: column; align-items: stretch; gap: 4px; }   /* world.css starts its items: the cards stretch */
+.rig-sec .w-field > span { font-size: 11px; color: var(--fg3); }
+.rig-sec textarea { width: 100%; box-sizing: border-box; resize: vertical; }
+.rig-current { display: flex; gap: 10px; align-items: flex-start; }
+.rig-current > img, .rig-current .rig-none-pic { width: 112px; aspect-ratio: 1; object-fit: cover; border-radius: var(--radius); border: 1px solid var(--line2); background: var(--bg0); flex: none; }
+.rig-current .rig-none-pic { display: flex; align-items: center; justify-content: center; font-size: 11px; }
+.rig-current-side { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.rig-thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 6px; }
+.rig-thumb { position: relative; padding: 0; aspect-ratio: 1; border: 2px solid transparent; border-radius: var(--radius); background: var(--bg0); overflow: hidden; cursor: pointer; }
+.rig-thumb:hover { border-color: var(--line2); }
+.rig-thumb.picked { border-color: var(--accent); cursor: default; }
+.rig-thumb.still { cursor: default; }
+.rig-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rig-thumb small { position: absolute; left: 0; right: 0; bottom: 0; padding: 1px 4px; font-size: 10px; color: var(--fg); background: rgba(0, 0, 0, 0.6); }
+.rig-thumb.making { display: flex; align-items: center; justify-content: center; text-align: center; font-size: 11px; border: 1px dashed var(--line2); cursor: default; }

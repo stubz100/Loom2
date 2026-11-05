@@ -134,15 +134,11 @@ export default function SkeletonBench() {
   return (
     <div className="skel-bench" data-profile={p.id}>
       <div className="skel-strip">
-        <b>{p.name}</b><span className="muted">· {v.id} · skeleton</span>
-        <span className="segmented rig-parts" role="group" aria-label="the part" data-testid="rig-parts">{/* RG3 (D187 R4, D188 F4) */}
-          <CommandButton id="cast.rig.body" text size={13} active={u.part === 'body'} /><CommandButton id="cast.rig.hands" text size={13} active={u.part === 'hands'} /><CommandButton id="cast.rig.feet" text size={13} active={u.part === 'feet'} />
-        </span>
+        <b>{p.name}</b><span className="muted">· {v.id} · {u.part === 'hands' ? 'hands' : u.part === 'feet' ? 'feet & legs' : 'skeleton'}</span>{/* D190: the part is switched in the panel */}
         {u.part === 'body' && <span className="segmented" role="group" aria-label="the reference's side">
           {(['front', 'back'] as const).map((k) => <button key={k} type="button" className={side === k ? 'active' : ''} disabled={k === 'back' && !v.anim_ref_back_asset_id} onClick={() => setSide(k)}>{k}</button>)}
         </span>}
         <span className="spacer" />
-        <CommandButton id="cast.skeleton.close" text size={13} />
       </div>
       {u.part === 'hands' ? <HandsPanes key={`h${p.id}/${v.id}`} v={v} body={body} />
         : u.part === 'feet' ? <FeetPanes key={`f${p.id}/${v.id}`} v={v} body={body} />

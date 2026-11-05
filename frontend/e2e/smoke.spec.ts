@@ -998,7 +998,7 @@ test("the pose editor (AP1b, D141): a crouch stands on the character's feet, the
   // the skeleton bench (World's Sheet) lists the character's poses
   await openLibrary(page, 'character', p.id)
   await page.locator('.cast-body button', { hasText: 'body' }).click()                                    // a body of its own (the default adult's)
-  await page.locator('.cast-body button', { hasText: /^Skeleton…/ }).click()
+  await page.locator('[data-testid="clay-figure-switch"] button', { hasText: 'Skeleton' }).click()   // D190: Figure | Skeleton
   await expect(page.locator('.skel-parts [data-group="poses"] [data-pose="crouch"]')).toContainText('its starter pose · 3 pinned')
   await page.locator('.skel-parts [data-group="poses"]').scrollIntoViewIfNeeded()
   await page.screenshot({ path: 'node_modules/.e2e/ap1b-bench-poses.png' })
@@ -2797,7 +2797,7 @@ test('the body fitted to the animation reference (CA1b, D104): Fit the body meas
   await expect.poll(async () => (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0].body?.hand_rest.preset, { timeout: 10_000 }).toBe('fist')
 })
 
-test('the skeleton bench (proto01_UIcast CS2): Skeleton… opens the reference with SDPose\'s points and the figure\'s, a hip dragged and Fit again refits the body, a part locked stays, the guide follows a motion (World’s Sheet, B2a)', async ({ page }) => {
+test('the skeleton bench (proto01_UIcast CS2, D190): Figure | Skeleton opens the reference with SDPose\'s points and the figure\'s, a hip dragged and Fit again refits the body, a part locked stays, the guide follows a motion (World’s Sheet, B2a)', async ({ page }) => {
   test.setTimeout(120_000)
   const name = `Bea ${Date.now().toString(36)}`
   const src = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0]
@@ -2811,7 +2811,8 @@ test('the skeleton bench (proto01_UIcast CS2): Skeleton… opens the reference w
   const prof = async () => (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0]
   await expect.poll(async () => (await prof()).body_points?.pose.length ?? 0, { timeout: 60_000 }).toBe(18)
   const fitted = (await prof()).body!, read = (await prof()).body_points!.pose[8][1]
-  await page.locator('.cast-body button', { hasText: /^Skeleton…/ }).click()
+  await page.locator('[data-testid="clay-figure-switch"] button', { hasText: 'Skeleton' }).click()   // D190: Figure | Skeleton
+  await expect(page).toHaveURL(/\/v1\/skeleton$/)                                                       // the hash keeps the side
   const bench = page.locator('.skel-bench')
   await expect(bench.locator('.skel-ref circle.white')).toHaveCount(18 + 42, { timeout: 15_000 })   // the body's 18 and both hands' 21 (the fake has no feet)
   await expect(bench.locator('.skel-ref circle.blue')).toHaveCount(18)
@@ -2850,12 +2851,13 @@ test('the skeleton bench (proto01_UIcast CS2): Skeleton… opens the reference w
   await bench.locator('.skel-motions button', { hasText: 'walk' }).click()
   await expect(bench.locator('.skel-guide img.pose')).toHaveCount(1, { timeout: 20_000 })
   await page.screenshot({ path: 'node_modules/.e2e/cs2-bench.png' })
-  await bench.locator('.skel-strip button', { hasText: /^Back to the figure/ }).click()
+  await page.locator('[data-testid="clay-figure-switch"] button', { hasText: 'Figure' }).click()          // D190: the way back is the switch
   await expect(page.locator('[data-testid="clay-builder"]')).toBeVisible()
+  await expect(page).toHaveURL(/\/v1$/)
   await expect(page.locator('[data-testid="clay-tiles"]')).toBeVisible()                                      // the tiles back in the centre (C0)
 })
 
-test("the rigging screen's hands and feet (RG3, D187 R4, D188 F4): a hand picture picked is read; the skeleton bench's Hands shows its 21 points and the clay hand, a point dragged and Fit the hand again refits it with SDPose's kept; the count and Unlink from the Inspector; Feet & legs: no feet picture, Start from a plain foot, a stiff sole (Clay)", async ({ page }) => {
+test("the rigging screen's hands and feet (RG3, D187 R4, D188 F4, D190): a hand picture picked is read; the skeleton panel makes candidates on the card picked and one is picked by hand; the skeleton bench's Hands shows its 21 points and the clay hand, a point dragged and Fit the hand again refits it with SDPose's kept; the count and Unlink from the Inspector; Feet & legs: no feet picture, Start from a plain foot, a stiff sole (Clay)", async ({ page }) => {
   test.setTimeout(120_000)
   const name = `Grisk ${Date.now().toString(36)}`
   const src = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0]
@@ -2869,9 +2871,9 @@ test("the rigging screen's hands and feet (RG3, D187 R4, D188 F4): a hand pictur
   await expect.poll(async () => (await ver()).hand_points?.hand.length ?? 0, { timeout: 60_000 }).toBe(21)
   expect((await ver()).body!.hand_shape!.right.count).toBe(5)
   await openLibrary(page, 'character', p.id)
-  await page.locator('.cast-body button', { hasText: /^Skeleton…/ }).click()
-  const bench = page.locator('.skel-bench')
-  await bench.locator('[data-testid="rig-parts"] button', { hasText: 'Hands' }).click()
+  await page.locator('[data-testid="clay-figure-switch"] button', { hasText: 'Skeleton' }).click()   // D190: Figure | Skeleton
+  const bench = page.locator('.skel-bench'), panel = page.locator('[data-testid="rig-panel"]')
+  await panel.locator('[data-testid="rig-parts"] button', { hasText: 'Hands' }).click()             // D190: the part is switched in the panel
   const picture = bench.locator('[data-testid="rig-hand-picture"]')
   await expect(picture.locator('circle.white')).toHaveCount(21, { timeout: 15_000 })
   await expect(bench.locator('[data-testid="rig-hand-3d"] canvas')).toHaveCount(1)
@@ -2894,16 +2896,35 @@ test("the rigging screen's hands and feet (RG3, D187 R4, D188 F4): a hand pictur
   await page.locator('.skel-parts button', { hasText: /^Unlink the left hand/ }).click()
   await expect.poll(async () => (await ver()).body!.hand_shape!.left?.count ?? null, { timeout: 10_000 }).toBe(4)
   await page.screenshot({ path: 'node_modules/.e2e/rg3-hands.png' })
+  // D190: the panel — the hand picture in use; one candidate made on another card (Klein 4B), landed among the pictures, not picked; picked
+  // by a click, it is read
+  await expect(panel.locator('[data-testid="rig-hand-pick"] .rig-current img')).toBeVisible()
+  await panel.locator('[data-testid="rig-models"] button.model-card:has(> span:text-is("Klein 4B"))').click()
+  await panel.locator('[data-testid="rig-hand-make"] .segmented button', { hasText: /^1$/ }).click()
+  await panel.locator('button', { hasText: /^Make 1 hand picture ▶/ }).click()
+  type JobLite = { id: string; status: string; recipe: { model_id?: string; asset_id?: string }; origin: { surface?: string; ref?: string } | null }
+  const jobs = async (surface: string) => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.filter((j) => j.origin?.surface === surface && j.origin.ref === p.id)
+  await expect.poll(async () => (await jobs('anim_ref')).length, { timeout: 10_000 }).toBe(1)
+  const made = (await jobs('anim_ref'))[0]
+  expect((await api<{ models: Record<string, { label: string }> }>('GET', '/capabilities')).models[made.recipe.model_id!].label).toBe('Klein 4B')   // the card's model, not Klein 9B behind it
+  const cand = panel.locator('[data-testid="rig-hand-candidates"] button.rig-thumb:not(.picked)')
+  await expect(cand).toHaveCount(1, { timeout: 60_000 })
+  expect((await ver() as unknown as { hand_ref_asset_id: string }).hand_ref_asset_id).toBe(handPic)    // landed, not picked for the author
+  const newPic = (await cand.getAttribute('data-id'))!
+  await cand.click()
+  await expect.poll(async () => (await ver() as unknown as { hand_ref_asset_id: string }).hand_ref_asset_id, { timeout: 10_000 }).toBe(newPic)
+  await expect.poll(async () => (await jobs('hand_fit')).some((j) => j.recipe.asset_id === newPic), { timeout: 10_000 }).toBe(true)   // picked, it is read at once
+  await page.screenshot({ path: 'node_modules/.e2e/d190-panel.png' })
   // Feet & legs: no feet picture yet; a plain foot started by hand, its sole made stiff (D189)
-  await bench.locator('[data-testid="rig-parts"] button', { hasText: 'Feet & legs' }).click()
-  await expect(bench.locator('[data-testid="rig-feet-picture"]')).toContainText('No feet picture yet')
+  await panel.locator('[data-testid="rig-parts"] button', { hasText: 'Feet & legs' }).click()
+  await expect(bench.locator('[data-testid="rig-feet-picture"]')).toContainText('No feet picture')
   await page.locator('.skel-parts button', { hasText: /^Start from a plain foot/ }).click()
   await expect.poll(async () => (await ver()).body?.foot_shape?.right.stiff ?? null, { timeout: 10_000 }).toBe(false)
   await page.locator('[data-testid="rig-sole"] button', { hasText: 'stiff' }).click()
   await expect.poll(async () => (await ver()).body?.foot_shape?.right.stiff ?? null, { timeout: 10_000 }).toBe(true)
   await expect(bench.locator('[data-testid="rig-shoe-state"]')).toContainText(/rigged|misses the shoe/, { timeout: 20_000 })   // the fit made a (fake) shell: its shoe found or missed
   await page.screenshot({ path: 'node_modules/.e2e/rg3-feet.png' })
-  await bench.locator('[data-testid="rig-parts"] button', { hasText: 'Body' }).click()
+  await panel.locator('[data-testid="rig-parts"] button', { hasText: 'Body' }).click()
   await expect(bench.locator('.skel-ref circle.white').first()).toBeVisible({ timeout: 15_000 })        // the body's view as it was
   // RG4 (D187 R6): the Humanoid switch — the parts range wider, no adult's warning
   await page.locator('.skel-parts [data-testid="humanoid"] button', { hasText: 'humanoid' }).click()
@@ -4397,7 +4418,7 @@ test('shells only (D183, C2c): a scene\'s Figures ＋ lists characters and no du
   await expect.poll(async () => (await api<Ver>('GET', `/story/profiles/${who.id}`)).versions[0].body_fit_from, { timeout: 60_000 }).toBeTruthy()
   await expect.poll(async () => (await api<Ver>('GET', `/story/profiles/${who.id}`)).versions[0].shell_asset_id, { timeout: 60_000 }).toBeTruthy()   // the shell followed the fit
   await openLibrary(page, 'character', who.id)
-  await page.locator('[data-testid="clay-builder"] button', { hasText: /^Skeleton…/ }).first().click()         // the body panel's verb (the fitted body offers it twice)
+  await page.locator('[data-testid="clay-figure-switch"] button', { hasText: 'Skeleton' }).click()   // D190: Figure | Skeleton
   const bench = page.locator('.skel-bench')
   await expect(bench).toBeVisible()
   await bench.locator('.tools button', { hasText: /^side$/ }).click()

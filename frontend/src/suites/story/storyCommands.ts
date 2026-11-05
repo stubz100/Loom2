@@ -397,7 +397,7 @@ const cmds: Command[] = [
     hint: "the reference's proportions measured (neck, shoulders, torso, limbs, hands) so the stage figure moves with the character's build; the height and build stay",
     placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character' && !fitBlocked(version()) && version()?.state === 'open', run: () => void sy().fitBody() },   // D140: only on an A-pose
   // CS2 (proto01_UIcast 03 §3.2, D136 U17): the skeleton bench — its view, its foot's verbs (its code loads with the stage's)
-  { id: 'cast.skeleton.open', scope: 'story', label: 'Skeleton…', icon: PersonStanding, hint: "the character's skeleton against its reference, its figure and its guide — fit, tune and lock each part",
+  { id: 'cast.skeleton.open', scope: 'story', label: 'Skeleton', icon: PersonStanding, hint: "the character's skeleton against its reference, its figure and its guide — fit, tune and lock each part; its hands, its feet & legs (D190: Figure | Skeleton in Clay's Library)",
     placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character' && !!version(),
     run: () => { sy().setSkeleton(true); const p = profile(); if (p) void import('../../ui2/clay/clayStore').then((m) => m.useClay.getState().openLibrary('figure', p.id, version()?.id ?? p.current)) } },   // C0: in Clay's Library
   // RG3 (D187 R4, D188 F4; proto01_rig 00): the rigging screen's parts — the body, the character's own hands, its feet & legs
@@ -407,6 +407,12 @@ const cmds: Command[] = [
     run: () => void import('../stage/benchState').then((m) => m.setUi({ part: 'hands' })) },
   { id: 'cast.rig.feet', scope: 'story', label: 'Feet & legs', icon: Footprints, hint: 'the feet picture\'s points, the shoe on the shell — its heel, ball and toe placed by hand', placement: ['panel'], when: () => sy().skeleton && profile()?.cls === 'character',
     run: () => void import('../stage/benchState').then((m) => m.setUi({ part: 'feet' })) },
+  // D190: the skeleton panel's make — the part's pictures on the card picked there (any text-to-image model), as many as picked; they land
+  // among the version's pictures, to pick from in the panel (nothing is picked for the author)
+  { id: 'cast.rig.make', scope: 'story', label: 'Make candidates ▶', icon: ImagePlus, hint: 'queues the pictures from the words above on the model card picked — they land below the picture in use, to pick from',
+    placement: ['panel'], when: () => sy().skeleton && profile()?.cls === 'character' && !!version(),
+    run: () => void import('../stage/benchState').then((m) => { const part = m.ui.part === 'hands' ? 'hand' : m.ui.part === 'feet' ? 'feet' : null
+      if (part) void sy().makeAnimRef(part, { model_id: m.ui.partModel ?? useSession.getState().capabilities?.story?.model_id ?? null, count: m.ui.partCount }) }) },
   { id: 'cast.rig.handFit', scope: 'story', label: 'Fit the hand again ▶', icon: Ruler, hint: 'the hand fitted to its points as they are now — SDPose\'s, with those you moved; the count, claws and widths stay',
     placement: ['panel', 'context'], when: () => sy().skeleton && openVersion() && !!version()?.hand_points,
     run: () => void import('../stage/benchState').then((m) => { const pts = m.ui.handPts ?? (version()?.hand_points as { hand?: number[][] } | null)?.hand; if (pts) void sy().refitPart('hand', { hand: pts }).then((ok) => { if (ok) m.setUi({ handPts: null }) }) }) },
@@ -448,7 +454,7 @@ const cmds: Command[] = [
   { id: 'cast.rig.placeReset', scope: 'story', label: 'Find the foot again', icon: RotateCcw, hint: 'the heel, ball and toe placed by hand put aside — found from the shape and the shell again',
     placement: ['panel', 'context'], when: () => sy().skeleton && openVersion() && !!(version()?.body as { foot_shape?: { right?: { place?: unknown } } } | null)?.foot_shape?.right?.place,
     run: () => void import('../stage/rigEdit').then((m) => { const v = version(); const f = (v?.body as { foot_shape?: never } | null)?.foot_shape; if (v && f) sy().setSheet({ body: { ...(v.body ?? {}), foot_shape: m.setFoot(m.setFoot(f, 'r', { place: null }), 'l', { place: null }) } as never }) }) },
-  { id: 'cast.skeleton.close', scope: 'story', label: 'Back to the figure', icon: ChevronLeft, placement: ['panel'], when: () => sy().skeleton, run: () => sy().setSkeleton(false) },
+  { id: 'cast.skeleton.close', scope: 'story', label: 'Figure', icon: ChevronLeft, hint: "the character's body page: its sizes, the fit, the shell (D190: Figure | Skeleton)", placement: ['panel'], when: () => sy().skeleton, run: () => sy().setSkeleton(false) },
   { id: 'cast.skeleton.fit', scope: 'story', label: 'Fit again ▶', icon: Ruler, hint: "the body fitted to the points as they are now — SDPose's, with those you moved; the locked parts stay",
     placement: ['panel', 'context'], when: () => sy().skeleton && openVersion() && !!version()?.body_points && !fitBlocked(version()),
     run: () => void import('../stage/benchState').then((m) => { const pts = m.bench.points(); if (pts) void sy().refitBody(pts as never) }) },
@@ -476,12 +482,15 @@ const cmds: Command[] = [
     placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character' && !!useSession.getState().capabilities?.story?.model_id, run: () => void sy().makeAnimRef('feet') },
   { id: 'story.cast.readHand', scope: 'story', label: 'Read the hand ▶', icon: ScanSearch, hint: "SDPose reads the hand picture again (a few seconds): each finger's length, place and width",
     placement: ['inspector', 'context'], when: () => profile()?.cls === 'character' && !!version()?.hand_ref_asset_id, run: () => void sy().readPart('hand') },
-  { id: 'story.cast.readFeet', scope: 'story', label: 'Read the feet ▶', icon: ScanSearch, hint: 'SDPose reads the feet picture again — else the A-pose side view (a few seconds): the heel, the toe, the ankle',
-    placement: ['inspector', 'context'], when: () => profile()?.cls === 'character' && !!(version()?.feet_ref_asset_id ?? version()?.anim_ref_side_asset_id), run: () => void sy().readPart('feet') },
+  { id: 'story.cast.readFeet', scope: 'story', label: 'Read the feet ▶', icon: ScanSearch, hint: 'SDPose reads the feet picture again (a few seconds): the heel, the toe, the ankle',
+    placement: ['inspector', 'context'], when: () => profile()?.cls === 'character' && !!version()?.feet_ref_asset_id, run: () => void sy().readPart('feet') },   // D190: the feet picture picked, nothing else
   { id: 'story.cast.useAsHandRef', scope: 'story', label: 'Use as the hand picture', icon: Hand, placement: ['context', 'inspector'], when: () => profile()?.cls === 'character' && picked().length === 1,
     run: () => void sy().setAnimRef('hand', picked()[0]) },
   { id: 'story.cast.useAsFeetRef', scope: 'story', label: 'Use as the feet picture', icon: Footprints, placement: ['context', 'inspector'], when: () => profile()?.cls === 'character' && picked().length === 1,
     run: () => void sy().setAnimRef('feet', picked()[0]) },
+  { id: 'story.cast.sideAsFeet', scope: 'story', label: 'Use the side view as the feet picture', icon: Footprints, hint: 'its feet read from the whole figure in profile (D190: picked, not assigned)',
+    placement: ['context'], when: () => profile()?.cls === 'character' && !!version()?.anim_ref_side_asset_id && version()?.anim_ref_side_asset_id !== version()?.feet_ref_asset_id,
+    run: () => { const id = version()?.anim_ref_side_asset_id; if (id) void sy().setAnimRef('feet', id) } },
   { id: 'story.cast.clearHandRef', scope: 'story', label: 'Clear the hand picture', icon: X, placement: ['inspector', 'context'], when: () => !!version()?.hand_ref_asset_id,
     run: () => void sy().setAnimRef('hand', null) },
   { id: 'story.cast.clearFeetRef', scope: 'story', label: 'Clear the feet picture', icon: X, placement: ['inspector', 'context'], when: () => !!version()?.feet_ref_asset_id,

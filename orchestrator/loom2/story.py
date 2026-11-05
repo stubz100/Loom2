@@ -830,6 +830,15 @@ def expand_spec(variant: str, model_id: str | None = None):
     return registry.get(registry.default_model("t2i"))
 
 
+def part_spec(variant: str, model_id: str | None = None):
+    """D190: the model a hand or feet picture is made on — the skeleton panel's card, any text-to-image model the build offers (the picture
+    is made from words alone, no references); none named, the clay-reference model (E62 a measured Klein 9B for the clean close-up)."""
+    pick = registry.get(model_id or "")
+    if pick is not None and pick.recipes.t2i and registry.offered(pick, variant):
+        return pick
+    return expand_spec(variant)
+
+
 def plan_expand(profile: Profile, version: ProfileVersion, preset: str, variant: str, *, seeds_per_cell: int = 1, width: int, height: int,
                 style_id: str | None = None, tier: str | None = None, group_id: str) -> list[tuple[dict[str, Any], dict[str, Any]]]:
     """One T2I recipe per cell (× seeds), each with the hero as reference 1 and the cell's sentence after the stub, and the job origin that
@@ -868,9 +877,9 @@ def part_words(v: ProfileVersion, part: str) -> str:
 
 
 def part_source(v: ProfileVersion, part: str) -> str | None:
-    """RG1: the picture a hand or the feet are read from — the hand picture; the feet picture, else the A-pose side view (E62 c: a side-view
-    figure reads its feet at 0.78–0.92)."""
-    return v.hand_ref_asset_id if part == "hand" else (v.feet_ref_asset_id or v.anim_ref_side_asset_id)
+    """RG1: the picture a hand or the feet are read from — the hand picture, the feet picture. D190: only what the author picked; the A-pose
+    side view serves when it is picked as the feet picture (E62 c: a side-view figure reads its feet at 0.78–0.92)."""
+    return v.hand_ref_asset_id if part == "hand" else v.feet_ref_asset_id
 
 
 def part_fit_recipe(v: ProfileVersion, part: str) -> dict[str, Any]:
@@ -880,7 +889,8 @@ def part_fit_recipe(v: ProfileVersion, part: str) -> dict[str, Any]:
     src = part_source(v, part)
     if not src:
         raise ValueError(f"make the {part} picture first: the {'hand is' if part == 'hand' else 'feet are'} read from it")
-    inset = HAND_INSET if part == "hand" else FEET_INSET if src == v.feet_ref_asset_id else 1.0
+    whole = src in (v.anim_ref_asset_id, v.anim_ref_back_asset_id, v.anim_ref_side_asset_id)   # D190: an A-pose picked as the feet picture is a whole figure
+    inset = 1.0 if whole else HAND_INSET if part == "hand" else FEET_INSET
     return {"kind": "keypoints", "asset_id": src, "boxes": False, "inset": inset, "matte": True}
 
 
@@ -1025,7 +1035,7 @@ def plan_anim_ref(profile: Profile, version: ProfileVersion, side: str, variant:
     the reference while the version has none (the finisher). CW6 (D143): a place's is its set picture, the empty place its set is fitted to."""
     if side in ("back", "side", "hand", "feet") and profile.cls != "character":
         raise ValueError(f"only a character has a {side} {'picture' if side in ('hand', 'feet') else 'view'}")
-    spec = expand_spec(variant, model_id)                                 # D186: the Make column's card when it takes references
+    spec = part_spec(variant, model_id) if side in ("hand", "feet") else expand_spec(variant, model_id)   # D186: the Make column's card when it takes references; D190: a part's, any t2i
     if spec is None:
         raise ValueError("no model in this build makes an animation reference")
     if side in ("hand", "feet"):                                         # RG1 (E62 a): the words about the hand or the shoes alone — no

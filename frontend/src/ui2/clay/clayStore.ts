@@ -22,8 +22,9 @@ export const kindOfClass = (cls: ProfileClass): LibKind => (cls === 'character' 
 export const classOfKind = (k: LibKind): ProfileClass | null => KINDS.find((x) => x.id === k)?.cls ?? null
 const isKind = (x: string | undefined): x is LibKind => KINDS.some((k) => k.id === x)
 
-export interface ClayPlace { rail: ClayRail; kind: LibKind; profile: string | null; version: string | null; bench: boolean; stage: string | null; anim: AnimRef | null }
-/** The hash's Clay place: #clay/library/<kind>/<profile>/<version>/bench, #clay/scene/<stage> (the parts optional). */
+export interface ClayPlace { rail: ClayRail; kind: LibKind; profile: string | null; version: string | null; bench: boolean; stage: string | null; anim: AnimRef | null
+  skeleton?: boolean }                                                             // D190: a character on Skeleton (…/<version>/skeleton)
+/** The hash's Clay place: #clay/library/<kind>/<profile>/<version>/bench (or /skeleton), #clay/scene/<stage> (the parts optional). */
 export function placeOfHash(hash: string): ClayPlace | null {
   const [layer, rail, a, b, c, d] = hash.replace(/^#/, '').split('/')
   if (layer !== 'clay') return null
@@ -33,12 +34,12 @@ export function placeOfHash(hash: string): ClayPlace | null {
     const anim: AnimRef | null = b === 'anm' && c ? { kind: 'template', id: c } : b === 'clip' && c && d ? { kind: 'clip', file: c, clip: decodeURIComponent(d) } : null
     return { rail: 'library', kind, profile: null, version: null, bench: false, stage: null, anim }
   }
-  const bench = b === 'bench' || c === 'bench' || d === 'bench'
-  return { rail: 'library', kind, profile: b && b !== 'bench' ? b : null, version: c && c !== 'bench' ? c : null, bench, stage: null, anim: null }
+  const tail = [b, c, d], named = (x?: string) => (x && x !== 'bench' && x !== 'skeleton' ? x : null)
+  return { rail: 'library', kind, profile: named(b), version: named(c), bench: tail.includes('bench'), skeleton: tail.includes('skeleton'), stage: null, anim: null }
 }
 const writeHash = (h: string): void => { if (location.hash !== h) history.replaceState(null, '', `${location.pathname}${location.search}${h}`) }
 const libraryHash = (kind: LibKind, asset: { profile: string; version: string } | null, bench: boolean): string =>
-  `#clay/library/${kind}${asset ? `/${asset.profile}/${asset.version}` : ''}${bench ? '/bench' : ''}`
+  `#clay/library/${kind}${asset ? `/${asset.profile}/${asset.version}` : ''}${bench ? '/bench' : asset && kind === 'figure' && useStory.getState().skeleton ? '/skeleton' : ''}`
 const animHash = (a: AnimRef): string => (a.kind === 'template' ? `#clay/library/animation/anm/${a.id}` : `#clay/library/animation/clip/${a.file}/${encodeURIComponent(a.clip)}`)
 
 /** A scene's shots: the shots whose current version is a camera on the stage (the storyboard's names). */
@@ -202,6 +203,7 @@ export function startClay(): () => void {
       const c = useClay.getState()
       if (from?.rail === 'scenes') { if (from.stage) void c.openScene(from.stage); else c.setRail('scenes'); return }
       if (from?.anim) { void c.openAnimation(from.anim); return }
+      if (from?.skeleton) useStory.getState().setSkeleton(true)                  // D190: the side of Figure | Skeleton the link names
       c.openLibrary(from?.kind ?? c.kind, from?.profile ?? null, from?.version ?? null)
       if (from?.bench) void c.openBench()
     })
@@ -213,6 +215,7 @@ export function startClay(): () => void {
     if (!at || !opened) return
     if (at.rail === 'scenes') { if (at.stage) void c.openScene(at.stage); else if (c.rail !== 'scenes') c.setRail('scenes'); return }
     if (at.anim) { if (c.view !== 'animation' || JSON.stringify(c.animation) !== JSON.stringify(at.anim)) void c.openAnimation(at.anim); return }
+    if (at.kind === 'figure' && at.profile && !at.bench && !!at.skeleton !== useStory.getState().skeleton) useStory.getState().setSkeleton(!!at.skeleton)   // D190
     if (at.profile !== (c.asset?.profile ?? null) || at.kind !== c.kind || c.rail !== 'library' || (at.bench && c.view !== 'bench')) {
       c.openLibrary(at.kind, at.profile, at.version)
       if (at.bench) void c.openBench()
@@ -225,5 +228,10 @@ export function startClay(): () => void {
     useClay.setState({ rail: 'scenes', view: 'page' })
     void import('../../suites/stage/stageStore').then((m) => writeHash(`#clay/scene${m.useStage.getState().current?.id ? `/${m.useStage.getState().current!.id}` : ''}`))
   })
-  return () => { offSession(); offNav(); window.removeEventListener('hashchange', onHash) }
+  const offSkel = useStory.subscribe((s, prev) => {                       // D190: Figure | Skeleton kept in the hash
+    if (s.skeleton === prev.skeleton) return
+    const c = useClay.getState()
+    if (c.rail === 'library' && c.view === 'page' && location.hash.startsWith('#clay/')) writeHash(libraryHash(c.kind, c.asset, false))
+  })
+  return () => { offSession(); offNav(); offSkel(); window.removeEventListener('hashchange', onHash) }
 }

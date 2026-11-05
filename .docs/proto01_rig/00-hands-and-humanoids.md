@@ -1,6 +1,6 @@
 # proto01_rig · Rigging the hands, and humanoids that are not human
 
-Status: **proposal, 2026-11-04; answered the same day → D187** (§8); **legs and shoes added → D188** (§9); **E62 run the same evening** (§10); **RG1 built** (§11); **Q9, Q10 answered → D189, RG2 built** (§12); **RG3 built** (§13); **RG4 built** (§14) — the waves done; **D190: Figure | Skeleton, the pictures picked and made in the panel** (§15); **D191: kept when let go, the shell in depth, the thumbs, the shoe's ankle** (§16). Read from the code at `055315e`.
+Status: **proposal, 2026-11-04; answered the same day → D187** (§8); **legs and shoes added → D188** (§9); **E62 run the same evening** (§10); **RG1 built** (§11); **Q9, Q10 answered → D189, RG2 built** (§12); **RG3 built** (§13); **RG4 built** (§14) — the waves done; **D190: Figure | Skeleton, the pictures picked and made in the panel** (§15); **D191: kept when let go, the shell in depth, the thumbs, the shoe's ankle** (§16); **E63: Wan Animate and the rolling feet, measured** (§17). Read from the code at `055315e`.
 
 ## 1. The request
 
@@ -438,3 +438,27 @@ normally shows 2 feet, is this causing issues with the fitting?". Looked at on a
 ![The thumb before and now: a fist, a pinch, at rest](img/d191-thumb.jpg)
 
 ![Skeleton › Hands: no Fit button; the picture's foot says what is kept](img/d191-hands.jpg)
+
+## 17. E63 (2026-11-05): does Wan Animate follow the guide's rolling feet?
+
+Owed since RG2b (the Detailed figure's heels and toes turned by the clip's foot turns, so the pose pass's feet roll). The author: "let's do
+the gpu check". Followed's shot 1 made again as a final with today's code and only Nora's layer performed (Wan Animate 161 frames at
+16 fps, 848×480, seed 0 as before, then the matte: 451 s), beside her take of 2026-11-04 made with the old guide
+(`engine/spikes/e63_feet.cjs`, `e63_feet.py`). The guides differ as intended: a foot's lift — its heel's height above its big toe over the
+leg's length — ran +0.02…+0.28 in the old guide (the feet hanging toe-down from the shins all the way) and −0.15…+0.14 in today's (toe up
+at the strike, flat in stance, heel up at the push-off). SDPose read both takes without person boxes, every other frame:
+
+| take | feet read | guide's lift (5–95 %) | drawn lift (5–95 %) | r (guide, drawn) |
+| --- | --- | --- | --- | --- |
+| old guide | 101 | +0.02 … +0.28 | +0.01 … +0.16 | 0.07 |
+| rolling guide | 113 | -0.14 … +0.14 | +0.02 … +0.17 | 0.08 |
+
+Wan drew different feet for the new guide — the takes differ 22.7 per pixel (of 255) around the feet against 12.1 above the ankles — but
+not feet that follow it: in neither take does the drawn lift follow the guide's (r 0.07, 0.08), and the drawn lift keeps the same small
+heel-up band whatever the guide does; the toe never lifts at the strike. At a full figure in a draft frame a boot is some 25 px and the
+guide's three foot points a few pixels apart — below what the model takes from the pose (the hands, E62 b, are drawn larger). No harm
+either: the feet stay planted and the boots whole in both takes. RG2b stays (the shell's shoe bends with it; the guide is what a larger
+frame would follow); whether Wan follows the roll where the feet are large — a shot from the knees down — is untested.
+
+![The feet at the rolling guide's extremes: the guide, the old take, the new take](img/e63-feet.png)
+

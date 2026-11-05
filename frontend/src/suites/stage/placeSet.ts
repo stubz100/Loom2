@@ -78,16 +78,39 @@ export function setFaces(ps: PlaceSetDoc): Face[] {
 /** A face's outward normal into the space (u × v). */
 export const normalOf = (f: Face) => new THREE.Vector3().crossVectors(f.u, f.v).normalize()
 
-/** The set drawn: a plane mesh per face (its own UVs 0..1 across the face), named by the face (`userData.face`). */
+/** W55: an open ground's backdrop is drawn up to this elevation from the ground's middle — the picture's sky carried on above it. */
+const BACKDROP_REACH_DEG = 60
+
+/** W55: how far a face is drawn past its own frame, in metres along its u (before, after) and its v (below, above). An open ground's
+ *  floor (`size`, 40 m) stopped 10 m short of its backdrop's ring (`backdrop`, 30 m) and its backdrop 12 m up: a low camera saw black
+ *  between them, a raised one black above (the Harbour pier's plates, 5–30 % of the frame). The floor is drawn out to the ring and the
+ *  backdrop up to BACKDROP_REACH_DEG, their textures' edges carried on (clamped); the faces themselves — what is baked and filled — stay. */
+export function drawnPast(ps: PlaceSetDoc, f: Face): [number, number, number, number] {
+  if (ps.kind !== 'ground') return [0, 0, 0, 0]
+  const s = { ...SET_KIND_SIZES.ground, ...ps.sizes }
+  if (f.id === 'floor') { const out = Math.max(0, s.backdrop / Math.cos(Math.PI / BACKDROP_FACETS) - s.size / 2) + 0.5; return [out, out, out, out] }
+  if (f.id.startsWith('backdrop_')) return [0, 0, 0, Math.max(0, s.backdrop * Math.tan(THREE.MathUtils.degToRad(BACKDROP_REACH_DEG)) - s.height)]
+  return [0, 0, 0, 0]
+}
+
+/** The set drawn: a plane mesh per face (its own UVs 0..1 across the face; W55: past its frame where drawnPast says, the UVs running on
+ *  past 0..1 so a texture's edge is carried on), named by the face (`userData.face`). */
 export function placeSet(ps: PlaceSetDoc, mat: THREE.Material, textured?: (id: string) => THREE.Material | null): THREE.Group {
   const g = new THREE.Group()
   for (const f of setFaces(ps)) {
-    const geo = new THREE.PlaneGeometry(f.w, f.h)
+    const [l, r, b, a] = drawnPast(ps, f)
+    const geo = new THREE.PlaneGeometry(f.w + l + r, f.h + b + a)
+    const cx = (f.w + r - l) / 2, cy = (f.h + a - b) / 2                     // the drawn plane's middle in the face's frame
+    if (l || r || b || a) {
+      const pos = geo.attributes.position, uv = geo.attributes.uv
+      for (let i = 0; i < pos.count; i++) uv.setXY(i, (pos.getX(i) + cx) / f.w, (pos.getY(i) + cy) / f.h)
+      uv.needsUpdate = true
+    }
     const m = new THREE.Mesh(geo, textured?.(f.id) ?? mat)
     const n = normalOf(f)
     const basis = new THREE.Matrix4().makeBasis(f.u, f.v, n)                  // the plane's +X along u, +Y along v, facing n
     m.quaternion.setFromRotationMatrix(basis)
-    m.position.copy(f.origin).addScaledVector(f.u, f.w / 2).addScaledVector(f.v, f.h / 2)
+    m.position.copy(f.origin).addScaledVector(f.u, cx).addScaledVector(f.v, cy)
     m.userData.face = f.id
     g.add(m)
   }

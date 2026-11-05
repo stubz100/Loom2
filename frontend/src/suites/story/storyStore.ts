@@ -371,6 +371,10 @@ export type ProfileBody = { name?: string; versions?: { id: string; [k: string]:
 let profTimer: number | null = null
 let profPending: { pid: string; body: ProfileBody } | null = null
 let profChain: Promise<unknown> = Promise.resolve()
+/** D191: the refits one after another, in the order they were asked — two points let go in quick succession sent two refits, and the
+ *  first one's answer, landing last, kept one point moved of two (the CS2 scenario, 1 of 92 in a full run). */
+let refitChain: Promise<unknown> = Promise.resolve()
+const inTurn = <T>(fn: () => Promise<T>): Promise<T> => { const run = refitChain.then(fn); refitChain = run.catch(() => null); return run }
 let shotTimer: number | null = null
 let shotPending: { sid: string; body: { name?: string } } | null = null
 let shotChain: Promise<unknown> = Promise.resolve()
@@ -622,14 +626,14 @@ export const useStory = create<StoryState>()((set, get) => {
         if (!v.candidates_group_id) await get().loadProfiles()
       } catch (e) { toast(`Animation reference: ${detail(e)}`) }
     },
-    refitPart: async (part, points) => {
+    refitPart: (part, points) => inTurn(async () => {
       const p = get().profile(); const v = get().version(); if (!p || !v) return false
       await patchWith({})                                                    // D191: an edit still queued goes first (a refit replaces the body)
       try {
         replaceProfile(await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/parts/{part}/refit', { params: { path: { pid: p.id, vid: v.id, part } }, body: { points } })))
         return true
       } catch (e) { toast(`Fit the ${part} again: ${detail(e)}`); return false }
-    },
+    }),
     readPart: async (part) => {
       const p = get().profile(); const v = get().version(); if (!p || !v) return
       try {
@@ -652,7 +656,7 @@ export const useStory = create<StoryState>()((set, get) => {
       } catch (e) { toast(`3D model: ${detail(e)}`) }
     },
     setSkeleton: (on) => set({ skeleton: on }),
-    refitBody: async (points) => {
+    refitBody: (points) => inTurn(async () => {
       const p = get().profile(); const v = get().version(); if (!p || !v) return false
       await patchWith({})                                                    // D191: an edit still queued (an unlock) goes first
       try {
@@ -660,7 +664,7 @@ export const useStory = create<StoryState>()((set, get) => {
         replaceProfile(r.profile as Profile)
         return true
       } catch (e) { toast(`Fit again: ${detail(e)}`); return false }
-    },
+    }),
     makeShell: async () => {
       const p = get().profile(); const v = get().version(); if (!p || !v) return
       try {

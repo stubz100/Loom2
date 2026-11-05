@@ -415,6 +415,10 @@
 .skel-pane .tools { position: absolute; right: 6px; top: 4px; display: flex; gap: 6px; z-index: 2; }
 .skel-pane > .hint { padding: 6px 8px; }
 .skel-pane .hint.warn { color: var(--warn, #d29922); }
+.skel-hints { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 0 12px; padding: 4px 8px; pointer-events: none; }   /* D191: the reference's lines laid over its foot */
+.skel-hints:empty { display: none; }
+.skel-hints .hint { padding: 0; text-shadow: 0 0 3px var(--bg1), 0 0 6px var(--bg1); }
+.skel-hints .hint[title] { pointer-events: auto; }
 .skel-ref { position: relative; flex: 1; min-height: 0; margin-top: 24px; }
 .skel-ref img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; user-select: none; }
 .skel-ref svg { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }

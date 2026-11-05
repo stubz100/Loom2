@@ -157,3 +157,22 @@ Tomas's line is over its 4.8 s limit.
 Fixed or gone: F3, F24 / F30 (a shot's cast is its scene's), F25 / F26 / F29 (the For trip is gone), F27, F37 (the toast says the range stays),
 F39, F40, F41, F42. Partly: F11 / F12 (no coverage grid; a character's copy, W16), F13 (greyed). Still: F1 (W1), F2, F17 (W14), F19 (W28), F20 (W24),
 F23 (W6), F35 (W34, W37), F43 (W55), F44 (W45).
+
+## 5. The register's last owed items (2026-11-05)
+
+Worked in waves 1–5 (journal 2026-10-31 23:12 … 2026-11-01 00:38) and by D176–D180; the three owed a look or a rig run, closed on The Last
+Ferry and Followed (journal 2026-11-05):
+
+- **W51** fixed: the player's picture kept the canvas's own size (848×480) and ran under the transport and the timeline when the Bin drawer
+  took the room; the viewer's grid now sizes to the room left and the picture shrinks to it (at 1280 × 760 too). With it, the top bar's chips
+  keep one line in a narrow window (the tabs' key hints hidden under 1400 px — the keys stay in the tabs' tooltips).
+- **W55** fixed in the drawing: an open ground's floor (40 m) stopped 10 m short of its backdrop's ring (30 m), and its backdrop 12 m up —
+  the Harbour pier's plates showed black between them (5–30 % of the frame); the floor is now drawn out to the ring and the backdrop up to 60°,
+  their textures' edges carried on, the faces themselves (baked, filled) unchanged: 0–0.4 % black on three of the four cameras. The fourth's
+  rest is the pier's own bake: its set picture was letterboxed (W65), and the bars, projected as seen, were never filled — W65 now refuses
+  such a picture before a set is built.
+- **W44** checked, nothing to change: a final made on a copy of Arrival with the set and the letter alone (no GPU job) cuts the letter by its
+  depth onto transparency (0.24 % of the frame); the walkthrough's empty letter was W43's black depth (D167).
+
+Left to the author: W5 (the framing words are also the Look's composition), W18 (a flat prop's model is a thick block), W19 and W20 (the
+fit's default kind; the backdrop panels a Fill queues).

@@ -53,7 +53,8 @@ a { color: var(--accent); }
 .top .project-tab .project-name { color: var(--fg3); font-size: 11px; margin-left: 4px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: bottom; }
 .top .tabs-sep { display: inline-block; align-self: center; width: 1px; height: 18px; background: var(--line2); margin: 0 6px; vertical-align: middle; }
 .top .spacer { flex: 1; }
-.top .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: var(--bg2); border: 1px solid var(--line); color: var(--fg2); font-size: 12px; cursor: pointer; }
+.top .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: var(--bg2); border: 1px solid var(--line); color: var(--fg2); font-size: 12px; cursor: pointer; white-space: nowrap; flex: none; }
+@media (max-width: 1400px) { .top .tab kbd { display: none; } }   /* a narrow window: the chips keep one line; the tab's key stays in its tooltip */
 .top .chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--fg3); }
 .top .chip .dot.ok { background: var(--keep); } .top .chip .dot.busy { background: var(--accent); } .top .chip .dot.down { background: var(--reject); } .top .chip .dot.warn { background: var(--warn); }
 .menu { position: absolute; z-index: 30; top: calc(var(--top) + 2px); background: var(--bg2); border: 1px solid var(--line2); border-radius: var(--radius); min-width: 240px; box-shadow: 0 8px 24px var(--shadow); padding: 4px; }

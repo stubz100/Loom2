@@ -37,6 +37,25 @@ describe("a place's set (CW6)", () => {
     const back = g.children.find((c) => c.userData.face === 'wall_back')!
     expect(new THREE.Vector3(0, 0, 1).applyQuaternion(back.quaternion).z).toBeCloseTo(1, 6)    // facing in (+Z)
   })
+  it("W55: open ground's floor is drawn out to its backdrop and the backdrop up past the picture, their textures carried on", () => {
+    const g = placeSet({ kind: 'ground', sizes: { size: 40, backdrop: 30, height: 12 } }, new THREE.MeshBasicMaterial())
+    g.updateMatrixWorld(true)
+    const floor = g.children.find((c) => c.userData.face === 'floor') as THREE.Mesh
+    const fb = new THREE.Box3().setFromObject(floor)
+    expect(fb.max.x).toBeGreaterThanOrEqual(30 / Math.cos(Math.PI / 12))                       // the ring's corners: no gap to the backdrop
+    const back = g.children.find((c) => c.userData.face === 'backdrop_0') as THREE.Mesh
+    const bb = new THREE.Box3().setFromObject(back)
+    expect(bb.max.y).toBeCloseTo(30 * Math.tan(Math.PI / 3), 3)                                 // up to 60° from the middle
+    expect(bb.min.y).toBeCloseTo(0, 6)
+    // the face's own frame keeps its texture's 0..1: a vertex at the floor's far-left corner of the face reads (0, 1) wherever the plane ends
+    const uv = floor.geometry.attributes.uv, pos = floor.geometry.attributes.position
+    const at = (i: number) => new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(floor.matrixWorld)
+    const i0 = [0, 1, 2, 3].reduce((a, i) => (at(i).x < at(a).x || at(i).z < at(a).z ? i : a), 0)
+    const p = at(i0), u = (p.x + 20) / 40, v = (20 - p.z) / 40                                  // the face: origin (−20, 0, 20), u +x, v −z
+    expect([uv.getX(i0), uv.getY(i0)].map((x) => +x.toFixed(4))).toEqual([+u.toFixed(4), +v.toFixed(4)])
+    const room = placeSet({ kind: 'room', sizes: { width: 4, depth: 4, height: 3 } }, new THREE.MeshBasicMaterial())
+    expect(Math.max(...(room.children[0] as THREE.Mesh).geometry.attributes.uv.array)).toBe(1)  // other kinds as they were
+  })
 })
 
 describe("D170: a street's fronts seen off square are the Fill's (place_sets.unseen_cos's twin)", () => {

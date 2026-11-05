@@ -252,9 +252,11 @@ function RefPane({ v, body, stance, side }: { v: Profile['versions'][number]; bo
               onPointerDown={(e) => { (e.target as Element).setPointerCapture?.(e.pointerId); setDrag({ kind: 'blue', key: 'pose', k, at: at(e) }) }}><title>{`${COCO[k]} — the figure's: drag to set the part it ends (locked)`}</title></circle> })}
         </svg>}
       </div>
-      {!pts && <span className="hint">Fit the body first: its points come from the reference (Cast's body section).</span>}
-      {ticks.length > 0 && <span className="hint warn">{ticks.length} point{ticks.length === 1 ? '' : 's'} apart from the figure's</span>}
-      {look === 'shell' && over.outside.length > 0 && <span className="hint warn" title={over.outside.join(', ')}>{over.outside.length} joint{over.outside.length === 1 ? '' : 's'} outside the shell</span>}
+      <div className="skel-hints">{/* D191: over the pane's foot — a line coming or going no longer rescales the picture under a drag */}
+        {!pts && <span className="hint">Fit the body first: its points come from the reference (Cast's body section).</span>}
+        {ticks.length > 0 && <span className="hint warn">{ticks.length} point{ticks.length === 1 ? '' : 's'} apart from the figure's</span>}
+        {look === 'shell' && over.outside.length > 0 && <span className="hint warn" title={over.outside.join(', ')}>{over.outside.length} joint{over.outside.length === 1 ? '' : 's'} outside the shell</span>}
+      </div>
     </div>
   )
 }

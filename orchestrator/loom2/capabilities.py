@@ -361,6 +361,8 @@ def _i2v_models(svc: Services, variant: str) -> dict:
     for spec in registry.video_specs():
         if not _offered(spec, variant):                          # C3: LTX-2.3 is community-licensed, full only
             continue
+        if registry.unconfirmed(spec, svc.app.settings):         # D193: H3 waits for Settings' licence confirmation (D17, D192)
+            continue
         e, geo, video = ROSTER_BY_ID[spec.id], spec.geometry, spec.video
         assert video is not None
         needs = spec.weights()
@@ -369,6 +371,7 @@ def _i2v_models(svc: Services, variant: str) -> dict:
         out[spec.id] = {"family": spec.family, "label": spec.label, "health": "missing" if missing else ("verified" if all(h == "verified" for h in healths.values()) else "present"),
                         "missing": missing, "fps": geo.fps, "frames": geo.frames, "frame_step": geo.frame_step, "size_mult": geo.size_mult, "size": list(geo.size or []),
                         "presets": {k: p.label for k, p in video.presets.items()}, "beats": spec.recipes.beats, "flf": spec.recipes.flf,
+                        "sound": video.sound, "takes_negative": video.takes_negative,       # D193: H3 makes its sound and takes no negative
                         "preset_params": {k: p.model_dump() for k, p in video.presets.items()},
                         "vram_gb": spec.estimates.vram_gb, "license": e.license, "approx_gb": round(sum((ROSTER_BY_ID[x].approx_gb or 0) for x in needs), 1),
                         **_blocks(spec)}

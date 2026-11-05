@@ -157,6 +157,8 @@ class I2vModelCaps(Open):
     presets: dict[str, str]
     beats: bool
     flf: bool
+    sound: bool = False                            # D193: the model makes the clip's sound with the picture (H3)
+    takes_negative: bool = True                    # D193: False — no negative in the graph (H3); the panel hides the field
     vram_gb: float | None = None
     license: str
     approx_gb: float

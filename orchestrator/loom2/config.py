@@ -244,7 +244,7 @@ class Settings(BaseModel):
     thumbnail_sizes: list[int] = Field(default_factory=lambda: [256, 512, 1024])
     log_level: str = "INFO"
     reopen_last_project: bool = True
-    h3_licence_confirmed: bool = False      # D17: the author confirms the MiniMax H3 community-licence application is filed
+    h3_licence_confirmed: bool = False      # D17 / D192: the author confirms MiniMax's answer (an individual without income needs no authorization); D193: H3 is offered and run only then (the roster's `confirm`)
     samples: SampleSettings = Field(default_factory=SampleSettings)     # D90: the scenes of the style samples and the preset swatches
     motion: MotionSettings = Field(default_factory=MotionSettings)      # CA1: the motion library's starter set and local folder
     effectcraft: EffectCraftSettings = Field(default_factory=EffectCraftSettings)   # AE1 (D114): the animation editor's engine

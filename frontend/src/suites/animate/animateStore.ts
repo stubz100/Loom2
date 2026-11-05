@@ -33,7 +33,15 @@ export interface AnimPresetSaved { name: string; panel: AnimPanel; saved_at: str
 export type AnimView = 'player' | 'compare' | 'windows'                // D99 (UX0 #14): the filmstrip is a track of the timeline (`filmTrack`), not a view; D165: the windows
 
 /** 04 §9a / 11 §3c: native fps, Draft frame count, tier sizes, the frame rule and keyframe beats of a video model (the server snaps anyway). */
-export interface ModelRules { fps: number; frames: number; step: number; mult: number; draft: [number, number]; hd: [number, number]; portrait: [number, number]; square: [number, number]; short: string; beats: boolean; camera: boolean }
+export interface ModelRules {
+  fps: number; frames: number; step: number; mult: number; draft: [number, number]; hd: [number, number]; portrait: [number, number]; square: [number, number]; short: string; beats: boolean; camera: boolean
+  base: number                     // D193: frames = base + step·n (Wan / LTX 1, H3 5)
+  fpsFixed: boolean                // D193: the clip runs at `fps` whatever the panel says (H3 makes its sound at 24)
+  maxPx: number | null             // D193: no larger size runs (H3: 1024×576)
+  sound: boolean                   // D193: the model makes the clip's sound
+  negative: boolean                // D193: the graph takes a negative (H3 none)
+  presets: AnimPreset[]            // D193: the presets this model has (H3: Draft only)
+}
 export const MOTION_CHIPS = ['slow push-in', 'orbit left', 'handheld camera', 'wind in hair', 'turns to camera', 'walks left to right', 'camera holds still', 'rain keeps falling', 'looks down, then back up', 'subtle breathing']
 export const DEFAULT_PANEL: AnimPanel = {
   start: null, end: null, prompt: '', negative: '', use_negative: false,
@@ -42,7 +50,9 @@ export const DEFAULT_PANEL: AnimPanel = {
 }
 
 /** Before the capabilities arrive: the panel's own defaults, no beats (the server snaps and checks anyway). */
-const NEUTRAL: ModelRules = { fps: 16, frames: 81, step: 4, mult: 16, draft: [832, 480], hd: [1280, 720], portrait: [480, 832], square: [640, 640], short: '', beats: false, camera: false }
+const NEUTRAL: ModelRules = { fps: 16, frames: 81, step: 4, mult: 16, draft: [832, 480], hd: [1280, 720], portrait: [480, 832], square: [640, 640], short: '', beats: false, camera: false,
+  base: 1, fpsFixed: false, maxPx: null, sound: false, negative: true, presets: ['draft', 'motion', 'quality'] }
+const PRESET_ORDER: AnimPreset[] = ['draft', 'motion', 'quality']
 
 /** C25 / D65: a video model's rules from `/capabilities.i2v.models[id]` (its spec's geometry); a neutral fallback before they load. */
 export function modelRules(id: string): ModelRules {
@@ -52,8 +62,11 @@ export function modelRules(id: string): ModelRules {
   const t = m.geometry?.tiers ?? {}
   const pair = (v: number[] | undefined, fallback: [number, number]): [number, number] => (v && v.length === 2 ? [v[0], v[1]] : fallback)
   const draft = pair(t.draft ?? caps?.tiers.draft?.[m.family] ?? m.size, NEUTRAL.draft)
+  const presets = PRESET_ORDER.filter((k) => m.presets?.[k] != null)
   return { fps: m.fps, frames: m.frames, step: m.frame_step, mult: m.size_mult, short: m.short, beats: !!(m.recipes?.beats ?? m.beats), camera: !!m.recipes?.camera, draft,
-    hd: pair(t.hd ?? caps?.tiers.hd?.[m.family], draft), portrait: pair(t.portrait ?? caps?.portrait?.[m.family], [draft[1], draft[0]]), square: pair(t.square ?? caps?.square?.[m.family], NEUTRAL.square) }
+    hd: pair(t.hd ?? caps?.tiers.hd?.[m.family], draft), portrait: pair(t.portrait ?? caps?.portrait?.[m.family], [draft[1], draft[0]]), square: pair(t.square ?? caps?.square?.[m.family], NEUTRAL.square),
+    base: m.geometry?.frame_base ?? 1, fpsFixed: !!m.geometry?.fps_fixed, maxPx: m.geometry?.max_px ?? null, sound: !!m.sound, negative: m.takes_negative !== false,
+    presets: presets.length ? presets : NEUTRAL.presets }
 }
 
 /** D65: the panel's model, or the variant's i2v default while it holds none (or one this build does not offer). */
@@ -78,7 +91,7 @@ export function recipeFor(p: AnimPanel & { start: string }, seeds?: number[]): I
   const model_id = panelModel(p.model_id)
   const s = seeds ?? (p.seed_mode === 'random' ? Array.from({ length: p.count }, () => 0) : p.seed_mode === 'fixed' ? Array.from({ length: p.count }, () => p.seed) : Array.from({ length: p.count }, (_, i) => p.seed + i))
   return {
-    kind: 'i2v', model_id, start_asset: p.start, end_asset: p.end || null, prompt_text: p.prompt, negative: p.use_negative ? p.negative : null,
+    kind: 'i2v', model_id, start_asset: p.start, end_asset: p.end || null, prompt_text: p.prompt, negative: p.use_negative && modelRules(model_id).negative ? p.negative : null,
     frames: p.frames, fps: p.fps, width: p.width, height: p.height, preset: p.preset, steps: p.steps, cfg: p.cfg, shift: p.shift,
     beats: modelRules(model_id).beats ? p.beats : [], seeds: s,
     camera: modelRules(model_id).camera ? (p.camera ?? DEFAULT_CAMERA) : null,      // D156: the camera model always runs a move (static by default); the plain one never
@@ -180,7 +193,8 @@ export const useAnimate = create<AnimateState>()(
         if (!useSession.getState().capabilities?.i2v?.models[model_id]) return
         const r = modelRules(model_id)
         const [width, height] = sizeFor(model_id, p.tier, p.orientation, [p.width, p.height])
-        get().set({ model_id, fps: r.fps, frames: r.frames, width, height, steps: null, cfg: null, shift: null })
+        const preset = r.presets.includes(p.preset) ? p.preset : r.presets[0]          // D193: H3 has Draft only
+        get().set({ model_id, preset, fps: r.fps, frames: r.frames, width, height, steps: null, cfg: null, shift: null })
       },
       setTier: (tier, orientation) => {
         const p = get().panel

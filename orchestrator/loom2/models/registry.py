@@ -111,6 +111,13 @@ def offered(spec: ModelSpec, variant: str | None) -> bool:
     return variant != "open" or "open" in ROSTER_BY_ID[spec.id].variants
 
 
+def unconfirmed(spec: ModelSpec, settings: Any) -> list[str]:
+    """D193: the Settings flags this model's weights wait for (the roster's `confirm`: H3's licence confirmation, D17 / D192) that are not
+    set — empty when the model may be offered and run."""
+    flags = {ROSTER_BY_ID[x].confirm for x in spec.weights() if x in ROSTER_BY_ID and ROSTER_BY_ID[x].confirm}
+    return sorted(f for f in flags if f and not getattr(settings, f, False))
+
+
 def default_model(kind: str, variant: str | None = None) -> str:
     """The spec named the default for `kind` (recipes.default_for); when the variant does not offer it, the first offered spec (by
     order) that runs the kind — Klein 4B for t2i / inpaint and Klein 4B base for refine under open."""

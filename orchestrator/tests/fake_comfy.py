@@ -163,7 +163,8 @@ class FakeComfy:
             return
         for v in (1, 2):
             await self._send({"type": "progress", "data": {"prompt_id": pid, "value": v, "max": 2, "node": "1"}})
-        vid = next((n for n in graph.values() if n.get("class_type") in ("WanImageToVideo", "WanFirstLastFrameToVideo", "LTXVImgToVideo", "WanAnimateToVideo", "WanSoundImageToVideo")), None)
+        vid = next((n for n in graph.values() if n.get("class_type") in ("WanImageToVideo", "WanFirstLastFrameToVideo", "LTXVImgToVideo", "WanAnimateToVideo", "WanSoundImageToVideo",
+                                                                          "MiniMaxH3ImageToVideo")), None)   # D193: H3
         sam_video = self._sam_video(graph)
         if vid:                                                  # M6: a video graph decodes `length` frames; SaveImage writes one PNG each
             w, h, count = int(vid["inputs"].get("width", 64)), int(vid["inputs"].get("height", 64)), int(vid["inputs"].get("length", 1))
@@ -199,6 +200,19 @@ class FakeComfy:
             gname = f"{gbase}_{sum(1 for p in gdir.glob(f'{gbase}_*.glb')) + 1:05d}_.glb"
             (gdir / gname).write_bytes((self.glb_for(graph) if self.glb_for else None) or minimal_glb())
             outputs[save3d] = {"3d": [{"filename": gname, "subfolder": gsub, "type": "output"}]}
+        save_audio = next((k for k, n in graph.items() if n.get("class_type") == "SaveAudio"), None)
+        if save_audio:                                                  # D193: H3's sound — a stereo FLAC as long as the frames at 24 fps
+            import numpy as np
+            import soundfile as sf
+            aprefix = graph[save_audio]["inputs"].get("filename_prefix", "loom2/audio")
+            asub, _, abase = aprefix.rpartition("/")
+            adir = self.output_dir / asub if asub else self.output_dir
+            adir.mkdir(parents=True, exist_ok=True)
+            aname = f"{abase}_{sum(1 for p in adir.glob(f'{abase}_*.flac')) + 1:05d}_.flac"
+            sr = 32000
+            t = np.arange(int(sr * count / 24)) / sr
+            sf.write(str(adir / aname), np.stack([0.1 * np.sin(2 * np.pi * 220 * t), 0.1 * np.sin(2 * np.pi * 330 * t)], axis=1).astype(np.float32), sr)
+            outputs[save_audio] = {"audio": [{"filename": aname, "subfolder": asub, "type": "output"}]}
         preview = next((k for k, n in graph.items() if n.get("class_type") == "PreviewAny"), None)
         if preview and any(n.get("class_type") == "SDPoseKeypointExtractor" for n in graph.values()):
             people = getattr(self, "people", None) or [fake_person()]                       # CA1b: the keypoints graph answers with text only

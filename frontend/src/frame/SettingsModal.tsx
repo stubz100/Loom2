@@ -28,7 +28,7 @@ export function SettingsModal() {
     setBusy(true)
     try {
       await s.saveSettings({ models_root: draft.models_root, mounted_model_trees: draft.mounted_model_trees, vram_budget_gb: draft.vram_budget_gb, hf_home: draft.hf_home,
-        thumbnail_sizes: draft.thumbnail_sizes, log_level: draft.log_level, samples: draft.samples, motion: draft.motion, audio: draft.audio, vsthost: { folders: draft.vsthost.folders }, engine: { flags: draft.engine.flags, restart_every_jobs: draft.engine.restart_every_jobs, port: draft.engine.port, health_timeout_s: draft.engine.health_timeout_s,
+        thumbnail_sizes: draft.thumbnail_sizes, log_level: draft.log_level, samples: draft.samples, h3_licence_confirmed: !!draft.h3_licence_confirmed, motion: draft.motion, audio: draft.audio, vsthost: { folders: draft.vsthost.folders }, engine: { flags: draft.engine.flags, restart_every_jobs: draft.engine.restart_every_jobs, port: draft.engine.port, health_timeout_s: draft.engine.health_timeout_s,
           stall_timeout_s: draft.engine.stall_timeout_s, reserve_vram_gb: draft.engine.reserve_vram_gb, vram_headroom_gb: draft.engine.vram_headroom_gb } })
       s.openSettings(false)
     } finally { setBusy(false) }
@@ -109,7 +109,7 @@ export function SettingsModal() {
           <h4 id="settings-keyboard">Keyboard</h4>
           <KeyboardSettings />
           <h4>Licences</h4>
-          <label>MiniMax H3 <Help text={"Records the confirmation that unlocks the H3 hero tier in Shots once its graph and weights land (04 §5b). Licence checks are read against EU terms."} /></label><label className="chk"><input type="checkbox" checked={!!draft.h3_licence_confirmed} onChange={(e) => set({ h3_licence_confirmed: e.target.checked })} /> the EU community-licence application is filed (D17)</label>
+          <label>MiniMax H3 <Help text={"H3's community licence excludes the EU; MiniMax answered that an individual without income from it needs no authorization (D192). Ticked, the H3 card appears in Image to video's models (D193). Should you earn from it or work through an organisation, the licence is read again."} /></label><label className="chk"><input type="checkbox" checked={!!draft.h3_licence_confirmed} onChange={(e) => set({ h3_licence_confirmed: e.target.checked })} /> I use H3 as an individual without income from it — MiniMax's answer (D192)</label>
           <h4>About</h4>
           <About />
         </div>

@@ -16,6 +16,10 @@ const CAPS = {
         recipes: { beats: true } },
       'vid-cam': { order: 3, short: 'Camera', family: 'geo', fps: 16, frames: 81, frame_step: 4, size_mult: 16, size: [832, 480],
         geometry: { tiers: { draft: [832, 480] } }, recipes: { camera: true } },
+      // D193: an H3-like model — 17n + 5 at a fixed 24 fps, a pixel cap, its sound, no negative, Draft only
+      'vid-h3': { order: 4, short: 'H3', family: 'h3', fps: 24, frames: 124, frame_step: 17, size_mult: 32, size: [864, 480], sound: true, takes_negative: false,
+        presets: { draft: 'Draft · 8 steps, turbo LoRA' }, preset_params: { draft: { label: 'Draft', steps: 8, turbo: true } },
+        geometry: { frame_base: 5, fps_fixed: true, max_px: 589824, tiers: { draft: [864, 480], hd: [1024, 576] } }, recipes: { flf: true } },
     },
     tiers: { draft: { fam: [768, 448] }, hd: { fam: [1216, 704] } },
     portrait: { fam: [448, 768] },
@@ -42,6 +46,26 @@ describe('modelRules / sizeFor', () => {
   it('keeps a custom size and uses neutral rules for an unknown model', () => {
     expect(sizeFor('vid-geo', 'custom', 'portrait', [999, 555])).toEqual([999, 555])
     expect(modelRules('nope')).toMatchObject({ fps: 16, frames: 81, draft: [832, 480], short: 'nope', beats: false })
+  })
+})
+
+describe('D193: a model with its own grid, rate, presets and sound', () => {
+  it('reads the H3 card’s rules', () => {
+    expect(modelRules('vid-h3')).toMatchObject({ fps: 24, frames: 124, step: 17, base: 5, fpsFixed: true, maxPx: 589824, sound: true, negative: false, presets: ['draft'], hd: [1024, 576] })
+    expect(modelRules('vid-geo')).toMatchObject({ base: 1, fpsFixed: false, maxPx: null, sound: false, negative: true, presets: ['draft', 'motion', 'quality'] })
+  })
+  it('drops the negative for a model without one', () => {
+    const p: AnimPanel & { start: string } = { ...DEFAULT_PANEL, start: 'ast_s', model_id: 'vid-h3', negative: 'blur', use_negative: true }
+    expect(recipeFor(p).negative).toBeNull()
+    expect(recipeFor({ ...p, model_id: 'vid-geo' }).negative).toBe('blur')
+  })
+  it('setModel takes a preset the model has', () => {
+    useAnimate.setState({ panel: { ...DEFAULT_PANEL, model_id: 'vid-geo', preset: 'motion' } })
+    useAnimate.getState().setModel('vid-h3')
+    expect(useAnimate.getState().panel).toMatchObject({ model_id: 'vid-h3', preset: 'draft', fps: 24, frames: 124, width: 864, height: 480 })
+    useAnimate.getState().set({ preset: 'draft' })
+    useAnimate.getState().setModel('vid-geo')
+    expect(useAnimate.getState().panel.preset).toBe('draft')
   })
 })
 

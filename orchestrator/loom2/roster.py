@@ -34,6 +34,7 @@ class RosterEntry(BaseModel):
     note: str | None = None
     base: str | None = None                    # LT1 (18 §3b): a LoRA's base — the model base it fits (klein-9b, flux2, wan22 …); the family when absent
     preset: str | None = None                  # LT1: the mechanism that applies this LoRA (turbo | lightning | angles | stage | guide) — never a slot
+    confirm: str | None = None                 # D193: the Settings flag the author sets before it is offered or run (H3: h3_licence_confirmed, D17 / D192)
 
 
 # P18 (D84): weights loom2 never lists or suggests, by a name fragment, with the licence reason the Models suite shows.
@@ -173,6 +174,26 @@ ROSTER: list[RosterEntry] = [
                 repo="Kijai/LTX2.3_comfy", file="vae/LTX23_audio_vae_bf16.safetensors", license="ltx-2.x community", approx_gb=0.34, note="core 0.38 needs it on LTXVEmptyLatentAudio"),
     RosterEntry(id="ltx23-upscaler-x2", name="ltx-2.3-spatial-upscaler-x2-1.1.safetensors", folder="upscale_models", family="ltx23", role="upscaler",
                 repo="Lightricks/LTX-2.3", file="ltx-2.3-spatial-upscaler-x2-1.1.safetensors", license="ltx-2.x community", approx_gb=0.93),
+    # ---- MiniMax H3 (D9, D192, D193): the hero clip — the pruned first + last frame transformer (FL2VA) in fp8 scaled, the H3 encoder
+    #      (Qwen3-VL-32B) in bf16 streamed from RAM by Dynamic VRAM, the video and audio VAEs, the 8-step turbo LoRA (E64). The community
+    #      licence excludes the EU; MiniMax answered the author that an individual without income from it needs no authorization (D192) —
+    #      offered only while Settings' H3 confirmation is on ----
+    RosterEntry(id="minimax-h3-fl2va-fp8", name="minimax_h3_fl2va_pruned_fp8_scaled.safetensors", folder="diffusion_models", family="minimax_h3", role="transformer",
+                repo="Comfy-Org/MiniMax-H3", file="diffusion_models/minimax_h3_fl2va_pruned_fp8_scaled.safetensors", license="minimax-h3-community (D192)",
+                approx_gb=20.96, confirm="h3_licence_confirmed", note="E64: 864×480 × 124 f @ 24 with sound in 138 s warm (8 turbo steps), VRAM peak 8.4–9.7 GB"),
+    RosterEntry(id="minimax-h3-encoder-bf16", name="qwen3vl_32b_minimax_h3_bf16.safetensors", folder="text_encoders", family="minimax_h3", role="text_encoder",
+                repo="Comfy-Org/MiniMax-H3", file="text_encoders/qwen3vl_32b_minimax_h3_bf16.safetensors", license="minimax-h3-community (D192)",
+                approx_gb=51.5, confirm="h3_licence_confirmed", note="no fp8 is offered; the template's NVFP4 is CUDA's (D192)"),
+    RosterEntry(id="minimax-h3-video-vae", name="minimax_h3_video_vae_fp16.safetensors", folder="vae", family="minimax_h3", role="vae",
+                repo="Comfy-Org/MiniMax-H3", file="vae/minimax_h3_video_vae_fp16.safetensors", license="minimax-h3-community (D192)", approx_gb=5.21,
+                confirm="h3_licence_confirmed"),
+    RosterEntry(id="minimax-h3-audio-vae", name="minimax_h3_audio_vae_fp32.safetensors", folder="vae", family="minimax_h3", role="vae",
+                repo="Comfy-Org/MiniMax-H3", file="vae/minimax_h3_audio_vae_fp32.safetensors", license="minimax-h3-community (D192)", approx_gb=0.6,
+                confirm="h3_licence_confirmed", note="H3 makes the clip's sound with the picture (D193: kept as the clip's sound.flac)"),
+    RosterEntry(id="minimax-h3-turbo-8step", name="minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors", folder="loras", family="minimax_h3", role="lora",
+                repo="Comfy-Org/MiniMax-H3", file="loras/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors", license="minimax-h3-community (D192)",
+                approx_gb=1.95, confirm="h3_licence_confirmed", base="minimax_h3", preset="turbo",
+                note="E64: 8 steps with it look as 20 without (258.6 s) at Draft"),
     # ---- Qwen-Image-Edit 2509 (P14 / D82): E12's angles method — the fp8 transformer, its Qwen2.5-VL encoder and VAE, lightx2v's Lightning
     #      and dx8152's Multiple-angles LoRA; all Apache-2.0, so `full` and `open` ----
     RosterEntry(id="qwen-edit-2509-fp8", name="qwen_image_edit_2509_fp8_e4m3fn.safetensors", folder="diffusion_models", family="qwen_image", role="transformer",

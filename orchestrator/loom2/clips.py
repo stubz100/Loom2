@@ -55,6 +55,7 @@ class ClipRecord(BaseModel):
     chained_from: str | None = None               # D88 XE (experimental): the clip this one continues
     overlap: int = 0                              # its first `overlap` frames repeat the previous clip's last ones (LTX 9, Wan 1)
     audio_asset_id: str | None = None             # D88 XL (experimental): the line the proxy carries (a lip-sync clip)
+    sound_path: str | None = None                 # D193: the sound the model made with the picture (H3), project-relative (`sound.flac`); the proxy carries it
 
 
 class ClipStore:
@@ -87,6 +88,18 @@ class ClipStore:
 
     def save(self, rec: ClipRecord) -> None:
         atomic_write_json(self.json_path(rec.id), rec.model_dump())
+
+    def keep_sound(self, rec: ClipRecord, src: Path) -> ClipRecord:
+        """D193: the engine's sound file (H3's audio VAE decode, FLAC) moved into the clip's folder as `sound.<ext>` and recorded."""
+        dst = self.dir(rec.id) / f"sound{Path(src).suffix.lower() or '.flac'}"
+        atomic_move(Path(src), dst)
+        rec.sound_path = dst.relative_to(self.ws.path).as_posix()
+        self.save(rec)
+        return rec
+
+    def sound_file(self, rec: ClipRecord) -> Path | None:
+        p = self.ws.path / rec.sound_path if rec.sound_path else None
+        return p if p is not None and p.is_file() else None
 
     def create(self, frames: list[Path], **fields: Any) -> ClipRecord:
         """Move the engine's decoded frames (in order) into a new clip's master; the size comes from the first frame."""
@@ -127,7 +140,8 @@ class ClipStore:
 
     def encode_proxy(self, rec: ClipRecord, *, gop: int = 6, crf: int = 18, audio: Path | None = None) -> ClipRecord:
         """h264 yuv420p proxy from the master: a short, fixed GOP keeps random-access decode cheap (E6: GOP 6 ≈ 10 ms
-        per seek in Mediabunny); odd sizes lose their last row/column (yuv420p needs even dimensions)."""
+        per seek in Mediabunny); odd sizes lose their last row/column (yuv420p needs even dimensions). `audio` (AAC, cut to the
+        clip's length): a lip-sync clip's line (D88 XL, mono) or the model's own sound (D193, its channels kept — H3's stereo)."""
         import av
         from PIL import Image
 
@@ -139,12 +153,17 @@ class ClipStore:
             stream.width, stream.height, stream.pix_fmt = w, h, "yuv420p"
             stream.options = {"crf": str(crf), "preset": "medium", "g": str(gop), "keyint_min": str(gop), "sc_threshold": "0"}
             astream, data, sr = None, None, 0
+            layout = "mono"
             if audio is not None and Path(audio).is_file():               # D88 XL: the line, AAC, cut to the clip's length (both streams before any packet)
                 import soundfile as sf
                 data, sr = sf.read(str(audio), dtype="float32", always_2d=True)
-                data = data[: int(sr * rec.frames / rec.fps)].mean(axis=1)
+                data = data[: int(sr * rec.frames / rec.fps)]
+                if data.shape[1] == 2:                                    # D193: a stereo sound stays stereo
+                    layout = "stereo"
+                else:
+                    data = data.mean(axis=1, keepdims=True)
                 astream = container.add_stream("aac", rate=sr)
-                astream.layout = "mono"
+                astream.layout = layout
             for i in range(rec.frames):
                 with Image.open(self.frame_path(rec.id, i)) as im:
                     arr = np.ascontiguousarray(np.asarray(im.convert("RGB"))[:h, :w])
@@ -155,8 +174,8 @@ class ClipStore:
             if astream is not None and data is not None:
                 step = 1024
                 for i in range(0, len(data), step):
-                    chunk = np.ascontiguousarray(data[i:i + step].reshape(1, -1))
-                    af = av.AudioFrame.from_ndarray(chunk, format="fltp", layout="mono")
+                    chunk = np.ascontiguousarray(data[i:i + step].T)              # planar: one row per channel
+                    af = av.AudioFrame.from_ndarray(chunk, format="fltp", layout=layout)
                     af.sample_rate = sr
                     af.pts = i
                     af.time_base = Fraction(1, sr)

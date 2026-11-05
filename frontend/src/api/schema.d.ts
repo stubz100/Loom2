@@ -6883,6 +6883,8 @@ export interface components {
              * @default 0
              */
             seed: number;
+            /** Sound Path */
+            sound_path: string | null;
             /** Start Asset Id */
             start_asset_id: string;
             /** Timings */
@@ -9274,10 +9276,22 @@ export interface components {
         Geometry: {
             /** Fps */
             fps?: number | null;
+            /**
+             * Fps Fixed
+             * @default false
+             */
+            fps_fixed?: boolean;
+            /**
+             * Frame Base
+             * @default 1
+             */
+            frame_base?: number;
             /** Frame Step */
             frame_step?: number | null;
             /** Frames */
             frames?: number | null;
+            /** Max Px */
+            max_px?: number | null;
             sample_px?: components["schemas"]["SamplePx"];
             /** Size */
             size?: number[] | null;
@@ -10191,6 +10205,16 @@ export interface components {
             ];
             /** Size Mult */
             size_mult: number;
+            /**
+             * Sound
+             * @default false
+             */
+            sound?: boolean;
+            /**
+             * Takes Negative
+             * @default true
+             */
+            takes_negative?: boolean;
             /** Vram Gb */
             vram_gb?: number | null;
         } & {
@@ -11658,6 +11682,8 @@ export interface components {
             approx_gb: number | null;
             /** Base */
             base: string | null;
+            /** Confirm */
+            confirm: string | null;
             /** Family */
             family: string;
             /** File */
@@ -13323,6 +13349,11 @@ export interface components {
              * @default false
              */
             flf?: boolean;
+            /**
+             * Flf Holds
+             * @default false
+             */
+            flf_holds?: boolean;
             /** Guide Figures */
             guide_figures?: number | null;
             /** Guide Lora */
@@ -16543,6 +16574,11 @@ export interface components {
             split?: number | null;
             /** Steps */
             steps: number;
+            /**
+             * Turbo
+             * @default false
+             */
+            turbo?: boolean;
         };
         /** VoiceBody */
         VoiceBody: {

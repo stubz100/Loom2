@@ -243,6 +243,9 @@ composition" instruction. Tiled refine (Ultimate-SD-Upscale pattern) with Klein 
   offered; the 8-step turbo LoRA kept, 20 steps without it show nothing more at Draft**). **Enabled (D17, D192)**:
   the author is EU-located; MiniMax answered the author's application that an individual without income from it
   needs no authorization — Settings' H3 confirmation records that answer (D192), the files are in `F:/loom2-models`.
+  **Wired 2026-11-05 (D193)**: Image to video's *H3 (hero)* card, offered while that confirmation is on — Draft
+  864×480 on the 8-step turbo, HD 1024×576, nothing above 1024×576's pixels, 17n + 5 frames at a fixed 24 fps, no
+  negative, the sound kept as the clip's `sound.flac` and carried by its proxy.
 - **Not selected for MVP:** HunyuanVideo 1.5 (no end frame), Wan 2.2 5B (identity, RDNA4 colour bug),
   Kandinsky/SkyReels/CogVideoX (stale or no FLF), MAGI-2 (307 GB).
 - **Post-MVP character animation:** Wan2.2-Animate-14B GGUF (pose/driving video → character), watching
@@ -286,7 +289,7 @@ Results are appended to the implementation journal with `torch.cuda.synchronize(
 | LTX Community (< $10M ARR) | LTX-2.3 / 2.5 | OK; flagged |
 | Tencent / Skywork community | HunyuanVideo 1.5, SkyReels V3 | not selected |
 | Qwen Research (NC) | Qwen-Image-2.1 | watch |
-| MiniMax H3 Community (territorial application) | H3 | **enabled after the author's EU application is filed** (D17); Settings toggle records the confirmation |
+| MiniMax H3 Community (territorial application) | H3 | **enabled on MiniMax's answer to the author** (D17, D192: an individual without income from it needs no authorization); Settings' confirmation offers the card (D193) |
 
 Licensing is read **EU-first** (D17): every roster entry's `license` is checked against its EU terms; US-only
 or other-territory clauses are noted but not optimised for.
@@ -308,7 +311,7 @@ LTX-2.5 GGUF maturity on 16 GB, Wan-Animate-2 ComfyUI support, ComfyUI version p
 | FLUX.2 dev | multiples of 16; up to 4 MP | any; loom ran 512²–1024² on this rig | — | — | every extra token costs on a streamed 32B model; 1024² hero ref alone = 4 096 tokens |
 | Wan 2.2 I2V-A14B | multiples of **16** | **480p (832×480)** and **720p (1280×720)** trained; 576p (1024×576) works | **4n+1**, 81 default (≈ 5 s) | **16** | 720p on 16 GB at Q5 is tight and slow; no native 1080p |
 | LTX-2.3 | multiples of **32** | 768×512 · 1024×576 · 1280×704 (720 is not ×32) · up to 4K via **two-stage: base at half size + 2× spatial upscaler** | **8n+1**, 121 default (5 s) | 24 (48 optional) | the upscaler stage is the designed route to FHD |
-| MiniMax H3 | per its VAE (16×) | 768p default; **864×480** measured on this rig | 4–15 s | 24 | ≈ 13 min per 5 s here |
+| MiniMax H3 | multiples of **32** (its canvas) | 768p native; **864×480** Draft and **1024×576** HD here (E64); nothing larger offered (768p 21 min) | **17n+5**, 124 default (5.2 s) | **24, fixed** (the sound) | 138 s per Draft clip here (E64) |
 | 1080 rows | — | **1080 is neither ×16 nor ×32** | — | — | generate **1920×1088** and crop 4 px top and bottom; the asset is stored cropped, the manifest records the generation size |
 
 ### 9b. Image cost model (FLUX.2 latent tokens = W/16 × H/16; attention ≈ quadratic)

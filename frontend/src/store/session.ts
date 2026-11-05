@@ -211,6 +211,7 @@ export const useSession = create<SessionState>()(
         const settings = await unwrap(http.PUT('/settings', { body: patch }))
         set({ settings })
         await get().scanModels()
+        set({ capabilities: await unwrap(http.GET('/capabilities')) })   // D193: what a setting offers (H3's confirmation) shows at once
         get().toast('Settings saved', 'success')
       },
 

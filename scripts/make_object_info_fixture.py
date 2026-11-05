@@ -57,6 +57,9 @@ CLASSES = [
     "ImageScaleBy", "VAEEncodeTiled", "SeedVR2Preprocess", "SeedVR2Conditioning", "SeedVR2PostProcessing",
     # D156 (E41): Wan 2.2 Fun-Camera — the camera move on the I2V graph
     "WanCameraEmbedding", "WanCameraImageToVideo",
+    # D193 (E64): MiniMax H3 — the core's own image-to-video node, the scheduler, the sound's decode and its save (merged from a v0.39.0
+    # capture 2026-11-05, engine/spikes/out/object_info_v0.39.0_h3.json)
+    "MiniMaxH3ImageToVideo", "BasicScheduler", "VAEDecodeAudio", "SaveAudio",
 ]
 
 

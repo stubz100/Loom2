@@ -43,6 +43,8 @@ from ..tools.upright import figure_box, set_scene_extras, stand_upright
 from .pipeline import AnyRecipe, Submission
 from . import tone
 
+SOUND_SUFFIXES = (".flac", ".wav", ".mp3", ".opus")                 # D193: a clip job's sound file among its outputs (H3's SaveAudio)
+
 
 def _parents(recipe: Any) -> list[str]:
     """Lineage: the reference images the job used — the kept ones only (D73: those over the model's limit never reached the engine);
@@ -295,7 +297,9 @@ class ClipFinisher:
     async def finish(self, job: JobRecord, recipe: I2V, files: list[dict], sub: Submission, q: JobQueue) -> None:
         """The decoded frames become `clips/<id>/master`, the proxy is encoded, and the proxy is the Catalogue asset."""
         compiled = sub.compiled
-        paths = [p for p in (output_path(q, f) for f in sorted(files, key=lambda x: x["filename"])) if p.is_file()]
+        found = [p for p in (output_path(q, f) for f in sorted(files, key=lambda x: x["filename"])) if p.is_file()]
+        sounds = [p for p in found if p.suffix.lower() in SOUND_SUFFIXES]   # D193: H3's sound beside its frames
+        paths = [p for p in found if p.suffix.lower() not in SOUND_SUFFIXES]
         if not paths:
             raise ValueError("the engine produced no frames")
         tone_match = None
@@ -320,9 +324,12 @@ class ClipFinisher:
                                       chained_from=recipe.extend_from.clip_id if recipe.extend_from else None,
                                       overlap=int(recipe.extend_from.lead) if recipe.extend_from else 0,
                                       audio_asset_id=recipe.audio.asset_id if recipe.audio else None)
+        if sounds:                                                    # D193: the model's own sound kept with the clip, carried by the proxy
+            rec = await asyncio.to_thread(clips.keep_sound, rec, sounds[0])
         q.progress(job, "encoding the proxy")
         line = q.catalogue.get(recipe.audio.asset_id) if recipe.audio else None
-        rec = await asyncio.to_thread(clips.encode_proxy, rec, audio=q.catalogue.abs_path(line) if line else None)
+        sound = q.catalogue.abs_path(line) if line else clips.sound_file(rec)
+        rec = await asyncio.to_thread(clips.encode_proxy, rec, audio=sound)
         prev = clips.get(recipe.extend_from.clip_id) if recipe.extend_from else None
         parents = [recipe.start_asset] + ([recipe.end_asset] if recipe.end_asset else []) + [b.asset_id for b in recipe.beats] + ([recipe.guide.asset_id] if recipe.guide else []) \
             + ([prev.asset_id] if prev and prev.asset_id else []) + ([recipe.audio.asset_id] if recipe.audio else [])
@@ -341,7 +348,8 @@ class ClipFinisher:
         q.hub.broadcast("asset.created", asset.model_dump())
         job.result["asset_ids"] = [asset.id]
         job.result["clip_id"] = rec.id
-        job.log_tail.append(f"clip {rec.id}: {rec.frames} frames @ {rec.fps} fps, {rec.w}×{rec.h}, proxy {rec.proxy_bytes / 2**20:.1f} MiB")
+        job.log_tail.append(f"clip {rec.id}: {rec.frames} frames @ {rec.fps} fps, {rec.w}×{rec.h}, proxy {rec.proxy_bytes / 2**20:.1f} MiB"
+                            + (f", its sound {rec.sound_path}" if rec.sound_path else ""))
         q.hub.broadcast("clip.ready", {"clip_id": rec.id, "asset_id": asset.id, "job_id": job.id, "frames": rec.frames, "fps": rec.fps, "w": rec.w, "h": rec.h,
                                        "origin": job.origin.model_dump() if job.origin else None})
         cam = (job.origin.payload or {}).get("camera_id") if job.origin else None

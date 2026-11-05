@@ -52,6 +52,8 @@ Rail: [Inputs] [Model] [Length & Size] [Presets]
 - **LTX (fast, beats)** — LTX-2.3 distilled GGUF Q4_K_M. Shows: 121 frames @ 24 fps, 8 steps; **beats**:
   optional mid keyframes (drop frames onto the timeline at chosen indices with a strength slider 0.3–1.0).
 - **H3 (hero)** — MiniMax H3 FL2VA, unlocked once Settings records that the EU licence application is filed
+  (**D193, 2026-11-05: built** — the card is listed once Settings' confirmation (D192's answer) is on; Draft only, 864×480 / HD
+  1024×576, 17n + 5 frames at a fixed 24 fps, no negative or shift fields, the clip keeps its sound)
   (D17); shows 864×480, 5 s, ≈ 13 min.
 - Health per model (ready / fetch N GB) and the licence badge.
 
@@ -79,7 +81,7 @@ Foot: **[Animate ▶]** (`Ctrl+Enter`), **Stage** (queue later). Disabled with r
 
 **Implemented 2026-10-06 (slice 2):** the timeline lives **under the player inside the Stage** (ruler in seconds, scrub,
 draggable in / out, S / E, beat ♦ and harvested ▼ pins) and the frame's Dock stays the jobs list; a **Clips** rail tab lists the
-project's clips; H3 shows as a locked card until D17's confirmation lands in Settings; live i2v jobs show progress cards
+project's clips; H3 shows as a card once D17's confirmation is on in Settings (D193; hidden before, D99); live i2v jobs show progress cards
 under the timeline. Keys and verbs are registry commands (`anim.*`, 36 of them) with buttons or menus (D32).
 
 ## 5. Dock · Timeline

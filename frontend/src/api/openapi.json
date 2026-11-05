@@ -4024,6 +4024,17 @@
             "title": "Seed",
             "type": "integer"
           },
+          "sound_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sound Path"
+          },
           "start_asset_id": {
             "title": "Start Asset Id",
             "type": "string"
@@ -4065,7 +4076,8 @@
           "identity",
           "chained_from",
           "overlap",
-          "audio_asset_id"
+          "audio_asset_id",
+          "sound_path"
         ],
         "title": "ClipRecord",
         "type": "object"
@@ -10166,6 +10178,16 @@
             ],
             "title": "Fps"
           },
+          "fps_fixed": {
+            "default": false,
+            "title": "Fps Fixed",
+            "type": "boolean"
+          },
+          "frame_base": {
+            "default": 1,
+            "title": "Frame Base",
+            "type": "integer"
+          },
           "frame_step": {
             "anyOf": [
               {
@@ -10187,6 +10209,17 @@
               }
             ],
             "title": "Frames"
+          },
+          "max_px": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Px"
           },
           "sample_px": {
             "$ref": "#/components/schemas/SamplePx"
@@ -12243,6 +12276,16 @@
           "size_mult": {
             "title": "Size Mult",
             "type": "integer"
+          },
+          "sound": {
+            "default": false,
+            "title": "Sound",
+            "type": "boolean"
+          },
+          "takes_negative": {
+            "default": true,
+            "title": "Takes Negative",
+            "type": "boolean"
           },
           "vram_gb": {
             "anyOf": [
@@ -15862,6 +15905,17 @@
             ],
             "title": "Base"
           },
+          "confirm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirm"
+          },
           "family": {
             "title": "Family",
             "type": "string"
@@ -16034,6 +16088,7 @@
           "note",
           "base",
           "preset",
+          "confirm",
           "path",
           "health",
           "size",
@@ -20125,6 +20180,11 @@
           "flf": {
             "default": false,
             "title": "Flf",
+            "type": "boolean"
+          },
+          "flf_holds": {
+            "default": false,
+            "title": "Flf Holds",
             "type": "boolean"
           },
           "guide_figures": {
@@ -27852,6 +27912,11 @@
           "steps": {
             "title": "Steps",
             "type": "integer"
+          },
+          "turbo": {
+            "default": false,
+            "title": "Turbo",
+            "type": "boolean"
           }
         },
         "required": [

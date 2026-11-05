@@ -96,7 +96,7 @@ def _te_loader(te_name: str, te_device: str | None, clip_type: str = "flux2") ->
 def video_spec(model_id: str) -> ModelSpec:
     spec = registry.get(model_id)
     if spec is None or not (spec.recipes.i2v or spec.recipes.animate or spec.recipes.lipsync) or spec.video is None:
-        raise CompileError(f"{model_id!r} is not an image-to-video model (Wan 2.2 or LTX-2.3)")
+        raise CompileError(f"{model_id!r} is not an image-to-video model (Wan 2.2, LTX-2.3 or H3)")
     return spec
 
 
@@ -118,7 +118,8 @@ CAMERA_POSES = {"static": "Static", "pan_left": "Pan Left", "pan_right": "Pan Ri
 
 
 def i2v_params(recipe: I2V) -> dict[str, Any]:
-    """What will actually run: sizes snapped to the model's multiple, frames to 4n+1 / 8n+1, preset values with overrides."""
+    """What will actually run: sizes snapped to the model's multiple, frames to 4n+1 / 8n+1 / 17n+5 (D193: H3), preset values with
+    overrides; a model with a fixed rate runs at it (D193: H3's sound is made at 24 fps), one with a pixel cap refuses a larger size."""
     spec = video_spec(recipe.model_id)
     fam, geo, presets = spec.family, spec.geometry, spec.video.presets   # type: ignore[union-attr]
     if recipe.preset not in presets:
@@ -127,12 +128,16 @@ def i2v_params(recipe: I2V) -> dict[str, Any]:
     if recipe.guide and spec.recipes.guide_size_mult:                  # CA3: the IC-LoRA's latent is halved (reference_downscale_factor 2) — ×64 on LTX
         mult = spec.recipes.guide_size_mult
     w, h = snap(recipe.width, mult, geo.size_mult * 8, policy, "width"), snap(recipe.height, mult, geo.size_mult * 8, policy, "height")
-    step = geo.frame_step or 1
+    if geo.max_px and w * h > geo.max_px:                              # D193 (E64): H3's 768p ran 21 min — not offered
+        raise FieldError("width", recipe.width, [], f"{spec.short or spec.label} runs up to {geo.max_px:,} pixels on this card ({w}×{h} is {w * h:,}); "
+                         f"E64 measured the larger sizes too slow — pick the Draft or HD tier")
+    step, base = geo.frame_step or 1, geo.frame_base
     try:
-        frames = snap(recipe.frames - 1, step, step, policy, "frames") + 1    # 4n+1 (Wan) / 8n+1 (LTX)
+        frames = snap(recipe.frames - base, step, step, policy, "frames") + base    # 4n+1 (Wan) / 8n+1 (LTX) / 17n+5 (H3)
     except FieldError as e:                                                    # reported in frames, not on the n grid
-        raise FieldError("frames", recipe.frames, [a + 1 for a in e.allowed], f"frames {recipe.frames} is not {step}n+1 for {spec.label}") from None
-    out: dict[str, Any] = {"family": fam, "width": w, "height": h, "frames": frames, "fps": recipe.fps, "preset": recipe.preset,
+        raise FieldError("frames", recipe.frames, [a + base for a in e.allowed], f"frames {recipe.frames} is not {step}n+{base} for {spec.label}") from None
+    fps = geo.fps if geo.fps_fixed and geo.fps else recipe.fps
+    out: dict[str, Any] = {"family": fam, "width": w, "height": h, "frames": frames, "fps": fps, "preset": recipe.preset,
                            "flf": bool(recipe.end_asset), "beats": len(recipe.beats)}
     p = presets[recipe.preset]
     if spec.graph in ("wan_animate", "wan_s2v"):                      # CN4 / D88 XL: one window (77 frames)
@@ -145,6 +150,10 @@ def i2v_params(recipe: I2V) -> dict[str, Any]:
         steps = recipe.steps or p.steps
         out |= {"steps": steps, "split": max(1, min(steps - 1, round(steps * p.split / p.steps))), "cfg_high": recipe.cfg if recipe.cfg is not None else p.cfg_high,
                 "cfg_low": p.cfg_low, "shift": recipe.shift if recipe.shift is not None else p.shift, "lora_high": p.lora_high, "lora_low": p.lora_low, "label": p.label}
+    elif spec.graph == "minimax_h3":                                  # D193: no shift, no CFG — the turbo LoRA as the preset says
+        steps = recipe.steps or p.steps
+        out |= {"steps": steps, "turbo": p.turbo, "sound": bool(spec.video and spec.video.sound),
+                "label": f"{spec.label.split(' · ')[0]} · {steps} steps{', turbo' if p.turbo else ''}"}
     else:
         steps = recipe.steps or p.steps
         out |= {"steps": steps, "shift": recipe.shift, "label": f"{spec.label.split(' · ')[0]} · {steps} steps"}
@@ -256,6 +265,39 @@ def build_i2v(recipe: I2V, roster: Roster, seed: int, out_prefix: str, start_nam
         g["13"] = {"class_type": "VAEDecode", "inputs": {"samples": ["12", 0], "vae": ["3", 0]}}
         out_node = "14"
         g[out_node] = {"class_type": "SaveImage", "inputs": {"images": ["13", 0], "filename_prefix": out_prefix}}
+    elif spec.graph == "minimax_h3":                                  # D193 (E64's graph): the core's H3 nodes, the clip and its sound
+        if recipe.beats or recipe.camera:
+            raise CompileError(f"{spec.label} takes a start and an end frame — no beats, no camera move")
+        _, unet = roster.require(spec.id)
+        _, te = roster.require(roles.te.default)
+        _, vvae = roster.require(roles.vae)
+        _, avae = roster.require(roles.extra["audio_vae"])
+        g["1"] = {"class_type": "UNETLoader", "inputs": {"unet_name": unet, "weight_dtype": spec.sampling.weight_dtype}}
+        h3_model: list = ["1", 0]
+        if ep["turbo"]:
+            _, turbo = roster.require(roles.extra["turbo_lora"])
+            g["1t"] = {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ["1", 0], "lora_name": turbo, "strength_model": 1.0}}
+            h3_model = ["1t", 0]
+        g["2"] = {"class_type": "CLIPLoader", "inputs": {"clip_name": te, "type": "minimax", "device": "default"}}
+        g["3"] = {"class_type": "VAELoader", "inputs": {"vae_name": vvae}}
+        g["99"] = {"class_type": "VAELoader", "inputs": {"vae_name": avae}}
+        # the frames scaled and centre-cropped to the canvas first (as for Wan and LTX): the node would stretch the first frame to it
+        h3_cond: dict[str, Any] = {"clip": ["2", 0], "vae": ["3", 0], "prompt": recipe.prompt_text, "width": w, "height": h, "length": frames,
+                                   "first_frame": load_scaled("100", start_name)}
+        if end_name:
+            h3_cond["last_frame"] = load_scaled("101", end_name)
+        g["7"] = {"class_type": "MiniMaxH3ImageToVideo", "inputs": h3_cond}
+        g["14"] = {"class_type": "BasicGuider", "inputs": {"model": h3_model, "conditioning": ["7", 0]}}
+        g["15"] = {"class_type": "RandomNoise", "inputs": {"noise_seed": seed}}
+        g["16"] = {"class_type": "KSamplerSelect", "inputs": {"sampler_name": spec.sampling.sampler}}
+        g["17"] = {"class_type": "BasicScheduler", "inputs": {"model": h3_model, "scheduler": spec.sampling.scheduler, "steps": ep["steps"], "denoise": 1.0}}
+        g["18"] = {"class_type": "SamplerCustomAdvanced", "inputs": {"noise": ["15", 0], "guider": ["14", 0], "sampler": ["16", 0], "sigmas": ["17", 0],
+                                                                     "latent_image": ["7", 1]}}
+        g["21"] = {"class_type": "VAEDecode", "inputs": {"samples": ["18", 0], "vae": ["3", 0]}}
+        g["23"] = {"class_type": "VAEDecodeAudio", "inputs": {"samples": ["18", 0], "vae": ["99", 0]}}
+        g["24"] = {"class_type": "SaveAudio", "inputs": {"audio": ["23", 0], "filename_prefix": out_prefix}}   # the sound beside the frames (FLAC)
+        out_node = "22"
+        g[out_node] = {"class_type": "SaveImage", "inputs": {"images": ["21", 0], "filename_prefix": out_prefix}}
     elif spec.graph == "wan22":
         _, high = roster.require(spec.id)
         _, low = roster.require(roles.extra["low_expert"])
@@ -393,14 +435,17 @@ def estimate_i2v_seconds(recipe: I2V) -> dict[str, Any]:
 
 def _estimate_i2v_plain(recipe: I2V) -> dict[str, Any]:
     """ETA from the E4/E5 spike baselines at the Draft tier, scaled by pixel-frames and (half) by the step ratio — the VAE
-    passes are a fixed share of a Wan clip (Q18)."""
+    passes are a fixed share of a Wan clip (Q18). D193: the pixel-frames ratio to the spec's `work_exponent` (E64: H3's 576p took
+    1.75× its 480p for 1.42× the pixels)."""
     ep = i2v_params(recipe)
     spec = video_spec(recipe.model_id)
     p = spec.video.presets[recipe.preset]                          # type: ignore[union-attr]
     size, frames = spec.geometry.size or [ep["width"], ep["height"]], spec.geometry.frames or ep["frames"]
     work = (ep["width"] * ep["height"] * ep["frames"]) / (size[0] * size[1] * frames)
     base, steps_ref = p.seconds or 240.0, p.steps
-    return {"seconds": round(base * work * (0.5 + 0.5 * ep["steps"] / steps_ref), 1), "source": "baseline (E4/E5 spikes)"}
+    work = work ** spec.estimates.work_exponent
+    src = "baseline (E64 2026-11-05)" if spec.graph == "minimax_h3" else "baseline (E4/E5 spikes)"
+    return {"seconds": round(base * work * (0.5 + 0.5 * ep["steps"] / steps_ref), 1), "source": src}
 
 
 class CompileError(ValueError):

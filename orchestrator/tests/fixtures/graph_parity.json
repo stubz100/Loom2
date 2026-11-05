@@ -105,6 +105,44 @@
    "width": 960
   }
  },
+ "i2v h3 FLF with its sound": {
+  "graph_hash": "4ccb8194c65e99f0",
+  "problems": [],
+  "summary": {
+   "beats": 0,
+   "family": "minimax_h3",
+   "flf": true,
+   "fps": 24,
+   "frames": 124,
+   "height": 480,
+   "label": "MiniMax H3 \u00b7 8 steps, turbo",
+   "model_id": "minimax-h3-fl2va-fp8",
+   "preset": "draft",
+   "sound": true,
+   "steps": 8,
+   "turbo": true,
+   "width": 864
+  }
+ },
+ "i2v h3 start only, 576p": {
+  "graph_hash": "6c18a1316a475363",
+  "problems": [],
+  "summary": {
+   "beats": 0,
+   "family": "minimax_h3",
+   "flf": false,
+   "fps": 24,
+   "frames": 124,
+   "height": 576,
+   "label": "MiniMax H3 \u00b7 8 steps, turbo",
+   "model_id": "minimax-h3-fl2va-fp8",
+   "preset": "draft",
+   "sound": true,
+   "steps": 8,
+   "turbo": true,
+   "width": 1024
+  }
+ },
  "i2v ltx beats": {
   "graph_hash": "23c9d7323401f186",
   "problems": [],

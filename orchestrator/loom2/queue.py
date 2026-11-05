@@ -530,6 +530,8 @@ class JobQueue:
             validate_train(self, recipe)
             return
         spec = registry.get(main)
+        if spec is not None and registry.unconfirmed(spec, self.app.settings):   # D193: H3 only after Settings' licence confirmation
+            raise ValueError(f"{spec.label} is offered once Settings › Licences confirms its licence (D17, D192)")
         if isinstance(recipe, T2I) and (spec is None or not spec.recipes.t2i):
             raise ValueError(f"no t2i preset for {recipe.model_id!r}")
         if getattr(recipe, "te_id", None):
@@ -543,7 +545,7 @@ class JobQueue:
             self._check_animate(recipe, spec)
         elif isinstance(recipe, I2V):
             if spec is None or not spec.recipes.i2v:
-                raise ValueError(f"{recipe.model_id!r} is not an image-to-video model (Wan 2.2 or LTX-2.3)")
+                raise ValueError(f"{recipe.model_id!r} is not an image-to-video model (Wan 2.2, LTX-2.3 or H3)")
             if recipe.audio:
                 raise ValueError(f"{spec.label} does not follow audio — lip-sync is the S2V model's")
             if recipe.extend_from:                                         # D88 XE (experimental)

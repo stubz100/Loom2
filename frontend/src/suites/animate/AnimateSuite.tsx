@@ -77,17 +77,19 @@ function InputsTab() {
   return (
     <div className="anim-form">
       <div className="slots full"><Slot which="start" /><span className="slot-swap"><CommandButton id="anim.swap" /></span><Slot which="end" /></div>
-      {p.end && cur && !beats && <span className="hint">First/last-frame on {cur.short}: a large pose or composition gap morphs mid-clip — try {beatModel ? `${beatModel.short} beats` : 'a different end frame'} or a shorter clip when it does (11 §3a).</span>}
+      {p.end && cur && !beats && !cur.recipes.flf_holds && <span className="hint">First/last-frame on {cur.short}: a large pose or composition gap morphs mid-clip — try {beatModel ? `${beatModel.short} beats` : 'a different end frame'} or a shorter clip when it does (11 §3a).</span>}
       <label>prompt</label>
       <div>
         <textarea value={p.prompt} onChange={(e) => an().set({ prompt: e.target.value })} placeholder="motion, camera, mood — e.g. she turns toward the window, soft push-in" />
         <div className="chip-row">{MOTION_CHIPS.map((c) => <button key={c} onClick={() => an().set({ prompt: (p.prompt ? p.prompt.replace(/[\s,]*$/, '') + ', ' : '') + c })} title="append to the prompt">{c}</button>)}</div>
       </div>
-      <label>negative</label>
-      <div>
-        <label className="chk"><input type="checkbox" checked={p.use_negative} onChange={(e) => an().set({ use_negative: e.target.checked })} /> write my own</label>
-        {p.use_negative ? <textarea value={p.negative} onChange={(e) => an().set({ negative: e.target.value })} placeholder="what to avoid" /> : <span className="hint">{cur ? `${cur.short} uses its stock negative list${cfgPresets.length ? `; it only matters above CFG 1 (${cfgPresets.join(' / ')})` : ''}.` : 'the model uses its stock negative list.'}</span>}
-      </div>
+      {cur?.takes_negative !== false && <>{/* D193: H3 has no negative (no CFG) */}
+        <label>negative</label>
+        <div>
+          <label className="chk"><input type="checkbox" checked={p.use_negative} onChange={(e) => an().set({ use_negative: e.target.checked })} /> write my own</label>
+          {p.use_negative ? <textarea value={p.negative} onChange={(e) => an().set({ negative: e.target.value })} placeholder="what to avoid" /> : <span className="hint">{cur ? `${cur.short} uses its stock negative list${cfgPresets.length ? `; it only matters above CFG 1 (${cfgPresets.join(' / ')})` : ''}.` : 'the model uses its stock negative list.'}</span>}
+        </div>
+      </>}
       {beats && <>
         <label>beats</label>
         <div>
@@ -128,14 +130,14 @@ function ModelTab() {
           return <button key={id} className={`model-card${p.model_id === id ? ' active' : ''}`} onClick={() => an().setModel(id)}>
             <b>{m.short}{m.label.includes(' · ') ? ` (${m.label.split(' · ').slice(1).join(' · ')})` : ''}</b>
             <small>{m.label}</small>
-            <small>{r.frames} f @ {r.fps} fps · {r.draft[0]}×{r.draft[1]}{m.recipes.beats ? ' · keyframe beats' : m.recipes.flf ? ' · FLF' : ''}</small>
+            <small>{r.frames} f @ {r.fps} fps · {r.draft[0]}×{r.draft[1]}{m.recipes.beats ? ' · keyframe beats' : m.recipes.flf ? ' · FLF' : ''}{r.sound ? ' · sound' : ''}</small>
             <span className={`badge ${m.health} health`}>{m.health === 'missing' ? `fetch ${m.approx_gb} GB` : m.health}</span>
           </button>
         })}
-        {/* D99 (UX0 #15): the H3 hero card stays hidden until its graph and weights are wired (it was a permanently locked card) */}
+        {/* D193: the H3 hero card is listed by the server once Settings › Licences confirms its licence (D17, D192) */}
       </div>
       <label>preset</label>
-      <div className="segmented">{(['draft', 'motion', 'quality'] as const).map((k) => <button key={k} className={p.preset === k ? 'active' : ''} onClick={() => an().set({ preset: k, steps: null, cfg: null })} title={presetLabel(k)}>{k}</button>)}</div>
+      <div className="segmented">{modelRules(p.model_id).presets.map((k) => <button key={k} className={p.preset === k ? 'active' : ''} onClick={() => an().set({ preset: k, steps: null, cfg: null })} title={presetLabel(k)}>{k}</button>)}</div>
       <span className="hint">{presetLabel(p.preset)}</span>
       {cur?.recipes?.camera && <>
         <label>camera</label>
@@ -155,8 +157,10 @@ function ModelTab() {
         <label>CFG</label>
         <div className="row"><input type="number" min={1} max={12} step={0.5} placeholder={loraHigh ? `${pp.cfg_high} (distilled)` : String(pp.cfg_high)} value={p.cfg ?? ''} onChange={(e) => an().set({ cfg: e.target.value === '' ? null : Number(e.target.value) })} disabled={loraHigh} /><span className="hint" style={{ margin: 0 }}>high expert only{distilled ? `; ${cap1(distilled[0])} runs at CFG ${distilled[1].cfg_high ?? 1}` : ''}</span></div>
       </>}
-      <label>shift</label>
-      <div className="row"><input type="number" min={0.5} max={12} step={0.5} placeholder={pp?.shift != null ? String(pp.shift) : 'scheduler'} value={p.shift ?? ''} onChange={(e) => an().set({ shift: e.target.value === '' ? null : Number(e.target.value) })} /></div>
+      {Object.values(cur?.preset_params ?? {}).some((x) => x.shift != null) && <>{/* D193: only where the graph has a shift (Wan); LTX's scheduler and H3 take none */}
+        <label>shift</label>
+        <div className="row"><input type="number" min={0.5} max={12} step={0.5} placeholder={pp?.shift != null ? String(pp.shift) : 'scheduler'} value={p.shift ?? ''} onChange={(e) => an().set({ shift: e.target.value === '' ? null : Number(e.target.value) })} /></div>
+      </>}
     </div>
   )
 }
@@ -179,6 +183,9 @@ function EstimateLine() {
   )
 }
 
+/** D193: the smallest frame count on the model's grid (base + step·n) the panel offers — 9 for Wan / LTX, 22 for H3. */
+const frameMin = (r: { base: number; step: number }) => { let n = r.base; while (n < 9) n += r.step; return n }
+
 function LengthTab() {
   const p = useAnimate((s) => s.panel)
   useSession((s) => s.capabilities?.i2v)                                  // re-render when the server's rules arrive (C25)
@@ -187,7 +194,7 @@ function LengthTab() {
   return (
     <div className="anim-form">
       <label>tier</label>
-      <div className="tiers">{(['draft', 'hd', 'custom'] as const).map((t) => <button key={t} className={p.tier === t ? 'active' : ''} onClick={() => an().setTier(t)} title={t === 'draft' ? `${r.draft[0]}×${r.draft[1]} (D18)` : t === 'hd' ? `${r.hd[0]}×${r.hd[1]} — slow on 16 GB` : 'type a size'}>{t === 'hd' ? 'HD' : t}</button>)}</div>
+      <div className="tiers">{(['draft', 'hd', 'custom'] as const).map((t) => <button key={t} className={p.tier === t ? 'active' : ''} onClick={() => an().setTier(t)} title={t === 'draft' ? `${r.draft[0]}×${r.draft[1]} (D18)` : t === 'hd' ? `${r.hd[0]}×${r.hd[1]} — slow on 16 GB` : r.maxPx ? `type a size (up to ${r.maxPx.toLocaleString()} pixels)` : 'type a size'}>{t === 'hd' ? 'HD' : t}</button>)}</div>
       <label>orientation</label>
       <div className="segmented">{(['landscape', 'portrait', 'square'] as const).map((o) => <button key={o} className={p.orientation === o ? 'active' : ''} onClick={() => an().setTier(p.tier === 'custom' ? 'draft' : p.tier, o)}>{o}</button>)}</div>
       <label>size</label>
@@ -197,9 +204,9 @@ function LengthTab() {
         <span className="hint" style={{ margin: 0 }}>snaps to ×{r.mult}</span>
       </div>
       <label>frames</label>
-      <div className="row"><input type="number" min={9} max={257} step={r.step} value={p.frames} onChange={num('frames', 9, 257)} /><span className="hint" style={{ margin: 0 }}>{r.step}n + 1 · {(p.frames / p.fps).toFixed(1)} s</span></div>
+      <div className="row"><input type="number" min={frameMin(r)} max={257} step={r.step} value={p.frames} onChange={num('frames', frameMin(r), 257)} /><span className="hint" style={{ margin: 0 }}>{r.step}n + {r.base} · {(p.frames / p.fps).toFixed(1)} s</span></div>
       <label>fps</label>
-      <div className="row"><input type="number" min={8} max={48} value={p.fps} onChange={num('fps', 8, 48)} /><span className="hint" style={{ margin: 0 }}>native {r.fps}; the master keeps it, conform is an export step (D27)</span></div>
+      <div className="row"><input type="number" min={8} max={48} value={p.fps} onChange={num('fps', 8, 48)} disabled={r.fpsFixed} title={r.fpsFixed ? `${r.short} runs at ${r.fps} fps (its sound is made at that rate)` : undefined} /><span className="hint" style={{ margin: 0 }}>{r.fpsFixed ? `fixed at ${r.fps}` : `native ${r.fps}; the master keeps it, conform is an export step (D27)`}</span></div>
       <label>seed</label>
       <div className="row">
         <div className="segmented">{(['random', 'fixed', 'increment'] as const).map((m) => <button key={m} className={p.seed_mode === m ? 'active' : ''} onClick={() => an().set({ seed_mode: m })}>{m}</button>)}</div>
@@ -255,7 +262,7 @@ function ClipsTab() {
           <button className={`clip-row${on ? ' active' : ''}`} data-id={c.id} aria-expanded={on ? folded !== c.id : undefined} onContextMenu={(e) => showMenu(e, clipMenu(c.id))}
             onClick={() => { if (on) setFolded(folded === c.id ? null : c.id); else { setFolded(null); an().select(c.id) } }} title={`${c.prompt} — click: in the player, its details under it (again: folded); right-click: its verbs`}>
             {c.asset_id ? <img src={api.thumbUrl(c.asset_id, 256)} alt="" /> : <span />}
-            <span>{c.prompt || '(no prompt)'}<small>{shortName(c.model_id, caps)} · {c.preset} · {c.frames} f @ {c.fps} · seed {c.seed}</small></span>
+            <span>{c.prompt || '(no prompt)'}<small>{shortName(c.model_id, caps)} · {c.preset} · {c.frames} f @ {c.fps} · seed {c.seed}{c.sound_path ? ' · ♪' : ''}</small></span>
           </button>
           {on && folded !== c.id && <div className="row-editor clip-editor"><ClipSelection /></div>}{/* AW3 (D121): the clip's editor under its row, as a layer's at Final */}
         </div>

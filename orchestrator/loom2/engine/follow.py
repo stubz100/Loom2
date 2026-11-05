@@ -184,7 +184,7 @@ class EngineFollower:
     def outputs(hist: dict | None, text: bool = False) -> list[dict]:
         files: list[dict] = []
         for node_out in ((hist or {}).get("outputs") or {}).values():
-            for key in ("images", "gifs", "videos", "3d", "meshes", "files"):                # P18: Save3DAdvanced reports its GLB under "3d" …
+            for key in ("images", "gifs", "videos", "3d", "meshes", "files", "audio"):       # P18: Save3DAdvanced reports its GLB under "3d" …; D193: SaveAudio under "audio"
                 for f in node_out.get(key, []) or []:
                     if isinstance(f, dict) and f.get("filename") and f.get("type", "output") == "output":   # … and a bare path list under "result" (skipped)
                         files.append({"filename": f["filename"], "subfolder": f.get("subfolder", "")})

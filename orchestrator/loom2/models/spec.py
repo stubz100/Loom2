@@ -10,7 +10,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 Graph = Literal["flux2", "klein", "krea2", "zimage", "chroma", "sd3", "lumina2",      # image: FLUX.2 family; D89 creative t2i / i2i families; D91 Lumina 2
-                "wan22", "wan_animate", "wan_s2v", "ltx23", "esrgan", "seedvr2", "matte", "sam", "qwen_edit", "pixal3d", "keypoints", "image_to_set"]      # video, upscalers (D153), subject matte, SAM, angles, mesh
+                "wan22", "wan_animate", "wan_s2v", "ltx23", "minimax_h3", "esrgan", "seedvr2", "matte", "sam", "qwen_edit", "pixal3d", "keypoints", "image_to_set"]      # video (D193: MiniMax H3), upscalers (D153), subject matte, SAM, angles, mesh
 
 
 class Strict(BaseModel):
@@ -75,6 +75,7 @@ class Recipes(Strict):
     i2v: bool = False
     camera: bool = False                           # D156 (E41): takes I2V.camera — a move the clip's camera makes (Wan 2.2 Fun-Camera)
     flf: bool = False                              # first + last frame
+    flf_holds: bool = False                        # D193 (E64): a large gap between the two frames does not morph mid-clip — the panel's morph hint is not shown
     beats: bool = False                            # keyframes in between
     reangle: str | None = None                     # P14 (D82): the angles method this model implements — angles_lora | klein_prompt
     instruct: bool = False                         # D151: an edit by instruction (Qwen-Image-Edit: the source and the instruction, the whole image back)
@@ -121,7 +122,10 @@ class SamplePx(Strict):
 class Geometry(Strict):
     size_mult: int = 16
     frame_step: int | None = None                  # video: 4n+1 / 8n+1
+    frame_base: int = 1                            # D193: the grid's offset — frames = base + step·n (H3: 17n + 5)
     fps: int | None = None
+    fps_fixed: bool = False                        # D193: the clip runs at `fps` whatever the panel asks (H3 makes its sound at 24)
+    max_px: int | None = None                      # D193: no size with more pixels runs (H3: 1024×576 — E64's 768p took 21 min)
     frames: int | None = None
     size: list[int] | None = None                  # video: the Draft size
     tiers: dict[str, list[int]] = {}               # image: thumb / draft / full; video: draft / hd / portrait / square
@@ -137,12 +141,15 @@ class VideoPreset(Strict):
     shift: float | None = None
     lora_high: bool = False
     lora_low: bool = False
+    turbo: bool = False                            # D193: the spec's roles.extra.turbo_lora on the model (H3's 8-step LoRA)
     seconds: float | None = None                   # baseline at the Draft tier (E4 / E5 spikes)
 
 
 class Video(Strict):
     label: str
     negative: str
+    takes_negative: bool = True                    # D193: False — the graph has no negative (H3: BasicGuider, no CFG); the panel hides the field
+    sound: bool = False                            # D193: the model makes the clip's sound with the picture (kept as the clip's sound.flac)
     presets: dict[str, VideoPreset]
 
 
@@ -155,6 +162,7 @@ class Estimates(Strict):
     cold_seconds: float | None = None              # P18: the same job with nothing resident (shown beside the warm figure)
     ref_step_seconds: float | None = None          # F27 (U0): one reference at ≤ 512² adds this per sampling step (a ≤ 1024² one four times it)
     ref_fit: float | None = None                   # F27: the reference load (in ≤ 512² references) past which the job spills out of VRAM
+    work_exponent: float = 1.0                     # D193: video seconds grow with (pixels × frames)^this over the Draft clip's (E64: H3 1.58)
 
 
 class EngineHints(Strict):

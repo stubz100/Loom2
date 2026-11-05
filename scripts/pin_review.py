@@ -99,6 +99,9 @@ def recipes() -> list[tuple[str, object, dict]]:
          {"start": png, "guide": "pose.mp4", "carry": [png] * 5}),
         ("i2v wan s2v (a line)", I2V(model_id="wan22-s2v-fp8", start_asset="a", frames=77, audio=AudioRef(asset_id="x")), {"start": png, "audio": "line.wav"}),
         ("i2v wan camera pan left", I2V(model_id="wan22-fun-camera-high-fp8", start_asset="a", camera=Camera(move="pan_left", speed=1.0)), {"start": png}),   # D156
+        ("i2v h3 FLF with its sound", I2V(model_id="minimax-h3-fl2va-fp8", start_asset="a", end_asset="b", frames=124, fps=24, width=864, height=480),   # D193
+         {"start": png, "end": "captain-cabin_s20261004.png"}),
+        ("i2v h3 start only, 576p", I2V(model_id="minimax-h3-fl2va-fp8", start_asset="a", frames=124, fps=24, width=1024, height=576), {"start": png}),
         ("i2v ltx guided (depth)", I2V(model_id="ltx23-distilled-fp8", start_asset="a", frames=121, fps=24, width=1024, height=576, guide=Guide(asset_id="g", kind="depth")), {"start": png, "guide": "depth.mp4"}),
         ("i2v ltx extend (9 lead frames)", I2V(model_id="ltx23-distilled-fp8", start_asset="a", frames=121, fps=24, width=1024, height=576, extend_from=ExtendFrom(clip_id="c", lead=9)), {"start": png, "lead": "lead.mp4"}),
         ("i2v wan extend (the last frame)", I2V(start_asset="a", extend_from=ExtendFrom(clip_id="c", lead=1)), {"start": png}),

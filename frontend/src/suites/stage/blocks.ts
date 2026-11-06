@@ -55,8 +55,15 @@ const fileOf = async (id: string): Promise<MotionFile> => {
   return f
 }
 let templates: Promise<AnimationTemplate[]> | null = null
-/** The templates moved (saved, removed): read them again. */
-export function templatesChanged(): void { templates = null }
+/** The templates moved (saved, removed): read them again — and evaluate again every block that plays one (viewport check: the cache key
+ *  holds the block, not the template's keys, so a saved animation reopened on the bench, or played by a figure, kept its old keys). */
+export function templatesChanged(): void {
+  templates = null
+  const isTemplate = (k: string) => { try { return (JSON.parse(k) as [{ source?: { kind?: string } }])[0]?.source?.kind === 'template' } catch { return false } }
+  for (const k of [...cache.keys()]) if (isTemplate(k)) cache.delete(k)
+  for (const k of [...failed]) if (isTemplate(k)) failed.delete(k)
+  useBlocks.getState().bump()
+}
 const templateOf = async (id: string): Promise<AnimationTemplate> => {
   templates ??= unwrap(http.GET('/stages/animations')).then((r) => [...r.items, ...r.library] as unknown as AnimationTemplate[]).catch((e) => { templates = null; throw e })
   const t = (await templates).find((x) => x.id === id)
@@ -135,6 +142,12 @@ function schedule(key: string, doc: StageDoc, o: StageObject, b: MotionBlock, at
   pending.set(key, p)
 }
 
+/** K11: where a block starts from — the figure before it: never a correction or a key inside the block (a head turn at frame 30 of a walk
+ *  re-anchored the walk at its frame-30 place: the figure jumped ahead, and flickered while the block was evaluated again). */
+export function blockStartAt(o: StageObject, layer: ObjectKey[] | undefined, runs: BlockRun[], start: number): StageObject {
+  return sampleFigure(o, (layer ?? []).filter((k) => !k.correction && k.frame <= start), runs, start)
+}
+
 /** A figure's evaluated blocks in their order — the ones evaluated so far; the first one not evaluated yet starts its evaluation (the
  *  blocks after it wait: they start where it ends). */
 export function blockRuns(doc: StageDoc, objectId: string, layer?: ObjectKey[]): BlockRun[] {
@@ -143,7 +156,7 @@ export function blockRuns(doc: StageDoc, objectId: string, layer?: ObjectKey[]):
   if (!o || !blocks.length) return []
   const out: BlockRun[] = []
   for (const b of blocks) {
-    const at = sampleFigure(o, layer, out, b.start)
+    const at = blockStartAt(o, layer, out, b.start)
     const key = blockKey(doc, o, b, at)
     const hit = cache.get(key)
     if (!hit) {

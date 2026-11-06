@@ -72,4 +72,15 @@ describe('AP1 thin: the composition viewer', () => {
     await vi.waitFor(() => expect(useComposition.getState().shown).toMatchObject({ revision: 1 }))
     expect(useComposition.getState().filled).toBe(1)
   })
+
+  it('K10: a composition made again starts at revision 0 too — its frames are not the old one’s', async () => {
+    comp = { ...comp, revision: 0, final_revision: 3 } as typeof comp
+    await useComposition.getState().open('fin_1')
+    await vi.waitFor(() => expect(useComposition.getState().shown).not.toBeNull())
+    const half0 = () => frames().filter((q) => q === 't=0&side=416').length     // frame 0 at ½ (832 × 480 → 416)
+    const n = half0()
+    comp = { ...comp, revision: 0, final_revision: 4 } as typeof comp           // a layer re-performed, the composition made again
+    await useComposition.getState().reload()
+    await vi.waitFor(() => expect(half0()).toBe(n + 1))                         // fetched again, not served from the old composition's cache
+  })
 })

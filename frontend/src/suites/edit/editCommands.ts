@@ -2,7 +2,7 @@
 // canvas and layer right-click menus, the keys and the help overlay.
 import { Type, ArrowDown, ArrowUp, Bandage, Check, Circle, CircleDashed, Clapperboard, ClipboardCopy, Orbit, ClipboardPaste, Copy, Crop, Dices, Expand, Eraser, Eye, EyeOff, FileDown, FileImage, FlipHorizontal, FlipVertical, FolderPlus, Group, Hand, Hourglass, ImageUpscale, Lasso, Layers, Layers2, Link, Lock, LockOpen, Maximize, Merge, Minus, MousePointer2, Paintbrush, PaintBucket, Pencil, Pipette, Plus, Redo2, RotateCcw, RotateCw, Save, Scan, ScanFace, Scissors, Shuffle, SlidersHorizontal, Sparkles, Square, SquareCheck, SquareDashed, SquareX, Trash, Undo2, Wand2, WandSparkles, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { registerCommands, sep, type MenuItem } from '../../frame/commands'
-import { askConfirm, askText, useSession } from '../../store/session'
+import { askText, useSession } from '../../store/session'
 import { useMakeFor } from '../../store/origin'
 import { ADJUSTMENT_DEFAULTS, FILTER_DEFAULTS, findNode, useEditor, type Node, type Tool } from './editorStore'
 import { magnetic } from './smartselect/magnetic'
@@ -77,7 +77,7 @@ registerCommands([
     hint: 'Image is making for a Shot (the For chip): save, and the new version becomes that Shot version\'s frame', run: () => { const f = useMakeFor.getState().generate; if (f) void ed().saveVersion({ forShot: f }) } },
   { id: 'edit.exportPng', scope: 'edit', label: 'Export PNG', icon: FileImage, keys: 'Ctrl+Shift+E', placement: ['panel', 'context'], when: hasDoc, run: () => void ed().exportPng() },
   { id: 'edit.exportPsd', scope: 'edit', label: 'Export PSD', icon: FileDown, placement: ['panel', 'context'], when: hasDoc, run: () => void ed().exportPsd() },
-  { id: 'edit.close', scope: 'edit', label: 'Close document', icon: X, placement: ['panel', 'context'], when: hasDoc, run: () => { if (!ed().docDirty) { ed().closeDocument(); return } void askConfirm({ title: 'Close without saving?', text: 'The latest changes are not saved. Cancel and Save (Ctrl+S) to keep them, or close and lose them.', okLabel: 'Close without saving', danger: true }).then((ok) => { if (ok) ed().closeDocument() }) } },
+  { id: 'edit.close', scope: 'edit', label: 'Close document', icon: X, placement: ['panel', 'context'], when: hasDoc, run: () => { void ed().leaveDocument().then((ok) => { if (ok) ed().closeDocument() }) } },   // K6: saved first (the idle flush clears docDirty while the .ora lags); asked only when that fails
   // D90 (01 §11.6): a developer check — registered in dev builds only, shown in Info › Diagnostics
   ...(DEV_HOOKS ? [{ id: 'edit.compare', scope: 'edit' as const, label: 'Compare preview with the exact flatten', icon: Scan, placement: ['inspector'] as ['inspector'], when: hasDoc, run: () => void ed().compareWithExact() }] : []),
   // layers

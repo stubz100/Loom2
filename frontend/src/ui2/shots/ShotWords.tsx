@@ -13,9 +13,9 @@ import { useShots, type WordsFor } from './shotsStore'
 const FOR: { id: WordsFor; label: string }[] = [{ id: 'still', label: 'a still' }, { id: 'plate', label: 'the plate' }, { id: 'performance', label: 'a performance' }]
 
 /** A text kept with a record, saved when it is left (a blur), not at every key. */
-function KeptText({ value, label, placeholder, rows, disabled, save }: { value: string; label: string; placeholder: string; rows: number; disabled?: boolean; save: (v: string) => Promise<void> }) {
+function KeptText({ value, label, placeholder, rows, disabled, max, save }: { value: string; label: string; placeholder: string; rows: number; disabled?: boolean; max: number; save: (v: string) => Promise<void> }) {
   const [draft, setDraft] = useState<string | null>(null)
-  return <textarea rows={rows} aria-label={label} placeholder={placeholder} value={draft ?? value} disabled={disabled}
+  return <textarea rows={rows} aria-label={label} placeholder={placeholder} value={draft ?? value} disabled={disabled} maxLength={max}
     onChange={(e) => setDraft(e.target.value)} onBlur={() => { if (draft !== null && draft !== value) void save(draft).finally(() => setDraft(null)); else setDraft(null) }} />
 }
 
@@ -58,8 +58,8 @@ export function ShotWords({ stageRev }: { stageRev?: number }) {
       <span>words <Help text="What the shot's pictures are told comes from its records: the Look, the place, the cast the camera sees, Clay's lights, the scene's words, the description and this shot's own words. Nothing is carried over from the last picture made." />
         <CommandButton id="shots.words.toggle" text label={open ? 'Hide the words' : 'Show the words ▸'} /></span>
       {open && <div className="s-words-body">
-        {scene && <label className="w-field"><span>the scene's</span><KeptText rows={1} label="the scene's words" placeholder="night, drifting fog" value={scene.words ?? ''} save={(w) => saveSceneWords(scene.id, w)} /></label>}
-        <label className="w-field"><span>this shot only</span><KeptText rows={1} label="this shot's words" placeholder="rain on the planks" value={v.words ?? ''} disabled={locked} save={saveShotWords} /></label>
+        {scene && <label className="w-field"><span>the scene's</span><KeptText rows={1} label="the scene's words" placeholder="night, drifting fog" max={1000} value={scene.words ?? ''} save={(w) => saveSceneWords(scene.id, w)} /></label>}
+        <label className="w-field"><span>this shot only</span><KeptText rows={1} label="this shot's words" placeholder="rain on the planks" max={2000} value={v.words ?? ''} disabled={locked} save={saveShotWords} /></label>
         <div className="w-chips left" role="group" aria-label="the words for">{FOR.map((f) => (
           <button key={f.id} className={purpose === f.id ? 'active' : ''} onClick={() => useShots.getState().setWordsFor(f.id)}>{f.label}</button>))}</div>
         {shown ? shown.parts.length ? <ol className="s-parts">{shown.parts.map((p) => (

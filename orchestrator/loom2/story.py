@@ -2141,7 +2141,7 @@ class _FlowMixin:
             upd = {k: v for k, v in data.items() if k in ("name", "colour", "words")}
             if "name" in upd and not str(upd["name"] or "").strip():
                 raise ValueError("a scene needs a name")
-            s = cur.model_copy(update={**upd, "updated_at": utc_now()})
+            s = Scene.model_validate({**cur.model_dump(), **upd, "updated_at": utc_now()})   # K15: validated — model_copy wrote 1000+ words that broke every read
             self._save_book(b.model_copy(update={"scenes": [s if x.id == sid else x for x in b.scenes], "revision": b.revision + 1}))
             return s
 

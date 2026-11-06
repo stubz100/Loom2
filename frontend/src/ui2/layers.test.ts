@@ -28,6 +28,23 @@ describe('U1: the layers', () => {
     navigate({ suite: 'catalogue' })                                                        // unmounted: the layer stays
     expect(useLayer.getState().layer).toBe('world')
   })
+  it('K9: a layer tab moves the suite off another layer’s (its keys go quiet), back to where that layer was left', () => {
+    const off = followNavigation()
+    navigate({ suite: 'animate' })                                                          // Performance on Shots
+    useLayer.getState().setLayer('bin')                                                     // the Bin tab
+    expect(useSession.getState().ui.suite).toBe('catalogue')                                // not Performance's: V no longer queues variations
+    navigate({ suite: 'edit' })                                                             // World's Edit
+    useLayer.getState().setLayer('clay')
+    expect(useSession.getState().ui.suite).toBe('stage')
+    useLayer.getState().setLayer('world')
+    expect(useSession.getState().ui.suite).toBe('edit')                                     // where World was left
+    useLayer.getState().setLayer('shots')
+    expect(useSession.getState().ui.suite).toBe('animate')
+    navigate({ suite: 'stage' })
+    useLayer.getState().setLayer('clay')                                                    // already the layer's suite: kept
+    expect(useSession.getState().ui.suite).toBe('stage')
+    off()
+  })
   it('follows a hash the author follows', () => {
     const off = followNavigation()
     location.hash = '#bin'

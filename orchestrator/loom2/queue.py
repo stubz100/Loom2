@@ -26,7 +26,7 @@ from .engine.pipeline import JobCancelled, finalize, plan
 from .engine.supervisor import EngineSupervisor
 from .events import EventHub
 from .fsio import StateError, atomic_write_json, free_space_gb, new_id, read_json_or, utc_now
-from .recipes import T2I, I2V, AssembleFinal, CompRender, Inpaint, Render, StageShot, TTS, TrainLora, parse_recipe, stage_spec, warm_group
+from .recipes import T2I, I2V, AssembleFinal, CompRender, Inpaint, Render, Segment, StageShot, TTS, TrainLora, parse_recipe, stage_spec, warm_group
 from .documents import DocumentStore
 from .groups import GroupStore
 from .loras import LoraRegistry, check_recipe_loras, publish
@@ -519,6 +519,9 @@ class JobQueue:
         if isinstance(recipe, StageShot):
             from .recipes import stage_model_id
             main = stage_model_id(recipe, self.app.settings.variant)       # D186: the Still's pick resolved here — one the method cannot run is refused by name
+        elif isinstance(recipe, Segment):
+            from .recipes import segment_model_id
+            main = segment_model_id(recipe)                               # K5: the mode's model, not the recipe's default matte
         else:
             main = recipe.model_id
         for mid in [main, *([recipe.te_id] if getattr(recipe, "te_id", None) else [])]:
@@ -804,11 +807,16 @@ class JobQueue:
         self.hub.broadcast("job.updated", job.model_dump())
         try:
             recipe = parse_recipe(job.recipe)
+            gated = registry.get(getattr(recipe, "model_id", None))
+            if gated is not None and registry.unconfirmed(gated, self.app.settings):   # K (D193): a staged / queued / restored job after the confirmation went
+                raise ValueError(f"{gated.label} is offered once Settings › Licences confirms its licence (D17, D192)")
             p = plan(recipe, job.variant)
             if not p.engine:                                           # D62 Quick Remove / P17 draft render: CPU only — the engine is not started
                 if p.gpu:                                              # LT2: the trainer takes the whole card — the engine stops, the next engine job restarts it
                     self.progress(job, "stopping the engine")
-                    await self.engine.stop()
+                    note = await self.engine.free_card()               # K4: an engine started by hand unloads everything first
+                    if note:
+                        job.log_tail.append(note)
                 await run_cpu(job, recipe, self)
                 self._complete(job, engine=False)
                 return

@@ -54,20 +54,20 @@ function around(pts: number[][], w: number, h: number, pad: number, min = 120): 
 function DragPicture({ src, w, h, view, points, edges, dim, onDrop, children, label }: { src: string; w: number; h: number; view: [number, number, number, number]; points: number[][];
   edges: [number, number, string][]; dim?: (k: number) => boolean; onDrop: (k: number, at: [number, number]) => void; children?: React.ReactNode; label: (k: number) => string }) {
   const svg = useRef<SVGSVGElement>(null)
-  const [drag, setDrag] = useState<{ k: number; at: [number, number] } | null>(null)
+  const [drag, setDrag] = useState<{ k: number; at: [number, number]; c0: [number, number]; moved: boolean } | null>(null)   // viewport check: a click is no drop
   const at = (e: React.PointerEvent): [number, number] => { const m = svg.current!.getScreenCTM()!.inverse(); const q = new DOMPoint(e.clientX, e.clientY).matrixTransform(m); return [q.x, q.y] }
   const r = Math.max(2, view[2] / 90)
   const pos = (k: number): number[] => (drag?.k === k ? drag.at : points[k])
   return (
-    <svg ref={svg} viewBox={view.join(' ')} className="rig-pic" onPointerMove={(e) => { if (drag) setDrag({ ...drag, at: at(e) }) }}
-      onPointerUp={() => { if (drag) onDrop(drag.k, drag.at); setDrag(null) }} onPointerLeave={() => { if (drag) onDrop(drag.k, drag.at); setDrag(null) }}>
+    <svg ref={svg} viewBox={view.join(' ')} className="rig-pic" onPointerMove={(e) => { if (drag) setDrag({ ...drag, at: at(e), moved: drag.moved || Math.hypot(e.clientX - drag.c0[0], e.clientY - drag.c0[1]) > 3 }) }}
+      onPointerUp={() => { if (drag?.moved) onDrop(drag.k, drag.at); setDrag(null) }} onPointerLeave={() => { if (drag?.moved) onDrop(drag.k, drag.at); setDrag(null) }}>
       <image href={src} x={0} y={0} width={w} height={h} />
       {children}
       {edges.map(([a, b, colour]) => points[a] && points[b] && (points[a][2] ?? 0) > 0 && (points[b][2] ?? 0) > 0
         ? <line key={`${a}-${b}`} x1={pos(a)[0]} y1={pos(a)[1]} x2={pos(b)[0]} y2={pos(b)[1]} stroke={colour} strokeWidth={r * 0.45} opacity={dim?.(b) ? 0.3 : 0.9} /> : null)}
       {points.map((q, k) => (q[2] ?? 0) > 0 && (
         <circle key={k} cx={pos(k)[0]} cy={pos(k)[1]} r={r} className={`white${dim?.(k) ? ' off' : ''}`} data-k={k}
-          onPointerDown={(e) => { (e.target as Element).setPointerCapture?.(e.pointerId); setDrag({ k, at: at(e) }) }}><title>{label(k)}</title></circle>))}
+          onPointerDown={(e) => { if (e.button !== 0) return; (e.target as Element).setPointerCapture?.(e.pointerId); setDrag({ k, at: at(e), c0: [e.clientX, e.clientY], moved: false }) }}><title>{label(k)}</title></circle>))}
     </svg>
   )
 }

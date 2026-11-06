@@ -43,10 +43,19 @@ class Services:
         self.documents: DocumentStore | None = None
         self.groups: GroupStore | None = None
         self.fetches: dict[str, FetchJob] = {}
+        self._project_lock = asyncio.Lock()                                # K (rule 10): one open / close at a time — two overlapping opens ran two queues
 
     # ---- project binding ------------------------------------------------------------------------
     async def open_project(self, path: Path) -> dict:
-        await self.close_project()
+        async with self._project_lock:
+            return await self._open_locked(path)
+
+    async def close_project(self) -> None:
+        async with self._project_lock:
+            await self._close_locked()
+
+    async def _open_locked(self, path: Path) -> dict:
+        await self._close_locked()
         ws = await asyncio.to_thread(Workspace.open, path)
         # B8: build everything first so a corrupt catalogue or queue file leaves no half-open project behind.
         # D37: the index open (and a rebuild after a schema change) and the group migration run off the event loop.
@@ -88,10 +97,17 @@ class Services:
         except Exception as e:  # noqa: BLE001 — a torn registry never blocks a settings change
             log.warning("trained LoRAs not published: %s", e)
 
-    async def close_project(self) -> None:
+    async def _close_locked(self) -> None:
         if self.queue:
             await self.queue.stop()
             self.queue = None
+        if self.documents:                                               # K6: an open document's synced changes reach its .ora before it is dropped
+            for od in list(self.documents.open.values()):
+                if od.dirty:
+                    try:
+                        await asyncio.to_thread(od.save)
+                    except Exception as e:  # noqa: BLE001 — one document that cannot be written never blocks the close
+                        log.warning("document %s not saved at close: %s", od.doc.id, e)
         if self.catalogue:
             self.catalogue.close()
             self.catalogue = None

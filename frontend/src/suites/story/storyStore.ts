@@ -366,10 +366,11 @@ function schedule(get: () => StoryState, set: (p: Partial<StoryState>) => void):
 // SY1: the stub saves after a pause, with the profile's revision. D90 (B14): the name too — one pending body per profile, the saves one
 // after another (each with the revision the last one returned), so a stub and a name typed together never send the same revision.
 // D93 (B4): the stub is a sheet now — every field of it rides the same pending body
-const TYPED = new Set(['appearance', 'outfit', 'colours', 'marks', 'label'])
+const TYPED = new Set(['appearance', 'outfit', 'colours', 'marks', 'label', 'body', 'height_m', 'hand_words', 'feet_words'])   // K74: every setSheet field
 export type ProfileBody = { name?: string; versions?: { id: string; [k: string]: unknown }[]; [k: string]: unknown }
 let profTimer: number | null = null
 let profPending: { pid: string; body: ProfileBody } | null = null
+let profSending: { pid: string; body: ProfileBody } | null = null     // K74: the body of the PATCH in flight — a reload meanwhile still shows it
 let profChain: Promise<unknown> = Promise.resolve()
 /** D191: the refits one after another, in the order they were asked — two points let go in quick succession sent two refits, and the
  *  first one's answer, landing last, kept one point moved of two (the CS2 scenario, 1 of 92 in a full run). */
@@ -402,7 +403,8 @@ export const useStory = create<StoryState>()((set, get) => {
   const updateProfile = (p: Profile) => set({ profiles: get().profiles.map((x) => (x.id === p.id ? p : x)) })           // a local edit: the list keeps its order
   /** What the server returned, with the name / sheet fields typed since still showing (they save next). */
   const overlayPending = (p: Profile): Profile => {
-    const b = profPending?.pid === p.id ? profPending.body : null
+    const sending = profSending?.pid === p.id ? profSending.body : null, pending = profPending?.pid === p.id ? profPending.body : null
+    const b = sending && pending ? mergeProfileBody(sending, pending) : sending ?? pending
     if (!b) return p
     return { ...p, ...(b.name !== undefined ? { name: b.name } : {}), versions: p.versions.map((v) => { const pv = b.versions?.find((x) => x.id === v.id); return pv ? { ...v, ...Object.fromEntries(Object.entries(pv).filter(([k]) => TYPED.has(k))) } : v }) }
   }
@@ -413,13 +415,27 @@ export const useStory = create<StoryState>()((set, get) => {
       let b = body
       if (profPending?.pid === p.id) { b = mergeProfileBody(profPending.body, body); profPending = null; if (profTimer) { window.clearTimeout(profTimer); profTimer = null } }   // a typed name / stub rides along
       if (!Object.keys(b).length) return p
+      const send = (rev: number) => unwrap(http.PATCH('/story/profiles/{pid}', { params: { path: { pid: p.id } }, body: { revision: rev, ...b } as never }))
+      profSending = { pid: p.id, body: b }
       try {
-        const next = await unwrap(http.PATCH('/story/profiles/{pid}', { params: { path: { pid: p.id } }, body: { revision: p.revision, ...b } as never }))
+        const next = await send(p.revision)
+        profSending = null
         replaceProfile(overlayPending(next))
         return next
       } catch (e) {
-        if ((e as ApiError).status === 409) { toast('The profile changed elsewhere — reloaded; your last change was not saved'); await get().loadProfiles() }
-        else toast(`Profile not saved: ${detail(e)}`)
+        if ((e as ApiError).status === 409) {
+          await get().loadProfiles()
+          // K8: a job moved the profile on (a hand read, a Fill's face, a shell) while this was typed — the typed fields are the author's
+          // and no job writes them, so they go again on the new revision; a body (one object a fit also writes) is a real conflict
+          const fresh = get().profiles.find((x) => x.id === p.id)
+          const typedOnly = !(b.versions ?? []).some((v) => 'body' in v)
+          if (fresh && typedOnly) {
+            try { const next = await send(fresh.revision); profSending = null; replaceProfile(overlayPending(next)); return next } catch { /* told below */ }
+          }
+          profSending = null
+          await get().loadProfiles()                                       // what the server holds now (a body conflict is not overlaid)
+          toast('The profile changed elsewhere — reloaded; your last change was not saved')
+        } else { profSending = null; toast(`Profile not saved: ${detail(e)}`) }
         return null
       }
     })
@@ -535,8 +551,7 @@ export const useStory = create<StoryState>()((set, get) => {
     },
     onChanged: (data) => {
       if (data?.kind === 'profile') {                                        // SY1: a profile moved on the server (an Expand's candidates page, a lock, a copy)
-        if (profPending) return                                              // our typed name / stub is about to save (D90 B14)
-        void get().loadProfiles()
+        void get().loadProfiles()                                            // K8: even while a typed edit waits — it is overlaid, and saves on the new revision
         return
       }
       if (data?.kind === 'shot') { if (!shotPending) void get().loadShots(); return }   // SY2: a take arrived, a finalize, a copy (not while a typed name waits)
@@ -562,7 +577,7 @@ export const useStory = create<StoryState>()((set, get) => {
       void get().loadVoices()                                                                    // CN2: the voices the speakers point at
       try {
         const r = await unwrap(http.GET('/story/profiles'))
-        set({ profiles: r.items, profilesLoaded: true })
+        set({ profiles: r.items.map(overlayPending), profilesLoaded: true })                    // K74: what is typed and not yet saved stays on screen
         const cur = get().profileId
         if (cur && !r.items.some((p) => p.id === cur)) set({ profileId: null, versionId: null, refPage: null, candPage: null, pagesFor: null })
         else if (cur) {

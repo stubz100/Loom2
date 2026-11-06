@@ -117,7 +117,9 @@ export function sampleFigure(o: StageObject, layer: ObjectKey[] | undefined, run
 /** The block's pose at a frame with a correction's joints (and the Detailed level's bones) laid over it; everything else the block's. */
 export function corrected(at: StageObject, k: ObjectKey): StageObject {
   const pose = at.pose ?? { preset: 'stand', joints: {}, extra: {}, ground: 0, pins: {}, contacts: {}, gaze: null }
-  return { ...at, pose: { ...pose, joints: { ...(pose.joints ?? {}), ...(k.pose?.joints ?? {}) }, extra: { ...(pose.extra ?? {}), ...(k.pose?.extra ?? {}) } } }
+  const has = (x: unknown) => !!x && typeof x === 'object' && Object.keys(x as object).length > 0
+  return { ...at, pose: { ...pose, joints: { ...(pose.joints ?? {}), ...(k.pose?.joints ?? {}) }, extra: { ...(pose.extra ?? {}), ...(k.pose?.extra ?? {}) },
+    ...(k.pose?.gaze ? { gaze: k.pose.gaze } : {}), ...(has(k.pose?.pins) ? { pins: k.pose!.pins } : {}), ...(has(k.pose?.contacts) ? { contacts: k.pose!.contacts } : {}) } }   // K12
 }
 
 type Body = NonNullable<StageObject['body']>

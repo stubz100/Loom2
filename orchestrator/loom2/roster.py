@@ -354,13 +354,15 @@ class Roster:
             raise FileNotFoundError(f"weight '{model_id}' ({r.entry.name}) is {r.health}")
         return r.entry.folder, r.entry.name
 
-    def listing(self, include_retired: bool = False) -> list[dict]:
+    def listing(self, include_retired: bool = False, settings: object | None = None) -> list[dict]:
         out = []
         for e in ROSTER:
             if e.retired and not include_retired:
                 continue
             if self.variant == "open" and "open" not in e.variants:
                 continue
+            if e.confirm and settings is not None and not getattr(settings, e.confirm, False):
+                continue                                                # D193 / K: H3's files wait for Settings' confirmation, like its card
             r = self.resolve(e.id)
             out.append({**e.model_dump(), "path": r.path, "health": r.health, "size": r.size, "sha256": r.sha256, "source_tree": r.source_tree})
         return out

@@ -137,6 +137,9 @@ export interface EditorState {
   rotateLayer: (deg: number) => void
   // documents
   openDocument: (id: string) => Promise<void>
+  /** K6: the open document's unsaved work kept before it is left — saved quietly (the .ora, no Bin version); when that fails, the author
+   *  is asked. True when it may be left. */
+  leaveDocument: () => Promise<boolean>
   openFromAsset: (assetId: string) => Promise<void>
   addLayerFromAsset: (assetId: string) => Promise<void>
   newDocument: (w: number, h: number, name?: string) => Promise<void>
@@ -808,12 +811,21 @@ export const useEditor = create<EditorState>()(
         },
 
         // ---- documents -----------------------------------------------------------------------------
+        leaveDocument: async () => {
+          const st = get()
+          if (!st.doc || (!st.docDirty && !fileDirty)) return true
+          if (await st.save({ quiet: true })) return true
+          return useSession.getState().askConfirm({ title: 'Leave without saving?', text: `“${st.doc.name}” could not be saved — leaving it loses the latest changes.`,
+            okLabel: 'Leave without saving', danger: true })
+        },
         openDocument: async (id) => {
+          if (get().doc && get().doc!.id !== id && !(await get().leaveDocument())) return   // K6: never dropped without being saved or asked
           get().closeDocument()
           const seq = ++openSeq
           set({ loading: true, error: null })
           try {
             const doc = asStack(await unwrap(http.GET('/documents/{doc_id}', { params: { path: { doc_id: id } } })))
+            const listed = (await unwrap(http.GET('/documents'))).items.find((d) => d.id === id)   // K6: the server's open copy may be ahead of its .ora
             const pixels = new Map<string, LayerPixels>(); const masks = new Map<string, LayerPixels>()
             const rasters: Node[] = []; const masked: Node[] = []
             walk(doc.layers, (n) => { if (n.kind === 'raster') rasters.push(n); if (n.mask) masked.push(n) })   // masks sit on any node kind
@@ -828,7 +840,7 @@ export const useEditor = create<EditorState>()(
             const candidates = top?.kind === 'group' && top.name.startsWith('AI ') && (top.children?.length ?? 0) > 1 && top.children!.filter((c) => c.visible).length <= 1
               ? { group: top.id, ids: top.children!.map((c) => c.id) } : null
             endTransformState()
-            fileDirty = false; selectionUploaded = `${doc.id}:none`        // D70: a document opens in sync with its .ora (its selection loads after)
+            fileDirty = !!listed?.dirty; selectionUploaded = `${doc.id}:none`   // D70 / K6: in sync with its .ora unless the server's open copy is ahead
             set({ doc, pixels, masks, activeId: first, editingMask: false, docDirty: false, history: [], future: [], selection: null, quickMask: false, candidates, candPreview: null, transform: null, revision: get().revision + 1,
               lassoPoly: null, aiPrompt: { points: [], box: null }, selectedIds: first ? [first] : [], anchorId: first, blendPreview: null })   // F17: nothing of the last document's gestures
             get().requestFit()
@@ -863,6 +875,7 @@ export const useEditor = create<EditorState>()(
           } catch (e) { useSession.getState().toast(`Could not add the asset: ${(e as Error).message}`, 'error') }
         },
         newDocument: async (w, h, name) => {
+          if (!(await get().leaveDocument())) return                       // K6
           try {
             const doc = asStack(await unwrap(http.POST('/documents', { body: { w, h, name: name ?? 'Untitled', background: 'transparent' } })))
             await get().openDocument(doc.id)
@@ -1306,13 +1319,20 @@ export const useEditor = create<EditorState>()(
           if (!p || p.index + 1 >= p.list.length) return
           const top = p.list[p.index], below = p.list[p.index + 1]
           if (top.kind !== 'raster' || below.kind !== 'raster') { useSession.getState().toast('Merge down needs two raster layers', 'info'); return }
+          if (below.locked) { useSession.getState().toast(`“${below.name}” is locked — unlock it to merge into it`, 'info'); return }   // K7
+          if (!top.visible) { useSession.getState().toast(`“${top.name}” is hidden — show it to merge it down`, 'info'); return }
           const a = get().pixels.get(top.id), b = get().pixels.get(below.id)
           if (!a || !b) return
-          const before = clone(doc)
-          const tiles = b.snapshotAll()
-          b.ctx.save()
-          b.ctx.globalAlpha = top.opacity * (top.fill ?? 1)
-          b.ctx.globalCompositeOperation = canvasBlend(top.blend)
+          // K7: the result covers both layers (it was drawn into the lower layer's own canvas, cropping the top to it); the lower layer
+          // keeps its own opacity, blend and mask — the top is drawn into it with its own
+          const ax = top.x ?? 0, ay = top.y ?? 0, bx = below.x ?? 0, by = below.y ?? 0
+          const x0 = Math.min(ax, bx), y0 = Math.min(ay, by)
+          const x1 = Math.max(ax + a.width, bx + b.width), y1 = Math.max(ay + a.height, by + b.height)
+          const out = new LayerPixels(x1 - x0, y1 - y0)
+          out.ctx.drawImage(b.canvas, bx - x0, by - y0)
+          out.ctx.save()
+          out.ctx.globalAlpha = top.opacity * (top.fill ?? 1)
+          out.ctx.globalCompositeOperation = canvasBlend(top.blend)
           const m = top.mask?.enabled ? get().masks.get(top.id) : undefined
           if (m) {
             // apply the mask to a copy of the top layer first
@@ -1321,15 +1341,25 @@ export const useEditor = create<EditorState>()(
             tc.drawImage(a.canvas, 0, 0)
             tc.globalCompositeOperation = 'destination-in'
             const off = maskOffset(top)
-            tc.drawImage(maskAlphaCanvas(m, top.mask!, off.x, off.y, top.x ?? 0, top.y ?? 0, a.width, a.height), 0, 0)   // D52 / D54: as it renders
-            b.ctx.drawImage(tmp, (top.x ?? 0) - (below.x ?? 0), (top.y ?? 0) - (below.y ?? 0))
-          } else b.ctx.drawImage(a.canvas, (top.x ?? 0) - (below.x ?? 0), (top.y ?? 0) - (below.y ?? 0))
-          b.ctx.restore()
-          b.refresh(); b.dirty = true
+            tc.drawImage(maskAlphaCanvas(m, top.mask!, off.x, off.y, ax, ay, a.width, a.height), 0, 0)   // D52 / D54: as it renders
+            out.ctx.drawImage(tmp, ax - x0, ay - y0)
+          } else out.ctx.drawImage(a.canvas, ax - x0, ay - y0)
+          out.ctx.restore()
+          out.refresh(); out.dirty = true
+          const before = clone(doc)
           const next = clone(doc)
           findParent(next, id)!.list.splice(p.index, 1)
-          set({ doc: next, activeId: below.id, editingMask: false, docDirty: true, revision: get().revision + 1 })
-          get().pushHistory({ label: 'merge down', layerId: below.id, kind: 'image', tiles, stack: before, at: Date.now() })
+          walk(next.layers, (n) => {
+            if (n.id !== below.id) return
+            n.x = x0; n.y = y0; n.w = x1 - x0; n.h = y1 - y0
+            if (n.mask?.linked) { n.mask.x += bx - x0; n.mask.y += by - y0 }   // a linked mask stays where it was on the canvas
+            if (n.text) n.text = null                                    // pixels now: a later Edit text… must not re-rasterise them away (K63)
+            return true
+          })
+          const old = get().pixels.get(below.id)!
+          get().pixels.set(below.id, out)
+          set({ doc: next, activeId: below.id, selectedIds: [below.id], anchorId: below.id, editingMask: false, docDirty: true, revision: get().revision + 1 })
+          get().pushHistory({ label: 'merge down', layerId: below.id, kind: 'image', tiles: [], stack: before, at: Date.now(), swap: { layerId: below.id, lp: old, mask: null } })
         },
         groupActive: () => {
           const doc = get().doc

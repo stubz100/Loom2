@@ -1425,20 +1425,26 @@ class Cuts:
         def run(p: Path) -> list[str]:
             doc = read(p)
             _, _, seq = sequence(doc)
-            v1 = seq["video_tracks"][0]["items"] if seq["video_tracks"] else []
+            video = [ti for t in seq["video_tracks"] for ti in t["items"]]   # K13: every video track — an insert on V2 plays the proxy too
+            audio = [ti for t in seq["audio_tracks"] for ti in t["items"]]
             done: list[str] = []
-            for cid, k, meta in self.to_conform(doc):
-                if cid not in ready:
-                    continue
+            by_clip: dict[str, list[tuple[int, dict]]] = {}
+            for cid, k, meta in self.to_conform(doc):                    # K13: a take placed twice (V1 and an insert on V2) is two items
+                if cid in ready:
+                    by_clip.setdefault(cid, []).append((k, meta))
+            for cid, kms in by_clip.items():
                 r = self.fc.batch([{"id": "prefs.set", "params": {"values": prefs(24)}},              # RIFE numbers from 1: the first it wrote
                                    {"id": "file.import", "params": {"paths": [str(ready[cid][0])], "imageSequence": True}}])
                 new = int(r[1]["items"][0])
-                uses = [ti for ti in v1 if ti["item"] == k]
-                steps = [{"id": "metadata.set", "params": {"item": new, "fields": {**meta, "loom2.media": "conform24"}}}]
+                keys = {k for k, _ in kms}
+                uses = [ti for ti in video if ti["item"] in keys]
+                steps = [{"id": "metadata.set", "params": {"item": new, "fields": {**kms[0][1], "loom2.media": "conform24"}}}]
                 if uses:
                     steps.append({"id": "clip.replaceFromBin", "params": {"clips": [ti["id"] for ti in uses], "item": new, "keepSourceIn": True}})
                     steps += [{"id": "clip.rename", "params": {"clip": ti["id"], "name": ti["name"]}} for ti in uses if ti.get("name")]   # F40: still its shot's
-                steps.append({"id": "project.delete", "params": {"items": [k]}})
+                gone = [k for k in keys if not any(ti["item"] == k for ti in audio)]   # K13: FilmCraft's delete takes every track item playing it — sound stays
+                if gone:
+                    steps.append({"id": "project.delete", "params": {"items": sorted(gone)}})
                 self.fc.batch(steps)
                 done.append(cid)
             self._markers(p)

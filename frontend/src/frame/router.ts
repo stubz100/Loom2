@@ -46,6 +46,13 @@ export function navigate(p: Place): void {
   for (const fn of listeners) fn(at)
 }
 
+/** K9: the suite put back under a layer shown by its tab — quietly: no navigation, so the layers' own followers (the Shots level, World's
+ *  rail) keep where they were. Only the layer switch calls it. */
+export function settleSuite(p: Place): void {
+  if (p.tab) setRailTab(p.suite, p.tab)
+  useSession.getState().setSuite(p.suite)
+}
+
 /** Where the old shell is now. */
 export function currentPlace(): Place {
   const suite = useSession.getState().ui.suite

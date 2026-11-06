@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { StageDoc, StageObject } from '../../api/types'
 import { sampleFigure, type BlockRun, type ObjectKey } from './anim'
 import { clipDrop, correctionKey, correctionWords, diffJoints, nextStart } from './corrections'
+import { blockStartAt } from './blocks'
 
 const FIG = { id: 'fig', kind: 'mannequin', name: 'Nora', transform: { pos: [0, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] },
   pose: { preset: 'stand', joints: {}, extra: {}, ground: 0, pins: {}, contacts: {}, gaze: null }, visible: true, locked: false } as unknown as StageObject
@@ -11,6 +12,25 @@ const JOINTS = ['root', 'spine', 'neck', 'head', 'r_shoulder', 'l_shoulder', 'r_
 const walkKey = (frame: number): ObjectKey => ({ frame, ease: 'linear', transform: { pos: [frame * 0.1, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] },
   pose: { preset: 'walk', joints: Object.fromEntries(JOINTS.map((j) => [j, j === 'r_hip' ? [frame % 2 ? 20 : -20, 0, 0] : [0, 0, 0]])), extra: {}, ground: 0, pins: {}, contacts: {}, gaze: null } })
 const RUN: BlockRun = { id: 'blk', start: 0, end: 40, blendIn: 0, keys: Array.from({ length: 41 }, (_, f) => walkKey(f)) }
+
+describe('the review of 2026-11-06: K11 / K12', () => {
+  it('K11: a block starts from the figure before it — a correction inside it does not re-anchor it', () => {
+    const base = sampleFigure(FIG, undefined, [RUN], 30)
+    const head = correctionKey(30, base, { head: [0, 30, 0] }, undefined, undefined)              // stores the walk's frame-30 place (x 3.0)
+    expect(head.transform.pos[0]).toBeCloseTo(3)
+    expect(blockStartAt(FIG, [head], [], 0).transform.pos).toEqual([0, 0, 0])                        // was x 3.0: the walk restarted 3 m on
+    const before = { frame: 0, ease: 'ease', transform: { pos: [1, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] } } as ObjectKey
+    expect(blockStartAt(FIG, [before, head], [], 0).transform.pos).toEqual([1, 0, 0])                // a key at the start places it
+  })
+  it('K12: a correction carries the gaze, the pins and the holds over the block', () => {
+    const base = sampleFigure(FIG, undefined, [RUN], 20)
+    const gaze = { camera: true, object_id: null, joint: null }
+    const key = correctionKey(20, base, {}, undefined, undefined, { gaze, pins: {}, contacts: {} })
+    expect(key.pose!.gaze).toEqual(gaze)
+    expect(sampleFigure(FIG, [key], [RUN], 20).pose!.gaze).toEqual(gaze)                             // was null: Look at did nothing over a clip
+    expect(correctionWords(key)).toBe('the gaze')
+  })
+})
 
 describe('C2: corrections over a block (P8)', () => {
   it('a correction key changes only its joints, the block keeps moving the figure', () => {

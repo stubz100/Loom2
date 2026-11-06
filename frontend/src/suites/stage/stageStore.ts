@@ -436,7 +436,7 @@ function editPose(get: () => StageState, id: string, fn: (p: StageObject['pose']
       const base = sampleFigure(raw, (layer ?? []).filter((k) => !k.correction), runs, frame)
       const joints = diffJoints(effectiveJoints(base), { ...effectiveJoints(base), ...(pose.joints ?? {}) })
       const extra = diffJoints(base.pose?.extra ?? {}, pose.extra ?? {})
-      get().apply((d) => withObjectKey(d, id, correctionKey(frame, base, joints, extra, (layer ?? []).find((k) => k.frame === frame))), `${label} · a correction`)
+      get().apply((d) => withObjectKey(d, id, correctionKey(frame, base, joints, extra, (layer ?? []).find((k) => k.frame === frame), { pins: pose.pins, contacts: pose.contacts, gaze: pose.gaze })), `${label} · a correction`)
       return
     }
     get().apply((d) => withObjectKey(d, id, { frame, ease: 'ease', transform: { pos: [...o.transform.pos], rot: [...o.transform.rot], scale: [...o.transform.scale] }, pose }), label)

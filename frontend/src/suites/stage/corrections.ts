@@ -20,18 +20,19 @@ export function diffJoints(base: Record<string, number[]>, pose: Record<string, 
 
 /** A correction key at `frame`: the joints changed on top of the block (`joints`, merged with the correction already there, the newest
  *  winning), the block's own transform and preset (what the key falls back to should its block go). */
-export function correctionKey(frame: number, base: StageObject, joints: Record<string, number[]>, extra: Record<string, number[]> | undefined, existing: ObjectKey | undefined): ObjectKey {
+export function correctionKey(frame: number, base: StageObject, joints: Record<string, number[]>, extra: Record<string, number[]> | undefined, existing: ObjectKey | undefined,
+  held?: { pins?: unknown; contacts?: unknown; gaze?: unknown }): ObjectKey {
   const had = existing?.correction ? existing.pose?.joints ?? {} : {}
   const hadExtra = existing?.correction ? existing.pose?.extra ?? {} : {}
-  return {
-    frame, ease: 'ease', correction: true,
-    transform: { pos: [...base.transform.pos], rot: [...base.transform.rot], scale: [...base.transform.scale] },
-    pose: { preset: base.pose?.preset ?? 'stand', joints: { ...had, ...joints }, extra: { ...hadExtra, ...(extra ?? {}) }, ground: base.pose?.ground ?? 0, pins: {}, contacts: {}, gaze: null },
-  }
+  // K12: the gaze, the pins and the holds ride the correction (they were written empty: Look at, Pin and Held to did nothing over a clip)
+  const pose = { preset: base.pose?.preset ?? 'stand', joints: { ...had, ...joints }, extra: { ...hadExtra, ...(extra ?? {}) }, ground: base.pose?.ground ?? 0,
+    pins: held?.pins ?? {}, contacts: held?.contacts ?? {}, gaze: held?.gaze ?? null } as NonNullable<ObjectKey['pose']>
+  return { frame, ease: 'ease', correction: true, transform: { pos: [...base.transform.pos], rot: [...base.transform.rot], scale: [...base.transform.scale] }, pose }
 }
 
 /** The joints a correction names, for its diamond's words ("head, neck"). */
-export const correctionWords = (k: Pick<ObjectKey, 'pose'>): string => Object.keys(k.pose?.joints ?? {}).map((j) => j.replace(/^([rl])_/, (_m, s: string) => (s === 'r' ? 'right ' : 'left '))).join(', ') || 'nothing changed'
+export const correctionWords = (k: Pick<ObjectKey, 'pose'>): string => [...Object.keys(k.pose?.joints ?? {}).map((j) => j.replace(/^([rl])_/, (_m, s: string) => (s === 'r' ? 'right ' : 'left '))),
+  ...(k.pose?.gaze ? ['the gaze'] : []), ...(Object.keys(k.pose?.pins ?? {}).length ? ['pins'] : []), ...(Object.keys(k.pose?.contacts ?? {}).length ? ['holds'] : [])].join(', ') || 'nothing changed'
 
 /** P10: where *Apply* lands a clip — after the figure's last block, else the shot's start; never the playhead. */
 export function nextStart(doc: Pick<StageDoc, 'tracks' | 'range'>, oid: string): number {

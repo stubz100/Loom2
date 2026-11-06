@@ -635,6 +635,12 @@ def parse_recipe(data: dict) -> AnyRecipe:
     return RecipeEnvelope.model_validate({"recipe": data}).recipe
 
 
+def segment_model_id(recipe: Segment) -> str:
+    """K5: the model a Segment job runs — the mode picks it (`build_segment`), not the recipe's `model_id` (the subject matte by default):
+    the open-variant gate, the VRAM admission and the warm group read this."""
+    return registry.segment_model(recipe.mode)
+
+
 def inpaint_model_id(recipe: Inpaint, variant: str = "full") -> str:
     """The transformer an inpaint mode actually runs (10 §4): Fill Hero is dev; Fill-Match and Remove need a distilled Klein
     (ICM), falling back to Klein 9B — or to Klein 4B under the `open` variant (C3, D26)."""
@@ -660,6 +666,8 @@ def warm_group(recipe: AnyRecipe, variant: str = "full") -> str:
         return reangle_model_id(recipe, variant)   # P14: the model the move's method runs in this build
     if isinstance(recipe, StageShot):
         return stage_model_id(recipe, variant)     # ST3: the model the Stage method runs in this build
+    if isinstance(recipe, Segment):
+        return segment_model_id(recipe)            # K5: SAM 3 for points / text / box
     if isinstance(recipe, (Render, AssembleFinal, CompRender)):
         return "cpu"                               # P17: the draft render never touches the engine; D111: nor the final's assembly
     if isinstance(recipe, TrainLora):

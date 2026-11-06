@@ -431,11 +431,19 @@ async def prepare_document(job: JobRecord, recipe: Inpaint | I2I | Upscale | Seg
         out: dict[str, Any] = {}
         if isinstance(recipe, Inpaint):
             if recipe.mode == "outpaint":
-                plan = outpaint_plan(od.doc.w, od.doc.h, recipe.outpaint or {}, max_pixels=recipe.max_pixels)
-                if plan.w == od.doc.w and plan.h == od.doc.h:
+                pad = recipe.outpaint or {}
+                pl, pt, pr, pb = (int(pad.get(k, 0)) for k in ("left", "top", "right", "bottom"))
+                grown = any(od.doc.find(g) is not None for g in exclude)   # K2: an earlier candidate of this batch already grew the canvas
+                w0, h0 = (od.doc.w - pl - pr, od.doc.h - pt - pb) if grown else (od.doc.w, od.doc.h)
+                if grown:
+                    comp = comp[pt:pt + h0, pl:pl + w0]                  # the picture the batch started from, not the grown canvas's empty strips
+                plan = outpaint_plan(w0, h0, pad, max_pixels=recipe.max_pixels)
+                if plan.w == w0 and plan.h == h0:
                     raise ValueError("outpaint needs at least one side to grow")
                 img, msk, strips = outpaint_inputs(comp, plan)
                 out["alpha_mask"] = strips
+                out["grown"] = grown
+                out["source_size"] = (od.doc.w, od.doc.h)                # K: the finisher refuses a canvas changed while the job ran
             else:
                 sel = od.selection
                 if sel is None or not sel.any():

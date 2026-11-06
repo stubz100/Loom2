@@ -220,7 +220,7 @@ class CompositionStore:
         root = self.folder(f.id)
         by_id = {x.id: x for x in f.layers}
         offsets = {k: (float(v[0]), float(v[1])) for k, v in (f.assembly.get("offsets_px") or {}).items()}
-        ec.tool("open_project", {"new": True})                        # a fresh project in the session
+        ec.new_project()                                              # a fresh project in the session — it holds no file until saved (K14)
         ec.command("comp.new", {"name": COMP_NAME, "width": w, "height": h, "frameRate": rate, "duration": f.frames / rate})
 
         def imported(first: Path) -> int:

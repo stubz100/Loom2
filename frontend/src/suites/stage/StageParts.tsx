@@ -48,6 +48,7 @@ import { JOINTS, MANNEQUIN_PRESETS, POSE_NAMES, PROP_PRESETS, SET_PRESETS, type 
 import { ThingsSheet } from './ThingsSheet'
 import { useThings } from './thingsStore'
 import { StageEngine } from './engine'
+import { CHAINS } from './ik'
 import { landAt, yawAt, viewport, viewportMenu, cameraMenu } from './stageCommands'
 import { canHold, descendsFrom, HAND_LABEL, holders } from './held'
 import { meshLabel, propMeshes } from './meshes'
@@ -841,7 +842,11 @@ function useStageKeys(): void {
       handleKeysAt('stage', e)                                           // D121: Clay's reach — the stage's keys, then the one transport and the mode keys (animateCommands.ts)
     }
     window.addEventListener('keydown', h)
-    return () => window.removeEventListener('keydown', h)
+    // viewport check: a choice made in one of Clay's selects gives the keys back to the tools — the select kept the focus, and its typeahead
+    // took the next tool key (R turned the pose preset into `run`, wiping the pins and contacts)
+    const blur = (e: Event) => { const t = e.target; if (t instanceof HTMLSelectElement && t.closest('.stage-panel, .sel-facts') && useSession.getState().ui.suite === 'stage') t.blur() }
+    document.addEventListener('change', blur, true)
+    return () => { window.removeEventListener('keydown', h); document.removeEventListener('change', blur, true) }
   }, [])
 }
 registerKeyHost('stage', function StageKeys() { useStageKeys(); return null })
@@ -1138,14 +1143,32 @@ function Viewport() {
   const selectedCamera = useStage((s) => s.selectedCamera)
   useEffect(() => { engineRef.current?.select(selected) }, [selected])
   useEffect(() => { engineRef.current?.selectCamera(selectedCamera) }, [selectedCamera])                   // D119 (SC1)
-  useEffect(() => { engineRef.current?.setTool(tool, snap) }, [tool, snap])
+  useEffect(() => {
+    const e = engineRef.current
+    if (!e) return
+    e.setTool(tool, snap)
+    const c = e.ikChain()
+    if (tool === 'rotate' && c) st().selectJoint(CHAINS[c].lower)            // viewport check: Rotate on a hand / foot handle turns its elbow / knee
+  }, [tool, snap])
   useEffect(() => { const e = engineRef.current; if (!e) return; e.setView(view); if (view === 'camera' && current) e.sync(current); setPipRect(e.pipRect()) }, [view]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { const e = engineRef.current; if (!e) return; e.setPip(pip); setPipRect(e.pipRect()) }, [pip])   // D121 (AW4)
   useEffect(() => { if (frameReq.n) engineRef.current?.frame(frameReq.ids) }, [frameReq])
   useEffect(() => { engineRef.current?.setPoseMode(poseMode); if (!poseMode) st().selectJoint(null) }, [poseMode])
   useEffect(() => { const e = engineRef.current; if (e && selected) e.selectJoint(selected, selectedJoint as Joint | null) }, [selectedJoint]) // eslint-disable-line react-hooks/exhaustive-deps
   const down = useRef<{ x: number; y: number; t: number; hot: boolean } | null>(null)
+  const rightDown = useRef<{ x: number; y: number } | null>(null)
+  const yielded = useRef(false)
+  // viewport check: the posed joint's rings cover the neighbouring pickers and the hand / foot cubes — a press on another picker is the
+  // picker's (the gizmo's own listener on the canvas runs after this capture-phase one)
+  const onDownCapture = (e: ReactPointerEvent) => {
+    if (e.button !== 0) return
+    const eng = engineRef.current, s = st()
+    if (!eng || !s.posing || s.mode === 'record' || !eng.gizmo.object) return
+    const p = eng.pick(e.clientX, e.clientY)
+    if ((p.joint && p.joint !== s.selectedJoint) || (p.ik && p.ik !== eng.ikChain())) { eng.yieldPress(); yielded.current = true }   // not the live handle's own cube
+  }
   const onDown = (e: ReactPointerEvent) => {
+    if (e.button === 2) { rightDown.current = { x: e.clientX, y: e.clientY }; return }   // viewport check: a right-drag pans (OrbitControls) — no menu after it
     if (e.button !== 0) return
     const eng = engineRef.current
     const hot = !!eng?.gizmo.object && !!eng.gizmo.axis                                                         // on a gizmo handle (a stale axis with nothing attached is not)
@@ -1155,7 +1178,7 @@ function Viewport() {
       eng!.beginPathDrag(); e.currentTarget.setPointerCapture(e.pointerId); down.current = null
       return
     }
-    down.current = { x: e.clientX, y: e.clientY, t: Date.now(), hot }                     // on a gizmo handle: the click is the gizmo's
+    down.current = { x: e.clientX, y: e.clientY, t: Date.now(), hot: hot && !yielded.current }   // on a gizmo handle: the click is the gizmo's
   }
   const onMove = (e: ReactPointerEvent) => {
     lastPointer.current = { x: e.clientX, y: e.clientY }
@@ -1179,6 +1202,7 @@ function Viewport() {
     }
     const d = down.current; down.current = null
     const eng = engineRef.current
+    if (yielded.current) { yielded.current = false; queueMicrotask(() => eng?.regizmo()) }   // the gizmo back after the press (a pick below re-targets it)
     if (!d || !eng || e.button !== 0 || d.hot || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4 || eng.gizmo.dragging) return
     const s = st()
     if (s.mode === 'record') return                                                    // C1: nothing is picked in Record
@@ -1189,9 +1213,13 @@ function Viewport() {
       if (at) s.addPathPoint(fig.id, [at[0], at[2]])
       return
     }
-    if (p.joint && p.id) { st().selectJoint(p.joint) }                                 // the rotate gizmo moves to the joint (FK)
-    else if (p.ik && p.id) { st().selectJoint(null); eng.startIk(p.id, p.ik) }         // a translate handle on the hand / foot (IK)
+    if (p.joint && p.id) { st().selectJoint(p.joint); eng.selectJoint(p.id, p.joint) }   // the rotate gizmo moves to the joint (FK) — the same joint again too
+    else if (p.ik && p.id) {
+      if (s.tool === 'rotate') st().selectJoint(CHAINS[p.ik].lower)                     // viewport check: under Rotate a hand / foot turns its elbow / knee
+      else { st().selectJoint(null); eng.startIk(p.id, p.ik) }                          // a translate handle on the hand / foot (IK)
+    }
     else if (p.camera) st().selectCamera(p.camera)                                      // D119 (SC1): a camera's body — the camera as the selection
+    else if (s.posing && s.selected && !p.id) { st().selectJoint(null); eng.dropHandle() }   // viewport check: a near miss drops the joint, not the figure and its pose mode
     else st().select(p.id)
   }
   const onDouble = (e: React.MouseEvent) => {                                           // D119 (SC1): a double-click on a camera's body looks through it
@@ -1201,6 +1229,8 @@ function Viewport() {
   }
   const onMenu = (e: React.MouseEvent) => {
     e.preventDefault()
+    const rd = rightDown.current; rightDown.current = null
+    if (rd && Math.hypot(e.clientX - rd.x, e.clientY - rd.y) > 4) return                // the end of a pan: no menu, the selection kept
     if (st().mode === 'record') return
     const eng = engineRef.current
     const p = eng ? eng.pick(e.clientX, e.clientY) : { id: null }
@@ -1215,7 +1245,7 @@ function Viewport() {
   markUsed('stage.tool.select'); markUsed('stage.tool.move'); markUsed('stage.tool.rotate'); markUsed('stage.tool.scale'); markUsed('stage.snap'); markUsed('stage.undo'); markUsed('stage.redo')
   return (
     <div ref={(el) => { (hostRef as React.MutableRefObject<HTMLDivElement | null>).current = el; dropRef(el) }} className={`stage-host${over ? ' over' : ''}`}
-      onPointerDown={onDown} onPointerUp={onUp} onPointerMove={onMove} onContextMenu={onMenu} onDoubleClick={onDouble}>
+      onPointerDownCapture={onDownCapture} onPointerDown={onDown} onPointerUp={onUp} onPointerMove={onMove} onContextMenu={onMenu} onDoubleClick={onDouble}>
       <div ref={canvasHolderRef} className="stage-canvas-holder" />
       {current && <div className="mode-pill" role="group" aria-label="Build or Record" onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}>{/* C1 (D181): ArtCraft's Build | Record */}
         <CommandButton id="stage.mode.build" text active={!rec} /><CommandButton id="stage.mode.record" text active={rec} />
@@ -1231,7 +1261,7 @@ function Viewport() {
       </div>}
       {current && figure && !rec && <div className="pose-pill" onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}>{/* D121: pose mode by the figure, ArtCraft's Enter Pose Mode / Done */}
         <CommandButton id="stage.pose.mode" text active={poseMode} label={poseMode ? `Done posing ${figure.name}` : `Pose ${figure.name}`} />
-        {poseMode && <Help text="Orange spheres are joints: click one for its rotate gizmo. Blue cubes are hands and feet: drag one and the elbow or knee follows. Done (or a click on the floor) ends pose mode." />}
+        {poseMode && <Help text="Orange spheres are joints: click one for its rotate gizmo. Blue cubes are hands and feet: click one for its move handle and drag it — the elbow or knee follows; under Rotate a cube turns its elbow or knee. A click beside the figure drops the joint; Done ends pose mode." />}
       </div>}
       {current && view === 'camera' && rect && guides && <div className="frame-guides" style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}><i className="thirds" /><i className="centre" /></div>}
       {current && <CameraPill />}{/* D121 (AW4): which camera, its lens, look through — ArtCraft's camera pill */}

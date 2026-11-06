@@ -228,6 +228,17 @@ class EngineSupervisor:
         async with self._lock:
             return await self._stop_locked(grace_s)
 
+    async def free_card(self) -> str | None:
+        """K4 (rule 10, D97): the whole card for a job that is not the engine's (training, TTS cloning, the mouth step). Our engine stops; an
+        engine started outside loom2 (adopted, V19) cannot be stopped from here, so it is told to unload every model and free its memory —
+        idle and empty while the job runs (the queue sends it nothing meanwhile); it used to keep its models beside a 13.6 GB trainer.
+        Returns what was done to an adopted engine, for the job's log."""
+        await self.stop()
+        if self.adopted and await self.client.is_up():
+            await self.client.free(unload_models=True, free_memory=True)
+            return "the engine started outside loom2 was told to unload its models and free its memory (it cannot be stopped from here)"
+        return None
+
     async def _stop_locked(self, grace_s: float = 10.0) -> dict:
         """The body of `stop()`; callers must hold `self._lock`."""
         proc, self.proc = self.proc, None

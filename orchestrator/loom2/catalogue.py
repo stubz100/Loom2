@@ -15,7 +15,7 @@ import sqlite3
 import threading
 import time
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
 from PIL import Image
@@ -26,7 +26,11 @@ from .fsio import StateError, _tmp_for, atomic_copy, atomic_move, atomic_write_j
 from .workspace import Workspace
 
 ASSET_SCHEMA_VERSION = 2                     # D66: `origin` (a version-1 manifest loads with none)
-INDEX_SCHEMA_VERSION = 4                     # D122: no `state` / `rating` columns; C6: a `lineage_kind` column (an older index is dropped and rebuilt)
+INDEX_SCHEMA_VERSION = 5                     # D122: no `state` / `rating` columns; C6: a `lineage_kind` column (an older index is dropped and rebuilt);
+                                             # K16: 5 rebuilds once more — 4's rebuild lost the stage guides and anim tests (IN_PLACE_ROOTS)
+# K16: where an asset indexed in place (`ingest_file(in_place=True)`) keeps its manifest (the file's own name, .json) — the rebuild reads these
+# besides `assets/`, and an in-place ingest anywhere else is refused, so the index can always be rebuilt from the files (house rule 4)
+IN_PLACE_ROOTS = ("clips/*/proxy.json", "stages/*/guides/*.json", "story/anim_tests/*.json")
 log = logging.getLogger(__name__)
 
 AssetKind = Literal["image", "video", "mask", "document-render", "mesh", "audio"]     # mesh: P18 (D84), a GLB; audio: CN2 (D87), a WAV master
@@ -309,7 +313,9 @@ class Catalogue:
                 raise ValueError(f"lineage kind {fields['lineage_kind']!r} is not in the Bin's vocabulary (loom2/kinds.py): name its shelf first")
         if in_place:
             dest = src
-            dest.relative_to(self.ws.path)                            # must be inside the project
+            rel = PurePosixPath(dest.relative_to(self.ws.path).as_posix()).with_suffix(".json")   # must be inside the project …
+            if not any(rel.full_match(g) for g in IN_PLACE_ROOTS):    # … K16: and where the rebuild finds its manifest
+                raise ValueError(f"{rel.with_suffix(dest.suffix)} cannot be indexed in place: the index is rebuilt only from {', '.join(IN_PLACE_ROOTS)}")
         else:
             dest = self.ws.asset_path(asset_id, ext, datetime.now())
             if move:
@@ -400,21 +406,25 @@ class Catalogue:
 
     # ---- index ------------------------------------------------------------------------------------
     def _index(self, rec: AssetRecord) -> None:
-        aspect = (rec.w / rec.h) if rec.w and rec.h else None
         with self._lock:
             if self._closed:
                 return
-            self._db.execute(
-                "INSERT OR REPLACE INTO assets (id, kind, path, w, h, aspect, frames, created_at, job_id, batch_id, session_id, root_id, model_id, seed, prompt_text,"
-                " suite, tags, has_document, trashed_at, bytes, thumb_status, manifest, lineage_kind) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (rec.id, rec.kind, rec.path, rec.w, rec.h, aspect, rec.frames, rec.created_at, rec.job_id, rec.batch_id, rec.session_id, rec.root_id, rec.model_id,
-                 rec.seed, rec.prompt_text, rec.suite, json.dumps(rec.tags), int(rec.has_document), rec.trashed_at, rec.bytes, rec.thumb_status,
-                 json.dumps(rec.model_dump(), default=str), rec.lineage_kind))
-            if self.fts:
-                text = " ".join(x for x in (rec.prompt_text or "", _flatten_text(rec.prompt_json), " ".join(rec.tags), rec.model_id or "", str(rec.seed or "")) if x)
-                self._db.execute("DELETE FROM assets_fts WHERE id=?", (rec.id,))
-                self._db.execute("INSERT INTO assets_fts (id, text) VALUES (?,?)", (rec.id, text))
+            self._index_row(rec)
             self._db.commit()
+
+    def _index_row(self, rec: AssetRecord) -> None:
+        """One asset's row (and its search text) — the caller holds `_lock` and commits."""
+        aspect = (rec.w / rec.h) if rec.w and rec.h else None
+        self._db.execute(
+            "INSERT OR REPLACE INTO assets (id, kind, path, w, h, aspect, frames, created_at, job_id, batch_id, session_id, root_id, model_id, seed, prompt_text,"
+            " suite, tags, has_document, trashed_at, bytes, thumb_status, manifest, lineage_kind) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (rec.id, rec.kind, rec.path, rec.w, rec.h, aspect, rec.frames, rec.created_at, rec.job_id, rec.batch_id, rec.session_id, rec.root_id, rec.model_id,
+             rec.seed, rec.prompt_text, rec.suite, json.dumps(rec.tags), int(rec.has_document), rec.trashed_at, rec.bytes, rec.thumb_status,
+             json.dumps(rec.model_dump(), default=str), rec.lineage_kind))
+        if self.fts:
+            text = " ".join(x for x in (rec.prompt_text or "", _flatten_text(rec.prompt_json), " ".join(rec.tags), rec.model_id or "", str(rec.seed or "")) if x)
+            self._db.execute("DELETE FROM assets_fts WHERE id=?", (rec.id,))
+            self._db.execute("INSERT INTO assets_fts (id, text) VALUES (?,?)", (rec.id, text))
 
     def add_lineage(self, from_id: str, to_id: str, via_job: str, kind: str = "generate") -> None:
         with self._lock:
@@ -836,18 +846,27 @@ class Catalogue:
             if self.fts:
                 self._db.execute("DELETE FROM assets_fts")
             self._db.commit()
-        manifests = sorted(self.ws.assets_dir.rglob("*.json")) + sorted(self.ws.clips_dir.glob("*/proxy.json"))     # M6: clip proxies are indexed in place
-        for m in manifests:
+        manifests = sorted(self.ws.assets_dir.rglob("*.json"))
+        for g in IN_PLACE_ROOTS:                                         # M6: clip proxies; K16: stage guides, anim tests — indexed where they lie
+            manifests += sorted(self.ws.path.glob(g))
+        recs: list[AssetRecord] = []
+        for m in manifests:                                              # read off the lock; one transaction below (K: 2000 rows took 17.6 s one commit each)
             try:
                 rec = AssetRecord.model_validate(read_json(m))
             except Exception:
                 continue
-            if not self.abs_path(rec).is_file():
-                continue
-            self._index(rec)
-            for parent in rec.parents:
-                self.add_lineage(parent, rec.id, rec.job_id or "", kind=rec.lineage_kind or rec.suite)   # C11
-            n += 1
+            if self.abs_path(rec).is_file():
+                recs.append(rec)
+        now = utc_now()
+        with self._lock:
+            if self._closed:
+                return 0
+            for rec in recs:
+                self._index_row(rec)
+                for parent in rec.parents:                               # C11
+                    self._db.execute("INSERT OR REPLACE INTO lineage VALUES (?,?,?,?,?)", (parent, rec.id, rec.job_id or "", rec.lineage_kind or rec.suite, now))
+                n += 1
+            self._db.commit()
         return n
 
     def usage_bytes(self) -> int:

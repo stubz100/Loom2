@@ -249,6 +249,11 @@ async def run_tts(job: "JobRecord", recipe: TTS, q: "JobQueue") -> bool:
                 _kill(proc.pid)
                 await asyncio.to_thread(proc.wait)
                 raise JobCancelled(job.id)
+    except asyncio.CancelledError:                                      # K3 (rule 10): the queue stopped — the cloning goes with the task
+        if proc.poll() is None:
+            _kill(proc.pid)
+            await asyncio.to_thread(proc.wait)
+        raise
     finally:
         if sampler:
             sampler.stop()

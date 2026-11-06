@@ -145,8 +145,11 @@ export async function benchKeys(): Promise<ObjectKey[] | null> {
 /** A template's record from the bench's track (its name and lineage kept, the keys new). */
 async function fromBench(base: Partial<AnimationTemplate> & { name: string }, keys: ObjectKey[]): Promise<AnimationTemplate> {
   const doc = st().current, o = doc?.objects.find((x) => x.id === bench?.figure)
-  return { id: newId('anm'), rig: 'mannequin', fps: doc?.size.fps || 24, hip: o ? hipOf(o) : 0.91, source: { stage_id: doc?.id ?? null, object_id: bench?.figure ?? null, start: doc?.range.start ?? 0, end: doc?.range.end ?? 0 },
-    thumb_asset_id: null, ...base, keys, frames: (keys[keys.length - 1]?.frame ?? 0) + 1 } as unknown as AnimationTemplate
+  return { id: newId('anm'), rig: 'mannequin', source: { stage_id: doc?.id ?? null, object_id: bench?.figure ?? null, start: doc?.range.start ?? 0, end: doc?.range.end ?? 0 },
+    thumb_asset_id: null, ...base, keys, frames: (keys[keys.length - 1]?.frame ?? 0) + 1,
+    // viewport check: the keys were sampled on the bench's figure — its hip and the scene's rate go with them (the old template's hip
+    // spread over them scaled the root by hip(bench) / hip(old) at every Save)
+    hip: o ? hipOf(o) : (base.hip ?? 0.91), fps: doc?.size.fps || base.fps || 24 } as unknown as AnimationTemplate
 }
 
 /** *Save*: the animation written over with the bench's track — the project's through the list (its revision), the library's through its file. */

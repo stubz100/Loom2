@@ -36,6 +36,7 @@ export function FinalViewer() {
   const view = useRef<HTMLDivElement>(null)
   const poly = useComposition((s) => s.poly)                               // the points tool's points so far, in comp pixels (the store clears them with the tool)
   const [drag, setDrag] = useState<Drag | null>(null)
+  const [settling, setSettling] = useState<{ dx: number; dy: number } | null>(null)   // viewport check: a move shown where it was dropped until it is applied
   useEffect(() => { const t = window.setInterval(() => void useComposition.getState().tick(), 250); return () => window.clearInterval(t) }, [])
   useEffect(() => () => useComposition.getState().togglePlay(false), [])
   useEffect(() => {                                                       // Esc drops the points tool's shape
@@ -82,7 +83,7 @@ export function FinalViewer() {
       return
     }
     const dx = Math.round(drag.dx * scale), dy = Math.round(drag.dy * scale)
-    if (dx || dy) void cp.nudge(dx, dy)
+    if (dx || dy) { setSettling({ dx: drag.dx, dy: drag.dy }); void cp.nudge(dx, dy).finally(() => setSettling(null)) }
   }
   const onDouble = () => { if (maskTool === 'poly' && poly.length >= 3) { void useComposition.getState().addPolyMask(poly.map(toLayer)); useComposition.getState().setMaskTool('off') } }
   // the selected layer's own pixels sit at (position − anchor) in the composition: masks are in the layer's pixels
@@ -107,7 +108,8 @@ export function FinalViewer() {
             onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={() => setDrag(null)} onDoubleClick={onDouble} />
           {selected !== null && <MaskOverlay w={final.size.w} h={final.size.h} offset={off} poly={poly} scaleOf={scaleOf} />}
         </div> : <div className="anim-overlay">loading the first frame…</div>}
-        {ghost ? <div className={`mask-ghost ${maskTool}`} style={ghost} /> : drag && maskTool === 'off' && (drag.dx || drag.dy) ? <div className="drag-ghost" style={{ transform: `translate(${drag.dx}px, ${drag.dy}px)` }}><span>{selName}: {Math.round(drag.dx)}, {Math.round(drag.dy)} px</span></div> : null}
+        {ghost ? <div className={`mask-ghost ${maskTool}`} style={ghost} /> : drag && maskTool === 'off' && (drag.dx || drag.dy) ? <div className="drag-ghost" style={{ transform: `translate(${drag.dx}px, ${drag.dy}px)` }}><span>{selName}: {Math.round(drag.dx)}, {Math.round(drag.dy)} px</span></div>
+          : settling ? <div className="drag-ghost settling" style={{ transform: `translate(${settling.dx}px, ${settling.dy}px)` }}><span>{selName}: moving…</span></div> : null}
         <span className="final-chip" data-side={side} data-busy={busy ? 'true' : undefined} data-fetching={fetching ? 'true' : undefined}
           title={`${Math.round((100 * filled) / Math.max(1, n))} % of the shot cached for playback · shown at ${side === 'full' ? 'full size' : 'half size'}${busy ? ' · a job runs: frames on demand only' : ''}${before ? ' · before: every effect off' : ''}`}>
           {before ? 'before' : chipText({ filled, final })}</span>

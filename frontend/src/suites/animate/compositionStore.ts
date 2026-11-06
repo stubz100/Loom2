@@ -229,7 +229,10 @@ let inflight: Promise<void> | null = null
 let restTimer: number | null = null
 let playTimer: number | null = null
 
-const key = (rev: number, frame: number, side: Side) => `${rev}:${frame}:${side}`
+/** K10: a frame is the composition's — its final, the assembly and final revision it was made from, its edits — not its revision alone
+ *  (every composition starts at 0: a remade one showed the old frames; a frame in flight while switching finals was the other final's). */
+const ident = (c: Pick<Composition, 'final_id' | 'assembled_at' | 'final_revision' | 'revision'>) => `${c.final_id}:${c.assembled_at ?? ''}:${c.final_revision}:${c.revision}`
+const key = (c: Pick<Composition, 'final_id' | 'assembled_at' | 'final_revision' | 'revision'>, frame: number, side: Side) => `${ident(c)}:${frame}:${side}`
 /** The jobs the page knows: one running means the session renders on demand only (D97 / D113). */
 export const queueBusy = (): boolean => Object.values(useSession.getState().jobs).some((j) => j.status === 'running')
 
@@ -241,14 +244,14 @@ function clearCache(): void {
   fullKeys.length = 0
 }
 
-async function fetchFrame(final: Final, revision: number, frame: number, side: Side): Promise<string | null> {
+async function fetchFrame(final: Final, comp: Composition, frame: number, side: Side): Promise<string | null> {
   const b = getBackend()
   if (!b) return null
   const px = side === 'half' ? Math.round(Math.max(final.size.w, final.size.h) / 2) : 0
   const res = await fetch(`${baseUrl()}/finals/${final.id}/composition/frame?t=${frame / final.rate}&side=${px}`, { headers: { 'X-Loom-Token': b.token } })
   if (!res.ok) throw new Error(`frame ${frame}: ${res.status}`)
   const url = URL.createObjectURL(await res.blob())
-  const k = key(revision, frame, side)
+  const k = key(comp, frame, side)
   const old = cache.get(k)
   if (old) URL.revokeObjectURL(old)
   cache.set(k, url)
@@ -274,7 +277,7 @@ export const useComposition = create<CompState>((set, get) => {
   const show = (frame: number, side: Side): boolean => {
     const { comp } = get()
     if (!comp) return false
-    const url = cache.get(key(comp.revision, frame, side))
+    const url = cache.get(key(comp, frame, side))
     if (!url) return false
     if (get().frame === frame && (side === 'full' || get().shown?.frame !== frame || get().shown?.side !== 'full')) set({ shown: { url, frame, side, revision: comp.revision } })
     return true
@@ -283,7 +286,7 @@ export const useComposition = create<CompState>((set, get) => {
     const { comp, final } = get()
     if (!comp || !final) return 0
     let n = 0
-    for (let i = 0; i < final.frames; i++) if (cache.has(key(comp.revision, i, 'half'))) n++
+    for (let i = 0; i < final.frames; i++) if (cache.has(key(comp, i, 'half'))) n++
     return n
   }
   const pump = (): void => {
@@ -294,10 +297,10 @@ export const useComposition = create<CompState>((set, get) => {
           const { final, comp } = get()
           const w = wanted
           if (!final || !comp) { wanted = null; break }
-          if (cache.has(key(comp.revision, w.frame, w.side))) { wanted = null; show(w.frame, w.side); break }
+          if (cache.has(key(comp, w.frame, w.side))) { wanted = null; show(w.frame, w.side); break }
           set({ fetching: true })
           try {
-            await fetchFrame(final, comp.revision, w.frame, w.side)
+            await fetchFrame(final, comp, w.frame, w.side)
             set({ error: null, filled: count() })
           } catch (e) { set({ error: (e as Error).message }) }
           if (wanted === w) wanted = null
@@ -631,10 +634,14 @@ export const useComposition = create<CompState>((set, get) => {
         const final = await unwrap(http.GET('/finals/{fid}', { params: { path: { fid: id } } }))
         let comp: Composition | null = null
         try { comp = await unwrap(http.GET('/finals/{fid}/composition', { params: { path: { fid: id } } })) } catch { comp = null }
-        if (comp?.revision !== get().comp?.revision || get().final?.id !== final.id) {
+        if (get().finalId !== id) return                                  // K10: another final was opened meanwhile — this reply is not its
+        const was = get().comp
+        if ((comp ? ident(comp) : null) !== (was ? ident(was) : null) || get().final?.id !== final.id) {
           clearCache(); wanted = null
           if (get().before) URL.revokeObjectURL(get().before!)
-          set({ shown: null, filled: 0, before: null })
+          // viewport check: an edit keeps the last frame on screen until the new one lands (it blanked behind "loading the first frame…"
+          // after every move — the layer seemed to jump back, then vanish); another final's picture is never shown for this one
+          set({ ...(get().final?.id !== final.id ? { shown: null } : {}), filled: 0, before: null })
         }
         set({ final, comp, error: null, frame: Math.min(get().frame, Math.max(0, final.frames - 1)) })
         if (comp) { request(get().frame, 'half'); armRest() }
@@ -686,9 +693,9 @@ export const useComposition = create<CompState>((set, get) => {
       if (!final || !comp || playing || inflight || wanted || queueBusy()) return
       for (let i = 0; i < final.frames; i++) {
         const frame = (get().frame + i) % final.frames
-        if (!cache.has(key(comp.revision, frame, 'half'))) {
+        if (!cache.has(key(comp, frame, 'half'))) {
           set({ fetching: true })
-          inflight = fetchFrame(final, comp.revision, frame, 'half').then(() => { set({ filled: count(), error: null }) }).catch((e: Error) => set({ error: e.message }))
+          inflight = fetchFrame(final, comp, frame, 'half').then(() => { set({ filled: count(), error: null }) }).catch((e: Error) => set({ error: e.message }))
             .finally(() => { inflight = null; set({ fetching: false }); if (wanted) pump() })   // V85: a seek asked during the idle fill is served now, not at the 300 ms settle
           await inflight
           return

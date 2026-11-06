@@ -64,6 +64,14 @@ class EffectCraft(McpSession):
             self.stop()
         return held
 
+    def new_project(self) -> None:
+        """A fresh, unsaved project in the session. K14: it holds no file now — so a later `open(path)` of the file held before opens it
+        again instead of taking this one for it (a make that failed half-way must never be saved over another final's composition)."""
+        with self._lock:
+            self._ensure_locked()
+            self.project = None
+            self._tool_locked("open_project", {"new": True})
+
     def open(self, path: str | Path) -> None:
         """Hold this .ecproj open in the session (a no-op when it already is)."""
         path = str(path)

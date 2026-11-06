@@ -164,9 +164,15 @@ export class StageEngine {
     this.orbit.enableDamping = false
     this.orbit.addEventListener('change', () => { this.dirty = true; this.hooks.onFreeCameraMoved?.() })
     this.gizmo = new TransformControls(this.free, canvas)
-    this.gizmo.addEventListener('dragging-changed', (e) => { this.orbit.enabled = !(e as unknown as { value: boolean }).value; this.dirty = true })
+    this.gizmo.addEventListener('dragging-changed', (e) => { this.orbit.enabled = !(e as unknown as { value: boolean }).value && this.view === 'free'; this.dirty = true })   // viewport check: not the hidden free camera in the camera view
     this.gizmo.addEventListener('objectChange', () => { if (this.ik) this.solveIk(); else if (this.posing) this.holdPinned(); this.followAll(); this.dirty = true })
-    this.gizmo.addEventListener('mouseUp', () => this.commitGizmo())
+    this.gizmo.addEventListener('mouseDown', () => { this.gizmoStart = this.gizmoSnap() })
+    this.gizmo.addEventListener('mouseUp', () => {                                       // viewport check: a click on a handle wrote a key / a save / an undo step
+      const same = this.gizmoStart !== null && this.gizmoStart === this.gizmoSnap()
+      this.gizmoStart = null
+      if (!same) this.commitGizmo()
+      queueMicrotask(() => this.refreshGizmo())                                         // after the control's own release (it fires this while still dragging)
+    })
     this.scene.add(this.gizmo.getHelper())
     this.gizmo.enabled = false
   }
@@ -186,6 +192,7 @@ export class StageEngine {
     this.free.aspect = this.w / this.h
     this.free.updateProjectionMatrix()
     this.dirty = true
+    this.syncGizmoViewport()
   }
   dispose(): void {
     this.disposed = true
@@ -211,8 +218,14 @@ export class StageEngine {
   }
 
   // ---- views and cameras ----------------------------------------------------------------------------------------------------------
-  setView(view: View): void { this.view = view; this.gizmo.camera = view === 'camera' ? this.shot : this.free; this.orbit.enabled = view === 'free'; if (this.selectedCamId) this.selectCamera(this.selectedCamId); for (const l of this.lights.values()) l.aim.visible = view === 'free'; this.dirty = true }
-  setAspect(aspect: number): void { this.aspect = aspect; this.dirty = true }
+  setView(view: View): void { this.view = view; this.gizmo.camera = view === 'camera' ? this.shot : this.free; this.orbit.enabled = view === 'free'; if (this.selectedCamId) this.selectCamera(this.selectedCamId); for (const l of this.lights.values()) l.aim.visible = view === 'free'; this.syncGizmoViewport(); this.dirty = true }
+  setAspect(aspect: number): void { this.aspect = aspect; this.syncGizmoViewport(); this.dirty = true }
+  /** viewport check: in the camera view the scene is drawn in the letterboxed frame — the gizmo's pointer region follows it (its handles
+   *  answered 16–54 px from where they were drawn). Lower-left origin, CSS px (TransformControls#viewport). */
+  private syncGizmoViewport(): void {
+    const g = this.gizmo as unknown as { viewport: THREE.Vector4 | null }
+    if (this.view === 'camera') { const f = this.frameRect(); g.viewport = new THREE.Vector4(f.x, this.h - f.y - f.h, f.w, f.h) } else g.viewport = null
+  }
   /** The rectangle (canvas px) the render camera's frame occupies — the framing guides draw over it. */
   frameRect(): { x: number; y: number; w: number; h: number } {
     const cw = this.w, ch = this.h
@@ -262,44 +275,32 @@ export class StageEngine {
   private modeOf(): 'translate' | 'rotate' | 'scale' { return this.tool === 'rotate' ? 'rotate' : this.tool === 'scale' ? 'scale' : 'translate' }
   setTool(tool: Tool, snap: boolean): void {
     this.tool = tool
-    if (tool === 'select' || tool === 'path') { this.gizmo.enabled = false; this.gizmo.detach() }
-    else if (this.posing) { this.selectJoint(this.posing.id, this.posing.joint) }                                   // the author, 2026-10-22: a joint keeps its rotate gizmo under every tool button
-    else if (this.ik) { this.gizmo.setMode('translate'); this.gizmo.setSpace('world'); this.gizmo.enabled = true; this.gizmo.attach(this.ik.proxy) }
-    else {
-      this.gizmo.setMode(this.modeOf())
-      this.gizmo.enabled = true
-      const sel = this.selectedId
-      if (sel) this.attach(sel)
-      else if (this.selectedCamId) this.selectCamera(this.selectedCamId)                 // D119: a camera's body only moves — translate whatever the tool
-    }
     this.gizmo.setTranslationSnap(snap ? 0.25 : null)
     this.gizmo.setRotationSnap(snap ? rad(15) : null)
     this.gizmo.setScaleSnap(snap ? 0.1 : null)
-    this.dirty = true
+    this.refreshGizmo()
   }
   private selectedId: string | null = null
   private selectedCamId: string | null = null
   select(id: string | null): void {
-    if (this.selectedId !== id || this.ik) this.endPosing()
+    if (this.selectedId !== id) this.endPosing()
     this.selectedId = id
     if (id) this.selectedCamId = null
     const e = id ? this.entries.get(id) : undefined
-    if (e && this.gizmo.enabled && !e.doc.locked && !this.posing) this.attach(id!); else if (!this.posing && !this.selectedCamId) this.gizmo.detach()
     this.selection.visible = !!e
     if (e) { this.selection.setFromObject(e.holder) }
     this.showPickers()
-    this.dirty = true
+    this.refreshGizmo()
   }
   /** D119 (SC1): a camera as the selection — its body takes the translate gizmo in the free view and the selection box. */
   selectCamera(id: string | null): void {
     this.selectedCamId = id
     if (id) { this.endPosing(); this.selectedId = null; this.showPickers() }
     const h = id ? this.camHelpers.get(id) : undefined
-    if (h && this.gizmo.enabled && this.view === 'free') { this.gizmo.setMode(this.tool === 'rotate' ? 'rotate' : 'translate'); this.gizmo.setSpace('world'); this.gizmo.showXYZE = true; this.gizmo.attach(h) }   // the author, 2026-10-22: the body turns under Rotate; scale moves
-    else if (!this.selectedId && !this.posing) this.gizmo.detach()
-    this.selection.visible = !!h && this.view === 'free'
-    if (h) this.selection.setFromObject(h)
-    this.dirty = true
+    const sel = !id && this.selectedId ? this.entries.get(this.selectedId) : undefined   // viewport check: clearing the camera keeps the object's box
+    this.selection.visible = h ? this.view === 'free' : !!sel
+    if (h) this.selection.setFromObject(h); else if (sel) this.selection.setFromObject(sel.holder)
+    this.refreshGizmo()
   }
   /** C2 (P9): where a path point is on the canvas (client px) — the dev hook and the smoke test aim the mouse at it; null when there is none. */
   pathScreen(id: string, index: number): { x: number; y: number } | null {
@@ -319,12 +320,47 @@ export class StageEngine {
     const r = this.canvas.getBoundingClientRect()
     return { x: r.left + (p.x + 1) / 2 * r.width, y: r.top + (1 - p.y) / 2 * r.height }
   }
-  /** The object takes the gizmo in the tool's mode — a camera's body (translate whatever the tool) or a joint (rotate, local) may have left it
-   *  in theirs (the author, 2026-10-22: the rotate tool moved an object selected after a camera). */
-  private attach(id: string): void {
-    const e = this.entries.get(id)
-    if (e && !e.doc.locked) { this.gizmo.setMode(this.modeOf()); this.gizmo.setSpace('world'); this.gizmo.showXYZE = true; this.gizmo.attach(e.holder) }
+  /** viewport check (the author, 2026-11-06: "every time you make an adjustment on a pose in clay, the focus goes back to the clay shell";
+   *  "when switching to rotation, you still get the move arrows"): the gizmo — what it holds, its mode, its space, whether it answers — is
+   *  derived here from the tool, the selection, the joint being posed and the hand / foot handle, after every one of them changes. Six
+   *  places wrote it before and left it disabled, or in the wrong mode, for the next selection. A joint keeps its rotate rings under every
+   *  tool (the author, 2026-10-22); a hand / foot handle moves; an object takes the tool's mode, a camera's body moves or turns. */
+  private refreshGizmo(): void {
+    const g = this.gizmo
+    if (g.dragging) return
+    const show = (o: THREE.Object3D, mode: 'translate' | 'rotate' | 'scale', space: 'world' | 'local', ball: boolean) => {
+      g.setMode(mode); g.setSpace(space); g.showXYZE = ball; g.enabled = true
+      if (g.object !== o) g.attach(o)
+    }
+    const off = () => { g.detach(); g.enabled = false }
+    const transformTool = this.tool !== 'select' && this.tool !== 'path'
+    if (this.ik) show(this.ik.proxy, 'translate', 'world', true)
+    else if (this.posing) {
+      const j = this.entries.get(this.posing.id)?.figure?.joints[this.posing.joint]
+      if (j) show(j, 'rotate', 'local', false)                                   // no free-rotate ball: it would cover the neighbouring pickers
+      else off()
+    } else if (transformTool && this.selectedId) {
+      const e = this.entries.get(this.selectedId)
+      if (e && !e.doc.locked) show(e.holder, this.modeOf(), 'world', true); else off()   // a locked object takes no gizmo
+    } else if (transformTool && this.selectedCamId && this.view === 'free') {
+      const h = this.camHelpers.get(this.selectedCamId)
+      if (h) show(h, this.tool === 'rotate' ? 'rotate' : 'translate', 'world', true); else off()   // D119: a camera's body moves; turns under Rotate
+    } else off()
+    this.dirty = true
   }
+  private gizmoStart: string | null = null
+  private gizmoSnap(): string {
+    const o = this.gizmo.object
+    return o ? JSON.stringify([o.position.toArray(), o.quaternion.toArray(), o.scale.toArray()]) : ''
+  }
+  /** The hand / foot handle live, if any (the viewport turns it into its limb's joint under Rotate). */
+  ikChain(): Chain | null { return this.ik?.chain ?? null }
+  /** A click on nothing in pose mode: the joint or the handle goes, the figure stays selected. */
+  dropHandle(): void { this.endPosing(); this.refreshGizmo() }
+  /** viewport check: this press is for a picker under the gizmo's rings (the next joint, a hand / foot cube) — the gizmo lets it through;
+   *  `regizmo()` gives the gizmo back after the press. */
+  yieldPress(): void { this.gizmo.enabled = false; this.gizmo.axis = null }
+  regizmo(): void { this.refreshGizmo() }
   /** The gizmo's mode now (the dev hook; the e2e reads it). */
   gizmoMode(): string { return this.gizmo.object ? this.gizmo.mode : 'none' }
   private commitGizmo(): void {
@@ -356,7 +392,7 @@ export class StageEngine {
   }
 
   // ---- ST2: posing ----------------------------------------------------------------------------------------------------------------
-  setPoseMode(on: boolean): void { this.poseMode = on; if (!on) this.endPosing(); this.showPickers(); this.dirty = true }
+  setPoseMode(on: boolean): void { this.poseMode = on; if (!on) this.endPosing(); this.showPickers(); this.refreshGizmo() }
   private showPickers(): void {
     for (const [id, e] of this.entries) e.pickers?.forEach((p) => { p.visible = this.poseMode && id === this.selectedId && e.doc.visible })
   }
@@ -365,35 +401,28 @@ export class StageEngine {
     if (!joint && this.ik?.id === id) return                       // clearing the joint while a hand / foot handle is live keeps that handle
     this.endIk()
     const e = this.entries.get(id)
-    if (!e?.figure || !joint) {                                                     // C2: pose mode over — the figure's gizmo only under a transform tool (under Select it stayed attached, and its handles took the next click)
-      this.posing = null
-      if (this.gizmo.enabled && e && !e.doc.locked && this.tool !== 'select' && this.tool !== 'path') this.attach(id); else { this.gizmo.detach(); if (this.tool === 'select' || this.tool === 'path') this.gizmo.enabled = false }
-      this.dirty = true; return
-    }
-    this.posing = { id, joint }
-    this.gizmo.setMode('rotate')
-    this.gizmo.setSpace('local')
-    this.gizmo.showXYZE = false                                    // no free-rotate ball: it would cover the neighbouring pickers (a joint is ~30 px from the next)
-    this.gizmo.enabled = true
-    this.gizmo.attach(e.figure.joints[joint])
-    this.dirty = true
+    this.posing = e?.figure && joint ? { id, joint } : null        // C2: pose mode over — the figure's gizmo only under a transform tool (refreshGizmo)
+    this.refreshGizmo()
   }
   /** A hand or a foot: a translate proxy at the end, the two bones follow while it moves. */
   startIk(id: string, chain: Chain): void {
     const e = this.entries.get(id)
     if (!e?.figure) return
     this.endPosing()
-    const c = figureChain(e.figure.limbs, chain)
-    const lower = e.figure.joints[c.lower]
     const proxy = new THREE.Object3D()
-    proxy.position.copy(lower.localToWorld(new THREE.Vector3(0, -c.b, 0)))
     this.scene.add(proxy)
     this.ik = { id, chain, proxy }
-    this.gizmo.setMode('translate')
-    this.gizmo.setSpace('world')
-    this.gizmo.enabled = true
-    this.gizmo.attach(proxy)
-    this.dirty = true
+    this.seatIk()
+    this.refreshGizmo()
+  }
+  /** The handle at the hand / foot the bones reach now (after a solve, a pose drawn from the document, a rebuild). */
+  private seatIk(): void {
+    const e = this.ik ? this.entries.get(this.ik.id) : undefined
+    if (!this.ik || !e?.figure) return
+    const c = figureChain(e.figure.limbs, this.ik.chain)
+    const lower = e.figure.joints[c.lower]
+    lower.updateWorldMatrix(true, false)
+    this.ik.proxy.position.copy(lower.localToWorld(new THREE.Vector3(0, -c.b, 0)))
   }
   private solveIk(): void {
     if (!this.ik) return
@@ -487,10 +516,10 @@ export class StageEngine {
     if (!id) return
     const joints = this.jointsOf(id)
     if (joints) this.hooks.onPosed(id, joints, this.ik ? this.ik.chain : chainOf(this.posing?.joint))
-    if (this.ik) this.endIk()
+    this.seatIk()                                                  // viewport check: the handle stays on the hand for the next drag (it was removed after each)
   }
-  private endIk(): void { if (this.ik) { this.scene.remove(this.ik.proxy); this.ik = null; this.gizmo.detach(); this.gizmo.enabled = false } }
-  private endPosing(): void { this.endIk(); if (this.posing) { this.posing = null; this.gizmo.detach() } }
+  private endIk(): void { if (this.ik) { this.scene.remove(this.ik.proxy); this.ik = null } }
+  private endPosing(): void { this.endIk(); this.posing = null }
 
   // ---- picking and placement ----------------------------------------------------------------------------------------------------
   /** Client → NDC of the camera being looked through: the whole canvas in the free view, the letterboxed frame in the camera view. */
@@ -525,7 +554,11 @@ export class StageEngine {
       if (hit) return hit.object.userData.joint ? { id: this.selectedId, joint: hit.object.userData.joint as Joint } : { id: this.selectedId, ik: hit.object.userData.ik as Chain }
     }
     const shells = [...this.entries.values()].flatMap((e) => (e.doc.visible ? e.proxy?.meshes ?? [] : []))                // CS3: a figure is its shell
-    const hits = this.ray.intersectObjects([...[...this.entries.values()].map((e) => e.body), ...shells, ...this.camHelpers.values()], true)   // D119: the cameras' bodies too
+    // viewport check: a figure at body scale 1 is its Detailed mannequin alone (the Simple shapes hidden) — it was not pickable; skinned meshes
+    // keep the bounding sphere of their first pick, so a shell that moved missed the clicks: recomputed from the bones now
+    const detailed = [...this.entries.values()].flatMap((e) => (e.doc.visible && e.detailed ? [e.detailed.object] : []))
+    for (const root of [...shells, ...detailed]) root.traverse((o) => { const m = o as THREE.SkinnedMesh; if (m.isSkinnedMesh) (m as unknown as { boundingSphere: THREE.Sphere | null }).boundingSphere = null })
+    const hits = this.ray.intersectObjects([...[...this.entries.values()].map((e) => e.body), ...shells, ...detailed, ...this.camHelpers.values()], true)   // D119: the cameras' bodies too
     for (const h of hits) {
       let hidden = false
       for (let p: THREE.Object3D | null = h.object; p; p = p.parent) if (!p.visible) { hidden = true; break }
@@ -585,14 +618,23 @@ export class StageEngine {
       }
       e.holder.visible = o.visible
       e.proxy?.meshes.forEach((m) => { m.visible = o.visible })                     // E23d: a hidden figure's proxy casts nothing
-      if (e.figure && o.pose && !this.ik && (e.doc.pose?.preset !== o.pose.preset || JSON.stringify(e.doc.pose?.joints) !== JSON.stringify(o.pose.joints) || (e.doc.pose?.ground ?? 0) !== (o.pose.ground ?? 0)
+      const posedHere = this.gizmo.dragging && (this.ik?.id === o.id || this.posing?.id === o.id)   // viewport check: not under the hand that poses it
+      if (e.figure && o.pose && !posedHere && (e.doc.pose?.preset !== o.pose.preset || JSON.stringify(e.doc.pose?.joints) !== JSON.stringify(o.pose.joints) || (e.doc.pose?.ground ?? 0) !== (o.pose.ground ?? 0)
         || JSON.stringify(e.doc.pose?.gaze ?? null) !== JSON.stringify(o.pose.gaze ?? null) || JSON.stringify(e.doc.pose?.contacts ?? {}) !== JSON.stringify(o.pose.contacts ?? {}))) {   // AP1b, the rest: a gaze or a hold let go gives the pose back
         applyPose(e.figure.joints, POSES[o.pose.preset ?? 'stand'] ?? POSES.stand, o.pose.joints, o.pose.ground ?? 0)
+        if (this.ik?.id === o.id) this.seatIk()                                     // Mirror, a preset, undo: the handle follows the hand (they were lost)
       }
       e.doc = o
       this.syncPins(e)
     }
     for (const [id, e] of [...this.entries]) if (!seen.has(id)) { this.disposeEntry(e); this.entries.delete(id); if (this.selectedId === id) this.select(null) }
+    if (!this.gizmo.dragging) {                                                       // viewport check: a rebuilt entry (♀/♂, a body, a shell) or a lock
+      const o = this.gizmo.object
+      let inScene = false
+      for (let q: THREE.Object3D | null = o ?? null; q; q = q.parent) if (q === this.scene) { inScene = true; break }
+      const sel = this.selectedId ? this.entries.get(this.selectedId) : undefined
+      if ((o && !inScene) || (sel && sel.doc.locked && o === sel.holder) || (sel && !o && !sel.doc.locked && this.tool !== 'select' && this.tool !== 'path')) this.refreshGizmo()
+    }
     this.placeChildren()
     this.holdContacts(doc)
     this.syncLight(doc)

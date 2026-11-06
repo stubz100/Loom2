@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ..recipes import (FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES, T2I, I2I, ImageToMesh, ImageToSet, Inpaint, Instruct, Keypoints, LayerPass, MatteSequence, AssembleFinal, CompRender,I2V, LoraRef, Reangle, RefImage, Render, Segment, StageShot, TrainLora, TTS, Upscale,
-                       inpaint_model_id, reangle_method, reangle_model_id, stage_model_id)
+                       inpaint_model_id, reangle_method, reangle_model_id, segment_model_id, stage_model_id)
 from ..edit_ai import plan_tiles
 from ..models import registry
 from ..models.spec import ModelSpec
@@ -1808,6 +1808,8 @@ def estimate_vram_gb(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V, vari
         return _vram(reangle_model_id(recipe, variant))
     if isinstance(recipe, StageShot):
         return _vram(stage_model_id(recipe, variant))
+    if isinstance(recipe, Segment):
+        return _vram(segment_model_id(recipe))                       # K5: the mode's model (SAM 3 is 5 GB, the matte 2.5)
     return _vram(recipe.model_id)
 
 
@@ -1866,6 +1868,8 @@ def recipe_weights(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V | Reang
         ids += model_ids(inpaint_model_id(recipe, variant), True)      # _flux2_loaders chains the spec's Turbo LoRA in the Edit graphs
     elif isinstance(recipe, I2I):
         ids += model_ids(recipe.model_id, True)
+    elif isinstance(recipe, Segment):
+        ids += model_ids(segment_model_id(recipe), False)              # K5: SAM 3 (full only, D26) for points / text / box — what the graph loads
     elif isinstance(recipe, Upscale):
         ids += model_ids(recipe.model_id, False)                       # D153: SeedVR2 loads its VAE too
         if recipe.refine:

@@ -894,10 +894,15 @@ test('posing (P13 / ST2, D81): the Poses tab applies a preset, mirrors it, edits
   await expect.poll(() => page.evaluate(() => (window as unknown as { __loom2Stage: { gizmoMode: () => string } }).__loom2Stage.gizmoMode())).toBe('rotate')
   await page.evaluate(() => { const w = window as unknown as { __loom2Stage: { select: (id: string) => void; state: () => { current: { objects: { id: string }[] } } } }; w.__loom2Stage.select(w.__loom2Stage.state().current.objects[0].id) })
   await expect(page.locator('#anim-sec-motion .stage-panel:not(.motion-lib) select').last()).toHaveValue('r_elbow')
-  // a click on the right hand's handle puts a translate gizmo there; dragging its centre moves the hand, the forearm and upper arm follow (two-bone IK)
+  // a click on the right hand's handle under Move puts a translate gizmo there (the elbow's rings let the press through to the cube — the
+  // viewport check of 2026-11-06); dragging its centre moves the hand, the forearm and upper arm follow (two-bone IK)
+  const gizmo = () => page.evaluate(() => (window as unknown as { __loom2Stage: { gizmoMode: () => string } }).__loom2Stage.gizmoMode())
+  await page.locator('button.cmd-btn[aria-label^="Move"]').first().click()
+  await expect.poll(gizmo).toBe('rotate')                                                                     // the posed elbow keeps its rings under Move
   const hand = await at('r_arm')
   await page.mouse.click(hand.x, hand.y)
   await expect(page.locator('#anim-sec-motion .stage-panel:not(.motion-lib) select').last()).toHaveValue('')
+  await expect.poll(gizmo).toBe('translate')
   const goal = { x: hand.x + 28, y: hand.y - 36 }
   await page.mouse.move(hand.x, hand.y); await page.mouse.down(); await page.mouse.move(goal.x, goal.y, { steps: 10 }); await page.mouse.up()
   const left = (j: Record<string, number[]> | undefined) => !!j?.r_shoulder && !!j.r_elbow && (j.r_shoulder.some((v, i) => Math.abs(v - WALK.r_shoulder[i]) > 1) || j.r_elbow.some((v, i) => Math.abs(v - WALK.r_elbow[i]) > 1))
@@ -906,6 +911,15 @@ test('posing (P13 / ST2, D81): the Poses tab applies a preset, mirrors it, edits
   expect(Object.keys(ik)).toHaveLength(12)
   const after = await at('r_arm')
   expect(Math.hypot(after.x - goal.x, after.y - goal.y)).toBeLessThan(Math.hypot(hand.x - goal.x, hand.y - goal.y) / 2)    // the hand went to (or toward, if out of reach) the goal
+  // the author, 2026-11-06: "every time you make an adjustment on a pose in clay, the focus goes back to the clay shell" — the handle stays on
+  // the hand for the next drag; "when switching to rotation, you still get the move arrows" — R on a live hand handle turns its elbow
+  await expect.poll(gizmo).toBe('translate')
+  await page.keyboard.press('r')
+  await expect(page.locator('#anim-sec-motion .stage-panel:not(.motion-lib) select').last()).toHaveValue('r_elbow')
+  await expect.poll(gizmo).toBe('rotate')
+  const hand2 = await at('r_arm')                                                                             // under Rotate a cube is its elbow, not arrows
+  await page.mouse.click(hand2.x, hand2.y)
+  await expect.poll(gizmo).toBe('rotate')
   // Mirror writes every joint explicitly; a second mirror is the first pose again, so the two are each other's left / right swap
   await page.locator('.stage-panel button', { hasText: /^Mirror the pose$/ }).click()
   await expect.poll(async () => JSON.stringify((await figure())?.pose?.joints) !== JSON.stringify(ik), { timeout: 10_000 }).toBe(true)

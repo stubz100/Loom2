@@ -201,6 +201,13 @@ class DocumentFinisher:
                 await add_result_layer(q, job, od, recipe, rgba, plan.x, plan.y, f"upscale ×{factor} at 1×")
             return
         if isinstance(recipe, Inpaint) and recipe.mode == "outpaint":
+            if (od.doc.w, od.doc.h) != tuple(inputs.get("source_size") or (od.doc.w, od.doc.h)):
+                raise ValueError(f"the canvas changed while the outpaint ran ({inputs['source_size'][0]}×{inputs['source_size'][1]} → {od.doc.w}×{od.doc.h}) — run it again")
+            if inputs.get("grown"):                                      # K2: an earlier candidate of the batch grew the canvas — this one joins it
+                job.result["shift"] = {"left": 0, "top": 0}
+                rgba = assemble_layer(arr, plan, inputs.get("alpha_mask"), recipe.feather)
+                await add_result_layer(q, job, od, recipe, rgba, 0, 0, "outpaint", as_mask=True)
+                return
             p = plan.pad or {}
             left, top = int(p.get("left", 0)), int(p.get("top", 0))
             job.result["shift"] = {"left": left, "top": top}          # C20: the editor shifts its own layers the same way
@@ -1489,7 +1496,7 @@ async def run_comp_render(job: JobRecord, recipe: CompRender, q: JobQueue) -> bo
     from ..final_assembly import conform_24, conform_24_alpha, mix_audio, write_prores
     from ..finals import FinalStore
     from ..fsio import utc_now
-    from ..trainer import _kill
+    from ..trainer import _kill, killed_on_cancel
     from .supervisor import _assign_to_job
     store, clips, cs = FinalStore(q.ws), ClipStore(q.ws), CompositionStore(q.ws)
     f = await asyncio.to_thread(store.get, recipe.final_id)
@@ -1517,15 +1524,16 @@ async def run_comp_render(job: JobRecord, recipe: CompRender, q: JobQueue) -> bo
         _assign_to_job(proc)
     job.log_tail.append(f"effectcraft-cli render pid {proc.pid}")
     q.progress(job, "rendering the composition")
-    while proc.poll() is None:
-        await asyncio.sleep(0.5)
-        done = len(list((tmp / "f16").glob("*.png")))
-        job.progress = min(1.0, done / max(1, f.frames))
-        job.progress_text = f"rendering {done}/{f.frames}"
-        if job.id in q._cancel_requested:
-            _kill(proc.pid)
-            await asyncio.to_thread(proc.wait)
-            q.check_cancel(job)
+    async with killed_on_cancel(proc):                   # K3: the process goes with a cancelled task
+        while proc.poll() is None:
+            await asyncio.sleep(0.5)
+            done = len(list((tmp / "f16").glob("*.png")))
+            job.progress = min(1.0, done / max(1, f.frames))
+            job.progress_text = f"rendering {done}/{f.frames}"
+            if job.id in q._cancel_requested:
+                _kill(proc.pid)
+                await asyncio.to_thread(proc.wait)
+                q.check_cancel(job)
     if proc.returncode != 0:
         tail = log_path.read_text(encoding="utf-8", errors="replace").strip()[-400:]
         raise ValueError(f"effectcraft-cli render failed ({proc.returncode}): {tail}")
@@ -1696,7 +1704,7 @@ async def _draft_frames_filmcraft(job: JobRecord, q: JobQueue, tl: Any) -> tuple
 
     from ..filmcraft import export_argv, export_script
     from ..fsio import utc_now
-    from ..trainer import _kill
+    from ..trainer import _kill, killed_on_cancel
     from .supervisor import _assign_to_job
     project = TimelineStore(q.ws).export_dir(tl.id) / tl.file
     tmp = q.ws.temp_dir / f"render-{job.id}"
@@ -1714,12 +1722,13 @@ async def _draft_frames_filmcraft(job: JobRecord, q: JobQueue, tl: Any) -> tuple
         proc = subprocess.Popen(argv, stdout=lf, stderr=subprocess.STDOUT, env={**os.environ, "PYTHONIOENCODING": "utf-8"})
         _assign_to_job(proc)
     q.progress(job, "rendering the draft (FilmCraft)")
-    while proc.poll() is None:
-        await asyncio.sleep(0.3)
-        if job.id in q._cancel_requested:
-            _kill(proc.pid)
-            await asyncio.to_thread(proc.wait)
-            q.check_cancel(job)
+    async with killed_on_cancel(proc):                   # K3: the process goes with a cancelled task
+        while proc.poll() is None:
+            await asyncio.sleep(0.3)
+            if job.id in q._cancel_requested:
+                _kill(proc.pid)
+                await asyncio.to_thread(proc.wait)
+                q.check_cancel(job)
     paths = sorted((tmp / "png").glob("*.png"), key=lambda x: int(re.sub(r"\D", "", x.stem) or 0))
     if proc.returncode != 0 or not paths:
         tail = log_path.read_text(encoding="utf-8", errors="replace").strip()[-400:]
@@ -1959,7 +1968,7 @@ async def run_movie_filmcraft(job: JobRecord, recipe: Render, q: JobQueue, tl: A
     from ..cuts import read
     from ..filmcraft import export_argv, export_script
     from ..fsio import slugify, utc_now
-    from ..trainer import _kill
+    from ..trainer import _kill, killed_on_cancel
     from .supervisor import _assign_to_job
     from ..cuts import Cuts
     from ..timelines import story_lookup
@@ -2004,12 +2013,13 @@ async def run_movie_filmcraft(job: JobRecord, recipe: Render, q: JobQueue, tl: A
         _assign_to_job(proc)
     job.log_tail.append(f"filmcraft-cli export pid {proc.pid}")
     q.progress(job, "exporting the movie (FilmCraft)")
-    while proc.poll() is None:
-        await asyncio.sleep(0.5)
-        if job.id in q._cancel_requested:
-            _kill(proc.pid)
-            await asyncio.to_thread(proc.wait)
-            q.check_cancel(job)
+    async with killed_on_cancel(proc):                   # K3: the process goes with a cancelled task
+        while proc.poll() is None:
+            await asyncio.sleep(0.5)
+            if job.id in q._cancel_requested:
+                _kill(proc.pid)
+                await asyncio.to_thread(proc.wait)
+                q.check_cancel(job)
     if proc.returncode != 0 or not part.is_file():
         tail = log_path.read_text(encoding="utf-8", errors="replace").strip()[-400:]
         raise ValueError(f"filmcraft-cli export failed ({proc.returncode}): {tail}")

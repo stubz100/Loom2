@@ -23,7 +23,7 @@ class FetchRequest(BaseModel):
 
 @router.get("/models", response_model=ModelListing)
 async def models(svc: Svc, include_retired: bool = False):
-    items = await asyncio.to_thread(svc.roster.listing, include_retired)
+    items = await asyncio.to_thread(svc.roster.listing, include_retired, svc.app.settings)
     return {"items": items, "models_root": str(svc.app.models_root),
             "scanned_at": svc.roster.scanned_at, "fetches": {k: v.state() for k, v in svc.fetches.items()}}
 
@@ -33,7 +33,7 @@ async def models_scan(svc: Svc):
     roster = svc.roster
     await asyncio.to_thread(roster.scan)                     # D37: two model roots are walked; never on the event loop
     await asyncio.to_thread(svc.publish_trained)             # V2: the project's trained LoRAs stay known
-    return {"items": await asyncio.to_thread(roster.listing), "unlisted": await asyncio.to_thread(roster.unlisted_files)}
+    return {"items": await asyncio.to_thread(roster.listing, False, svc.app.settings), "unlisted": await asyncio.to_thread(roster.unlisted_files)}
 
 
 @router.get("/loras", response_model=LoraListing)
@@ -57,6 +57,8 @@ async def models_fetch(svc: Svc, body: FetchRequest):
         raise HTTPException(404, "unknown model id")
     if svc.app.settings.variant == "open" and "open" not in entry.variants:
         raise HTTPException(403, "model is not part of the open variant")
+    if entry.confirm and not getattr(svc.app.settings, entry.confirm, False):   # D193 / K: H3's 80 GB only once Settings' confirmation is on
+        raise HTTPException(403, f"{entry.name} is fetched once Settings › Licences confirms its licence (D17, D192)")
     job = svc.fetches.get(body.model_id)
     if job and job.status in ("queued", "downloading", "hashing"):
         return job.state()

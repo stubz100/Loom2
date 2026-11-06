@@ -7,6 +7,7 @@ journal 2026-10-14) is the record of the recipe: 1 000 steps of Klein base-4B on
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import os
 import re
@@ -252,6 +253,20 @@ def _kill(pid: int) -> None:
             pass
 
 
+@contextlib.asynccontextmanager
+async def killed_on_cancel(proc: subprocess.Popen):
+    """K3 (rule 10): a task cancelled while it waits on its subprocess — the queue stopping because another project opened or the app
+    closes — takes the process with it. The runners killed it only on the queue's own cancel request, so a trainer kept the card while its
+    job was re-queued, and the reopened project started a second one beside it."""
+    try:
+        yield
+    except asyncio.CancelledError:
+        if proc.poll() is None:
+            _kill(proc.pid)
+            await asyncio.to_thread(proc.wait)
+        raise
+
+
 def _sha256(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as f:
@@ -276,7 +291,9 @@ async def run_train(job: "JobRecord", recipe: TrainLora, q: "JobQueue") -> bool:
         raise ValueError(f"{recipe.model_id!r} is not a trainable base")
     store = StoryStore(q.ws)
     q.progress(job, "training: stopping the engine")
-    await q.engine.stop()                                               # 16 GB first: the trainer needs the whole card; the next engine job restarts it
+    note = await q.engine.free_card()                                   # 16 GB first: the trainer needs the whole card (K4: an adopted engine unloads)
+    if note:
+        job.log_tail.append(note)
     q.check_cancel(job)
     sdir, odir = set_dir(q.ws, job.id), run_dir(q.ws, job.id)
     q.progress(job, "training: preparing the reference set")
@@ -337,6 +354,11 @@ async def run_train(job: "JobRecord", recipe: TrainLora, q: "JobQueue") -> bool:
                 _kill(proc.pid)
                 await asyncio.to_thread(proc.wait)
                 raise JobCancelled(job.id)
+    except asyncio.CancelledError:                                      # K3 (rule 10): the queue stopped — the trainer goes with the task
+        if proc.poll() is None:
+            _kill(proc.pid)
+            await asyncio.to_thread(proc.wait)
+        raise
     finally:
         sampler.stop()
     rc = proc.returncode

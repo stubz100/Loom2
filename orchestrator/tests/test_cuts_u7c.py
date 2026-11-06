@@ -72,9 +72,16 @@ def test_a_16fps_take_is_conformed_as_it_lands_in_one_undo_step(tmp_path: Path, 
         route = [{"shot_id": n.shot_id, "node_id": n.id} for n in (_one_pass(st, "Gate", own.id), _one_pass(st, "Road", wan.id))]
         tl = cl.post("/timelines", json={"name": "Conform", "fps": 24, "w": 64, "h": 36}).json()
         base = f"/timelines/{tl['id']}"
+        assert cl.post("/queue/pause").status_code == 200
         r = cl.post(f"{base}/assemble", json={"revision": tl["revision"], "route": None, "shots": route}).json()
         assert r["report"]["placed"] == ["Gate", "Road"] and len(r["conforming"]) == 1                      # the 16 fps take only
         rev, undo = r["timeline"]["revision"], r["tracks"]["undo"]
+        # K13: the same take placed on V2 too (an insert of the shot) — the conform must swap it as well, not delete it with the proxy
+        # (the queue held from before the Assemble: the conform must run after the place, or the undo count below is one off)
+        assert cl.get(f"/jobs/{r['conforming'][0]}").json()["status"] == "queued"
+        r2 = cl.post(f"{base}/place", json={"revision": rev, "clip_id": wan.id, "track": "V2", "frame": 60})
+        assert r2.status_code == 200, r2.text
+        rev, undo = r2.json()["timeline"]["revision"], r2.json()["tracks"]["undo"]
         job = cl.get(f"/jobs/{r['conforming'][0]}").json()
         assert job["recipe"]["kind"] == "render" and job["recipe"]["conform"] is True and job["warm_group"] == "cpu"
         cl.post("/queue/unpause")
@@ -90,6 +97,8 @@ def test_a_16fps_take_is_conformed_as_it_lands_in_one_undo_step(tmp_path: Path, 
         v1 = tr["video"][0]["items"]
         assert [(i["name"], i["start"], i["duration"]) for i in v1] == [("Gate", 0, 24), ("Road", 24, 25)]   # in place, its length kept
         assert "conform24" in (v1[1]["media_path"] or "") and "conform24" not in (v1[0]["media_path"] or "")
+        v2 = tr["video"][1]["items"]
+        assert len(v2) == 1 and v2[0]["start"] == 60 and "conform24" in (v2[0]["media_path"] or "")          # K13: kept, and conformed
         assert tr["undo"] == undo + 1 and cl.get(base).json()["revision"] == rev + 1                         # one undo step; the revision moved on
         # Assemble again: the conformed take is the take (its links kept) — nothing to place, nothing to conform
         r = cl.post(f"{base}/assemble", json={"revision": rev + 1, "route": None, "shots": route}).json()

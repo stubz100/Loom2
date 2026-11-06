@@ -171,7 +171,8 @@ function ShellState({ v }: { v: Profile['versions'][number] }) {
 function RefPane({ v, body, stance, side }: { v: Profile['versions'][number]; body: Body; stance: Record<string, number[]>; side: 'front' | 'back' }) {
   const u = useUi()
   const svg = useRef<SVGSVGElement>(null)
-  const [drag, setDrag] = useState<{ kind: 'white' | 'blue'; key: string; k: number; at: XY } | null>(null)
+  // viewport check: `c0` — where the press was on screen; under 3 px of travel it is a click, not a drop (a click locked a part, moved a point)
+  const [drag, setDrag] = useState<{ kind: 'white' | 'blue'; key: string; k: number; at: XY; c0: XY; moved: boolean } | null>(null)
   const shell = v.shell_asset_id ?? null
   const [look, setLook] = useState<Look>(shell ? 'shell' : 'figure')
   const [view, setView] = useState<'front' | 'side'>('front')
@@ -187,9 +188,9 @@ function RefPane({ v, body, stance, side }: { v: Profile['versions'][number]; bo
   const at = (e: React.PointerEvent): XY => { const m = svg.current!.getScreenCTM()!.inverse(); const q = new DOMPoint(e.clientX, e.clientY).matrixTransform(m); return [q.x, q.y] }
   const r = Math.max(3, (crop?.[3] ?? h) / 110)
   const rows = (key: 'pose' | 'hand_left' | 'hand_right' | 'feet') => (pts?.[key] ?? []) as number[][]
-  const move = (e: React.PointerEvent) => { if (drag) setDrag({ ...drag, at: at(e) }) }
+  const move = (e: React.PointerEvent) => { if (drag) setDrag({ ...drag, at: at(e), moved: drag.moved || Math.hypot(e.clientX - drag.c0[0], e.clientY - drag.c0[1]) > 3 }) }
   const drop = () => {
-    if (!drag || !pts) { setDrag(null); return }
+    if (!drag || !pts || !drag.moved) { setDrag(null); return }                             // a click: nothing moved, nothing kept or locked
     if (drag.kind === 'white') {
       const next = JSON.parse(JSON.stringify(pts)) as Points
       const list = (next as unknown as Record<string, number[][]>)[drag.key]
@@ -245,11 +246,11 @@ function RefPane({ v, body, stance, side }: { v: Profile['versions'][number]; bo
             if (!seen(pt)) return null
             const q = drag?.kind === 'white' && drag.key === key && drag.k === k ? drag.at : [pt[0], pt[1]]
             return <circle key={`${key}${k}`} cx={q[0]} cy={q[1]} r={key === 'pose' ? r : r * 0.55} className={`white${key === 'pose' && ui.moved.includes(k) ? ' moved' : ''}`} data-k={k}
-              onPointerDown={(e) => { (e.target as Element).setPointerCapture?.(e.pointerId); setDrag({ kind: 'white', key, k, at: at(e) }) }}><title>{`${key === 'pose' ? COCO[k] : key} — SDPose's: drag where it is; the body is fitted and kept when you let go`}</title></circle>
+              onPointerDown={(e) => { if (e.button !== 0) return; (e.target as Element).setPointerCapture?.(e.pointerId); setDrag({ kind: 'white', key, k, at: at(e), c0: [e.clientX, e.clientY], moved: false }) }}><title>{`${key === 'pose' ? COCO[k] : key} — SDPose's: drag where it is; the body is fitted and kept when you let go`}</title></circle>
           }))}
           {map && fig.map((f, k) => { const q = drag?.kind === 'blue' && drag.k === k ? drag.at : map.toPic(f)
             return <circle key={`b${k}`} cx={q[0]} cy={q[1]} r={r * 0.5} className="blue" data-k={k}
-              onPointerDown={(e) => { (e.target as Element).setPointerCapture?.(e.pointerId); setDrag({ kind: 'blue', key: 'pose', k, at: at(e) }) }}><title>{`${COCO[k]} — the figure's: drag to set the part it ends (locked)`}</title></circle> })}
+              onPointerDown={(e) => { if (e.button !== 0) return; (e.target as Element).setPointerCapture?.(e.pointerId); setDrag({ kind: 'blue', key: 'pose', k, at: at(e), c0: [e.clientX, e.clientY], moved: false }) }}><title>{`${COCO[k]} — the figure's: drag to set the part it ends (locked)`}</title></circle> })}
         </svg>}
       </div>
       <div className="skel-hints">{/* D191: over the pane's foot — a line coming or going no longer rescales the picture under a drag */}
@@ -266,7 +267,10 @@ function FigurePane({ body, stance, shell, look, points }: { body: Body; stance:
   const host = useRef<HTMLDivElement>(null)
   const [outside, setOutside] = useState<Joint[]>([])                       // the joints the shell's volume does not hold (ringed)
   const u = useUi()
-  const world = useRef<{ r: THREE.WebGLRenderer; scene: THREE.Scene; cam: THREE.PerspectiveCamera; orbit: OrbitControls; content: THREE.Group; balls: Map<Joint, THREE.Mesh>; ends: Map<End, THREE.Mesh>; fig?: Mannequin } | null>(null)
+  // viewport check: `framed` — the figure the camera was framed on (framed again only for another figure or height, never after an edit: the
+  // orbit snapped back to the side after every drop); `pressed` — a press under way (a ball drag or an orbit): the rebuild waits for its end
+  const world = useRef<{ r: THREE.WebGLRenderer; scene: THREE.Scene; cam: THREE.PerspectiveCamera; orbit: OrbitControls; content: THREE.Group; balls: Map<Joint, THREE.Mesh>; ends: Map<End, THREE.Mesh>; fig?: Mannequin
+    framed?: string; pressed?: boolean; pressAt?: [number, number]; clickOk?: boolean } | null>(null)
   const bodyRef = useRef(body)
   useEffect(() => { bodyRef.current = body }, [body])                       // the body the drag writes over: the latest
   useEffect(() => {                                                          // the viewer, once
@@ -287,6 +291,7 @@ function FigurePane({ body, stance, shell, look, points }: { body: Body; stance:
     const fit = () => { const b = el.getBoundingClientRect(); r.setSize(b.width, b.height); cam.aspect = b.width / Math.max(1, b.height); cam.updateProjectionMatrix() }
     const ro = new ResizeObserver(fit); ro.observe(el); fit(); loop()
     const click = (e: MouseEvent) => {
+      if (!w.clickOk) return                                              // viewport check: the end of a drag or an orbit is no click on a row
       const b = r.domElement.getBoundingClientRect()
       const ray = new THREE.Raycaster(); ray.setFromCamera(new THREE.Vector2(((e.clientX - b.left) / b.width) * 2 - 1, -((e.clientY - b.top) / b.height) * 2 + 1), cam)
       const hit = ray.intersectObjects([...w.balls.values()], false)[0]
@@ -299,6 +304,9 @@ function FigurePane({ body, stance, shell, look, points }: { body: Body; stance:
     const ray = new THREE.Raycaster(), plane = new THREE.Plane(), hitAt = new THREE.Vector3()
     let drag: { key: Joint | End; ball: THREE.Mesh; from: THREE.Vector3; start: [number, number]; moved: boolean } | null = null
     const ndc = (e: PointerEvent) => { const b = r.domElement.getBoundingClientRect(); return new THREE.Vector2(((e.clientX - b.left) / b.width) * 2 - 1, -((e.clientY - b.top) / b.height) * 2 + 1) }
+    const press = (e: PointerEvent) => { w.pressed = true; w.pressAt = [e.clientX, e.clientY] }
+    const release = (e: PointerEvent) => { w.pressed = false; w.clickOk = !!w.pressAt && Math.hypot(e.clientX - w.pressAt[0], e.clientY - w.pressAt[1]) < 3 }
+    r.domElement.addEventListener('pointerdown', press, { capture: true }); window.addEventListener('pointerup', release, { capture: true })
     const down = (e: PointerEvent) => {
       if (e.button !== 0) return
       ray.setFromCamera(ndc(e), cam)
@@ -332,13 +340,18 @@ function FigurePane({ body, stance, shell, look, points }: { body: Body; stance:
       saveBody({ ...b, joint_offsets: { ...(b.joint_offsets ?? {}), [d.key]: next } })
     }
     r.domElement.addEventListener('pointerdown', down); r.domElement.addEventListener('pointermove', move); r.domElement.addEventListener('pointerup', up)
-    return () => { cancelAnimationFrame(raf); ro.disconnect(); r.domElement.removeEventListener('click', click); r.domElement.removeEventListener('pointerdown', down); r.domElement.removeEventListener('pointermove', move); r.domElement.removeEventListener('pointerup', up); orbit.dispose(); r.dispose(); r.domElement.remove(); world.current = null }
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); r.domElement.removeEventListener('click', click); r.domElement.removeEventListener('pointerdown', press, { capture: true }); window.removeEventListener('pointerup', release, { capture: true }); r.domElement.removeEventListener('pointerdown', down); r.domElement.removeEventListener('pointermove', move); r.domElement.removeEventListener('pointerup', up); orbit.dispose(); r.dispose(); r.domElement.remove(); world.current = null }
   }, [])
   useEffect(() => {                                                          // the figure, whenever the body, the stance or the look change
     const w = world.current
     if (!w) return
     let live = true
-    const t = window.setTimeout(() => {
+    let t = 0
+    const build = () => {
+      if (w.pressed) { t = window.setTimeout(build, 150); return }        // viewport check: never rebuilt under a drag (a ball detached mid-drag saved a wild offset)
+      for (const o of w.content.children) if (o.userData.owned) {        // the balls and lines made here (the shell's and the clones' are shared)
+        const m = o as THREE.Mesh; m.geometry?.dispose(); (m.material as THREE.Material | undefined)?.dispose?.()
+      }
       w.content.clear(); w.balls.clear(); w.ends.clear()
       const clay = new THREE.MeshLambertMaterial({ color: 0xb4b4b8 })
       const fig = mannequin(clay, POSES.stand, stance, body)
@@ -353,13 +366,13 @@ function FigurePane({ body, stance, shell, look, points }: { body: Body; stance:
         const on = (ROW_JOINTS[ui.row as RowKey] ?? []).includes(j)
         const ball = new THREE.Mesh(new THREE.SphereGeometry(0.022 * H / 1.75, 12, 8), new THREE.MeshBasicMaterial({ color: on ? 0xf0a030 : placed[j] ? 0xe8c46a : 0x2f9be8, depthTest: false }))
         if (placed[j]) ball.scale.setScalar(1.25)
-        ball.position.copy(at); ball.renderOrder = 3; ball.userData.joint = j; w.content.add(ball); w.balls.set(j, ball)
+        ball.position.copy(at); ball.renderOrder = 3; ball.userData.joint = j; ball.userData.owned = true; w.content.add(ball); w.balls.set(j, ball)
       }
       for (const k of ENDS) {
         const at = endObject(fig, k).getWorldPosition(new THREE.Vector3())
         const ball = new THREE.Mesh(new THREE.SphereGeometry(0.016 * H / 1.75, 10, 8), new THREE.MeshBasicMaterial({ color: placed[k] ? 0xe8c46a : 0x8fd3a8, depthTest: false }))
         if (placed[k]) ball.scale.setScalar(1.25)
-        ball.position.copy(at); ball.renderOrder = 3; ball.userData.end = k; w.content.add(ball); w.ends.set(k, ball)
+        ball.position.copy(at); ball.renderOrder = 3; ball.userData.end = k; ball.userData.owned = true; w.content.add(ball); w.ends.set(k, ball)
       }
       ;(window as unknown as { __loom2SkeletonBench?: unknown }).__loom2SkeletonBench = { screen: (key: string): [number, number] | null => {   // the driver's: a ball's place on the page
         const o = w.balls.get(key as Joint) ?? w.ends.get(key as End)
@@ -369,7 +382,7 @@ function FigurePane({ body, stance, shell, look, points }: { body: Body; stance:
       const link = (a: Joint, b: Joint | THREE.Object3D) => pts.push(fig.joints[a].getWorldPosition(new THREE.Vector3()), b instanceof THREE.Object3D ? b.getWorldPosition(new THREE.Vector3()) : fig.joints[b].getWorldPosition(new THREE.Vector3()))
       link('root', 'spine'); link('spine', 'neck'); link('neck', 'head'); link('spine', 'r_shoulder'); link('spine', 'l_shoulder'); link('r_shoulder', 'r_elbow'); link('l_shoulder', 'l_elbow')
       link('r_elbow', fig.markers[4]); link('l_elbow', fig.markers[7]); link('root', 'r_hip'); link('root', 'l_hip'); link('r_hip', 'r_knee'); link('l_hip', 'l_knee'); link('r_knee', fig.markers[10]); link('l_knee', fig.markers[13])
-      const lines = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x2f9be8, depthTest: false })); lines.renderOrder = 2; w.content.add(lines)
+      const lines = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x2f9be8, depthTest: false })); lines.renderOrder = 2; lines.userData.owned = true; w.content.add(lines)
       fig.root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.visible = false })                     // the Simple boxes: the Detailed figure or the shell instead
       if (look === 'none') setOutside([])
       else if (look === 'shell' && shell) {
@@ -392,11 +405,16 @@ function FigurePane({ body, stance, shell, look, points }: { body: Body; stance:
           d.object.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) { (m.material as THREE.MeshLambertMaterial).transparent = true; (m.material as THREE.MeshLambertMaterial).opacity = 0.55 } })
         }).catch(() => { fig.root.traverse((o) => { if ((o as THREE.Mesh).isMesh && !o.userData.joint) o.visible = true }) })   // no starter set: the boxes
       }
-      const half = THREE.MathUtils.degToRad(w.cam.fov / 2), halfW = Math.atan(Math.tan(half) * w.cam.aspect)
-      const d = Math.max((0.6 * H) / Math.tan(half), (0.56 * H) / Math.tan(halfW))   // the figure whole, arms out, in a narrow pane too
-      w.cam.position.set(d, H * 0.5, 0)                                     // from the side: the depth the picture cannot show
-      w.orbit.target.set(0, H * 0.5, 0); w.orbit.update()
-    }, 120)
+      const framing = `${H}:${body.figure ?? ''}`
+      if (w.framed !== framing) {                                         // viewport check: framed once per figure — an edit keeps the author's orbit
+        w.framed = framing
+        const half = THREE.MathUtils.degToRad(w.cam.fov / 2), halfW = Math.atan(Math.tan(half) * w.cam.aspect)
+        const d = Math.max((0.6 * H) / Math.tan(half), (0.56 * H) / Math.tan(halfW))   // the figure whole, arms out, in a narrow pane too
+        w.cam.position.set(d, H * 0.5, 0)                                   // from the side: the depth the picture cannot show
+        w.orbit.target.set(0, H * 0.5, 0); w.orbit.update()
+      }
+    }
+    t = window.setTimeout(build, 120)
     return () => { live = false; window.clearTimeout(t) }
   }, [body, stance, shell, look, u.row, points])
   return (

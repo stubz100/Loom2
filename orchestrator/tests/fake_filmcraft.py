@@ -277,9 +277,13 @@ class Fake:
                     ti["source_in"] = 0
             return {"replaced": len(p.get("clips") or [])}
         if cid == "project.delete":
-            for i in p.get("items") or []:
+            gone = {int(i) for i in p.get("items") or []}
+            for i in gone:
                 self.items().pop(str(i), None)
-            return {"deleted": len(p.get("items") or [])}
+            s = self.sequence()                                        # K13: as FilmCraft's — "remove track items that referenced deleted media"
+            for t in s["video_tracks"] + s["audio_tracks"]:
+                t["items"] = [x for x in t["items"] if int(x["item"]) not in gone]
+            return {"deleted": len(gone)}
         if cid == "metadata.set":
             it = self.items().get(str(p["item"]))
             if it is None:

@@ -20,6 +20,7 @@ async def engine_get(svc: Svc):
 
 @router.post("/engine/start", response_model=EngineState, response_model_exclude_unset=True)
 async def engine_start(svc: Svc):
+    _card_free(svc)
     try:
         return await svc.engine.start()
     except ENGINE_DOWN as e:
@@ -49,6 +50,24 @@ async def engine_free(svc: Svc):
     except ENGINE_DOWN as e:
         raise HTTPException(503, f"the engine is not reachable: {e}")
     return {"freed": True}
+
+
+def _card_free(svc: Services) -> None:
+    """K (rule 10, D97): a job that took the whole card and stopped the engine for it (training, TTS cloning, the mouth step) — the engine
+    starts after it, never beside it (Start in the Engine menu launched ComfyUI next to a 13.6 GB trainer)."""
+    q = svc.queue
+    rid = q.state()["running"] if q else None
+    job = q.get(rid) if q and rid else None
+    if job is None:
+        return
+    from ..engine.pipeline import plan
+    from ..recipes import parse_recipe
+    try:
+        p = plan(parse_recipe(job.recipe), job.variant)
+    except Exception:  # noqa: BLE001 — a recipe that no longer parses is not this route's concern
+        return
+    if p.gpu and not p.engine:
+        raise HTTPException(409, f"job {rid} has the whole card — the engine starts after it (one job on the GPU, D97)")
 
 
 def _engine_idle(svc: Services) -> None:

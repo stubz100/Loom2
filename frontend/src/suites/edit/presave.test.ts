@@ -120,6 +120,20 @@ describe('D70 pre-save', () => {
     expect(useSession.getState().toasts.map((t) => t.text)).toEqual(['Saved'])
   })
 
+  it('K6: leaving a document saves what was synced but not written; a clean one is left as it is', async () => {
+    const px = open()
+    px.get('a')!.dirty = true
+    useEditor.setState({ docDirty: true })
+    await useEditor.getState().sync()                                    // the idle flush: synced, docDirty cleared, the .ora still lags
+    expect(useEditor.getState().docDirty).toBe(false)
+    o.calls.length = 0
+    expect(await useEditor.getState().leaveDocument()).toBe(true)
+    expect(o.docCalls()).toEqual(['POST /documents/doc_1/save'])        // written before it is left
+    o.calls.length = 0
+    expect(await useEditor.getState().leaveDocument()).toBe(true)       // now in sync: nothing to do
+    expect(o.docCalls()).toEqual([])
+  })
+
   it('the selection is uploaded when it changed and not again', async () => {
     open()
     useEditor.setState({ selection: new LayerPixels(8, 8, true) })

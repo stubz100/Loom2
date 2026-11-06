@@ -806,7 +806,7 @@ export function EditorCanvas() {
       const st = useEditor.getState()
       const p = toDoc(e)
       st.setCursor({ x: Math.floor(p.x), y: Math.floor(p.y) })
-      if (st.tool === 'lasso' && st.lassoKind === 'magnetic') { magnetic.move(p, (e.buttons & 1) === 1); return }
+      if (st.tool === 'lasso' && st.lassoKind === 'magnetic' && drag?.kind !== 'pan' && drag?.kind !== 'xform') { magnetic.move(p, (e.buttons & 1) === 1); return }   // viewport check: a pan (Space / middle) or a transform drag is not the trace
       if (!drag && st.tool === 'lasso' && st.lassoPoly) { previewPoly(st.lassoPoly, p); return }
       if (!drag) return
       if (drag.kind === 'quick' || drag.kind === 'heal') {           // D59 / D62: every sample that moved more than ¼ px joins the stroke
@@ -861,6 +861,7 @@ export function EditorCanvas() {
     const onUp = (e: PointerEvent) => {
       setInteracting(false)
       const st = useEditor.getState()
+      if (st.tool === 'lasso' && st.lassoKind === 'magnetic' && drag?.kind !== 'pan') magnetic.release()   // viewport check: an Alt-click / Alt-drag's freehand ends with the button
       if (!drag) return
       host.releasePointerCapture(e.pointerId)
       if (drag.kind === 'pan') host.style.cursor = spaceHeld ? 'grab' : ''

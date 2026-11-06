@@ -172,8 +172,11 @@ async def run_mouth(job: "JobRecord", recipe: "LayerPass", q: "JobQueue") -> boo
                     _kill(proc.pid)
                     await asyncio.to_thread(proc.wait)
                     raise JobCancelled(job.id)
-        finally:
-            pass
+        except asyncio.CancelledError:                                  # K3 (rule 10): the queue stopped — the mouth step goes with the task
+            if proc.poll() is None:
+                _kill(proc.pid)
+                await asyncio.to_thread(proc.wait)
+            raise
         rc = proc.returncode
         tail = ""
         try:

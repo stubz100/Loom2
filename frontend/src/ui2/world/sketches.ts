@@ -45,6 +45,20 @@ export const useSketches = create<SketchState>()((set, get) => ({
   },
   select: (selected) => set({ selected }),
 }))
+/** K76: the project the home was read in — another project opened forgets it (the old home's id was a 404, its sketches listed, and
+ *  Make sketches ▶ aimed into it); one shown is read again in the new one. */
+const projectPath = (pj = useSession.getState().project): string | null => (pj?.open ? pj.path ?? null : null)
+let sketchesFor = projectPath()
+let sketchesWanted = false                                                       // read once in this session: read again in the next project
+useSession.subscribe((s) => {
+  const path = projectPath(s.project)
+  if (path === sketchesFor) return
+  sketchesWanted ||= useSketches.getState().home !== null
+  const had = sketchesWanted
+  sketchesFor = path
+  useSketches.setState({ home: null, items: [], next: null, selected: null, ideas: 0 })
+  if (had && path) void useSketches.getState().load()
+})
 onRecords('ui2.world.sketches', ['group.changed', 'asset.deleted'], (f) => {   // its own home's change only (B4: every free thing's home is busy)
   const home = useSketches.getState().home
   if (!home) return
@@ -96,6 +110,8 @@ registerCommands([
         await useStory.getState().loadProfiles()
         void useSketches.getState().load()
         useSession.getState().toast(r.items.length ? `${r.items.length} draft${r.items.length === 1 ? '' : 's'}: ${r.items.map((x) => x.name).join(', ')}` : 'Nothing to bring in', 'success')
+        if (r.skipped?.length)                                                    // review K37: an idea that could not fold is named, the rest folded
+          useSession.getState().toast(`Not brought in: ${r.skipped.map((x) => `${x.name} (${x.reason})`).join('; ')}`, 'error')
       } catch (e) { useSession.getState().toast(`Bring the ideas in: ${(e as { detail?: string }).detail ?? e}`, 'error') }
     })() },
   { id: 'world.sketch.trash', scope: 'world', label: 'Trash', placement: ['inspector', 'context'], danger: true, when: () => !!sel(),

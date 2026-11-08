@@ -72,7 +72,7 @@ def current_takes(layer: "FinalLayer") -> list[dict[str, Any]]:
 
 
 def face_recipe(ws: "Workspace", settings: "Settings", store: "FinalStore", f: "Final", layer: "FinalLayer", preset: str, mouth: str = "head",
-                seed: int | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
+                seed: int | None = None, live: set[str] | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
     """The face pass's first step (AE4c), as the route and the matte finisher's follow-up queue it: the recipe and the origin's payload.
     ValueError names what is missing (keypoints, the matte, a line on the layer, the model)."""
     from .compositions import CompositionStore
@@ -105,7 +105,7 @@ def face_recipe(ws: "Workspace", settings: "Settings", store: "FinalStore", f: "
             if s2v is None:
                 raise ValueError("no lip-sync model in this build")
             model_id, stage = s2v.id, "face_video"
-    store.sweep_unfinished(f.id, layer.id)
+    store.sweep_unfinished(f.id, layer.id, live)
     take_id = new_id("take")
     recipe = {"kind": "layer_pass", "final_id": f.id, "layer_id": layer.id, "preset": preset, "strength": 0.10, "seeds": [layer.seed if seed is None else seed],
               "scope": "layer", "model_id": model_id, "step": {"take_id": take_id, "stage": stage, "k": 0}, "mouth": mouth if preset == "lipsync" else "head"}
@@ -241,7 +241,7 @@ async def queue_face_work(q: "JobQueue", f: "Final", layer: "FinalLayer", preset
     from .finals import FINAL_LAYER_SURFACE, FinalStore
     from .origin import JobOrigin
     store = FinalStore(q.ws)
-    recipe, payload = await asyncio.to_thread(face_recipe, q.ws, q.app.settings, store, f, layer, preset)
+    recipe, payload = await asyncio.to_thread(face_recipe, q.ws, q.app.settings, store, f, layer, preset, "head", None, q.live_take_ids())
     jobs = q.submit(recipe, origin=JobOrigin(suite="stage", surface=FINAL_LAYER_SURFACE, ref=f.id, payload=payload))
     if flush:
         await q.flush()

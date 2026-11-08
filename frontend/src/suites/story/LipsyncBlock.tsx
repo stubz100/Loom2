@@ -6,7 +6,7 @@ import { Help } from '../../frame/Help'
 import type { ShotVersion } from '../../api/types'
 import { CommandButton } from '../../frame/CommandButton'
 import { useSession } from '../../store/session'
-import { sy, useStory, voicedLines } from './storyStore'
+import { lipsyncLine, sy, useStory, voicedLines } from './storyStore'
 
 export function LipsyncBlock({ v, ownerNode }: { v: ShotVersion; ownerNode: string | null }) {
   const caps = useSession((s) => s.capabilities?.experimental?.lipsync)
@@ -18,7 +18,8 @@ export function LipsyncBlock({ v, ownerNode }: { v: ShotVersion; ownerNode: stri
   if (!caps) return null
   const lines = voicedLines(flowNodes, ownerNode, audioSecs, caps.seconds_max)
   const first = lines.find((l) => !l.too_long)
-  const key = opts.node_id !== null && opts.index !== null ? `${opts.node_id}:${opts.index}` : (first ? `${first.node_id}:${first.index}` : '')
+  const line = lipsyncLine(lines, opts)                                                    // K77: a line picked for another shot is not shown as this one's
+  const key = line ? `${line.node_id}:${line.index}` : ''
   const preset = caps.presets?.[opts.preset] as { label?: string; seconds?: number | null } | undefined
   return (
     <div className="lipsync" aria-label="lip-sync">

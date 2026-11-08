@@ -1,10 +1,12 @@
 // proto01_UIcast CW6 (D143): what a place's set builder says — its fit running or failed, a set changed since its bake, the faces to fill
 // and how much of the set they are; D180: the picture being cleaned under its things, and the bake due again after it.
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { setBackend } from '../../api/client'
+import { useStory } from './storyStore'
 import type { Job, Profile } from '../../api/types'
 import { bakeKey, type SourceCam } from '../stage/setOverlay'
 import type { PlaceSetDoc } from '../stage/placeSet'
-import { bakeDue, bakedFresh, setStatus, unseenShare, type PlaceSet } from './setBuilder'
+import { bakeDue, bakedFresh, saveSet, setStatus, unseenShare, type PlaceSet } from './setBuilder'
 
 type Version = Profile['versions'][number]
 const cam: SourceCam = { pos: [0.3, 1.6, 2], target: [0.1, 1.3, -3], roll: 0, focal_mm: 24, sensor_mm: 36 }
@@ -46,5 +48,29 @@ describe("a place's set builder (CW6)", () => {
     const cleaned = { ...baked, baked_key: null, keep_fills_key: key }                           // the clean landed: the bake is due, the Fills kept
     expect(bakeDue(cleaned)).toBe(true)
     expect(setStatus(ver(cleaned), {}, 'prf_k', false)).toEqual({ text: 'changed since the bake', warn: true })
+  })
+})
+
+describe("K78: the set's edits one after another", () => {
+  afterEach(() => vi.unstubAllGlobals())
+  it("a width and a part clicked together: two saves, each on the last one's revision, the second keeping the first", async () => {
+    let rev = 4
+    const puts: { revision: number; sizes: Record<string, number>; parts: Record<string, boolean> }[] = []
+    const prof = (ps: PlaceSet) => ({ id: 'prf_k', name: 'Quay', cls: 'place', current: 'v1', revision: rev, versions: [{ ...ver(ps), state: 'open' }] })
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const req = input instanceof Request ? input : null
+      const body = JSON.parse(await (req ? req.text() : Promise.resolve(String(init?.body)))) as { revision: number; place_set: PlaceSet }
+      puts.push({ revision: body.revision, sizes: body.place_set.sizes as Record<string, number>, parts: body.place_set.parts as Record<string, boolean> })
+      if (body.revision !== rev) return Response.json({ detail: 'stale' }, { status: 409 })
+      rev += 1
+      return Response.json(prof(body.place_set))
+    }))
+    setBackend({ host: '127.0.0.1', port: 8766, token: 't' })
+    useStory.setState({ profiles: [prof(set([])) as never], profileId: 'prf_k', versionId: 'v1' })
+    const a = saveSet((cur) => ({ ...cur, sizes: { ...cur.sizes, width: 6 } }))
+    const b = saveSet((cur) => ({ ...cur, parts: { ...cur.parts, ceiling: false } }))
+    expect(await Promise.all([a, b])).toEqual([true, true])
+    expect(puts.map((p) => p.revision)).toEqual([4, 5])
+    expect(puts[1]).toMatchObject({ sizes: { width: 6 }, parts: { ceiling: false } })
   })
 })

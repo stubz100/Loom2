@@ -706,11 +706,11 @@ const cmds: Command[] = [
     run: () => { const s = pickedScene(); if (s) void askText({ title: 'Rename the scene', initial: s.name }).then((v) => { if (v?.trim() && v.trim() !== s.name) void sy().renameScene(s.id, v.trim()) }) } },
   { id: 'story.scene.dissolve', scope: 'story', label: 'Dissolve the scene (its nodes stay)', icon: Ungroup, placement: ['inspector', 'context'], when: () => !!pickedScene() && !sy().play,
     run: () => { const s = pickedScene(); if (s) void sy().dissolveScene(s.id) } },
-  // RC2e (06 O2): Shot templates — saved from a Shot into World › Presets, used beside a node or where the Flow was right-clicked
+  // RC2e (06 O2): Shot templates — saved from a Shot (K81: listed in the Flow's column), used beside a node or where the Flow was right-clicked
   { id: 'story.flow.saveTemplate', scope: 'story', label: 'Save as a template…', icon: BookPlus, placement: ['inspector', 'context'],
-    hint: "its kind, its lines (the words), its line, its route and its camera with its keys — World › Presets › Shot templates keeps it",
+    hint: "its kind, its lines (the words), its line, its route and its camera with its keys — the Flow's column keeps it under Shot templates",   // K81
     when: () => visual() && !!node()?.shot_id && !sy().play,
-    run: () => { const n = node(); if (n) void askText({ title: 'Save as a Shot template', text: 'Its name in World › Presets.', initial: n.title }).then((v) => { if (v?.trim()) void sy().saveTemplate(n.id, v.trim()) }) } },
+    run: () => { const n = node(); if (n) void askText({ title: 'Save as a Shot template', text: "Its name under Shot templates, in the Flow's column.", initial: n.title }).then((v) => { if (v?.trim()) void sy().saveTemplate(n.id, v.trim()) }) } },
   { id: 'story.template.use', scope: 'story', label: 'New Shot from it', icon: CopyPlus, placement: ['inspector', 'context'],
     hint: 'a node of its kind with its lines on its route — beside the node picked in the Flow (its scene, a camera on its stage), else at the Flow\'s centre',
     when: () => sy().selected?.kind === 'template', run: () => { const id = sy().selected?.id; if (id) void sy().useTemplate(id, sy().nodeId, null) } },

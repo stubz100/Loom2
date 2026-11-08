@@ -24,7 +24,8 @@ import { DEFAULT_BODY, ENDS, placedCount, rangeOf, type Body, type End } from '.
 import { JOINTS, mannequin, POSE_NAMES, POSES, type Joint, type Mannequin } from './builders'
 import { HAND_PRESETS, makeDetailed } from './detailed'
 import type { HandShapes } from './clayHand'
-import { bindProxy, insideShell, setShellPoints, stanceOf } from './proxy'
+import { bindProxy, insideShell, setShellPoints, stanceOf, type Proxy } from './proxy'
+import { clearContent, loadOnce } from './gpu'
 import { COCO, cropOf, defaultOf, disagreements, dragFactor, lengthCm, outside, pictureMap, ROWS, seen, setLocked, unlock, type Points, type RowKey, type XY } from './skeleton'
 import { bench, handFromPicture, movedOf, readPicture, setUi, ui, useUi } from './benchState'
 import { FeetPanes, FeetParts, HandParts, HandsPanes } from './RigBench'
@@ -270,7 +271,8 @@ function FigurePane({ body, stance, shell, look, points }: { body: Body; stance:
   // viewport check: `framed` — the figure the camera was framed on (framed again only for another figure or height, never after an edit: the
   // orbit snapped back to the side after every drop); `pressed` — a press under way (a ball drag or an orbit): the rebuild waits for its end
   const world = useRef<{ r: THREE.WebGLRenderer; scene: THREE.Scene; cam: THREE.PerspectiveCamera; orbit: OrbitControls; content: THREE.Group; balls: Map<Joint, THREE.Mesh>; ends: Map<End, THREE.Mesh>; fig?: Mannequin
-    framed?: string; pressed?: boolean; pressAt?: [number, number]; clickOk?: boolean } | null>(null)
+    framed?: string; pressed?: boolean; pressAt?: [number, number]; clickOk?: boolean; px?: Proxy | null } | null>(null)
+  const glb = useRef<{ id: string; p: Promise<THREE.Object3D> } | null>(null)            // review K61: the shell parsed once, not on every rebuild
   const bodyRef = useRef(body)
   useEffect(() => { bodyRef.current = body }, [body])                       // the body the drag writes over: the latest
   useEffect(() => {                                                          // the viewer, once
@@ -340,7 +342,8 @@ function FigurePane({ body, stance, shell, look, points }: { body: Body; stance:
       saveBody({ ...b, joint_offsets: { ...(b.joint_offsets ?? {}), [d.key]: next } })
     }
     r.domElement.addEventListener('pointerdown', down); r.domElement.addEventListener('pointermove', move); r.domElement.addEventListener('pointerup', up)
-    return () => { cancelAnimationFrame(raf); ro.disconnect(); r.domElement.removeEventListener('click', click); r.domElement.removeEventListener('pointerdown', press, { capture: true }); window.removeEventListener('pointerup', release, { capture: true }); r.domElement.removeEventListener('pointerdown', down); r.domElement.removeEventListener('pointermove', move); r.domElement.removeEventListener('pointerup', up); orbit.dispose(); r.dispose(); r.domElement.remove(); world.current = null }
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); r.domElement.removeEventListener('click', click); r.domElement.removeEventListener('pointerdown', press, { capture: true }); window.removeEventListener('pointerup', release, { capture: true }); r.domElement.removeEventListener('pointerdown', down); r.domElement.removeEventListener('pointermove', move); r.domElement.removeEventListener('pointerup', up)
+      w.px?.dispose(); clearContent(w.content); orbit.dispose(); r.dispose(); r.forceContextLoss(); r.domElement.remove(); world.current = null }   // review K61 (V82): the GL context goes now
   }, [])
   useEffect(() => {                                                          // the figure, whenever the body, the stance or the look change
     const w = world.current
@@ -349,10 +352,10 @@ function FigurePane({ body, stance, shell, look, points }: { body: Body; stance:
     let t = 0
     const build = () => {
       if (w.pressed) { t = window.setTimeout(build, 150); return }        // viewport check: never rebuilt under a drag (a ball detached mid-drag saved a wild offset)
-      for (const o of w.content.children) if (o.userData.owned) {        // the balls and lines made here (the shell's and the clones' are shared)
-        const m = o as THREE.Mesh; m.geometry?.dispose(); (m.material as THREE.Material | undefined)?.dispose?.()
-      }
-      w.content.clear(); w.balls.clear(); w.ends.clear()
+      // review K61: everything the last build made freed — the balls and lines, the mannequin, the Detailed clone, the shell's meshes (only the
+      // balls and lines were, and the views grew GPU buffers while a slider was dragged)
+      w.px?.dispose(); w.px = null
+      clearContent(w.content); w.balls.clear(); w.ends.clear()
       const clay = new THREE.MeshLambertMaterial({ color: 0xb4b4b8 })
       const fig = mannequin(clay, POSES.stand, stance, body)
       w.fig = fig
@@ -386,13 +389,15 @@ function FigurePane({ body, stance, shell, look, points }: { body: Body; stance:
       fig.root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.visible = false })                     // the Simple boxes: the Detailed figure or the shell instead
       if (look === 'none') setOutside([])
       else if (look === 'shell' && shell) {
-        void new GLTFLoader().loadAsync(api.assetUrl(shell)).then((gltf) => {
+        void loadOnce(glb, shell, (id) => new GLTFLoader().loadAsync(api.assetUrl(id)).then((gltf) => gltf.scene)).then((model) => {
           if (!live) return
-          const px = bindProxy(gltf.scene, fig.joints, fig.limbs, g, { preset: 'stand', joints: stance }, { stance, visible: true, points, markers: fig.markers })
+          const px = bindProxy(model, fig.joints, fig.limbs, g, { preset: 'stand', joints: stance }, { stance, visible: true, points, markers: fig.markers })   // it reads the model, never changes it
+          w.px = px
           for (const m of px.meshes) { const mat = m.material as THREE.MeshLambertMaterial; mat.transparent = true; mat.opacity = 0.42; mat.depthWrite = false; w.content.add(m) }
           const plain = px.meshes.map((m) => new THREE.Mesh(m.geometry, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide })))
           plain.forEach((m) => m.updateMatrixWorld(true))
           const out = [...w.balls].filter(([, ball]) => !insideShell(plain, ball.position)).map(([j]) => j)
+          plain.forEach((m) => (m.material as THREE.Material).dispose())
           for (const j of out) { const ball = w.balls.get(j)!; (ball.material as THREE.MeshBasicMaterial).color.set(0xe5484d); ball.scale.setScalar(1.6) }
           setOutside(out)
         }).catch(() => undefined)

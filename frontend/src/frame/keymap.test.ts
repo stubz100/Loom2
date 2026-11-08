@@ -45,6 +45,13 @@ describe('remap', () => {
     expect(keymap.remap('cat.alpha', 'F3')).toMatchObject({ ok: false, conflict: { id: 'global.find' } })     // alternate chords count
     expect(keymap.remap('edit.brush', 'X')).toEqual({ ok: true })                                           // other suites do not collide
   })
+  it("review K95: refuses a key a command of another scope answers to inside one suite's reach", async () => {
+    const { commands, keymap } = await boot()
+    commands.registerCommands([cmd('stage.frame', 'stage', 'F'), cmd('anim.level.clay', 'animate', '1'), cmd('anim.variations', 'animate', 'V')])
+    commands.setReach('stage', [{ scope: 'stage' }, { scope: 'animate', only: (c) => c.id.startsWith('anim.level.') }])   // Clay: its own and the mode keys
+    expect(keymap.remap('stage.frame', '1')).toMatchObject({ ok: false, conflict: { id: 'anim.level.clay' } })
+    expect(keymap.remap('stage.frame', 'V')).toEqual({ ok: true })                                           // outside the reach's filter: no clash
+  })
   it('refuses fixed keys, both ways', async () => {
     const { commands, keymap } = await boot()
     expect(commands.command('cat.next')!.fixed).toBe(true)                                                   // ArrowRight: marked at registration

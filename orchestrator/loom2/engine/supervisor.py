@@ -164,11 +164,11 @@ class EngineSupervisor:
         return [e.python, e.main, "--listen", e.host, "--port", str(e.port), *e.flags, *reserve, *headroom, "--log-stdout",
                 "--extra-model-paths-config", self.model_paths_config(),
                 "--output-directory", str(state / "engine_out"), "--temp-directory", str(state / "engine_tmp"),
-                "--user-directory", str(state / "engine_user")]
+                "--user-directory", str(state / "engine_user"), "--input-directory", str(state / "engine_in")]   # review K26: loom2's uploads apart
 
     def launch(self, model_gb: float | None = None) -> dict:
         """V44: the launch as `start()` makes it — argv, cwd, env and port — for `scripts/engine-start.ps1` (`--argv`)."""
-        for d in ("engine_out", "engine_tmp", "engine_user"):
+        for d in ("engine_out", "engine_tmp", "engine_user", "engine_in"):
             (self.app.state_dir / d).mkdir(parents=True, exist_ok=True)
         return {"argv": self._argv(model_gb), "cwd": str(Path(self.app.settings.engine.main).parent), "env": dict(ENGINE_ENV),
                 "port": self.app.settings.engine.port, "state": str(self.app.state_dir)}
@@ -185,8 +185,9 @@ class EngineSupervisor:
                 self._emit()
                 return self.state()
             e = self.app.settings.engine
-            for d in ("engine_out", "engine_tmp", "engine_user"):
+            for d in ("engine_out", "engine_tmp", "engine_user", "engine_in"):
                 (self.app.state_dir / d).mkdir(parents=True, exist_ok=True)
+            await asyncio.to_thread(self.sweep_inputs)                  # review K26: no job's upload outlives the engine it was made for
             self.log_path = self.app.logs_dir / f"engine-{time.strftime('%Y%m%d-%H%M%S')}.log"
             for old in sorted(self.app.logs_dir.glob("engine-*.log"))[:-9]:      # C18: keep the last ten engine logs
                 try:
@@ -239,6 +240,20 @@ class EngineSupervisor:
             return "the engine started outside loom2 was told to unload its models and free its memory (it cannot be stopped from here)"
         return None
 
+    def sweep_inputs(self) -> int:
+        """Review K26: every reference, crop, mask and guide a job uploads lands in the engine's input folder (`<state>/engine_in`) and
+        was never removed (1707 files, 1.1 GB measured in ComfyUI's own `input/`). Nothing there is needed once the engine that read it
+        has stopped: emptied when ours starts and when it stops. Never raises."""
+        root, n = self.app.state_dir / "engine_in", 0
+        for p in (root.rglob("*") if root.is_dir() else []):
+            if p.is_file():
+                try:
+                    p.unlink()
+                    n += 1
+                except OSError:
+                    pass
+        return n
+
     async def _stop_locked(self, grace_s: float = 10.0) -> dict:
         """The body of `stop()`; callers must hold `self._lock`."""
         proc, self.proc = self.proc, None
@@ -247,6 +262,8 @@ class EngineSupervisor:
                 await asyncio.wait_for(asyncio.to_thread(self._stop_proc, proc, grace_s), timeout=grace_s + 15)
             except asyncio.TimeoutError:
                 await asyncio.to_thread(_kill_tree, proc.pid)             # V20: taskkill off the loop
+        if proc is not None:                                             # review K26: ours stopped — its uploads go (an adopted engine's stay)
+            await asyncio.to_thread(self.sweep_inputs)
         if self._log_fh:
             self._log_fh.close()
             self._log_fh = None

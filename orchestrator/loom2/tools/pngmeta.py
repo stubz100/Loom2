@@ -14,13 +14,17 @@ from PIL import Image
 A1111_RE = re.compile(r"^(?P<prompt>.*?)(?:\nNegative prompt: (?P<neg>.*?))?\n(?P<kv>(?:[A-Za-z ]+: [^,\n]+(?:, )?)+)\s*$", re.S)
 
 
-def _from_comfy(prompt_graph: dict) -> dict[str, Any]:
+def _from_comfy(prompt_graph: Any) -> dict[str, Any]:
+    if not isinstance(prompt_graph, dict):
+        raise ValueError("the prompt chunk is not a graph")           # review K92: a list or a string in the chunk read as no ComfyUI metadata
     texts, seed, model, steps = [], None, None, None
     for node in prompt_graph.values():
         if not isinstance(node, dict):
             continue
         cls = node.get("class_type", "")
         inp = node.get("inputs", {}) or {}
+        if not isinstance(inp, dict):
+            continue
         if cls == "CLIPTextEncode" and isinstance(inp.get("text"), str) and inp["text"].strip():
             texts.append(inp["text"].strip())
         if cls in ("KSampler", "KSamplerAdvanced"):

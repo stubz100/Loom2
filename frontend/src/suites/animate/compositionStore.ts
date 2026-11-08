@@ -73,6 +73,28 @@ export function maskPathD(m: Pick<MaskInfo, 'vertices' | 'inTangents' | 'outTang
   }
   return m.closed ? `${d} Z` : d
 }
+/** Review K116: the selected layer's transform at the playhead — where its own pixels (the masks' space) sit in the composition:
+ *  comp = position + rotate(rotation) · scale(scale %) · (layer − anchor). The overlay drew the masks at (position − anchor) of the
+ *  layer's unsampled values: off on a keyed, scaled or turned layer. */
+export interface LayerXf { pos: [number, number]; anchor: [number, number]; scale: [number, number]; rot: number }
+const vec2 = (v: unknown, d: [number, number]): [number, number] => (Array.isArray(v) ? [Number(v[0] ?? d[0]), Number(v[1] ?? d[1])] : d)
+export function layerXf(props: Pick<FlatProp, 'path' | 'value'>[]): LayerXf {
+  const at = (k: string) => props.find((p) => p.path === `transform/${k}`)?.value
+  const sc = vec2(at('scale'), [100, 100])
+  return { pos: vec2(at('position'), [0, 0]), anchor: vec2(at('anchor'), [0, 0]), scale: [sc[0] / 100 || 1, sc[1] / 100 || 1], rot: Number(at('rotation') ?? 0) || 0 }
+}
+/** The transform as an SVG attribute (layer pixels → composition pixels). */
+export const xfAttr = (x: LayerXf): string => `translate(${x.pos[0]} ${x.pos[1]}) rotate(${x.rot}) scale(${x.scale[0]} ${x.scale[1]}) translate(${-x.anchor[0]} ${-x.anchor[1]})`
+/** A move on the frame (composition pixels) as a move in the layer's pixels. */
+export function deltaToLayer(x: LayerXf, [dx, dy]: [number, number]): [number, number] {
+  const r = (-x.rot * Math.PI) / 180
+  return [(dx * Math.cos(r) - dy * Math.sin(r)) / x.scale[0], (dx * Math.sin(r) + dy * Math.cos(r)) / x.scale[1]]
+}
+/** A composition point in the layer's pixels (the inverse of the transform). */
+export function toLayerPx(x: LayerXf, [cx, cy]: [number, number]): [number, number] {
+  const [lx, ly] = deltaToLayer(x, [cx - x.pos[0], cy - x.pos[1]])
+  return [lx + x.anchor[0], ly + x.anchor[1]]
+}
 /** AE2d: seconds snapped to the composition's frames. */
 export const snapTime = (sec: number, rate: number): number => Math.round(sec * rate) / rate
 /** AE3: an effect on the selected layer, as the engine's property tree reports it. */
@@ -116,6 +138,8 @@ interface CompState {
   layers: CompLayer[]
   selected: number | null
   props: FlatProp[]
+  /** Review K116: the frame the properties' values were read at (read again when the playhead rests elsewhere). */
+  propsAt: number | null
   keysOf: Record<string, PropKey[]>
   uidOf: Record<string, number | string>
   busy: boolean
@@ -228,6 +252,7 @@ let wanted: { frame: number; side: Side } | null = null
 let inflight: Promise<void> | null = null
 let restTimer: number | null = null
 let playTimer: number | null = null
+let propsSeq = 0, masksSeq = 0
 
 /** K10: a frame is the composition's — its final, the assembly and final revision it was made from, its edits — not its revision alone
  *  (every composition starts at 0: a remade one showed the old frames; a frame in flight while switching finals was the other final's). */
@@ -332,7 +357,7 @@ export const useComposition = create<CompState>((set, get) => {
   }
   return {
     finalId: null, final: null, comp: null, frame: 0, playing: false, shown: null, fetching: false, filled: 0, error: null,
-    layers: [], selected: null, props: [], keysOf: {}, uidOf: {}, busy: false, masks: [], maskTool: 'off', selectedMask: null, poly: [], maskView: 'lines', editorTab: 'props', passPreset: 'cleanup', passStrength: 0.1, passMouth: 'head', passScope: 'layer', effects: [], fxValues: {}, catalog: {}, before: null,
+    layers: [], selected: null, props: [], propsAt: null, keysOf: {}, uidOf: {}, busy: false, masks: [], maskTool: 'off', selectedMask: null, poly: [], maskView: 'lines', editorTab: 'props', passPreset: 'cleanup', passStrength: 0.1, passMouth: 'head', passScope: 'layer', effects: [], fxValues: {}, catalog: {}, before: null,
     loadLayers: async () => {
       const fid = get().finalId
       if (!fid || !get().comp) { set({ layers: [] }); return }
@@ -340,26 +365,33 @@ export const useComposition = create<CompState>((set, get) => {
         const r = await unwrap(http.GET('/finals/{fid}/composition/layers', { params: { path: { fid } } }))
         const layers = r.items as unknown as CompLayer[]
         set({ layers })
-        if (get().selected !== null && !layers.some((l) => l.id === get().selected)) set({ selected: null, props: [], keysOf: {}, uidOf: {} })
+        if (get().selected !== null && !layers.some((l) => l.id === get().selected)) set({ selected: null, props: [], propsAt: null, keysOf: {}, uidOf: {} })
       } catch (e) { set({ error: detail(e) }) }
     },
-    select: (id) => { set({ selected: id, props: [], keysOf: {}, uidOf: {}, masks: [], effects: [], fxValues: {}, selectedMask: null, maskTool: 'off', poly: [] }); if (id !== null) { void get().loadProps(); void get().loadMasks() } },
+    select: (id) => { set({ selected: id, props: [], propsAt: null, keysOf: {}, uidOf: {}, masks: [], effects: [], fxValues: {}, selectedMask: null, maskTool: 'off', poly: [] }); if (id !== null) { void get().loadProps(); void get().loadMasks() } },
     loadProps: async () => {
       const fid = get().finalId, sel = get().selected
       if (!fid || sel === null) return
+      const n = ++propsSeq
+      const frame = get().frame, t = frame / (get().final?.rate ?? 16)
       try {
         const r = await unwrap(http.GET('/finals/{fid}/composition/layers/{lid}', { params: { path: { fid, lid: String(sel) } } })) as { properties?: FlatProp[] }
-        const props = (r.properties ?? []).filter((p) => (EDITABLE as readonly string[]).includes(p.path))
+        const listed = (r.properties ?? []).filter((p) => (EDITABLE as readonly string[]).includes(p.path))
         const fxValues = Object.fromEntries((r.properties ?? []).filter((p) => p.path.startsWith('effects/')).map((p) => [p.path, p.value]))   // AE3: the effects' dials
-        if (get().selected === sel) set({ fxValues })
+        if (get().selected === sel && n === propsSeq) set({ fxValues })
         const keysOf: Record<string, PropKey[]> = {}
         const uidOf: Record<string, number | string> = {}
-        await Promise.all(props.map(async (p) => {
-          const k = await unwrap(http.GET('/finals/{fid}/composition/layers/{lid}/property', { params: { path: { fid, lid: String(sel) }, query: { path: p.path } } })) as { keys?: PropKey[]; uid?: number | string }
+        const value: Record<string, unknown> = {}
+        await Promise.all(listed.map(async (p) => {
+          // review K116: each value at the playhead — the layer's list says the engine's own time, so a keyed layer showed (and an edit
+          // wrote back) another frame's position
+          const k = await unwrap(http.GET('/finals/{fid}/composition/layers/{lid}/property', { params: { path: { fid, lid: String(sel) }, query: { path: p.path, t } } })) as { keys?: PropKey[]; uid?: number | string; value?: unknown }
           keysOf[p.path] = k.keys ?? []
           if (k.uid !== undefined) uidOf[p.path] = k.uid
+          if (k.value !== undefined) value[p.path] = k.value
         }))
-        if (get().selected === sel) set({ props, keysOf, uidOf })
+        const props = listed.map((p) => (p.path in value ? { ...p, value: value[p.path] } : p))
+        if (get().selected === sel && n === propsSeq) set({ props, keysOf, uidOf, propsAt: frame })      // a newer read (another frame) wins
       } catch (e) { set({ error: detail(e) }) }
     },
     command: (id, params, what) => run(what, () => unwrap(http.POST('/finals/{fid}/composition/command', { params: { path: { fid: get().finalId! } }, body: { id, params } }))),
@@ -367,7 +399,9 @@ export const useComposition = create<CompState>((set, get) => {
     setProp: (path, value, time) => {
       const sel = get().selected
       if (sel === null) return Promise.resolve(false)
-      return run('Set the property', () => unwrap(http.POST('/finals/{fid}/composition/property', { params: { path: { fid: get().finalId! } }, body: { layer: sel, path, value, time: time ?? null } })))
+      // review K116: a property with keys is set at the playhead (a key there), never as a static value under its keys
+      const at = time ?? (get().keysOf[path]?.length ? get().frame / (get().final?.rate ?? 16) : null)
+      return run('Set the property', () => unwrap(http.POST('/finals/{fid}/composition/property', { params: { path: { fid: get().finalId! } }, body: { layer: sel, path, value, time: at } })))
     },
     nudge: (dx, dy) => { const sel = get().selected; return sel === null ? Promise.resolve(false) : get().command('layer.nudge', { x: dx, y: dy, layers: [sel] }, 'Move the layer') },
     undo: () => get().command('edit.undo', {}, 'Undo'),
@@ -573,10 +607,19 @@ export const useComposition = create<CompState>((set, get) => {
     loadMasks: async () => {
       const fid = get().finalId, sel = get().selected
       if (!fid || sel === null) return
+      const n = ++masksSeq
+      const t = get().frame / (get().final?.rate ?? 16)
       try {
         const r = await unwrap(http.GET('/finals/{fid}/composition/layers/{lid}', { params: { path: { fid, lid: String(sel) }, query: { tree: true } } })) as { properties?: TreeNode }
-        if (get().selected === sel) {
-          const masks = masksOf(r.properties)
+        // review K116: a keyed (following) mask's shape at the playhead, not at the engine's own time
+        const masks = await Promise.all(masksOf(r.properties).map(async (m) => {
+          if (!m.animated) return m
+          const p = await unwrap(http.GET('/finals/{fid}/composition/layers/{lid}/property', { params: { path: { fid, lid: String(sel) }, query: { path: `${m.path}/path`, t } } })).catch(() => null) as { value?: unknown } | null
+          if (p?.value === undefined) return m
+          const at = masksOf({ children: [{ path: 'masks', children: [{ uid: m.uid, path: m.path, children: [{ path: `${m.path}/path`, value: p.value }] }] }] })[0]
+          return { ...m, vertices: at.vertices, inTangents: at.inTangents, outTangents: at.outTangents, closed: at.closed }
+        }))
+        if (get().selected === sel && n === masksSeq) {
           set({ masks, effects: effectsOf(r.properties), selectedMask: masks.some((m) => m.uid === get().selectedMask) ? get().selectedMask : masks.length ? masks[masks.length - 1].uid : null })   // one tree read: the masks and the effects; the newest mask selected
         }
       } catch (e) { set({ error: detail(e) }) }
@@ -622,7 +665,7 @@ export const useComposition = create<CompState>((set, get) => {
     // ---- AE2d: timing ----
     setTiming: (id, patch) => get().command('layer.timing', { layers: [id], ...patch }, 'Timing'),
     slip: (id, delta) => get().command('layer.slip', { layers: [id], delta }, 'Slip'),
-    close: () => set({ finalId: null, final: null, comp: null, frame: 0, playing: false, shown: null, fetching: false, filled: 0, error: null, layers: [], selected: null }),
+    close: () => set({ finalId: null, final: null, comp: null, frame: 0, playing: false, shown: null, fetching: false, filled: 0, error: null, layers: [], selected: null, propsAt: null }),
     open: async (finalId) => {
       if (get().finalId !== finalId) { get().togglePlay(false); set({ finalId, frame: 0, shown: null, comp: null, final: null }) }
       await get().reload()
@@ -682,7 +725,13 @@ export const useComposition = create<CompState>((set, get) => {
       }
       playTimer = window.setTimeout(() => void loop(), period)
     },
-    settle: () => { if (!get().playing && get().comp) request(get().frame, 'full') },
+    settle: () => {
+      if (get().playing || !get().comp) return
+      request(get().frame, 'full')
+      // review K116: the playhead rests on another frame than the properties were read at — their values (and a following mask's shape) there
+      const s = get()
+      if (s.selected !== null && s.propsAt !== null && s.propsAt !== s.frame && !s.busy) { void s.loadProps(); if (s.masks.some((m) => m.animated)) void s.loadMasks() }
+    },
     tick: async () => {
       const { final, comp, playing, finalId } = get()
       if (finalId && comp) {                                                   // D118: a pass's job landed — the composition takes the layer's new source

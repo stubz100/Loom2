@@ -368,6 +368,7 @@ async def profile_expand(svc: Svc, pid: str, body: ExpandBody):
             jobs += svc.queue.submit(recipe, origin=JobOrigin.model_validate(origin), batch_id=batch)
     except ValueError as e:
         raise HTTPException(422, str(e))
+    await svc.queue.flush()                                                  # review K88 (D64): on disk before the reply
     _changed(svc, p)
     return {"batch_id": batch, "job_ids": [j.id for j in jobs], "cells": len(planned), "group_id": gid, "model_id": spec.id}
 
@@ -1341,8 +1342,8 @@ async def profile_train(svc: Svc, pid: str, body: TrainBody):
         raise HTTPException(404, str(e))
     gid = body.group_id or v.group_id
     trigger = (body.trigger or v.trigger or _trigger(p.name)).strip()
-    out = _queue_train(svc, body, gid, trigger, body.name.strip() or f"{p.name} {v.id}", pid, v.id,
-                       JobOrigin(suite="story", surface="train", ref=pid, payload={"version": v.id}))
+    out = await _queue_train(svc, body, gid, trigger, body.name.strip() or f"{p.name} {v.id}", pid, v.id,
+                             JobOrigin(suite="story", surface="train", ref=pid, payload={"version": v.id}))
     if v.trigger != trigger:                                                      # the trigger is the version's from now on (a retrain keeps it)
         p = await asyncio.to_thread(store.set_version_lora, pid, v.id, v.lora, trigger)
         _changed(svc, p)
@@ -1365,17 +1366,17 @@ async def album_train(svc: Svc, gid: str, body: TrainBody):
     if owner is not None:
         p, v = owner
         trigger = (body.trigger or v.trigger or _trigger(p.name)).strip()
-        out = _queue_train(svc, body, gid, trigger, body.name.strip() or f"{p.name} {v.id}", p.id, v.id,
-                           JobOrigin(suite="story", surface="train", ref=p.id, payload={"version": v.id, "group_id": gid}))
+        out = await _queue_train(svc, body, gid, trigger, body.name.strip() or f"{p.name} {v.id}", p.id, v.id,
+                                 JobOrigin(suite="story", surface="train", ref=p.id, payload={"version": v.id, "group_id": gid}))
         if v.trigger != trigger:
             _changed(svc, await asyncio.to_thread(store.set_version_lora, p.id, v.id, v.lora, trigger))
         return out
     trigger = (body.trigger or _trigger(g.name)).strip()
-    return _queue_train(svc, body, gid, trigger, body.name.strip() or g.name, None, None,
-                        JobOrigin(suite="catalogue", surface="train", ref=gid, payload={"group_id": gid}))
+    return await _queue_train(svc, body, gid, trigger, body.name.strip() or g.name, None, None,
+                              JobOrigin(suite="catalogue", surface="train", ref=gid, payload={"group_id": gid}))
 
 
-def _queue_train(svc, body: TrainBody, gid: str, trigger: str, name: str, pid: str | None, vid: str | None, origin: JobOrigin) -> dict:
+async def _queue_train(svc, body: TrainBody, gid: str, trigger: str, name: str, pid: str | None, vid: str | None, origin: JobOrigin) -> dict:
     """The job's recipe and its submission: the base (the first of /capabilities.train with its weights when the body names none)."""
     _, _, q = svc.require_project()
     from ..capabilities import _train
@@ -1389,6 +1390,7 @@ def _queue_train(svc, body: TrainBody, gid: str, trigger: str, name: str, pid: s
         job = q.submit(recipe, stage=body.stage, origin=origin)[0]
     except ValueError as e:
         raise HTTPException(422, str(e))
+    await q.flush()                                                          # review K88 (D64): on disk before the reply
     return {"job_id": job.id, "trigger": trigger, "model_id": model_id, "staged": job.status == "staged"}
 
 
@@ -1455,6 +1457,7 @@ async def lora_check(svc: Svc, lid: str):
                 jobs += q.submit(recipe, origin=origin, batch_id=batch)
     except ValueError as e:
         raise HTTPException(422, str(e))
+    await q.flush()                                                          # review K88 (D64): on disk before the reply
     rec.identity = {"status": "running", "model_id": spec.id, "hero_asset_id": v.hero_asset_id, "with": [], "without": [], "n": len(jobs)}
     await asyncio.to_thread(reg.save, rec)
     svc.hub.broadcast("lora.changed", {"id": rec.id, "profile_id": rec.profile_id, "version": rec.version})
@@ -2300,8 +2303,7 @@ def _flow_changed(svc, nid: str | None = None) -> None:
 async def flow_get(svc: Svc):
     ws, _, _ = svc.require_project()
     store = StoryStore(ws)
-    nodes = await asyncio.to_thread(store.flow_nodes)
-    g = await asyncio.to_thread(store.flow_graph, nodes)
+    g, nodes = await asyncio.to_thread(store.flow_state)                     # review K31: the index repaired against the nodes it is sent with
     return {"graph": g.model_dump(by_alias=True), "nodes": [n.model_dump() for n in nodes.values()]}
 
 
@@ -2717,6 +2719,7 @@ async def shot_lipsync(svc: Svc, sid: str, vid: str, body: LipsyncBody):
         job = q.submit(recipe, stage=body.stage, origin=origin)[0]
     except ValueError as e:
         raise HTTPException(422, str(e))
+    await q.flush()                                                          # review K88 (D64): on disk before the reply
     p = spec.video.presets.get(body.preset) if spec.video else None
     return {"job_id": job.id, "model_id": spec.id, "frames": frames, "audio_asset_id": audio_id, "image_asset_id": image_id, "staged": job.status == "staged",
             "seconds": p.seconds if p else None}
@@ -2726,8 +2729,7 @@ async def shot_lipsync(svc: Svc, sid: str, vid: str, body: LipsyncBody):
 async def flow_validate(svc: Svc):
     ws, _, _ = svc.require_project()
     store = StoryStore(ws)
-    nodes = await asyncio.to_thread(store.flow_nodes)
-    g = await asyncio.to_thread(store.flow_graph, nodes)
+    g, nodes = await asyncio.to_thread(store.flow_state)                     # review K31
     world = await asyncio.to_thread(store.world)
     shots = {s.id: s for s in await asyncio.to_thread(store.shots)}
     return {"problems": validate_flow(g, nodes, [v.name for v in world.variables], shots)}

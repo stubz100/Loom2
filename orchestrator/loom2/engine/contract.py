@@ -15,7 +15,8 @@ from pathlib import PurePath
 from typing import Any
 
 NAME_INPUTS = {"unet_name", "clip_name", "clip_name1", "clip_name2", "clip_name3", "vae_name", "lora_name", "image",
-               "ckpt_name", "control_net_name", "model_name", "upscale_model_name", "style_model_name", "clip_vision_name", "video"}
+               "ckpt_name", "control_net_name", "model_name", "upscale_model_name", "style_model_name", "clip_vision_name", "video",
+               "bg_removal_name", "audio_encoder_name"}                     # review K87: BiRefNet's and S2V's weights checked too
 
 
 def _spec_lists(node_info: dict) -> tuple[dict, dict]:

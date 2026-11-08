@@ -65,3 +65,22 @@ describe("U7c (06 §3): a cut changed by a job is read again", () => {
     useSequence.setState({ current: null })
   })
 })
+
+describe('K96: a lane edit waiting out its pause', () => {
+  it('is saved into its own cut before another opens', async () => {
+    const seen: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const req = input instanceof Request ? input : null
+      const path = new URL(req ? req.url : String(input)).pathname, method = (req?.method ?? init?.method ?? 'GET').toUpperCase()
+      seen.push(`${method} ${path}`)
+      return Response.json(method === 'PUT' ? { ...tl, revision: 3 } : { ...tl, id: 'tl_2', clips: [] })
+    }))
+    const { setBackend } = await import('../../../api/client')
+    setBackend({ host: '127.0.0.1', port: 8766, token: 't' })
+    useSequence.setState({ current: { ...tl, file: null } as never, lane: laneOf(tl), saving: false, cutBusy: false, open: useSequence.getInitialState().open })   // U7c's test left a mock
+    useSequence.getState().removeClip(1)                                             // waits 300 ms before its save
+    await useSequence.getState().open('tl_2')
+    expect(seen).toEqual(['PUT /timelines/tl_1', 'GET /timelines/tl_2'])
+    vi.unstubAllGlobals()
+  })
+})

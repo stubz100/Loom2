@@ -305,7 +305,7 @@ def fit_body(measured: dict[str, float], body: Body | None = None, locks: tuple[
     # Levenberg–Marquardt in log factors: damped, each step at most 0.2 (≈ 22 %), held inside the bounds
     x = np.log([getattr(b, k) for k in unknown])
     lam = 1e-3
-    for _ in range(300):
+    for _ in range(300 if unknown else 0):                                 # review K91: every factor locked — nothing to fit, the body as it is
         r = resid(x)
         jac = np.stack([(resid(x + e) - r) / 1e-6 for e in np.eye(len(x)) * 1e-6], axis=1)
         step = np.linalg.solve(jac.T @ jac + lam * np.eye(len(x)), -jac.T @ r)

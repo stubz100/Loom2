@@ -133,7 +133,12 @@ export function treeFromJson(j: Record<string, unknown>): Tree {
 
 /** D65: the panel's model, or the variant's t2i default while the panel holds none ('' before the capabilities arrived). */
 export function panelModel(p: Panel): string {
-  return resolveModel(p.model_id, 't2i', (id) => !!useSession.getState().capabilities?.models[id])
+  return panelModelOf(p, useSession.getState().capabilities)
+}
+/** review K65 (T8): `panelModel` against given capabilities — the column's sections read the model the recipe runs (a fresh panel's '' is
+ *  the default), from the capabilities they render with, so the card, Turbo, CFG, the reference count and the tiers are the run's. */
+export function panelModelOf(p: Pick<Panel, 'model_id'>, caps: Capabilities | null | undefined): string {
+  return resolveModel(p.model_id, 't2i', (id) => !!caps?.models[id], caps)
 }
 
 export type ModelCap = Capabilities['models'][string]
@@ -808,13 +813,13 @@ export const makeContext = contextSlot<Panel>(() => structuredClone(useGenerate.
 /** D190: the model a hand or feet picture is made on from World's Make — the column's card, any wired text-to-image model (the picture is
  *  made from words alone); else null, the server's clay-reference model. */
 export function partModel(): string | null {
-  const mid = useGenerate.getState().panel.model_id
+  const mid = panelModel(useGenerate.getState().panel)                   // review K65: the card the column shows (a fresh panel's '' is the default)
   const cap = useSession.getState().capabilities?.models[mid]
   return cap && cap.wired && cap.recipes.t2i ? mid : null
 }
 
 export function referenceModel(): string | null {
-  const mid = useGenerate.getState().panel.model_id
+  const mid = panelModel(useGenerate.getState().panel)                   // review K65
   const cap = useSession.getState().capabilities?.models[mid]
   return cap && ['flux2', 'klein'].includes(cap.family) && (cap.max_refs ?? 0) >= 1 && cap.wired ? mid : null
 }

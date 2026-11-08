@@ -12,7 +12,8 @@ import { DEV_HOOKS } from '../../devHooks'
 import { registerTransport } from './transport'
 import { navigate } from '../../frame/router'
 
-export type AnimPreset = 'draft' | 'motion' | 'quality'
+/** The presets the server's I2V recipe takes (D38: the generated type, so a spec's own preset key reaches the panel — review K85). */
+export type AnimPreset = NonNullable<I2VRecipe['preset']>
 /** D156 (E41): the camera's move on the camera model — the core's WanCameraEmbedding paths; `static` holds it. */
 export type CameraMove = 'static' | 'pan_left' | 'pan_right' | 'pan_up' | 'pan_down' | 'zoom_in' | 'zoom_out' | 'roll_cw' | 'roll_ccw'
 export interface CameraMoveSpec { move: CameraMove; speed: number }
@@ -53,6 +54,11 @@ export const DEFAULT_PANEL: AnimPanel = {
 const NEUTRAL: ModelRules = { fps: 16, frames: 81, step: 4, mult: 16, draft: [832, 480], hd: [1280, 720], portrait: [480, 832], square: [640, 640], short: '', beats: false, camera: false,
   base: 1, fpsFixed: false, maxPx: null, sound: false, negative: true, presets: ['draft', 'motion', 'quality'] }
 const PRESET_ORDER: AnimPreset[] = ['draft', 'motion', 'quality']
+/** The model's presets: the named order first, then (review K85) any other key its spec has, in the spec's order. */
+const presetsOf = (spec: Record<string, unknown> | undefined): AnimPreset[] => {
+  const keys = Object.keys(spec ?? {}).filter((k) => spec![k] != null) as AnimPreset[]
+  return [...PRESET_ORDER.filter((k) => keys.includes(k)), ...keys.filter((k) => !PRESET_ORDER.includes(k))]
+}
 
 /** C25 / D65: a video model's rules from `/capabilities.i2v.models[id]` (its spec's geometry); a neutral fallback before they load. */
 export function modelRules(id: string): ModelRules {
@@ -62,11 +68,19 @@ export function modelRules(id: string): ModelRules {
   const t = m.geometry?.tiers ?? {}
   const pair = (v: number[] | undefined, fallback: [number, number]): [number, number] => (v && v.length === 2 ? [v[0], v[1]] : fallback)
   const draft = pair(t.draft ?? caps?.tiers.draft?.[m.family] ?? m.size, NEUTRAL.draft)
-  const presets = PRESET_ORDER.filter((k) => m.presets?.[k] != null)
+  const presets = presetsOf(m.presets)
   return { fps: m.fps, frames: m.frames, step: m.frame_step, mult: m.size_mult, short: m.short, beats: !!(m.recipes?.beats ?? m.beats), camera: !!m.recipes?.camera, draft,
     hd: pair(t.hd ?? caps?.tiers.hd?.[m.family], draft), portrait: pair(t.portrait ?? caps?.portrait?.[m.family], [draft[1], draft[0]]), square: pair(t.square ?? caps?.square?.[m.family], NEUTRAL.square),
     base: m.geometry?.frame_base ?? 1, fpsFixed: !!m.geometry?.fps_fixed, maxPx: m.geometry?.max_px ?? null, sound: !!m.sound, negative: m.takes_negative !== false,
     presets: presets.length ? presets : NEUTRAL.presets }
+}
+
+/** D193: the smallest frame count on the model's grid (base + step·n) the panel offers — 9 for Wan / LTX, 22 for H3. Review K85: a step of
+ *  0 or none (a spec without one) is no grid — the loop that walked it never ended. */
+export function frameMin(r: { base: number; step: number | null | undefined }): number {
+  const step = Number(r.step), base = Number(r.base) || 1
+  if (!(step > 0)) return Math.max(9, base)
+  return base + Math.max(0, Math.ceil((9 - base) / step)) * step
 }
 
 /** D65: the panel's model, or the variant's i2v default while it holds none (or one this build does not offer). */
@@ -89,13 +103,35 @@ export function sizeFor(model_id: string, tier: AnimPanel['tier'], orientation: 
 /** The I2V recipe for a panel with a start frame (callers check `start` first: Animate asks for one, the preview uses a placeholder). */
 export function recipeFor(p: AnimPanel & { start: string }, seeds?: number[]): I2VRecipe {
   const model_id = panelModel(p.model_id)
+  const r = modelRules(model_id)                                               // review K85: once per recipe
   const s = seeds ?? (p.seed_mode === 'random' ? Array.from({ length: p.count }, () => 0) : p.seed_mode === 'fixed' ? Array.from({ length: p.count }, () => p.seed) : Array.from({ length: p.count }, (_, i) => p.seed + i))
   return {
-    kind: 'i2v', model_id, start_asset: p.start, end_asset: p.end || null, prompt_text: p.prompt, negative: p.use_negative && modelRules(model_id).negative ? p.negative : null,
+    kind: 'i2v', model_id, start_asset: p.start, end_asset: p.end || null, prompt_text: p.prompt, negative: p.use_negative && r.negative ? p.negative : null,
     frames: p.frames, fps: p.fps, width: p.width, height: p.height, preset: p.preset, steps: p.steps, cfg: p.cfg, shift: p.shift,
-    beats: modelRules(model_id).beats ? p.beats : [], seeds: s,
-    camera: modelRules(model_id).camera ? (p.camera ?? DEFAULT_CAMERA) : null,      // D156: the camera model always runs a move (static by default); the plain one never
+    beats: r.beats ? p.beats : [], seeds: s,
+    camera: r.camera ? (p.camera ?? DEFAULT_CAMERA) : null,      // D156: the camera model always runs a move (static by default); the plain one never
   }
+}
+
+/** Try the other model (review K71): a clip's recipe on another model — that model's frames, rate and Draft size, a camera move only when it
+ *  takes one (a Fun-Camera clip's move on plain Wan failed every time), a preset it has, its negative only where it takes one, the preset's
+ *  own steps / CFG / shift (as picking the model in the panel does), no beats, a new seed. */
+export function otherRecipe(base: Record<string, unknown>, other: string): Record<string, unknown> {
+  const r = modelRules(other)
+  const preset = r.presets.includes(base.preset as AnimPreset) ? base.preset : r.presets[0]
+  return { ...base, model_id: other, fps: r.fps, frames: r.frames, width: r.draft[0], height: r.draft[1], beats: [], seeds: [0], preset, steps: null, cfg: null, shift: null,
+    negative: r.negative ? (base.negative ?? null) : null, camera: r.camera ? (base.camera ?? DEFAULT_CAMERA) : null }
+}
+
+/** Review K85: the panel's model is gone from the capabilities (H3 after its licence was unticked) or was never set — the variant's i2v
+ *  default with that model's own values (`setModel`), so a submission never sends the default model with another model's frames and size. */
+export function settleModel(): void {
+  const caps = useSession.getState().capabilities
+  const models = caps?.i2v?.models
+  if (!models || models[useAnimate.getState().panel.model_id]) return
+  const def = caps?.defaults?.i2v
+  const next = (def && models[def] ? def : '') || byOrder(models)[0]?.[0]
+  if (next) useAnimate.getState().setModel(next)
 }
 
 /** D90 (02 §9, X12): the Clips tab's filter — words of the prompt (D122: no keep / reject state). */
@@ -115,6 +151,8 @@ export const fmtTime = (frame: number, fps: number): string => { const s = frame
 
 interface AnimateState {
   panel: AnimPanel; presets: AnimPresetSaved[]; lastPreset: string | null
+  /** Review K95: the project the panel's start, end and beats (asset ids) belong to — another project's open drops them. */
+  panelProject: string | null
   preview: AnimPreview | null; previewError: string | null
   clips: Clip[]; current: string | null; assets: Record<string, Asset>; pins: Record<string, { frame: number; asset_id: string }[]>
   view: AnimView; filmTrack: boolean; compareWith: string | null; playing: boolean; frame: number; speed: number; loop: boolean; onion: boolean
@@ -171,6 +209,10 @@ async function putPresets(presets: { name: string; panel: AnimPanel; saved_at: s
 
 let previewTimer: ReturnType<typeof setTimeout> | null = null
 let previewSeq = 0
+/** Review K68: the presets this browser kept before D95, read once from the persisted copy at start (never the in-memory list — that is the
+ *  open project's: opening B after A wrote A's presets into B) and moved into the first project whose list is empty. */
+let legacyPresets: { presets: AnimPresetSaved[]; last: string | null } | null = null
+let presetsSeq = 0
 
 /** D66: an Animate submission names the clip on screen when it was made (null: none), so a finished clip knows which view it belongs to. */
 const clipOrigin = (ref: string | null): JobOrigin => originFor('animate', { suite: 'animate', surface: 'clip', ref })   // D90 (02 §5): or the For chip's shot
@@ -182,7 +224,7 @@ let followed: { from: string | null; to: string } | null = null
 export const useAnimate = create<AnimateState>()(
   persist(
     (set, get) => ({
-      panel: DEFAULT_PANEL, presets: [], lastPreset: null, preview: null, previewError: null,
+      panel: DEFAULT_PANEL, presets: [], lastPreset: null, panelProject: null, preview: null, previewError: null,
       clips: [], current: null, assets: {}, pins: {},
       view: 'player', filmTrack: false, compareWith: null, playing: false, frame: 0, speed: 1, loop: true, onion: false, inPoint: null, outPoint: null, extractEvery: 8, busy: null,
       clipLive: null, clipFilter: { q: '' },
@@ -237,9 +279,12 @@ export const useAnimate = create<AnimateState>()(
         try {
           const r = await unwrap(http.GET('/clips'))
           const clips = r.items
-          const cur = get().current && clips.some((c) => c.id === get().current) ? get().current : clips[0]?.id ?? null
-          set({ clips, current: cur })
-          if (cur && cur !== get().current) get().select(cur)
+          const was = get().current
+          const cur = was && clips.some((c) => c.id === was) ? was : clips[0]?.id ?? null
+          set({ clips })
+          // review K116: a clip landing as the current one is selected (its frames, its stills, its harvested pins) — the check ran after
+          // `current` was already set, so it never did
+          if (cur !== was) get().select(cur)
           for (const c of clips.slice(0, 12)) if (c.asset_id) void get().loadAsset(c.asset_id)
           void get().loadClipStates()
         } catch { /* no project */ }
@@ -349,8 +394,7 @@ export const useAnimate = create<AnimateState>()(
         const other = videoModels().find(([id]) => id !== c.model_id)?.[0]
         if (!other) { useSession.getState().toast('No other video model is offered in this build', 'info'); return }
         const r = modelRules(other)
-        const base = c.params.recipe as Record<string, unknown>
-        const recipe = { ...base, model_id: other, fps: r.fps, frames: r.frames, width: r.draft[0], height: r.draft[1], beats: [], seeds: [0] }
+        const recipe = otherRecipe(c.params.recipe as Record<string, unknown>, other)
         try { await unwrap(http.POST('/jobs', { body: { recipe, stage: false, origin: clipOrigin(c.id) } })); useSession.getState().toast(`Trying the same inputs on ${r.short}`, 'success') } catch (e) { useSession.getState().toast(`Try on ${r.short} failed: ${(e as ApiError).detail ?? e}`, 'error') }
       },
 
@@ -395,16 +439,24 @@ export const useAnimate = create<AnimateState>()(
         if (a) { get().setStart(a.id); useSession.getState().toast('The frame is the next clip\'s start (Extend, by hand)', 'info') }
       },
       loadPresets: async () => {
+        const n = ++presetsSeq
+        const path = useSession.getState().project?.path ?? null
+        const saved = (p: { name: string; panel: unknown; saved_at: string }): AnimPresetSaved =>
+          ({ name: p.name, panel: { ...DEFAULT_PANEL, ...(p.panel as Partial<AnimPanel>), start: null, end: null, beats: [] }, saved_at: p.saved_at })
         try {
           const r = await unwrap(http.GET('/project/animate-presets'))
-          const local = get().presets
-          if (!r.presets.length && local.length) {                                       // this browser's presets from before: into the project, once
-            await putPresets(local, get().lastPreset)
-            useSession.getState().toast(`${local.length} Animate preset${local.length === 1 ? '' : 's'} moved from this browser into the project`, 'info')
+          if (n !== presetsSeq || (useSession.getState().project?.path ?? null) !== path) return      // review K68: another project opened meanwhile
+          const legacy = legacyPresets
+          if (!r.presets.length && legacy?.presets.length) {                             // this browser's presets from before D95: into the project, once
+            legacyPresets = null
+            const moved = legacy.presets.map(saved)
+            await putPresets(moved, legacy.last)
+            set({ presets: moved, lastPreset: legacy.last })
+            useSession.getState().toast(`${moved.length} Animate preset${moved.length === 1 ? '' : 's'} moved from this browser into the project`, 'info')
             return
           }
-          set({ presets: r.presets.map((p) => ({ name: p.name, panel: { ...DEFAULT_PANEL, ...(p.panel as Partial<AnimPanel>), start: null, end: null, beats: [] }, saved_at: p.saved_at })), lastPreset: r.last ?? null })
-        } catch { /* no project open */ }
+          set({ presets: r.presets.map(saved), lastPreset: r.last ?? null })
+        } catch { if (n === presetsSeq) set({ presets: [], lastPreset: null }) }      // no project open: none listed
       },
       savePreset: (name) => {
         set({ presets: [...get().presets.filter((p) => p.name !== name), { name, panel: { ...get().panel, start: null, end: null, beats: [] }, saved_at: new Date().toISOString() }], lastPreset: name })
@@ -414,9 +466,35 @@ export const useAnimate = create<AnimateState>()(
       deletePreset: (name) => { set({ presets: get().presets.filter((p) => p.name !== name) }); void putPresets(get().presets, get().lastPreset === name ? null : get().lastPreset) },
     }),
     // D95 (AN1): the presets are the project's now — no longer written to this browser (an older copy is read once and moved, loadPresets)
-    { name: 'loom2.animate', partialize: (s) => ({ panel: s.panel, speed: s.speed, loop: s.loop, onion: s.onion, extractEvery: s.extractEvery }) as never },
+    { name: 'loom2.animate', partialize: (s) => ({ panel: s.panel, panelProject: s.panelProject, speed: s.speed, loop: s.loop, onion: s.onion, extractEvery: s.extractEvery }) as never,
+      // review K68: a copy saved before D95 still holds `presets` — kept aside for the one move (loadPresets), never the open project's list
+      merge: (persisted, current) => {
+        const { presets, lastPreset, ...rest } = (persisted ?? {}) as Partial<AnimateState>
+        if (Array.isArray(presets) && presets.length) legacyPresets = { presets, last: lastPreset ?? null }
+        return { ...current, ...rest }
+      } },
   ),
 )
+
+/** Review K95 / K68: a project opened — the panel's start, end and beats are dropped when they were picked in another project (their asset ids
+ *  name nothing here), and the presets listed are emptied until this project's arrive. */
+function projectOpened(path: string): void {
+  const s = useAnimate.getState()
+  const other = s.panelProject !== null && s.panelProject !== path
+  useAnimate.setState({ panelProject: path, presets: [], lastPreset: null,
+    ...(other ? { panel: { ...s.panel, start: null, end: null, beats: [] } } : {}) })
+}
+{
+  const path = (p: ReturnType<typeof useSession.getState>['project']) => (p?.open && p.path ? p.path : null)
+  const now = path(useSession.getState().project)
+  if (now && now !== useAnimate.getState().panelProject) projectOpened(now)
+  settleModel()
+  useSession.subscribe((s, prev) => {
+    const p = path(s.project)
+    if (p && p !== path(prev.project)) projectOpened(p)
+    if (s.capabilities !== prev.capabilities) settleModel()                    // review K85: the panel's model went (H3 unticked) — the default's values
+  })
+}
 
 if (DEV_HOOKS) (window as unknown as { __loom2Animate?: typeof useAnimate }).__loom2Animate = useAnimate      // dev: the headed check drives the player
 

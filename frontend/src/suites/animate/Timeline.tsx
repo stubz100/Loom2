@@ -56,6 +56,7 @@ type Drag =
 export function Timeline({ className = '', span, fps, frame, onSeek, work, rows, onBarDrag, onKeyDrag, onKeyMenu, onMenu, acceptDrop, onDrop, children }: Props) {
   const ruler = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<Drag | null>(null)
+  const live = useRef<Drag | null>(null)                                 // review K116: the drag in progress, ended once
   const moved = useRef(false)                                            // a drag's own click does not select the row
   const at = (clientX: number) => { const r = ruler.current!.getBoundingClientRect(); return frameAt(clientX, r.left, r.width, span) }
   const scrub = (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -69,18 +70,26 @@ export function Timeline({ className = '', span, fps, frame, onSeek, work, rows,
     if (e.button !== 0) return
     e.stopPropagation(); e.preventDefault()
     e.currentTarget.setPointerCapture(e.pointerId)
+    live.current = d
     setDrag(d)
   }
   const move = (e: ReactPointerEvent<HTMLElement>) => {
-    if (!drag) return
-    if (drag.kind === 'work') setDrag({ ...drag, frame: at(e.clientX) })
-    else setDrag({ ...drag, dx: e.clientX - drag.x0 })
+    const d0 = live.current
+    if (!d0) return
+    e.stopPropagation()                                                  // a trim handle sits inside its bar: one handler per move
+    const d = d0.kind === 'work' ? { ...d0, frame: at(e.clientX) } : { ...d0, dx: e.clientX - d0.x0 }
+    live.current = d
+    setDrag(d)
   }
+  // review K116: the release ends the drag once — a trim handle's pointer-up bubbled to its bar's handler too, and both read the same
+  // render's drag: every trim was sent twice (an in point moved by twice the drag)
   const release = (e: ReactPointerEvent<HTMLElement>) => {
-    const d = drag
+    const d = live.current
+    live.current = null
     setDrag(null)
     try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* already released */ }
     if (!d) return
+    e.stopPropagation()
     moved.current = d.kind !== 'work' && Math.abs(d.dx) >= 3
     if (d.kind === 'work') {
       if (!work?.onChange) return
@@ -103,7 +112,7 @@ export function Timeline({ className = '', span, fps, frame, onSeek, work, rows,
   const keyAt = (row: string, f: number) => (drag?.kind === 'key' && drag.row === row && drag.frame === f ? f + deltaFrames(drag.dx, drag.width, span) : f)
   const wf = work ? (drag?.kind === 'work' && drag.end === 'from' ? Math.min(drag.frame, work.to - 1) : work.from) : 0
   const wt = work ? (drag?.kind === 'work' && drag.end === 'to' ? Math.max(drag.frame, work.from + 1) : work.to) : 0
-  const handlers = { onPointerMove: move, onPointerUp: release, onPointerCancel: () => setDrag(null) }
+  const handlers = { onPointerMove: move, onPointerUp: release, onPointerCancel: () => { live.current = null; setDrag(null) } }
   return (
     <div className={`tl ${className}`} onContextMenu={onMenu}>
       <div className="tl-row tl-ruler-row">

@@ -453,8 +453,11 @@ class Catalogue:
     def get_many(self, ids: list[str]) -> list[AssetRecord]:
         if not ids:
             return []
+        rows: list = []
         with self._lock:
-            rows = self._db.execute(f"SELECT manifest FROM assets WHERE id IN ({','.join('?' * len(ids))})", ids).fetchall()
+            for k in range(0, len(ids), 900):                          # review K54: under SQLite's variable cap at any page size
+                part = ids[k:k + 900]
+                rows += self._db.execute(f"SELECT manifest FROM assets WHERE id IN ({','.join('?' * len(part))})", part).fetchall()
         by = {json.loads(r["manifest"])["id"]: AssetRecord.model_validate(json.loads(r["manifest"])) for r in rows}
         return [by[i] for i in ids if i in by]
 
@@ -642,18 +645,19 @@ class Catalogue:
 
     # ---- edits ------------------------------------------------------------------------------------
     def patch(self, asset_id: str, changes: dict) -> AssetRecord | None:
-        rec = self.get(asset_id)
-        if rec is None:
-            return None
-        allowed = {"tags", "collection_ids", "has_document"}                  # D122: no state / rating
-        data = rec.model_dump()
-        for k, v in changes.items():
-            if k in allowed:
-                data[k] = v
-        rec = AssetRecord.model_validate(data)
-        atomic_write_json(self.manifest_path(rec), rec.model_dump())
-        self._index(rec)
-        return rec
+        with self._lock:                                               # review K92: get → change → write as one (two tag edits lost one)
+            rec = self.get(asset_id)
+            if rec is None:
+                return None
+            allowed = {"tags", "collection_ids", "has_document"}              # D122: no state / rating
+            data = rec.model_dump()
+            for k, v in changes.items():
+                if k in allowed:
+                    data[k] = v
+            rec = AssetRecord.model_validate(data)
+            atomic_write_json(self.manifest_path(rec), rec.model_dump())
+            self._index(rec)
+            return rec
 
     def patch_many(self, ids: list[str], changes: dict) -> list[AssetRecord]:
         out = []
@@ -664,22 +668,19 @@ class Catalogue:
         return out
 
     def trash(self, ids: list[str]) -> list[AssetRecord]:
-        out = []
-        now = utc_now()
-        for rec in self.get_many(ids):
-            rec.trashed_at = now
-            atomic_write_json(self.manifest_path(rec), rec.model_dump())
-            self._index(rec)
-            out.append(rec)
-        return out
+        return self._set_trashed(ids, utc_now())
 
     def restore(self, ids: list[str]) -> list[AssetRecord]:
+        return self._set_trashed(ids, None)
+
+    def _set_trashed(self, ids: list[str], when: str | None) -> list[AssetRecord]:
         out = []
-        for rec in self.get_many(ids):
-            rec.trashed_at = None
-            atomic_write_json(self.manifest_path(rec), rec.model_dump())
-            self._index(rec)
-            out.append(rec)
+        with self._lock:                                               # review K92: read → write under the lock, as patch
+            for rec in self.get_many(ids):
+                rec.trashed_at = when
+                atomic_write_json(self.manifest_path(rec), rec.model_dump())
+                self._index(rec)
+                out.append(rec)
         return out
 
     def purge(self, ids: list[str] | None = None, older_than_days: int | None = None, failed: list[str] | None = None) -> list[str]:
@@ -713,10 +714,10 @@ class Catalogue:
 
     def _delete_files(self, rec: AssetRecord) -> None:
         cid = str((rec.params or {}).get("clip_id") or "") if rec.kind == "video" else ""
-        if cid and Path(rec.path).parts[:2] == ("clips", cid):             # C6: the proxy lives in the clip → the whole clip goes
-            shutil.rmtree(self.ws.clips_dir / cid, ignore_errors=True)
         for p in (self.abs_path(rec), self.manifest_path(rec)):
             unlink(p, missing_ok=True)                                        # V4: D42's retries — a file read at that moment is deleted a moment later
+        if cid and Path(rec.path).parts[:2] == ("clips", cid):             # C6: the proxy lives in the clip → the whole clip goes — K: only once the
+            shutil.rmtree(self.ws.clips_dir / cid, ignore_errors=True)       # proxy is gone (a held proxy raised above: record and frames kept)
         tdir = self.ws.thumb_path(rec.id, 1).parent
         if tdir.is_dir():
             for t in tdir.iterdir():

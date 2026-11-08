@@ -22,7 +22,7 @@ import { BinCompare, BinLoupe } from './BinLoupe'
 import { BinTile } from './BinTile'
 import { PromptBlock } from '../PromptBlock'
 import { binMenu, gridKeys, useFileDrop } from './binMenus'
-import { FILTERS, HEADINGS, passes, pathLabel, ROLE_LABEL, ROLE_WORDS, selectedThings, shelfLabel, startBin, TRASH, useBin } from './binStore'
+import { FILTERS, HEADINGS, pathLabel, ROLE_LABEL, ROLE_WORDS, selectedThings, shelfLabel, shownItems, startBin, TRASH, useBin } from './binStore'
 import '../world/world.css'
 import './bin.css'
 import { NoProject } from '../NoProject'
@@ -92,14 +92,14 @@ function Grid() {
   const tile = useBin((s) => s.tile)
   const pins = useBin((s) => s.pins.length)
   const many = useBin((s) => s.selection.length)
-  const focus = useBin((s) => s.items.findIndex((x) => x.asset.id === s.selected))
+  const focus = useBin((s) => shownItems(s).findIndex((x) => x.asset.id === s.selected))     // review K70: the index in the grid's list
   const node = homeOf(useBin((s) => s.open))
   const shelf = useBin((s) => s.shelf)
   const inTrash = useBin((s) => s.open === TRASH)
   const [cols, setCols] = useState(1)
   const el = useRef<HTMLDivElement | null>(null)
   const over = useFileDrop(useCallback(() => el.current, []))
-  const shown = query ? items.filter((x) => passes(x, filter)) : items        // a home's chips filter on the server; a search's here
+  const shown = shownItems({ items, query, filter })                          // a home's chips filter on the server; a search's here
   const open = (it: BinThing) => { useBin.getState().select(it.asset.id); useBin.getState().view(true) }
   return (
     <section className="w-centre">

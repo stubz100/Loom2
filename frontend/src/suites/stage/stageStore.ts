@@ -394,6 +394,19 @@ function save(get: () => StageState, set: (p: Partial<StageState>) => void): Pro
   return run
 }
 
+/** A stage read and made the open one (null: none) — the undo history, the selection and the shot's picks start afresh. review K93: no save
+ *  waits here (open() flushes first; a save's own 409 reloads through this). */
+async function openStage(get: () => StageState, set: (p: Partial<StageState>) => void, id: string | null): Promise<void> {
+  if (!id) { set({ current: null, selected: null, selectedCamera: null, stageSelected: false, undo: [], redo: [] }); return }
+  try {
+    const st = await unwrap(http.GET('/stages/{st_id}', { params: { path: { st_id: id } } }))
+    set({ current: st, selected: null, selectedCamera: null, stageSelected: false, posing: false, selectedJoint: null, undo: [], redo: [], stages: get().stages.some((s) => s.id === st.id) ? get().stages.map((s) => (s.id === st.id ? st : s)) : st.purpose === 'stage' ? [st, ...get().stages] : get().stages,   // D142: a bench stays out of the picker
+      shot: { ...get().shot, refs: [], use_as_is: false }, shots: [], frame: st.range?.start ?? 0, playing: false, shotStart: null })
+    void get().loadShots(); void get().refreshShotPreview()
+    if (st.objects.some((o) => o.profile_id)) { profilesForMentions(); get().syncBodies() }        // CA0: the bound figures' bodies
+  } catch (e) { useSession.getState().toast(`Open stage failed: ${(e as ApiError).detail ?? e}`, 'error') }
+}
+
 async function saveNow(get: () => StageState, set: (p: Partial<StageState>) => void): Promise<void> {
   const cur = get().current
   if (!cur) return
@@ -406,10 +419,45 @@ async function saveNow(get: () => StageState, set: (p: Partial<StageState>) => v
   } catch (e) {
     const err = e as ApiError
     if (err.status === 409) {
-      useSession.getState().toast('The stage changed elsewhere — reloaded; your last change was not saved', 'error')
-      await get().open(cur.id)
+      const here = get().current?.id === cur.id                                       // review K93: another stage opened meanwhile stays open
+      useSession.getState().toast(here ? 'The stage changed elsewhere — reloaded; your last change was not saved' : `${cur.name} changed elsewhere — your last change to it was not saved`, 'error')
+      if (here) await openStage(get, set, cur.id)                                      // not open(): it would wait for this save
     } else useSession.getState().toast(`Stage not saved: ${err.detail ?? e}`, 'error')
   } finally { set({ saving: false }) }
+}
+
+/** A pose with what it holds to or looks at among `gone` let go: a hold becomes a plain pin where the end is now (read in the frames of `doc`,
+ *  the document at the pose's frame), a look at it ends. */
+function letGoOf<P extends StageObject['pose'] | ObjectKey['pose']>(pose: P, figureId: string, gone: ReadonlySet<string>, doc: StageDoc): P {
+  if (!pose) return pose
+  const contacts = (pose.contacts ?? {}) as Contacts
+  const lost = (Object.keys(contacts) as End[]).filter((e) => { const c = contacts[e]; return !!c && gone.has(c.object_id) })
+  const looks = !!pose.gaze?.object_id && gone.has(pose.gaze.object_id)
+  if (!lost.length && !looks) return pose
+  const own = lost.length ? resolvePins(pose.pins as Pins, contacts, docFrames(doc, figureId)) : {}
+  const pins = { ...(pose.pins ?? {}) } as Record<string, number[]>, kept = { ...contacts } as Record<string, unknown>
+  for (const e of lost) { if (own[e]) pins[e] = own[e]!; delete kept[e] }
+  return { ...pose, pins, contacts: kept as never, ...(looks ? { gaze: null } : {}) }
+}
+/** review K63: the document without an object — its children with it (D129: a thing held in a hand let go where it stands), its keys, its
+ *  skeleton keys and its clip blocks, and every other figure's hold on it (a pin where the end is now) and look at it, in its pose and in its
+ *  keys. They named the removed object: a hand held to a deleted table swung to a wrong point, the transport kept its key marks. */
+export function removedFrom(d: StageDoc, id: string, worldOf?: ((id: string) => Transform | null) | null): StageDoc {
+  const gone = new Set<string>([id])
+  let grew = true
+  while (grew) { grew = false; for (const o of d.objects) if (o.parent && !o.parent_joint && gone.has(o.parent) && !gone.has(o.id)) { gone.add(o.id); grew = true } }
+  if (!d.objects.some((o) => gone.has(o.id))) return d
+  const k = keyframesOf(d)
+  const keyed = Object.fromEntries(Object.entries(k.objects).filter(([oid]) => !gone.has(oid)).map(([oid, ks]) =>
+    [oid, ks.map((key) => { const pose = letGoOf(key.pose, oid, gone, sampleDoc(d, key.frame)); return pose === key.pose ? key : { ...key, pose } })]))
+  const objects = d.objects.filter((o) => !gone.has(o.id)).map((o) => {
+    const held = o.parent_joint && o.parent && gone.has(o.parent)                                               // D129: a held thing is let go where it is
+      ? { ...o, parent: null, parent_joint: null, transform: worldOf?.(o.id) ?? o.transform } : o
+    const pose = held.kind === 'mannequin' ? letGoOf(held.pose, held.id, gone, d) : held.pose
+    return pose === held.pose ? held : { ...held, pose }
+  })
+  const keep = <T,>(rec: Record<string, T> | undefined): Record<string, T> => Object.fromEntries(Object.entries(rec ?? {}).filter(([oid]) => !gone.has(oid)))
+  return { ...d, objects, keyframes: { ...k, objects: keyed, skeleton: keep(k.skeleton) }, tracks: keep(d.tracks) }
 }
 
 /** U5 (G8): an object that moves — it has keys, or clip blocks on its track. An edit on it is a key at the playhead (over a block, a
@@ -421,6 +469,12 @@ export function animated(doc: StageDoc | null | undefined, id: string): boolean 
 /** A pose edit (joints, a preset, the Detailed level's own bones): on a keyed figure it is a key at the playhead — the figure as sampled
  *  there, its pose changed — as a transform edit is (ST4); otherwise the figure's pose itself. Before CA1 a pose edit on a keyed figure
  *  changed only the unkeyed pose, which the keys hide: a preset or a hand after a library clip did nothing. */
+/** review K56: a key's pose is the figure's whole pose as it stands — its holds and its gaze too (a key written by a move or Key object left
+ *  them out: a figure holding a prop, moved, lost its gaze and read the prop-space pin as its own — the next pose edit bent the arm to a
+ *  wrong point and saved it). */
+export function keyedPose(p: StageObject['pose'] | null | undefined): ObjectKey['pose'] {
+  return p ? { ...p, joints: { ...(p.joints ?? {}) }, extra: { ...(p.extra ?? {}) }, ground: p.ground ?? 0, pins: { ...(p.pins ?? {}) }, contacts: { ...(p.contacts ?? {}) }, gaze: p.gaze ?? null } : null
+}
 /** AP1b, the rest: a pose edit that leaves the contacts and the gaze as they are. */
 const rest = (p: StageObject['pose']) => ({ contacts: p?.contacts ?? {}, gaze: p?.gaze ?? null })
 function editPose(get: () => StageState, id: string, fn: (p: StageObject['pose']) => NonNullable<StageObject['pose']>, label: string): void {
@@ -453,6 +507,27 @@ export function takeRendered(next: StageDoc, rendered: StageDoc, get: () => Stag
   const doc = edited ? { ...cur!, passes: next.passes, group_id: next.group_id, revision: next.revision, updated_at: next.updated_at } : next
   set({ current: doc, stages: get().stages.map((x) => (x.id === next.id ? next : x)) })
   if (edited) schedule(get, set)
+}
+
+/** CA0 / D110 / CW6: a bound thing as Cast has it now — a figure's body and shell, a mesh's model and height, a set's built set (V86: never
+ *  an undo step). */
+function synced(o: StageObject): StageObject {
+  return o.kind === 'mannequin' && o.profile_id ? withBody(o, castBody(o.profile_id, o.version)) : o.kind === 'set' ? withPlaceSet(o) : withModel(o)
+}
+/** review K58: an undo (or redo) step's document with what no step owns carried from the document as it is now — the server's record of the
+ *  renders (the passes and their guides, the album page) and the revision, and the bodies, shells, models and sets Cast gave the bound things
+ *  (V86). The whole snapshot came back before: after a render, Ctrl+Z of an earlier edit wiped the passes record on the server. */
+export function undoneTo(snap: StageDoc, cur: StageDoc): StageDoc {
+  const objects = snap.objects.map(synced)
+  return { ...snap, passes: cur.passes, group_id: cur.group_id, revision: cur.revision, updated_at: cur.updated_at, objects: objects.every((o, i) => o === snap.objects[i]) ? snap.objects : objects }
+}
+/** review K108: the selection an undo or a redo leaves — a thing or a camera it took away is no longer selected (nor posed); the viewport
+ *  dropped it and the Inspector kept it. */
+function stillSelected(s: Pick<StageState, 'selected' | 'selectedCamera'>, doc: StageDoc): Partial<StageState> {
+  const out: Partial<StageState> = {}
+  if (s.selected && !doc.objects.some((o) => o.id === s.selected)) Object.assign(out, { selected: null, posing: false, selectedJoint: null })
+  if (s.selectedCamera && !doc.cameras.some((c) => c.id === s.selectedCamera)) out.selectedCamera = null
+  return out
 }
 
 function schedule(get: () => StageState, set: (p: Partial<StageState>) => void): void {
@@ -529,12 +604,13 @@ export const useStage = create<StageState>()((set, get) => ({
       const shown = get().sampledDoc()?.objects.find((x) => x.id === id), raw = cur.objects.find((x) => x.id === id)
       if (!shown || !raw) return
       const base = sampleFigure(raw, (layer ?? []).filter((k) => !k.correction), runs, frame)
-      get().apply((d) => withObjectKey(d, id, correctionKey(frame, base, diffJoints(effectiveJoints(base), effectiveJoints(shown)), diffJoints(base.pose?.extra ?? {}, shown.pose?.extra ?? {}), (layer ?? []).find((k) => k.frame === frame))), 'correction')
+      get().apply((d) => withObjectKey(d, id, correctionKey(frame, base, diffJoints(effectiveJoints(base), effectiveJoints(shown)), diffJoints(base.pose?.extra ?? {}, shown.pose?.extra ?? {}), (layer ?? []).find((k) => k.frame === frame),
+        { pins: shown.pose?.pins ?? {}, contacts: shown.pose?.contacts ?? {}, gaze: shown.pose?.gaze ?? null })), 'correction')   // review K56: the holds and the gaze it shows
       return
     }
     const o = get().sampledDoc()?.objects.find((x) => x.id === id)
     if (!o) return
-    get().apply((d) => withObjectKey(d, id, { frame: get().frame, ease: 'ease', transform: { pos: [...o.transform.pos], rot: [...o.transform.rot], scale: [...o.transform.scale] }, pose: o.pose ? { preset: o.pose.preset, joints: { ...o.pose.joints }, extra: { ...(o.pose.extra ?? {}) }, ground: o.pose.ground ?? 0, pins: { ...(o.pose.pins ?? {}) } } : null }), 'key object')
+    get().apply((d) => withObjectKey(d, id, { frame: get().frame, ease: 'ease', transform: { pos: [...o.transform.pos], rot: [...o.transform.rot], scale: [...o.transform.scale] }, pose: keyedPose(o.pose) }), 'key object')   // review K56
   },
   addPathPoint: (id, p) => get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id ? { ...o, path: [...(o.path ?? []), [Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000]] } : o)) }), 'path point'),
   clearPath: (id) => get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id ? { ...o, path: null, shadow_proxy: null } : o)) }), 'clear path'),
@@ -915,19 +991,14 @@ export const useStage = create<StageState>()((set, get) => ({
     } catch (e) { useSession.getState().toast(`New stage failed: ${(e as ApiError).detail ?? e}`, 'error'); return null }
   },
   open: async (id) => {
-    if (!id) { set({ current: null, selected: null, selectedCamera: null, stageSelected: false, undo: [], redo: [] }); return }
-    try {
-      const st = await unwrap(http.GET('/stages/{st_id}', { params: { path: { st_id: id } } }))
-      set({ current: st, selected: null, selectedCamera: null, stageSelected: false, posing: false, selectedJoint: null, undo: [], redo: [], stages: get().stages.some((s) => s.id === st.id) ? get().stages.map((s) => (s.id === st.id ? st : s)) : st.purpose === 'stage' ? [st, ...get().stages] : get().stages,   // D142: a bench stays out of the picker
-        shot: { ...get().shot, refs: [], use_as_is: false }, shots: [], frame: st.range?.start ?? 0, playing: false, shotStart: null })
-      void get().loadShots(); void get().refreshShotPreview()
-      if (st.objects.some((o) => o.profile_id)) { profilesForMentions(); get().syncBodies() }        // CA0: the bound figures' bodies
-    } catch (e) { useSession.getState().toast(`Open stage failed: ${(e as ApiError).detail ?? e}`, 'error') }
+    if (saveTimer) { window.clearTimeout(saveTimer); saveTimer = null; await save(get, set) }   // review K93: the pending edit is saved to its own stage first
+    await openStage(get, set, id)
   },
   rename: async (name) => { const cur = get().current; if (!cur || !name.trim()) return; set({ current: { ...cur, name: name.trim() } }); await save(get, set) },
   destroy: async () => {
     const cur = get().current
     if (!cur) return
+    if (saveTimer) { window.clearTimeout(saveTimer); saveTimer = null }              // review K93: no save of a stage being deleted
     try {
       await unwrap(http.DELETE('/stages/{st_id}', { params: { path: { st_id: cur.id } } }))
       set({ stages: get().stages.filter((s) => s.id !== cur.id) })
@@ -944,8 +1015,8 @@ export const useStage = create<StageState>()((set, get) => ({
     schedule(get, set)
     void label
   },
-  undoEdit: () => { const u = get().undo; const cur = get().current; if (!u.length || !cur) return; set({ current: { ...u[u.length - 1], revision: cur.revision }, undo: u.slice(0, -1), redo: [...get().redo, cur] }); schedule(get, set) },
-  redoEdit: () => { const r = get().redo; const cur = get().current; if (!r.length || !cur) return; set({ current: { ...r[r.length - 1], revision: cur.revision }, redo: r.slice(0, -1), undo: [...get().undo, cur] }); schedule(get, set) },
+  undoEdit: () => { const u = get().undo; const cur = get().current; if (!u.length || !cur) return; const doc = undoneTo(u[u.length - 1], cur); set({ current: doc, undo: u.slice(0, -1), redo: [...get().redo, cur], ...stillSelected(get(), doc) }); schedule(get, set) },
+  redoEdit: () => { const r = get().redo; const cur = get().current; if (!r.length || !cur) return; const doc = undoneTo(r[r.length - 1], cur); set({ current: doc, redo: r.slice(0, -1), undo: [...get().undo, cur], ...stillSelected(get(), doc) }); schedule(get, set) },
   select: (id) => { const same = !!id && id === get().selected                       // the same figure again keeps its joint and pose mode (the author, 2026-10-22)
     set({ selected: id, selectedJoint: same ? get().selectedJoint : null, posing: same ? get().posing : false, selectedCamera: null, stageSelected: false }) },   // the same figure again keeps its joint (the author, 2026-10-22)
   selectCamera: (id) => { set({ selected: null, selectedJoint: null, posing: false, selectedCamera: id, stageSelected: false }); if (id) get().setActiveCamera(id) },
@@ -1056,20 +1127,14 @@ export const useStage = create<StageState>()((set, get) => ({
     const cur = get().current
     if (cur && animated(cur, id)) {                   // ST4: a keyed object takes the edit as a key at this frame
       const o = get().sampledDoc()?.objects.find((x) => x.id === id)
-      get().apply((d) => withObjectKey(d, id, { frame: get().frame, ease: 'ease', transform: t, pose: o?.pose ? { preset: o.pose.preset, joints: { ...o.pose.joints }, extra: { ...(o.pose.extra ?? {}) }, ground: o.pose.ground ?? 0, pins: { ...(o.pose.pins ?? {}) } } : null }), 'key object')
+      get().apply((d) => withObjectKey(d, id, { frame: get().frame, ease: 'ease', transform: t, pose: keyedPose(o?.pose) }), 'key object')   // review K56: its holds and gaze kept
       return
     }
     get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id ? { ...o, transform: t } : o)) }), 'transform')
   },
   removeObject: (id) => {
     const worldOf = get().worldOf
-    get().apply((d) => {
-      const gone = new Set<string>([id])
-      let grew = true
-      while (grew) { grew = false; for (const o of d.objects) if (o.parent && !o.parent_joint && gone.has(o.parent) && !gone.has(o.id)) { gone.add(o.id); grew = true } }
-      return { ...d, objects: d.objects.filter((o) => !gone.has(o.id)).map((o) => (o.parent_joint && o.parent && gone.has(o.parent)          // D129: a held thing is let go where it is
-        ? { ...o, parent: null, parent_joint: null, transform: worldOf?.(o.id) ?? o.transform } : o)) }
-    }, 'remove')
+    get().apply((d) => removedFrom(d, id, worldOf), 'remove')
     const sel = get().selected                                                            // V88: a selected child of the removed parent went with it
     if (sel && !get().current?.objects.some((o) => o.id === sel)) set({ selected: null })
   },
@@ -1105,7 +1170,10 @@ export const useStage = create<StageState>()((set, get) => ({
     return { ...d, cameras, active_camera: d.active_camera === id ? cameras[0].id : d.active_camera }
   }, 'remove camera'),
   setActiveCamera: (id) => get().apply((d) => (d.active_camera === id ? d : { ...d, active_camera: id }), 'active camera'),
-  frameView: (ids) => set({ frameRequest: { ids, n: get().frameRequest.n + 1 } }),
+  frameView: (ids) => {                                                                     // review K108: in the camera view it moved the hidden free camera — the free view comes first
+    if (get().mode === 'record') return                                                   // Record looks through the shot's camera: nothing to frame
+    set({ ...(get().view === 'camera' ? { view: 'free' as View } : {}), frameRequest: { ids, n: get().frameRequest.n + 1 } })
+  },
   object: (id) => (id ? get().current?.objects.find((o) => o.id === id) : undefined),
   activeCamera: () => { const c = get().current; return c?.cameras.find((x) => x.id === c.active_camera) ?? c?.cameras[0] },
   openBench: async (profileId, version = null, layer, back) => {
@@ -1253,7 +1321,7 @@ export const useStage = create<StageState>()((set, get) => ({
   syncBodies: () => {
     const d = get().current
     if (!d || !d.objects.some((o) => (o.kind === 'mannequin' || o.kind === 'mesh' || o.kind === 'set') && o.profile_id)) return
-    const next = d.objects.map((o) => (o.kind === 'mannequin' && o.profile_id ? withBody(o, castBody(o.profile_id, o.version)) : o.kind === 'set' ? withPlaceSet(o) : withModel(o)))
+    const next = d.objects.map(synced)
     if (next.every((o, i) => o === d.objects[i])) return
     const doc = get().current                                                             // V86: an external Cast change is not the stage's undo step
     if (!doc) return

@@ -28,16 +28,29 @@ export interface Hist { rgb: Uint32Array; r: Uint32Array; g: Uint32Array; b: Uin
 /** 256-bin histograms of the visible raster layers below `id` (panel order), composited on the CPU at ≤ 384 px with canvas blends —
  * a guide for Levels / Curves, not the exact composite (adjustments below are not applied). RGB is the plain mean of R, G and B
  * (PhotoCraft tone.rs); fully transparent pixels are skipped. */
-function histogramBelow(id: string): Hist | null {
-  const st = useEditor.getState(), doc = st.doc
-  if (!doc) return null
+/** The visible raster layers below `id` (panel order), or null when it is not in the stack. */
+function rastersBelow(doc: NonNullable<ReturnType<typeof useEditor.getState>['doc']>, id: string): Node[] | null {
   const order: Node[] = [], parent = new Map<string, Node | null>()
   const rec = (ns: Node[], p: Node | null) => ns.forEach((n) => { order.push(n); parent.set(n.id, p); if (n.children) rec(n.children, n) })
   rec(doc.layers, null)
   const at = order.findIndex((n) => n.id === id)
   if (at < 0) return null
   const shown = (n: Node): boolean => n.visible && (parent.get(n.id) ? shown(parent.get(n.id)!) : true)
-  const below = order.slice(at + 1).filter((n) => n.kind === 'raster' && shown(n))
+  return order.slice(at + 1).filter((n) => n.kind === 'raster' && shown(n))
+}
+/** review K66: what the histogram below `id` is made of — the document's size and background, and each visible pixel layer below (its
+ *  place, opacity, fill, blend and canvas version). A Levels scrub on the layer itself, an AI point or a selection edit leaves it alone. */
+export function histogramKey(id: string): string {
+  const st = useEditor.getState(), doc = st.doc
+  const below = doc ? rastersBelow(doc, id) : null
+  if (!doc || !below) return ''
+  return [`${doc.w}x${doc.h}:${doc.background}`, ...below.map((n) => `${n.id}:${n.x ?? 0},${n.y ?? 0}:${n.opacity}:${n.fill ?? 1}:${n.blend}:${st.pixels.get(n.id)?.version ?? '-'}`)].join('|')
+}
+function histogramBelow(id: string): Hist | null {
+  const st = useEditor.getState(), doc = st.doc
+  if (!doc) return null
+  const below = rastersBelow(doc, id)
+  if (!below) return null
   const s = Math.min(1, 384 / Math.max(doc.w, doc.h))
   const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(doc.w * s)); c.height = Math.max(1, Math.round(doc.h * s))
   const ctx = c.getContext('2d', { willReadFrequently: true })!
@@ -59,7 +72,8 @@ function histogramBelow(id: string): Hist | null {
 }
 function useHistogram(id: string): Hist | null {
   const revision = useEditor((s) => s.revision)
-  return useMemo(() => histogramBelow(id), [id, revision]) // eslint-disable-line react-hooks/exhaustive-deps
+  const key = useMemo(() => histogramKey(id), [id, revision]) // eslint-disable-line react-hooks/exhaustive-deps -- review K66: composited again only when what lies below changed
+  return useMemo(() => histogramBelow(id), [id, key]) // eslint-disable-line react-hooks/exhaustive-deps
 }
 /** Bars scaled so the 251st-smallest bin × 1.1 reaches the top (PhotoCraft draw_histogram: spikes saturate instead of flattening the rest). */
 function HistogramBars({ bins, w, h, colour = 'var(--fg3)' }: { bins: Uint32Array | null; w: number; h: number; colour?: string }) {

@@ -18,7 +18,7 @@ import { showMenu, useMenu } from '../../../frame/ContextMenu'
 import { CLASS_LABEL, sy, useStory } from '../storyStore'
 import { edgeMenu, flowView, nodeMenu, sceneMenu, templateItems } from '../storyCommands'
 import { storyKey } from '../storyKeys'
-import { NODE_LABEL } from './types'
+import { canvasSelection, NODE_LABEL } from './types'
 import { cellsOf, lengthLine, owes, routeOf, staleFrom, STEPS, type CellState, type Step } from '../board'
 import { TriangleAlert } from 'lucide-react'
 
@@ -152,9 +152,11 @@ export function FlowCanvas({ onOpen, paneItems }: { onOpen?: (shotId: string) =>
     setFrom(built)
     // U4: the sizes measured so far carried over — a node without them is hidden until measured, so a selection made it blink (and the
     // second click of a double-click fell through to the pane). Not when its handles changed (a Choice's options): it is measured again.
+    // K116: a selection of several made on the canvas stays (the store's one node rebuilt it to one)
     setNodes((prev) => {
       const was = new Map(prev.map((p) => [p.id, p]))
-      return built.map((b) => { const p = was.get(b.id); return p?.measured && handlesOf(p.data.node) === handlesOf(b.data.node) ? { ...b, measured: p.measured } : b })
+      const sel = canvasSelection(new Set(prev.filter((p) => p.selected).map((p) => p.id)), nodeId)
+      return built.map((b) => { const p = was.get(b.id); const n = { ...b, selected: sel(b.id) }; return p?.measured && handlesOf(p.data.node) === handlesOf(b.data.node) ? { ...n, measured: p.measured } : n })
     })
   }
   const edges = useMemo<Edge[]>(() => (graph?.edges ?? []).filter((e) => flowNodes[e.from] && flowNodes[e.to]).map((e) => {

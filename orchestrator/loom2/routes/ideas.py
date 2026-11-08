@@ -87,9 +87,18 @@ class FoldedIdea(BaseModel):
     candidates: int
 
 
+class FoldSkipped(BaseModel):
+    """Review K37: an idea *Bring the ideas in* could not fold (its pictures in the Trash, a page locked …), or whose candidates did not join."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    idea_id: str
+    name: str
+    reason: str
+
+
 class IdeasFolded(BaseModel):
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
     items: list[FoldedIdea]
+    skipped: list[FoldSkipped] = []
 
 
 @router.post("/story/ideas/fold", response_model=IdeasFolded)
@@ -97,12 +106,16 @@ async def ideas_fold(svc: Svc):
     """U3 (D157, G4): every idea not kept yet folded into a draft entity of its class (World's Sketches · *Bring the ideas in*)."""
     ws, _, _ = svc.require_project()
     groups = svc.require_groups()
-    items = await asyncio.to_thread(fold, ws, groups)
+    skipped: list[dict] = []
+    try:
+        items = await asyncio.to_thread(fold, ws, groups, skipped)
+    except ValueError as e:                                                     # review K37: a sentence, not a 500
+        raise HTTPException(422, str(e))
     for it in items:
         svc.hub.broadcast("story.changed", {"kind": "profile", "id": it["profile_id"], "revision": 0})
     if items:
         svc.group_changed([])
-    return {"items": items}
+    return {"items": items, "skipped": skipped}
 
 
 @router.get("/story/ideas", response_model=IdeaList)

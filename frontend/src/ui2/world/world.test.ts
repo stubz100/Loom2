@@ -1,8 +1,9 @@
 // U3 (D157, proto01_UI2 03 §2, §5): World's pure parts — the readiness line per class, the role filter, the hash's place.
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { ProfileVersion } from '../../api/types'
 import { carriedThings, readiness, sheetDrift } from './readiness'
-import { passes, placeOfHash } from './worldStore'
+import { binKey, passes, placeOfHash, useWorld } from './worldStore'
+import { useStory } from '../../suites/story/storyStore'
 import { activeFraming, FRAMINGS, REF_FRAMINGS, refFrame, refTree, to169, to23 } from './make'
 import { DEFAULT_PANEL, recipeFromPanel } from '../../suites/generate/generateStore'
 
@@ -37,7 +38,8 @@ describe('U3: the bin', () => {
   })
   it('reads its place from the hash', () => {
     expect(placeOfHash('#world/place/prf_1/v2')).toEqual({ rail: 'place', entity: 'prf_1', version: 'v2' })
-    expect(placeOfHash('#world')).toEqual({ rail: 'character', entity: null, version: null })
+    expect(placeOfHash('#world')).toEqual({ rail: null, entity: null, version: null })            // K74: a bare #world names no place — World goes on where it was
+    expect(placeOfHash('#world/prop')).toEqual({ rail: 'prop', entity: null, version: null })
     expect(placeOfHash('#shots/sht_1')).toBeNull()
   })
 })
@@ -134,5 +136,27 @@ describe('the market walk small items (M3, M4)', () => {
   it('W11: a T-pose is fitted but said (more than one figure is the Library\'s body item, clay.test.ts)', () => {
     const tp = readiness({ cls: 'character', voice_id: null }, v({ anim_ref_asset_id: 'a', body_fit_from: 'a', anim_ref_note: 't_pose' } as never), 1)
     expect(tp.items.find((x) => x.id === 'tpose')).toMatchObject({ state: 'warn' })
+  })
+})
+
+describe('the review K: World', () => {
+  const prof = (id: string, cls: string, extra: Partial<ProfileVersion> = {}) => ({ id, name: id, cls, current: 'v1', revision: 1, versions: [v(extra)] }) as never
+  it('K74: shown again on a bare #world, World keeps its own rail, entity and mode (a prop stayed a prop, not the first character)', () => {
+    history.replaceState(null, '', '#world')
+    useStory.setState({ profiles: [prof('prf_c', 'character'), prof('prf_p', 'prop')], profileId: 'prf_p', versionId: 'v1' })
+    useWorld.setState({ rail: 'prop', mode: 'make', selected: 'ast_1', binFor: 'prf_p/v1', bin: { items: [] } as never })
+    const loadBin = vi.spyOn(useWorld.getState(), 'loadBin')
+    useWorld.getState().resume()
+    expect(useStory.getState().profileId).toBe('prf_p')
+    expect(useWorld.getState()).toMatchObject({ rail: 'prop', selected: 'ast_1' })
+    expect(location.hash).toBe('#world/prop/prf_p/v1')
+    expect(loadBin).not.toHaveBeenCalled()                                                         // its bin is the one shown
+  })
+  it('K83: the bin is read again for what it shows, not for a sheet word typed', () => {
+    const a = prof('prf_c', 'character', { appearance: 'red cloak' }) as unknown as Parameters<typeof binKey>[0]
+    const b = prof('prf_c', 'character', { appearance: 'grey hood', hand_words: 'gloved' } as never) as unknown as Parameters<typeof binKey>[0]
+    expect(binKey(a, 'v1')).toBe(binKey(b, 'v1'))
+    expect(binKey(prof('prf_c', 'character', { hero_asset_id: 'ast_h' }) as never, 'v1')).not.toBe(binKey(a, 'v1'))
+    expect(binKey(a, 'v2')).toBe('')
   })
 })

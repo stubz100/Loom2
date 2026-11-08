@@ -177,6 +177,16 @@ async def clip_extend(svc: Svc, clip_id: str, body: ExtendBody):
     origin = JobOrigin(suite="animate", surface="extend", ref=rec.id, payload={"lead": int(spec.recipes.extend_lead)})
     try:
         job = q.submit(recipe, stage=body.stage, origin=origin)[0]
-    except ValueError as e:
+    except ValueError as e:                                            # review K86: the frame made for a refused job goes again (no orphan per 422)
+        def undo() -> None:
+            cat.trash([a.id])
+            cat.purge([a.id])
+            cur = store.get(rec.id)
+            if cur is not None and a.id in cur.extracted_asset_ids:
+                cur.extracted_asset_ids.remove(a.id)
+                store.save(cur)
+        await asyncio.to_thread(undo)
+        svc.hub.broadcast("asset.deleted", {"id": a.id})
         raise HTTPException(422, str(e))
+    await q.flush()                                                    # review K86: on disk before the reply, as every other submit
     return {"job_id": job.id, "start_asset_id": a.id, "lead": int(spec.recipes.extend_lead), "model_id": rec.model_id, "staged": job.status == "staged"}

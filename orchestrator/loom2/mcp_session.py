@@ -45,6 +45,7 @@ class McpSession:
         self.app = app
         self.proc: subprocess.Popen | None = None
         self._lock = threading.Lock()
+        self.op_lock = threading.RLock()                # review K42: a caller's open → commands → save held as one (routes run in threads)
         self._replies: queue.Queue = queue.Queue()
         self._n = 0
         self.started_at: float | None = None

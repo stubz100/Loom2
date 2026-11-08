@@ -79,7 +79,11 @@ class ComfyClient:
         r.raise_for_status()
         return r.json()
 
-    async def interrupt(self) -> None:
+    async def interrupt(self, prompt_id: str | None = None) -> None:
+        """Stop the running prompt. Review K86: with its id, the prompt is first taken off the engine's pending queue — a cancel right
+        after `queue_prompt` sent a bare /interrupt before the prompt had started, and the prompt then ran to its end."""
+        if prompt_id:
+            await self._http.post("/queue", json={"delete": [prompt_id]})
         await self._http.post("/interrupt")
 
     async def free(self, unload_models: bool = True, free_memory: bool = True) -> None:

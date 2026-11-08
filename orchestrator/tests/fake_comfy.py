@@ -289,6 +289,11 @@ class FakeComfy:
             fake.interrupts += 1
             return {}
 
+        @app.post("/queue")
+        async def queue_edit(request: Request):                      # K86: the pending queue's delete (the fake runs at once: a note only)
+            fake.queue_deletes = getattr(fake, "queue_deletes", []) + list((await request.json()).get("delete") or [])
+            return {}
+
         @app.post("/free")
         async def free(request: Request):
             fake.frees.append(await request.json())

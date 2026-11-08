@@ -23,7 +23,7 @@ import { ModelCards } from '../../frame/ModelCards'
 import { imageModelItems } from '../../frame/modelCardItems'
 import { askConfirm, useSession } from '../../store/session'
 import { appendValue, FIELD_LABEL, REPLACE, type FieldKey } from './fieldPresets'
-import { dropRefs, honoursNegative, onSubject, refDropFor, runOnSubject, useGenerate, type ModelCap, type Panel as PanelState, type Subject } from './generateStore'
+import { dropRefs, honoursNegative, onSubject, panelModelOf, refDropFor, runOnSubject, useGenerate, type ModelCap, type Panel as PanelState, type Subject } from './generateStore'
 import { bindingLines, castOffer, composedLines, nameOnly, needsLook, sentIndex, slotsOf } from './subjectCast'
 import { CastButton, SheetView, SubjectSlots, SubjectWarn, VersionChip } from './SubjectLink'
 import type { Profile } from '../../api/types'
@@ -276,7 +276,7 @@ export function PromptSection({ tree }: { tree?: ReactNode } = {}) {
   const p = g.panel
   const t = p.tree
   const pv = g.preview
-  const cap = useSession((s) => s.capabilities?.models[p.model_id])
+  const cap = useSession((s) => s.capabilities?.models[panelModelOf(p, s.capabilities)])   // review K65: the model the recipe runs ('' = the default)
   const wc = pv?.word_count ?? 0
   const counterClass = wc === 0 ? '' : wc >= 30 && wc <= 80 ? 'ok' : wc > 120 ? 'warn' : ''
   return (
@@ -314,7 +314,7 @@ function RefSlots() {
   const g = useGenerate()
   const p = g.panel
   const caps = useSession((s) => s.capabilities)
-  const cap = caps?.models[p.model_id]
+  const cap = caps?.models[panelModelOf(p, caps)]                        // review K65
   const max = cap?.max_refs ?? 4
   const suggest = cap?.inputs.refs_suggest
   const suggestCap = suggest ? caps?.models[suggest.model] : undefined
@@ -353,7 +353,7 @@ function RefSlots() {
 
 export function RefsSection() {
   const p = useGenerate((g) => g.panel)
-  const cap = useSession((s) => s.capabilities?.models[p.model_id])
+  const cap = useSession((s) => s.capabilities?.models[panelModelOf(p, s.capabilities)])   // review K65: "0 of 10" for a model that takes 10
   const max = cap?.max_refs ?? 4
   return (
     <Section id="refs" title={`References · ${p.refs.length} of ${max}`}>
@@ -430,7 +430,8 @@ export function ModelSection() {
   const p = g.panel
   const caps = useSession((s) => s.capabilities)
   const pv = g.preview
-  const cap = caps?.models[p.model_id]
+  const mid = panelModelOf(p, caps)                                       // review K65: the card highlighted, Turbo shown and CFG fixed for what runs
+  const cap = caps?.models[mid]
   const teOpts = cap?.te_options ?? []                                    // D31: an encoder picker only where the model has an alternate
   const teEff = teOpts.find((o) => (p.te_id ? o.id === p.te_id : o.default))
   const teGguf = !!teEff?.gguf
@@ -446,7 +447,7 @@ export function ModelSection() {
   return (
     <Section id="model" title="Model">
       {/* D186: the one card (frame/ModelCards) — every model that generates; D89: Refine-only models (SD 3.5) are Edit's */}
-      <ModelCards items={imageModelItems(caps, (c) => !!c.recipes.t2i)} value={p.model_id} onPick={(m) => g.setModel(m)} testId="gen-models" />
+      <ModelCards items={imageModelItems(caps, (c) => !!c.recipes.t2i)} value={mid} onPick={(m) => g.setModel(m)} testId="gen-models" />
       {cap?.turbo && <label className="chk" style={{ marginTop: 6 }}><input type="checkbox" checked={p.turbo} onChange={(e) => g.set({ turbo: e.target.checked, steps: null })} /> 8-step Turbo LoRA{p.turbo && <> · strength <input type="number" step={0.05} min={0} max={2} value={p.turbo_strength} onChange={(e) => g.set({ turbo_strength: Number(e.target.value) })} style={{ width: 64 }} /></>}</label>}
       <details className="advanced" open={sampling}>
         <summary>Sampling</summary>
@@ -501,12 +502,13 @@ export function SizeSection() {
   const p = g.panel
   const caps = useSession((s) => s.capabilities)
   const fmt = useSession((s) => s.project?.format)
-  const fam = caps?.models[p.model_id]?.family ?? ''
+  const mid = panelModelOf(p, caps)                                       // review K65: the tiers of the model that runs
+  const fam = caps?.models[mid]?.family ?? ''
   const tiers = caps?.tiers ?? {}
   const projectAspect = fmt ? `${fmt.aspect[0]}:${fmt.aspect[1]}` : '16:9'
   const applyAspect = (aw: number, ah: number) => { const w = Math.sqrt(p.width * p.height * aw / ah); g.set({ width: snap16(w), height: snap16(w * ah / aw), tier: 'custom' }) }
   const pv = g.preview
-  const tierItems: PresetIcon[] = (['thumb', 'draft', 'full'] as const).flatMap((t) => { const wh = tiers[t]?.[p.model_id] ?? tiers[t]?.[fam]; return wh ? [{ id: t, label: `${t} · ${wh[0]}×${wh[1]}`, icon: tierGlyph(t), hint: t === 'draft' ? 'the default (D18)' : undefined }] : [] })
+  const tierItems: PresetIcon[] = (['thumb', 'draft', 'full'] as const).flatMap((t) => { const wh = tiers[t]?.[mid] ?? tiers[t]?.[fam]; return wh ? [{ id: t, label: `${t} · ${wh[0]}×${wh[1]}`, icon: tierGlyph(t), hint: t === 'draft' ? 'the default (D18)' : undefined }] : [] })
   return (
     <Section id="size" title={`Size · ${p.width}×${p.height}`}>
       <div className="gen-form">
@@ -515,7 +517,7 @@ export function SizeSection() {
           selected={ASPECTS.find(([, aw, ah]) => Math.abs(p.width / p.height - aw / ah) < 0.02)?.[0] ?? null} onPick={(id) => { const a = ASPECTS.find(([n]) => n === id); if (a) applyAspect(a[1], a[2]) }} />
         <label>size</label>
         <PresetIcons label="size tier" size={36} items={[...tierItems, { id: 'custom', label: 'custom size', icon: tierGlyph('custom') }]} selected={p.tier}
-          onPick={(id) => { const wh = tiers[id]?.[p.model_id] ?? tiers[id]?.[fam]; g.set(id === 'custom' || !wh ? { tier: 'custom' } : { tier: id as PanelState['tier'], width: wh[0], height: wh[1] }) }} />
+          onPick={(id) => { const wh = tiers[id]?.[mid] ?? tiers[id]?.[fam]; g.set(id === 'custom' || !wh ? { tier: 'custom' } : { tier: id as PanelState['tier'], width: wh[0], height: wh[1] }) }} />
         {p.tier === 'custom' && <><label>pixels</label>
           <div><input type="number" step={16} min={64} max={2048} value={p.width} aria-label="width" onChange={(e) => g.set({ width: snap16(Number(e.target.value)), tier: 'custom' })} style={{ width: 80 }} /> × <input type="number" step={16} min={64} max={2048} value={p.height} aria-label="height" onChange={(e) => g.set({ height: snap16(Number(e.target.value)), tier: 'custom' })} style={{ width: 80 }} />
             <span className="disabled-why"> {Math.round(p.width * p.height / 1e4) / 100} MP</span></div></>}
@@ -536,7 +538,7 @@ function SavedSection() {
   return (
     <Section id="presets" title="Saved panels" tools={<CommandButton id="gen.savePreset" className="quiet" size={14} />}>
       {(() => {
-        const items = g.presets.map((pr) => ({ id: pr.name, label: pr.name, hint: caps?.models[pr.panel.model_id]?.label ?? pr.panel.model_id, icon: fieldGlyph('panel'), img: pr.thumb_asset_id ? api.thumbUrl(pr.thumb_asset_id, 256) : null }))
+        const items = g.presets.map((pr) => ({ id: pr.name, label: pr.name, hint: caps?.models[panelModelOf(pr.panel, caps)]?.label ?? pr.panel.model_id, icon: fieldGlyph('panel'), img: pr.thumb_asset_id ? api.thumbUrl(pr.thumb_asset_id, 256) : null }))
         const last = items.find((i) => i.id === g.lastPreset)
         return (                                                            // D119 (SC2): the saved panels behind the +, the one applied beside it
           <div className="saved-panels">

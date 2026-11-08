@@ -27,7 +27,7 @@ export function WindowsView() {
   const shot = useStory((s) => s.shot())
   const version = useStory((s) => s.shotVersion())
   const f = finalFor(finals, shot?.id, version?.id)
-  const { data, frame, sel, skeletons, fid } = useWindows()
+  const { data, frame, sel, skeletons, fid, pending } = useWindows()
   const svg = useRef<SVGSVGElement>(null)
   const [drag, setDrag] = useState<Drag | null>(null)
   useEffect(() => { if (!finals.length) void useFinals.getState().load() }, [finals.length])
@@ -96,13 +96,17 @@ export function WindowsView() {
         <Help text={HELP} />
       </div>
       <div className="win-frame">
-        <div className="win-pic" style={{ aspectRatio: `${W} / ${H}` }}>
+        {/* review K116: the picture box keeps the frame's shape (sized in the frame's container units, not stretched by max-width) and the
+            svg maps onto it as the pictures do, so the boxes line up with what they frame */}
+        <div className="win-pic" style={{ aspectRatio: `${W} / ${H}`, '--win-ar': W / H } as React.CSSProperties}>
           <img src={api.fileUrl(`/finals/${f.id}/layers/${shadows}/clay/${frame}`)} alt="" draggable={false} style={place} />
           {skeletons && data.layers.map((l) => <img key={l.id} className="win-pose" src={api.fileUrl(`/finals/${f.id}/layers/${l.id}/pose/${frame}`)} alt="" draggable={false} style={place} />)}
-          <svg ref={svg} viewBox={`${-pad.l} ${-pad.t} ${W} ${H}`} onPointerMove={move} onPointerUp={end} onPointerCancel={end}>
+          <svg ref={svg} viewBox={`${-pad.l} ${-pad.t} ${W} ${H}`} preserveAspectRatio="none" onPointerMove={move} onPointerUp={end} onPointerCancel={end}>
             <rect className="win-edge" x={0} y={0} width={data.w} height={data.h}><title>the shot's frame</title></rect>
             {data.layers.map((l, i) => (['window', 'head'] as const).map((kind) => {
-              const live = drag && drag.lid === l.id && drag.kind === kind ? drag.box : shownBox(l, kind, frame)
+              // review K116: a box let go stays where it was dropped until the server's answer lands (it snapped back meanwhile)
+              const live = drag && drag.lid === l.id && drag.kind === kind ? drag.box
+                : pending && pending.lid === l.id && pending.kind === kind && pending.frame === frame ? pending.box : shownBox(l, kind, frame)
               if (!live) return null
               const [x, y, w, h] = rectOf(live, kind, win)
               const on = sel?.lid === l.id && selKind === kind

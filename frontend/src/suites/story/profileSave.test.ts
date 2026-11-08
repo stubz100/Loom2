@@ -27,6 +27,7 @@ beforeEach(() => {
       server.revision += 1
       return Response.json(profile())
     }
+    if (method === 'PUT' && url.pathname === '/story/profiles/prf_1/versions/v1/shell') { server.revision += 1; return Response.json(profile()) }   // a route that answers with the profile
     return Response.json({ items: [] })
   }))
   setBackend({ host: '127.0.0.1', port: 8766, token: 't' })
@@ -59,5 +60,13 @@ describe('K8 profile saves', () => {
     expect(useStory.getState().profiles[0].versions[0].appearance).toBe('grey hood')
     await useStory.getState().settleProfiles()
     expect(server.versions[0].appearance).toBe('grey hood')
+  })
+
+  it('K75: a route answering with the profile (a shell picked) keeps the typed words on screen', async () => {
+    useStory.getState().setSheet({ hand_words: 'long thin fingers' } as never)
+    await useStory.getState().setShell('ast_shell')
+    expect((useStory.getState().profiles[0].versions[0] as unknown as { hand_words: string }).hand_words).toBe('long thin fingers')
+    await useStory.getState().settleProfiles()
+    expect((server.versions[0] as unknown as { hand_words: string }).hand_words).toBe('long thin fingers')
   })
 })

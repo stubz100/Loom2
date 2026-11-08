@@ -111,6 +111,12 @@ def offered(spec: ModelSpec, variant: str | None) -> bool:
     return variant != "open" or "open" in ROSTER_BY_ID[spec.id].variants
 
 
+def video_names() -> str:
+    """Review K85: the image-to-video models by their labels, for a refusal's words (they were kept by hand in two places)."""
+    names = list(dict.fromkeys(s.label.split(" · ")[0].split(" — ")[0].strip() for s in video_specs()))
+    return ", ".join(names[:-1]) + (" or " if len(names) > 1 else "") + names[-1] if names else "none in this build"
+
+
 def unconfirmed(spec: ModelSpec, settings: Any) -> list[str]:
     """D193: the Settings flags this model's weights wait for (the roster's `confirm`: H3's licence confirmation, D17 / D192) that are not
     set — empty when the model may be offered and run."""

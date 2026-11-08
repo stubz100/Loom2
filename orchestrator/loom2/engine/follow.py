@@ -132,8 +132,9 @@ class EngineFollower:
                         job.error = f"engine process died ({type(e).__name__})"
                         return False
                     continue                                # wedged but alive: the stall timer decides
-                if hist and hist.get("status", {}).get("completed"):
-                    if hist["status"].get("status_str") == "success":
+                st = (hist or {}).get("status", {})
+                if hist and (st.get("completed") or st.get("status_str") in ("success", "error")):   # K: ComfyUI sets completed on success only — an
+                    if st.get("status_str") == "success":                                    # error / interrupt was never seen here (420 s, a restart)
                         return True
                     msgs = [m for m in hist["status"].get("messages", []) if isinstance(m, list) and len(m) == 2]   # C15: keep the engine's words
                     err = next((m[1] for m in msgs if m[0] == "execution_error" and isinstance(m[1], dict)), None)

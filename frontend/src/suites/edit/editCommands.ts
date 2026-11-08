@@ -164,7 +164,7 @@ registerCommands([
   ...(['free', 'skew', 'distort', 'perspective'] as const).map((m) => ({
     id: `edit.transform.mode.${m}`, scope: 'edit' as const, label: m === 'free' ? 'Free transform (scale / rotate)' : m[0].toUpperCase() + m.slice(1), placement: ['context'] as ['context'],
     when: () => !!ed().transform || !!active(), hint: m === 'free' ? undefined : `a plain handle drag ${m === 'skew' ? 'skews (edges)' : m === 'distort' ? 'moves one corner' : 'mirrors a corner'}`,
-    run: () => { if (!ed().transform) ed().beginTransform(); if (ed().transform) ed().setTransform({ mode: m }) },
+    run: () => { if (ed().transform) ed().setTransform({ mode: m }); else ed().beginTransform({ mode: m }) },   // review K64: the mode rides the open (a text layer asks first)
   })),
   { id: 'edit.transform.apply', scope: 'edit', label: 'Apply transform', icon: Check, keys: 'Enter', alt: ['Ctrl+Enter'], placement: ['strip', 'context'], when: () => !!ed().transform, hint: 'or double-click inside the box', run: () => ed().applyTransform() },
   { id: 'edit.transform.cancel', scope: 'edit', label: 'Cancel transform', icon: X, keys: 'Escape', placement: ['strip', 'context'], when: () => !!ed().transform, run: () => ed().cancelTransform() },

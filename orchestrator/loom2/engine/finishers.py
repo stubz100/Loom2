@@ -185,6 +185,10 @@ class DocumentFinisher:
             raise ValueError(f"missing output {src}")
         od = await asyncio.to_thread(q.documents.get, recipe.document_id)
         plan: RegionPlan = inputs["plan"]
+        planned = tuple(inputs.get("source_size") or (od.doc.w, od.doc.h))
+        if (od.doc.w, od.doc.h) != planned and not isinstance(recipe, Upscale):
+            # review K25: a crop / enlarge while the job ran — the result was planned on the old canvas; nothing is pasted at stale coordinates
+            raise ValueError(f"the canvas changed while the job ran ({planned[0]}×{planned[1]} → {od.doc.w}×{od.doc.h}) — run it again")
         q.progress(job, "paste-back")
         arr = await asyncio.to_thread(lambda: np.asarray(Image.open(src).convert("RGBA")))
         if isinstance(recipe, Upscale):
@@ -195,14 +199,14 @@ class DocumentFinisher:
             rec = await asyncio.to_thread(q.catalogue.make_thumbs, rec)
             q.hub.broadcast("asset.created", rec.model_dump())
             job.result["asset_ids"] = [rec.id]
-            if recipe.as_layer:
+            if recipe.as_layer and (od.doc.w, od.doc.h) != planned:      # review K25: the asset stands; the layer would land at stale coordinates
+                job.log_tail.append(f"the canvas changed while the upscale ran ({planned[0]}×{planned[1]} → {od.doc.w}×{od.doc.h}): the Bin has it, no layer added")
+            elif recipe.as_layer:
                 factor = max(1, round(arr.shape[1] / max(1, plan.w)))
                 rgba = assemble_layer(arr, plan, inputs.get("alpha_mask"), 0)     # C4: back to 1× with the source's alpha
                 await add_result_layer(q, job, od, recipe, rgba, plan.x, plan.y, f"upscale ×{factor} at 1×")
             return
         if isinstance(recipe, Inpaint) and recipe.mode == "outpaint":
-            if (od.doc.w, od.doc.h) != tuple(inputs.get("source_size") or (od.doc.w, od.doc.h)):
-                raise ValueError(f"the canvas changed while the outpaint ran ({inputs['source_size'][0]}×{inputs['source_size'][1]} → {od.doc.w}×{od.doc.h}) — run it again")
             if inputs.get("grown"):                                      # K2: an earlier candidate of the batch grew the canvas — this one joins it
                 job.result["shift"] = {"left": 0, "top": 0}
                 rgba = assemble_layer(arr, plan, inputs.get("alpha_mask"), recipe.feather)
@@ -1449,7 +1453,8 @@ async def run_assemble(job: JobRecord, recipe: AssembleFinal, q: JobQueue) -> bo
     def progress(done: int, total: int) -> None:
         job.progress = done / total
         job.progress_text = f"compositing {done}/{total}"
-    stats = await asyncio.to_thread(assemble_frames, store, f, tmp / "f16", progress, store.folder(f.id) / "comp")   # AE1: + the composition's footage
+    stats = await asyncio.to_thread(assemble_frames, store, f, tmp / "f16", progress, store.folder(f.id) / "comp",   # AE1: + the composition's footage
+                                    lambda: job.id in q._cancel_requested)                                           # review K89: a cancel every frame
     q.check_cancel(job)
     paths = sorted((tmp / "f16").glob("*.png"))
     fps = f.rate
@@ -1461,6 +1466,7 @@ async def run_assemble(job: JobRecord, recipe: AssembleFinal, q: JobQueue) -> bo
     job.log_tail.append(f"assembly: {stats['frames']} frames in {stats['seconds']} s; offsets {stats['offsets_px']}; " + (f"conformed to {len(paths)} at 24 fps" if conformed else f"at {fps} fps"))
     q.progress(job, "writing the master")
     parents = [x.still_asset_id for x in f.layers if x.still_asset_id] + [x.reference_asset_id for x in f.layers if x.reference_asset_id]
+    await q.irreversible(job)                        # review K24 (C8): the clip lands once — a crash from here never makes a second one
     rec = await asyncio.to_thread(clips.create, paths, job_id=job.id, batch_id=job.batch_id, model_id="final", preset="draft", prompt=f.name, seed=job.seed, fps=fps,
                                   start_asset_id=parents[0] if parents else "", beats=[], params={"recipe": recipe.model_dump(), "final_id": f.id, "assembly": stats},
                                   timings={"assemble_s": stats["seconds"]})
@@ -1553,6 +1559,7 @@ async def run_comp_render(job: JobRecord, recipe: CompRender, q: JobQueue) -> bo
                         f"{rs.depth}-bit{', alpha' if rs.alpha else ''}{', no motion blur' if rs.motion_blur == 'off' else ''}"
                         f"{', no frame blending' if rs.frame_blending == 'off' else ''})" + (f"; conformed to {len(paths)} at 24 fps" if conformed else ""))
     q.progress(job, "writing the master")
+    await q.irreversible(job)                        # review K24 (C8): the clip and set_render land once
     previous = await asyncio.to_thread(clips.get, f.clip_id) if f.clip_id else None
     parents = [previous.asset_id] if previous and previous.asset_id else []
     stats = {"frames": f.frames, "render_s": render_s, "composition_revision": c.revision, "effectcraft": c.effectcraft, "conform": "RIFE v4.6 to 24 fps (D27)" if conformed else None,
@@ -1673,6 +1680,7 @@ async def _draft_clip(job: JobRecord, recipe: Render, q: JobQueue, tl: Any, recs
     q.progress(job, "writing the master")
     sources = [recs[c.clip_id] for c in tl.clips]
     parents = list(dict.fromkeys(r.asset_id for r in sources if r.asset_id))
+    await q.irreversible(job)                        # review K24 (C8): the draft's clip lands once
     rec = await asyncio.to_thread(clips.create, paths, job_id=job.id, batch_id=job.batch_id, model_id="sequence", preset="draft", prompt=tl.name,
                                   seed=job.seed, fps=tl.fps, start_asset_id=parents[0] if parents else "", beats=[],
                                   params={"recipe": recipe.model_dump(), "timeline": {"id": tl.id, "name": tl.name, "revision": tl.revision, "clips": [c.model_dump(by_alias=True) for c in tl.clips], "overlaps": tl.overlaps}},
@@ -1887,6 +1895,7 @@ async def run_movie(job: JobRecord, recipe: Render, q: JobQueue) -> bool:
     secs = round(time.time() - t0, 1)
     job.log_tail.append(f"movie: {total} frames at {W}×{H} @ {tl.fps} fps, {placed} spoken line(s), in {secs} s → {out.relative_to(q.ws.path).as_posix()}")
     parents = list(dict.fromkeys(recs[c.clip_id].asset_id for c in tl.clips if recs[c.clip_id].asset_id))
+    await q.irreversible(job)                        # review K24 (C8): the movie's asset lands once (the file itself is rewritten in place)
     asset = await asyncio.to_thread(q.catalogue.ingest_file, out, kind="video", move=False, job_id=job.id, batch_id=job.batch_id, suite="animate", model_id="movie",
                                     seed=job.seed, prompt_text=tl.name, params={"recipe": recipe.model_dump(), "timeline_id": tl.id, "revision": tl.revision, "movie": True,
                                                                                  "conformed": sorted(conformed), "lines": placed},
@@ -2046,6 +2055,7 @@ async def run_movie_filmcraft(job: JobRecord, recipe: Render, q: JobQueue, tl: A
     W, H, total = await asyncio.to_thread(_video_size, out)
     job.log_tail.append(f"movie (FilmCraft): {total} frames at {W}×{H} @ {tl.fps} fps, {placed} spoken line(s), in {secs} s → {out.relative_to(q.ws.path).as_posix()}")
     parents = list(dict.fromkeys(recs[c.clip_id].asset_id for c in tl.clips if recs[c.clip_id].asset_id))
+    await q.irreversible(job)                        # review K24 (C8): the movie's asset lands once
     asset = await asyncio.to_thread(q.catalogue.ingest_file, out, kind="video", move=False, job_id=job.id, batch_id=job.batch_id, suite="animate", model_id="movie",
                                     seed=job.seed, prompt_text=tl.name, params={"recipe": recipe.model_dump(), "timeline_id": tl.id, "revision": tl.revision, "movie": True,
                                                                                  "engine": "filmcraft", "conformed": sorted(conformed), "lines": placed},

@@ -165,3 +165,20 @@ export const useLibrary = create<LibraryState>()((set, get) => {
     },
   }
 })
+
+/** K76: the project the library was read in — another project opened drops it (and the old one's typed words, never sent to the new one);
+ *  a library shown is read again in the new project. */
+const projectPath = (pj = useSession.getState().project): string | null => (pj?.open ? pj.path ?? null : null)
+let libraryFor = projectPath()
+let libraryWanted = false                                                        // read once in this session: read again in the next project
+useSession.subscribe((s) => {
+  const path = projectPath(s.project)
+  if (path === libraryFor) return
+  libraryWanted ||= useLibrary.getState().library !== null
+  const had = libraryWanted
+  libraryFor = path
+  pending = {}
+  if (timer) { window.clearTimeout(timer); timer = null }
+  useLibrary.setState({ library: null })
+  if (had && path) void useLibrary.getState().load()
+})

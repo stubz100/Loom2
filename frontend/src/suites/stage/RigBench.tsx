@@ -22,7 +22,8 @@ import { mannequin, POSES, type Mannequin } from './builders'
 import { FINGERS, HIDDEN, type FingerName, type HandShapes } from './clayHand'
 import { HAND_PRESETS, makeDetailed, type HandPreset } from './detailed'
 import { HAND_EDGES } from './passes'
-import { bindProxy, FOOT_REACH, stanceOf, type FootShapes } from './proxy'
+import { bindProxy, FOOT_REACH, stanceOf, type FootShapes, type Proxy } from './proxy'
+import { clearContent, loadOnce } from './gpu'
 import { footOf, handOf, linked, moveAnkle, placeOffset, setClaw, setCount, setFinger, setFoot, type Side } from './rigEdit'
 import { setUi, useUi } from './benchState'
 
@@ -136,7 +137,7 @@ function ClayHandView({ body, side, preset }: { body: Body; side: Side; preset: 
     const loop = () => { raf = requestAnimationFrame(loop); r.render(scene, cam) }
     const fit = () => { const b = el.getBoundingClientRect(); r.setSize(b.width, b.height); cam.aspect = b.width / Math.max(1, b.height); cam.updateProjectionMatrix() }
     const ro = new ResizeObserver(fit); ro.observe(el); fit(); loop()
-    return () => { cancelAnimationFrame(raf); ro.disconnect(); orbit.dispose(); r.dispose(); r.domElement.remove(); world.current = null }
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); clearContent(content); orbit.dispose(); r.dispose(); r.forceContextLoss(); r.domElement.remove(); world.current = null }   // review K61 (V82)
   }, [])
   useEffect(() => {
     const w = world.current
@@ -155,7 +156,7 @@ function ClayHandView({ body, side, preset }: { body: Body; side: Side; preset: 
       d.handsOnly(true)
       d.follow(fig.joints, { ...d.handPreset('r', preset), ...d.handPreset('l', preset) }); g.updateMatrixWorld(true)
       const marks = side === 'r' ? d.wholebody?.right : d.wholebody?.left
-      w.content.clear(); w.content.add(g)
+      clearContent(w.content); w.content.add(g)                                 // review K61: the last hand, its points and chains freed
       if (!marks) return
       const pts = marks.map((m) => m.getWorldPosition(new THREE.Vector3()))
       const dotMat = new THREE.MeshBasicMaterial({ color: 0x3a8bff, depthTest: false }), offMat = new THREE.MeshBasicMaterial({ color: 0x666b77, depthTest: false })
@@ -280,7 +281,8 @@ function ShoeView({ v, body, side }: { v: Version; body: Body; side: Side }) {
   const [bend, setBend] = useState<Bend>('flat')
   const [state, setState] = useState<{ rigged: boolean; missed: number; placed: boolean; ankle: boolean } | null>(null)
   const world = useRef<{ r: THREE.WebGLRenderer; scene: THREE.Scene; cam: THREE.PerspectiveCamera; orbit: OrbitControls; content: THREE.Group; balls: Map<string, THREE.Mesh>;
-    ankle: THREE.Vector3 | null; fig: Mannequin | null; feet: ((extra: Record<string, number[]> | null) => void) | null } | null>(null)
+    ankle: THREE.Vector3 | null; fig: Mannequin | null; feet: ((extra: Record<string, number[]> | null) => void) | null; px: Proxy | null } | null>(null)
+  const glb = useRef<{ id: string; p: Promise<THREE.Object3D> } | null>(null)            // review K61: the shell parsed once, not on every rebuild
   const bodyRef = useRef(body); useEffect(() => { bodyRef.current = body }, [body])
   const sideRef = useRef(side); useEffect(() => { sideRef.current = side }, [side])
   const shell = v.shell_asset_id ?? null
@@ -292,7 +294,7 @@ function ShoeView({ v, body, side }: { v: Version; body: Body; side: Side }) {
     scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.5)); const key = new THREE.DirectionalLight(0xffffff, 1.3); key.position.set(-2, 3, 1); scene.add(key)
     scene.add(new THREE.GridHelper(2, 20, 0x555a66, 0x33363d))
     const cam = new THREE.PerspectiveCamera(30, 1, 0.01, 20), orbit = new OrbitControls(cam, r.domElement), content = new THREE.Group(); scene.add(content)
-    const w: NonNullable<typeof world.current> = { r, scene, cam, orbit, content, balls: new Map(), ankle: null, fig: null, feet: null }
+    const w: NonNullable<typeof world.current> = { r, scene, cam, orbit, content, balls: new Map(), ankle: null, fig: null, feet: null, px: null }
     world.current = w
     let raf = 0
     const loop = () => { raf = requestAnimationFrame(loop); r.render(scene, cam) }
@@ -336,14 +338,15 @@ function ShoeView({ v, body, side }: { v: Version; body: Body; side: Side }) {
       saveBody({ ...bodyRef.current, foot_shape: setFoot(f, s, { place: place as never }) as never })
     }
     r.domElement.addEventListener('pointerdown', down); r.domElement.addEventListener('pointermove', move); r.domElement.addEventListener('pointerup', up)
-    return () => { cancelAnimationFrame(raf); ro.disconnect(); r.domElement.removeEventListener('pointerdown', down); r.domElement.removeEventListener('pointermove', move); r.domElement.removeEventListener('pointerup', up); orbit.dispose(); r.dispose(); r.domElement.remove(); world.current = null }
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); r.domElement.removeEventListener('pointerdown', down); r.domElement.removeEventListener('pointermove', move); r.domElement.removeEventListener('pointerup', up)
+      w.px?.dispose(); clearContent(content); orbit.dispose(); r.dispose(); r.forceContextLoss(); r.domElement.remove(); world.current = null }   // review K61 (V82)
   }, [])
   useEffect(() => {
     const w = world.current
     if (!w || !shell) return
     let live = true
     const t = window.setTimeout(() => void (async () => {
-      const gltf = await new GLTFLoader().loadAsync(api.assetUrl(shell))
+      const model = await loadOnce(glb, shell, (id) => new GLTFLoader().loadAsync(api.assetUrl(id)).then((gltf) => gltf.scene))   // review K61: parsed once
       if (!live) return
       const clay = new THREE.MeshLambertMaterial({ color: 0xb4b4b8, transparent: true, opacity: 0.5, depthWrite: false })   // see-through: a hem or a robe hides no shoe
       const stance = stanceOf(points as never)
@@ -351,8 +354,9 @@ function ShoeView({ v, body, side }: { v: Version; body: Body; side: Side }) {
       const g = new THREE.Group(); g.add(fig.root); g.updateMatrixWorld(true)
       fig.root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.visible = false })
       const f = feetOf(body)
-      const px = bindProxy(gltf.scene, fig.joints, fig.limbs, g, { preset: 'stand', joints: stance }, { stance, visible: true, hands: true, points: points as never, markers: fig.markers, feet: f ? { shape: f, size: body.feet } : null })
-      w.content.clear(); w.balls.clear(); w.content.add(g)
+      const px = bindProxy(model, fig.joints, fig.limbs, g, { preset: 'stand', joints: stance }, { stance, visible: true, hands: true, points: points as never, markers: fig.markers, feet: f ? { shape: f, size: body.feet } : null })
+      w.px?.dispose(); clearContent(w.content); w.balls.clear(); w.content.add(g)   // review K61: the last mannequin, shell and balls freed
+      w.px = px
       for (const m of px.meshes) { m.material = clay; w.content.add(m) }
       w.feet = px.feet; w.fig = fig
       const fpt = px.footPoints[side]

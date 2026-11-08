@@ -7,9 +7,11 @@ replace (house rule 4), and the revision counts them. *Make again* writes it fro
 """
 from __future__ import annotations
 
+import functools
 import json
 import os
 import shutil
+import uuid
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -113,6 +115,16 @@ def relativise(text: str, root: Path) -> str:
     return json.dumps(walk(json.loads(text), 0), indent=1)
 
 
+def _held(fn: Any) -> Any:
+    """Review K42: an operation on the shared EffectCraft session — open the final's project, its commands, the save — holds the session for
+    its whole length: routes run in threads, and another final's open between them landed its edit in this project (saved as this one's)."""
+    @functools.wraps(fn)
+    def run(self: Any, f: Any, ec: Any, *a: Any, **k: Any) -> Any:
+        with ec.op_lock:
+            return fn(self, f, ec, *a, **k)
+    return run
+
+
 class CompositionStore:
     def __init__(self, ws: Workspace) -> None:
         self.ws = ws
@@ -211,6 +223,7 @@ class CompositionStore:
         return c
 
     # ---- making ----------------------------------------------------------------------------------
+    @_held
     def make(self, f: Final, ec: EffectCraft) -> Composition:
         """The composition from the final's layers through the session: the plate; Stage's shadows as a Multiply layer; each prop with its
         alpha; each character over her matte (luma, parented to her), both moved by her contact offset; the actors in the assembly's order."""
@@ -263,7 +276,7 @@ class CompositionStore:
         """The session's project to `comp.ecproj`: a copy to a temp name, its footage paths made relative, then the atomic replace; the
         session then holds the written file."""
         root, final = self.folder(f.id), self.ecproj(f.id)
-        tmp = root / "comp.ecproj.tmp"
+        tmp = root / f"comp.ecproj.{uuid.uuid4().hex[:8]}.tmp"        # review K42: a name of its own per write
         if save_as:
             ec.tool("save_project", {"path": str(tmp)})
         else:
@@ -309,6 +322,7 @@ class CompositionStore:
                 return d
         return self.footage(f.id) / f"{layer_id}_matte"
 
+    @_held
     def set_source(self, f: Final, ec: EffectCraft, layer_id: str, take_id: str | None) -> Composition:
         """The layer's footage item replaced by the take's frames (or its original frames): `file.replaceFootage` keeps the layer's
         transforms, masks, effects and keys; `file.interpretFootage` keeps the rate. One save; the composition stays fresh to the final."""
@@ -337,6 +351,7 @@ class CompositionStore:
         return c
 
     # ---- D118 (AE4b): the line as an audio layer -------------------------------------------------
+    @_held
     def add_audio(self, f: Final, ec: EffectCraft, src: Path, meta: dict[str, Any], t: float, name: str) -> Composition:
         """The line's WAV copied under the final's folder, imported and added as a layer at `t` (its In point), named for the character and
         the line, recorded with what it is; one save."""
@@ -354,6 +369,7 @@ class CompositionStore:
         c.audio.append(AudioLayer(layer=lid, file=f"audio/{dst.name}", **{k: v for k, v in meta.items() if k in ("final_layer", "asset_id", "node_id", "index", "speaker", "text", "duration_s")}))
         return self._edited(f, ec, c)
 
+    @_held
     def remove_audio(self, f: Final, ec: EffectCraft, layer: int) -> Composition:
         """The audio layer taken out of the composition (selected, cleared) and off the record; the WAV stays for another attach."""
         c = self._open(f, ec)
@@ -392,6 +408,7 @@ class CompositionStore:
             out.append({**a.model_dump(), **tl, "path": str(self.folder(f.id) / a.file)})
         return out
 
+    @_held
     def sync_sources(self, f: Final, ec: EffectCraft) -> Composition:
         """Every layer whose source moved on the final (a pass landed, a take chosen) swapped in the composition; AE4e: the final's
         processing layers brought in (imported and added right above their layer), replaced when run again, taken out when dropped."""
@@ -401,6 +418,7 @@ class CompositionStore:
                 c = self.set_source(f, ec, x.id, x.source)
         return self._sync_processing(f, ec, c)
 
+    @_held
     def _sync_processing(self, f: Final, ec: EffectCraft, c: Composition) -> Composition:
         from .recipes import LayerPassPreset  # noqa: F401  (the labels below name the presets)
         store = FinalStore(self.ws)
@@ -481,24 +499,28 @@ class CompositionStore:
         self.save(c)
         return c
 
+    @_held
     def command(self, f: Final, ec: EffectCraft, cid: str, params: dict | None) -> tuple[Any, Composition]:
         """One engine command on the composition (a blend mode, a mask, a parent, undo …), saved."""
         c = self._open(f, ec)
         result = ec.command(cid, params or {})
         return result, self._edited(f, ec, c)
 
+    @_held
     def set_property(self, f: Final, ec: EffectCraft, args: dict) -> tuple[Any, Composition]:
         """A property set (or keyed, with `time`) on a layer, saved."""
         c = self._open(f, ec)
         result = ec.tool("set_property", args)
         return result, self._edited(f, ec, c)
 
+    @_held
     def batch(self, f: Final, ec: EffectCraft, steps: list[dict]) -> tuple[Any, Composition]:
         """Several engine commands as one edit (`command_batch`, stopping at the first refusal), saved once."""
         c = self._open(f, ec)
         result = ec.tool("command_batch", {"steps": [{"id": s["id"], "params": s.get("params") or {}} for s in steps], "stop_on_error": True})
         return result, self._edited(f, ec, c)
 
+    @_held
     def frame(self, f: Final, ec: EffectCraft, t: float, side: int, before: bool = False) -> bytes:
         """A frame of the composition as PNG at the longest side `side` (0: full size). `before` (AE3): every layer's effects off for this
         frame only — one switch, the frame, the switch undone; nothing saved, the revision unmoved."""
@@ -514,6 +536,7 @@ class CompositionStore:
         finally:
             ec.command("edit.undo", {})
 
+    @_held
     def effect_defs(self, f: Final, ec: EffectCraft, names: list[str]) -> list[dict]:
         """AE3: the engine's definitions of these effects (by their names): id, category, GPU, the parameters with their types, defaults,
         ranges and options — what the Effects section shows is what the engine runs (T8)."""
@@ -525,18 +548,21 @@ class CompositionStore:
         return sorted(out, key=lambda e: order.get(str(e.get("name", "")).lower(), order.get(str(e.get("id", "")).lower(), 999)))
 
     # ---- reading (AE2) ---------------------------------------------------------------------------
+    @_held
     def layers(self, f: Final, ec: EffectCraft) -> list[dict]:
         """The composition's layers top to bottom as EffectCraft reports them (id, index, name, blend mode, track matte, parent, switches,
         in / out / start)."""
         self._open(f, ec)
         return list(ec.tool("get_comp", {"comp": COMP_NAME}).get("layers") or [])
 
+    @_held
     def layer(self, f: Final, ec: EffectCraft, ref: str | int, flat: bool = True) -> dict:
         """One layer's properties with its header: flat (path, type, value, keys), or the tree (groups with their uids — the masks and
         their mode / inverted, AE2c)."""
         self._open(f, ec)
         return ec.tool("get_layer", {"layer": ref, "comp": COMP_NAME, "flat": True} if flat else {"layer": ref, "comp": COMP_NAME, "depth": 3})
 
+    @_held
     def prop(self, f: Final, ec: EffectCraft, ref: str | int, path: str, t: float | None = None) -> dict:
         """One property: its value (at `t`), whether it is animated, its keyframes (time, value, interpolation)."""
         self._open(f, ec)
@@ -562,6 +588,7 @@ class CompositionStore:
                 raise ValueError("the plate fills the frame: nothing to trace into a mask")
         raise KeyError(f"no composition layer {ref!r}")
 
+    @_held
     def mask_from_content(self, f: Final, ec: EffectCraft, ref: str | int, t: float, follow: bool = True, tolerance: float = 1.5,
                           max_points: int = 160) -> tuple[dict, Composition]:
         """A new mask on the layer traced from what is visible on it at the frame under `t` (`tools/outline.py`: the largest region's

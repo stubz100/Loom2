@@ -3,6 +3,7 @@
 // ambient level (the sky) sits with the stage's own fields.
 import type { StageObject } from '../../api/types'
 import { Help } from '../../frame/Help'
+import { NumField } from './NumField'
 import { st, useStage } from './stageStore'
 
 type Light = NonNullable<StageObject['light']>
@@ -20,7 +21,6 @@ function aimPoint(o: StageObject): number[] {
   const p = o.transform.pos
   return [p[0], p[1] + (o.kind === 'mannequin' ? 1.2 : 0.4), p[2]]
 }
-const num = (x: number) => Math.round(x * 100) / 100
 
 export function LightControls({ o }: { o: StageObject }) {
   const objects = useStage((s) => s.current?.objects ?? [])
@@ -34,8 +34,8 @@ export function LightControls({ o }: { o: StageObject }) {
       <div className="kv"><span>colour</span><input type="color" value={s.colour} aria-label="light colour" onChange={(e) => set({ colour: e.target.value })} /></div>
       <div className="kv"><span>softness</span><span className="range-row"><input type="range" min={0} max={1} step={0.05} value={s.softness} aria-label="shadow softness" onChange={(e) => set({ softness: Number(e.target.value) })} /><span className="n">{s.softness.toFixed(2)}</span></span></div>
       <div className="kv"><span>shadows</span><input type="checkbox" checked={s.shadows} aria-label="casts shadows" onChange={(e) => set({ shadows: e.target.checked })} /></div>
-      <div className="kv"><span>aims at</span><span className="vec">{s.target.map((x, i) => <input key={i} type="number" step={0.1} value={num(x)} aria-label={`aim ${'xyz'[i]}`}
-        onChange={(e) => { const t = [...s.target]; t[i] = Number(e.target.value) || 0; set({ target: t }) }} />)}</span></div>
+      <div className="kv"><span>aims at</span><span className="vec">{s.target.map((x, i) => <NumField key={i} step={0.1} value={x} label={`aim ${'xyz'[i]}`}
+        onCommit={(v) => { const t = [...s.target]; t[i] = v; set({ target: t }) }} />)}</span></div>{/* review K93: typed whole, committed on blur / Enter */}
       {targets.length > 0 && <div className="kv"><span>aim at</span><select value="" aria-label="aim the light at an object" onChange={(e) => { const t = targets.find((x) => x.id === e.target.value); if (t) set({ target: aimPoint(t) }) }}>
         <option value="">an object…</option>{targets.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>}
       {!o.light && <p className="hint">As the key light <Help text="Shining as the first key light did (hard shadows); any change gives it settings of its own." /></p>}

@@ -4,7 +4,7 @@
 // definitions — names, parameters, ranges, options — come from the engine (`GET …/composition/effects`), never a copy here (T8).
 import { Aperture, BarChart3, Box, Circle, Contrast, Droplet, Eraser, Feather, Grip, Layers, Maximize2, Minimize2, Moon, MoveHorizontal, Palette, Scale, Spline, Sun, SunDim, SunMedium, Triangle, type LucideIcon } from 'lucide-react'
 import { Help } from '../../frame/Help'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { NumField } from './FinalEditor'
 import { useComposition, type EffectDef, type EffectInfo, type EffectParam } from './compositionStore'
 
@@ -50,6 +50,29 @@ function TextField({ value, onCommit, label }: { value: string; onCommit: (v: st
   return <input type="text" value={draft} aria-label={label} onChange={(e) => setDraft(e.target.value)} onBlur={commit} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit() } }} />
 }
 
+/** Review K116: a colour picked, committed when the picker lets go (the native `change`, or the field's blur) — React's onChange is the
+ *  `input` event, one engine edit (a save, a revision, a frame) per pixel the picker's cursor crossed. */
+export function ColorField({ value, onCommit, label, disabled }: { value: string; onCommit: (hex: string) => void; label: string; disabled?: boolean }) {
+  const [draft, setDraft] = useState(value)
+  const ref = useRef<HTMLInputElement>(null)
+  const latest = useRef({ value, onCommit, sent: value })                // the native listener reads the newest props; `sent`: no second send of one colour
+  useEffect(() => { latest.current = { ...latest.current, value, onCommit } })   // the parent keys it by the value: a new value remounts it fresh
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const h = () => commit(el, latest.current)
+    el.addEventListener('change', h)
+    return () => el.removeEventListener('change', h)
+  }, [])
+  return <input ref={ref} type="color" value={draft} disabled={disabled} aria-label={label} onChange={(e) => setDraft(e.target.value)} onBlur={(e) => commit(e.currentTarget, latest.current)} />
+}
+function commit(el: HTMLInputElement, l: { value: string; onCommit: (hex: string) => void; sent: string }): void {
+  const v = el.value
+  if (v === l.value || v === l.sent) return
+  l.sent = v
+  l.onCommit(v)
+}
+
 /** One dial: the field its type asks for, its value the engine's. */
 function Dial({ path, param, value }: { path: string; param: EffectParam; value: unknown }) {
   const busy = useComposition((s) => s.busy)
@@ -63,7 +86,7 @@ function Dial({ path, param, value }: { path: string; param: EffectParam; value:
   } else if (param.type === 'bool') {
     field = <input type="checkbox" checked={!!value} disabled={busy} aria-label={label} onChange={(e) => set(e.target.checked)} />
   } else if (param.type === 'color') {
-    field = <input type="color" value={hex(value ?? param.default)} disabled={busy} aria-label={label} onChange={(e) => set(rgba(e.target.value, value ?? param.default))} />
+    field = <ColorField key={hex(value ?? param.default)} value={hex(value ?? param.default)} disabled={busy} label={label} onCommit={(h) => set(rgba(h, value ?? param.default))} />
   } else if (param.type === 'vec2' || param.type === 'vec3') {
     const v = Array.isArray(value) ? (value as number[]) : [0, 0, 0]
     field = <>{[0, 1].map((i) => <NumField key={`${i}:${v[i]}`} value={Number(v[i] ?? 0)} step={0.01} onCommit={(n) => { const next = [...v]; next[i] = n; set(next) }} label={`${label} ${'xy'[i]}`} />)}</>

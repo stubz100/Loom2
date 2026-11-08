@@ -29,6 +29,7 @@ async function passesFor(shotId: string, version: string): Promise<Record<string
 export async function runStale(shotId: string, version: string): Promise<void> {
   const { toast } = useSession.getState()
   const path = { sid: shotId, vid: version }
+  await (await import('./storyStore')).useStory.getState().settleFlow()            // K73: the recipe reads the node's words as typed
   try {
     const dry = await unwrap(http.POST('/story/shots/{sid}/versions/{vid}/run-stale', { params: { path }, body: { dry: true } }))
     if (!dry.plan.length) { toast('Nothing in this recipe is stale', 'info'); return }

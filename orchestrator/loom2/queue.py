@@ -109,6 +109,7 @@ class JobQueue:
         self.jobs: dict[str, JobRecord] = {}
         self.paused = False
         self._task: asyncio.Task | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None        # K: the loop the queue runs on — a submit from a worker thread goes there
         self._wake = asyncio.Event()
         self._running_id: str | None = None
         self._last_group: str | None = None
@@ -205,10 +206,14 @@ class JobQueue:
     async def start(self) -> None:
         self.load()
         self._reconcile_leftovers()
+        self._loop = asyncio.get_running_loop()
         self._task = asyncio.create_task(self._run_loop(), name="loom2-queue")
 
     JOB_TEMP_PREFIXES = ("assemble", "comp-render", "render", "movie")       # V37: `<temp>/<prefix>-<job>` — the finishers' work folders
     JOB_TEMP_SUBDIRS = ("ai", "lipsync", "tts")                              # and `<temp>/<sub>/<job>` — the crops, the lip-sync and TTS runs
+    JOB_TEMP_NAMED = ("mattes", "lead", "passes")                            # review K26: `<temp>/<sub>/…-<job>…` — what a job encoded for its upload
+    GRAPHS_KEPT = 200                                                        # D184's graphs as sent: the newest kept for the spikes
+    BLOB_AGE_S = 24 * 3600                                                   # review K26: an upload no job names, older than a day, goes at open
 
     def _sweep_job_temp(self, job_id: str) -> int:
         """V37: the temp folders a job's finisher made go with the job when it fails, is cancelled or was interrupted (a finisher that
@@ -218,6 +223,61 @@ class JobQueue:
             if d.is_dir():
                 shutil.rmtree(d, ignore_errors=True)
                 n += 1
+        return n + self._sweep_named(job_id)
+
+    def _sweep_named(self, job_id: str) -> int:
+        """Review K26: the mattes, lead-ins and pass inputs a job encoded for its upload (named after the job), once it ends."""
+        n = 0
+        for sub in self.JOB_TEMP_NAMED:
+            root = self.ws.temp_dir / sub
+            for p in (root.glob(f"*{job_id}*") if root.is_dir() else []):
+                try:
+                    shutil.rmtree(p, ignore_errors=True) if p.is_dir() else p.unlink(missing_ok=True)
+                    n += 1
+                except OSError:
+                    pass
+        return n
+
+    def _reconcile_k26(self) -> int:
+        """Review K26: what nothing swept before — the job-named upload files of jobs no longer live, the graphs as sent beyond the newest
+        GRAPHS_KEPT, and uploaded blobs older than a day that no waiting job names. Never raises."""
+        import re
+        waiting = [j for j in self.jobs.values() if j.status not in TERMINAL]
+        live = {j.id for j in waiting}
+        named = {str(r.get("blob")) for j in waiting for r in (j.recipe.get("refs") or []) if isinstance(r, dict) and r.get("blob")}
+        n = 0
+        for sub in self.JOB_TEMP_NAMED:
+            root = self.ws.temp_dir / sub
+            for p in (list(root.iterdir()) if root.is_dir() else []):
+                ids = set(re.findall(r"job_[0-9a-z]+", p.name))
+                if ids and not (ids & live):
+                    try:
+                        shutil.rmtree(p, ignore_errors=True) if p.is_dir() else p.unlink(missing_ok=True)
+                        n += 1
+                    except OSError:
+                        pass
+        train = self.ws.temp_dir / "train"                             # a training's saves resume a failed run (LT2): kept while it can be resumed
+        for d in (list(train.iterdir()) if train.is_dir() else []):
+            j = self.jobs.get(d.name)
+            if d.is_dir() and (j is None or j.status in ("done", "cancelled") or (j.status == "failed" and not j.resumable)):
+                shutil.rmtree(d, ignore_errors=True)
+                n += 1
+        graphs = self.ws.queue_path.with_name("graphs")
+        try:
+            old = sorted((p for p in graphs.glob("*.json") if p.stem not in live), key=lambda p: p.stat().st_mtime)[:-self.GRAPHS_KEPT] if graphs.is_dir() else []
+        except OSError:
+            old = []
+        for p in old:
+            p.unlink(missing_ok=True)
+            n += 1
+        blobs, now = self.ws.temp_dir / "blobs", time.time()
+        for p in (list(blobs.iterdir()) if blobs.is_dir() else []):
+            try:
+                if p.is_file() and p.name not in named and now - p.stat().st_mtime > self.BLOB_AGE_S:
+                    p.unlink()
+                    n += 1
+            except OSError:
+                pass
         return n
 
     def _reconcile_leftovers(self) -> int:
@@ -244,6 +304,7 @@ class JobQueue:
                 if d.is_dir() and d.name[len(prefix) + 1:] not in live:
                     shutil.rmtree(d, ignore_errors=True)
                     removed += 1
+        removed += self._reconcile_k26()
         if removed:
             log.info("reconciled %d leftover engine file(s) from earlier runs", removed)
         return removed
@@ -322,8 +383,32 @@ class JobQueue:
         plan(recipe, self.app.settings.variant)
         self._disk_guard()
 
+    def live_take_ids(self) -> set[str]:
+        """K: the take folders of the face / lip-sync passes queued, staged or running (finals.sweep_unfinished leaves them)."""
+        out: set[str] = set()
+        for j in self.jobs.values():
+            step = (j.recipe or {}).get("step") if j.status in ("queued", "staged", "running") and (j.recipe or {}).get("kind") == "layer_pass" else None
+            if isinstance(step, dict) and step.get("take_id"):
+                out.add(str(step["take_id"]))
+        return out
+
     def submit(self, recipe_data: dict, stage: bool = False, origin: JobOrigin | None = None, batch_id: str | None = None) -> list[JobRecord]:
-        """`batch_id`: join an existing batch (17 §3b Expand: one job per coverage cell, one batch) instead of making one per multi-seed submit."""
+        """`batch_id`: join an existing batch (17 §3b Expand: one job per coverage cell, one batch) instead of making one per multi-seed submit.
+        K (AGENTS rule 3, V22): the queue is the loop's — a route's or a finisher's worker thread (asyncio.to_thread) hands the submit to the
+        loop and waits for its jobs (it mutated `jobs` while the loop's `persist()` iterated them, and wrote queue.json beside the writer)."""
+        loop = self._loop
+        if loop is not None and not loop.is_closed():
+            try:
+                here = asyncio.get_running_loop()
+            except RuntimeError:
+                here = None
+            if here is not loop:
+                async def on_loop() -> list[JobRecord]:
+                    return self._submit(recipe_data, stage, origin, batch_id)
+                return asyncio.run_coroutine_threadsafe(on_loop(), loop).result()
+        return self._submit(recipe_data, stage, origin, batch_id)
+
+    def _submit(self, recipe_data: dict, stage: bool, origin: JobOrigin | None, batch_id: str | None) -> list[JobRecord]:
         recipe = parse_recipe(recipe_data)
         self._validate_models(recipe)
         recipe = self.resolve_mentions(recipe)                # D73: @mentions → references, stamped before the job record is written
@@ -356,7 +441,7 @@ class JobQueue:
             self._cancel_requested.add(job_id)
             if rec.prompt_id:                   # B5: before submission there is nothing to interrupt; _run_one checks the flag
                 try:
-                    await self.engine.client.interrupt()
+                    await self.engine.client.interrupt(rec.prompt_id)     # K86: off the pending queue too
                 except Exception as e:
                     log.warning("interrupt failed: %s", e)
             return True
@@ -548,7 +633,7 @@ class JobQueue:
             self._check_animate(recipe, spec)
         elif isinstance(recipe, I2V):
             if spec is None or not spec.recipes.i2v:
-                raise ValueError(f"{recipe.model_id!r} is not an image-to-video model (Wan 2.2, LTX-2.3 or H3)")
+                raise ValueError(f"{recipe.model_id!r} is not an image-to-video model ({registry.video_names()})")   # review K85
             if recipe.audio:
                 raise ValueError(f"{spec.label} does not follow audio — lip-sync is the S2V model's")
             if recipe.extend_from:                                         # D88 XE (experimental)
@@ -687,6 +772,7 @@ class JobQueue:
             tmp = self.ws.temp_dir / "ai" / job.id
             if tmp.is_dir():
                 shutil.rmtree(tmp, ignore_errors=True)
+            self._sweep_named(job.id)                                    # review K26: its mattes / lead-in / pass inputs too
         except OSError as e:  # noqa: BLE001
             log.debug("cleanup after %s: %s", job.id, e)
 

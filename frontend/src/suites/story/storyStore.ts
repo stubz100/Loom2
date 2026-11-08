@@ -187,6 +187,8 @@ export interface StoryState {
   load: () => Promise<void>
   flush: () => Promise<void>
   settleProfiles: () => Promise<void>                       // M3: a sheet edit still waiting out its debounce is saved first — the server reads the sheet at a make
+  /** K73: the Flow's node edits still waiting out their pause are sent, and every node save is waited for — before a route that reads the nodes. */
+  settleFlow: () => Promise<void>
   setSection: (s: Section) => void
   select: (s: Selection) => void
   /** A change to the world: applied at once, saved after 300 ms with the document's revision. */
@@ -366,11 +368,24 @@ function schedule(get: () => StoryState, set: (p: Partial<StoryState>) => void):
 // SY1: the stub saves after a pause, with the profile's revision. D90 (B14): the name too — one pending body per profile, the saves one
 // after another (each with the revision the last one returned), so a stub and a name typed together never send the same revision.
 // D93 (B4): the stub is a sheet now — every field of it rides the same pending body
-const TYPED = new Set(['appearance', 'outfit', 'colours', 'marks', 'label', 'body', 'height_m', 'hand_words', 'feet_words'])   // K74: every setSheet field
+const TYPED = new Set(['appearance', 'outfit', 'colours', 'marks', 'label', 'body', 'height_m', 'hand_words', 'feet_words'])   // K75: every setSheet field
 export type ProfileBody = { name?: string; versions?: { id: string; [k: string]: unknown }[]; [k: string]: unknown }
 let profTimer: number | null = null
 let profPending: { pid: string; body: ProfileBody } | null = null
-let profSending: { pid: string; body: ProfileBody } | null = null     // K74: the body of the PATCH in flight — a reload meanwhile still shows it
+let profSending: { pid: string; body: ProfileBody } | null = null     // K75: the body of the PATCH in flight — a reload meanwhile still shows it
+/** What the server returned, with the name / sheet fields typed since still showing (they save next). K75: every reply that carries a
+ *  profile goes through it — a shell, a model or an anim ref landing put the old hand / feet words back mid-typing. */
+function overlayPending(p: Profile): Profile {
+  const sending = profSending?.pid === p.id ? profSending.body : null, pending = profPending?.pid === p.id ? profPending.body : null
+  const b = sending && pending ? mergeProfileBody(sending, pending) : sending ?? pending
+  if (!b) return p
+  return { ...p, ...(b.name !== undefined ? { name: b.name } : {}), versions: p.versions.map((v) => { const pv = b.versions?.find((x) => x.id === v.id); return pv ? { ...v, ...Object.fromEntries(Object.entries(pv).filter(([k]) => TYPED.has(k))) } : v }) }
+}
+/** K75: a profile a route returned, in its place in the list (the order kept), with what is typed still showing — the set builder's and the
+ *  things sheet's replies too. */
+export function storeProfile(p: Profile): void {
+  useStory.setState({ profiles: useStory.getState().profiles.map((x) => (x.id === p.id ? overlayPending(p) : x)) })
+}
 let profChain: Promise<unknown> = Promise.resolve()
 /** D191: the refits one after another, in the order they were asked — two points let go in quick succession sent two refits, and the
  *  first one's answer, landing last, kept one point moved of two (the CS2 scenario, 1 of 92 in a full run). */
@@ -396,18 +411,48 @@ const nodeChains: Record<string, Promise<void>> = {}
 const nodeQueued = new Set<string>()
 const pinsChanged = new Set<string>()            // RC2f: a node whose speakers' pins were changed — only then are they sent (a linked node's are its scene's)
 let nodeSaving = 0
+/** K73: a node's typed edits wait out a pause before they are sent (a keystroke each was a PATCH, and its broadcast a Flow reload that could
+ *  land over the next keystroke); the save carries the node's latest local state. A pick (a select, a place, a board) is sent at once. */
+const NODE_PAUSE_MS = 400
+const NODE_TYPED = new Set(['title', 'text', 'lines', 'options'])
+const nodeTimers: Record<string, number> = {}
+const nodeWaiters: Record<string, (() => void)[]> = {}
+const nodePorts = new Set<string>()
+const nodeSending = new Set<string>()
+/** K73: an edit of ours on the node is not on the server yet (waiting out its pause, queued or being sent) — a Flow read keeps the local node. */
+const nodeBusy = (id: string): boolean => id in nodeTimers || nodeQueued.has(id) || nodeSending.has(id)
+/** K73: the Flow reads in order — a reply of a read that a later one overtook is not applied (the later one's is). */
+let flowSeq = 0
+let flowLatest: Promise<void> = Promise.resolve()
+/** K81: the project whose Shot templates are loaded — they load with the Flow (New Shot from a template ▸), not only with Episode. */
+let templatesFor: string | null = null
+/** K83: the board's read — asks made before it starts are one read; asks during it, one more after. */
+let boardNext: Promise<void> | null = null
+let boardLast: Promise<void> = Promise.resolve()
+
+/** K83: the same records (the server's reply equal to what is shown) — the list is kept, so the views reading it (the board's loads) stay. */
+export function sameRecords<T>(a: readonly T[], b: readonly T[]): boolean {
+  return a.length === b.length && a.every((x, i) => JSON.stringify(x) === JSON.stringify(b[i]))
+}
+/** K79: a variable's name as typed — letters, digits and _ (a leading digit gets a _); refused when empty or another variable's. */
+export function variableName(raw: string, others: string[]): { name: string } | { why: string } {
+  let n = raw.trim().replace(/[^A-Za-z0-9_]/g, '_')
+  if (!n) return { why: 'A variable needs a name' }
+  if (/^\d/.test(n)) n = `_${n}`
+  if (others.includes(n)) return { why: `There is a variable named ${n} already` }
+  return { name: n }
+}
+/** K80: an enum's values as typed — comma-separated, trimmed, each once. */
+export const enumValues = (text: string): string[] => [...new Set(text.split(',').map((x) => x.trim()).filter(Boolean))]
+/** K77: the line a shot's lip-sync uses — the one picked when it is among the shot's own lines, else the shot's first that fits the window. */
+export function lipsyncLine<L extends { node_id: string; index: number; too_long: boolean }>(lines: L[], o: { node_id: string | null; index: number | null }): L | undefined {
+  return lines.find((l) => l.node_id === o.node_id && l.index === o.index) ?? lines.find((l) => !l.too_long)
+}
 
 export const useStory = create<StoryState>()((set, get) => {
   const edit: StoryState['edit'] = (patch) => { const w = get().world ?? EMPTY; set({ world: { ...w, ...patch } }); schedule(get, set) }
-  const replaceProfile = (p: Profile) => set({ profiles: [p, ...get().profiles.filter((x) => x.id !== p.id)] })
+  const replaceProfile = (p: Profile) => set({ profiles: [overlayPending(p), ...get().profiles.filter((x) => x.id !== p.id)] })   // K75: what is typed stays on screen
   const updateProfile = (p: Profile) => set({ profiles: get().profiles.map((x) => (x.id === p.id ? p : x)) })           // a local edit: the list keeps its order
-  /** What the server returned, with the name / sheet fields typed since still showing (they save next). */
-  const overlayPending = (p: Profile): Profile => {
-    const sending = profSending?.pid === p.id ? profSending.body : null, pending = profPending?.pid === p.id ? profPending.body : null
-    const b = sending && pending ? mergeProfileBody(sending, pending) : sending ?? pending
-    if (!b) return p
-    return { ...p, ...(b.name !== undefined ? { name: b.name } : {}), versions: p.versions.map((v) => { const pv = b.versions?.find((x) => x.id === v.id); return pv ? { ...v, ...Object.fromEntries(Object.entries(pv).filter(([k]) => TYPED.has(k))) } : v }) }
-  }
   const patchWith = (body: ProfileBody, pid: string | null = get().profileId): Promise<Profile | null> => {
     const run = profChain.then(async (): Promise<Profile | null> => {
       const p = get().profiles.find((x) => x.id === pid)
@@ -420,7 +465,7 @@ export const useStory = create<StoryState>()((set, get) => {
       try {
         const next = await send(p.revision)
         profSending = null
-        replaceProfile(overlayPending(next))
+        replaceProfile(next)
         return next
       } catch (e) {
         if ((e as ApiError).status === 409) {
@@ -430,7 +475,7 @@ export const useStory = create<StoryState>()((set, get) => {
           const fresh = get().profiles.find((x) => x.id === p.id)
           const typedOnly = !(b.versions ?? []).some((v) => 'body' in v)
           if (fresh && typedOnly) {
-            try { const next = await send(fresh.revision); profSending = null; replaceProfile(overlayPending(next)); return next } catch { /* told below */ }
+            try { const next = await send(fresh.revision); profSending = null; replaceProfile(next); return next } catch { /* told below */ }
           }
           profSending = null
           await get().loadProfiles()                                       // what the server holds now (a body conflict is not overlaid)
@@ -461,6 +506,19 @@ export const useStory = create<StoryState>()((set, get) => {
     shotChain = run.catch(() => undefined)
     return run
   }
+  /** D125 (SP3): what the board's cells read (`loadBoard` coalesces the asks, K83). */
+  const readBoard = async (): Promise<void> => {
+    const want = new Set<string>()
+    for (const s of get().shots) { const v = s.versions.find((x) => x.id === s.current); if (v?.clip_id) want.add(v.clip_id) }
+    const missing = [...want].filter((id) => !get().clipsById[id])
+    const [got, finals, cuts, cards] = await Promise.all([
+      Promise.all(missing.map((id) => unwrap(http.GET('/clips/{clip_id}', { params: { path: { clip_id: id } } })).catch(() => null))),
+      unwrap(http.GET('/finals')).catch(() => null), unwrap(http.GET('/timelines')).catch(() => null), unwrap(http.GET('/story/shots/cards')).catch(() => null)])
+    const next = { ...get().clipsById }
+    got.forEach((c, i) => { if (c) next[missing[i]] = c })
+    set({ ...(missing.length ? { clipsById: next } : {}), ...(finals ? { boardFinals: finals.items } : {}), ...(cuts ? { boardCuts: cuts.items.map((t) => ({ clips: t.clips.map((c) => ({ shot_id: c.shot_id ?? null, shot_version: c.shot_version ?? null, clip_id: c.clip_id })) })) } : {}),
+      ...(cards ? { cards: Object.fromEntries(cards.items.map((c) => [c.shot_id, c])), cardGuide: cards.guide_s } : {}) })
+  }
   /** D90 (B14): a typed field joins the profile's pending body; the save follows a 400 ms pause (another profile's pending one goes first). */
   const queueProfile = (pid: string, body: ProfileBody) => {
     if (profPending && profPending.pid !== pid) { const prev = profPending; profPending = null; if (profTimer) { window.clearTimeout(profTimer); profTimer = null } void patchWith(prev.body, prev.pid) }
@@ -481,7 +539,11 @@ export const useStory = create<StoryState>()((set, get) => {
       catch (e) { if ((e as ApiError).status !== 409) toast(`World: ${detail(e)}`); set({ world: null }) }
       finally { set({ loading: false }) }
     },
-    flush: async () => { if (saveTimer) { window.clearTimeout(saveTimer); saveTimer = null; await save(get, set) } },
+    flush: async () => {                                                     // K96: a save already on its way is waited for too
+      if (saveTimer) { window.clearTimeout(saveTimer); saveTimer = null; void save(get, set) }
+      await saveChain
+    },
+    settleFlow: () => settleNodes(get, set),
     settleProfiles: async () => { if (profPending) await patchWith({}, profPending.pid); await profChain },
     setSection: (section) => set({ section }),
     select: (selected) => set({ selected }),
@@ -528,6 +590,7 @@ export const useStory = create<StoryState>()((set, get) => {
     },
     setVariable: (name, patch) => {
       const w = get().world; if (!w) return
+      if (patch.name !== undefined && patch.name !== name && w.variables.some((v) => v.name === patch.name)) { toast(`There is a variable named ${patch.name} already`); return }   // K79: two of one name were changed and removed together
       const vars = w.variables.map((v) => {
         if (v.name !== name) return v
         const next = { ...v, ...patch }
@@ -545,6 +608,11 @@ export const useStory = create<StoryState>()((set, get) => {
       if (s.kind === 'panel') {
         void askConfirm({ title: `Delete the saved panel "${s.id}"?`, text: 'Its fields and picture go; what it made stays in the Bin.', okLabel: 'Delete', danger: true })
           .then(async (ok) => { if (!ok) return; const { useGenerate } = await import('../generate/generateStore'); await useGenerate.getState().deletePreset(s.id); if (get().selected?.id === s.id) set({ selected: null }) })
+        return
+      }
+      if (s.kind === 'template') {                                             // K81: a Shot template is deleted, asked first (never taken for a variable's name)
+        const t = get().shotTemplates.find((x) => x.id === s.id); if (!t) return
+        void askConfirm({ title: `Delete the template ${t.name}?`, okLabel: 'Delete', danger: true, text: 'The Shots made from it stay.' }).then((ok) => { if (ok) void get().deleteTemplate(t.id) })
         return
       }
       if (s.kind === 'style') get().removeStyle(s.id); else if (s.kind === 'beat') get().removeBeat(s.id); else get().removeVariable(s.id)
@@ -733,7 +801,7 @@ export const useStory = create<StoryState>()((set, get) => {
     ensureCandidates: async (pid, vid) => {
       await get().settleProfiles()                                                                  // M3: its answer replaces the profile — a pending sheet edit goes first
       try {
-        const next = await unwrap(http.POST('/story/profiles/{pid}/candidates', { params: { path: { pid } }, body: { version: vid } }))
+        const next = overlayPending(await unwrap(http.POST('/story/profiles/{pid}/candidates', { params: { path: { pid } }, body: { version: vid } })))   // K75
         set({ profiles: get().profiles.some((x) => x.id === next.id) ? get().profiles.map((x) => (x.id === next.id ? next : x)) : [next, ...get().profiles] })
         return next.versions.find((v) => v.id === vid)?.candidates_group_id ?? null
       } catch (e) { toast(`Candidates: ${detail(e)}`); return null }
@@ -744,7 +812,7 @@ export const useStory = create<StoryState>()((set, get) => {
       const into = vid ?? p.current
       try {
         const r = await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/add', { params: { path: { pid, vid: into } }, body: { asset_ids: ids, role } }))
-        set({ profiles: get().profiles.map((x) => (x.id === pid ? r.profile : x)) })
+        storeProfile(r.profile)                                                                     // K75: what is typed stays on screen
         if (get().profileId === pid) void get().loadPages()
         const copies = Object.keys(r.copied).length
         const what = role === 'hero' ? `is ${p.name}'s hero` : role === 'reference' ? `${ids.length === 1 ? 'is' : 'are'} in ${p.name}'s reference set` : `${ids.length === 1 ? 'is a candidate' : 'are candidates'} of ${p.name}`
@@ -869,6 +937,7 @@ export const useStory = create<StoryState>()((set, get) => {
       } catch (e) { toast(`Delete voice: ${detail(e)}`) }
     },
     voiceLine: async (nodeId, index) => {                                                           // the speaker's voice, else the fallback picked under the lines
+      await get().settleFlow()                                                                      // K73: the line as typed
       try {
         const r = await unwrap(http.POST('/story/flow/nodes/{nid}/lines/{i}/voice', { params: { path: { nid: nodeId, i: index } }, body: { voice_id: get().voiceId, speed: 1, stage: false } }))
         await useSession.getState().refreshAll()
@@ -877,6 +946,7 @@ export const useStory = create<StoryState>()((set, get) => {
       } catch (e) { toast(`Voice: ${detail(e)}`) }
     },
     voiceNode: async (nodeId) => {
+      await get().settleFlow()
       try {
         const r = await unwrap(http.POST('/story/flow/nodes/{nid}/voice', { params: { path: { nid: nodeId } }, body: { voice_id: get().voiceId, speed: 1, stage: false } }))
         await useSession.getState().refreshAll()
@@ -884,6 +954,7 @@ export const useStory = create<StoryState>()((set, get) => {
       } catch (e) { toast(`Voice all lines: ${detail(e)}`) }
     },
     voiceEpisode: async () => {
+      await get().settleFlow()
       try {
         const r = await unwrap(http.POST('/story/flow/voice', { body: { voice_id: get().voiceId, speed: 1, stage: false } }))
         await useSession.getState().refreshAll()
@@ -902,8 +973,9 @@ export const useStory = create<StoryState>()((set, get) => {
     lipsync: async () => {
       const s = get().shot(); const v = get().shotVersion(); if (!s || !v) return
       const o = get().lipsyncOpts
+      await get().settleFlow()                                                                      // K73: the lines as typed
       const lines = get().lipsyncLines()
-      const line = o.node_id !== null && o.index !== null ? lines.find((l) => l.node_id === o.node_id && l.index === o.index) ?? { node_id: o.node_id, index: o.index, too_long: false, seconds: null } : lines.find((l) => !l.too_long)
+      const line = lipsyncLine(lines, o)                                                            // K77: never another shot's line (its words on this shot's frame)
       if (!line) { toast(lines.length ? 'Every voiced line runs past the lip-sync window — shorten one in the Flow' : 'No voiced line — voice one in the Flow (🎙) first'); return }
       if (line.too_long) { toast(`That line runs ${line.seconds} s — past the lip-sync window; pick a shorter one`); return }
       try {
@@ -934,17 +1006,12 @@ export const useStory = create<StoryState>()((set, get) => {
       set({ picked: additive ? (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]) : [id] })
     },
     setCastFilter: (castFilter) => set({ castFilter }),
-    loadBoard: async () => {                                                                        // D125 (SP3): what the board's cells read
-      const want = new Set<string>()
-      for (const s of get().shots) { const v = s.versions.find((x) => x.id === s.current); if (v?.clip_id) want.add(v.clip_id) }
-      const missing = [...want].filter((id) => !get().clipsById[id])
-      const [got, finals, cuts, cards] = await Promise.all([
-        Promise.all(missing.map((id) => unwrap(http.GET('/clips/{clip_id}', { params: { path: { clip_id: id } } })).catch(() => null))),
-        unwrap(http.GET('/finals')).catch(() => null), unwrap(http.GET('/timelines')).catch(() => null), unwrap(http.GET('/story/shots/cards')).catch(() => null)])
-      const next = { ...get().clipsById }
-      got.forEach((c, i) => { if (c) next[missing[i]] = c })
-      set({ clipsById: next, ...(finals ? { boardFinals: finals.items } : {}), ...(cuts ? { boardCuts: cuts.items.map((t) => ({ clips: t.clips.map((c) => ({ shot_id: c.shot_id ?? null, shot_version: c.shot_version ?? null, clip_id: c.clip_id })) })) } : {}),
-        ...(cards ? { cards: Object.fromEntries(cards.items.map((c) => [c.shot_id, c])), cardGuide: cards.guide_s } : {}) })
+    loadBoard: () => {                                                                              // K83: the Flow and the board both asked on every change — one read
+      if (boardNext) return boardNext
+      const run = boardLast.then(() => { boardNext = null; return readBoard() })
+      boardNext = run
+      boardLast = run.catch(() => undefined)
+      return run
     },
     setBoardFilter: (boardFilter) => set({ boardFilter }),
     setBoardSearch: (boardSearch) => set({ boardSearch }),
@@ -967,17 +1034,20 @@ export const useStory = create<StoryState>()((set, get) => {
     loadShots: async () => {
       try {
         const r = await unwrap(http.GET('/story/shots'))
-        set({ shots: r.items, shotsLoaded: true })
+        // K83: a node's save broadcasts its shot whether or not it changed — the same shots keep the list (no board reload, no details)
+        const same = get().shotsLoaded && sameRecords(get().shots, r.items)
+        if (!same) set({ shots: r.items, shotsLoaded: true })
         const cur = get().shotId
         if (cur && !r.items.some((s) => s.id === cur)) set({ shotId: null, shotVersionId: null })
         else if (cur) { const s = r.items.find((x) => x.id === cur)!; if (!s.versions.some((v) => v.id === get().shotVersionId)) set({ shotVersionId: s.current }) }
-        void get().loadShotDetails()
+        if (!same) void get().loadShotDetails()
       } catch (e) { if ((e as ApiError).status !== 409) toast(`Shots: ${detail(e)}`) }
     },
     selectShot: (id, version) => {
       const s = id ? get().shots.find((x) => x.id === id) : undefined
       set({ shotId: s ? id : null, shotVersionId: s ? (version && s.versions.some((v) => v.id === version) ? version : s.current) : null,
-        ...(s?.owner_node && get().flowNodes[s.owner_node] ? { nodeId: s.owner_node } : {}) })                   // D125 (S10): a shot selects its node
+        ...(s?.owner_node && get().flowNodes[s.owner_node] ? { nodeId: s.owner_node } : {}),                   // D125 (S10): a shot selects its node
+        ...((s ? id : null) !== get().shotId ? { lipsyncOpts: { ...get().lipsyncOpts, node_id: null, index: null } } : {}) })   // K77: a line picked for another shot is not this one's
       void get().loadShotDetails()
     },
     loadShotDetails: async () => {
@@ -1066,15 +1136,25 @@ export const useStory = create<StoryState>()((set, get) => {
       return !!st && st.revision > v.stage_revision
     },
     // ---- SY3 · Flow
-    loadFlow: async () => {
+    loadFlow: () => {
+      const seq = ++flowSeq
+      const path = useSession.getState().project?.path ?? null
+      if (path && templatesFor !== path) { templatesFor = path; void get().loadTemplates() }            // K81: the templates load with the Flow
+      const run = (async () => {
       try {
         const [r, sc] = await Promise.all([unwrap(http.GET('/story/flow')), unwrap(http.GET('/story/scenes')).catch(() => null)])
+        if (seq !== flowSeq) { await flowLatest; return }                                               // K73: a later read overtook this one — its reply is applied
         const flowNodes: Record<string, FlowNode> = {}
-        for (const n of r.nodes) flowNodes[n.id] = n
+        const mine = get().flowNodes
+        // K73: a node with an edit of ours still on its way keeps what is typed; a reply older than our last save's keeps our node too
+        for (const n of r.nodes) { const m = mine[n.id]; flowNodes[n.id] = m && (nodeBusy(n.id) || m.revision > n.revision) ? m : n }
         const scenes = sc?.items ?? get().scenes
         set({ flowNodes, flowGraph: r.graph, flowLoaded: true, scenes, ...(get().nodeId && !flowNodes[get().nodeId!] ? { nodeId: null } : {}),
           ...(get().sceneId && !scenes.some((s) => s.id === get().sceneId) ? { sceneId: null } : {}) })
       } catch (e) { if ((e as ApiError).status !== 409) toast(`Flow: ${detail(e)}`) }
+      })()
+      flowLatest = run
+      return run
     },
     selectNode: (nodeId) => {                                                                       // D125 (S10): a node selects its shot (one panel)
       set({ nodeId, ...(nodeId ? { edge: null } : {}) })
@@ -1103,9 +1183,12 @@ export const useStory = create<StoryState>()((set, get) => {
       const n = get().flowNodes[id]; if (!n) return
       set({ flowNodes: { ...get().flowNodes, [id]: { ...n, ...patch } as FlowNode } })               // at once; the save follows (one at a time per node, the latest state)
       if ('speaker_versions' in patch) pinsChanged.add(id)
-      await saveNode(get, set, id, !!(patch.type || patch.options))
+      const saved = queueNode(get, set, id, !!(patch.type || patch.options))                       // K73: typed words after a pause, a pick at once
+      if (!Object.keys(patch).every((k) => NODE_TYPED.has(k))) void flushNode(get, set, id)
+      await saved
     },
     deleteNode: async (id, withShot = false) => {   // D125 (#4) / RC2a: its shot moves to a Shot node of its own, or goes too
+      dropNode(id); await nodeChains[id]                                                            // K73: no save of it after it went
       try { await unwrap(http.DELETE('/story/flow/nodes/{nid}', { params: { path: { nid: id }, query: { shot: withShot ? 'delete' : 'keep' } } })); if (get().nodeId === id) set({ nodeId: null }); await get().loadFlow(); void get().loadShots() }
       catch (e) { toast(`Delete: ${detail(e)}`) }
     },
@@ -1115,6 +1198,7 @@ export const useStory = create<StoryState>()((set, get) => {
       if (made) await get().patchNode(made.id, { lines: n.lines, options: n.options.map((o) => ({ ...o, id: `opt_${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}` })), cond: n.cond, set: n.set, target: n.target, colour: n.colour, board_group_id: n.board_group_id, place_id: n.place_id, speaker_versions: n.speaker_versions })
     },
     makeScene: async (name, nodeIds) => {
+      await get().settleFlow()                                                                      // K73: the scene moves its nodes on the server — ours land first
       try { const r = await unwrap(http.POST('/story/scenes', { body: { name, node_ids: nodeIds } })); set({ scenes: r.items }); await get().loadFlow() }
       catch (e) { toast(`Scene: ${detail(e)}`) }
     },
@@ -1123,10 +1207,12 @@ export const useStory = create<StoryState>()((set, get) => {
       catch (e) { toast(`Scene: ${detail(e)}`) }
     },
     sceneMembers: async (sceneId, add, remove) => {
+      await get().settleFlow()
       try { const r = await unwrap(http.POST('/story/scenes/{sid}/nodes', { params: { path: { sid: sceneId } }, body: { add, remove } })); set({ scenes: r.items }); await get().loadFlow() }
       catch (e) { toast(`Scene: ${detail(e)}`) }
     },
     dissolveScene: async (sceneId) => {
+      await get().settleFlow()
       try { await unwrap(http.DELETE('/story/scenes/{sid}', { params: { path: { sid: sceneId } } })); set({ sceneId: null }); await get().loadFlow() }
       catch (e) { toast(`Scene: ${detail(e)}`) }
     },
@@ -1136,7 +1222,8 @@ export const useStory = create<StoryState>()((set, get) => {
       try { set({ shotTemplates: (await unwrap(http.GET('/story/shot-templates'))).items }) } catch (e) { if ((e as ApiError).status !== 409) toast(`Shot templates: ${detail(e)}`) }
     },
     saveTemplate: async (nodeId, name) => {
-      try { set({ shotTemplates: (await unwrap(http.POST('/story/shot-templates', { body: { node_id: nodeId, name } }))).items }); useSession.getState().toast(`Saved as the Shot template ${name} (World › Presets)`, 'success') }
+      await get().settleFlow()                                                                      // K73: the template keeps the lines as typed
+      try { set({ shotTemplates: (await unwrap(http.POST('/story/shot-templates', { body: { node_id: nodeId, name } }))).items }); useSession.getState().toast(`Saved as the Shot template ${name} — the Flow's column lists it under Shot templates`, 'success') }   // K81: World › Presets is not in the shell
       catch (e) { toast(`Template: ${detail(e)}`) }
     },
     renameTemplate: async (id, name) => {
@@ -1148,6 +1235,7 @@ export const useStory = create<StoryState>()((set, get) => {
       catch (e) { toast(`Template: ${detail(e)}`) }
     },
     useTemplate: async (id, near, at) => {
+      await get().settleFlow()
       try {
         const n = await unwrap(http.POST('/story/shot-templates/{tid}/use', { params: { path: { tid: id } }, body: { near, x: at?.x ?? null, y: at?.y ?? null } }))
         await Promise.all([get().loadFlow(), get().loadShots()])
@@ -1155,6 +1243,7 @@ export const useStory = create<StoryState>()((set, get) => {
       } catch (e) { toast(`New Shot: ${detail(e)}`) }
     },
     ownCast: async (nodeId, own) => {
+      await get().settleFlow()
       try { await unwrap(http.POST('/story/flow/nodes/{nid}/own', { params: { path: { nid: nodeId } }, body: { part: 'cast', own } })); await get().loadFlow() }
       catch (e) { toast(`Cast: ${detail(e)}`) }
     },
@@ -1166,6 +1255,7 @@ export const useStory = create<StoryState>()((set, get) => {
       } catch (e) { toast(`Stage: ${detail(e)}`) }
     },
     newShotFrom: async (nodeId) => {
+      await get().settleFlow()                                                                      // K73: the sibling copies the lines as typed
       try {
         const n = await unwrap(http.POST('/story/flow/nodes/{nid}/sibling', { params: { path: { nid: nodeId } } }))
         await Promise.all([get().loadFlow(), get().loadShots()])
@@ -1199,18 +1289,22 @@ export const useStory = create<StoryState>()((set, get) => {
       saveGraph(get, set, { edges })
     },
     bindShot: async (nodeId, shotId, version) => {
+      await get().settleFlow()
       try { await unwrap(http.POST('/story/flow/nodes/{nid}/bind', { params: { path: { nid: nodeId } }, body: { shot_id: shotId, version: version ?? null } })); await Promise.all([get().loadFlow(), get().loadShots()]) }
       catch (e) { toast(`Bind: ${detail(e)}`) }
     },
     unbindShot: async (nodeId) => {
+      await get().settleFlow()
       try { await unwrap(http.POST('/story/flow/nodes/{nid}/unbind', { params: { path: { nid: nodeId } } })); await Promise.all([get().loadFlow(), get().loadShots()]) }
       catch (e) { toast(`Unbind: ${detail(e)}`) }
     },
     spawnShot: async (nodeId, name) => {
+      await get().settleFlow()
       try { await unwrap(http.POST('/story/flow/nodes/{nid}/shot', { params: { path: { nid: nodeId } }, body: { name } })); await Promise.all([get().loadFlow(), get().loadShots()]) }
       catch (e) { toast(`New shot: ${detail(e)}`) }
     },
     validate: async () => {
+      await get().settleFlow()                                                                      // K73: validated as typed
       try { const r = await unwrap(http.POST('/story/flow/validate')); set({ problems: r.problems }) }
       catch (e) { toast(`Validate: ${detail(e)}`) }
     },
@@ -1251,14 +1345,17 @@ export const useStory = create<StoryState>()((set, get) => {
 })
 
 /** SY3: a node saved with its revision, one save at a time per node and never two queued — the save sends the node's latest local state, so
- *  keystrokes coalesce; a 409 reloads (the last change lost and said so). `ports`: the index is refreshed after, an edge may have gone. */
-function saveNode(get: () => StoryState, set: (p: Partial<StoryState>) => void, id: string, ports: boolean): Promise<void> {
+ *  keystrokes coalesce; a 409 reloads (the last change lost and said so). A type or options change (`nodePorts`): the index is refreshed
+ *  after, an edge may have gone. */
+function saveNode(get: () => StoryState, set: (p: Partial<StoryState>) => void, id: string): Promise<void> {
   if (nodeQueued.has(id)) return nodeChains[id]
   nodeQueued.add(id)
   nodeChains[id] = (nodeChains[id] ?? Promise.resolve()).then(async () => {
     nodeQueued.delete(id)
+    const ports = nodePorts.delete(id)
     const n = get().flowNodes[id]; if (!n) return
     nodeSaving += 1
+    nodeSending.add(id)
     try {
       const { type, title, lines, options, cond, set: sets, target, text, colour, board_group_id, place_id, speaker_versions } = n     // D90 (02 §4.2): the board rides along; D93 (C7): where; D93 follow-up: the speakers' versions
       const pins = pinsChanged.delete(id) ? { speaker_versions } : {}
@@ -1267,11 +1364,43 @@ function saveNode(get: () => StoryState, set: (p: Partial<StoryState>) => void, 
       if (cur) set({ flowNodes: { ...get().flowNodes, [id]: { ...cur, revision: next.revision, updated_at: next.updated_at } } })
       if (ports) { const r = await unwrap(http.GET('/story/flow')); set({ flowGraph: r.graph }) }
     } catch (e) {
-      if ((e as ApiError).status === 409) { toast('The node changed elsewhere — reloaded; your last change was not saved'); await get().loadFlow() }
-      else toast(`Node not saved: ${detail(e)}`)
-    } finally { nodeSaving -= 1 }
+      if ((e as ApiError).status === 409) {
+        nodeSending.delete(id); dropNode(id)                                                         // K73: the server's node is read, not ours kept
+        toast('The node changed elsewhere — reloaded; your last change was not saved'); await get().loadFlow()
+      } else toast(`Node not saved: ${detail(e)}`)
+    } finally { nodeSaving -= 1; nodeSending.delete(id) }
   })
   return nodeChains[id]
+}
+
+/** K73: a node's edit joins its pending save, sent after a pause (`flushNode` sends it at once); resolves when that save is done. */
+function queueNode(get: () => StoryState, set: (p: Partial<StoryState>) => void, id: string, ports: boolean): Promise<void> {
+  if (ports) nodePorts.add(id)
+  if (id in nodeTimers) window.clearTimeout(nodeTimers[id])
+  const done = new Promise<void>((resolve) => { (nodeWaiters[id] ??= []).push(resolve) })
+  nodeTimers[id] = window.setTimeout(() => { void flushNode(get, set, id) }, NODE_PAUSE_MS)
+  return done
+}
+/** K73: the node's edit waiting out its pause is sent now (its save, or the save already on its way when none waits). */
+function flushNode(get: () => StoryState, set: (p: Partial<StoryState>) => void, id: string): Promise<void> {
+  if (!(id in nodeTimers)) return nodeChains[id] ?? Promise.resolve()
+  window.clearTimeout(nodeTimers[id]); delete nodeTimers[id]
+  const waiting = nodeWaiters[id] ?? []; delete nodeWaiters[id]
+  const run = saveNode(get, set, id)
+  void run.then(() => { for (const w of waiting) w() })
+  return run
+}
+/** K73: the node's waiting edit is dropped (the node went, or the server's is read after a conflict); who waited for it is let go. */
+function dropNode(id: string): void {
+  if (id in nodeTimers) { window.clearTimeout(nodeTimers[id]); delete nodeTimers[id] }
+  for (const w of nodeWaiters[id] ?? []) w()
+  delete nodeWaiters[id]
+  nodePorts.delete(id)
+}
+/** K73: every waiting node edit sent, and every node save waited for. */
+async function settleNodes(get: () => StoryState, set: (p: Partial<StoryState>) => void): Promise<void> {
+  await Promise.all(Object.keys(nodeTimers).map((id) => flushNode(get, set, id)))
+  await Promise.all(Object.values(nodeChains))
 }
 
 /** SY3: the index saved with its revision, one save at a time; a 409 reloads (the last change lost and said so). */

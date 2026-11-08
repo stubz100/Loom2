@@ -2937,7 +2937,8 @@ export interface paths {
          * @description D123 (SC3c-3): the things not yet made — the plate cleaned under them all and (D124) their shadows (a Fill on the set's document); when it lands, the relief is
          *     rebuilt from the clean plate at the set's lens and then a Pixal3D model is queued for each one's cut-out (stood on the relief at its
          *     footprint when it lands) — the rebuild first, so the clean set shows within a minute or two and the models follow. The jobs take their
-         *     turns through the queue (D97). 422 with the reason: nothing to make, Pixal3D not in the variant.
+         *     turns through the queue (D97). 422 with the reason: nothing to make, Pixal3D not in the variant. Review K51: 409 while a Make of the set
+         *     is under way (its clean, rebuild or a model queued, staged or running — a double click, a Make after a reload).
          */
         post: operations["stage_things_make_stages__st_id__sets__set_id__things_make_post"];
         delete?: never;
@@ -9121,6 +9122,18 @@ export interface components {
             /** Problems */
             problems: components["schemas"]["FlowProblem"][];
         };
+        /**
+         * FoldSkipped
+         * @description Review K37: an idea *Bring the ideas in* could not fold (its pictures in the Trash, a page locked …), or whose candidates did not join.
+         */
+        FoldSkipped: {
+            /** Idea Id */
+            idea_id: string;
+            /** Name */
+            name: string;
+            /** Reason */
+            reason: string;
+        };
         /** FoldedIdea */
         FoldedIdea: {
             /** Candidates */
@@ -10319,6 +10332,11 @@ export interface components {
         IdeasFolded: {
             /** Items */
             items: components["schemas"]["FoldedIdea"][];
+            /**
+             * Skipped
+             * @default []
+             */
+            skipped: components["schemas"]["FoldSkipped"][];
         };
         /** IdsReply */
         IdsReply: {

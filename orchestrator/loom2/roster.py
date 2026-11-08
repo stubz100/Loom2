@@ -287,6 +287,17 @@ ROSTER_BY_ID: dict[str, RosterEntry] = {e.id: e for e in ROSTER}
 assert len(ROSTER_BY_ID) == len(ROSTER), "duplicate roster ids"
 
 
+def _check_confirms() -> None:
+    """Review K85: a roster `confirm` names a boolean Settings field — a misspelt one hid its model for good, silently."""
+    from .config import Settings
+    for e in ROSTER:
+        f = Settings.model_fields.get(e.confirm or "") if e.confirm else None
+        assert not e.confirm or (f is not None and f.annotation is bool), f"roster {e.id}: confirm {e.confirm!r} is not a Settings flag"
+
+
+_check_confirms()
+
+
 class ResolvedModel(BaseModel):
     entry: RosterEntry
     path: str | None

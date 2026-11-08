@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from ..animations import AnimationStore, AnimationTemplate, StaleAnimations
 from ..bins import stage_home
-from ..fsio import atomic_write_json, read_json_or, utc_now
+from ..fsio import atomic_write_json, new_id, read_json_or, utc_now
 from ..stages import encode_guide
 from ..origin import JobOrigin
 from ..recipes import STAGE_PASSES
@@ -266,7 +266,7 @@ async def animations_library_put(svc: Svc, aid: str, body: AnimationTemplate):
 
 
 class AnimationThumb(BaseModel):
-    blob: str                                     # the sha256 of a PNG uploaded with PUT /blobs/{sha}
+    blob: str = Field(..., pattern=r"^[0-9a-f]{64}$")   # the sha256 of a PNG uploaded with PUT /blobs/{sha} (review K91: nothing else names a file)
 
 
 @router.post("/stages/animations/{aid}/thumbnail", response_model=AnimationsOut)
@@ -467,8 +467,29 @@ async def stage_things_make(svc: Svc, st_id: str, set_id: str):
     """D123 (SC3c-3): the things not yet made — the plate cleaned under them all and (D124) their shadows (a Fill on the set's document); when it lands, the relief is
     rebuilt from the clean plate at the set's lens and then a Pixal3D model is queued for each one's cut-out (stood on the relief at its
     footprint when it lands) — the rebuild first, so the clean set shows within a minute or two and the models follow. The jobs take their
-    turns through the queue (D97). 422 with the reason: nothing to make, Pixal3D not in the variant."""
+    turns through the queue (D97). 422 with the reason: nothing to make, Pixal3D not in the variant. Review K51: 409 while a Make of the set
+    is under way (its clean, rebuild or a model queued, staged or running — a double click, a Make after a reload)."""
     ws, catalogue, q = svc.require_project()
+    try:
+        _, obj = await asyncio.to_thread(StageStore(ws).picture_set, st_id, set_id)
+    except (KeyError, ValueError) as e:
+        raise _things_error(e) from e
+    if not any(not t.mesh_asset_id for t in obj.things):                         # nothing to make says so before a Make under way does
+        raise HTTPException(422, "every thing is made — pick a thing on the picture first")
+    key = (str(ws.path), st_id, set_id)
+    if key in _MAKING or set_things.make_live(q, st_id, set_id):
+        raise HTTPException(409, "the things are being made — wait for them, or cancel their jobs in the Dock")
+    _MAKING.add(key)                                                              # from the check to the submit (the prep runs off the loop)
+    try:
+        return await _things_make(svc, ws, catalogue, q, st_id, set_id)
+    finally:
+        _MAKING.discard(key)
+
+
+_MAKING: set[tuple[str, str, str]] = set()        # review K51: the Makes between their check and their submit (on the loop)
+
+
+async def _things_make(svc: Svc, ws: Any, catalogue: Any, q: Any, st_id: str, set_id: str) -> dict:
     try:
         prep = await asyncio.to_thread(set_things.prepare_make, StageStore(ws), svc.require_documents(), catalogue, st_id, set_id, svc.app.settings.variant)
     except (KeyError, ValueError) as e:
@@ -484,6 +505,7 @@ async def stage_things_make(svc: Svc, st_id: str, set_id: str):
                          origin=origin(set_things.CLEAN_SURFACE, {"cutouts": models}))[0]
     except ValueError as e:
         raise HTTPException(422, str(e)) from e
+    await q.flush()                                                               # D64: on disk before the reply (a reload sees the Make, K51)
     return {"clean_job_id": clean.id, "models": models, "shadows": prep["shadows"]}
 
 
@@ -602,7 +624,7 @@ async def stage_guide(svc: Svc, st_id: str, body: GuideUpload):
     if gid is None:
         gid = (await asyncio.to_thread(lambda: groups.create(f"Stage · {st.name}", parent_id=stage_home(groups, ws, st).id))).id   # B3 (D159): in its shot's home
     out_dir = ws.stages_dir / st_id / "guides"
-    out = out_dir / f"{body.camera_id}-{body.kind}-r{body.revision}.mp4"
+    out = out_dir / f"{body.camera_id}-{body.kind}-r{body.revision}-{new_id('g')[2:]}.mp4"   # review K91: a re-upload at the same revision is a file of its own
     await asyncio.to_thread(encode_guide, paths, out, body.fps)
     origin = JobOrigin(suite="stage", surface="guide", ref=st_id, payload={"camera_id": body.camera_id, "kind": body.kind})
     params = {"stage_id": st_id, "camera_id": body.camera_id, "revision": body.revision, "pass": f"{body.kind}-sequence", "frames": len(paths), "fps": body.fps,

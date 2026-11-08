@@ -16803,3 +16803,108 @@ Offline 859 (11 new in `test_review_k.py`; the test FilmCraft's delete as the re
 navigations inside one layer (Story's Flow under the Performance level: its column never came): it settles on a switch to another layer only,
 and once at start for a reload; the conform test now holds the queue before its Assemble (its V2 placement raced the conform). Nothing ran on
 the GPU. Left: K1 (the rig's A/B), the open viewport items above and the register's other mediums and lows, subsystem by subsystem.
+
+## 2026-11-08 08:53 — The K register's steps 3 and 4: K1 measured and fixed (D194), the mediums and most lows
+
+The author: "continue" (the order agreed at 11:55). Step 3 on the rig, step 4 split by subsystem — five agents for the frontend and the Story backend beside my own backend work (the five ran into the five-hour limit three times; each resumed where it stopped).
+
+**K1 → D194** (recorded first in 13): references go to the model at their own shape. `_ref_chain`'s `ImageScale(ref_max_px, ref_max_px, crop disabled)` stretched every reference to a square since M3 (D152's 1024×576 hero went in 1.78× tall); the node goes — `pipeline.fit_reference` already fits each reference inside `ref_max_px`² keeping its aspect. The A/B on the rig (`scripts/k1_refs_rig.py`, Klein 9B, seeds 1 and 2, FaceSim against the hero, one GPU job at a time; `engine/spikes/out/k1_refs/squash|aspect.json|jpg`): the face Fill without a reference 0.418 → 0.419 (the control), **with the hero 0.514 → 0.647**; text to image with the hero **0.663 → 0.886**; the squashed faces read long and narrow, the kept ones carry the hero's width, freckles and brow; the Fill with the hero 69 s → 58 s, VRAM peak 9.38 → 9.31 GB. Every reference job changes its look; D152's numbers were taken on the squash. Graph parity: only `t2i klein base 9b + refs` moved.
+
+**Backend (mine):**
+
+- **K21** — the history fallback ends on `status_str` success or error, not only `completed`.
+- **K22** — `EventHub.broadcast` / `broadcast_binary` from a worker thread go through `call_soon_threadsafe` under a lock.
+- **K23** — `JobQueue.submit` from a thread is marshalled onto the loop (`run_coroutine_threadsafe`).
+- **K24** — the assembly, the composition render, the draft clip and both movies are irreversible just before their first project write.
+- **K25** — every paste-back compares the canvas with the one planned (`source_size` for every document job) and fails cleanly; an upscale keeps its asset and skips the layer.
+- **K26** — the engine gets its own input folder (`<state>/engine_in`, `--input-directory`), emptied when loom2's engine starts and stops (1707 files / 1.1 GB had piled up in ComfyUI's `input/` — that old folder can be emptied by hand); a job's mattes, lead-ins and pass inputs go when it ends, `temp/train/<job>` with a failed training; at open: dead jobs' named files, graphs beyond the newest 200, blobs older than a day that no waiting job names.
+- **K27** — `effective_params` honours `cfg_fixed`; the negative is used only above CFG 1.
+- **K28** — `instruct_weights()`: the gate and `/capabilities.instruct` read the graph's own four weights (not the angles LoRA).
+- **K29** — the in-app fetch passes `token=None`.
+- **K33–K35** — a new version carries the A-pose references, the shell, the body points and a prop's model (`VERSION_CARRIED`); *Make its stage independent* keeps the tracks; a new shot version copies the range, words, method and stage stamps.
+- **K38** — `sweep_unfinished` leaves the take folders of live passes.
+- **K39** — re-matting a windowed layer is refused when its windows moved since the performance (409).
+- **K40** — plate-path anchor beats unscaled, clamped to the trimmed clip.
+- **K41** — portrait plate clips and stills take the short side as the width.
+- **K42** — a composition operation holds the EffectCraft session for its whole length (`op_lock`, `@_held` on every store operation); a temp name per write.
+- **K43** — the assembly stages the composition's footage beside (`comp.new/`) and swaps it in when every frame is written.
+- **K44** — `mix_audio` plays a lane placed before 0 from what is inside the shot.
+- **K45** — each print's entry is written with its placement, and a failed print saves the ones placed (the test caught the second half: a failure before `_print`'s own save left the entry only in the session).
+- **K46** — a re-voiced line is trimmed to the new take (up to the next thing on its track).
+- **K47** — the cut's lane is clamped to the media; a rename short-cuts before `check()`.
+- **K48** — *Assemble* trims a newer final that is shorter to its end (ripple), the cut closing up.
+- **K49** — the built set's roll from `camera_roll`; `ray` rotates by it.
+- **K53** — a purged clip unlinks its proxy before the folder goes.
+- **K54** — asset aspects read once and cached per page (a landing on a 5000-item page: 0.02 s), the tree's live set read once, `get_many` chunked under SQLite's cap.
+- **K85 (backend)** — a roster `confirm` must name a boolean Settings field (checked at import); the refusals name the video models from the specs.
+- **K86 (part)** — a cancel takes the prompt off the engine's pending queue before /interrupt; *Continue* undoes its frame on a refused job and flushes before replying.
+- **K87 (part)** — `NAME_INPUTS` checks `bg_removal_name` / `audio_encoder_name`; the plug-in host's answer is the last line that parses as an object.
+- **K89** — every pass / layer / processing segment is a plain name; `FinalStore.delete` locked and atomic (renamed away, then removed); the assembly asks for a cancel every frame and lists each folder once; `check_ready` reads the matte the assembly reads, and *Assemble* waits for a matte still being made.
+- **K90 (part)** — the export maps FilmCraft's and the host's refusals to 422; one unreadable cut no longer fails the list; a cut's record goes after its folder; markers re-added at the cut's rate.
+- **K92 (part)** — the groups loader's V6 retry runs again (read_json wrapped the OSError); a non-object prompt chunk reads as no ComfyUI metadata; trash / restore / patch under the catalogue lock; an unknown thumbnail size is a 404, not a re-make; *Move* drops roles only after the move succeeds.
+
+**Story, ideas, stages (backend):**
+
+- **K30** — `_change_profile` / `_change_version`: every profile setter, `patch_profile`'s revision check, new / lock version, candidates, delete, `put_world` and `set_animatic` read and write under `_LOCK`.
+- **K31** — `flow_state()` reads the nodes and repairs the index together under the lock; `put_graph` under it.
+- **K32** — IdeaStore's RLock held from read to write (`add_variant` copies first).
+- **K36** — `create_profile` checks the hero before any page is made; moved only when free (`bins.is_free`), else copied — no 423, no orphan pages.
+- **K37** — *Bring the ideas in* leaves out trashed pictures and reports an idea that cannot fold (`skipped`, named in a toast); the rest fold; 422 not 500.
+- **K50** — one lock per stage file (and per bench / line-up / animation bench); the relief read before the lock; `restand_things` computes first.
+- **K51** — a picture set's Make answers 409 while a clean / rebuild / model job of that set is live in the queue (found after a reload too); `model_landed` skips a thing that has its mesh.
+- **K52** — `_reach` as connected-part labelling on row runs, `_grow` as running sums (numpy; equal to the old step code on 150 random masks): reach 61 s → 0.02 s, a 300 px grow 6.9 s → 0.03 s on 1920×1088.
+- **K88** — `set_source` refuses a final version first; reads skip a file deleted mid-read; `fsio.unlink` in the deletes; shots.json rewritten only when it changed; `keep` checks the class first; expand / train / LoRA check / lip-sync flush before replying; `_names` cached per request.
+- **K91 (most)** — `ensure_document` writes the pointer without a revision and `put` keeps it (no 409 at the next autosave); `AnimationThumb.blob` a sha256; `fit_body` with every factor locked; `place_set_from_fit` keeps `model_id`; `place_things._put` under the lock; a guide re-upload gets its own name; the bench found and made under one lock. Left: the AnimationStore lock and a corrupt library file, the motion rescan per GET.
+
+**Clay (frontend):**
+
+- **K56** — `keyedPose()`: `keyObject` / `setTransform` keys carry the whole pose (holds, gaze); a key over a clip block passes them into its correction.
+- **K57** — with a gaze set, `commitPose` puts back the pose's own neck and head (`withOwnHead`).
+- **K58** — undo / redo through `undoneTo()`: the current passes, group, revision and the bound objects' bodies, shells, models and sets kept.
+- **K59** — the Inspector, Reset transform and Stand it here read the object / camera sampled at the playhead (`objectSampler`, `sampleCamera`).
+- **K60** — `NumField`: Clay's number fields commit on the input's native `change` — Enter, leaving the field, a click on its arrows (rule 3) — never per keystroke (the range, the vectors, light aim, path points, focal, roll: "-90" types). The first version committed on blur / Enter only; the e2e caught that an arrow click then did nothing.
+- **K61** — the rigging benches free what each rebuild made (`gpu.ts`), parse the shell once, lose the context on unmount.
+- **K62** — renders run inside `working()`: a dispose mid-render frees the GPU when the render ends.
+- **K63** — removing an object removes its keys and blocks; another figure's hold on it becomes a pin where the hand is, a look at it goes.
+- **K93** — `open()` saves a pending edit first, a 409 reopens only the stage still open; KindNote / KindHint behind a ?; `useScenes` re-reads on add / remove / rename only; path and camera glyphs disposed; `awayStretches` samples the figure and camera only; ThingsSheet takes the focus.
+- **K108** — undo / redo clear a removed selection; F in the camera view goes to the free view first; pickers re-shown after a rebuild; in pose mode joints and cubes before path points; a press on a cube grabs it (press-drag moves the hand); a press on another picker holds the orbit.
+- **K113 (part, mine)** — ThingsSheet's overlay and clicks map to the drawn picture (`containedRect` / `pointIn`, re-measured on resize) — the rest of K113 stays open.
+
+**Edit and Generate (frontend):**
+
+- **K64** — `rasterizeFirst`: a pixel operation on a text layer asks (askConfirm), rasterises as its own step, then runs (flip / rotate, free transform, clear, cut, layer via cut, masks, painting); merges and `bakeTransform` drop the text block.
+- **K65** — `panelModelOf(p, caps)`: the column reads the model the recipe runs everywhere (the card, Turbo, CFG, references 0 of 10, tiers).
+- **K66** — the scene rebuilds only on stack / canvas / text changes, the ants re-scan on the selection's version, thumbnails cached per canvas version, the histogram keyed on the layers under it.
+- **K67** — history: a 512 MB budget beside the 200 cap (tile snapshots and swapped canvases counted).
+- **K94** — the mask hint, Fill's hint and History's empty state behind a ?; Copy merged / PSD merged / sample-all read the document, not the view; the loupe's drag and Ctrl+wheel; derived masks destroyed with their mask; the ants drawn once per outline and zoom; a late candidate adds only what arrived.
+- **K116 (Edit, loupe)** — an AI result takes the active layer only if it did not change meanwhile; undo / redo restore the active layer; the candidate strip follows undo; nudges move a free transform's box; a cursor and a brush footprint per tool; the text editor's help says Esc keeps; the loupe refits on resize while fitted.
+
+**Story, World, the Flow (frontend):**
+
+- **K73** — Flow node words save after a 400 ms pause as one PATCH; a read never puts back typed words, an overtaken read is dropped; `settleFlow()` before every route that reads nodes.
+- **K74** — a bare `#world` names no rail: World keeps its own rail, entity and mode (`resume()`); leaving a free edit moves the suite off `edit`.
+- **K75** — every reply carrying a profile keeps typed words (`storeProfile`, K8's `overlayPending` everywhere).
+- **K76** — another project forgets the Sketches home and the library.
+- **K77** — `lipsyncLine()`: the picked line only when it is the shot's own; the pick cleared on a shot change.
+- **K78** — set saves chained, each edit built from the latest set on the last revision.
+- **K79 / K80** — `CommitText`: variable names and enum values commit on blur / Enter; duplicates refused.
+- **K81** — Shot templates have a home in the Flow's left column: New Shot from it, Rename…, Delete (buttons and right-click); loaded with the Flow.
+- **K82** — the place-things sheet maps clicks and the overlay to the drawn picture.
+- **K83** — `loadBoard` coalesced, an unchanged shot list kept, World's bin reloads only when what it shows changes.
+- **K96** — voice-stale on trimmed text; `pick()` drops the old bin; `flush()` waits for a world save; the sequence's open saves a pending lane first; kept masks requested once.
+- **K116 (Flow)** — a multi-selection on the canvas stays while it holds the store's node.
+
+**Shots, Animate, Bin, the frame (frontend):**
+
+- **K68** — the browser's old presets migrate once from the stored copy into the first empty project; a project change clears the list.
+- **K69 / K70** — a search keeps what is selected and still found; `shownItems()`: range select, Select all, the arrows and the large view walk what is shown.
+- **K71** — `otherRecipe()`: Try the other model sends a camera only to a model that takes one, with a preset it has.
+- **K72** — Settings' list fields keep the raw text, split on blur / Save.
+- **K84** — a save is done when the PUT succeeds; the rescan and `/capabilities` run beside it (`applyCapabilities` applies the cut ranges).
+- **K85 (frontend)** — `frameMin` cannot loop; a spec's other preset keys kept; `modelRules` once; the preview timer test leak; `settleModel()` moves a panel off a model that vanished (H3 unticked).
+- **K95** — Fetch N GB opens the Models sheet; windowsStore drops stale replies; a right-click in a multi-selection keeps it; remaps refuse conflicts a suite's keys reach together; `anim.stage` on the I2V card only; RangeField keeps the range on a bare blur; the panel's range dropped with another project; the Frames help reads the keys; four status texts behind a ?; the Retired note behind a ?.
+- **K116 (Final, Windows)** — a key diamond's click only selects; mask fills let moves through; a trim fires once; `loadClips` selects; Properties and masks read at the playhead with the layer's full transform; dropped window boxes stay until the reply and line up; the colour dial commits on release.
+
+Left open from these groups: K85 (the sound told by suffix, the estimate's source label, `keep_sound`'s double write); K86 (the matte retry's rmtree-then-rename, clip.json's read-modify-write races); K87 (the fetch's progress probe and stall restart, a camera move recorded on models without camera nodes, roster.index.json in place); K89 (assets ingested before admission in three finals routes); K90 (a voice record saved whole at the job's end, `sync_lines`' pre-check in the live session, a dissolve's removal re-placing, a cut of placed media only); K92 (`rehome` and live versions' pages, SampleSettings pinning defaults, the PNG prompt chunk behind the media key — D67's "pixels only" asks whether generated PNGs should drop it); K91 (the AnimationStore lock and a corrupt library file, the motion rescan per GET); K113 (Mirror after a refit, a set handle dragged past the picture, Try it on's header, the bent shoe's points, the 3D panes' shrink, drags on a final version, re-crops after a drop, D183's per-joint reset); K116's parent transform under Final's masks; K83's `loadUsedBy` and recipe tick per `story.changed` (records.ts).
+
+Checks: offline 886 (27 new: `test_review_k.py` 10 more, `test_review_k_story.py` 17), Vitest 797 + 3 skipped (≈ 90 new across `reviewK*.test.*`, the stores' tests, loupe, settings lists, range field), typecheck, build, lint 63 warnings (two fast-refresh notes from helpers exported for tests), settings audit 326 / 0, model literals 0, agents 0, the API contract regenerated (`IdeasFolded.skipped`, the blob's sha256 pattern, the things make's 409). e2e alone: the first full run 84 / 92 — three scenes typed numbers and fired `change` (the NumField fix above), two compared against a hero the profile now copies (K36: a picture with a home is copied, B4 — the tests read the profile's hero), one counted the mask's new pick line, two followed from those in the shared project; then 92 / 92 in 7.3 min, and the three number scenes again on the final NumField. GPU: only K1's A/B, one job at a time. The before / after sheet: `.docs/proto01/img/d194-k1-refs-ab.jpg`.

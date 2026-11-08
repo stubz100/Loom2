@@ -1233,7 +1233,8 @@ test('a prop (D110 PS1–PS2, D125): Cast\'s props class lists the props (the ol
   const ver = async () => (await api<{ versions: Ver[] }>('GET', `/story/profiles/${prop.id}`)).versions.find((v) => v.id === prop.current)!
   await expect.poll(async () => (await ver()).model_asset_id, { timeout: 90_000 }).not.toBeNull()
   const v = await ver()
-  expect(v.model_from).toBe(img)                                                                            // made from the hero (no animation reference yet)
+  const hero = (await api<{ versions: { hero_asset_id: string | null }[] }>('GET', `/story/profiles/${prop.id}`)).versions[0].hero_asset_id
+  expect(v.model_from).toBe(hero)                                                                           // made from the hero (no animation reference yet; K36: a copy when the picture had a home)
   const mesh = await api<{ kind: string; params: { upright_deg: number[] | null } }>('GET', `/assets/${v.model_asset_id}`)
   expect(mesh.kind).toBe('mesh'); expect(mesh.params.upright_deg).toEqual([0, 0, 0])                         // the fake's flat triangle needs no turn
   await expect(section.locator('.model-view canvas.model-view-canvas')).toBeVisible({ timeout: 15_000 })
@@ -1400,7 +1401,7 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.7, { steps: 6 })
   await page.mouse.up()
   await expect(editor.locator('.comp-mask-list li')).toHaveCount(1)
-  await expect(page.locator('.final-viewer svg.mask-overlay g.mask.selected path')).toHaveCount(1)       // drawn on the frame, selected
+  await expect(page.locator('.final-viewer svg.mask-overlay g.mask.selected path:not(.hit)')).toHaveCount(1)   // drawn on the frame, selected (K116: .hit is its wide pick line)
   await expect(page.locator('.final-viewer svg.mask-overlay g.mask.selected circle.vertex')).toHaveCount(4)
   await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 6/)
   // a shape from points (the pen): three clicks, the first point again closes it
@@ -2261,7 +2262,8 @@ test('figures bound to characters (D93 · C8): a figure picks a character in the
   await expect.poll(async () => { const js = await mine(); return js.length > 0 && js.every((j) => j.status === 'done') }, { timeout: 60_000 }).toBe(true)
   const job = (await mine())[0]
   expect(job.recipe.mentions?.map((m) => [m.figure, m.profile_id])).toEqual([['fig_l', ana.id], ['fig_r', bo.id]])   // left to right, not the document's order
-  expect(job.recipe.refs?.map((r) => r.asset_id)).toEqual([copies[0], copies[1]])
+  const heroes = await Promise.all([ana, bo].map(async (x) => (await api<{ versions: { hero_asset_id: string | null }[] }>('GET', `/story/profiles/${x.id}`)).versions[0].hero_asset_id))
+  expect(job.recipe.refs?.map((r) => r.asset_id)).toEqual(heroes)                                           // K36: each hero its own copy (the duplicates had a home)
   expect(job.result?.serialized_prompt).toContain(`From left to right in image 1: figure 1 is ${ana.name} (reference image 2), a short woman in a red raincoat; figure 2 is ${bo.name} (reference image 3), a lanky boy with a green cap.`)
 })
 

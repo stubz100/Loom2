@@ -271,3 +271,296 @@ def test_k_h3_gate_covers_the_models_sheet_and_fetch(tmp_path: Path):
         assert r.status_code == 403 and "Settings" in r.json()["detail"]
         cl.put("/settings", json={"h3_licence_confirmed": True})
         assert gated <= {x["id"] for x in cl.get("/models").json()["items"]}
+
+
+@pytest.mark.asyncio
+async def test_k_broadcast_and_submit_from_a_worker_thread_land_on_the_loop(tmp_path: Path, object_info):
+    """Three reviewers: finishers and routes broadcast and submit inside asyncio.to_thread — the hub's queues and the job table are the loop's."""
+    import asyncio
+    import threading
+    from loom2.events import EventHub
+    hub = EventHub()
+
+    class WS:
+        def __init__(self): self.sent = []
+        async def send_text(self, t): self.sent.append(t)
+        async def send_bytes(self, b): self.sent.append(b)
+    ws = WS()
+    hub.attach(ws)
+    threads: list[str] = []
+
+    def from_thread():
+        threads.append(threading.current_thread().name)
+        return [hub.broadcast("job.updated", {"n": i})["seq"] for i in range(5)]
+    seqs = await asyncio.to_thread(from_thread)
+    await asyncio.sleep(0.05)                                            # delivered without waiting for another wake-up of the loop
+    assert seqs == [1, 2, 3, 4, 5] and len(ws.sent) == 5 and threads and threads[0] != threading.current_thread().name
+    hub.detach(ws)
+    from test_lifecycle import Rig
+    rig = Rig(tmp_path, object_info)
+    try:
+        rig.queue.load()
+        await rig.queue.start()
+        rig.queue.pause()
+        loop_thread = threading.current_thread()
+        seen: list[bool] = []
+        orig = rig.queue._submit
+        def spy(*a, **k):
+            seen.append(threading.current_thread() is loop_thread)
+            return orig(*a, **k)
+        rig.queue._submit = spy
+        jobs = await asyncio.to_thread(rig.queue.submit, {"kind": "t2i", "prompt_text": "x", "seeds": [1]})
+        assert jobs and seen == [True]                                   # the body ran on the loop, the thread got its jobs
+    finally:
+        await rig.close()
+
+
+@pytest.mark.asyncio
+async def test_k25_a_canvas_changed_while_the_job_ran_is_refused(tmp_path: Path, object_info, monkeypatch):
+    """A crop while an inpaint runs: the result was planned on the old canvas — the job fails cleanly, nothing pasted at stale coordinates."""
+    import numpy as np
+    from loom2.engine import pipeline
+    from test_lifecycle import MAGENTA, Rig
+    rig = Rig(tmp_path, object_info, color=MAGENTA)
+    real = pipeline.prepare_document
+
+    async def then_crop(job, recipe, q):
+        out = await real(job, recipe, q)
+        od = q.documents.get(recipe.document_id)
+        od.doc.w, od.doc.h = 120, 80                                    # the author crops while the engine works
+        return out
+    monkeypatch.setattr(pipeline, "prepare_document", then_crop)
+    try:
+        base = np.zeros((96, 160, 4), dtype=np.uint8); base[..., 1] = 180; base[..., 3] = 255
+        od = rig.docs.create("doc", 160, 96, base_pixels=base)
+        sel = np.zeros((96, 160), dtype=np.uint8); sel[30:60, 50:100] = 255
+        od.selection, od.doc.has_selection = sel, True
+        layers = len(list(od.doc.walk()))
+        rig.queue.load()
+        await rig.queue.start()
+        j = rig.queue.submit({"kind": "inpaint", "mode": "fill", "document_id": od.doc.id, "prompt_text": "x", "seeds": [1]})[0]
+        r = await rig.wait(j.id)
+        assert r.status == "failed" and "canvas changed" in (r.error or "")
+        assert len(list(od.doc.walk())) == layers                        # no layer landed
+    finally:
+        await rig.close()
+
+
+def test_k1_a_reference_keeps_its_shape(tmp_path: Path):
+    """D194: the reference reaches ReferenceLatent at the size fit_reference gave it (inside ref_max_px², its aspect kept) — no square ImageScale."""
+    from types import SimpleNamespace
+    from PIL import Image
+    from loom2.engine import graphs
+    from loom2.engine.pipeline import fit_reference
+    src = tmp_path / "hero.png"
+    Image.new("RGB", (2048, 1152), (9, 9, 9)).save(src)
+    q = SimpleNamespace(ws=SimpleNamespace(temp_dir=tmp_path / "temp"))
+    with Image.open(fit_reference(q, src, 1024, "ast_hero")) as im:
+        assert im.size == (1024, 576)
+    g: dict = {}
+    from loom2.recipes import RefImage
+    graphs._ref_chain(g, ["5", 0], [RefImage(asset_id="ast_hero")], {"ast_hero": "loom2ref-ast_hero.png"}, ["3", 0], 1024)
+    assert [n["class_type"] for n in g.values()] == ["LoadImage", "VAEEncode", "ReferenceLatent"]
+
+
+def test_k26_temp_and_engine_uploads_are_swept(tmp_path: Path, object_info):
+    """Job-named upload files of dead jobs, graphs beyond the newest 200, stale blobs no waiting job names, and the engine's own uploads."""
+    import os
+    import time as _t
+    from loom2.engine.supervisor import EngineSupervisor
+    from loom2.queue import JobRecord
+    from test_lifecycle import Rig
+    rig = Rig(tmp_path, object_info)
+    q, tmp = rig.queue, rig.ws.temp_dir
+    q.load()
+    live = JobRecord(kind="t2i", recipe={"kind": "t2i", "refs": [{"blob": "b" * 64}]}, status="queued")
+    q.jobs[live.id] = live
+    for sub, name in (("mattes", "clip-clip_1-job_dead0001.mp4"), ("lead", "lead-job_dead0002.mp4"), ("passes", "fin_1-lay_1-job_dead0003"),
+                      ("mattes", f"clip-clip_2-{live.id}.mp4"), ("train", "job_dead0004")):
+        p = tmp / sub / name
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.mkdir() if sub in ("passes", "train") else p.write_bytes(b"x")
+    graphs = rig.ws.queue_path.with_name("graphs")
+    graphs.mkdir(parents=True, exist_ok=True)
+    for i in range(205):
+        g = graphs / f"job_{i:08x}.json"
+        g.write_text("{}", encoding="utf-8")
+        os.utime(g, (1_000_000 + i, 1_000_000 + i))
+    blobs = tmp / "blobs"
+    blobs.mkdir(parents=True, exist_ok=True)
+    old = _t.time() - 3 * 24 * 3600
+    for name in ("a" * 64, "b" * 64):
+        (blobs / name).write_bytes(b"x")
+        os.utime(blobs / name, (old, old))
+    (blobs / ("c" * 64)).write_bytes(b"x")                              # fresh: kept
+    q._reconcile_leftovers()
+    assert not (tmp / "mattes" / "clip-clip_1-job_dead0001.mp4").exists() and not (tmp / "lead" / "lead-job_dead0002.mp4").exists()
+    assert not (tmp / "passes" / "fin_1-lay_1-job_dead0003").exists() and not (tmp / "train" / "job_dead0004").exists()
+    assert (tmp / "mattes" / f"clip-clip_2-{live.id}.mp4").exists()     # a live job's upload stays
+    left = sorted(p.stem for p in graphs.glob("*.json"))
+    assert len(left) == 200 and left[0] == f"job_{5:08x}"               # the oldest five went
+    assert sorted(p.name for p in blobs.iterdir()) == ["b" * 64, "c" * 64]   # old and unnamed: gone; named by a waiting job or fresh: kept
+    sup = EngineSupervisor(rig.app)
+    inp = rig.app.state_dir / "engine_in"
+    (inp / "sub").mkdir(parents=True, exist_ok=True)
+    (inp / "loom2ref-ast_1.png").write_bytes(b"x"); (inp / "sub" / "image.png").write_bytes(b"x")
+    assert sup.sweep_inputs() == 2 and not any(p.is_file() for p in inp.rglob("*"))
+    assert "--input-directory" in sup._argv() and sup._argv()[sup._argv().index("--input-directory") + 1] == str(inp)
+
+
+def test_k28_instruct_names_what_its_graph_loads():
+    """The gate and /capabilities read one list: the transformer, encoder, VAE and Lightning — not the angles LoRA (Reangle's)."""
+    from loom2.engine.graphs import instruct_weights, recipe_weights
+    from loom2.models import registry
+    from loom2.recipes import Instruct
+    spec = registry.instruct_specs()[0]
+    want = instruct_weights(spec)
+    assert spec.roles.extra["angles"] not in want and spec.roles.extra["lightning"] in want and spec.roles.vae in want and len(want) == 4
+    assert recipe_weights(Instruct(document_id="d", model_id=spec.id, prompt_text="make it night")) == want
+
+
+def test_k42_a_composition_operation_holds_the_session():
+    """Two finals' operations from two route threads: the second waits for the first's open → commands → save (no interleaving)."""
+    import threading
+    import time as _t
+    from types import SimpleNamespace
+    from loom2.compositions import CompositionStore, _held
+    log: list = []
+
+    class Store:
+        @_held
+        def op(self, f, ec, name):
+            log.append(("open", name)); _t.sleep(0.05); log.append(("save", name))
+    ec, s = SimpleNamespace(op_lock=threading.RLock()), Store()
+    ts = [threading.Thread(target=s.op, args=(None, ec, n)) for n in ("A", "B")]
+    [t.start() for t in ts]; [t.join() for t in ts]
+    assert [log[0][1], log[1][1]] == [log[0][1]] * 2 and [log[2][1], log[3][1]] == [log[2][1]] * 2
+    assert all(getattr(CompositionStore, n).__wrapped__ for n in ("command", "batch", "set_source", "frame", "make", "mask_from_content"))
+
+
+def test_k43_a_cancelled_assembly_leaves_the_compositions_footage(tmp_path: Path):
+    """The footage is staged beside and swapped in at the end: a cancel (or a failure) mid-way leaves the live footage whole."""
+    from loom2 import final_assembly
+    from loom2.finals import FinalStore
+    from loom2.stages import StageStore
+    from test_compositions_ae1 import N, _final_assembled
+    ws = _ws(tmp_path)
+    st = StageStore(ws).create("Room")
+    f, _ = _final_assembled(ws, st.id, st.cameras[0].id, tmp_path / "src")
+    store = FinalStore(ws)
+    comp = store.folder(f.id) / "comp"
+    before = {p.relative_to(comp).as_posix(): p.read_bytes() for p in comp.rglob("*.png")}
+    assert len(before) == 3 * N                                          # shadow, the box, her matte
+    asked = []
+    out = final_assembly.assemble_frames(store, store.get(f.id), tmp_path / "again", None, comp, lambda: asked.append(1) or len(asked) > 1)
+    assert out == {"cancelled": True, "frames": 1}
+    assert {p.relative_to(comp).as_posix(): p.read_bytes() for p in comp.rglob("*.png")} == before
+    assert not comp.with_name("comp.new").exists()
+    again = final_assembly.assemble_frames(store, store.get(f.id), tmp_path / "again2", None, comp)    # a whole run swaps in
+    assert again["frames"] == N and len(list(comp.rglob("*.png"))) == 3 * N and not comp.with_name("comp.new").exists()
+
+
+def test_k48_a_newer_shorter_final_ends_with_its_media(tmp_path: Path):
+    """Assemble plays a newer final in place keeping the run's length — a final remade shorter is trimmed to its end (no held last frame)."""
+    from fastapi.testclient import TestClient
+    from loom2.story import StoryStore
+    from loom2.workspace import Workspace
+    from test_cuts_u7b import _client, _clip, _final, _v1
+    app = _client(tmp_path)
+    with TestClient(app) as cl:
+        cl.post("/project", json={"path": str(tmp_path / "proj"), "name": "A", "size_cap_gb": 10})
+        ws = Workspace(tmp_path / "proj")
+        a, b, a2 = _clip(ws, tmp_path, "a", (200, 0, 0), 48), _clip(ws, tmp_path, "b", (0, 0, 200)), _clip(ws, tmp_path, "a2", (250, 50, 0), 30)
+        st = StoryStore(ws)
+        na, nb = (st.create_node("shot", title=t) for t in ("Arrival", "The seal"))
+        _final(ws, na.shot_id, a.id)
+        _final(ws, nb.shot_id, b.id)
+        route = [{"shot_id": n.shot_id, "node_id": n.id} for n in (na, nb)]
+        tl = cl.post("/timelines", json={"name": "E", "fps": 24, "w": 64, "h": 36}).json()
+        base = f"/timelines/{tl['id']}"
+        r = cl.post(f"{base}/assemble", json={"revision": tl["revision"], "route": {}, "shots": route}).json()
+        assert [(x[1], x[3], x[4]) for x in _v1(cl, base)] == [("Arrival", 0, 48), ("The seal", 48, 24)]
+        _final(ws, na.shot_id, a2.id)                                           # remade at 30 frames
+        r = cl.post(f"{base}/assemble", json={"revision": r["timeline"]["revision"], "route": {}, "shots": route}).json()
+        assert r["report"]["updated"] == ["Arrival"]
+        assert [(x[1], x[2], x[3], x[4]) for x in _v1(cl, base)] == [("Arrival", a2.id, 0, 30), ("The seal", b.id, 30, 24)]   # closed up
+
+
+def test_k46_a_revoiced_line_plays_whole(tmp_path: Path):
+    """A line voiced again is swapped in place — at the new take's length (it kept the old one: a longer take was cut off)."""
+    from fastapi.testclient import TestClient
+    from fake_tts import tone
+    from loom2.story import StoryStore
+    from loom2.workspace import Workspace
+    from test_cuts_u7b import _client, _clip, _final
+    app = _client(tmp_path)
+    svc = app.state.services
+    with TestClient(app) as cl:
+        cl.post("/project", json={"path": str(tmp_path / "proj"), "name": "L", "size_cap_gb": 10})
+        ws = Workspace(tmp_path / "proj")
+        a = _clip(ws, tmp_path, "a", (200, 0, 0), 48)
+        st = StoryStore(ws)
+        na = st.create_node("shot", title="Gate")
+        st.patch_node(na.id, {"revision": st.flow_nodes()[na.id].revision, "lines": [{"speaker": None, "text": "Come in."}]})
+
+        def voice(secs: float, tag: str) -> None:
+            wav = tmp_path / f"{tag}.wav"
+            tone(str(wav), secs)
+            st.set_line_audio(na.id, 0, svc.catalogue.ingest_file(wav, kind="audio", move=False, suite="story").id, "x")
+        voice(0.5, "first")
+        _final(ws, na.shot_id, a.id)
+        route = [{"shot_id": na.shot_id, "node_id": na.id}]
+        tl = cl.post("/timelines", json={"name": "Lines", "fps": 24, "w": 64, "h": 36}).json()
+        base = f"/timelines/{tl['id']}"
+        r = cl.post(f"{base}/assemble", json={"revision": tl["revision"], "route": None, "shots": route}).json()
+        assert [(i["line"], i["start"], i["duration"]) for i in r["tracks"]["audio"][0]["items"]] == [(0, 0, 12)]
+        voice(1.0, "again")                                                  # voiced again, twice as long
+        r = cl.post(f"{base}/assemble", json={"route": None, "shots": route}).json()
+        assert [(i["line"], i["start"], i["duration"]) for i in r["tracks"]["audio"][0]["items"]] == [(0, 0, 24)]
+        voice(0.25, "short")                                                 # and shorter
+        r = cl.post(f"{base}/assemble", json={"route": None, "shots": route}).json()
+        assert [(i["line"], i["start"], i["duration"]) for i in r["tracks"]["audio"][0]["items"]] == [(0, 0, 6)]
+
+
+def test_k45_a_failed_print_leaves_the_earlier_ones_known(tmp_path: Path, monkeypatch):
+    """Two tracks with effects; the second print fails: the first's companion is on disk with its entry (it was not, and the next mix
+    printed it again — heard twice)."""
+    import json
+    from fastapi.testclient import TestClient
+    from fake_tts import tone
+    from loom2.cuts import CutError, Cuts
+    from test_cuts_au4 import _client
+    app, _ = _client(tmp_path)
+    svc = app.state.services
+    real, calls = Cuts._print, []
+
+    def second_fails(self, *a, **k):
+        calls.append(1)
+        if len(calls) == 2:
+            raise CutError("the host fell over")
+        return real(self, *a, **k)
+    monkeypatch.setattr(Cuts, "_print", second_fails)
+    with TestClient(app) as cl:
+        cl.post("/project", json={"path": str(tmp_path / "proj"), "name": "S", "size_cap_gb": 10})
+        tl = cl.post("/timelines", json={"name": "Fx", "fps": 24, "w": 64, "h": 36}).json()
+        base = f"/timelines/{tl['id']}"
+        plugin = cl.get("/audio/plugins").json()["plugins"][0]
+        ids = []
+        for track, hz in (("A2", 220), ("A3", 330)):
+            wav = tmp_path / f"{track}.wav"
+            tone(str(wav), 1.0, hz=hz)
+            a = svc.catalogue.ingest_file(wav, kind="audio", move=False, suite="import")
+            r = cl.post(f"{base}/place", json={"asset_id": a.id, "track": track, "frame": 0}).json()
+            tid = r["tracks"]["audio"][int(track[1:]) - 1]["id"]
+            ids.append(tid)
+            assert cl.post(f"{base}/fx", json={"track": tid, "op": "add", "plugin": {k: plugin[k] for k in ("bundle", "uid", "name", "vendor")}}).status_code == 200
+        assert cl.get(f"{base}/mix").status_code >= 400                      # the second print failed
+        raw = json.loads((tmp_path / "proj" / "timelines" / tl["id"] / "cut.fcproj").read_text(encoding="utf-8"))
+        seq_item = next(it for it in raw["project"]["items"].values() if "Sequence" in it["kind"])
+        known = json.loads(seq_item["metadata"].get("loom2.prints") or "{}")
+        assert list(known) == [str(ids[0])]                                   # the first's companion is known
+        monkeypatch.setattr(Cuts, "_print", real)
+        assert cl.get(f"{base}/mix").status_code == 200
+        raw = json.loads((tmp_path / "proj" / "timelines" / tl["id"] / "cut.fcproj").read_text(encoding="utf-8"))
+        seq = next(it["kind"]["Sequence"] for it in raw["project"]["items"].values() if "Sequence" in it["kind"])
+        assert len(seq["audio_tracks"]) == 3 + 2                              # A1–A3 and one companion each — not a second for A2

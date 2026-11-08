@@ -4,7 +4,7 @@ and every model gains `recipes` / `inputs` / `geometry` blocks the panels gate t
 """
 from __future__ import annotations
 
-from .engine.graphs import STAGE_DRAFT_PX, STAGE_HINTS, stage_pass_for, te_alternates, te_label, te_options
+from .engine.graphs import STAGE_DRAFT_PX, STAGE_HINTS, instruct_weights, stage_pass_for, te_alternates, te_label, te_options
 from .engine.image_families import family
 from .models import registry
 from .models.spec import ModelSpec
@@ -316,7 +316,7 @@ def _instruct(svc: Services, variant: str) -> dict:
     for spec in registry.instruct_specs():
         if not _offered(spec, variant):
             continue
-        needs = spec.weights()
+        needs = instruct_weights(spec)                                   # review K28: what the graph loads — not the angles LoRA
         healths = {x: svc.roster.resolve(x).health for x in needs}
         missing = [ROSTER_BY_ID[x].name for x, hh in healths.items() if hh in ("missing", "retired")]
         models[spec.id] = {"label": spec.label, "short": spec.short or spec.label, "hint": spec.hint, "license": ROSTER_BY_ID[spec.id].license,

@@ -22,7 +22,7 @@ from typing import Any
 
 import numpy as np
 
-from .relief import LEVEL_MAX_DEG, floor_fit, floor_height, focal_mm_for
+from .relief import LEVEL_MAX_DEG, camera_roll, floor_fit, floor_height, focal_mm_for
 
 WALL_MIN_SHARE = 0.03          # a vertical plane holding fewer of the standing points is clutter, not a wall
 WALL_MAX_M = 25.0              # farther than this a vertical plane is a backdrop (E38: the field's hills read as 70 m walls)
@@ -245,7 +245,7 @@ def fit_set(pos: np.ndarray, uv: np.ndarray, lens_deg: float | None = None, seed
         sizes = {"width": round(width, 3), "depth": round(z_f - z_b, 3), "height": round(height, 3)}
     cam_pos = cam - centre
     target = cam_pos + fwd_s
-    roll = math.degrees(math.atan2(-float(np.cross(fwd_s, up_s) @ np.array([0.0, 1.0, 0.0])), float(up_s[1])))
+    roll = camera_roll(fwd_s, up_s)                                        # K: the engine's convention (lookAt, then rotateZ) — the sign was the other way
     lens = lens_deg if lens_deg else 60.0
     return {
         "kind": kind, "sizes": sizes, "assumed": sorted(set(assumed)),

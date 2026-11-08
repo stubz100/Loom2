@@ -84,6 +84,7 @@ class GroupStore:
         self.groups: dict[str, GroupRecord] = {}
         self.parent: dict[Key, str] = {}
         self.migrated: int = 0                # collections turned into groups at this open (0 = none)
+        self._aspect: dict[str, float] = {}   # review K54: an asset's h / w, read once (a landing re-read every item on its page)
         self._load()
 
     # ---- load / integrity -------------------------------------------------------------------------
@@ -119,9 +120,12 @@ class GroupStore:
         for attempt in range(3):
             try:
                 return read_json(p)
-            except OSError:
+            except (OSError, StateError) as e:                         # review K92: read_json wraps the OSError — V6's retry never ran
+                cause = e if isinstance(e, OSError) else e.__cause__
+                if not isinstance(cause, OSError):
+                    raise                                              # a torn record stays one
                 if attempt == 2:
-                    raise
+                    raise cause from (None if cause is e else e)       # the caller's V6 branch: transient, the album left as it is
                 time.sleep(delay)
                 delay *= 3
 
@@ -232,14 +236,25 @@ class GroupStore:
         with self._lock:
             return self._descendants(gid) if gid in self.groups else set()
 
+    def _aspects(self, ids: list[str]) -> None:
+        """Review K54: the assets' aspects not known yet, in one query (an asset's size never changes)."""
+        missing = [i for i in dict.fromkeys(ids) if i not in self._aspect]
+        if missing:
+            for a in self.cat.get_many(missing):
+                self._aspect[a.id] = (a.h / a.w) if a.w and a.h else 0.75
+            for i in missing:
+                self._aspect.setdefault(i, 0.75)
+
     def _height(self, it: GroupItem) -> float:
         if it.kind == "group":
             return it.w * CARD_RATIO
-        a = self.cat.get(it.id)
-        return it.w * (a.h / a.w) if a and a.w and a.h else it.w * 0.75
+        if it.id not in self._aspect:
+            self._aspects([it.id])
+        return it.w * self._aspect[it.id]
 
     def _next_spots(self, g: GroupRecord, sizes: list[tuple[float, float]]) -> list[tuple[float, float]]:
         """Free spots below the page's content, left to right, wrapping at ROW_W."""
+        self._aspects([it.id for it in g.items if it.kind == "asset"])
         bottom = max((it.y + self._height(it) for it in g.items), default=MARGIN - GAP)
         x, y, row_h, out = float(MARGIN), bottom + GAP, 0.0, []
         for w, h in sizes:
@@ -310,19 +325,22 @@ class GroupStore:
                 out += [a for a in self._cover(self.groups[it.id], n - len(out)) if a not in out]
         return out[:n]
 
-    def _summary(self, g: GroupRecord) -> dict:
+    def _summary(self, g: GroupRecord, alive: set[str] | None = None) -> dict:
         own = [it.id for it in g.items if it.kind == "asset"]
-        live = {r.id for r in self.cat.get_many(self._asset_ids(g.id)) if r.trashed_at is None}   # V10: the page hides trashed assets — the counts too
+        ids = self._asset_ids(g.id)
+        live = (alive & set(ids)) if alive is not None else {r.id for r in self.cat.get_many(ids) if r.trashed_at is None}   # V10: trashed not counted
         return {"id": g.id, "name": g.name, "assets": sum(1 for i in own if i in live), "groups": len(g.items) - len(own), "total": len(live),
                 "cover_ids": self._cover(g), "revision": g.revision}
 
     # ---- reads ------------------------------------------------------------------------------------
     def tree(self) -> dict:
         with self._lock:
+            alive = {r.id for r in self.cat.get_many(self._asset_ids(ROOT_ID)) if r.trashed_at is None}   # review K54: read once for the whole tree
+
             def node(gid: str) -> dict:
                 g = self.groups[gid]
                 kids = [node(it.id) for it in sorted(g.items, key=lambda it: (it.y, it.x)) if it.kind == "group" and it.id in self.groups]
-                return {**self._summary(g), "children": kids}
+                return {**self._summary(g, alive), "children": kids}
             return node(ROOT_ID)
 
     def page(self, gid: str) -> dict:

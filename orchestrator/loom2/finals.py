@@ -556,9 +556,11 @@ def plate_path_frames(n: int) -> int:
 def plate_path_size(f: "Final", height: int, mult: int = 64) -> tuple[int, int]:
     """CA3: the clip's size — the video model's height (E34 measured 1024 × 576) at the final's aspect, on the guided clip's grid (LTX's
     IC-LoRA: ×64, the rig's 992 × 576 was refused); the frames are resized to the final's size when they land."""
-    h = max(128, height - height % mult)
-    w = max(128, round(h * f.size["w"] / f.size["h"] / mult) * mult)
-    return w, h
+    short = max(128, height - height % mult)                           # K: the model's short side on the final's short side (a 9:16 final got 320 × 576)
+    W, H = f.size["w"], f.size["h"]
+    if W >= H:
+        return max(128, round(short * W / H / mult) * mult), short
+    return short, max(128, round(short * H / W / mult) * mult)
 
 
 def plate_path_guide(depth: list[Path], w: int, h: int, n: int, out: Path, fps: int) -> None:
@@ -595,8 +597,9 @@ def plate_path_recipe(f: "Final", model_id: str, still_id: str, guide_id: str, p
                          "guide": {"asset_id": guide_id, "kind": "depth", "strength": 1.0}}
     landed = [b for b in (beats or []) if b.get("asset_id") and 0 < int(b.get("frame", 0)) < f.frames]
     if landed:
-        scale = (n - 1) / max(1, f.frames - 1)
-        r["beats"] = [{"frame": min(n - 1, round(int(b["frame"]) * scale)), "asset_id": b["asset_id"], "strength": 1.0} for b in landed]
+        # K: the clip is trimmed to the final's first frames (the guide holds its last) — clip frame i is final frame i; scaled, an anchor
+        # landed up to 7 frames late against a later view (F 82: the beat for 80 at 87)
+        r["beats"] = [{"frame": min(n - 1, int(b["frame"])), "asset_id": b["asset_id"], "strength": 1.0} for b in landed]
     return r
 
 
@@ -658,7 +661,8 @@ class FinalStore:
         return self.folder(fid) / "final.json"
 
     def pass_dir(self, fid: str, layer: str, name: str) -> Path:
-        return self.folder(fid) / layer / name
+        # review K89: every segment a plain name — a pass named `..` (or a layer id from a body) resolved outside the final and was rmtree'd
+        return self.folder(fid).joinpath(plain_name(layer), *(plain_name(x) for x in name.split("/")))
 
     def frames_dir(self, fid: str, lid: str) -> Path:
         """D118: where the layer's frames are — a take's `passes/<id>/` when one is its source, else its own `frames/`."""
@@ -670,7 +674,7 @@ class FinalStore:
 
     def processing_dir(self, fid: str, pid: str) -> Path:
         """D118 (AE4e): a processing layer's folder — `in/` (the stack below, rendered) and `frames/` (the pass's result)."""
-        return self.folder(fid) / "processing" / pid
+        return self.folder(fid) / "processing" / plain_name(pid)       # review K89
 
     @_locked
     def set_processing(self, fid: str, rec: ProcessingLayer) -> Final:
@@ -710,8 +714,9 @@ class FinalStore:
                 return d
         return self.pass_dir(fid, lid, "matte")
 
-    def sweep_unfinished(self, fid: str, lid: str) -> int:
-        """D118 (AE4c): the folders of passes that never became takes (a chain that failed in the engine) dropped; how many."""
+    def sweep_unfinished(self, fid: str, lid: str, live: set[str] | None = None) -> int:
+        """D118 (AE4c): the folders of passes that never became takes (a chain that failed in the engine) dropped; how many. K: never the
+        folder of a pass still queued or running (`live`: their take ids) — a second pass on the layer swept the first's plan mid-chain."""
         f = self.get(fid)
         layer = next((x for x in f.layers if x.id == lid), None) if f else None
         if layer is None:
@@ -720,7 +725,7 @@ class FinalStore:
         keep = {t.get("id") for t in layer.takes}
         n = 0
         for d in root.glob("take_*") if root.is_dir() else []:
-            if d.is_dir() and d.name not in keep:
+            if d.is_dir() and d.name not in keep and d.name not in (live or set()):
                 shutil.rmtree(d, ignore_errors=True)
                 n += 1
         return n
@@ -970,9 +975,14 @@ class FinalStore:
         p = self.folder(fid) / lid / "keypoints.json"
         return list(read_json(p).get("wholebody") or []) if p.is_file() else []
 
+    @_locked
     def delete(self, fid: str) -> bool:
+        """Review K89: under the records' lock, and atomic — the folder renamed away first (a writer landing after it finds no final), then
+        removed; a removal that fails part-way leaves a hidden `.deleted-*` folder, never a half final."""
         d = self.folder(fid)
         if not (d / "final.json").is_file():
             return False
-        shutil.rmtree(d)
+        gone = d.with_name(f".deleted-{d.name}-{new_id('x')}")
+        d.replace(gone)
+        shutil.rmtree(gone, ignore_errors=True)
         return True

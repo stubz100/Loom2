@@ -219,6 +219,8 @@ async def asset_thumbnail(svc: Svc, asset_id: str, request: Request):
 @router.get("/thumbs/{asset_id}/{size}")
 async def thumb(svc: Svc, asset_id: str, size: int):
     ws, cat, _ = svc.require_project()
+    if size not in cat.thumb_sizes:                                    # review K92: an unknown size re-made every thumbnail on each request
+        raise HTTPException(404, f"thumbnails are {', '.join(map(str, cat.thumb_sizes))} px")
     p = ws.thumb_path(asset_id, size)
     if not p.is_file():
         rec = await asyncio.to_thread(cat.get, asset_id)

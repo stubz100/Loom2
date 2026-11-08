@@ -108,7 +108,7 @@ def check_ready(store: FinalStore, f: Final) -> list[str]:
         if x.kind == "figure":
             if x.frames_done != f.frames:
                 out.append(f"{x.name} is not performed yet")
-            elif len(_frames(store.pass_dir(f.id, x.id, "matte"))) != f.frames:
+            elif len(_frames(store.matte_dir(f.id, x.id))) != f.frames:    # review K89: the matte the assembly reads (the shown take's)
                 out.append(f"{x.name} has no matte yet")
     return out
 
@@ -138,9 +138,10 @@ def mix_audio(timing: list[dict[str, Any]], seconds: float, out: Path) -> Path |
             m = int(round(len(data) * sr / rate))
             xs = np.linspace(0, len(data) - 1, m)
             data = np.stack([np.interp(xs, np.arange(len(data)), data[:, k]) for k in range(2)], axis=1).astype(np.float32)
-        s0 = max(0, int(round((a["in"] - a["start"]) * sr)))
+        t0 = max(float(a["in"]), float(a["start"]), 0.0)                  # K: a lane before 0 (or started after its in) plays from what is in the shot
+        s0 = int(round((t0 - a["start"]) * sr))
         s1 = min(len(data), int(round((a["out"] - a["start"]) * sr)))
-        at = int(round(a["in"] * sr))
+        at = int(round(t0 * sr))
         if s1 <= s0 or at >= n:
             continue
         seg = data[s0:s1][: max(0, n - at)]
@@ -153,28 +154,47 @@ def mix_audio(timing: list[dict[str, Any]], seconds: float, out: Path) -> Path |
     return out
 
 
-def assemble_frames(store: FinalStore, f: Final, out_dir: Path, progress=None, comp_dir: Path | None = None) -> dict[str, Any]:
+def assemble_frames(store: FinalStore, f: Final, out_dir: Path, progress=None, comp_dir: Path | None = None,
+                    cancelled: Callable[[], bool] | None = None) -> dict[str, Any]:
     """Composite the final's layers into `out_dir/NNNN.png`; returns what it did (offsets, occlusions, the stack order, time).
 
     With `comp_dir` (AE1, proto01_animate 20 §2) it also writes the **composition's footage** from the same per-frame rules, so the editable
     composition and this composite agree by construction: `shadow/` (Stage's ratio as grey, to multiply), `<prop>/` (its beauty with its depth
-    alpha), `<figure>_matte/` (her alpha with a nearer prop's cut, in her own frame — her contact offset is the layer's position there)."""
+    alpha), `<figure>_matte/` (her alpha with a nearer prop's cut, in her own frame — her contact offset is the layer's position there).
+    Review K43: the footage is written beside (`<comp>.new/`) and swapped in when every frame is written — a failure or a cancel leaves the
+    live composition's footage as it was. K89: `cancelled` is asked every frame ({"cancelled": True} back, nothing swapped)."""
     t0 = time.time()
     missing = check_ready(store, f)
     if missing:
         raise ValueError("; ".join(missing))
     out_dir.mkdir(parents=True, exist_ok=True)
     n, w, h = f.frames, f.size["w"], f.size["h"]
-    pd = lambda lid, name: _frames(store.pass_dir(f.id, lid, name))   # noqa: E731
-    md = lambda lid: _frames(store.matte_dir(f.id, lid))               # noqa: E731  (AE4c: the shown take's matte when the pass changed her silhouette)
-    plate = _frames(store.frames_dir(f.id, "plate"))
+    listed: dict[tuple[str, str], list[Path]] = {}                     # review K89: each folder listed once, not per frame per layer
+
+    def pd(lid: str, name: str) -> list[Path]:
+        if (lid, name) not in listed:
+            listed[(lid, name)] = _frames(store.pass_dir(f.id, lid, name))
+        return listed[(lid, name)]
+
+    def md(lid: str) -> list[Path]:                                    # AE4c: the shown take's matte when the pass changed her silhouette
+        if (lid, ":matte") not in listed:
+            listed[(lid, ":matte")] = _frames(store.matte_dir(f.id, lid))
+        return listed[(lid, ":matte")]
+
+    def fr(lid: str) -> list[Path]:
+        if (lid, ":frames") not in listed:
+            listed[(lid, ":frames")] = _frames(store.frames_dir(f.id, lid))
+        return listed[(lid, ":frames")]
+    plate = fr("plate")
     bare_d, bare_c = pd("plate", "depth"), pd("plate", "clay")
     shadows = pd("shadows", "clay")
     props = [x for x in f.layers if x.kind == "prop"]
     figs = [x for x in f.layers if x.kind == "figure"]
-    if comp_dir:
-        for name in ["shadow", *(x.id for x in props), *(f"{x.id}_matte" for x in figs)]:
-            shutil.rmtree(comp_dir / name, ignore_errors=True)
+    live_dir, names = comp_dir, ["shadow", *(x.id for x in props), *(f"{x.id}_matte" for x in figs)]
+    if live_dir:
+        comp_dir = live_dir.with_name(live_dir.name + ".new")              # review K43: staged beside, swapped in at the end
+        shutil.rmtree(comp_dir, ignore_errors=True)
+        for name in names:
             (comp_dir / name).mkdir(parents=True)
     # the characters' contact offsets (D107), one per layer over the shot
     offsets: dict[str, tuple[float, float]] = {}
@@ -187,6 +207,10 @@ def assemble_frames(store: FinalStore, f: Final, out_dir: Path, progress=None, c
     hidden = {x.id: 0 for x in figs}
     orders: list[tuple[str, ...]] = []
     for i in range(n):
+        if cancelled is not None and cancelled():
+            if comp_dir:
+                shutil.rmtree(comp_dir, ignore_errors=True)
+            return {"cancelled": True, "frames": i}
         bd = gray(bare_d[i])
         layers: list[dict[str, Any]] = []
         actors = np.zeros((h, w), bool)
@@ -205,7 +229,7 @@ def assemble_frames(store: FinalStore, f: Final, out_dir: Path, progress=None, c
             dx, dy = offsets[x.id]
             grown = max_filter(np.where(sm, dep, 0.0), 15)
             fill = float(np.median(dep[sm])) if sm.any() else 0.0
-            layers.append({"id": x.id, "kind": "figure", "img": shift(rgb(_frames(store.frames_dir(f.id, x.id))[i]), dx, dy), "alpha": np.clip(shift(al, dx, dy), 0, 1),
+            layers.append({"id": x.id, "kind": "figure", "img": shift(rgb(fr(x.id)[i]), dx, dy), "alpha": np.clip(shift(al, dx, dy), 0, 1),
                            "alpha0": al, "offset": (dx, dy), "depth": shift(np.where(grown > 0, grown, fill), dx, dy), "order": fill})
         ratio = np.clip(gray(shadows[i]) / np.maximum(8 / 255, gray(bare_c[i])), 0.0, 1.0)
         ratio[dilate(actors, 2)] = 1.0
@@ -235,9 +259,26 @@ def assemble_frames(store: FinalStore, f: Final, out_dir: Path, progress=None, c
                     Image.fromarray((np.clip(lay["alpha0"], 0, 1) * 255 + 0.5).astype(np.uint8)).save(comp_dir / f"{lay['id']}_matte" / f"{i:04d}.png")
         if progress:
             progress(i + 1, n)
+    if live_dir and comp_dir:
+        _swap_in(comp_dir, live_dir, names)
     stack_order = max(set(orders), key=orders.count) if orders else ()
     return {"frames": n, "offsets_px": {k: [round(v[0], 1), round(v[1], 1)] for k, v in offsets.items()}, "hidden_px": hidden,
             "stack": list(stack_order), "stack_frames": orders.count(stack_order), "seconds": round(time.time() - t0, 1)}
+
+def _swap_in(staged: Path, live: Path, names: list[str]) -> None:
+    """Review K43: the composition's new footage replaces the old folder by folder (each a rename once the old one is gone); raises when a
+    folder cannot be replaced (a frame held open) — the staged copy stays for the next run to write again."""
+    live.mkdir(parents=True, exist_ok=True)
+    for name in names:
+        old = live / name
+        if old.exists():
+            gone = live / f".{name}.old"
+            shutil.rmtree(gone, ignore_errors=True)
+            old.replace(gone)
+            shutil.rmtree(gone, ignore_errors=True)
+        (staged / name).replace(old)
+    shutil.rmtree(staged, ignore_errors=True)
+
 
 def rife_binary() -> Path | None:
     """The local rife-ncnn-vulkan (E9, D27) under engine/tools, when it was installed; None otherwise (the clip stays at its rate)."""

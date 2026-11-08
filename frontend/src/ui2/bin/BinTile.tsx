@@ -24,7 +24,8 @@ export function BinTile({ it, menu, onDouble, corner }: {
     <button className={`w-tile${sel || primary ? ' selected' : ''}${primary ? ' primary' : ''}`} data-id={id} title={it.asset.prompt_text ?? it.path}
       onClick={(e) => useBin.getState().select(id, e.shiftKey ? 'range' : e.ctrlKey || e.metaKey ? 'toggle' : 'single')}
       onDoubleClick={onDouble}
-      onContextMenu={(e) => { e.preventDefault(); const s = useBin.getState(); if (!s.selection.includes(id)) s.select(id); showMenu(e, menu(it)) }}
+      // review K95: a right-click inside a selection keeps it and makes this thing the one the single verbs act on (they acted on the last clicked)
+      onContextMenu={(e) => { e.preventDefault(); const s = useBin.getState(); if (!s.selection.includes(id)) s.select(id); else if (s.selected !== id) s.select(id, 'primary'); showMenu(e, menu(it)) }}
       onPointerDown={(e) => beginDrag(e, () => {
         if (useBin.getState().open === TRASH || it.asset.trashed_at) return null
         const s = useBin.getState()

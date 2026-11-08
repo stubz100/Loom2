@@ -918,6 +918,7 @@
       "AnimationThumb": {
         "properties": {
           "blob": {
+            "pattern": "^[0-9a-f]{64}$",
             "title": "Blob",
             "type": "string"
           }
@@ -9822,6 +9823,30 @@
         "title": "FlowProblems",
         "type": "object"
       },
+      "FoldSkipped": {
+        "description": "Review K37: an idea *Bring the ideas in* could not fold (its pictures in the Trash, a page locked …), or whose candidates did not join.",
+        "properties": {
+          "idea_id": {
+            "title": "Idea Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "idea_id",
+          "name",
+          "reason"
+        ],
+        "title": "FoldSkipped",
+        "type": "object"
+      },
       "FoldedIdea": {
         "properties": {
           "candidates": {
@@ -12576,10 +12601,19 @@
             },
             "title": "Items",
             "type": "array"
+          },
+          "skipped": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FoldSkipped"
+            },
+            "title": "Skipped",
+            "type": "array"
           }
         },
         "required": [
-          "items"
+          "items",
+          "skipped"
         ],
         "title": "IdeasFolded",
         "type": "object"
@@ -37417,7 +37451,7 @@
     },
     "/stages/{st_id}/sets/{set_id}/things/make": {
       "post": {
-        "description": "D123 (SC3c-3): the things not yet made — the plate cleaned under them all and (D124) their shadows (a Fill on the set's document); when it lands, the relief is\nrebuilt from the clean plate at the set's lens and then a Pixal3D model is queued for each one's cut-out (stood on the relief at its\nfootprint when it lands) — the rebuild first, so the clean set shows within a minute or two and the models follow. The jobs take their\nturns through the queue (D97). 422 with the reason: nothing to make, Pixal3D not in the variant.",
+        "description": "D123 (SC3c-3): the things not yet made — the plate cleaned under them all and (D124) their shadows (a Fill on the set's document); when it lands, the relief is\nrebuilt from the clean plate at the set's lens and then a Pixal3D model is queued for each one's cut-out (stood on the relief at its\nfootprint when it lands) — the rebuild first, so the clean set shows within a minute or two and the models follow. The jobs take their\nturns through the queue (D97). 422 with the reason: nothing to make, Pixal3D not in the variant. Review K51: 409 while a Make of the set\nis under way (its clean, rebuild or a model queued, staged or running — a double click, a Make after a reload).",
         "operationId": "stage_things_make_stages__st_id__sets__set_id__things_make_post",
         "parameters": [
           {

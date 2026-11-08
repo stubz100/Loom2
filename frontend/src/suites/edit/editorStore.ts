@@ -73,6 +73,32 @@ export interface HistoryEntry {
   sel?: { had: boolean; has: boolean }
   /** D43: consecutive entries with the same key within a couple of seconds merge into one history row (one gesture). */
   coalesce?: string
+  /** review K116: the active layer before the step, recorded where the step moved it — undo (and redo, the other way) put it back where
+   *  it was instead of jumping to the top layer. */
+  active?: string | null
+}
+/** review K67: history is capped by entry count and by the bytes its snapshots hold (tiles, swapped-out canvases) — full-layer snapshots
+ *  of a 4K document are 33 MB each; past the budget the oldest entries go (the newest always stays). */
+export const HISTORY_MAX_ENTRIES = 200
+export const HISTORY_MAX_BYTES = 512 * 1024 * 1024
+const canvasBytes = (lp: { width: number; height: number } | null | undefined) => (lp ? lp.width * lp.height * 4 : 0)
+/** review K67: the bytes a history entry keeps alive: its tile snapshots and the canvases it swaps (a transform's, a merge's, a text edit's). */
+export function historyBytes(e: HistoryEntry): number {
+  let b = 0
+  for (const t of e.tiles) b += t.data.width * t.data.height * 4
+  for (const s of [...(e.swap ? [e.swap] : []), ...(e.more ?? [])]) b += canvasBytes(s.lp) + canvasBytes(s.mask)
+  return b + canvasBytes(e.selSwap?.lp) + canvasBytes(e.maskSwap?.mask)
+}
+/** review K67: the entries kept (newest last) and the ones dropped — at most `maxEntries`, and the oldest dropped while the rest hold more
+ *  than `maxBytes` (the newest is always kept). */
+export function trimHistory(h: HistoryEntry[], maxEntries = HISTORY_MAX_ENTRIES, maxBytes = HISTORY_MAX_BYTES): { kept: HistoryEntry[]; dropped: HistoryEntry[] } {
+  let start = Math.max(0, h.length - maxEntries)
+  let total = 0
+  for (let i = h.length - 1; i >= start; i--) {
+    total += historyBytes(h[i])
+    if (total > maxBytes && i < h.length - 1) { start = i + 1; break }
+  }
+  return { kept: h.slice(start), dropped: h.slice(0, start) }
 }
 export type SelectionModify = 'expand' | 'contract' | 'border' | 'smooth' | 'feather'
 type ViewKeys = 'zoom' | 'pan' | 'overlay' | 'before' | 'pixelGrid' | 'quickMask' | 'marqueeShape' | 'selectionMode' | 'tolerance' | 'fillMode' | 'maskView'
@@ -129,7 +155,8 @@ export interface EditorState {
   loadSelectionFromServer: (label?: string) => Promise<void>
   // free transform (10 §4): live numbers for the preview; applied by resampling the layer (and a linked mask)
   transform: Xform | null
-  beginTransform: () => void
+  /** `patch`: the box's first settings (a mode) — applied once it opens (after a text layer's rasterising is answered, K64). */
+  beginTransform: (patch?: Partial<Pick<Xform, 'mode' | 'interp'>>) => void
   setTransform: (patch: Partial<Xform>) => void
   applyTransform: () => void
   cancelTransform: () => void
@@ -238,6 +265,8 @@ export interface EditorState {
   refreshText: (id: string) => void
   cancelTextGesture: (id: string) => void
   rasterizeTextLayer: (id: string) => void
+  /** review K64: a pixel operation on text layers rasterises them first, asking; `run` follows a yes (at once when none is text). */
+  rasterizeFirst: (ids: string[], what: string, run: () => void) => void
   beginTextEdit: (id: string | null) => void
   endTextEdit: (apply: boolean) => void
   setTextDefaults: (p: Partial<EditorState['textDefaults']>) => void
@@ -327,6 +356,21 @@ function findParent(doc: DocumentStack, id: string): { list: Node[]; index: numb
   return out
 }
 export function countRasters(doc: DocumentStack): number { let n = 0; walk(doc.layers, (x) => { if (x.kind === 'raster') n++ }); return n }
+/** An AI candidate group left unpicked: an "AI …" group of several layers, at most one of them visible. */
+const unpickedGroup = (n: Node | null | undefined): n is Node => !!n && n.kind === 'group' && n.name.startsWith('AI ') && (n.children?.length ?? 0) > 1 && n.children!.filter((c) => c.visible).length <= 1
+/** review K116: the candidate strip for a stack undo / redo put back — the shown one while its group (or its loose layers) still holds
+ *  several; else the unpicked AI group holding `hint` (the step's layer: an undone pick, a redone arrival); else none (a strip naming
+ *  layers the stack lacks stayed up after an undo). */
+export function candidatesIn(doc: DocumentStack, cur: EditorState['candidates'], hint?: string | null): EditorState['candidates'] {
+  if (cur) {
+    const ids = cur.group ? findNode(doc, cur.group)?.children?.map((c) => c.id) ?? [] : cur.ids.filter((id) => findNode(doc, id))
+    if (ids.length > 1) return { group: cur.group, ids }
+  }
+  const found: { g: Node | null } = { g: null }
+  if (hint) walk(doc.layers, (n) => { if (n.children?.some((c) => c.id === hint)) { found.g = n; return true } })
+  const g = found.g
+  return unpickedGroup(g) ? { group: g.id, ids: g.children!.map((c) => c.id) } : null
+}
 /** The stack the canvas renders: the document with the view-only previews applied — the blend dropdown's hovered mode (D55) and the
  * hovered AI candidate shown alone among its siblings (D90 B18). The document itself is never touched; the same object when no
  * preview applies. */
@@ -360,6 +404,9 @@ const maskEditExtras = (tool: Tool): { tool?: Tool } => {
   return PAINTS_MASK.includes(tool) ? {} : { tool: 'brush' }
 }
 let openSeq = 0                                                   // C31: the latest openDocument() wins; a superseded load frees what it fetched
+/** review K116: the active layer when the last AI job was sent — its first result takes the active layer only while that is still the
+ *  active one (a result arriving while another layer is being painted no longer takes the brush away); later results never do. */
+let aiFollow: { docId: string; activeId: string | null } | null = null
 // D70 idle pre-save: one flush in flight at a time; `fileDirty` — the server's open document has changes its .ora does not (synced, not
 // saved); the selection is uploaded only when its LayerPixels version (app-wide monotonic, F7) moved; strokes are never flushed half-way.
 let flushing: Promise<boolean> | null = null
@@ -478,12 +525,55 @@ export const useEditor = create<EditorState>()(
         get().selection!.destroy()
         set({ selection: null, quickMask: false })
       }
+      /** review K116: `{ active: was }` when the step moved the active layer away from `was` (undo puts it back), else nothing. */
+      const movedFrom = (was: string | null): Partial<HistoryEntry> => (get().activeId !== was ? { active: was } : {})
+      /** review K116: undo / redo put a stack back — the active layer goes where the step had moved it from, else stays, else (it is not in
+       *  the stack put back: an undone new layer) its nearest neighbour below, then above — never the top layer for no reason; the entry
+       *  for the other way records where it was. The candidate strip follows the stack put back (a stale strip named layers it lacked). */
+      const restoreStack = (stack: DocumentStack, e: HistoryEntry, other: HistoryEntry) => {
+        const cur = get().activeId, curDoc = get().doc
+        let act: string | null
+        if (e.active !== undefined && (e.active === null || findNode(stack, e.active))) act = e.active
+        else if (findNode(stack, cur)) act = cur
+        else {
+          const order = curDoc ? walkOrder(curDoc) : [], i = cur ? order.indexOf(cur) : -1
+          const near = i < 0 ? undefined : [...order.slice(i + 1), ...order.slice(0, i).reverse()].find((id) => findNode(stack, id))
+          act = near ?? stack.layers[0]?.id ?? null
+        }
+        if (act !== cur) other.active = cur
+        set({ doc: keepServerState(stack, curDoc), activeId: act, candidates: candidatesIn(stack, get().candidates, e.layerId), candPreview: null })
+      }
       /** Replace the stack, mark dirty, and record the previous stack as one undoable step. */
       const commit = (next: DocumentStack, before: DocumentStack, label: string, layerId: string, extra: Partial<EditorState> = {}, coalesce?: string, entry: Partial<HistoryEntry> = {}) => {
+        const was = get().activeId
         set({ doc: next, docDirty: true, revision: get().revision + 1, ...extra })
-        get().pushHistory({ label, layerId, kind: 'image', tiles: [], stack: before, at: Date.now(), coalesce, ...entry })
+        get().pushHistory({ label, layerId, kind: 'image', tiles: [], stack: before, at: Date.now(), coalesce, ...movedFrom(was), ...entry })
       }
       const transformOpen = (): boolean => { if (!get().transform) return false; useSession.getState().toast(TRANSFORM_OPEN, 'info'); return true }
+      /** review K64: a pixel operation on text layers (a transform, a flip, Clear, Cut, Ink from white, Apply mask, a brush) left their
+       *  block describing pixels it no longer makes — the next Edit text… re-rasterised the change away. They are rasterised first, asked
+       *  once (the rasterising its own undo step); `run` follows a yes, or runs at once when no text layer is touched. */
+      const rasterizeFirst = (ids: string[], what: string, run: () => void): void => {
+        const doc = get().doc
+        const texts = ids.map((id) => findNode(doc, id)).filter((n): n is Node => !!n && n.kind === 'raster' && !!n.text)
+        if (!doc || !texts.length) { run(); return }
+        const one = texts.length === 1
+        void useSession.getState().askConfirm({ title: 'Rasterize the text?', okLabel: one ? 'Rasterize' : `Rasterize ${texts.length}`,
+          text: `${what} changes the pixels of ${one ? `the text layer “${texts[0].name}”` : `${texts.length} text layers`}: ${one ? 'it is' : 'they are'} rasterized first — the pixels stay, the text is no longer editable.` })
+          .then((ok) => {
+            if (!ok || get().doc?.id !== doc.id) return
+            dropText(texts.map((n) => n.id), one ? 'rasterize text' : `rasterize ${texts.length} text layers`)
+            run()
+          })
+      }
+      /** The text blocks of these layers dropped, one undo step (Rasterize text; K64). */
+      const dropText = (ids: string[], label: string): void => {
+        const doc = get().doc
+        if (!doc || !ids.some((id) => findNode(doc, id)?.text)) return
+        const next = clone(doc)
+        for (const id of ids) { const n = findNode(next, id); if (n?.text) n.text = null }
+        commit(next, clone(doc), label, ids[0])
+      }
       /** D58: bake a transform into its layers once, from their current (original) pixels — the active raster, or every raster of a
        * group with one homography; with `t.selection` only the selected pixels move (lifted, warped, composited back) and the selection
        * moves with them; linked masks follow, flattened onto their default. One history step; the old canvases ride along for undo. */
@@ -523,7 +613,8 @@ export const useEditor = create<EditorState>()(
             get().masks.set(n.id, newMask)
           }
           get().pixels.set(n.id, nlp.lp)
-          walk(next.layers, (m) => { if (m.id === n.id) { Object.assign(m, { x: nlp.x, y: nlp.y, w: nlp.lp.width, h: nlp.lp.height }, maskPatch); return true } })
+          // review K64: resampled pixels are no longer the block's rasterisation (the callers ask first; this keeps a bake honest anyway)
+          walk(next.layers, (m) => { if (m.id === n.id) { Object.assign(m, { x: nlp.x, y: nlp.y, w: nlp.lp.width, h: nlp.lp.height }, maskPatch, m.text ? { text: null } : {}); return true } })
           swaps.push({ layerId: n.id, lp, mask: newMask ? oldMask : null })
         }
         if (!swaps.length) return false
@@ -544,7 +635,9 @@ export const useEditor = create<EditorState>()(
       /** PhotoCraft's rotate / flip presets: exact pixel permutations (nearest, integer offsets about the layer's rounded centre). */
       const preset = (kind: 'flipH' | 'flipV' | 'rot180' | 'rot90cw' | 'rot90ccw') => {
         if (transformOpen()) return                                   // F10: it would bake under the open transform's preview
-        const n = findNode(get().doc, get().activeId)
+        const n0 = findNode(get().doc, get().activeId)
+        if (n0?.text && !n0.locked) { rasterizeFirst([n0.id], { flipH: 'Flip horizontal', flipV: 'Flip vertical', rot180: 'Rotate 180°', rot90cw: 'Rotate 90°', rot90ccw: 'Rotate 270°' }[kind], () => preset(kind)); return }   // review K64
+        const n = n0
         const lp = n?.kind === 'raster' ? get().pixels.get(n.id) : undefined
         if (!n || !lp || n.locked) return
         const rect: [number, number, number, number] = [n.x ?? 0, n.y ?? 0, (n.x ?? 0) + lp.width, (n.y ?? 0) + lp.height]
@@ -626,6 +719,7 @@ export const useEditor = create<EditorState>()(
             // is in flight — a yield only waited behind a busy frame (≈ 50 ms on the headed aiclick run)
             const r = await unwrap(http.POST('/documents/{doc_id}/ai', { params: { path: { doc_id: doc.id } }, body: { recipe, stage } }))
             const jobs = r.jobs
+            aiFollow = { docId: doc.id, activeId: get().activeId }        // review K116
             set({ aiBatch: jobs[0]?.batch_id ?? jobs[0]?.id ?? null, candidates: null, candPreview: null })
             s.toast(stage ? `Queued ${jobs.length} AI job${jobs.length > 1 ? 's' : ''} for later — Run now in the Dock` : `Queued ${jobs.length} AI job${jobs.length > 1 ? 's' : ''} — results arrive as layers`, 'info')
             void s.refreshAll()
@@ -690,12 +784,13 @@ export const useEditor = create<EditorState>()(
               if (dx || dy) walk(next.layers, (n) => { if (n.kind === 'raster') { n.x = (n.x ?? 0) + dx; n.y = (n.y ?? 0) + dy } if (n.mask && !n.mask.linked) { n.mask.x += dx; n.mask.y += dy } })   // unlinked masks on every kind (as queue.py shifts them)
             }
             const gnode = group ? findNode(server, group) : null
+            const fresh = new Set(added)                                       // review K94: only what arrived — a candidate picked away (or deleted) here stays gone
             if (gnode) {
               const local = findNode(next, gnode.id)
               if (local?.children) {                                           // later candidates join the group that is already here
                 const have = new Set(local.children.map((c) => c.id))
-                gnode.children?.forEach((c, i) => { if (!have.has(c.id)) local.children!.splice(Math.min(i, local.children!.length), 0, clone(c)) })
-              } else next.layers.unshift(clone(gnode))
+                gnode.children?.forEach((c, i) => { if (!have.has(c.id) && fresh.has(c.id)) local.children!.splice(Math.min(i, local.children!.length), 0, clone(c)) })
+              } else next.layers.unshift({ ...clone(gnode), children: (gnode.children ?? []).filter((c) => fresh.has(c.id)).map((c) => clone(c)) })
             } else for (const lid of [...added].reverse()) { const n = findNode(server, lid); if (n && !findNode(next, lid)) next.layers.unshift(clone(n)) }
             next.revision = server.revision; next.saved_at = server.saved_at
             // F5: a grown canvas resamples the selection inside the same history step (the old one rides in `selSwap` for undo)
@@ -703,9 +798,13 @@ export const useEditor = create<EditorState>()(
             let selection = old, selSwap: HistoryEntry['selSwap']
             if (grown && old) { selection = new LayerPixels(server.w, server.h, true); selection.ctx.drawImage(old.canvas, dx, dy); selection.refresh(); selSwap = { lp: old } }
             if (grown && get().transform) { endTransformState(); set({ transform: null }); useSession.getState().toast('The canvas grew: the free transform was cancelled', 'info') }   // F10
-            const ids = gnode?.children?.map((c) => c.id) ?? added
-            set({ doc: next, selection, candidates: ids.length > 1 ? { group: group ?? '', ids } : null, candPreview: null, activeId: added[0], editingMask: false, revision: get().revision + 1 })
-            get().pushHistory({ label: 'AI result', layerId: added[0], kind: 'image', tiles: [], stack: before, at: Date.now(), selSwap })
+            const ids = gnode ? findNode(next, gnode.id)?.children?.map((c) => c.id) ?? [] : added   // review K94: the group as it is here
+            // review K116: the result takes the active layer only when nothing else was chosen since the job was sent (or the active one is gone)
+            const was = get().activeId
+            const take = !findNode(next, was) || (aiFollow?.docId === doc.id && aiFollow.activeId === was)
+            if (take) aiFollow = null
+            set({ doc: next, selection, candidates: ids.length > 1 ? { group: group ?? '', ids } : null, candPreview: null, ...(take ? { activeId: added[0], editingMask: false } : {}), revision: get().revision + 1 })
+            get().pushHistory({ label: 'AI result', layerId: added[0], kind: 'image', tiles: [], stack: before, at: Date.now(), selSwap, ...movedFrom(was) })
             if (grown) get().requestFit()
             useSession.getState().toast(ids.length > 1 ? `Candidate ${ids.indexOf(added[0]) + 1} of ${ids.length} arrived — pick with 1–4 or the strip` : 'AI layer added', 'success')
           } catch (e) { useSession.getState().toast(`Could not load the AI result: ${(e as Error).message}`, 'error') }
@@ -726,11 +825,12 @@ export const useEditor = create<EditorState>()(
             g.children = g.children.filter((ch) => ch.id === keepId)
             // B18: the other candidates' canvases stay in the maps for undo; gc drops them when the history entry goes
           }
+          const was = get().activeId
           set({ doc: next, candidates: null, candPreview: null, activeId: keepId, docDirty: true, revision: get().revision + 1 })
-          get().pushHistory({ label: 'pick candidate', layerId: keepId, kind: 'image', tiles: [], stack: before, at: Date.now() })
+          get().pushHistory({ label: 'pick candidate', layerId: keepId, kind: 'image', tiles: [], stack: before, at: Date.now(), ...movedFrom(was) })
         },
 
-        beginTransform: () => {
+        beginTransform: (patch) => {
           const { doc, activeId, selection } = get()
           const n = findNode(doc, activeId)
           if (!doc || !n || n.locked || (n.kind !== 'raster' && n.kind !== 'group')) { useSession.getState().toast(n?.locked ? 'Layer is locked' : 'Free transform works on a pixel layer or a group', 'info'); return }
@@ -738,6 +838,7 @@ export const useEditor = create<EditorState>()(
           let locked = 0
           walk([n], (m) => { if (m.kind === 'raster' && get().pixels.has(m.id)) { if (m.locked) locked++; else rasters.push(m) } })   // F13: locked children stay put
           if (!rasters.length) { useSession.getState().toast(locked ? 'The group\'s pixel layers are all locked' : 'The group holds no pixel layers to transform', 'info'); return }
+          if (rasters.some((m) => m.text)) { rasterizeFirst(rasters.map((m) => m.id), 'Free transform', () => get().beginTransform(patch)); return }   // review K64
           // the frame: the layer (the group's rasters together), cut to the selection's bounds when only selected pixels move (D58)
           let r = [Infinity, Infinity, -Infinity, -Infinity]
           for (const m of rasters) { const lp = get().pixels.get(m.id)!; r = [Math.min(r[0], m.x ?? 0), Math.min(r[1], m.y ?? 0), Math.max(r[2], (m.x ?? 0) + lp.width), Math.max(r[3], (m.y ?? 0) + lp.height)] }
@@ -775,7 +876,7 @@ export const useEditor = create<EditorState>()(
             transformPreview.set(m.id, { moving, rest, x: mx, y: my, maskBaked: !!mask })
           }
           const rect: [number, number, number, number] = [Math.round(r[0]), Math.round(r[1]), Math.round(r[2]), Math.round(r[3])]
-          set({ transform: { nodeId: n.id, rect, quad: rectCorners(rect), pivot: { x: (rect[0] + rect[2]) / 2, y: (rect[1] + rect[3]) / 2 }, interp: 'bicubic', mode: 'free', selection: lift }, tool: 'move' })
+          set({ transform: { nodeId: n.id, rect, quad: rectCorners(rect), pivot: { x: (rect[0] + rect[2]) / 2, y: (rect[1] + rect[3]) / 2 }, interp: 'bicubic', mode: 'free', selection: lift, ...patch }, tool: 'move' })
         },
         setTransform: (patch) => { const t = get().transform; if (t) set({ transform: { ...t, ...patch } }) },
         cancelTransform: () => { endTransformState(); set({ transform: null, revision: get().revision + 1 }) },
@@ -837,8 +938,7 @@ export const useEditor = create<EditorState>()(
             const first = rasters[0]?.id ?? null
             // an AI candidate group left unpicked (several children, one visible) resumes its strip
             const top = doc.layers[0]
-            const candidates = top?.kind === 'group' && top.name.startsWith('AI ') && (top.children?.length ?? 0) > 1 && top.children!.filter((c) => c.visible).length <= 1
-              ? { group: top.id, ids: top.children!.map((c) => c.id) } : null
+            const candidates = unpickedGroup(top) ? { group: top.id, ids: top.children!.map((c) => c.id) } : null
             endTransformState()
             fileDirty = !!listed?.dirty; selectionUploaded = `${doc.id}:none`   // D70 / K6: in sync with its .ora unless the server's open copy is ahead
             set({ doc, pixels, masks, activeId: first, editingMask: false, docDirty: false, history: [], future: [], selection: null, quickMask: false, candidates, candPreview: null, transform: null, revision: get().revision + 1,
@@ -1187,11 +1287,13 @@ export const useEditor = create<EditorState>()(
           const before = clone(doc)
           const next = clone(doc)
           for (const n of nodes) if (n.id !== base.id) { const p = findParent(next, n.id); if (p) p.list.splice(p.index, 1) }
-          walk(next.layers, (n) => { if (n.id === base.id) { Object.assign(n, { x: x0, y: y0, w: x1 - x0, h: y1 - y0, opacity: 1, fill: 1, blend: 'normal', mask: null, clip: false, name: nodes[0].name }); return true } })
+          // review K64: the merged pixels are no text — the base's block goes (a later Edit text… re-rasterised the merge away)
+          walk(next.layers, (n) => { if (n.id === base.id) { Object.assign(n, { x: x0, y: y0, w: x1 - x0, h: y1 - y0, opacity: 1, fill: 1, blend: 'normal', mask: null, clip: false, name: nodes[0].name, text: null }); return true } })
           const old = get().pixels.get(base.id)!, oldMask = base.mask ? get().masks.get(base.id) ?? null : null
           get().pixels.set(base.id, out)
+          const was = get().activeId
           set({ doc: next, activeId: base.id, selectedIds: [base.id], anchorId: base.id, editingMask: false, docDirty: true, revision: get().revision + 1 })
-          get().pushHistory({ label: `merge ${nodes.length} layers`, layerId: base.id, kind: 'image', tiles: [], stack: before, at: Date.now(), swap: { layerId: base.id, lp: old, mask: oldMask } })
+          get().pushHistory({ label: `merge ${nodes.length} layers`, layerId: base.id, kind: 'image', tiles: [], stack: before, at: Date.now(), swap: { layerId: base.id, lp: old, mask: oldMask }, ...movedFrom(was) })
         },
         flattenImage: async () => {
           const doc0 = get().doc
@@ -1254,6 +1356,13 @@ export const useEditor = create<EditorState>()(
         updateNode: (id, patch, label, coalesce) => {
           const doc = get().doc
           if (!doc) return
+          const t = get().transform
+          if (t && ('x' in patch || 'y' in patch)) {                       // review K116: a layer under an open free transform moves with the box only
+            let inside = false
+            const root = findNode(doc, t.nodeId)
+            if (root) walk([root], (m) => { if (m.id === id) { inside = true; return true } })
+            if (inside) { transformOpen(); return }
+          }
           const before = clone(doc)
           const next = clone(doc)
           walk(next.layers, (n) => { if (n.id === id) { Object.assign(n, patch); return true } })
@@ -1358,8 +1467,9 @@ export const useEditor = create<EditorState>()(
           })
           const old = get().pixels.get(below.id)!
           get().pixels.set(below.id, out)
+          const was = get().activeId
           set({ doc: next, activeId: below.id, selectedIds: [below.id], anchorId: below.id, editingMask: false, docDirty: true, revision: get().revision + 1 })
-          get().pushHistory({ label: 'merge down', layerId: below.id, kind: 'image', tiles: [], stack: before, at: Date.now(), swap: { layerId: below.id, lp: old, mask: null } })
+          get().pushHistory({ label: 'merge down', layerId: below.id, kind: 'image', tiles: [], stack: before, at: Date.now(), swap: { layerId: below.id, lp: old, mask: null }, ...movedFrom(was) })
         },
         groupActive: () => {
           const doc = get().doc
@@ -1448,6 +1558,7 @@ export const useEditor = create<EditorState>()(
           const m = n?.mask ? get().masks.get(id) : undefined
           if (!doc || !n?.mask || !lp || !m) { useSession.getState().toast('Apply mask needs a raster layer with a mask', 'info'); return }
           if (n.locked) { useSession.getState().toast('Layer is locked', 'info'); return }
+          if (n.text) { rasterizeFirst([id], 'Apply mask', () => get().applyMask(id)); return }   // review K64
           const before = clone(doc)
           const tiles = lp.snapshotAll()
           // D52: the layer's alpha × the mask as it renders (density, feather); outside the mask's extent nothing shows, as in compose.py
@@ -1466,6 +1577,7 @@ export const useEditor = create<EditorState>()(
           const lp = n?.kind === 'raster' ? get().pixels.get(id) : undefined
           if (!doc || !n || !lp || n.mask) { useSession.getState().toast('Mask from transparency needs a raster layer without a mask', 'info'); return }
           if (n.locked) { useSession.getState().toast('Layer is locked', 'info'); return }
+          if (n.text) { rasterizeFirst([id], 'Mask from transparency', () => get().maskFromTransparency(id)); return }   // review K64: the layer turns opaque
           const before = clone(doc)
           const tiles = lp.snapshotAll()
           // D52 (Photoshop Layer › Layer Mask › From Transparency): the alpha becomes a linked layer-sized mask, the layer turns opaque
@@ -1501,6 +1613,7 @@ export const useEditor = create<EditorState>()(
           const n = findNode(doc, activeId)
           if (!doc || !n || n.locked || (n.kind !== 'raster' && !(editingMask && n.mask))) return
           if (transformOpen()) return                                   // F10: the transform bakes from the pixels as they are at apply
+          if (!editingMask && n.text) { rasterizeFirst([n.id], 'Clear', () => get().clearSelected()); return }   // review K64 (a mask is no text)
           clearTarget(n, editingMask ? 'mask' : 'image', 'clear')
         },
 
@@ -1515,12 +1628,14 @@ export const useEditor = create<EditorState>()(
             const have = new Set(last.tiles.map((t) => `${t.x},${t.y}`))
             const merged: HistoryEntry = { ...last, at: e.at, tiles: [...last.tiles, ...e.tiles.filter((t) => !have.has(`${t.x},${t.y}`))], stack: last.stack ?? e.stack,
               sel: last.sel && e.sel ? { had: last.sel.had, has: e.sel.has } : last.sel ?? e.sel }
-            set({ history: [...h.slice(0, -1), merged], future: [] })
-            if (f.length) { releaseEntries(f); gcPixels() }
+            const t = trimHistory([...h.slice(0, -1), merged])                 // review K67: a long merged gesture counts against the budget too
+            set({ history: t.kept, future: [] })
+            if (f.length || t.dropped.length) { releaseEntries([...t.dropped, ...f]); gcPixels() }
             return
           }
-          const dropped = [...h.slice(0, Math.max(0, h.length - 199)), ...f]
-          set({ history: [...h.slice(-199), e], future: [] })
+          const t = trimHistory([...h, e])                                  // review K67: 200 entries, and the byte budget (oldest first)
+          const dropped = [...t.dropped, ...f]
+          set({ history: t.kept, future: [] })
           if (dropped.length) { releaseEntries(dropped); gcPixels() }      // B19: canvases only history referenced go with it
         },
         undo: () => {
@@ -1537,7 +1652,8 @@ export const useEditor = create<EditorState>()(
           if (e.more) redoEntry.more = e.more.map(swapPixels)
           if (e.maskSwap) redoEntry.maskSwap = swapMask(e.maskSwap)
           if (e.selSwap) redoEntry.selSwap = swapSelection(e.selSwap)
-          if (e.stack) set({ doc: keepServerState(e.stack, get().doc), activeId: findNode(e.stack, get().activeId) ? get().activeId : e.stack.layers[0]?.id ?? null })
+          redoEntry.active = undefined
+          if (e.stack) restoreStack(e.stack, e, redoEntry)
           endTransformState()                                             // F16: undo ends an open transform
           set({ history: h.slice(0, -1), future: [...get().future, redoEntry], docDirty: true, transform: null, revision: get().revision + 1 })
         },
@@ -1555,7 +1671,8 @@ export const useEditor = create<EditorState>()(
           if (e.more) undoEntry.more = e.more.map(swapPixels)
           if (e.maskSwap) undoEntry.maskSwap = swapMask(e.maskSwap)
           if (e.selSwap) undoEntry.selSwap = swapSelection(e.selSwap)
-          if (e.stack) set({ doc: keepServerState(e.stack, get().doc), activeId: findNode(e.stack, get().activeId) ? get().activeId : e.stack.layers[0]?.id ?? null })
+          undoEntry.active = undefined
+          if (e.stack) restoreStack(e.stack, e, undoEntry)
           endTransformState()
           set({ future: f.slice(0, -1), history: [...get().history, undoEntry], docDirty: true, transform: null, revision: get().revision + 1 })
         },
@@ -1619,6 +1736,7 @@ export const useEditor = create<EditorState>()(
             if (opts.merged || n?.kind !== 'raster') { s.toast('Cut needs a raster layer', 'info'); return false }
             if (n.locked) { s.toast(`"${n.name}" is locked — unlock it to cut (Copy works)`, 'info'); return false }
             if (transformOpen()) return false
+            if (n.text) { rasterizeFirst([n.id], 'Cut', () => { get().copySelection(opts) }); return false }   // review K64
           }
           let src: HTMLCanvasElement | null = null, ox = 0, oy = 0
           if (opts.merged) src = get().extractor?.() ?? null
@@ -1725,11 +1843,9 @@ export const useEditor = create<EditorState>()(
           const doc = get().doc
           const n = findNode(doc, id)
           if (!doc || !n?.text) return
-          const before = clone(doc)
-          const next = clone(doc)
-          findNode(next, id)!.text = null
-          commit(next, before, 'rasterize text', id)
+          dropText([id], 'rasterize text')
         },
+        rasterizeFirst: (ids, what, run) => rasterizeFirst(ids, what, run),
         beginTextEdit: (id) => set({ editingText: id, revision: get().revision + 1 }),
         endTextEdit: (apply) => {
           const id = get().editingText
@@ -1768,6 +1884,7 @@ export const useEditor = create<EditorState>()(
         layerVia: (cut) => {
           const n = findNode(get().doc, get().activeId)
           if (n?.kind !== 'raster' || !get().selection) { useSession.getState().toast(`Layer via ${cut ? 'cut' : 'copy'} needs a selection on a raster layer`, 'info'); return }
+          if (cut && n.text && !n.locked) { rasterizeFirst([n.id], 'Layer via cut', () => get().layerVia(cut)); return }   // review K64
           if (!get().copySelection({ cut })) return
           const c = get().clipboard!
           get().addImageLayer(c.canvas, `${n.name} (${cut ? 'cut' : 'copy'})`, { x: c.x, y: c.y })
@@ -1776,6 +1893,7 @@ export const useEditor = create<EditorState>()(
           const n = findNode(get().doc, get().activeId)
           const lp = n?.kind === 'raster' && !n.locked ? get().pixels.get(n.id) : null
           if (!n || !lp) { useSession.getState().toast('Ink from white needs an unlocked raster layer', 'info'); return }
+          if (n.text) { rasterizeFirst([n.id], 'Ink from white', () => get().inkFromWhite()); return }   // review K64
           lp.beginStroke(); lp.touch(0, 0, lp.width, lp.height)
           const img = lp.ctx.getImageData(0, 0, lp.width, lp.height)
           unmixWhite(img.data)

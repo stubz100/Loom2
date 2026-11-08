@@ -4,13 +4,13 @@
 // or, with the points tool, clicks lay a shape's points (one `mask.new`). The selected layer's masks are drawn over the frame (UX9 U3), the
 // selected one brighter, its points draggable (one `mask.setVertex` each). The lanes under the transport are the layers' bars (AE2d). The
 // Before toggle shows the frame with every effect off (AE3).
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { api } from '../../api/client'
 import { CommandButton } from '../../frame/CommandButton'
 import { Help } from '../../frame/Help'
 import { useSession } from '../../store/session'
 import { fmtTime } from './animateStore'
-import { chipText, maskPathD, snapTime, useComposition } from './compositionStore'
+import { chipText, deltaToLayer, layerXf, maskPathD, snapTime, toLayerPx, useComposition, xfAttr, type LayerXf } from './compositionStore'
 import { Timeline as TimelineView, TransportBar, type BarDrag, type TLRow } from './Timeline'
 
 interface Drag { x0: number; y0: number; dx: number; dy: number; box: DOMRect; vbox: DOMRect }                 // the frame's and the view's boxes at the press
@@ -35,6 +35,8 @@ export function FinalViewer() {
   const img = useRef<HTMLImageElement>(null)
   const view = useRef<HTMLDivElement>(null)
   const poly = useComposition((s) => s.poly)                               // the points tool's points so far, in comp pixels (the store clears them with the tool)
+  const props = useComposition((s) => s.props)
+  const xf = useMemo(() => layerXf(props), [props])
   const [drag, setDrag] = useState<Drag | null>(null)
   const [settling, setSettling] = useState<{ dx: number; dy: number } | null>(null)   // viewport check: a move shown where it was dropped until it is applied
   useEffect(() => { const t = window.setInterval(() => void useComposition.getState().tick(), 250); return () => window.clearInterval(t) }, [])
@@ -86,9 +88,8 @@ export function FinalViewer() {
     if (dx || dy) { setSettling({ dx: drag.dx, dy: drag.dy }); void cp.nudge(dx, dy).finally(() => setSettling(null)) }
   }
   const onDouble = () => { if (maskTool === 'poly' && poly.length >= 3) { void useComposition.getState().addPolyMask(poly.map(toLayer)); useComposition.getState().setMaskTool('off') } }
-  // the selected layer's own pixels sit at (position − anchor) in the composition: masks are in the layer's pixels
-  const off = layerOffset()
-  const toLayer = ([x, y]: [number, number]): [number, number] => [x - off[0], y - off[1]]
+  // masks are in the layer's own pixels; review K116: placed by the layer's transform at the playhead (position, anchor, scale, rotation)
+  const toLayer = (p: [number, number]): [number, number] => toLayerPx(xf, p)
   if (!finalId || !final) {
     return <div className="anim-stage final-viewer"><div className="anim-view"><div className="anim-empty"><h2>Final</h2>no final open — open one in the Shot section <Help text="Performance › Final shot makes a final: the scene split into layers, performed, matted and assembled; Make the composition, then Open it here." /></div></div></div>
   }
@@ -106,7 +107,7 @@ export function FinalViewer() {
           <img ref={img} className={`final-frame ${selected !== null ? 'movable' : ''}`} src={before ?? shown.url} alt="" draggable={false} data-side={shown.side} data-before={before ? 'true' : undefined}
             title={selected !== null ? (maskTool === 'poly' ? 'Click the points of the shape; click the first again to close' : maskTool === 'object' ? `Click the thing on ${selName ?? 'the layer'} to matte` : maskTool !== 'off' ? `Drag to draw the ${maskTool === 'rect' ? 'rectangle' : 'ellipse'} mask on ${selName ?? 'the layer'}` : `Drag to move ${selName ?? 'the selected layer'}`) : undefined}
             onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={() => setDrag(null)} onDoubleClick={onDouble} />
-          {selected !== null && <MaskOverlay w={final.size.w} h={final.size.h} offset={off} poly={poly} scaleOf={scaleOf} />}
+          {selected !== null && <MaskOverlay w={final.size.w} h={final.size.h} xf={xf} poly={poly} scaleOf={scaleOf} />}
         </div> : <div className="anim-overlay">loading the first frame…</div>}
         {ghost ? <div className={`mask-ghost ${maskTool}`} style={ghost} /> : drag && maskTool === 'off' && (drag.dx || drag.dy) ? <div className="drag-ghost" style={{ transform: `translate(${drag.dx}px, ${drag.dy}px)` }}><span>{selName}: {Math.round(drag.dx)}, {Math.round(drag.dy)} px</span></div>
           : settling ? <div className="drag-ghost settling" style={{ transform: `translate(${settling.dx}px, ${settling.dy}px)` }}><span>{selName}: moving…</span></div> : null}
@@ -119,7 +120,7 @@ export function FinalViewer() {
         <CommandButton id="anim.final.before" active={!!before} />
         <span className="hint" data-comp-state>composition · revision {comp.revision}{comp.stale ? ' · stale: the final changed, make it again' : ''}{comp.clip_id ? ` · rendered at revision ${comp.rendered_revision}` : ''}</span>
       </TransportBar>
-      <Lanes rate={final.rate} frames={n} />
+      <FinalLanes rate={final.rate} frames={n} />
     </div>
   )
 }
@@ -131,23 +132,20 @@ function pictureRect(box: DOMRect, w: number, h: number) {
   return { left: box.left + (box.width - pw) / 2, top: box.top + (box.height - ph) / 2, width: pw, height: ph, scale: k > 0 ? 1 / k : 1 }
 }
 
-/** The selected layer's pixels sit at (position − anchor) in the composition (the contact offset, D107). */
-function layerOffset(): [number, number] {
-  const props = useComposition.getState().props
-  const pos = props.find((p) => p.path === 'transform/position')?.value as number[] | undefined
-  const anc = props.find((p) => p.path === 'transform/anchor')?.value as number[] | undefined
-  return [Number(pos?.[0] ?? 0) - Number(anc?.[0] ?? 0), Number(pos?.[1] ?? 0) - Number(anc?.[1] ?? 0)]
-}
-
-/** UX9 U3: the selected layer's masks drawn over the frame — the selected one brighter, its points draggable; the points tool's shape. */
-function MaskOverlay({ w, h, offset, poly, scaleOf }: { w: number; h: number; offset: [number, number]; poly: [number, number][]; scaleOf: () => number }) {
+/** UX9 U3: the selected layer's masks drawn over the frame — the selected one brighter, its points draggable; the points tool's shape.
+ *  Review K116: the masks sit in a group carrying the layer's transform at the playhead; an outline is picked by a wide invisible stroke
+ *  only, so a press inside a mask reaches the frame and moves the layer (a filled mask over the figure blocked every move). */
+function MaskOverlay({ w, h, xf, poly, scaleOf }: { w: number; h: number; xf: LayerXf; poly: [number, number][]; scaleOf: () => number }) {
   const masks = useComposition((s) => s.masks)
   const selectedMask = useComposition((s) => s.selectedMask)
   const view = useComposition((s) => s.maskView)
   const busy = useComposition((s) => s.busy)
+  const tool = useComposition((s) => s.maskTool)
   const [vd, setVd] = useState<VertexDrag | null>(null)
   const k = scaleOf()
   const r = 4 * k                                                         // a handle 4 css px wide, in comp pixels
+  const rl = r / Math.max(1e-3, (Math.abs(xf.scale[0]) + Math.abs(xf.scale[1])) / 2)   // … in the layer's pixels (inside the group)
+  const dl = (d: VertexDrag) => deltaToLayer(xf, [d.dx * k, d.dy * k])     // a drag in css pixels as the layer's
   const start = (e: ReactPointerEvent<SVGCircleElement>, uid: number, index: number) => {
     if (e.button !== 0 || busy) return
     e.stopPropagation()
@@ -163,23 +161,29 @@ function MaskOverlay({ w, h, offset, poly, scaleOf }: { w: number; h: number; of
     const v = m?.vertices[vd.index]
     setVd(null)
     if (!m || !v || (Math.abs(vd.dx) < 2 && Math.abs(vd.dy) < 2)) return
-    void useComposition.getState().moveVertex(vd.uid, vd.index, [v[0] + vd.dx * k, v[1] + vd.dy * k])
+    const [ddx, ddy] = dl(vd)
+    void useComposition.getState().moveVertex(vd.uid, vd.index, [v[0] + ddx, v[1] + ddy])
   }
+  const frameD = `M ${[[0, 0], [w, 0], [w, h], [0, h]].map((p) => toLayerPx(xf, p as [number, number]).join(' ')).join(' L ')} Z`   // the frame, in the layer's pixels
   return (
     <svg className={`mask-overlay ${view}`} viewBox={`0 0 ${w} ${h}`} width="100%" height="100%" aria-label="masks" data-view={view}>
+      <g transform={xfAttr(xf)} data-layer-xf>
       {masks.map((m) => {
         const sel = m.uid === selectedMask
-        const verts = vd && vd.uid === m.uid ? m.vertices.map((p, i) => (i === vd.index ? [p[0] + vd.dx * k, p[1] + vd.dy * k] as [number, number] : p)) : m.vertices
-        const d = maskPathD({ ...m, vertices: verts }, offset[0], offset[1])
-        const fillD = view === 'fill' && m.inverted ? `M 0 0 H ${w} V ${h} H 0 Z ${d}` : d                   // Fill: an inverted mask covers the frame but the shape
+        const verts = vd && vd.uid === m.uid ? m.vertices.map((p, i) => { if (i !== vd.index) return p; const [ddx, ddy] = dl(vd); return [p[0] + ddx, p[1] + ddy] as [number, number] }) : m.vertices
+        const d = maskPathD({ ...m, vertices: verts })
+        const fillD = view === 'fill' && m.inverted ? `${frameD} ${d}` : d                   // Fill: an inverted mask covers the frame but the shape
         return (
           <g key={m.uid} className={`mask${sel ? ' selected' : ''}${m.inverted ? ' inverted' : ''}`} data-mask={m.uid}>
-            <path d={fillD} fillRule="evenodd" vectorEffect="non-scaling-stroke" onClick={() => useComposition.getState().selectMask(m.uid)} />
-            {sel && verts.map((p, i) => <circle key={i} cx={p[0] + offset[0]} cy={p[1] + offset[1]} r={r} className="vertex" data-index={i}
+            <path d={fillD} fillRule="evenodd" vectorEffect="non-scaling-stroke" />
+            {tool === 'off' && <path className="hit" d={d} vectorEffect="non-scaling-stroke" onClick={() => useComposition.getState().selectMask(m.uid)}
+              style={{ fill: 'none', stroke: 'transparent', strokeWidth: 10, pointerEvents: 'stroke', animation: 'none', cursor: 'pointer' }} />}
+            {sel && verts.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r={rl} className="vertex" data-index={i}
               onPointerDown={(e) => start(e, m.uid, i)} onPointerMove={move} onPointerUp={end} onPointerCancel={() => setVd(null)} />)}
           </g>
         )
       })}
+      </g>
       {poly.length > 0 && <g className="mask drawing">
         <path d={`M ${poly.map((p) => `${p[0]} ${p[1]}`).join(' L ')}`} vectorEffect="non-scaling-stroke" />
         {poly.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r={i === 0 ? r * 1.5 : r} className={i === 0 ? 'vertex first' : 'vertex'} />)}
@@ -190,7 +194,7 @@ function MaskOverlay({ w, h, offset, poly, scaleOf }: { w: number; h: number; of
 
 /** AE2d → D121 (AW2): the layers as lanes of the one timeline — a bar per layer over the shot (drag to move, the ends to trim, Alt-drag to slip;
  *  in frames of the shot, written back in seconds), the selected layer's keys on its lane, a line's waveform on its bar, the playhead. */
-function Lanes({ rate, frames }: { rate: number; frames: number }) {
+export function FinalLanes({ rate, frames }: { rate: number; frames: number }) {
   const layers = useComposition((s) => s.layers)
   const selected = useComposition((s) => s.selected)
   const frame = useComposition((s) => s.frame)
@@ -204,8 +208,10 @@ function Lanes({ rate, frames }: { rate: number; frames: number }) {
     const sel = selected === l.id
     const audio = audioOf(l.id)                                            // D118 (AE4b): a line's bar shows its waveform
     return { id: String(l.id), className: `lane${audio ? ' audio' : ''}`, selected: sel, data: { lane: String(l.id) }, title: audio ? `${l.name} · ${audio.text}` : l.name,
-      label: <span className="lane-name">{audio ? '🔊 ' : ''}{l.name}</span>,
-      onSelect: () => useComposition.getState().select(sel ? null : l.id),
+      // review K116: a click on the lane (a key diamond, the bar) selects the layer — the toggle took the layer away from under its own keys;
+      // the name still folds it, as its row in Layers does
+      label: <span className="lane-name" title={sel ? 'Click to deselect' : undefined} onClick={(e) => { e.stopPropagation(); useComposition.getState().select(sel ? null : l.id) }}>{audio ? '🔊 ' : ''}{l.name}</span>,
+      onSelect: () => { if (!sel) useComposition.getState().select(l.id) },
       bars: [{ id: 'bar', from: Math.round(l.in * rate), to: Math.round(l.out * rate), drag: !busy, style: audio ? { backgroundImage: `url(${api.thumbUrl(audio.asset_id, 256)})` } : undefined,
         title: `${l.name}: ${l.in.toFixed(2)}–${l.out.toFixed(2)} s · drag to move, the ends to trim, Alt-drag to slip` }],
       keys: sel ? keyFrames.map((f) => ({ frame: f, title: `key at ${(f / rate).toFixed(2)} s` })) : [] }
@@ -214,7 +220,7 @@ function Lanes({ rate, frames }: { rate: number; frames: number }) {
     const l = layers.find((x) => String(x.id) === row)
     if (!l || busy) return
     const cp = useComposition.getState(), d = snapTime(delta / rate, rate)
-    cp.select(l.id)
+    if (cp.selected !== l.id) cp.select(l.id)                              // the selected layer keeps its editor (its masks, its tool)
     if (mode === 'move') void cp.setTiming(l.id, { delta: d })
     else if (mode === 'in') void cp.setTiming(l.id, { in: Math.max(0, Math.min(l.out - step, l.in + d)) })
     else if (mode === 'out') void cp.setTiming(l.id, { out: Math.max(l.in + step, Math.min(duration, l.out + d)) })

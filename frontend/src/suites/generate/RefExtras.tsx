@@ -3,7 +3,7 @@
 import { X } from 'lucide-react'
 import { api } from '../../api/client'
 import { useSession } from '../../store/session'
-import { mentionsInUse, useGenerate } from './generateStore'
+import { mentionsInUse, panelModelOf, useGenerate } from './generateStore'
 import { useMentions } from './useMentions'
 
 /** The Text mode's prompt, with @mentions. */
@@ -25,7 +25,7 @@ export function RefExtras() {
   const p = g.panel
   const pv = g.preview
   const caps = useSession((s) => s.capabilities)
-  const cap = caps?.models[p.model_id]
+  const cap = caps?.models[panelModelOf(p, caps)]                        // review K65: the model the recipe runs ('' = the default)
   const part = p.prompt_mode === 'tree' && (p.ref_framing === 'hand' || p.ref_framing === 'feet') ? p.ref_framing : null   // RG1: a hand or feet picture sends no mention (E62 a)
   const left = part ? mentionsInUse(p) : []
   const ms = part ? [] : mentionsInUse(p)
@@ -72,7 +72,7 @@ export function RefExtras() {
         </div>
       )}
       {dropped > 0 && (
-        <p className="ref-warn">{dropped} reference{dropped === 1 ? '' : 's'} over {cap?.label ?? p.model_id}'s limit of {pv?.max_refs ?? cap?.max_refs} {dropped === 1 ? 'is' : 'are'} left out — remove some or pick a model that takes more.</p>
+        <p className="ref-warn">{dropped} reference{dropped === 1 ? '' : 's'} over {cap?.label ?? panelModelOf(p, caps)}'s limit of {pv?.max_refs ?? cap?.max_refs} {dropped === 1 ? 'is' : 'are'} left out — remove some or pick a model that takes more.</p>
       )}
     </>
   )

@@ -5,7 +5,7 @@
 // marquee, lasso, wand, fill, eyedropper).
 import { Application, ColorMatrixFilter, Container, Graphics, Matrix, PerspectiveMesh, Rectangle, RendererType, RenderTexture, Sprite, Texture, TilingSprite } from 'pixi.js'
 import 'pixi.js/advanced-blend-modes'
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSession } from '../../store/session'
 import { segmentTool } from '../../store/modelCaps'
 import { CANVAS_COLOURS } from '../../frame/theme'
@@ -23,6 +23,7 @@ import { quickSelect } from './smartselect/client'
 import { ensureDocImage } from './smartselect/source'
 import { modeFor, selectionValues, type SelectionMode } from './selectionOps'
 import { applyDrag, edgeHandles, hitTest, homographyOf, insideQuad, rectCorners, type Hit, type Quad } from './transform'
+import { toolCursor, toolFootprint } from './tools'
 import { onlyAssets, registerDropTarget } from '../../frame/drag'
 import { layerDrop } from '../../frame/dropRules'
 import { listenFileDrop } from '../../shell/tauri'
@@ -73,7 +74,11 @@ const mods = (e: Mods): Mods => { const l = useEditor.getState().latched; return
 /** D51: where the last stroke ended (document coordinates) and on which target — Shift-click continues from it. */
 let lastPaint: { id: string; at: Pt } | null = null
 /** Overlay Graphics that live across scene rebuilds (cleared and redrawn in place); everything else in the overlay is rebuilt. */
-const OVERLAY_GRAPHICS = ['frame', 'ants', 'aiprompt', 'gguide', 'xform', 'preview']
+const OVERLAY_GRAPHICS = ['frame', 'ants', 'aiprompt', 'gguide', 'xform', 'preview', 'footprint']
+/** review K66: an identity number per canvas object (a LayerPixels, the selection) — what the scene and the ants are keyed on. */
+const UIDS = new WeakMap<object, number>()
+let uidSeq = 0
+const uidOf = (o: object): number => { let n = UIDS.get(o); if (n === undefined) { n = ++uidSeq; UIDS.set(o, n) } return n }
 
 /** How an editor's Pixi application goes: its canvas removed, the global pools kept. `destroy(true)` would also release Pixi's global
  *  resources (renderer.destroy: `true` = releaseGlobalResources), destroying pooled batches another live renderer is drawing with — its
@@ -95,7 +100,11 @@ export function EditorCanvas() {
   const previewTex = useRef(new Map<HTMLCanvasElement, Texture>())
   const renderPending = useRef(0)
   const fitPending = useRef(false)                                       // V91: a fit asked while hidden (kept alive) runs on the return
-  const antsRef = useRef<{ rev: number; segs: number[] }>({ rev: -1, segs: [] })
+  // review K66 / K94: the ants' outline keyed on the selection's canvas and version (it was re-scanned on every revision bump), and their
+  // tessellation kept per zoom — the solid line once, each of the eight dash phases once (the march only shows one; it re-tessellated
+  // every outline segment every 120 ms)
+  const antsRef = useRef<{ key: string; segs: number[]; zoom: number; phases: (Graphics | null)[] }>({ key: '', segs: [], zoom: -1, phases: [] })
+  const [ready, setReady] = useState(0)                                  // the renderer exists: the scene is built
   const negRef = useRef<ColorMatrixFilter[] | null>(null)              // C21: the two overlay filters are made once, not per rebuild
   const phaseRef = useRef(0)
   /** Render every dirty pass (inner passes were pushed first, so nesting resolves bottom-up). */
@@ -160,27 +169,41 @@ export function EditorCanvas() {
   // ---- overlay drawers (marching ants, transform box) ------------------------------------------------
   const drawAnts = () => {
     const ov = overlayRef.current; if (!ov) return
-    let g = ov.getChildByLabel('ants') as Graphics | null
-    if (!g) { g = new Graphics(); g.label = 'ants'; ov.addChild(g) }
-    g.clear()
-    const st = useEditor.getState()
-    const segs = antsRef.current.segs
-    if (!st.selection || !st.overlay || st.quickMask || !segs.length) return
-    const z = st.zoom, w = 1 / z
-    for (let i = 0; i < segs.length; i += 4) g.moveTo(segs[i], segs[i + 1]).lineTo(segs[i + 2], segs[i + 3])
-    g.stroke({ color: 0xffffff, width: w, alpha: 0.95 })
-    const dash = 4 / z, period = dash * 2, off = (phaseRef.current % 8) / 8 * period
-    for (let i = 0; i < segs.length; i += 4) {
-      const x0 = segs[i], y0 = segs[i + 1], x1 = segs[i + 2], y1 = segs[i + 3]
-      const len = Math.abs(x1 - x0) + Math.abs(y1 - y0)
-      const dx = Math.sign(x1 - x0), dy = Math.sign(y1 - y0)
-      for (let s = off - period; s < len; s += period) {
-        const a = Math.max(0, s), b = Math.min(len, s + dash)
-        if (b <= a) continue
-        g.moveTo(x0 + dx * a, y0 + dy * a).lineTo(x0 + dx * b, y0 + dy * b)
-      }
+    let c = ov.getChildByLabel('ants') as Container | null
+    if (!c) { c = new Container(); c.label = 'ants'; ov.addChild(c) }
+    const st = useEditor.getState(), sel = st.selection, a = antsRef.current
+    if (!sel || !st.overlay || st.quickMask) { c.visible = false; return }
+    const key = `${uidOf(sel)}:${sel.version}`
+    if (a.key !== key) { a.key = key; a.segs = outlineSegments(sel); a.zoom = -1 }
+    const segs = a.segs, z = st.zoom, w = 1 / z
+    c.visible = segs.length > 0
+    if (!segs.length) return
+    if (a.zoom !== z) {                                                    // the outline or the zoom moved: the solid line again, the phases on demand
+      for (const old of c.removeChildren()) old.destroy()
+      a.zoom = z; a.phases = Array.from({ length: 8 }, () => null)
+      const base = new Graphics()
+      for (let i = 0; i < segs.length; i += 4) base.moveTo(segs[i], segs[i + 1]).lineTo(segs[i + 2], segs[i + 3])
+      base.stroke({ color: 0xffffff, width: w, alpha: 0.95 })
+      c.addChild(base)
     }
-    g.stroke({ color: 0x000000, width: w })
+    const ph = phaseRef.current % 8
+    if (!a.phases[ph]) {
+      const g = new Graphics()
+      const dash = 4 / z, period = dash * 2, off = ph / 8 * period
+      for (let i = 0; i < segs.length; i += 4) {
+        const x0 = segs[i], y0 = segs[i + 1], x1 = segs[i + 2], y1 = segs[i + 3]
+        const len = Math.abs(x1 - x0) + Math.abs(y1 - y0)
+        const dx = Math.sign(x1 - x0), dy = Math.sign(y1 - y0)
+        for (let s = off - period; s < len; s += period) {
+          const lo = Math.max(0, s), hi = Math.min(len, s + dash)
+          if (hi <= lo) continue
+          g.moveTo(x0 + dx * lo, y0 + dy * lo).lineTo(x0 + dx * hi, y0 + dy * hi)
+        }
+      }
+      g.stroke({ color: 0x000000, width: w })
+      a.phases[ph] = g; c.addChild(g)
+    }
+    a.phases.forEach((g, i) => { if (g) g.visible = i === ph })
   }
   /** AI Select prompts (A tool): include points green, exclude points red, the box amber; `live` is the box being dragged. */
   const drawAiPrompt = (live?: { start: Pt; last: Pt }) => {
@@ -316,14 +339,19 @@ export function EditorCanvas() {
         return true
       })
       useEditor.getState().setExtractor(() => {
-        const d = useEditor.getState().doc
+        const st = useEditor.getState(), d = st.doc
         if (!d || !layersRef.current) return null
+        // review K94: the document as it is — Copy merged, the PSD's merged image, sample-all and the compare never take the view's state
+        // (Before hiding the active layer, the text being edited, a hovered blend mode or candidate, a free transform's preview)
+        const viewOnly = st.before || !!st.editingText || !!st.blendPreview || !!st.candPreview || !!st.transform
+        if (viewOnly) buildSceneRef.current(true)
         // extract.canvas() may hand back a WebGPU/bitmap canvas (no 2D context); redraw it into a plain 2D canvas,
         // which also leaves the browser to convert premultiplied → straight alpha
         refreshDerived(); markPassesDirty(); renderPasses()
         const src = app.renderer.extract.canvas({ target: layersRef.current, frame: new Rectangle(0, 0, d.w, d.h), resolution: 1 }) as HTMLCanvasElement
         const c = document.createElement('canvas'); c.width = d.w; c.height = d.h
         c.getContext('2d')!.drawImage(src, 0, 0)
+        if (viewOnly) buildSceneRef.current(false)                       // the view back as it was
         requestRender()                                                  // the extract leaves the screen with a frame at the extract's size
         return c
       })
@@ -335,6 +363,7 @@ export function EditorCanvas() {
         requestRender()
       })
       ro.observe(host)
+      setReady((r) => r + 1)                                           // review K66: the scene is keyed on what it draws — build it now that the renderer exists
       useEditor.getState().bump()                                      // re-run the scene effects now that the renderer exists
       useEditor.getState().requestFit()
       requestRender()
@@ -354,10 +383,16 @@ export function EditorCanvas() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- scene sync (doc stack → sprites) -------------------------------------------------------
-  useEffect(() => {
+  /** Build the scene from the store as it is now — the view (`exact` false: Before, the text being edited, the hover previews, a free
+   *  transform's preview, the overlays) or the document alone (`exact`: what the extractor reads, review K94). Reads the store and the refs
+   *  only, so the extractor made at init can call it. */
+  const buildScene = (exact: boolean) => {
     const layers = layersRef.current, world = worldRef.current
-    if (!layers || !world || !doc) { layers?.removeChildren(); return }
     const st = useEditor.getState()
+    const doc = exact ? st.doc : viewDoc(st.doc, st.blendPreview, st.candPreview, st.candidates)
+    if (!layers || !world || !doc) { layers?.removeChildren(); return }
+    const before = !exact && st.before
+    const { overlay, quickMask, editingMask, maskView } = st
     const checker = world.getChildByLabel('checker') as TilingSprite | null
     if (checker) { checker.width = doc.w; checker.height = doc.h; checker.visible = doc.background === 'transparent' }
     for (const c of layers.removeChildren()) c.destroy({ children: true })   // C21: sprites, mask wrappers and the background rect go; the LayerPixels textures stay
@@ -376,7 +411,7 @@ export function EditorCanvas() {
     /** A raster's display object: its sprite, or while it is being transformed (D58) what stays behind plus a perspective mesh of the
      * moving pixels; the mask applies unless a linked one is baked into the preview. */
     const rasterObj = (n: Node, lp: LayerPixels): Container => {
-      const pv = st.transform ? transformPreview.get(n.id) : undefined
+      const pv = st.transform && !exact ? transformPreview.get(n.id) : undefined
       if (!pv) {
         const sp = new Sprite(lp.texture)
         sp.position.set(n.x ?? 0, n.y ?? 0)
@@ -434,7 +469,7 @@ export function EditorCanvas() {
     const isolated = (nodes: Node[]): Target => ({ nodes, underlay: null, background: null })
     let register = true                                                   // false while building a backdrop copy (no sprite lookups)
     const reg = (id: string, obj: Container) => { if (register) spritesRef.current.set(id, obj) }
-    const hidden = (n: Node) => !n.visible || (before && n.id === st.activeId) || n.id === st.editingText   // "before": hide the active layer; D154: the inline editor shows the text
+    const hidden = (n: Node) => !n.visible || (before && n.id === st.activeId) || (!exact && n.id === st.editingText)   // "before": hide the active layer; D154: the inline editor shows the text
     const contains = (n: Node, g: Node): boolean => n.kind === 'group' && (n.children ?? []).some((c) => c === g || contains(c, g))
     /** The part of a target's tree drawn before `g` (a pass-through group inside it): the nodes below it, and its ancestors
      * reduced to their children below it. */
@@ -557,6 +592,7 @@ export function EditorCanvas() {
       }
     }
     build(doc.layers, layers, { nodes: doc.layers, underlay: null, background: doc.background !== 'transparent' ? doc.background : null })
+    if (exact) return                                                      // the extractor reads the layers only; the view build after it redraws the rest
     // selection / quick-mask / mask-editing overlays
     const ov = overlayRef.current!
     for (const child of [...ov.children]) {                                  // C21: keep the labelled Graphics, destroy the sprites
@@ -591,14 +627,28 @@ export function EditorCanvas() {
       }
     }
     for (const label of OVERLAY_GRAPHICS.slice(1)) { const g = ov.getChildByLabel(label); if (g) ov.addChild(g) }   // the kept Graphics draw above the sprites, in their old order
-    // marching ants: recomputed only when the selection changed (every selection edit bumps the revision)
-    if (sel) { if (antsRef.current.rev !== revision) antsRef.current = { rev: revision, segs: outlineSegments(sel) } } else antsRef.current = { rev: -1, segs: [] }
-    drawAnts()
+    drawAnts()                                                             // the outline is re-scanned when the selection's canvas or version moved (K66)
     drawAiPrompt()
     applyTransformPreview()
     drawTransformBox()
     requestRender()
-  }, [doc, revision, before, overlay, quickMask, editingMask, activeId, maskView, transformId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }
+  const buildSceneRef = useRef(buildScene)                               // the extractor (made at init) builds with it (refs and the store only)
+  /** review K66: what the scene is built from besides the stack — the canvases of its layers and masks (by identity and size), the
+   *  selection's canvas (Quick Mask's sprite), the text being edited. A revision bump that changes none of them (an AI point, a lasso
+   *  corner, a selection edit, a finished stroke) repaints (below) instead of rebuilding every sprite and pass. */
+  const sceneKey = useMemo(() => {
+    const st = useEditor.getState()
+    const parts: (string | number)[] = [st.selection ? uidOf(st.selection) : 0, st.editingText ?? '']
+    if (docState) walk(docState.layers, (n) => {
+      const lp = st.pixels.get(n.id), m = st.masks.get(n.id)
+      parts.push(`${n.id}:${lp ? `${uidOf(lp)}/${lp.width}x${lp.height}` : ''}:${m ? `${uidOf(m)}/${m.width}x${m.height}` : ''}`)
+    })
+    return parts.join('|')
+  }, [docState, revision]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { buildScene(false) }, [doc, sceneKey, ready, before, overlay, quickMask, editingMask, activeId, maskView, transformId]) // eslint-disable-line react-hooks/exhaustive-deps
+  // pixels painted in place (a stroke's end, a fill, undo's tiles, a heal) — the passes they sit in render again, one frame
+  useEffect(() => { markPassesDirty(); requestRender() }, [revision]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- view (zoom / pan / fit), document frame and pixel grid -------------------------------------
   useEffect(() => {
@@ -653,14 +703,35 @@ export function EditorCanvas() {
       stroke?: Stroke; smoother?: Smoother; walker?: PathWalker; brushAt?: Pt; offset?: Pt; line?: boolean; movedAt?: number; targetId?: string; targetKind?: 'image' | 'mask' }
     let drag: Drag | null = null
     let spaceHeld = false
+    let busy = false                                                     // a Quick Selection / Spot Healing request in flight: the progress pointer
+    let hover: { clientX: number; clientY: number } | null = null       // review K116: where the pointer is over the canvas (the footprint's place)
+    /** review K116: the pointer per tool (toolCursor), the hand's while Space is held or a pan runs, progress while a request runs. */
+    const applyCursor = () => {
+      const st = useEditor.getState()
+      host.style.cursor = busy ? 'progress' : drag?.kind === 'pan' ? 'grabbing' : spaceHeld ? 'grab' : toolCursor(st.tool, { transform: !!st.transform, alt: st.latched.alt })
+    }
+    /** review K116: the tool's footprint at the pointer — a ring the brush's (eraser's, healing's, Quick Selection's) diameter at the zoom. */
+    const drawFootprint = () => {
+      const ov = overlayRef.current; if (!ov) return
+      let g = ov.getChildByLabel('footprint') as Graphics | null
+      if (!g) { g = new Graphics(); g.label = 'footprint'; ov.addChild(g) }
+      g.clear()
+      const st = useEditor.getState()
+      const d = hover && !spaceHeld && !st.transform && drag?.kind !== 'pan' ? toolFootprint(st.tool, st) : 0
+      if (d > 0 && hover) {
+        const p = toDoc(hover as MouseEvent), z = Math.max(st.zoom, 1e-3), r = Math.max(d / 2, 1 / z)
+        g.circle(p.x, p.y, r).stroke({ color: 0x000000, width: 3 / z, alpha: 0.45 }).circle(p.x, p.y, r).stroke({ color: 0xffffff, width: 1 / z, alpha: 0.9 })
+      }
+      requestRender()
+    }
     // Space holds the hand tool (the hand is the command; Space its hold accelerator). V93: not in a field or a modal, not while the editor is
     // hidden (kept alive under another suite), and let go when the window loses focus (Alt+Tab mid-hold left the pan stuck)
     const onKey = (e: KeyboardEvent) => {
       if (e.code !== 'Space' || !host.clientWidth) return
       if ((e.target as HTMLElement)?.closest('input, textarea, select, [contenteditable], .modal')) return
-      spaceHeld = e.type === 'keydown'; host.style.cursor = spaceHeld ? 'grab' : ''
+      spaceHeld = e.type === 'keydown'; applyCursor(); drawFootprint()
     }
-    const onBlur = () => { spaceHeld = false; host.style.cursor = '' }
+    const onBlur = () => { spaceHeld = false; applyCursor() }
     window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKey); window.addEventListener('blur', onBlur)
 
     const paintTarget = (): { lp: LayerPixels; kind: 'image' | 'mask'; offset: Pt; id: string } | null => {
@@ -673,6 +744,8 @@ export function EditorCanvas() {
       if (st.editingMask && n.mask) { const m = st.masks.get(n.id); return m ? { lp: m, kind: 'mask', offset: { x: (n.mask.linked ? (n.x ?? 0) : 0) + n.mask.x, y: (n.mask.linked ? (n.y ?? 0) : 0) + n.mask.y }, id: n.id } : null }
       // D52: masks are paintable on every node kind (groups, adjustments, filters); pixels only on rasters
       if (n.kind !== 'raster') { useSession.getState().toast(n.mask ? 'Click the mask thumbnail to paint this layer\'s mask' : 'Select a raster layer to paint on, or add a mask to paint', 'info'); return null }
+      // review K64: paint on a text layer would be re-rasterised away by the next Edit text… — rasterised first (asked); then paint again
+      if (n.text) { st.rasterizeFirst([n.id], st.tool === 'eraser' ? 'The eraser' : st.tool === 'fill' ? 'The fill' : 'The brush', () => undefined); return null }
       const lp = st.pixels.get(n.id)
       return lp ? { lp, kind: 'image', offset: { x: n.x ?? 0, y: n.y ?? 0 }, id: n.id } : null
     }
@@ -735,7 +808,7 @@ export function EditorCanvas() {
       host.setPointerCapture(e.pointerId)
       const p = toDoc(e)
       const tool = spaceHeld || e.button === 1 || st.tool === 'hand' ? 'hand' : st.tool
-      if (tool === 'hand') { drag = { kind: 'pan', start: { x: e.clientX, y: e.clientY }, last: p, startPan: { ...st.pan } }; host.style.cursor = 'grabbing'; return }
+      if (tool === 'hand') { drag = { kind: 'pan', start: { x: e.clientX, y: e.clientY }, last: p, startPan: { ...st.pan } }; applyCursor(); drawFootprint(); return }
       if (st.transform) {                                               // free transform owns the pointer (D58, PhotoCraft transform_tool)
         const t = st.transform
         let hit = hitTest(t, p, 12 / st.zoom)
@@ -806,6 +879,8 @@ export function EditorCanvas() {
       const st = useEditor.getState()
       const p = toDoc(e)
       st.setCursor({ x: Math.floor(p.x), y: Math.floor(p.y) })
+      hover = { clientX: e.clientX, clientY: e.clientY }
+      if (toolFootprint(st.tool, st) > 0) drawFootprint()                // review K116: the ring follows the pointer
       if (st.tool === 'lasso' && st.lassoKind === 'magnetic' && drag?.kind !== 'pan' && drag?.kind !== 'xform') { magnetic.move(p, (e.buttons & 1) === 1); return }   // viewport check: a pan (Space / middle) or a transform drag is not the trace
       if (!drag && st.tool === 'lasso' && st.lassoPoly) { previewPoly(st.lassoPoly, p); return }
       if (!drag) return
@@ -864,7 +939,7 @@ export function EditorCanvas() {
       if (st.tool === 'lasso' && st.lassoKind === 'magnetic' && drag?.kind !== 'pan') magnetic.release()   // viewport check: an Alt-click / Alt-drag's freehand ends with the button
       if (!drag) return
       host.releasePointerCapture(e.pointerId)
-      if (drag.kind === 'pan') host.style.cursor = spaceHeld ? 'grab' : ''
+      if (drag.kind === 'pan') { drag = null; applyCursor(); drawFootprint(); return }
       if (drag.kind === 'paint' && drag.stroke) {
         if (catchRaf) { cancelAnimationFrame(catchRaf); catchRaf = 0 }
         const o = drag.offset!
@@ -989,7 +1064,7 @@ export function EditorCanvas() {
       const st = useEditor.getState(), doc = st.doc
       if (!doc) { clearPreview(); return }
       if (alt && !st.selection) { clearPreview(); return }
-      host.style.cursor = 'progress'
+      busy = true; applyCursor()
       try {
         if (!(await ensureDocImage(st.quickSampleAll))) { useSession.getState().toast('The composite is not available yet', 'info'); return }
         const r = await quickSelect(pts.flatMap((q) => [q.x, q.y]), st.quickSize)
@@ -1000,7 +1075,7 @@ export function EditorCanvas() {
         for (let y = Math.max(0, r.box[1]); y < Math.min(doc.h, r.box[3]); y++) for (let x = Math.max(0, r.box[0]); x < Math.min(doc.w, r.box[2]); x++) shape[y * doc.w + x] = r.mask[(y - r.box[1]) * bw + (x - r.box[0])]
         useEditor.getState().applySelectionShape(shape, alt ? 'subtract' : 'add', 'quick selection')
       } catch (err) { useSession.getState().toast(`Quick Selection failed: ${(err as Error).message}`, 'error') }
-      finally { host.style.cursor = ''; clearPreview() }
+      finally { busy = false; applyCursor(); clearPreview() }
     }
     /** D62: Spot Healing (PhotoCraft spot_heal_surface): the region around the stroke (the stroke ± max(size, 8) + 8 px) and its
      * coverage go to POST /heal; the healed pixels, masked by the coverage, land on a "Spot healing" layer above the target. */
@@ -1045,7 +1120,7 @@ export function EditorCanvas() {
       const body = new Uint8Array(w * h * 5)
       body.set(rgba, 0)
       for (let i = 0; i < w * h; i++) body[w * h * 4 + i] = cd[i * 4 + 3]
-      host.style.cursor = 'progress'
+      busy = true; applyCursor()
       try {
         const b = useSession.getState().backend!
         const res = await fetch(`http://${b.host}:${b.port}/heal?w=${w}&h=${h}&seed=${Math.floor(Math.random() * 2 ** 31)}`, { method: 'POST', headers: { 'X-Loom-Token': b.token, 'Content-Type': 'application/octet-stream' }, body })
@@ -1087,7 +1162,7 @@ export function EditorCanvas() {
         const s3 = useEditor.getState()
         s3.touch(); s3.bump()
       } catch (err) { useSession.getState().toast(`Spot Healing failed: ${(err as Error).message}`, 'error') }
-      finally { host.style.cursor = ''; clearPreview() }
+      finally { busy = false; applyCursor(); clearPreview() }
     }
     /** D59: the Magnetic Lasso's border — fastened path and live segment, its points, and the closing mark near the start. */
     magnetic.onChange = () => {
@@ -1270,8 +1345,14 @@ export function EditorCanvas() {
     const unsubPoly = useEditor.subscribe((s, prev) => {
       if (prev.lassoPoly && !s.lassoPoly) clearPreview()
       if (s.lassoPoly && s.tool !== 'lasso') s.setLassoPoly(null)
+      // review K116: a tool, a size ([ ]), the zoom, the latched Alt or a transform changes the pointer and the footprint
+      if (s.tool !== prev.tool || !!s.transform !== !!prev.transform || s.latched.alt !== prev.latched.alt) applyCursor()
+      if (s.tool !== prev.tool || s.brush.size !== prev.brush.size || s.healSize !== prev.healSize || s.quickSize !== prev.quickSize || s.zoom !== prev.zoom || s.pan !== prev.pan || !!s.transform !== !!prev.transform) drawFootprint()
     })
+    const onLeave = () => { hover = null; drawFootprint() }
+    applyCursor()
     host.addEventListener('pointerdown', onDown)
+    host.addEventListener('pointerleave', onLeave)
     host.addEventListener('pointermove', onMove)
     host.addEventListener('pointerup', onUp)
     host.addEventListener('pointercancel', onUp)
@@ -1281,7 +1362,7 @@ export function EditorCanvas() {
     host.addEventListener('contextmenu', onContext)
     return () => {
       unregDrop(); unlistenFiles()
-      host.removeEventListener('pointerdown', onDown); host.removeEventListener('pointermove', onMove); host.removeEventListener('pointerup', onUp); host.removeEventListener('pointercancel', onUp)
+      host.removeEventListener('pointerdown', onDown); host.removeEventListener('pointerleave', onLeave); host.removeEventListener('pointermove', onMove); host.removeEventListener('pointerup', onUp); host.removeEventListener('pointercancel', onUp)
       host.removeEventListener('dblclick', onDouble); unsubPoly()
       host.removeEventListener('wheel', onWheel); host.removeEventListener('contextmenu', onContext)
       window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKey); window.removeEventListener('blur', onBlur)

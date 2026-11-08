@@ -84,6 +84,8 @@ export function unusedCommands(suite: Suite): Command[] { return commandsAt(suit
 export interface Reach { scope: Scope; only?: (c: Command) => boolean }
 const REACH = new Map<Suite, Reach[]>()
 export function setReach(suite: Suite, reach: Reach[]): void { REACH.set(suite, reach) }
+/** Review K95: every registered reach — keymap.ts refuses a remap onto a chord another scope's command answers to inside one reach. */
+export function allReaches(): Reach[][] { return [...REACH.values()] }
 /** The scopes, and which of their commands, a suite's keys reach; a suite without a registered reach reaches its own scope. */
 export function reachOf(suite: Suite): Reach[] { return REACH.get(suite) ?? [{ scope: suite as Scope }] }
 /** The commands a suite's keys reach, its reach's order (its own scope first). */

@@ -9,7 +9,7 @@ import { handleKeyFor } from '../../frame/commands'
 import { loupeMedia } from '../../frame/loupe/media'
 import { Playable, useZoomPan, xfStyle } from '../../frame/loupe/view'
 import { loupeView } from './binCommands'
-import { useBin } from './binStore'
+import { shownItems, useBin } from './binStore'
 
 /** The window's keys while a view is open: Esc closes; the Bin's keys (← →, Ctrl+0, Tab, Space) run their commands. */
 function useViewKeys(close: () => void): void {
@@ -27,8 +27,8 @@ function useViewKeys(close: () => void): void {
 export function BinLoupe() {
   const viewing = useBin((s) => s.viewing)
   const it = useBin((s) => s.items.find((x) => x.asset.id === s.selected))
-  const index = useBin((s) => s.items.findIndex((x) => x.asset.id === s.selected))
-  const count = useBin((s) => s.items.length)
+  const index = useBin((s) => shownItems(s).findIndex((x) => x.asset.id === s.selected))      // review K70: of what the grid shows
+  const count = useBin((s) => shownItems(s).length)
   if (!viewing || !it) return null
   return <LoupeOf a={it.asset} index={index} count={count} />
 }

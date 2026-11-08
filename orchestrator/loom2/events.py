@@ -12,6 +12,7 @@ import json
 import secrets
 import logging
 import struct
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -35,6 +36,25 @@ class EventHub:
         self.seq = 0
         self.dropped = 0
         self.run = secrets.token_hex(4)                 # V65: this hub's run — seqs of another run (an orchestrator restart) do not line up
+        # K (three reviewers): finishers and routes broadcast from worker threads (asyncio.to_thread) — the seq and the history under a lock,
+        # the clients' queues fed on the loop (a put from another thread did not wake it: a frame measured 3 s late; debug mode raised)
+        self._lock = threading.Lock()
+        self._loop: asyncio.AbstractEventLoop | None = None
+
+    def _on_loop(self) -> bool:
+        try:
+            running = asyncio.get_running_loop()
+        except RuntimeError:
+            running = None
+        if running is not None and self._loop is None:
+            self._loop = running
+        return self._loop is None or running is self._loop
+
+    def _deliver(self, fn, *args) -> None:
+        if self._on_loop():
+            fn(*args)
+        elif self._loop is not None and not self._loop.is_closed():
+            self._loop.call_soon_threadsafe(fn, *args)
 
     def replay(self, since: int, run: str | None) -> tuple[list[dict], bool]:
         """V65: the frames a reconnecting client missed (it names the last seq it applied and the run it saw) and whether some are gone —
@@ -51,7 +71,8 @@ class EventHub:
         c = _Client(ws)
         if hello is not None:
             c.queue.put_nowait(json.dumps(hello, default=str, ensure_ascii=False))
-        c.task = asyncio.get_running_loop().create_task(self._sender(c), name="loom2-events-sender")
+        self._loop = asyncio.get_running_loop()
+        c.task = self._loop.create_task(self._sender(c), name="loom2-events-sender")
         self._clients[ws] = c
 
     def detach(self, ws: Any) -> None:
@@ -68,18 +89,24 @@ class EventHub:
         return len(self._clients)
 
     def broadcast(self, type_: str, data: dict | None = None) -> dict:
-        self.seq += 1
-        frame = {"seq": self.seq, "type": type_, "t": round(time.time(), 3), "data": data or {}}
-        self._recent.append(frame)
-        del self._recent[:-self._history]
-        text = json.dumps(frame, default=str, ensure_ascii=False)
+        with self._lock:
+            self.seq += 1
+            frame = {"seq": self.seq, "type": type_, "t": round(time.time(), 3), "data": data or {}}
+            self._recent.append(frame)
+            del self._recent[:-self._history]
+            text = json.dumps(frame, default=str, ensure_ascii=False)
+            self._deliver(self._put_text, text)                      # in seq order: off the loop it is queued on the loop, FIFO
+        return frame
+
+    def _put_text(self, text: str) -> None:
         for c in list(self._clients.values()):
             c.queue.put_nowait(text)
-        return frame
 
     def broadcast_binary(self, header: dict, payload: bytes) -> None:
         h = json.dumps({**header, "t": round(time.time(), 3)}, default=str).encode("utf-8")
-        frame = struct.pack(">I", len(h)) + h + payload
+        self._deliver(self._put_binary, struct.pack(">I", len(h)) + h + payload)
+
+    def _put_binary(self, frame: bytes) -> None:
         for c in list(self._clients.values()):
             if c.queue.qsize() >= self._max_pending:      # a client that cannot keep up loses previews, not state
                 self.dropped += 1

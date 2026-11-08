@@ -17,6 +17,8 @@ import { useMotion } from './motion/motionStore'
 const hasStage = () => !!st().current
 const sel = () => st().object(st().selected)
 const hasSel = () => !!sel()
+/** review K59 (T8): the selected object as the viewport shows it at the playhead — a keyed one's own transform is only its unkeyed base. */
+const shown = () => { const id = st().selected; return id ? st().sampledDoc()?.objects.find((o) => o.id === id) ?? sel() : undefined }
 /** The viewport engine registers itself so the commands can place, frame and read the free view (engine.ts is not a store). */
 export const viewport: { centre?: () => number[]; freePose?: () => { pos: number[]; target: number[] }; frame?: (ids: string[] | null) => void; lookThrough?: () => void
   snapshot?: (id: string) => Promise<Blob | null>                                                       // CW3: one object alone, for Prototype ▸
@@ -84,7 +86,7 @@ registerCommands([
     when: () => !!sel()?.parent_joint, run: () => st().letGo(st().selected!) },
   { id: 'stage.object.lock', scope: 'stage', label: 'Lock / unlock', icon: Lock, keys: 'Ctrl+L', placement: ['inspector', 'context'], when: hasSel, run: () => { const o = sel()!; st().updateObject(o.id, { locked: !o.locked }) } },
   { id: 'stage.object.hide', scope: 'stage', label: 'Hide / show', icon: EyeOff, keys: 'H', placement: ['inspector', 'context'], when: hasSel, run: () => { const o = sel()!; st().updateObject(o.id, { visible: !o.visible }) } },
-  { id: 'stage.object.reset', scope: 'stage', label: 'Reset transform', icon: LockOpen, placement: ['inspector', 'context'], when: hasSel, run: () => { const o = sel()!; st().setTransform(o.id, { pos: [o.transform.pos[0], 0, o.transform.pos[2]], rot: [0, 0, 0], scale: [1, 1, 1] }) } },
+  { id: 'stage.object.reset', scope: 'stage', label: 'Reset transform', icon: LockOpen, placement: ['inspector', 'context'], when: hasSel, run: () => { const o = shown()!; st().setTransform(o.id, { pos: [o.transform.pos[0], 0, o.transform.pos[2]], rot: [0, 0, 0], scale: [1, 1, 1] }) } },   // review K59: where it stands now
   { id: 'stage.camera.add', scope: 'stage', label: 'Add camera', icon: Camera, placement: ['panel', 'context'], when: hasStage, run: () => st().addCamera() },
   { id: 'stage.camera.setFromView', scope: 'stage', label: 'Set the camera from the view', icon: Video, placement: ['panel', 'inspector', 'context'], when: () => hasStage() && !!st().activeCamera() && st().view === 'free',
     run: () => { const c = st().activeCamera(); const p = viewport.freePose?.(); if (c && p) st().updateCamera(c.id, { pos: p.pos, target: p.target }) } },
@@ -204,7 +206,7 @@ registerCommands([
       await (await import('./animatic')).recordAnimatic({ shot: f.shot, version: f.version })
     }) },
   { id: 'stage.object.standHere', scope: 'stage', label: 'Stand it here', icon: MapPin, placement: ['context'], hint: 'the selected thing moved to where you right-clicked on the floor',
-    when: () => !!sel() && !sel()!.locked && !!st().menuAt, run: () => { const o = sel(), at = st().menuAt; if (o && at) st().setTransform(o.id, { ...o.transform, pos: [at[0], at[1], at[2]] }) } },
+    when: () => !!sel() && !sel()!.locked && !!st().menuAt, run: () => { const o = shown(), at = st().menuAt; if (o && at) st().setTransform(o.id, { ...o.transform, pos: [at[0], at[1], at[2]] }) } },   // review K59: its turn and scale as now
   { id: 'stage.undo', scope: 'stage', label: 'Undo', icon: Undo2, keys: 'Ctrl+Z', placement: ['toolbar', 'context'], when: () => st().undo.length > 0, run: () => st().undoEdit() },
   { id: 'stage.redo', scope: 'stage', label: 'Redo', icon: Redo2, keys: 'Ctrl+Shift+Z', placement: ['toolbar', 'context'], when: () => st().redo.length > 0, run: () => st().redoEdit() },
 ])

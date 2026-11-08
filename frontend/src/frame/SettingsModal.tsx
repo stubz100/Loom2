@@ -8,6 +8,7 @@ import { ModelCards } from './ModelCards'
 import { ROLE_NAMES, STRIP, TRACK_ROLES } from '../suites/story/episode/cut'
 import { About } from './About'
 import { THEMES, type Theme } from './theme'
+import { LISTS, listsInto, type ListField } from './settingsLists'
 
 export function SettingsModal() {
   const s = useSession()
@@ -16,20 +17,26 @@ export function SettingsModal() {
   const [edits, setDraft] = useState<Settings | null>(null)
   const draft = edits ?? (s.settings ? structuredClone(s.settings) : null)
   const [busy, setBusy] = useState(false)
+  // review K72: the list fields' text as typed — split on blur and on Save, so a trailing `;`, space or `,` (a second tree, a flag, a
+  // "Program Files" path) can be typed; re-joined per keystroke it vanished
+  const [texts, setTexts] = useState<Partial<Record<ListField, string>>>({})
   if (!draft) return (
     <div className="modal-backdrop" onClick={() => s.openSettings(false)}>
       <div className="modal" onClick={(e) => e.stopPropagation()}><div className="head">Settings</div><div className="body"><p className="muted">Loading the settings…</p></div></div>
     </div>
   )
   const set = (patch: Partial<Settings>) => setDraft({ ...draft, ...patch })
+  const listProps = (f: ListField) => ({ value: texts[f] ?? LISTS[f].join(draft), onChange: (e: React.ChangeEvent<HTMLInputElement>) => setTexts({ ...texts, [f]: e.target.value }),
+    onBlur: () => { if (texts[f] === undefined) return; setDraft(listsInto(draft, { [f]: texts[f] })); const rest = { ...texts }; delete rest[f]; setTexts(rest) } })
   const setEngine = (patch: Partial<Settings['engine']>) => setDraft({ ...draft, engine: { ...draft.engine, ...patch } })
   const setAudio = (patch: Partial<Settings['audio']>) => setDraft({ ...draft, audio: { ...draft.audio, ...patch } })
   const save = async () => {
     setBusy(true)
+    const d = listsInto(draft, texts)                                         // review K72: what is still being typed counts
     try {
-      await s.saveSettings({ models_root: draft.models_root, mounted_model_trees: draft.mounted_model_trees, vram_budget_gb: draft.vram_budget_gb, hf_home: draft.hf_home,
-        thumbnail_sizes: draft.thumbnail_sizes, log_level: draft.log_level, samples: draft.samples, h3_licence_confirmed: !!draft.h3_licence_confirmed, motion: draft.motion, audio: draft.audio, vsthost: { folders: draft.vsthost.folders }, engine: { flags: draft.engine.flags, restart_every_jobs: draft.engine.restart_every_jobs, port: draft.engine.port, health_timeout_s: draft.engine.health_timeout_s,
-          stall_timeout_s: draft.engine.stall_timeout_s, reserve_vram_gb: draft.engine.reserve_vram_gb, vram_headroom_gb: draft.engine.vram_headroom_gb } })
+      await s.saveSettings({ models_root: d.models_root, mounted_model_trees: d.mounted_model_trees, vram_budget_gb: d.vram_budget_gb, hf_home: d.hf_home,
+        thumbnail_sizes: d.thumbnail_sizes, log_level: d.log_level, samples: d.samples, h3_licence_confirmed: !!d.h3_licence_confirmed, motion: d.motion, audio: d.audio, vsthost: { folders: d.vsthost.folders }, engine: { flags: d.engine.flags, restart_every_jobs: d.engine.restart_every_jobs, port: d.engine.port, health_timeout_s: d.engine.health_timeout_s,
+          stall_timeout_s: d.engine.stall_timeout_s, reserve_vram_gb: d.engine.reserve_vram_gb, vram_headroom_gb: d.engine.vram_headroom_gb } })
       s.openSettings(false)
     } finally { setBusy(false) }
   }
@@ -40,12 +47,12 @@ export function SettingsModal() {
         <div className="body form">
           <h4>Weights</h4>
           <label>Models root <Help text={"ComfyUI layout: diffusion_models/, text_encoders/, vae/, loras/… (D1)"} /></label><input type="text" value={draft.models_root} onChange={(e) => set({ models_root: e.target.value })} />
-          <label>Mounted trees <Help text={"Read-only ComfyUI model trees, `;` separated (the D:\\comfyui backup)"} /></label><input type="text" value={draft.mounted_model_trees.join(';')} onChange={(e) => set({ mounted_model_trees: e.target.value.split(';').map((x) => x.trim()).filter(Boolean) })} />
+          <label>Mounted trees <Help text={"Read-only ComfyUI model trees, `;` separated (the D:\\comfyui backup)"} /></label><input type="text" aria-label="mounted trees" {...listProps('trees')} />
           <label>HF_HOME <Help text={"Holds the Hugging Face token used for gated repos"} /></label><input type="text" value={draft.hf_home} onChange={(e) => set({ hf_home: e.target.value })} />
           <h4>Engine</h4>
           <label>VRAM budget (GB)</label><input type="number" min={4} max={64} step={0.5} value={draft.vram_budget_gb} onChange={(e) => set({ vram_budget_gb: Number(e.target.value) })} />
           <label>Engine port</label><input type="number" value={draft.engine.port} onChange={(e) => setEngine({ port: Number(e.target.value) })} />
-          <label>Flags <Help text={"E0/E7 defaults: --use-pytorch-cross-attention --disable-pinned-memory --preview-method none; MIOpen stays off"} /></label><input type="text" value={draft.engine.flags.join(' ')} onChange={(e) => setEngine({ flags: e.target.value.split(/\s+/).filter(Boolean) })} />
+          <label>Flags <Help text={"E0/E7 defaults: --use-pytorch-cross-attention --disable-pinned-memory --preview-method none; MIOpen stays off"} /></label><input type="text" aria-label="engine flags" {...listProps('flags')} />
           <label>Restart every N jobs <Help text={"0 = never (HIP launch-failure mitigation, 06 §10)"} /></label><input type="number" min={0} value={draft.engine.restart_every_jobs} onChange={(e) => setEngine({ restart_every_jobs: Number(e.target.value) })} />
           <label>Health timeout (s)</label><input type="number" min={10} value={draft.engine.health_timeout_s} onChange={(e) => setEngine({ health_timeout_s: Number(e.target.value) })} />
           <label>Stall timeout (s) <Help text={"No engine event for this long while a job runs → the job fails, the engine restarts, the queue pauses (TDR watchdog, 06 §10)"} /></label><input type="number" min={60} value={draft.engine.stall_timeout_s ?? 420} onChange={(e) => setEngine({ stall_timeout_s: Number(e.target.value) })} />
@@ -57,7 +64,7 @@ export function SettingsModal() {
           <label>Density</label>
           <select value={s.ui.density} onChange={(e) => s.setUi({ density: e.target.value as 'comfortable' | 'compact' })}><option value="comfortable">comfortable</option><option value="compact">compact</option></select>
           <h4>Engine output</h4>
-          <label>Thumbnail sizes</label><input type="text" value={draft.thumbnail_sizes.join(',')} onChange={(e) => set({ thumbnail_sizes: e.target.value.split(',').map(Number).filter(Boolean) })} />
+          <label>Thumbnail sizes</label><input type="text" aria-label="thumbnail sizes" {...listProps('thumbs')} />
           <label>Log level</label>
           <select value={draft.log_level} onChange={(e) => set({ log_level: e.target.value })}>{['DEBUG', 'INFO', 'WARNING', 'ERROR'].map((l) => <option key={l}>{l}</option>)}</select>
           <h4 id="settings-samples">Samples</h4>
@@ -104,8 +111,7 @@ export function SettingsModal() {
             </Fragment>
           ))}
           <label>VST3 folders <Help text={"Your own folders of VST3 effects, `;` separated, beside the system's (C:\\Program Files\\Common Files\\VST3) — loom2's own host scans them once and again when a bundle changes"} /></label>
-          <input type="text" aria-label="VST3 folders" value={draft.vsthost.folders.join(';')} placeholder="none — the system's folder only"
-            onChange={(e) => set({ vsthost: { ...draft.vsthost, folders: e.target.value.split(';').map((x) => x.trim()).filter(Boolean) } })} />
+          <input type="text" aria-label="VST3 folders" placeholder="none — the system's folder only" {...listProps('vst')} />
           <h4 id="settings-keyboard">Keyboard</h4>
           <KeyboardSettings />
           <h4>Licences</h4>

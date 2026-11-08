@@ -87,6 +87,10 @@ export function staleFrom(cards: Record<string, Pick<ShotCard, 'version' | 'stal
   return (shotId, version) => { const c = cards[shotId]; return new Set(c && c.version === version ? c.stale_steps ?? [] : []) }
 }
 
+/** K96: a spoken line whose words changed since it was voiced — the server keeps the words it spoke trimmed (shot_graph.py), so a trailing
+ *  space typed after is no change. */
+export const lineVoiceStale = (l: Pick<FlowNode['lines'][number], 'audio_asset_id' | 'audio_text' | 'text'>): boolean => !!l.audio_asset_id && l.audio_text !== l.text.trim()
+
 /** Every step's cell for a shot's version (04 §2.4). */
 export function cellsOf(s: Shot, v: ShotVersion, node: FlowNode | null, x: CellInput): Record<Step, Cell> {
   const route = routeOf(v, madeFinal(s.id, x.finals))
@@ -97,7 +101,7 @@ export function cellsOf(s: Shot, v: ShotVersion, node: FlowNode | null, x: CellI
   if (node?.type === 'shot' && node.lines.length) {
     const lines = node.lines.filter((l) => l.text.trim())
     cells.lines = lines.length ? { state: 'done', text: String(lines.length) } : { state: 'owed', text: 'none' }
-    const voiced = lines.filter((l) => l.audio_asset_id), changed = voiced.filter((l) => l.audio_text !== l.text)
+    const voiced = lines.filter((l) => l.audio_asset_id), changed = voiced.filter(lineVoiceStale)
     cells.voice = !lines.length ? { state: 'na' } : busy.has('voice') ? { state: 'running' } : changed.length ? { state: 'stale', text: `${changed.length} changed` }
       : voiced.length === lines.length ? { state: 'done' } : { state: 'owed', text: `${voiced.length} of ${lines.length}` }
   } else { cells.lines = { state: 'na' }; cells.voice = { state: 'na' } }

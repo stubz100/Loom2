@@ -51,7 +51,9 @@ registerCommands([
   // D121: Ctrl+Enter is the Performance card's verb — Animate ▶ (image to video), Render clip ▶ (the stage clip), the final shot's next step
   { id: 'anim.run', scope: 'animate', label: "Run the card's verb", hint: "Animate ▶, Render clip ▶ or the final shot's next step — the Performance card decides", icon: Clapperboard, keys: 'Ctrl+Enter', placement: ['panel'],
     when: () => useSession.getState().ui.suite === 'animate' && cardOn(), run: () => { runCommand(cardCmd()) } },
-  { id: 'anim.stage', scope: 'animate', label: 'Queue', hint: 'add to the queue and run it later — Run now in the Dock', icon: Layers, keys: 'Ctrl+Shift+Enter', placement: ['panel'], when: hasStart, run: () => void an().animate(true) },
+  // review K95: Queue is the Image to video card's — on the Stage clip or the Final shot card Ctrl+Shift+Enter queued an image-to-video clip
+  { id: 'anim.stage', scope: 'animate', label: 'Queue', hint: 'add to the queue and run it later — Run now in the Dock', icon: Layers, keys: 'Ctrl+Shift+Enter', placement: ['panel'],
+    when: () => useAnimRoute.getState().route === 'i2v' && hasStart(), run: () => void an().animate(true) },
   { id: 'anim.swap', scope: 'animate', label: 'Swap start and end', icon: ArrowLeftRight, placement: ['panel'], when: () => !!an().panel.end, run: () => an().swap() },
   { id: 'anim.clearStart', scope: 'animate', label: 'Clear start frame', icon: X, placement: ['panel', 'context'], when: hasStart, run: () => an().setStart(null) },
   { id: 'anim.clearEnd', scope: 'animate', label: 'Clear end frame', icon: X, placement: ['panel', 'context'], when: () => !!an().panel.end, run: () => an().setEnd(null) },

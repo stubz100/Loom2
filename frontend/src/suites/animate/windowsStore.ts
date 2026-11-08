@@ -17,6 +17,8 @@ interface WindowsState {
   sel: BoxSel | null
   skeletons: boolean
   busy: boolean
+  /** Review K116: a box dropped and being sent — drawn where it was let go until the server's answer replaces it (it snapped back meanwhile). */
+  pending: (BoxSel & { frame: number; box: Box }) | null
   load: (fid: string) => Promise<void>
   setFrame: (frame: number) => void
   select: (sel: BoxSel | null) => void
@@ -42,24 +44,31 @@ export function shownBox(l: LayerBoxes, kind: BoxKind, frame: number): Box | nul
 const body = (kind: BoxKind, mode: BoxMode, keys: BoxKey[] = []) =>
   (kind === 'window' ? { window: mode, window_keys: keys } : { head: mode, head_keys: keys }) as never
 
+/** Review K95: every read and write takes a number — a reply is applied only when no later one was asked for meanwhile (a slow read of the
+ *  previous final landed over the new one's boxes; an older edit's answer over a newer edit's). */
+let seq = 0
+
 export const useWindows = create<WindowsState>((set, get) => {
   const layer = (lid: string) => get().data?.layers.find((l) => l.id === lid) ?? null
   const put = async (lid: string, payload: never, what: string) => {
     const fid = get().fid
-    if (!fid) return
+    if (!fid) { set({ pending: null }); return }
+    const n = ++seq
     set({ busy: true })
-    try { set({ data: await unwrap(http.PUT('/finals/{fid}/layers/{lid}/boxes', { params: { path: { fid, lid } }, body: payload })) }) }
+    try { const data = await unwrap(http.PUT('/finals/{fid}/layers/{lid}/boxes', { params: { path: { fid, lid } }, body: payload })); if (n === seq && get().fid === fid) set({ data }) }
     catch (e) { useSession.getState().toast(`${what}: ${(e as ApiError).detail ?? (e as Error).message ?? e}`, 'error') }
-    finally { set({ busy: false }) }
+    finally { if (n === seq) set({ busy: false, pending: null }) }
   }
   return {
-    fid: null, data: null, frame: 0, sel: null, skeletons: true, busy: false,
+    fid: null, data: null, frame: 0, sel: null, skeletons: true, busy: false, pending: null,
     load: async (fid) => {
+      const n = ++seq
       try {
         const data = await unwrap(http.GET('/finals/{fid}/boxes', { params: { path: { fid } } }))
+        if (n !== seq) return
         const same = get().fid === fid
-        set({ fid, data, frame: same ? Math.min(get().frame, Math.max(0, data.frames - 1)) : 0, sel: same ? get().sel : data.layers[0] ? { lid: data.layers[0].id, kind: 'window' } : null })
-      } catch (e) { set({ fid, data: null }); useSession.getState().toast(`Windows: ${(e as ApiError).detail ?? (e as Error).message ?? e}`, 'error') }
+        set({ fid, data, pending: null, frame: same ? Math.min(get().frame, Math.max(0, data.frames - 1)) : 0, sel: same ? get().sel : data.layers[0] ? { lid: data.layers[0].id, kind: 'window' } : null })
+      } catch (e) { if (n !== seq) return; set({ fid, data: null, pending: null }); useSession.getState().toast(`Windows: ${(e as ApiError).detail ?? (e as Error).message ?? e}`, 'error') }
     },
     setFrame: (frame) => { const n = get().data?.frames ?? 1; set({ frame: Math.max(0, Math.min(n - 1, Math.round(frame))) }) },
     select: (sel) => set({ sel }),
@@ -68,6 +77,7 @@ export const useWindows = create<WindowsState>((set, get) => {
       if (!l) return
       const t = trackOf(l, sel.kind)
       const from = t.mode === 'keys' ? keysOf(l, sel.kind) : (t.offer as unknown as BoxKey[])
+      set({ pending: { ...sel, frame: get().frame, box } })
       await put(sel.lid, body(sel.kind, 'keys', upsert(from, sel.kind, get().frame, box)), sel.kind === 'window' ? `${l.name}'s window` : `${l.name}'s head box`)
     },
     keyHere: async () => {

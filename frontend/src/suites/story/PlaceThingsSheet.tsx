@@ -9,7 +9,7 @@ import { CommandButton } from '../../frame/CommandButton'
 import { Help } from '../../frame/Help'
 import { useSession } from '../../store/session'
 import type { PlaceSet } from './setBuilder'
-import { setPicture, usePlaceThings } from './placeThingsStore'
+import { containedRect, pointIn, setPicture, usePlaceThings } from './placeThingsStore'
 import { useStory } from './storyStore'
 
 const TINTS = [[79, 209, 197], [246, 173, 85], [159, 122, 234], [104, 211, 145], [99, 179, 237], [252, 129, 129]]
@@ -38,8 +38,9 @@ export function PlaceThingsSheet() {
   const things = useStory((s) => (target ? s.profiles.find((p) => p.id === target.pid)?.versions.find((v) => v.id === target.vid)?.place_set?.things : undefined)) ?? NO_THINGS
   const pic = target ? setPicture(target.pid, target.vid) : null
   const [name, setName] = useState('')
-  const [disp, setDisp] = useState<{ w: number; h: number } | null>(null)
+  const [disp, setDisp] = useState<{ x: number; y: number; w: number; h: number } | null>(null)   // K82: the drawn picture inside the img box
   const [kept, setKept] = useState<Record<string, HTMLCanvasElement>>({})
+  const asked = useRef(new Set<string>())                                               // K96: each kept mask asked for once (not once per mask landing)
   const canvas = useRef<HTMLCanvasElement>(null)
   const img = useRef<HTMLImageElement>(null)
   const close = () => void usePlaceThings.getState().open(null)
@@ -52,7 +53,8 @@ export function PlaceThingsSheet() {
   }, [target])
   useEffect(() => {                                                                   // the kept things' masks, loaded once each
     for (const [k, t] of things.entries()) {
-      if (kept[t.mask_asset_id]) continue
+      if (asked.current.has(t.mask_asset_id)) continue
+      asked.current.add(t.mask_asset_id)
       const im = new Image()
       im.crossOrigin = 'anonymous'
       im.onload = () => {
@@ -62,11 +64,18 @@ export function PlaceThingsSheet() {
       }
       im.src = api.assetUrl(t.mask_asset_id)
     }
-  }, [things, kept])
+  }, [things])
+  useEffect(() => {                                                                   // K82: the window resized — the picture is drawn elsewhere
+    const im = img.current
+    if (!target || !im || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => setDisp(im.naturalWidth ? containedRect(im.clientWidth, im.clientHeight, im.naturalWidth, im.naturalHeight) : null))
+    ro.observe(im)
+    return () => ro.disconnect()
+  }, [target])
   useEffect(() => {                                                                   // the overlay: kept things, the mask found, the points
     const c = canvas.current
     if (!c || !disp || !size) return
-    c.width = disp.w; c.height = disp.h
+    c.width = Math.round(disp.w); c.height = Math.round(disp.h)
     const g = c.getContext('2d')!
     g.clearRect(0, 0, c.width, c.height)
     for (const t of things) { const k = kept[t.mask_asset_id]; if (k) g.drawImage(k, 0, 0, disp.w, disp.h) }
@@ -80,11 +89,11 @@ export function PlaceThingsSheet() {
   }, [mask, points, disp, size, things, kept])
 
   if (!target || !pic) return null
-  const measure = () => { const im = img.current; if (im) setDisp({ w: im.clientWidth, h: im.clientHeight }) }
+  const measure = () => { const im = img.current; if (im) setDisp(containedRect(im.clientWidth, im.clientHeight, im.naturalWidth, im.naturalHeight)) }
   const mark = (e: React.MouseEvent<HTMLCanvasElement>, label: 0 | 1) => {
     if (!size || !disp) return
-    const r = e.currentTarget.getBoundingClientRect()
-    void usePlaceThings.getState().addPoint(((e.clientX - r.left) / disp.w) * size.w, ((e.clientY - r.top) / disp.h) * size.h, label)
+    const p = pointIn(e.clientX, e.clientY, e.currentTarget.getBoundingClientRect(), size)    // K82: the overlay lies over the drawn picture only
+    void usePlaceThings.getState().addPoint(p.x, p.y, label)
   }
   const status = job ? 'finding…' : mask ? 'found — keep it under a name' : points.length ? 'mark the thing itself (+)' : 'click a thing that moves'
   const keep = async () => { if (await usePlaceThings.getState().keep(name.trim())) setName('') }
@@ -105,7 +114,7 @@ export function PlaceThingsSheet() {
           </div>
           <div className="things-pic">
             <img ref={img} src={api.assetUrl(pic)} alt="" draggable={false} onLoad={measure} />
-            <canvas ref={canvas} aria-label="the set picture: click a thing" onClick={(e) => mark(e, mode)} onContextMenu={(e) => { e.preventDefault(); mark(e, mode === 1 ? 0 : 1) }} />
+            <canvas ref={canvas} aria-label="the set picture: click a thing" style={disp ? { left: disp.x, top: disp.y, width: disp.w, height: disp.h } : undefined} onClick={(e) => mark(e, mode)} onContextMenu={(e) => { e.preventDefault(); mark(e, mode === 1 ? 0 : 1) }} />
           </div>
         </div>
         <div className="foot">

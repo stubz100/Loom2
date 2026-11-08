@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import type { ModelEntry } from '../../api/types'
 import { CommandButton } from '../../frame/CommandButton'
+import { Help } from '../../frame/Help'
 import { markUsed, runCommand, titleFor, command } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import { useSession } from '../../store/session'
@@ -41,8 +42,8 @@ function ModelsPanel({ tab }: { tab: string }) {
       <select value={ui.family} onChange={(e) => ui.set({ family: e.target.value })}>{families.map((f) => <option key={f}>{f}</option>)}</select>
       <label>Search</label><input type="text" value={ui.search} onChange={(e) => ui.set({ search: e.target.value })} placeholder="name, repo, role…" />
       <label>Missing</label><label className="chk" style={{ justifySelf: 'start' }}><input type="checkbox" checked={ui.missingOnly} onChange={(e) => ui.set({ missingOnly: e.target.checked })} /> only the missing weights</label>
-      <label>Retired</label><input type="checkbox" checked={ui.showRetired} onChange={(e) => ui.set({ showRetired: e.target.checked })} style={{ justifySelf: 'start' }} />
-      <span className="hint">Retired entries were struck by a spike and deleted (D30); they can be re-fetched.</span>
+      <label>Retired <Help text="Retired entries were struck by a spike and deleted (D30); they can be re-fetched." /></label>{/* review K95: rule 11 — the line was a block */}
+      <input type="checkbox" checked={ui.showRetired} onChange={(e) => ui.set({ showRetired: e.target.checked })} style={{ justifySelf: 'start' }} />
       <label>Root</label><span className="mono" style={{ fontSize: 11 }}>{s.settings?.models_root}</span>
       <label>Unlisted</label><span>{s.unlisted.length} file{s.unlisted.length === 1 ? '' : 's'} on disk without a roster entry</span>
     </div>

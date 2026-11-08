@@ -27,8 +27,9 @@ const CAPS = {
   },
 } as unknown as Capabilities
 
-beforeEach(() => useSession.setState({ capabilities: CAPS }))
-afterEach(() => { useSession.setState({ capabilities: null }); vi.useRealTimers() })
+// review K85: every case on fake timers — setModel / set arm the preview's 250 ms timer, which ran after the case ended (a real request)
+beforeEach(() => { vi.useFakeTimers(); useSession.setState({ capabilities: CAPS }) })
+afterEach(() => { vi.clearAllTimers(); useSession.setState({ capabilities: null }); vi.useRealTimers() })
 
 describe('modelRules / sizeFor', () => {
   it('reads a model spec’s own tiers', () => {

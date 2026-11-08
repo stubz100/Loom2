@@ -59,6 +59,13 @@
 .flow-vars .var-row input[type=text], .flow-vars .var-row select { width: 100%; min-width: 0; box-sizing: border-box; }
 .flow-vars .var-row .k { color: var(--fg3); font-size: 11px; }
 .flow-vars .var-row.active { border-color: var(--accent); }
+/* K81: the Shot templates' rows under the variables — a click picks one, its tools use, rename or delete it */
+.flow-templates .template-row { display: grid; grid-template-columns: 1fr auto; gap: 4px; align-items: center; padding: 2px 6px; border: 1px solid var(--line2); border-radius: var(--radius); background: var(--bg1); cursor: default; }
+.flow-templates .template-row:hover { background: var(--bg2); }
+.flow-templates .template-row.active { border-color: var(--accent); }
+.flow-templates .template-row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-templates .template-row .tools { display: flex; gap: 2px; }
+.flow-templates .template-row .quiet { padding: 0 4px; min-height: 20px; }
 .world-editor .row-item .k { color: var(--fg3); font-size: 11px; text-align: right; }
 .world-editor .row-item .tools { display: flex; gap: 2px; }
 .world-editor .row-item .quiet { padding: 0 4px; min-height: 20px; }

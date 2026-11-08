@@ -13,7 +13,7 @@ import { BinGrid } from './BinGrid'
 import { BinTree } from './BinLayer'
 import { binMenu, gridKeys, useFileDrop } from './binMenus'
 import { BinTile } from './BinTile'
-import { FILTERS, passes, startBin, TILE, TRASH, useBin } from './binStore'
+import { FILTERS, shownItems, startBin, TILE, TRASH, useBin } from './binStore'
 import { verbsHere, type Verb } from './verbs'
 import './bin.css'
 
@@ -39,7 +39,7 @@ export default function BinDrawer() {
   const loading = useBin((s) => s.loading)
   const total = useBin((s) => s.total)
   const inTrash = useBin((s) => s.open === TRASH)
-  const focus = useBin((s) => s.items.findIndex((x) => x.asset.id === s.selected))
+  const focus = useBin((s) => shownItems(s).findIndex((x) => x.asset.id === s.selected))     // review K70: the index in the grid's list
   const [cols, setCols] = useState(1)
   const el = useRef<HTMLDivElement | null>(null)
   const over = useFileDrop(useCallback(() => el.current, []))
@@ -51,7 +51,7 @@ export default function BinDrawer() {
     return () => window.removeEventListener('keydown', onKey, true)
   }, [pick])
   if (!project?.open) return <span className="meta">No project open.</span>
-  const shown = query ? items.filter((x) => passes(x, filter)) : items
+  const shown = shownItems({ items, query, filter })
   const picked = (a: Asset): Verb | undefined => (pick ? verbsHere(a, suite).find((v) => v.id === pick.verb) : undefined)
   const PickIcon = pick ? command(pick.cmd)?.icon : undefined
   const double = (it: BinThing) => {

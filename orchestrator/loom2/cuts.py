@@ -149,9 +149,14 @@ def lane(doc: dict, fps: int) -> tuple[list[TimelineClip], list[int], dict | Non
         nxt = into.get(tis[i + 1]["id"]) if i + 1 < len(tis) else None
         end = _frames(nxt["start"] + nxt["duration"], fps) if nxt else _frames(ti["start"] + ti["duration"], fps)
         speed = abs(float(ti.get("speed") or 1.0))
-        in_ = round((ti["source_in"] / TICK - (cut - s_i) / fps) * clip_fps)
-        length = round((end - s_i) * clip_fps / fps * speed)
-        clips.append(TimelineClip(id=str(ti["id"]), clip_id=meta["loom2.clip"], **{"in": max(0, in_)}, out=max(0, in_) + max(1, length),
+        in_ = max(0, round((ti["source_in"] / TICK - (cut - s_i) / fps) * clip_fps))
+        out = in_ + max(1, round((end - s_i) * clip_fps / fps * speed))
+        info = (its[str(ti["item"])].get("kind", {}).get("Media") or {}).get("info") or {}
+        n = int(info.get("frames") or 0) or (round(int(info["duration"]) * clip_fps / TICK) if info.get("duration") else 0)
+        if n:                                                            # review K: a dissolve reaches past whole takes — the lane stays in the media
+            in_ = min(in_, n - 1)
+            out = min(max(out, in_ + 1), n)
+        clips.append(TimelineClip(id=str(ti["id"]), clip_id=meta["loom2.clip"], **{"in": in_}, out=out,
                                   fps=clip_fps if clip_fps != fps else None, shot_id=meta.get("loom2.shot") or None,
                                   shot_version=meta.get("loom2.version") or None, node_id=meta.get("loom2.node") or None))
         overlaps.append(_frames(tr["duration"], fps) if tr and i > 0 else 0)
@@ -1000,8 +1005,12 @@ class Cuts:
         todo = [t for t in seq["audio_tracks"] if t["id"] not in companions and active(ch.get(t["id"], []))]
         if not steps and not todo and not pr:
             return 0
+
+        def keep() -> None:                                            # review K45: the entry with its placement — each `_print` saves first
+            self.fc.batch([{"id": "metadata.set", "params": {"item": seq_id, "fields": {"loom2.prints": json.dumps({str(k): v for k, v in pr.items()})}}}])
         if steps:
             self.fc.batch(steps)
+            keep()
         printed = 0
         for t in todo:
             chain = ch[t["id"]]
@@ -1011,13 +1020,19 @@ class Cuts:
                 continue
             if self.host is None or not self.host.available():
                 raise CutError("a track's effects print through loom2's VST3 host, which is not built here (scripts/build_vsthost.py)")
-            wav = self._print(p, tl, seq, t, chain, key, companions)
+            try:
+                wav = self._print(p, tl, seq, t, chain, key, companions)
+            except Exception:
+                if printed:                                            # review K45: the prints placed so far are saved with their entries —
+                    self.fc.save()                                     # on disk as in the session, so the next mix does not print them again
+                raise
             pr[t["id"]] = self._place_print(p, t, wav, key, cur.get("track") if cur.get("track") in by_id else None)
+            keep()                                                     # a later track's failed print leaves this one's companion known
             companions = {v["track"] for v in pr.values()}
             if cur.get("file") and cur["file"] != str(wav):
                 Path(cur["file"]).unlink(missing_ok=True)
             printed += 1
-        self.fc.batch([{"id": "metadata.set", "params": {"item": seq_id, "fields": {"loom2.prints": json.dumps({str(k): v for k, v in pr.items()})}}}])
+        keep()
         self._mirror_prints(p)
         self.fc.save()
         return printed
@@ -1176,18 +1191,18 @@ class Cuts:
             name = self.name_of(_as_clip(i))
             if name:
                 steps.append({"id": "markers.addChapter", "params": {"time": ticks(start, cut.fps), "name": name}})
-        steps += self._readd(sequence(doc)[2].get("markers") or [])
+        steps += self._readd(sequence(doc)[2].get("markers") or [], fps=cut.fps)
         self.fc.batch(steps)
         self.fc.save()
 
     @staticmethod
-    def _readd(markers: list[dict], skip: int | None = None) -> list[dict]:
+    def _readd(markers: list[dict], skip: int | None = None, fps: float = 24) -> list[dict]:
         """The author's markers (not loom2's chapters) as the commands that put them back."""
         out = []
         for m in markers:
             if m.get("kind") == "Chapter" or m.get("id") == skip:
                 continue
-            frames = {"durationFrames": round(m["duration"] * 24 / TICK)} if m.get("duration") else {}
+            frames = {"durationFrames": round(m["duration"] * fps / TICK)} if m.get("duration") else {}   # review K90: the cut's rate, not 24
             out.append({"id": "markers.add", "params": {"target": "program", "time": m["start"], "name": m.get("name", ""), "comment": m.get("comment", ""),
                                                         **({"color": m["color"]} if m.get("color") else {}), **frames}})
         return out
@@ -1197,7 +1212,7 @@ class Cuts:
         marks = sequence(doc)[2].get("markers") or []
         if not any(m.get("id") == mid for m in marks):
             raise CutError(f"the cut has no marker {mid}")
-        self.fc.batch([{"id": "markers.clearAll", "params": {"target": "program"}}, *self._readd(marks, skip=mid)])
+        self.fc.batch([{"id": "markers.clearAll", "params": {"target": "program"}}, *self._readd(marks, skip=mid, fps=tracks(doc).fps)])
         return {"removed": mid}
 
     # ---- CE5: captions from the lines --------------------------------------------------------------------------------------------
@@ -1397,6 +1412,16 @@ class Cuts:
         steps: list[dict] = []
         for ex, cue in revoiced:
             steps.append({"id": "clip.replaceFromBin", "params": {"clips": [ex.id], "item": self._line_item(cue), "keepSourceIn": True}})
+            # review K46: the replace keeps the old length — the new take is played whole (its head trim kept), up to the next thing on
+            # its track; a shorter take ends where it ends
+            want = round(float(cue["duration_s"]) * cut.fps - ex.source_in * cut.fps)
+            track = next((t for t in cut.audio if any(i.id == ex.id for i in t.items)), None)
+            nxt = min((i.start for i in (track.items if track else []) if i.start >= ex.start + ex.duration - 0.5 and i.id != ex.id), default=None)
+            if nxt is not None:
+                want = min(want, round(nxt - ex.start))
+            delta = int(max(1, want) - round(ex.duration))
+            if delta:
+                steps.append({"id": "timeline.trim", "params": {"clip": ex.id, "edge": "out", "mode": "regular", "deltaFrames": delta}})
         spans = sorted((i.start, i.start + i.duration) for i in a1)
         for start, cue in sorted(missing, key=lambda x: x[0]):
             length = max(1.0, round(float(cue["duration_s"]) * cut.fps))
@@ -1456,7 +1481,7 @@ class Cuts:
         """The route's shots onto V1 as one change (one undo step), keeping what the author did to what stays:
 
         - a shot already on V1 in the route's order is kept with its trims, speed, grade and dissolves; with a newer final it plays it in
-          place (its start and length kept, as *Update*);
+          place (its start and length kept, as *Update* — shortened to the newer final's end when that is shorter, K48);
         - a shot no longer on the route (or out of the route's order) goes with its lines, the later clips closing up on every track;
         - a shot not on V1 yet goes in after the one before it, the later clips moving on every track (an insert), at its final's length;
         - a shot whose lines run longer than it is held for them when its final has the frames, else it is listed (F39);
@@ -1510,6 +1535,12 @@ class Cuts:
                     item = self._media_item(doc_now(), tl, use, records[w.clip_id])
                     self.fc.batch([{"id": "clip.replaceFromBin", "params": {"clips": [x.id for x in r], "item": item, "keepSourceIn": True}}])
                     rep.updated.append(w.name)
+                    r2, rec = runs_of(now()).get(firsts[i]), records[w.clip_id]
+                    last = r2[-1] if r2 else None
+                    over = (last.source_in * fps + last.duration * abs(last.speed or 1.0)) - rec.frames / rec.fps * fps if last else 0.0
+                    if last is not None and over > 0.5 and not last.hold:   # review K48: a final remade shorter ends with its media, no held frame
+                        self.fc.batch([{"id": "timeline.trim", "params": {"clip": last.id, "edge": "out", "mode": "ripple",
+                                                                           "deltaFrames": -int(round(over / abs(last.speed or 1.0)))}}])
                 else:
                     rep.kept.append(w.name)
             # placed: after the shot before it on the route (or before the next one on the cut, or at V1's end), as an insert

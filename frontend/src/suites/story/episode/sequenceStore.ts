@@ -148,6 +148,7 @@ async function saveNow(get: () => SequenceState, set: (p: Partial<SequenceState>
     const err = e as ApiError
     if (err.status === 409) {                                                  // the document moved under us: take the server's, drop the edit
       useSession.getState().toast('The cut changed elsewhere — reloaded; your last change was not saved', 'error')
+      if (saveTimer) { window.clearTimeout(saveTimer); saveTimer = null }       // K96: dropped too — the reopen below must not wait for it
       await get().open(current.id)
     } else useSession.getState().toast(`Cut not saved: ${err.detail ?? e}`, 'error')
   } finally { if (seq === saveSeq) set({ saving: false }) }
@@ -199,6 +200,7 @@ export const useSequence = create<SequenceState>()((set, get) => ({
     } catch (e) { useSession.getState().toast(`New cut failed: ${(e as ApiError).detail ?? e}`, 'error'); return null }
   },
   open: async (id) => {
+    if (saveTimer) { window.clearTimeout(saveTimer); saveTimer = null; await save(get, set) }   // K96: a lane edit waiting out its pause is the open cut's — saved before another opens
     if (!id) { set({ current: null, lane: null, selected: null, playhead: 0, playing: false, undo: [], redo: [], tracks: null, selClip: null, selTrack: null }); return }
     try {
       const tl = await unwrap(http.GET('/timelines/{tl_id}', { params: { path: { tl_id: id } } }))

@@ -53,8 +53,8 @@ def ensure_document(store: StageStore, documents: Any, catalogue: Any, st_id: st
     with Image.open(catalogue.abs_path(a)) as im:
         base = np.asarray(im.convert("RGBA"))
     od = documents.create(f"{obj.name} · things", int(base.shape[1]), int(base.shape[0]), "transparent", a.id, base)
-    store.edit_picture_set(st_id, set_id, lambda _st, o: setattr(o, "things_document_id", od.doc.id))
-    return od
+    store.edit_picture_set(st_id, set_id, lambda _st, o: setattr(o, "things_document_id", od.doc.id), bump=False)   # review K91: no new revision
+    return od                                                                       # (the client's next autosave is no 409; `put` keeps it)
 
 
 def keep_thing(store: StageStore, documents: Any, catalogue: Any, st_id: str, set_id: str, name: str,
@@ -131,12 +131,22 @@ SHADOW_SCALE = 640                                 # the search runs on the pict
 SHADOW_CHROMA = 0.12                               # D124: a shadow keeps the colour of the surface it falls on, warmed by the light it bounces (the rig's block: 0.074 off the lit floor; the table against the wall: 0.40)
 
 
+def _spread(m: np.ndarray, r: int, axis: int) -> np.ndarray:
+    """A mask grown by `r` along one axis: a window's count from a running sum (one pass at any reach)."""
+    n = m.shape[axis]
+    c = np.cumsum(m, axis=axis, dtype=np.int32)
+    c = np.concatenate([np.zeros_like(np.take(c, [0], axis=axis)), c], axis=axis)
+    i = np.arange(n)
+    return (np.take(c, np.minimum(i + r + 1, n), axis=axis) - np.take(c, np.maximum(i - r, 0), axis=axis)) > 0
+
+
 def _grow(m: np.ndarray, px: int) -> np.ndarray:
-    """A mask grown by `px` (3×3 steps: a square reach, cheap at any size)."""
-    img = Image.fromarray(np.where(m, 255, 0).astype(np.uint8))
-    for _ in range(max(0, px)):
-        img = img.filter(ImageFilter.MaxFilter(3))
-    return np.asarray(img) > 127
+    """A mask grown by `px`: the square reach `px` 3×3 steps give, as two running sums (review K52: 300 px on a 1920×1088 picture in
+    0.03 s, 6.9 s by the steps)."""
+    m = np.asarray(m, bool)
+    if px <= 0:
+        return m.copy()
+    return _spread(_spread(m, int(px), 1), int(px), 0)
 
 
 def _box(a: np.ndarray, r: int) -> np.ndarray:
@@ -150,13 +160,46 @@ def _box(a: np.ndarray, r: int) -> np.ndarray:
 
 
 def _reach(seed: np.ndarray, within: np.ndarray) -> np.ndarray:
-    """Everything in `within` connected to `seed` (a morphological reconstruction by 3×3 steps)."""
-    grown = seed & within
+    """Everything in `within` connected to `seed` (8-connected — what growing by 3×3 steps until nothing changes reached). Review K52: the
+    connected parts labelled on the rows' runs instead (a run touches the runs of the next row it overlaps or meets at a corner; the
+    labels joined by min-label hooking with pointer jumping) — the same region, 0.02 s where the steps took 61 s (a 1200 px thing reached
+    from one end of a 1920×1088 picture)."""
+    within = np.asarray(within, bool)
+    seed = np.asarray(seed, bool) & within
+    h, w = within.shape
+    if not seed.any():
+        return np.zeros((h, w), bool)
+    d = np.diff(np.pad(within, ((0, 0), (1, 1))).view(np.int8), axis=1)
+    rs, cs = np.nonzero(d == 1)                                                  # each run: its row, its first column, one past its last
+    ce = np.nonzero(d == -1)[1]
+    n, m = len(rs), w + 2
+    skey, ekey = rs.astype(np.int64) * m + cs, rs.astype(np.int64) * m + ce     # both sorted (row-major)
+    nxt = (rs.astype(np.int64) + 1) * m
+    lo = np.searchsorted(ekey, nxt + cs, "left")                               # the next row's runs ending at or after this one's start …
+    hi = np.searchsorted(skey, nxt + ce, "right")                              # … and starting at or before one past its end
+    cnt = np.maximum(hi - lo, 0)
+    a = np.repeat(np.arange(n), cnt)
+    b = np.arange(int(cnt.sum())) - np.repeat(np.cumsum(cnt) - cnt, cnt) + np.repeat(lo, cnt)
+    parent = np.arange(n)
     while True:
-        nxt = _grow(grown, 1) & within
-        if (nxt == grown).all():
-            return grown
-        grown = nxt
+        while True:                                                              # every run straight to its root
+            up = parent[parent]
+            if (up == parent).all():
+                break
+            parent = up
+        pa, pb = parent[a], parent[b]
+        if (pa == pb).all():
+            break
+        low = np.minimum(pa, pb)                                                 # each root hooked under the smaller one it touches
+        np.minimum.at(parent, pa, low)
+        np.minimum.at(parent, pb, low)
+    sy, sx = np.nonzero(seed)
+    roots = np.unique(parent[np.searchsorted(skey, sy.astype(np.int64) * m + sx, "right") - 1])
+    keep = np.isin(parent, roots)
+    out = np.zeros((h, w + 1), np.int8)
+    np.add.at(out, (rs[keep], cs[keep]), 1)
+    np.add.at(out, (rs[keep], ce[keep]), -1)
+    return np.cumsum(out, axis=1)[:, :w] > 0
 
 
 def shadows_of(rgb: np.ndarray, masks: list[np.ndarray]) -> list[np.ndarray]:
@@ -470,12 +513,21 @@ def restand_things(store: StageStore, catalogue: Any, st_id: str, set_id: str) -
     transform it was stood with is stood again on the relief as it is now (`stand`); a prop the author moved stays where they put it.
     Returns the names stood again, left, and failed (with the reason)."""
     out: dict[str, list[str]] = {"stood": [], "left": [], "failed": []}
-    _, obj = store.picture_set(st_id, set_id)
+    st0, obj = store.picture_set(st_id, set_id)
     if not any(t.mesh_asset_id and t.object_id for t in obj.things):
         return out
     same = lambda a, b: all(np.allclose(getattr(a, k), getattr(b, k), atol=1e-3) for k in ("pos", "rot", "scale"))  # noqa: E731
+    stood: dict[str, Any] = {}                                                  # review K50: the stands read first (the reliefs, the
+    for t in obj.things:                                                        # models), outside the stage's lock …
+        m = next((x for x in st0.objects if x.id == t.object_id), None) if t.mesh_asset_id and t.object_id else None
+        if m is None or (t.placed is not None and not same(m.transform, t.placed)):
+            continue
+        try:
+            stood[t.id] = stand(catalogue, obj, t, t.mesh_asset_id)[1]
+        except Exception as e:  # noqa: BLE001
+            stood[t.id] = e
 
-    def fn(st: Any, o: Any) -> None:
+    def fn(st: Any, o: Any) -> None:                                            # … then applied to the stage as it is now
         for t in o.things:
             m = next((x for x in st.objects if x.id == t.object_id), None) if t.mesh_asset_id and t.object_id else None
             if m is None:
@@ -483,15 +535,34 @@ def restand_things(store: StageStore, catalogue: Any, st_id: str, set_id: str) -
             if t.placed is not None and not same(m.transform, t.placed):
                 out["left"].append(t.name)
                 continue
-            try:
-                _, tf = stand(catalogue, o, t, t.mesh_asset_id)
-            except Exception as e:  # noqa: BLE001
-                out["failed"].append(f"{t.name}: {e}")
+            tf = stood.get(t.id)
+            if tf is None:                                                      # made or put back meanwhile: stood the next time
+                continue
+            if isinstance(tf, Exception):
+                out["failed"].append(f"{t.name}: {tf}")
                 continue
             m.transform, t.placed = Transform(**tf), Transform(**tf)
             out["stood"].append(t.name)
     store.edit_picture_set(st_id, set_id, fn)
     return out
+
+
+class _HasModel(Exception):
+    """Review K51: the thing got its model meanwhile."""
+
+
+MAKE_SURFACES = (CLEAN_SURFACE, REBUILD_SURFACE, MODEL_SURFACE)
+
+
+def make_live(q: Any, st_id: str, set_id: str) -> str | None:
+    """Review K51 (as D180's PlaceThing refuses while its model's job lives): the job of a picture set's *Make the things* chain — the
+    clean, the relief's rebuild, a thing's model — still queued, staged or running, else None. The queue is durable, so a reload or a
+    restart still sees it. On the loop (the queue is the loop's)."""
+    for j in list(q.jobs.values()):
+        o = getattr(j, "origin", None)
+        if o is not None and o.surface in MAKE_SURFACES and o.ref == st_id and (o.payload or {}).get("set_id") == set_id and q.job_live(j.id):
+            return j.id
+    return None
 
 
 def model_landed(q: Any, job: Any, mesh_id: str) -> None:
@@ -505,15 +576,25 @@ def model_landed(q: Any, job: Any, mesh_id: str) -> None:
         t = next((x for x in obj.things if x.id == thing_id), None)
         if t is None:
             raise KeyError(thing_id)
+        if t.mesh_asset_id:                                                     # review K51: a second Make's model — the thing has its prop
+            job.log_tail.append(f"{t.name} already has its model ({t.mesh_asset_id}); this one stays in the Catalogue, no second prop")
+            return
         foot, tf = stand(q.catalogue, obj, t, mesh_id)
         oid = new_id("msh")
 
         def fn(st: Any, o: Any) -> None:
+            x = next((x for x in o.things if x.id == thing_id), None)
+            if x is None:
+                raise KeyError(thing_id)
+            if x.mesh_asset_id:                                                 # review K51: made meanwhile (read again under the lock)
+                raise _HasModel(x.name)
             st.objects.append(StageObject(id=oid, kind="mesh", name=t.name, asset_id=mesh_id, transform=tf, colour_id=(len(st.objects) % 12) + 1))
-            for x in o.things:
-                if x.id == thing_id:
-                    x.mesh_asset_id, x.object_id, x.placed = mesh_id, oid, Transform(**tf)
-        st = store.edit_picture_set(st_id, set_id, fn)
+            x.mesh_asset_id, x.object_id, x.placed = mesh_id, oid, Transform(**tf)
+        try:
+            st = store.edit_picture_set(st_id, set_id, fn)
+        except _HasModel:
+            job.log_tail.append(f"{t.name} already has its model; this one stays in the Catalogue, no second prop")
+            return
         job.result.update({"stage_id": st_id, "object_id": oid, "footprint": {k: round(v, 3) for k, v in foot.items() if isinstance(v, (int, float))},
                            "transform": tf})
         job.log_tail.append(f"{t.name} stood on the relief at x {foot['x']:.2f} z {foot['z']:.2f} (the floor {foot['y']:.2f}), {foot['width']:.2f} m wide, "

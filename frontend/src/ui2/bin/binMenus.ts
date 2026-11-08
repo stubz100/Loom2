@@ -6,7 +6,7 @@ import { handleKeyFor, sep, type MenuItem } from '../../frame/commands'
 import { listenFileDrop } from '../../shell/tauri'
 import { belongs, importInto, moveTargets } from './binCommands'
 import { navigate } from '../../frame/router'
-import { selectedThings, TRASH, useBin } from './binStore'
+import { selectedThings, shownItems, TRASH, useBin } from './binStore'
 import { useSession } from '../../store/session'
 import { worldItems } from './verbs'
 
@@ -63,7 +63,7 @@ export function binMenu(it: BinThing): MenuItem[] {
 export function gridKeys(e: React.KeyboardEvent, cols: number): void {
   if ((e.target as HTMLElement).closest('input, textarea, select')) return
   const s = useBin.getState()
-  const order = s.items.map((x) => x.asset.id), i = order.indexOf(s.selected ?? '')
+  const order = shownItems(s).map((x) => x.asset.id), i = order.indexOf(s.selected ?? '')   // review K70: the arrows walk what is shown
   const d = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: cols, ArrowUp: -cols }[e.key]
   if (d !== undefined && !e.ctrlKey && !e.altKey) {
     e.preventDefault()

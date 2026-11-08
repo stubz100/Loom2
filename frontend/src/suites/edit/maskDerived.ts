@@ -42,6 +42,7 @@ export function derivedMask(raw: LayerPixels, m: MaskParams): LayerPixels {
   out.ctx.putImageData(img, 0, 0)
   out.refresh()
   cache.set(raw, { version: raw.version, density: d, feather: f, out })
+  raw.companion = out                                                 // review K94: it goes when the raw mask is destroyed
   return out
 }
 

@@ -63,7 +63,7 @@ class FetchJob:
             os.environ.setdefault("HF_HOME", self.hf_home)
         tmp = self.models_root / "_incoming"
         tmp.mkdir(parents=True, exist_ok=True)
-        local = Path(hf_hub_download(self.entry.repo, self.entry.file, local_dir=str(tmp), token=True))  # type: ignore[arg-type]
+        local = Path(hf_hub_download(self.entry.repo, self.entry.file, local_dir=str(tmp), token=None))  # type: ignore[arg-type]
         self.dest.parent.mkdir(parents=True, exist_ok=True)
         if self.dest.exists():
             self.dest.unlink()

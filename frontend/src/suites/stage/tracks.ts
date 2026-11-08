@@ -2,7 +2,7 @@
 // scene's timeline, each as long as its voice (F39: the action is timed to them, and the shot's range is extended to them only when asked),
 // and the stretches where a figure turns its back to the camera (F42: a performance is told, and a character without a back view says so).
 import type { FlowNode, StageCamera, StageDoc } from '../../api/types'
-import { sampleDoc } from './anim'
+import { keyframesOf, objectSampler, sampleCamera } from './anim'
 
 /** The breath between two lines, in frames; an unvoiced line is timed by its words at this rate. */
 export const LINE_GAP_FRAMES = 6
@@ -41,9 +41,11 @@ export function awayStretches(doc: StageDoc, objectId: string, cameraId: string,
   const out: [number, number][] = []
   const limit = Math.cos((deg * Math.PI) / 180)
   let open: number | null = null
+  // review K93: the figure and the camera alone, their keys read once (the whole document was sampled per frame per figure, on every edit)
+  const fig = objectSampler(doc, objectId), cam0 = doc.cameras.find((c) => c.id === cameraId) as StageCamera | undefined
+  const camKeys = keyframesOf(doc).camera[cameraId]
   for (let f = from; f <= to; f++) {
-    const d = sampleDoc(doc, f)
-    const o = d.objects.find((x) => x.id === objectId), cam = d.cameras.find((c) => c.id === cameraId) as StageCamera | undefined
+    const o = fig?.(f), cam = cam0 ? sampleCamera(cam0, camKeys, f) : undefined
     let away = false
     if (o && cam) {
       const [fx, fz] = forward(o.transform.rot[1] ?? 0)

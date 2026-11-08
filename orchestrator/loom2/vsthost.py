@@ -59,12 +59,20 @@ class VstHost:
             proc.kill()
             proc.communicate()
             raise VstHostError(f"the plug-in host took longer than {timeout:.0f} s and was stopped")
-        line = next((x for x in reversed(out.splitlines()) if x.strip().startswith("{")), None)
-        if line is None:
+        res = None
+        for x in reversed(out.splitlines()):                          # review K87 / K90: a plug-in's own `{` line is not the answer —
+            if x.strip().startswith("{"):                             # the last line that parses as an object is
+                try:
+                    cand = json.loads(x)
+                except ValueError:
+                    continue
+                if isinstance(cand, dict):
+                    res = cand
+                    break
+        if res is None:
             crash = proc.returncode not in (0, 1)
             raise VstHostError(f"the plug-in host stopped without an answer (exit code {proc.returncode}{' — a plug-in crashed' if crash else ''}); "
                                f"loom2 is fine{': ' + err.strip().splitlines()[-1] if err.strip() else ''}")
-        res = json.loads(line)
         if not res.get("ok"):
             raise VstHostError(res.get("error") or "the plug-in host refused")
         return res

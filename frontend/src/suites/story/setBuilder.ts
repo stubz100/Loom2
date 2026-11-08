@@ -7,7 +7,7 @@ import type { Job, Profile } from '../../api/types'
 import { useSession } from '../../store/session'
 import { bakeKey, type SourceCam } from '../stage/setOverlay'
 import { setFaces, type PlaceSetDoc } from '../stage/placeSet'
-import { sy, useStory } from './storyStore'
+import { storeProfile, sy, useStory } from './storyStore'
 
 type Version = Profile['versions'][number]
 export type PlaceSet = NonNullable<Version['place_set']>
@@ -62,7 +62,7 @@ export function unseenShare(ps: PlaceSet): number {
 }
 
 const current = () => { const p = sy().profile(); const v = sy().version(); return p && v && p.cls === 'place' ? { p, v } : null }
-const put = (p: Profile) => useStory.setState({ profiles: useStory.getState().profiles.map((x) => (x.id === p.id ? p : x)) })
+const put = (p: Profile) => storeProfile(p)                                     // K75: a typed sheet word stays on screen
 
 export async function buildSet(cameraHeight = EYE_HEIGHT_M): Promise<void> {
   const c = current(); if (!c) return
@@ -72,19 +72,33 @@ export async function buildSet(cameraHeight = EYE_HEIGHT_M): Promise<void> {
   } catch (e) { toast(`Build the set: ${detail(e)}`) }
 }
 
-/** The author's edit of the set (the kind, a size, a part, a drag, a face's material): the faces stay until the next bake. */
-export async function saveSet(ps: PlaceSet | null): Promise<boolean> {
-  const c = current(); if (!c) return false
-  try {
-    const p = ps === null ? await unwrap(http.DELETE('/story/profiles/{pid}/versions/{vid}/set', { params: { path: { pid: c.p.id, vid: c.v.id } } }))
-      : await unwrap(http.PUT('/story/profiles/{pid}/versions/{vid}/set', { params: { path: { pid: c.p.id, vid: c.v.id } }, body: { revision: c.p.revision, place_set: ps } }))
-    put(p)
-    return true
-  } catch (e) {
-    if ((e as ApiError).status === 409) { await sy().loadProfiles(); toast('The set changed meanwhile (a Fill landed) — shown as it is now; edit again', 'info') }
-    else toast(`The set: ${detail(e)}`)
-    return false
-  }
+/** K78: an edit made from the set as it is when the edit runs (not as the page drew it). */
+export type SetEdit = (cur: PlaceSet) => PlaceSet
+let setChain: Promise<unknown> = Promise.resolve()
+
+/** The author's edit of the set (the kind, a size, a part, a drag, a face's material): the faces stay until the next bake. K78: the edits
+ *  go one after another, each made from the set the last one left and sent with its revision — a width's blur and a part's click sent
+ *  together carried one revision, and the second was refused as "a Fill landed", its toggle lost. */
+export function saveSet(next: PlaceSet | SetEdit | null): Promise<boolean> {
+  const c = current(); if (!c) return Promise.resolve(false)
+  const pid = c.p.id, vid = c.v.id
+  const run = setChain.then(async (): Promise<boolean> => {
+    const p = useStory.getState().profiles.find((x) => x.id === pid), cur = p?.versions.find((v) => v.id === vid)?.place_set ?? null
+    if (!p) return false
+    const ps = typeof next === 'function' ? (cur ? next(cur) : null) : next
+    if (typeof next === 'function' && (!ps || ps === cur)) return false                                      // nothing to change
+    try {
+      put(ps === null ? await unwrap(http.DELETE('/story/profiles/{pid}/versions/{vid}/set', { params: { path: { pid, vid } } }))
+        : await unwrap(http.PUT('/story/profiles/{pid}/versions/{vid}/set', { params: { path: { pid, vid } }, body: { revision: p.revision, place_set: ps } })))
+      return true
+    } catch (e) {
+      if ((e as ApiError).status === 409) { await sy().loadProfiles(); toast('The set changed meanwhile (a Fill landed) — shown as it is now; edit again', 'info') }
+      else toast(`The set: ${detail(e)}`)
+      return false
+    }
+  })
+  setChain = run.catch(() => false)
+  return run
 }
 
 export const useSetBuilder = create<{ baking: boolean }>(() => ({ baking: false }))

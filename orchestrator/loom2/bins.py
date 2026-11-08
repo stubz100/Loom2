@@ -584,9 +584,9 @@ def move_things(groups: GroupStore, ws: Any, ids: list[str], to: str, confirm: b
                 continue
             drops += [(aid, r, h.path or "") for r in roles if r in CHOSEN]
             plain.append(aid)
-    for aid, role, path in drops:
+    changed = groups.move([("asset", a) for a in plain], to) if plain else set()   # review K92: the move first — a locked page (423)
+    for aid, role, path in drops:                                                    # leaves the records' roles as they were
         _drop_role(st, path, aid, role)
-    changed = groups.move([("asset", a) for a in plain], to) if plain else set()
     return {"moved": plain, "ask": ask, "refused": refused, "dropped": [{"id": a, "role": r, "home": p} for a, r, p in drops],
             "changed": sorted(changed), "records": sorted({p.split("/")[2] if p.startswith("world/") else p.split("/")[1] for _, _, p in drops})}
 

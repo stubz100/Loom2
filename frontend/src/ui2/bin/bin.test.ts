@@ -1,10 +1,11 @@
 // U8 (D157, proto01_UI2 05 §2): the Bin's pure parts — a home's path by its names, every home (and its role pages) by id, the kind chips,
 // and where a home's thing belongs (World's version, the Look, a shot, a cut; nothing for the imports).
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { setBackend } from '../../api/client'
 import type { BinNode, BinThing } from '../../api/types'
 import { belongs, moveTargets } from './binCommands'
 import { kindVerb } from './binMenus'
-import { homesById, passes, pathLabel, subtreeIds, touches, TRASH, useBin } from './binStore'
+import { homesById, passes, pathLabel, selectedThings, shownItems, subtreeIds, touches, TRASH, useBin } from './binStore'
 
 const node = (id: string, path: string, name: string, children: BinNode[] = [], pages: string[] = []): BinNode => ({ id, path, name, count: 0, total: 0, pages, children, gone: false, page: false, kinds: [] })
 const homes = [
@@ -75,5 +76,52 @@ describe("the Bin's kinds (C6, D181)", () => {
     expect(kindVerb(thing('world/sketches', 'pictures'))).toBeNull()
     expect(kindVerb(thing('world/place/prf_1/v1', 'working'))).toBeNull()
     expect(kindVerb(thing('imports', 'set'))).toBeNull()                                          // a set thing on no version has no builder to open
+  })
+})
+
+describe('the Bin in a search (review K69, K70, K95)', () => {
+  const thing = (id: string, kind: string) => ({ asset: { id, kind, tags: [], trashed_at: null }, roles: [], home_id: 'g', path: 'world/look', shelf: 'pictures' }) as unknown as BinThing
+  const found = [thing('p1', 'image'), thing('c1', 'video'), thing('p2', 'image'), thing('s1', 'audio'), thing('p3', 'image')]
+  const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+  let results = found                                                                // what GET /bin/search answers
+  beforeEach(() => {
+    results = found
+    vi.stubGlobal('fetch', vi.fn(async () => json({ items: results })))   // the client takes `fetch` when the backend is set
+    setBackend({ host: '127.0.0.1', port: 8766, token: 't' } as never)
+    useBin.setState({ open: null, query: 'fog', filter: 'pictures', items: found, selection: [], selected: null, viewing: false })
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('K70: Select all, a range and the verbs take only the things the kind chip shows', () => {
+    expect(shownItems(useBin.getState()).map((x) => x.asset.id)).toEqual(['p1', 'p2', 'p3'])
+    useBin.getState().selectAll()
+    expect(useBin.getState().selection).toEqual(['p1', 'p2', 'p3'])                      // the clip and the sound stay out (Ctrl+A, Delete)
+    useBin.getState().select('p1'); useBin.getState().select('p3', 'range')
+    expect(useBin.getState().selection).toEqual(['p1', 'p2', 'p3'])
+    useBin.setState({ selection: ['p1', 'c1'], selected: 'p1' })
+    expect(selectedThings().map((x) => x.asset.id)).toEqual(['p1'])
+  })
+  it('K70: a chip that hides selected things takes them out of the selection', () => {
+    useBin.setState({ filter: 'all', selection: ['p1', 'c1'], selected: 'c1', viewing: true })
+    useBin.getState().setFilter('pictures')
+    expect(useBin.getState()).toMatchObject({ selection: ['p1'], selected: 'p1', viewing: true })
+  })
+  it('K69: a search read again keeps the selection and the large view of what is still found', async () => {
+    useBin.setState({ filter: 'all', selection: ['p2', 's1'], selected: 's1', viewing: true })
+    await useBin.getState().search('fog')
+    expect(useBin.getState()).toMatchObject({ selection: ['p2', 's1'], selected: 's1', viewing: true })
+    results = [thing('p2', 'image')]
+    await useBin.getState().search('fog')
+    expect(useBin.getState()).toMatchObject({ selection: ['p2'], selected: 'p2', viewing: true })
+    results = []
+    await useBin.getState().search('fog')
+    expect(useBin.getState()).toMatchObject({ selection: [], selected: null, viewing: false })   // nothing to view: the next click selects, it opens nothing
+  })
+  it('K95: a right-click inside a selection makes that thing the primary and keeps the selection', () => {
+    useBin.setState({ filter: 'all', selection: ['p1', 'p2', 'p3'], selected: 'p1' })
+    useBin.getState().select('p3', 'primary')
+    expect(useBin.getState()).toMatchObject({ selection: ['p1', 'p2', 'p3'], selected: 'p3' })
+    useBin.getState().select('c1', 'primary')                                          // outside the selection: it alone
+    expect(useBin.getState()).toMatchObject({ selection: ['c1'], selected: 'c1' })
   })
 })

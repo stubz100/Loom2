@@ -171,6 +171,17 @@ export function sampleDoc(doc: StageDoc, frame: number): StageDoc {
     objects: doc.objects.map((o) => sampleBody(sampleFigure(o, k.objects[o.id], tracks.includes(o.id) ? runsOf(doc, o.id, k.objects[o.id]) : [], frame), sk[o.id], frame)) }
 }
 
+/** review K93: one object sampled frame after frame — its keys sorted and its clip blocks' runs read once, not the whole document per frame
+ *  (the timeline's back-to-camera rows sampled every object and camera at every frame of the range, per figure, on every edit). The figure's
+ *  place, turn and pose as sampleDoc gives them (its skeleton keys aside); null when there is no such object. */
+export function objectSampler(doc: StageDoc, objectId: string): ((frame: number) => StageObject) | null {
+  const o = doc.objects.find((x) => x.id === objectId)
+  if (!o) return null
+  const layer = keyframesOf(doc).objects[objectId]
+  const runs = doc.tracks && objectId in doc.tracks ? runsOf(doc, objectId, layer) : []
+  return (frame) => sampleFigure(o, layer, runs, frame)
+}
+
 /** A key written at its frame (replacing one already there), the list kept sorted. */
 export function withKey<T extends { frame: number }>(keys: T[] | undefined, key: T): T[] {
   return [...(keys ?? []).filter((k) => k.frame !== key.frame), key].sort((a, b) => a.frame - b.frame)

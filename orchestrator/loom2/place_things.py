@@ -42,11 +42,14 @@ def _place_set(store: Any, pid: str, vid: str) -> tuple[Any, PlaceSet]:
 
 
 def _put(store: Any, pid: str, vid: str, fn: Any) -> Any:
-    """The version's set changed in place by `fn(ps)` (read again, so a Fill or a bake meanwhile stays)."""
-    p, ps = _place_set(store, pid, vid)
-    ps = ps.model_copy(deep=True)
-    fn(ps)
-    return store.set_place_set(pid, vid, ps)
+    """The version's set changed in place by `fn(ps)` (read again, so a Fill or a bake meanwhile stays). Review K91: read, changed and
+    written under the story's lock (a Fill landing between the read and the write was lost)."""
+    from .story import _LOCK
+    with _LOCK:
+        p, ps = _place_set(store, pid, vid)
+        ps = ps.model_copy(deep=True)
+        fn(ps)
+        return store.set_place_set(pid, vid, ps)
 
 
 def picture_of(ps: PlaceSet) -> str:
@@ -79,6 +82,10 @@ def ray(cam: SourceCamera, w: int, h: int, px: float, py: float) -> tuple[np.nda
     r = np.cross(f, [0.0, 1.0, 0.0])
     r = r / max(1e-9, float(np.linalg.norm(r)))
     u = np.cross(r, f)
+    roll = math.radians(float(getattr(cam, "roll", 0.0) or 0.0))          # K: the camera's roll as the engine applies it (rotateZ after the look-at)
+    if roll:
+        c, s_ = math.cos(roll), math.sin(roll)
+        r, u = c * r + s_ * u, -s_ * r + c * u
     tan_x = (cam.sensor_mm / 2) / cam.focal_mm
     nx, ny = (px / w - 0.5) * 2, (0.5 - py / h) * 2
     d = f + r * nx * tan_x + u * ny * tan_x * (h / w)

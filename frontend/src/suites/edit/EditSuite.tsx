@@ -36,6 +36,7 @@ import './edit.css'
 import './fonts.css'
 import { fontFamilies, fontString } from './textFonts'
 import { padOf, type TextBlock } from './textRaster'
+import { cachedThumbnail } from './layerPixels'
 import { onlyAssets, useDropTarget } from '../../frame/drag'
 import { editOpenDrop, layerDrop, refDrop } from '../../frame/dropRules'
 import { navigate } from '../../frame/router'
@@ -118,7 +119,7 @@ function TextToolOptions() {
       <label>colour</label><div className="row"><input type="color" value={d.colour} onChange={(e) => set({ colour: e.target.value })} /><LatchButton on={d.weight === 'bold'} label={<b>B</b>} title="bold" onToggle={() => set({ weight: d.weight === 'bold' ? 'normal' : 'bold' })} /><LatchButton on={d.italic} label={<i>I</i>} title="italic" onToggle={() => set({ italic: !d.italic })} /></div>
       <label>outline</label><div className="row"><input type="checkbox" checked={!!d.outline} title="a stroke around the glyphs" onChange={(e) => set({ outline: e.target.checked ? { width: 2, colour: '#000000' } : null })} />{d.outline && <input type="color" value={d.outline.colour} onChange={(e) => set({ outline: { ...d.outline!, colour: e.target.value } })} />}</div>
       {d.outline && <ValueField label="outline px" value={d.outline.width} min={0} max={64} unit="px" onChange={(v) => set({ outline: { ...d.outline!, width: v } })} />}
-      <Help className="full" text={"Click the canvas to place text, drag to draw a box that wraps. Type in place; ✓ or Ctrl+Enter keeps it, ✕ or Esc drops the change. Later: double-click the layer with the Move tool, or Edit text… on its right-click; the Properties tab edits every field. The pixels are the text as drawn — exports and the compositor see them; Rasterize text keeps the pixels and drops the editing."} />
+      <Help className="full" text={"Click the canvas to place text, drag to draw a box that wraps. Type in place; ✓, Ctrl+Enter or Esc keeps it, ✕ drops the change. Later: double-click the layer with the Move tool, or Edit text… on its right-click; the Properties tab edits every field. The pixels are the text as drawn — exports and the compositor see them; Rasterize text keeps the pixels and drops the editing."} />
     </div>
   )
 }
@@ -177,7 +178,7 @@ function TextEditOverlay() {
     <div className={`text-edit${t.box ? ' box' : ''}`} style={style} onPointerDown={(e) => e.stopPropagation()}>
       <textarea ref={ref} value={t.content} style={ta} spellCheck={false} placeholder="type…" onChange={(e) => ed().setText(id, { content: e.target.value }, 'move')}
         onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); ed().endTextEdit(true) } else if (e.key === 'Escape') { e.preventDefault(); ed().endTextEdit(true) } e.stopPropagation() }} />{/* W64: Esc leaves the editor keeping the text; ✕ discards */}
-      <div className="text-edit-bar" style={{ transform: `scale(${1 / zoom})`, transformOrigin: '0 0' }}><CommandButton id="edit.text.apply" /><CommandButton id="edit.text.cancel" /><Help text={"✓ or Ctrl+Enter keeps the text; ✕ or Esc drops the change. The font, size, colour and outline live in the Properties tab; a new text layer takes the Text tool's options."} /></div>
+      <div className="text-edit-bar" style={{ transform: `scale(${1 / zoom})`, transformOrigin: '0 0' }}><CommandButton id="edit.text.apply" /><CommandButton id="edit.text.cancel" /><Help text={"✓, Ctrl+Enter or Esc keeps the text; ✕ drops the change. The font, size, colour and outline live in the Properties tab; a new text layer takes the Text tool's options."} /></div>
     </div>
   )
 }
@@ -228,7 +229,11 @@ function ToolOptions() {
   const [cv, setCv] = useState({ w: 0, h: 0, ax: 0.5, ay: 0.5 })
   useEffect(() => { if (doc) setCv((c) => ({ ...c, w: doc.w, h: doc.h })) }, [doc?.w, doc?.h]) // eslint-disable-line react-hooks/exhaustive-deps
   const set = (p: Partial<typeof b>) => ed().setBrush(p)
-  const nudge = (dx: number, dy: number) => { const n = findNode(doc, activeId); if (n?.kind === 'raster') ed().updateNode(n.id, { x: (n.x ?? 0) + dx, y: (n.y ?? 0) + dy }, 'nudge', `nudge:${n.id}`) }   // D43: a run of nudges is one step
+  const nudge = (dx: number, dy: number) => {
+    const t = ed().transform
+    if (t) { ed().setTransform({ quad: t.quad.map((c) => ({ x: c.x + dx, y: c.y + dy })) as typeof t.quad, pivot: { x: t.pivot.x + dx, y: t.pivot.y + dy } }); return }   // review K116: under a free transform the box moves (as the arrow keys do)
+    const n = findNode(doc, activeId); if (n?.kind === 'raster') ed().updateNode(n.id, { x: (n.x ?? 0) + dx, y: (n.y ?? 0) + dy }, 'nudge', `nudge:${n.id}`)   // D43: a run of nudges is one step
+  }
   const modeSeg = <div className="segmented">{(['replace', 'add', 'subtract', 'intersect'] as const).map((m) => <button key={m} className={mode === m ? 'active' : ''} title={{ replace: 'new selection', add: 'add (Shift)', subtract: 'subtract (Alt)', intersect: 'intersect (Shift+Alt)' }[m]} onClick={() => ed().setView({ selectionMode: m })}>{m}</button>)}</div>
   const featherField = <ValueField label="feather" value={sv.marqueeFeather} min={0} max={250} step={1} unit="px" onChange={(v) => ed().setView({ marqueeFeather: v })} />
   return (
@@ -258,7 +263,7 @@ function ToolOptions() {
         <label /><label className="chk" title="look at every visible layer instead of the active one"><input type="checkbox" checked={sv.wandMerged} onChange={(e) => ed().setView({ wandMerged: e.target.checked })} /> sample all layers</label>
         <label /><span><label className="chk"><input type="checkbox" checked={sv.wandContiguous} onChange={(e) => ed().setView({ wandContiguous: e.target.checked })} /> contiguous</label> <label className="chk"><input type="checkbox" checked={sv.wandAA} onChange={(e) => ed().setView({ wandAA: e.target.checked })} /> anti-alias</label></span>
         <Help className="full" text={"Tolerance per channel including alpha; transparent pixels match each other whatever their hidden colour."} /></div>}
-      {tool === 'fill' && <div className="tool-opts"><label>mode</label><div className="segmented">{(['solid', 'linear', 'radial'] as const).map((m) => <button key={m} className={fillMode === m ? 'active' : ''} onClick={() => ed().setView({ fillMode: m })}>{m}</button>)}</div><label>colour</label><Swatches /><Slider label="opacity" value={b.opacity} min={0} max={1} step={0.01} scale={100} unit="%" onChange={(v) => set({ opacity: v })} /><span className="hint full">{fillMode === 'solid' ? 'click fills the selection, or the whole layer (mask: white) when nothing is selected' : `drag from the foreground colour to the background colour (${fillMode}); limited to the selection when there is one; on a mask: white → black`}</span></div>}
+      {tool === 'fill' && <div className="tool-opts"><label>mode</label><div className="segmented">{(['solid', 'linear', 'radial'] as const).map((m) => <button key={m} className={fillMode === m ? 'active' : ''} onClick={() => ed().setView({ fillMode: m })}>{m}</button>)}</div><label>colour</label><Swatches /><Slider label="opacity" value={b.opacity} min={0} max={1} step={0.01} scale={100} unit="%" onChange={(v) => set({ opacity: v })} /><Help className="full" text={fillMode === 'solid' ? 'Click fills the selection, or the whole layer (mask: white) when nothing is selected.' : `Drag from the foreground colour to the background colour (${fillMode}); limited to the selection when there is one; on a mask: white → black.`} /></div>}   {/* review K94 (rule 11) */}
       {tool === 'move' && (
         <div className="tool-opts">
           <label>nudge</label><div className="nudge"><button onClick={() => nudge(0, -1)}>▲</button><button onClick={() => nudge(-1, 0)}>◀</button><button onClick={() => nudge(1, 0)}>▶</button><button onClick={() => nudge(0, 1)}>▼</button></div>
@@ -508,6 +513,9 @@ function AiTab() {
     return { id, label: name(id), hint: m?.hint ?? i?.hint ?? (t ? t.label.split(' · ').slice(1).join(' · ') : null), license: m?.license ?? t?.license ?? i?.license, health: health(id), distilled: !!m?.distilled, seconds: i?.seconds ?? null } })
   const candidatesFor = (id: string) => (isHero(id) ? 2 : 4)
   const revision = useEditor((s) => s.revision)
+  // review K66: the selection is read again only when it changed (its version), not on every revision bump
+  const selKey = useMemo(() => { const sel = ed().selection; return sel ? `${sel.width}x${sel.height}:${sel.version}` : '' }, [revision]) // eslint-disable-line react-hooks/exhaustive-deps
+  const docSize = useEditor((s) => (s.doc ? `${s.doc.w}x${s.doc.h}` : ''))
   // the engine image the orchestrator will build (edit_ai.plan_region): shown so a big region is a conscious choice
   const engineSize = useMemo(() => {
     const st = ed(); const sel = st.selection; const d = st.doc
@@ -521,7 +529,7 @@ function AiTab() {
     const m = Math.max(32, Math.round(Math.max(x1 + 1 - x0, y1 + 1 - y0) * p.margin / 100))
     const w = Math.min(d.w, Math.ceil((x1 + 1 - x0 + 2 * m) / 16) * 16), h = Math.min(d.h, Math.ceil((y1 + 1 - y0 + 2 * m) / 16) * 16)
     return planSize(w, h, p.minSize, 2048)
-  }, [revision, p.op, p.margin, p.minSize, p.pad]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selKey, docSize, p.op, p.margin, p.minSize, p.pad]) // eslint-disable-line react-hooks/exhaustive-deps
   const reason = p.op === 'select' ? (doc ? null : 'no document') : aiReason(c, p.op)      // Select shows its own reason (SelectControls)
   /** D64: the recipe the preview plans — the one the run command sends (aiRecipes.ts; its random seeds don't re-plan). */
   const preview = useDocPreview(p.op === 'select' || !doc ? null : aiRecipe(c, p.op))
@@ -626,7 +634,7 @@ function CandidateStrip() {
   useKeymap((k) => k.version)                                          // D72: the tooltips follow a remap
   const revision = useEditor((s) => s.revision)
   const doc = useEditor((s) => s.doc)
-  const thumbs = useMemo(() => { const st = ed(); const m = new Map<string, string>(); cands?.ids.forEach((id) => { const lp = st.pixels.get(id); if (lp) m.set(id, lp.thumbnail(96)) }); return m }, [cands, revision]) // eslint-disable-line react-hooks/exhaustive-deps
+  const thumbs = useMemo(() => { const st = ed(); const m = new Map<string, string>(); cands?.ids.forEach((id) => { const lp = st.pixels.get(id); if (lp) m.set(id, cachedThumbnail(lp, 96)) }); return m }, [cands, revision]) // eslint-disable-line react-hooks/exhaustive-deps -- review K66: cached per canvas version
   if (!cands || !doc) return null
   const g = findNode(doc, cands.group)
   return (
@@ -951,7 +959,8 @@ function LayersTab() {
     ed().setActive(row?.dataset.id ?? null)                             // addLayer inserts above the active layer; each new one becomes active
     void (async () => { for (const id of layerDrop(p).take) await ed().addLayerFromAsset(id) })()
   }, (p) => layerDrop(p, 'at this row').verdict)
-  const thumbs = useMemo(() => { const st = ed(); const m = new Map<string, string>(); st.pixels.forEach((lp, id) => m.set(id, lp.thumbnail(64))); st.masks.forEach((lp, id) => m.set('m:' + id, lp.thumbnail(48))); return m }, [revision]) // eslint-disable-line react-hooks/exhaustive-deps
+  // review K66: the stack's layers only, each thumbnail made again only when its canvas changed (a PNG per layer and mask per bump before)
+  const thumbs = useMemo(() => { const st = ed(); const m = new Map<string, string>(); walk(st.doc?.layers ?? [], (n) => { const lp = st.pixels.get(n.id), mk = st.masks.get(n.id); if (lp) m.set(n.id, cachedThumbnail(lp, 64)); if (mk) m.set('m:' + n.id, cachedThumbnail(mk, 48)) }); return m }, [revision]) // eslint-disable-line react-hooks/exhaustive-deps
   const before = useRef<DocumentStack | null>(null)
   const active = findNode(doc, activeId)
   const multi = !!activeId && selectedIds.length > 1 && selectedIds.includes(activeId)
@@ -988,7 +997,8 @@ function LayersTab() {
   return (
     <div>
       <div ref={dropRef} className={`layers${dropOver ? ' drop-over' : ''}`}>{rows(doc.layers, 0)}</div>
-      {editingMask && active?.mask && <div className="mask-hint">Editing the <b>mask</b> of “{active.name}” with the mask colours: the brush paints the foreground (black hides, white shows), the eraser the background — X swaps them; G fills, Delete clears to the background. Alt-click the mask thumbnail to see it alone.{' '}
+      {/* review K94 (rule 11): a short status, the explanation behind the ? */}
+      {editingMask && active?.mask && <div className="mask-hint">Editing the <b>mask</b> <Help text={"The mask colours are live: the brush paints the foreground (black hides, white shows), the eraser the background — X swaps them; G fills, Delete clears to the background. Alt-click the mask thumbnail to see it alone."} />{' '}
         {active.kind === 'raster' && <button className="quiet" onClick={() => { ed().setActive(active.id, false); ed().setView({ maskView: 'off' }) }}>Edit pixels instead</button>}</div>}
       {active && (
         <div className="tool-opts" style={{ marginTop: 10 }}>
@@ -1072,8 +1082,8 @@ function PropertiesTab() {
       {n.kind === 'raster' && (
         <Section id="layer" title="Layer">
           <div className="tool-opts">
-            <ValueField label="x" value={n.x ?? 0} min={-3 * doc.w} max={4 * doc.w} unit="px" onStart={start} onChange={(v) => ed().updateNode(n.id, { x: Math.round(v) })} onCommit={() => commit('move layer')} />
-            <ValueField label="y" value={n.y ?? 0} min={-3 * doc.h} max={4 * doc.h} unit="px" onStart={start} onChange={(v) => ed().updateNode(n.id, { y: Math.round(v) })} onCommit={() => commit('move layer')} />
+            <ValueField label="x" value={n.x ?? 0} min={-3 * doc.w} max={4 * doc.w} unit="px" onStart={() => { if (!ed().transform) start() }} onChange={(v) => ed().updateNode(n.id, { x: Math.round(v) })} onCommit={() => commit('move layer')} />
+            <ValueField label="y" value={n.y ?? 0} min={-3 * doc.h} max={4 * doc.h} unit="px" onStart={() => { if (!ed().transform) start() }} onChange={(v) => ed().updateNode(n.id, { y: Math.round(v) })} onCommit={() => commit('move layer')} />
             <label>size</label><span>{n.w}×{n.h}</span>
             <label>lineage</label><span className="mono">{n.lineage_asset_id ?? '—'}</span>
           </div>
@@ -1141,7 +1151,7 @@ function HistoryTab() {
       {future.map((e, j) => <button key={`f${j}`} className="future" onClick={() => stepFwd(j)}>{e.label} <span className="kind">{what(e)} · redo</span></button>)}
       {[...history].reverse().map((e, r) => { const i = history.length - 1 - r; return <button key={`h${i}`} className={r === 0 ? 'current' : ''} onClick={() => stepBack(i)}>{e.label} <span className="kind">{what(e)} · {new Date(e.at).toLocaleTimeString()}</span></button> })}
       <button className="quiet" disabled={!history.length} onClick={() => stepBack(-1)}>◂ back to the opened state</button>
-      {!history.length && !future.length && <div className="muted">No steps yet. Undo Ctrl+Z · redo Ctrl+Shift+Z; strokes keep 256² tile snapshots, stack edits keep the layer tree.</div>}
+      {!history.length && !future.length && <div className="muted">No steps yet <Help text={"Undo Ctrl+Z · redo Ctrl+Shift+Z. Strokes keep 256² tile snapshots, stack edits keep the layer tree; the oldest steps go past 200 or a memory budget."} /></div>}   {/* review K94 (rule 11) */}
     </div>
   )
 }

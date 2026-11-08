@@ -111,7 +111,8 @@ def place_set_from_fit(f: dict[str, Any], asset_id: str, relief_asset_id: str | 
     same = keep is not None and keep.kind == f["kind"]
     materials = {x.id: x.material for x in keep.faces if x.material} if keep is not None else {}
     faces = [SetFace(id=fid, material=m, texel_m=TEXEL_BY_KIND[f["kind"]]) for fid, m in materials.items()] if same else []
-    return PlaceSet(kind=f["kind"], sizes=dict(f["sizes"]), parts=dict(keep.parts) if same and keep is not None else {}, faces=faces, sources=[src])
+    return PlaceSet(kind=f["kind"], sizes=dict(f["sizes"]), parts=dict(keep.parts) if same and keep is not None else {}, faces=faces, sources=[src],
+                    model_id=keep.model_id if keep is not None else None)   # review K91: the set's painting model (D186) is the author's — a refit keeps it
 
 
 def fit_landed(q: Any, job: Any, relief_asset_id: str, glb: Path) -> None:

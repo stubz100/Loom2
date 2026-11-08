@@ -531,6 +531,7 @@ async def prepare_document(job: JobRecord, recipe: Inpaint | I2I | Upscale | Seg
                 out["alpha_mask"] = np.ascontiguousarray(comp[..., 3])
         out["plan"] = plan
         out["image_path"] = tmp / "image.png"
+        out.setdefault("source_size", (od.doc.w, od.doc.h))            # review K25: every paste-back is planned on this canvas
         return out
 
     inputs = await asyncio.wait_for(asyncio.to_thread(work), 300.0)      # B4: region preparation is bounded too

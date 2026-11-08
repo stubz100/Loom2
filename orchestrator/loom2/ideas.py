@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 from pydantic import BaseModel, ConfigDict, Field
 
 from .body import Body
-from .fsio import atomic_write_json, new_id, plain_name, read_json, utc_now
+from .fsio import atomic_write_json, new_id, plain_name, read_json, unlink, utc_now
 from .origin import JobOrigin
 
 if TYPE_CHECKING:
@@ -33,7 +33,7 @@ IdeaClass = Literal["character", "prop", "place"]
 IDEA_CLAY_SURFACE = "idea_clay"                  # CW1: origin.surface of a variant's clay jobs; ref = the idea, payload {variant, step}
 FOR_IDEA = "for_idea"                             # CW2: the key a job's origin payload carries while Image's For chip names an idea
 MADE_FOR_MAX = 200                                # the newest results kept on an idea's *Made for this idea* list
-_LOCK = threading.Lock()
+_LOCK = threading.RLock()                         # review K32: held from the read to the write of every change (not only the write)
 
 
 class MadeFrom(BaseModel):
@@ -238,72 +238,80 @@ class IdeaStore:
 
     def patch(self, iid: str, data: dict[str, Any], groups: GroupStore | None = None) -> Idea:
         """The name, note, class and focus, a variant's note (`variants: [{id, note}]`) — from a body based on `revision` (409 when stale)."""
-        cur = self._require(iid)
-        base = data.get("revision")
-        if base is not None and int(base) != cur.revision:
-            raise StaleIdea(f"the idea is at revision {cur.revision}, the change is based on {base} — reload it first")
-        upd = {k: data[k] for k in ("name", "note", "cls", "focus") if k in data}
-        if "name" in upd:
-            upd["name"] = str(upd["name"]).strip()
-        if upd.get("focus") is not None:
-            cur.variant(str(upd["focus"]))
-        variants = [v.model_copy() for v in cur.variants]
-        for vp in data.get("variants") or []:
-            v = next((x for x in variants if x.id == vp.get("id")), None)
-            if v is None:
-                raise ValueError(f"no variant {vp.get('id')!r}")
-            if "note" in vp:
-                v.note = str(vp["note"])[:400]
-        idea = Idea.model_validate({**cur.model_dump(), **upd, "variants": [v.model_dump() for v in variants]})
+        with _LOCK:                                                                          # review K32
+            cur = self._require(iid)
+            base = data.get("revision")
+            if base is not None and int(base) != cur.revision:
+                raise StaleIdea(f"the idea is at revision {cur.revision}, the change is based on {base} — reload it first")
+            upd = {k: data[k] for k in ("name", "note", "cls", "focus") if k in data}
+            if "name" in upd:
+                upd["name"] = str(upd["name"]).strip()
+            if upd.get("focus") is not None:
+                cur.variant(str(upd["focus"]))
+            variants = [v.model_copy() for v in cur.variants]
+            for vp in data.get("variants") or []:
+                v = next((x for x in variants if x.id == vp.get("id")), None)
+                if v is None:
+                    raise ValueError(f"no variant {vp.get('id')!r}")
+                if "note" in vp:
+                    v.note = str(vp["note"])[:400]
+            idea = self._save(Idea.model_validate({**cur.model_dump(), **upd, "variants": [v.model_dump() for v in variants]}))
         if "name" in upd and groups is not None and idea.group_id in groups.groups:
             groups.update(idea.group_id, name=f"{idea.name} · idea")
-        return self._save(idea)
+        return idea
 
     def add_variant(self, iid: str, asset_id: str, groups: GroupStore) -> tuple[Idea, Variant]:
         """*Add to ‹idea›*, *Add as a variant* (CW2), a picture dropped on its card: copied onto the idea's page, in focus."""
         cur = self._require(iid)
-        aid, src = self._copy(groups, asset_id, cur.group_id)
+        aid, src = self._copy(groups, asset_id, cur.group_id)                               # review K32: the copy first (the slow part) …
         v = Variant(asset_id=aid, made_from=src)
-        if not cur.variants:
-            groups.update(cur.group_id, cover_id=aid)
-        return self._save(cur.model_copy(update={"variants": [*cur.variants, v], "focus": v.id})), v
+        with _LOCK:                                                                          # … then the idea as it is now: a variant added meanwhile stays
+            cur = self._require(iid)
+            if not cur.variants:
+                groups.update(cur.group_id, cover_id=aid)
+            return self._save(cur.model_copy(update={"variants": [*cur.variants, v], "focus": v.id})), v
 
     def remove_variant(self, iid: str, vid: str) -> Idea:
         """The variant leaves the idea; its picture stays on the idea's page (nothing is trashed)."""
-        cur = self._require(iid)
-        cur.variant(vid)
-        rest = [v for v in cur.variants if v.id != vid]
-        focus = cur.focus if cur.focus != vid else (rest[-1].id if rest else None)
-        return self._save(cur.model_copy(update={"variants": rest, "focus": focus}))
+        with _LOCK:                                                                          # review K32
+            cur = self._require(iid)
+            cur.variant(vid)
+            rest = [v for v in cur.variants if v.id != vid]
+            focus = cur.focus if cur.focus != vid else (rest[-1].id if rest else None)
+            return self._save(cur.model_copy(update={"variants": rest, "focus": focus}))
 
     def set_clay(self, iid: str, vid: str, **fields: Any) -> Idea:
         """A variant's clay as its jobs land (no revision guard: a product of the variant, like a version's shell)."""
-        cur = self._require(iid)
-        variants = [v.model_copy() for v in cur.variants]
-        v = next((x for x in variants if x.id == vid), None)
-        if v is None:
-            raise KeyError(f"no variant {vid!r}")
-        clay = (v.clay or VariantClay()).model_dump()
-        v.clay = VariantClay.model_validate({**clay, **fields})
-        return self._save(cur.model_copy(update={"variants": variants}))
+        with _LOCK:                                                                          # review K32: a landing never reverts another's step
+            cur = self._require(iid)
+            variants = [v.model_copy() for v in cur.variants]
+            v = next((x for x in variants if x.id == vid), None)
+            if v is None:
+                raise KeyError(f"no variant {vid!r}")
+            clay = (v.clay or VariantClay()).model_dump()
+            v.clay = VariantClay.model_validate({**clay, **fields})
+            return self._save(cur.model_copy(update={"variants": variants}))
 
     def add_made_for(self, iid: str, asset_ids: list[str]) -> Idea | None:
         """CW2: results made while Image's For chip named the idea — listed, newest first (never a variant by themselves, U4)."""
-        cur = self.get(iid)
-        if cur is None:
-            return None
-        fresh = [a for a in reversed(asset_ids) if a not in cur.made_for]
-        return self._save(cur.model_copy(update={"made_for": (fresh + cur.made_for)[:MADE_FOR_MAX]}))
+        with _LOCK:                                                                          # review K32: two batches landing are both listed
+            cur = self.get(iid)
+            if cur is None:
+                return None
+            fresh = [a for a in reversed(asset_ids) if a not in cur.made_for]
+            return self._save(cur.model_copy(update={"made_for": (fresh + cur.made_for)[:MADE_FOR_MAX]}))
 
     def record_kept(self, iid: str, kept: Kept) -> Idea:
-        cur = self._require(iid)
-        return self._save(cur.model_copy(update={"kept": [*cur.kept, kept]}))
+        with _LOCK:                                                                          # review K32
+            cur = self._require(iid)
+            return self._save(cur.model_copy(update={"kept": [*cur.kept, kept]}))
 
     def delete(self, iid: str) -> Idea:
         """The record goes; its page and pictures stay in the album (as a deleted profile's do)."""
-        cur = self._require(iid)
-        self.path(iid).unlink()
-        return cur
+        with _LOCK:
+            cur = self._require(iid)
+            unlink(self.path(iid), missing_ok=True)                                         # review K88: fsio's retries (a reader holding the file)
+            return cur
 
 
 # ---- Make the clay ▶ (CW1; 06 §2.3): a character variant's figure, then its shell ----------------------------------------------------
@@ -456,21 +464,45 @@ def made_for_landed(q: Any, job: Any, asset_ids: list[str]) -> None:
 
 
 # ---- Keep ▶ (CW1; 06 §2.1) ------------------------------------------------------------------------------------------------------------
-def fold(ws: Workspace, groups: GroupStore) -> list[dict[str, Any]]:
+def fold(ws: Workspace, groups: GroupStore, skipped: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     """U3 (D157, G4; proto01_UI2 03 §7): the ideas folded into draft entities — each idea not kept yet becomes a draft profile of its class
     (*Keep ▶* on its variant in focus: the hero, a sheet drafted from its prompt, its clay carried over), its other variants' pictures the new
-    version's candidates. The ideas stay, with where they went (`kept`), for the old Cast's board until U8. One row per idea folded."""
+    version's candidates. The ideas stay, with where they went (`kept`), for the old Cast's board until U8. One row per idea folded.
+    Review K37: a variant whose picture is in the Trash (or gone) is left out — the focus falls to the next living one; an idea that cannot
+    be folded is skipped and named in `skipped` ({idea_id, name, reason}) and the ideas after it still fold; candidates that cannot join
+    leave the draft made, said in `skipped` too."""
     from .story import StoryStore
+
+    def alive(aid: str) -> bool:
+        r = groups.cat.get(aid)
+        return r is not None and r.trashed_at is None and r.kind == "image"
+
+    def note(idea: Idea, why: str) -> None:
+        if skipped is not None:
+            skipped.append({"idea_id": idea.id, "name": idea.name, "reason": why[:400]})
     out: list[dict[str, Any]] = []
     for idea in IdeaStore(ws).list():
         if idea.kept or not idea.variants:
             continue
-        vid = idea.focus if idea.focus and any(v.id == idea.focus for v in idea.variants) else idea.variants[0].id
-        p, _ = keep(ws, groups, idea.id, vid)
-        others = [v.asset_id for v in idea.variants if v.id != vid and groups.cat.get(v.asset_id) is not None]
+        live = [v for v in idea.variants if alive(v.asset_id)]
+        if not live:
+            note(idea, "its pictures are in the Trash or gone")
+            continue
+        vid = idea.focus if idea.focus and any(v.id == idea.focus for v in live) else live[0].id
+        try:
+            p, _ = keep(ws, groups, idea.id, vid)
+        except Exception as e:  # noqa: BLE001 — one idea's failure is reported; the others still fold
+            note(idea, str(e) or type(e).__name__)
+            continue
+        others = [v.asset_id for v in live if v.id != vid]
+        n = 0
         if others:
-            StoryStore(ws).add_assets(p.id, p.current, others, "candidate", groups, groups.cat)
-        out.append({"idea_id": idea.id, "profile_id": p.id, "name": p.name, "cls": p.cls, "candidates": len(others)})
+            try:
+                StoryStore(ws).add_assets(p.id, p.current, others, "candidate", groups, groups.cat)
+                n = len(others)
+            except Exception as e:  # noqa: BLE001 — the draft is made; its candidates said apart
+                note(idea, f"the draft is made, but its other pictures did not join its candidates: {e}")
+        out.append({"idea_id": idea.id, "profile_id": p.id, "name": p.name, "cls": p.cls, "candidates": n})
     return out
 
 
@@ -482,8 +514,12 @@ def keep(ws: Workspace, groups: GroupStore, iid: str, vid: str, profile_id: str 
     store, stories = IdeaStore(ws), StoryStore(ws)
     idea = store._require(iid)
     v = idea.variant(vid)
-    if profile_id is not None and (stories.profile(profile_id) or None) is None:
-        raise KeyError(profile_id)
+    if profile_id is not None:                                                      # review K88: refused before the picture is copied
+        cur = stories.profile(profile_id)
+        if cur is None:
+            raise KeyError(profile_id)
+        if cur.cls != idea.cls:
+            raise ValueError(f"a {idea.cls} idea is kept as a {idea.cls}, not as a {cur.cls}")
     hero = groups.cat.duplicate(v.asset_id)
     if hero is None:
         raise ValueError("the variant's picture is missing")
@@ -492,9 +528,6 @@ def keep(ws: Workspace, groups: GroupStore, iid: str, vid: str, profile_id: str 
         p = stories.create_profile((name or idea.name).strip() or idea.name, idea.cls, groups, hero.id, **sheet)
         ver = p.version()
     else:
-        cur = stories.profile(profile_id)
-        if cur.cls != idea.cls:
-            raise ValueError(f"a {idea.cls} idea is kept as a {idea.cls}, not as a {cur.cls}")
         p = stories.new_version(profile_id, groups)
         ver = p.version()
         groups.move([("asset", hero.id)], ver.group_id)

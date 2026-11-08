@@ -11,7 +11,7 @@ import { Help } from '../../frame/Help'
 import { useSession } from '../../store/session'
 import { CROWD_ASPECT, isGround, isVertical, setFaces, SET_KIND_PARTS, SET_KIND_SIZES, type PlaceSetDoc, type SetKind } from '../stage/placeSet'
 import { changeKind, dragTo, handles, outlines, rescale, type Handle, type SourceCam } from '../stage/setOverlay'
-import { autoBake, faceNoun, makeCrowd, makeWalkers, saveSet, setCamera, setPicture, setStatus, useCrowdForm, useSetBuilder, type PlaceSet } from './setBuilder'
+import { autoBake, faceNoun, makeCrowd, makeWalkers, saveSet, setCamera, setPicture, setStatus, useCrowdForm, useSetBuilder, type PlaceSet, type SetEdit } from './setBuilder'
 import { onStoryItem } from './storyCommands'
 import { PlaceThingsSheet, ThingRows } from './PlaceThingsSheet'
 import { ModelCards } from '../../frame/ModelCards'
@@ -20,7 +20,7 @@ import { defaultModel } from '../../store/modelCaps'
 
 /** D186: the set's painting model — the one card: the FLUX.2-family models that Fill (its Fills, walkers and cleans; its crowds when the
  *  model refines), the Fill default first; the default picked clears the set's own. Saved with the set (`PlaceSet.model_id`). */
-function SetModel({ ps, onEdit }: { ps: PlaceSet; onEdit: (next: PlaceSet) => void }) {
+function SetModel({ ps, onEdit }: { ps: PlaceSet; onEdit: (edit: SetEdit) => void }) {
   const caps = useSession((s) => s.capabilities)
   const def = defaultModel('inpaint', caps)
   const items = defaultFirstItems(imageModelItems(caps, (c) => ['flux2', 'klein'].includes(c.family) && Array.isArray(c.recipes.inpaint) && c.recipes.inpaint.includes('fill')), def)
@@ -28,7 +28,7 @@ function SetModel({ ps, onEdit }: { ps: PlaceSet; onEdit: (next: PlaceSet) => vo
   return (
     <div className="kv tall set-model" data-testid="set-models">
       <span>painting model <Help text="The model that paints the set: Fill what the picture never saw, the walkers, the clean under its things — and the crowd's first picture when it refines (else the refine default). The Fill default first; FLUX.2 dev follows the faces' words more closely at its Turbo settings, ≈ 3× slower a face." /></span>
-      <ModelCards label="painting model" items={items} value={ps.model_id ?? def} onPick={(id) => onEdit({ ...ps, model_id: id === def ? null : id })} />
+      <ModelCards label="painting model" items={items} value={ps.model_id ?? def} onPick={(id) => onEdit((cur) => ({ ...cur, model_id: id === def ? null : id }))} />
     </div>
   )
 }
@@ -44,6 +44,13 @@ const HANDLE_TIP: Record<string, string> = { back: 'the back wall: drag its foot
 
 /** The set with its picture's camera moved (a drag, the height). */
 const withCamera = (ps: PlaceSet, cam: SourceCam): PlaceSet => ({ ...ps, sources: ps.sources.map((s, i) => (i === 0 ? { ...s, camera: { ...s.camera, ...cam } } : s)) })
+/** K78: a change of the set's geometry made from the set as it is when it is saved (its camera with it). */
+const geometry = (fn: (ps: PlaceSetDoc, cam: SourceCam) => { set: PlaceSetDoc; camera: SourceCam }): SetEdit => (cur) => {
+  const cam = setCamera(cur)
+  if (!cam) return cur
+  const r = fn(cur as PlaceSetDoc, cam)
+  return withCamera(r.set as PlaceSet, r.camera)
+}
 
 export function PlaceSetSection({ p, v }: { p: Profile; v: Version }) {
   const jobs = useSession((s) => s.jobs)
@@ -54,7 +61,7 @@ export function PlaceSetSection({ p, v }: { p: Profile; v: Version }) {
   const status = setStatus(v, jobs, p.id, baking)
   useEffect(() => { if (ps) autoBake(p.id, v.id, ps) }, [ps, p.id, v.id])
   markUsed('cast.place.fillFace')
-  const edit = (next: PlaceSet) => void saveSet(next)
+  const edit = (next: SetEdit) => void saveSet(next)                       // K78: each edit made from the set the last one left
   const s = ps ? { ...SET_KIND_SIZES[ps.kind], ...ps.sizes } : {}
   const parts = ps ? { ...SET_KIND_PARTS[ps.kind], ...(ps.parts ?? {}) } : {}
   return (
@@ -69,16 +76,16 @@ export function PlaceSetSection({ p, v }: { p: Profile; v: Version }) {
           {ps && cam && <>
             <div className="segmented set-kind" role="group" aria-label="the set's kind">
               {KINDS.map(([k, label]) => <button key={k} type="button" className={ps.kind === k ? 'active' : ''} aria-pressed={ps.kind === k}
-                onClick={() => { const r = changeKind(ps as PlaceSetDoc, cam, k); edit(withCamera(r.set as PlaceSet, r.camera)) }}>{label}</button>)}
+                onClick={() => edit(geometry((set, c) => changeKind(set, c, k)))}>{label}</button>)}
             </div>
             <div className="kv set-sizes">
-              {Object.keys(SET_KIND_SIZES[ps.kind]).map((k) => <Field key={`${k}${s[k]}`} label={SIZE_LABEL[k] ?? k} value={s[k]} min={0.5} onSet={(x) => edit({ ...ps, sizes: { ...ps.sizes, [k]: x } })} />)}
+              {Object.keys(SET_KIND_SIZES[ps.kind]).map((k) => <Field key={`${k}${s[k]}`} label={SIZE_LABEL[k] ?? k} value={s[k]} min={0.5} onSet={(x) => edit((cur) => ({ ...cur, sizes: { ...cur.sizes, [k]: x } }))} />)}
               <Field key={`cam${cam.pos[1]}`} label="camera height" value={cam.pos[1]} min={0.2} title="The picture's camera above the floor: the whole fit scales with it (eye level is 1.6 m)"
-                onSet={(x) => { const r = rescale(ps as PlaceSetDoc, cam, x); edit(withCamera(r.set as PlaceSet, r.camera)) }} />
+                onSet={(x) => edit(geometry((set, c) => rescale(set, c, x)))} />
             </div>
             <div className="set-parts">
               {Object.keys(SET_KIND_PARTS[ps.kind]).map((k) => <label key={k} className="chip-toggle"><input type="checkbox" checked={parts[k] !== false}
-                onChange={(e) => edit({ ...ps, parts: { ...ps.parts, [k]: e.target.checked } })} /> {PART_LABEL[k] ?? k}</label>)}
+                onChange={(e) => { const on = e.target.checked; edit((cur) => ({ ...cur, parts: { ...cur.parts, [k]: on } })) }} /> {PART_LABEL[k] ?? k}</label>)}
             </div>
           </>}
           <div className="verbs">
@@ -108,7 +115,7 @@ function Field({ label, value, min, title, onSet }: { label: string; value: numb
 }
 
 /** The picture with the set drawn over it from its camera; a handle dragged previews the set and saves it on release. */
-function SetOverlay({ pic, ps, cam, assumed, onEdit }: { pic: string; ps: PlaceSet | null; cam: SourceCam | null; assumed: string[]; onEdit: (ps: PlaceSet) => void }) {
+function SetOverlay({ pic, ps, cam, assumed, onEdit }: { pic: string; ps: PlaceSet | null; cam: SourceCam | null; assumed: string[]; onEdit: (edit: SetEdit) => void }) {
   const [size, setSize] = useState<[number, number] | null>(null)
   const [drag, setDrag] = useState<{ h: Handle; set: PlaceSetDoc; camera: SourceCam } | null>(null)
   const svg = useRef<SVGSVGElement>(null)
@@ -129,7 +136,7 @@ function SetOverlay({ pic, ps, cam, assumed, onEdit }: { pic: string; ps: PlaceS
             <g key={h.id} className={`handle${h.assumed ? ' assumed' : ''}${drag?.h.id === h.id ? ' on' : ''}`} data-handle={h.id}
               onPointerDown={(e) => { if (e.button !== 0 || !ps || !cam) return; e.currentTarget.setPointerCapture(e.pointerId); setDrag({ h: live, set: ps as PlaceSetDoc, camera: cam }) }}
               onPointerMove={(e) => { if (!drag || drag.h.id !== h.id || !ps || !cam) return; const r = dragTo(ps as PlaceSetDoc, cam, size[0], size[1], drag.h, at(e)); if (r) setDrag({ h: drag.h, ...r }) }}
-              onPointerUp={() => { if (drag && ps) onEdit(withCamera(drag.set as PlaceSet, drag.camera)); setDrag(null) }}
+              onPointerUp={() => { if (drag && ps) { const d = drag; onEdit((cur) => withCamera({ ...cur, sizes: d.set.sizes }, d.camera)) /* K78: the drag's sizes and camera, the rest as it is now */ } setDrag(null) }}
               onPointerCancel={() => setDrag(null)}>
               <title>{(HANDLE_TIP[h.id] ?? h.id) + (h.assumed ? ' (guessed — the picture does not show it)' : '')}</title>
               <line className="hit" x1={h.a[0]} y1={h.a[1]} x2={h.b[0]} y2={h.b[1]} />
@@ -145,7 +152,7 @@ function SetOverlay({ pic, ps, cam, assumed, onEdit }: { pic: string; ps: PlaceS
 /** The baked faces: what the picture saw of each, filled or to fill, and the material each Fill names (D143). D170: a facade is filled as a
  *  flat elevation of its material; unnamed, the place's words paint a view down the street (E46c), so it is marked until named. D172: the
  *  ground outside a room is filled from above; unnamed, its noun paints the wrong ground (a road as asphalt, E48), so it is marked too. */
-function FaceRows({ ps, onEdit }: { ps: PlaceSet; onEdit: (ps: PlaceSet) => void }) {
+function FaceRows({ ps, onEdit }: { ps: PlaceSet; onEdit: (edit: SetEdit) => void }) {
   const order = [...ps.faces].sort((a, b) => (a.bad ?? 0) - (b.bad ?? 0))
   const size = new Map(setFaces(ps as PlaceSetDoc).map((f) => [f.id, { w: f.w, h: f.h }]))   // D173: a crowd's stretch is in the face's metres
   return (
@@ -164,7 +171,7 @@ function FaceRows({ ps, onEdit }: { ps: PlaceSet; onEdit: (ps: PlaceSet) => void
             title={facade ? "Filled as a flat elevation of what you name here, seen square on. Unnamed, the place's words paint a view down the street"
               : ground ? `Filled from above as what you name here. Unnamed, it is painted as ${faceNoun(f.id)}`
               : "The face's material, named for its Fill (pale ochre plaster, worn terracotta tiles)"}
-            onBlur={(e) => { const m = e.target.value.trim(); if (m !== f.material) onEdit({ ...ps, faces: ps.faces.map((x) => (x.id === f.id ? { ...x, material: m } : x)) }) }}
+            onBlur={(e) => { const m = e.target.value.trim(); if (m !== f.material) onEdit((cur) => ({ ...cur, faces: cur.faces.map((x) => (x.id === f.id ? { ...x, material: m } : x)) })) }}
             onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
           {isVertical(f.id) && f.texture_asset_id && <FaceCrowd face={f} w={size.get(f.id)?.w ?? 0} h={size.get(f.id)?.h ?? 0} />}
           {isVertical(f.id) && f.texture_asset_id && <FaceWalkers face={f} w={size.get(f.id)?.w ?? 0} h={size.get(f.id)?.h ?? 0} />}

@@ -20,7 +20,7 @@ def test_the_clip_on_the_grid_and_the_method_check():
     assert [plate_path_frames(n) for n in (2, 9, 10, 81, 100, 121)] == [9, 9, 17, 81, 105, 121]
     f = Final(stage_id="s", camera_id="c", stage_revision=0, range={"start": 0, "end": 120}, size={"w": 832, "h": 468}, frames=81)
     assert plate_path_size(f, 576) == (1024, 576)                                          # E34's size at a 16:9 final
-    assert plate_path_size(f.model_copy(update={"size": {"w": 480, "h": 832}}), 576) == (320, 576)
+    assert plate_path_size(f.model_copy(update={"size": {"w": 480, "h": 832}}), 576) == (576, 1024)   # K: the short side on the short side (was 320 × 576, below the final's size)
     plate_method_check("projected", 721)
     plate_method_check("generated", PLATE_PATH_MAX)
     with pytest.raises(ValueError, match="at most 257"):

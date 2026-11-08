@@ -235,8 +235,10 @@ async def final_plate(svc: Svc, fid: str, body: PlateBody):
     await asyncio.to_thread(home_now, getattr(svc, "groups", None), getattr(svc, "ws", None), rec)                    # W57: not in Imports
     svc.hub.broadcast("asset.created", rec.model_dump())
     fmt = ws.load().format
-    h = 720
-    w = max(64, round(h * fmt.width / fmt.height / 16) * 16)
+    if fmt.width >= fmt.height:                                             # K: 720 on the short side (a 9:16 final's still was 400 × 720)
+        w, h = max(64, round(720 * fmt.width / fmt.height / 16) * 16), 720
+    else:
+        w, h = 720, max(64, round(720 * fmt.height / fmt.width / 16) * 16)
     first = await asyncio.to_thread(_scene_plate, ws, f)                    # O4: the scene's first plate leads the references
     refs = ([{"asset_id": first, "note": "the same place as this picture: its walls, floor, light and materials"}] if first else []) + \
         [r for r in body.refs if r.get("asset_id") != first]
@@ -998,6 +1000,9 @@ async def final_layer_matte(svc: Svc, fid: str, lid: str, body: MatteBody):
         raise HTTPException(404, "final or layer not found")
     if layer.kind != "figure" or layer.frames_done != f.frames:
         raise HTTPException(422, "a performed character layer is matted")
+    from ..boxes import sig as boxes_sig
+    if layer.window and layer.window_sig and layer.window_sig != boxes_sig(layer.window):   # K: the take was made in other windows — pasted back shifted
+        raise HTTPException(409, "the layer's windows changed since it was performed — perform it again, then matte it")
     try:
         from ..recipes import matte_mode
         jobs = svc.queue.submit({"kind": "matte_sequence", "final_id": fid, "layer_id": lid, "text": body.text, "mode": matte_mode(svc.app.settings.variant)},
@@ -1044,7 +1049,7 @@ async def final_layer_pass(svc: Svc, fid: str, lid: str, body: PassBody):
     if body.preset in ("face", "lipsync"):                                # AE4c (E29b): the head as its own layer, in steps (D164: owed.py's, shared)
         from ..owed import face_recipe
         try:
-            fr, fp = await asyncio.to_thread(face_recipe, ws, svc.app.settings, store, f, layer, body.preset, body.mouth, seed)
+            fr, fp = await asyncio.to_thread(face_recipe, ws, svc.app.settings, store, f, layer, body.preset, body.mouth, seed, svc.queue.live_take_ids() if svc.queue else set())
         except ValueError as e:
             raise HTTPException(422, str(e))
         recipe |= {"model_id": fr["model_id"], "step": fr["step"], "mouth": fr["mouth"]}
@@ -1147,6 +1152,10 @@ async def final_assemble(svc: Svc, fid: str):
     if f is None:
         raise HTTPException(404, "final not found")
     missing = await asyncio.to_thread(check_ready, store, f)
+    matting = [j for j in svc.queue.jobs.values() if j.status not in ("done", "failed", "cancelled") and j.recipe.get("kind") == "matte_sequence"
+               and j.recipe.get("final_id") == fid]
+    if matting:                                                        # review K89: a matte still running — its folder may hold the last one's frames
+        missing.append(f"{len(matting)} matte{'s are' if len(matting) != 1 else ' is'} still being made")
     if missing:
         raise HTTPException(422, "not ready: " + "; ".join(missing))
     try:

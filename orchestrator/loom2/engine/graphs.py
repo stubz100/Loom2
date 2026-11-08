@@ -96,7 +96,7 @@ def _te_loader(te_name: str, te_device: str | None, clip_type: str = "flux2") ->
 def video_spec(model_id: str) -> ModelSpec:
     spec = registry.get(model_id)
     if spec is None or not (spec.recipes.i2v or spec.recipes.animate or spec.recipes.lipsync) or spec.video is None:
-        raise CompileError(f"{model_id!r} is not an image-to-video model (Wan 2.2, LTX-2.3 or H3)")
+        raise CompileError(f"{model_id!r} is not an image-to-video model ({registry.video_names()})")      # review K85: from the specs
     return spec
 
 
@@ -511,11 +511,9 @@ def _ref_chain(g: dict[str, Any], cond: list, refs: list, ref_files: dict[str, s
         g[str(nid)] = {"class_type": "LoadImage", "inputs": {"image": name}}
         img: list = [str(nid), 0]
         nid += 1
-        if max_px:
-            g[str(nid)] = {"class_type": "ImageScale", "inputs": {"image": img, "upscale_method": "lanczos", "width": int(max_px), "height": int(max_px), "crop": "disabled"}}
-            # ImageScale needs both sizes; the orchestrator pre-fits references to ≤ max_px² before upload, so this is a no-op guard
-            img = [str(nid), 0]
-            nid += 1
+        # K1: no ImageScale here — at the pin it resizes to exactly the size given, so `max_px × max_px` stretched every reference to a
+        # square (D152's 1024×576 hero went in 1.78× tall). The orchestrator fits each reference inside max_px × max_px, keeping its aspect,
+        # before the upload (pipeline.fit_reference); `max_px` stays in the signature for the callers and the load estimate.
         g[str(nid)] = {"class_type": "VAEEncode", "inputs": {"pixels": img, "vae": vae}}
         lat = [str(nid), 0]
         nid += 1
@@ -730,7 +728,7 @@ def effective_params(recipe: T2I, roster: Roster | None = None) -> dict[str, Any
         steps = sm.steps                                      # fixed for distilled variants (09 §3b)
     fam = family(spec)
     guidance = (recipe.guidance if recipe.guidance is not None else sm.guidance) if fam.flux_guidance else None   # D89: no FluxGuidance, no guidance
-    cfg = sm.cfg if sm.distilled else (recipe.cfg if recipe.cfg is not None else sm.cfg)
+    cfg = sm.cfg if (sm.distilled or sm.cfg_fixed) else (recipe.cfg if recipe.cfg is not None else sm.cfg)   # K: dev's CFG stays (a Klein base CFG carried over burnt it)
     sampler = recipe.sampler or sm.sampler
     if sampler not in SAMPLERS:
         raise CompileError(f"unknown sampler {sampler!r} (the pinned engine offers {len(SAMPLERS)})")
@@ -762,7 +760,7 @@ def effective_params(recipe: T2I, roster: Roster | None = None) -> dict[str, Any
     bindings = subject_bindings(recipe, spec)                                   # D93 (A3): what each linked subject got (the card shows its slots)
     return {"model_id": recipe.model_id, "te_id": resolve_te_id(spec, recipe.te_id) if spec.roles.te else None, "width": w, "height": h, "steps": steps, "guidance": guidance, "cfg": cfg,
             "sampler": sampler, "scheduler": scheduler, "turbo": turbo, "turbo_strength": float(recipe.turbo_strength) if turbo else None,
-            "distilled": sm.distilled, "negative_used": bool(recipe.negative) and not sm.distilled,
+            "distilled": sm.distilled, "negative_used": bool(recipe.negative) and not sm.distilled and cfg > 1.0,   # K: at CFG 1 the sampler skips the uncond pass
             "weight_dtype": weight_dtype, "te_device": te_device, "base_shift": base_shift, "max_shift": max_shift,
             "tiled_vae": bool(recipe.tiled_vae), "tile_size": int(recipe.tile_size) if recipe.tiled_vae else None,
             "prompt_mode": mode, "serialized_prompt": text, "word_count": word_count(text), "token_estimate": int(word_count(text) * 1.4) + 8,
@@ -1061,6 +1059,13 @@ def build_reangle(recipe: Reangle, roster: Roster, seed: int, out_prefix: str, i
     summary = {"model_id": spec.id, "method": method, "method_requested": recipe.method, "move": recipe.move, "steps": int(spec.sampling.steps),
                "cfg": float(spec.sampling.cfg), "seed": int(seed), "source_size": [w, h]}                 # what was asked and what ran
     return Compiled(graph=g, output_node="99", summary=summary, serialized_prompt=prompt)
+
+
+def instruct_weights(spec: Any) -> list[str]:
+    """Review K28: what `build_instruct` loads — the transformer, the encoder, the VAE and the Lightning LoRA (not the angles LoRA, which
+    is Reangle's); `recipe_weights` and `/capabilities.instruct` read this one list."""
+    ids = [spec.id, spec.roles.te.default if spec.roles.te else None, spec.roles.vae, spec.roles.extra.get("lightning")]
+    return list(dict.fromkeys(x for x in ids if x))
 
 
 def build_instruct(recipe: Instruct, roster: Roster, seed: int, out_prefix: str, image_name: str) -> Compiled:
@@ -1870,6 +1875,9 @@ def recipe_weights(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V | Reang
         ids += model_ids(recipe.model_id, True)
     elif isinstance(recipe, Segment):
         ids += model_ids(segment_model_id(recipe), False)              # K5: SAM 3 (full only, D26) for points / text / box — what the graph loads
+    elif isinstance(recipe, Instruct):
+        spec = registry.get(recipe.model_id)
+        ids += instruct_weights(spec) if spec else [recipe.model_id]    # review K28: the encoder, VAE and Lightning named when missing
     elif isinstance(recipe, Upscale):
         ids += model_ids(recipe.model_id, False)                       # D153: SeedVR2 loads its VAE too
         if recipe.refine:

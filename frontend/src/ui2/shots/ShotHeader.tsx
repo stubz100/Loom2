@@ -23,9 +23,10 @@ function openInWorld(m: CastMember): void {
   useWorld.getState().pick(m.profile, m.version)
 }
 
-function RangeField({ start, end, fps, whole }: { start: number; end: number; fps: number; whole: boolean }) {
+export function RangeField({ start, end, fps, whole }: { start: number; end: number; fps: number; whole: boolean }) {
   const [a, setA] = useState<string | null>(null), [b, setB] = useState<string | null>(null)
   const commit = () => {
+    if (a === null && b === null) return                                  // review K95: a blur without typing pinned the stage's range on the shot
     const s = Number(a ?? start), e = Number(b ?? end)
     setA(null); setB(null)
     if (Number.isFinite(s) && Number.isFinite(e) && 0 <= s && s <= e && (s !== start || e !== end || whole)) void setRange({ start: Math.round(s), end: Math.round(e) })

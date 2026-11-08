@@ -180,6 +180,13 @@ class StampReader:
     def __init__(self, *, stages: Any = None, groups: Any = None, story: Any = None) -> None:
         self.stages, self.groups, self.story = stages, groups, story
         self._cache: dict[str, Any] = {}
+        self._profiles: dict[str, Any] = {}
+
+    def profile(self, pid: str) -> Any:
+        """A profile read once per request (review K88: a card's stamps and names asked for it per mention, ≈ 4 ms a card)."""
+        if pid not in self._profiles:
+            self._profiles[pid] = self.story.profile(pid) if self.story is not None else None
+        return self._profiles[pid]
 
     def same_parts(self, key: str, version: Any, then: Any) -> bool:
         return _same_parts(self, key, version, then)
@@ -197,7 +204,7 @@ class StampReader:
             val = g.revision if g else None
         elif kind == "sheet" and self.story is not None:
             pid, _, vid = rest.partition(":")
-            p = self.story.profile(pid)
+            p = self.profile(pid)
             if p is not None:
                 try:
                     val = sheet_fp(p.version(vid))
@@ -241,16 +248,23 @@ def _why(key: str, then: Any, now: Any, names: dict[str, str]) -> str | None:
     return f"{key} changed"
 
 
-def _names(recipe: ShotRecipe, story: Any) -> dict[str, str]:
-    """Readable names for the stamp keys: a mention's own name for its group, the character and version for a sheet."""
+def _names(recipe: ShotRecipe, reader: Any) -> dict[str, str]:
+    """Readable names for the stamp keys: a mention's own name for its group, the character and version for a sheet. Review K88: each
+    profile read once (the reader's, else one read per profile here)."""
     out: dict[str, str] = {}
+    seen: dict[str, Any] = {}
+
+    def profile(pid: str) -> Any:
+        if pid not in seen:
+            seen[pid] = reader.profile(pid)                                   # a StampReader (cached per request) or a StoryStore
+        return seen[pid]
     for st in recipe.steps:
         for run in st.runs:
             for m in run.settings.get("mentions") or []:
                 if m.get("group_id"):
                     out[m["group_id"]] = f"@{m.get('name') or m['group_id']}"
-                if m.get("profile_id") and story is not None:
-                    p = story.profile(m["profile_id"])
+                if m.get("profile_id") and m["profile_id"] not in seen and reader is not None:
+                    p = profile(m["profile_id"])
                     if p is not None:
                         for v in p.versions:
                             out[f"{p.id}:{v.id}"] = f"{p.name} {v.label or v.id}"
@@ -272,7 +286,7 @@ def recipe_state(version: Any, reader: StampReader) -> dict[str, Any]:
     its last cost and its runs. A step after a stale one is stale ("after <step>")."""
     recipe: ShotRecipe = version.recipe or ShotRecipe(template=default_template(version.stage_id))
     tpl = TEMPLATES.get(recipe.template or default_template(version.stage_id)) or TEMPLATES["i2v"]
-    names = _names(recipe, reader.story)
+    names = _names(recipe, reader if reader.story is not None else None)
     rows: list[dict[str, Any]] = []
     order = [t.id for t in tpl.steps] + [s.id for s in recipe.steps if s.id not in {t.id for t in tpl.steps}]
     labels = {t.id: t for t in tpl.steps}

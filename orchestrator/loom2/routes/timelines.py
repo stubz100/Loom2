@@ -16,6 +16,8 @@ from ..origin import JobOrigin
 from ..schemas import Deleted, JobsSubmitted, TimelineExported, TimelineList
 from ..cuts import AssembleReport, CutTracks
 from ..timelines import StaleTimeline, Timeline, TimelineStore
+from ..mcp_session import McpSessionError
+from ..vsthost import VstHostError
 from .deps import Svc
 
 router = APIRouter(tags=["timelines"])
@@ -140,7 +142,7 @@ async def timeline_export(svc: Svc, tl_id: str, body: TimelineExport):
     try:
         names, lines, audio = await asyncio.to_thread(_story_lookup, ws, cat)
         path, text = await asyncio.to_thread(store.export, tl, body.format, recs, names, lines, audio)
-    except ValueError as e:
+    except (ValueError, McpSessionError, VstHostError) as e:            # review K90: FilmCraft's and the VST host's refusals are said, not a 500
         raise HTTPException(422, str(e))
     after = await asyncio.to_thread(store.get, tl_id)
     if after is not None and after.revision != tl.revision:              # U7c: the export brought a voiced line onto A1 — the clients hear it

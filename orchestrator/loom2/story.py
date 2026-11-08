@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from .fsio import atomic_move, atomic_write_json, new_id, plain_name, read_json, read_json_or, unlink, utc_now
+from .fsio import StateError, atomic_move, atomic_write_json, new_id, plain_name, read_json, read_json_or, unlink, utc_now
 from .models import registry
 from .body import Body
 from .origin import JobOrigin
@@ -46,7 +46,19 @@ PROFILE_SCHEMA_VERSION = 3                         # D93 (B4): 2 — a version h
 SHOT_SCHEMA_VERSION = 2                            # RC2a: 2 — the shot lives in its node's file (`Shot` is the API's view of it)
 FLOW_SCHEMA_VERSION = 2                            # RC2a: 2 — a visual node's file holds its shot
 _LOCK = threading.RLock()                          # RC2a: a node's fields and its shot share one file — every read-modify-write holds this
+                                                   # (review K30 / K31: the world, the profiles and the Flow's index too)
 _NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _read_present(p: Path) -> Any | None:
+    """review K88: a record read, None when its file went between the listing and the read (a bind or a delete meanwhile); a corrupt
+    one still raises."""
+    try:
+        return read_json(p)
+    except StateError as e:
+        if isinstance(e.__cause__, FileNotFoundError):
+            return None
+        raise
 
 ProfileClass = Literal["character", "place", "prop"]
 VersionState = Literal["open", "final"]
@@ -154,6 +166,11 @@ class SheetColour(BaseModel):
 
 
 SHEET_FIELDS = ("appearance", "outfit", "colours", "marks", "body", "height_m")
+# K (D157, Q6: a new version carries the sheet, the body, the A-pose references and the 3D model) — what new_version copied besides the sheet;
+# not the test clip (that version's) nor the LoRA (D157: no LoRA)
+VERSION_CARRIED = ("anim_ref_asset_id", "anim_ref_back_asset_id", "anim_ref_side_asset_id", "anim_ref_note", "hand_ref_asset_id", "feet_ref_asset_id",
+                   "hand_words", "feet_words", "hand_points", "feet_points", "hand_note", "feet_note", "body_fit_from", "body_points",
+                   "shell_asset_id", "shell_from", "model_asset_id", "model_from")
 PART_WORDS = ("hand_words", "feet_words")       # RG1 (Q4): the hand and feet pictures' own words, patched like the sheet
 
 
@@ -1072,10 +1089,13 @@ class _ShotMixin:
             idx = d.get("shots") if isinstance(d, dict) else None
             if isinstance(idx, dict):
                 return idx
-        idx = {r.shot.id: r.id for r in self._records().values() if r.shot is not None}   # type: ignore[attr-defined]
         with _LOCK:
-            self.flow_dir.mkdir(parents=True, exist_ok=True)     # type: ignore[attr-defined]
-            atomic_write_json(p, {"schema_version": 1, "shots": idx})
+            d = read_json_or(p, {})
+            had = d.get("shots") if isinstance(d, dict) else None
+            idx = {r.shot.id: r.id for r in self._records().values() if r.shot is not None}   # type: ignore[attr-defined]
+            if idx != had:                                       # review K88: an unknown shot id rebuilds, but writes only an index that changed
+                self.flow_dir.mkdir(parents=True, exist_ok=True)     # type: ignore[attr-defined]
+                atomic_write_json(p, {"schema_version": 1, "shots": idx})
         return idx
 
     def _index_set(self, sid: str, nid: str | None) -> None:
@@ -1121,16 +1141,12 @@ class _ShotMixin:
         return r.model_copy(update={"shot": r.shot.model_copy(update={"versions": out})})
 
     def set_animatic(self, sid: str, vid: str, a: Animatic | None) -> Shot:
-        """C3: the version's animatic — the newest recording (an earlier one stays a clip in the Bin; files are truth)."""
-        s = self.shot(sid)
-        if s is None:
-            raise KeyError(sid)
-        v = s.version(vid)
-        v.animatic = a
-        s.revision += 1
-        s.updated_at = utc_now()
-        self.save_shot(s)
-        return s
+        """C3: the version's animatic — the newest recording (an earlier one stays a clip in the Bin; files are truth). Review K30: read,
+        changed and written under the lock (a take landing meanwhile stays)."""
+        def apply(part: ShotPart, r: NodeRecord) -> ShotPart:
+            part.version(vid).animatic = a
+            return part
+        return self._change_part(sid, apply)
 
     def save_shot(self, s: Shot) -> None:
         """A shot's view written back as it is: its versions and current version into its node, its name as the node's title."""
@@ -1226,6 +1242,11 @@ class _ShotMixin:
             if st is not None and st.purpose != "stage":
                 raise ValueError(f"{st.name} is a {'bench' if st.purpose == 'bench' else 'line-up'}, not a scene — a shot looks through a stage's camera")
         with _LOCK:
+            held = self._holder(sid)                                          # review K88: a final version refuses before a camera is copied for it
+            if held is None or held.shot is None:
+                raise KeyError(sid)
+            if held.shot.version(vid).state != "open":
+                raise ValueError(f"{held.as_shot().name} {vid} is final — make a new version to change its source")
             if stage_id and camera_id:                                        # U2 (G6): a camera serves one shot — another's is copied for this one
                 camera_id, rev = self._own_camera(stage_id, camera_id, sid)
                 stage_revision = rev if rev is not None else stage_revision
@@ -1262,7 +1283,9 @@ class _ShotMixin:
             src = part.version()
             n = max(int(v.id[1:]) for v in part.versions if v.id[1:].isdigit()) + 1
             v = ShotVersion(id=f"v{n}", stage_id=src.stage_id, camera_id=src.camera_id, stage_revision=src.stage_revision, frame_asset_id=src.frame_asset_id,
-                            clip_id=src.clip_id, derived_from=src.id, recipe=src.recipe.model_copy(deep=True) if src.recipe else None)   # RC0: the plan and its history carry over
+                            clip_id=src.clip_id, derived_from=src.id, recipe=src.recipe.model_copy(deep=True) if src.recipe else None,   # RC0: the plan and its history carry over
+                            range=dict(src.range) if src.range else None, words=src.words, method=src.method,   # K: the shot's own range, words and method …
+                            stage_stamps=dict(src.stage_stamps) if src.stage_stamps else None, stamps_revision=src.stamps_revision)   # … and D178's stamps (no false stale)
             return part.model_copy(update={"versions": [*part.versions, v], "current": v.id})
         return self._change_part(sid, apply)
 
@@ -1448,7 +1471,8 @@ class _FlowMixin:
 
     def _record(self, nid: str) -> NodeRecord | None:
         p = self.node_path(nid)
-        return NodeRecord.model_validate(read_json(p)) if p.is_file() else None
+        raw = _read_present(p) if p.is_file() else None          # review K88: deleted between the check and the read (a bind, a delete)
+        return NodeRecord.model_validate(raw) if raw is not None else None
 
     def _records(self) -> dict[str, NodeRecord]:
         d = self.flow_dir / "nodes"
@@ -1456,7 +1480,10 @@ class _FlowMixin:
             return {}
         out = {}
         for p in d.glob("node_*.json"):
-            r = NodeRecord.model_validate(read_json(p))
+            raw = _read_present(p)                               # review K88: a node file gone since the listing is no node, not a 500
+            if raw is None:
+                continue
+            r = NodeRecord.model_validate(raw)
             out[r.id] = r
         return out
 
@@ -1501,24 +1528,32 @@ class _FlowMixin:
 
     def flow_graph(self, nodes: dict[str, FlowNode] | None = None) -> FlowGraph:
         """The index, made to agree with the node files: a node without a placement gets one (laid out in a row after the others), a
-        placement or edge of a gone node is dropped, the start is the first Start node when the index names none that exists."""
-        nodes = self.flow_nodes() if nodes is None else nodes
-        p = self.flow_dir / "graph.json"
-        g = FlowGraph.model_validate(read_json_or(p, {}))
-        known = {pl.id for pl in g.nodes}
-        placements = [pl for pl in g.nodes if pl.id in nodes]
-        changed = len(placements) != len(g.nodes)
-        for i, nid in enumerate(sorted(n for n in nodes if n not in known)):
-            placements.append(FlowPlacement(id=nid, x=40.0 + 220.0 * (len(placements) % 6), y=40.0 + 140.0 * (len(placements) // 6)))
-            changed = True
-        edges = [e for e in g.edges if e.from_ in nodes and e.to in nodes]
-        changed = changed or len(edges) != len(g.edges)
-        start = g.start if g.start in nodes and nodes[g.start].type == "start" else next((n.id for n in sorted(nodes.values(), key=lambda n: n.created_at) if n.type == "start"), None)
-        changed = changed or start != g.start
-        if changed:
-            g = g.model_copy(update={"nodes": placements, "edges": edges, "start": start, "revision": g.revision + (1 if p.is_file() else 0), "updated_at": utc_now()})
-            self.save_graph(g)
-        return g
+        placement or edge of a gone node is dropped, the start is the first Start node when the index names none that exists.
+        Review K31: the repair runs under the lock against the node files read there — a snapshot taken before (`nodes`, kept for the
+        callers) could miss a node made meanwhile and drop its placement and edges."""
+        return self.flow_state()[0]
+
+    def flow_state(self) -> tuple[FlowGraph, dict[str, FlowNode]]:
+        """Review K31: the index and the nodes read together under the lock (the index repaired against these very nodes) — what the Flow's
+        GET and its validation answer from."""
+        with _LOCK:
+            nodes = self.flow_nodes()
+            p = self.flow_dir / "graph.json"
+            g = FlowGraph.model_validate(read_json_or(p, {}))
+            known = {pl.id for pl in g.nodes}
+            placements = [pl for pl in g.nodes if pl.id in nodes]
+            changed = len(placements) != len(g.nodes)
+            for i, nid in enumerate(sorted(n for n in nodes if n not in known)):
+                placements.append(FlowPlacement(id=nid, x=40.0 + 220.0 * (len(placements) % 6), y=40.0 + 140.0 * (len(placements) // 6)))
+                changed = True
+            edges = [e for e in g.edges if e.from_ in nodes and e.to in nodes]
+            changed = changed or len(edges) != len(g.edges)
+            start = g.start if g.start in nodes and nodes[g.start].type == "start" else next((n.id for n in sorted(nodes.values(), key=lambda n: n.created_at) if n.type == "start"), None)
+            changed = changed or start != g.start
+            if changed:
+                g = g.model_copy(update={"nodes": placements, "edges": edges, "start": start, "revision": g.revision + (1 if p.is_file() else 0), "updated_at": utc_now()})
+                self.save_graph(g)
+            return g, nodes
 
     def _bare(self, r: NodeRecord, g: FlowGraph | None = None) -> bool:
         """RC2a: a Shot node that is nothing but its shot — outside the routes (no edge in or out, not the start), no lines, text, beat,
@@ -1659,9 +1694,12 @@ class _FlowMixin:
 
     def put_graph(self, data: dict[str, Any]) -> FlowGraph:
         """Positions, edges and the start from a client body based on `revision` (409 when stale); edges must join existing nodes on
-        ports they offer."""
-        nodes = self.flow_nodes()
-        cur = self.flow_graph(nodes)
+        ports they offer. Review K31: read, checked and written under the lock (a node made meanwhile keeps its placement)."""
+        with _LOCK:
+            return self._put_graph(data)
+
+    def _put_graph(self, data: dict[str, Any]) -> FlowGraph:
+        cur, nodes = self.flow_state()
         base = data.get("revision")
         if base is not None and int(base) != cur.revision:
             raise StaleFlow(f"the graph is at revision {cur.revision}, the change is based on {base} — reload it first")
@@ -1846,7 +1884,8 @@ class _FlowMixin:
             raise KeyError(v.stage_id)
         copy = stages.create(f"{st.name} · {cur.name}", dict(st.size))
         copy = stages.put(copy.id, {"revision": copy.revision, "objects": [o.model_dump() for o in st.objects], "cameras": [c.model_dump() for c in st.cameras],
-                                    "active_camera": v.camera_id, "keyframes": st.keyframes, "range": st.range.model_dump(), "length": st.length, "ambient": st.ambient})   # C3: the copy as long as its source
+                                    "active_camera": v.camera_id, "keyframes": st.keyframes, "range": st.range.model_dump(), "length": st.length, "ambient": st.ambient,   # C3: the copy as long as its source
+                                    "tracks": {k: [b.model_dump() for b in blocks] for k, blocks in (st.tracks or {}).items()}})   # K: the figures' clip blocks too
         return self.set_source(sid, vid, copy.id, v.camera_id, copy.revision)   # type: ignore[attr-defined]
 
     def _prune_book(self) -> None:
@@ -2392,18 +2431,20 @@ class StoryStore(_ShotMixin, _FlowMixin):
         return World.model_validate(read_json_or(self.world_path, {}))
 
     def put_world(self, data: dict[str, Any]) -> World:
-        """Replace the world from a client body based on `revision` (409 when stale); schema and timestamps are the server's."""
-        cur = self.world()
-        base = data.get("revision")
-        if base is not None and int(base) != cur.revision:
-            raise StaleWorld(f"the world is at revision {cur.revision}, the change is based on {base} — reload it first")
-        keep = ("logline", "synopsis", "styles", "default_style", "spine", "variables", "sample_scene")   # U2 (G2): the Look's sample scene
-        merged = {**cur.model_dump(), **{k: v for k, v in data.items() if k in keep}, "schema_version": WORLD_SCHEMA_VERSION,
-                  "revision": cur.revision + 1, "created_at": cur.created_at, "updated_at": utc_now()}
-        w = World.model_validate(merged)
-        check_world(w)
-        atomic_write_json(self.world_path, w.model_dump())
-        return w
+        """Replace the world from a client body based on `revision` (409 when stale); schema and timestamps are the server's. Review K30:
+        under the lock — two PUTs on one revision cannot both pass."""
+        with _LOCK:
+            cur = self.world()
+            base = data.get("revision")
+            if base is not None and int(base) != cur.revision:
+                raise StaleWorld(f"the world is at revision {cur.revision}, the change is based on {base} — reload it first")
+            keep = ("logline", "synopsis", "styles", "default_style", "spine", "variables", "sample_scene")   # U2 (G2): the Look's sample scene
+            merged = {**cur.model_dump(), **{k: v for k, v in data.items() if k in keep}, "schema_version": WORLD_SCHEMA_VERSION,
+                      "revision": cur.revision + 1, "created_at": cur.created_at, "updated_at": utc_now()}
+            w = World.model_validate(merged)
+            check_world(w)
+            atomic_write_json(self.world_path, w.model_dump())
+            return w
 
     def style(self, style_id: str) -> StoryStyle | None:
         return next((s for s in self.world().styles if s.id == style_id), None)
@@ -2414,22 +2455,53 @@ class StoryStore(_ShotMixin, _FlowMixin):
 
     def profile(self, pid: str) -> Profile | None:
         p = self.profile_path(pid)
-        return Profile.model_validate(read_json(p)) if p.is_file() else None
+        raw = _read_present(p) if p.is_file() else None          # review K88: a profile deleted between the check and the read is none
+        return Profile.model_validate(raw) if raw is not None else None
 
     def profiles(self) -> list[Profile]:
         if not self.profiles_dir.is_dir():
             return []
-        out = [Profile.model_validate(read_json(p)) for p in self.profiles_dir.glob("prf_*.json")]
+        out = [Profile.model_validate(raw) for raw in map(_read_present, self.profiles_dir.glob("prf_*.json")) if raw is not None]
         return sorted(out, key=lambda p: p.updated_at, reverse=True)
 
     def save_profile(self, p: Profile) -> None:
         self.profiles_dir.mkdir(parents=True, exist_ok=True)
         atomic_write_json(self.profile_path(p.id), p.model_dump())
 
+    def _change_profile(self, pid: str, fn: Any) -> Any:
+        """Review K30: every read-modify-write of a profile — read under `_LOCK`, `fn(cur)` returns the changed profile (or raises; None:
+        nothing to change, None is returned), its revision bumped and its time stamped, written once. A job's product landing (a Fill's
+        face, a fit, a shell) and the author's sheet edit take turns: neither writes over the other, and two edits on one revision cannot
+        both pass the revision check."""
+        with _LOCK:
+            cur = self.profile(pid)
+            if cur is None:
+                raise KeyError(pid)
+            p = fn(cur)
+            if p is None:
+                return None
+            p = Profile.model_validate({**p.model_dump(), "revision": cur.revision + 1, "updated_at": utc_now()})
+            self.save_profile(p)
+            return p
+
+    def _change_version(self, pid: str, vid: str, fn: Any) -> Any:
+        """Review K30: one version of a profile changed under the lock — `fn(v, cur)` changes the version's copy in place (or raises;
+        returns False: nothing to change, None is returned)."""
+        def apply(cur: Profile) -> Profile | None:
+            versions = [v.model_copy() for v in cur.versions]
+            v = next((x for x in versions if x.id == vid), None)
+            if v is None:
+                raise KeyError(f"no version {vid!r}")
+            if fn(v, cur) is False:
+                return None
+            return Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions]})
+        return self._change_profile(pid, apply)
+
     def create_profile(self, name: str, cls: ProfileClass, groups: GroupStore, hero_asset_id: str | None = None, stub: str = "", **sheet: Any) -> Profile:
-        """A profile with version 1: its reference set is a new album group named after it; the hero (when given) moves onto that page
-        as its cover and first reference. D93 (B4): `sheet` holds the version's appearance / outfit / colours / marks / label; `stub` is
-        the appearance (the schema-1 word, still taken)."""
+        """A profile with version 1: its reference set is a new album group named after it; the hero (when given) goes onto that page
+        as its cover and first reference — moved when it is nobody's (Unprocessed, the Sketches, the Imports), else a copy (review K36,
+        D93 A2: copied, never taken — a final version's locked set keeps its picture). D93 (B4): `sheet` holds the version's appearance /
+        outfit / colours / marks / label; `stub` is the appearance (the schema-1 word, still taken)."""
         name = name.strip()
         if not name:
             raise ValueError("a profile needs a name")
@@ -2439,7 +2511,16 @@ class StoryStore(_ShotMixin, _FlowMixin):
             from .sizes import prop_height
             fields["height_m"] = prop_height(name, fields.get("appearance"))
         stub_v = ProfileVersion.model_validate({"id": "v1", "group_id": "-", **fields})   # a bad colour is refused before the group is made
-        from .bins import version_home
+        from .bins import is_free, version_home
+        if hero_asset_id:                                                  # review K36: the hero settled before the home and its set are made
+            rec = groups.cat.get(hero_asset_id)
+            if rec is None or rec.trashed_at is not None or rec.kind != "image":
+                raise ValueError("the hero must be an image in the Catalogue")
+            if not is_free(groups, groups.parent.get(("asset", hero_asset_id))):
+                dup = groups.cat.duplicate(hero_asset_id)
+                if dup is None:
+                    raise ValueError("the hero could not be copied (its file is missing)")
+                hero_asset_id = dup.id
         draft = Profile(name=name, cls=cls, current="v1", versions=[stub_v])
         h = version_home(groups, draft, "v1")                                     # U2 (G1): the version's home in the Bin, its reference set inside
         g = groups.create(f"{name} · v1", parent_id=h.id, kind="role", role="reference")
@@ -2455,74 +2536,58 @@ class StoryStore(_ShotMixin, _FlowMixin):
     def patch_profile(self, pid: str, data: dict[str, Any]) -> Profile:
         """Name, class, the current version, and an open version's sheet / hero from a client body based on `revision` (409 when stale).
         D93 (B4): a version's sheet fields (`stub` is taken as the appearance) are read-only once it is final; its label is not (a name, not
-        the look)."""
-        cur = self.profile(pid)
-        if cur is None:
-            raise KeyError(pid)
-        base = data.get("revision")
-        if base is not None and int(base) != cur.revision:
-            raise StaleProfile(f"the profile is at revision {cur.revision}, the change is based on {base} — reload it first")
-        versions = [v.model_copy() for v in cur.versions]
-        for patch in data.get("versions") or []:
-            v = next((x for x in versions if x.id == patch.get("id")), None)
-            if v is None:
-                raise ValueError(f"no version {patch.get('id')!r}")
-            patch = {("appearance" if k == "stub" else k): x for k, x in patch.items()}
-            if v.state != "open" and any(k in patch for k in (*SHEET_FIELDS, *PART_WORDS, "hero_asset_id")):
-                raise ValueError(f"version {v.id} is locked — its fields are read-only; make a new version")
-            i = versions.index(v)
-            versions[i] = ProfileVersion.model_validate({**v.model_dump(), **{k: patch[k] for k in (*SHEET_FIELDS, *PART_WORDS, "hero_asset_id", "label") if k in patch}})
-        merged = {**cur.model_dump(), **{k: v for k, v in data.items() if k in ("name", "cls", "current", "voice_id")}, "versions": [v.model_dump() for v in versions],
-                  "id": pid, "schema_version": PROFILE_SCHEMA_VERSION, "revision": cur.revision + 1, "created_at": cur.created_at, "updated_at": utc_now()}
-        p = Profile.model_validate(merged)
-        check_profile(p)
-        self.save_profile(p)
-        return p
+        the look). Review K30: the revision checked and the profile written under the lock."""
+        def apply(cur: Profile) -> Profile:
+            base = data.get("revision")
+            if base is not None and int(base) != cur.revision:
+                raise StaleProfile(f"the profile is at revision {cur.revision}, the change is based on {base} — reload it first")
+            versions = [v.model_copy() for v in cur.versions]
+            for patch in data.get("versions") or []:
+                v = next((x for x in versions if x.id == patch.get("id")), None)
+                if v is None:
+                    raise ValueError(f"no version {patch.get('id')!r}")
+                patch = {("appearance" if k == "stub" else k): x for k, x in patch.items()}
+                if v.state != "open" and any(k in patch for k in (*SHEET_FIELDS, *PART_WORDS, "hero_asset_id")):
+                    raise ValueError(f"version {v.id} is locked — its fields are read-only; make a new version")
+                i = versions.index(v)
+                versions[i] = ProfileVersion.model_validate({**v.model_dump(), **{k: patch[k] for k in (*SHEET_FIELDS, *PART_WORDS, "hero_asset_id", "label") if k in patch}})
+            merged = {**cur.model_dump(), **{k: v for k, v in data.items() if k in ("name", "cls", "current", "voice_id")}, "versions": [v.model_dump() for v in versions],
+                      "id": pid, "schema_version": PROFILE_SCHEMA_VERSION, "created_at": cur.created_at}
+            p = Profile.model_validate(merged)
+            check_profile(p)
+            return p
+        return self._change_profile(pid, apply)
 
     def set_anim_ref(self, pid: str, vid: str, side: str, asset_id: str | None, *, only_if_empty: bool = False) -> Profile | None:
         """CA0: a version's animation reference (front) or back view — the author's pick, or the first result of a make (`only_if_empty`).
         No revision guard and a final version takes it too, like its LoRA: the reference is the version's product, not an edit of its sheet.
-        None when `only_if_empty` and the slot is taken."""
-        cur = self.profile(pid)
-        if cur is None:
-            raise KeyError(pid)
+        None when `only_if_empty` and the slot is taken. Review K30: under the lock (`_change_version`), as every setter below."""
         field = {"back": "anim_ref_back_asset_id", "side": "anim_ref_side_asset_id",                 # D175: the side view
                  "hand": "hand_ref_asset_id", "feet": "feet_ref_asset_id"}.get(side, "anim_ref_asset_id")   # RG1: the hand and feet pictures
-        versions = [v.model_copy() for v in cur.versions]
-        v = next((x for x in versions if x.id == vid), None)
-        if v is None:
-            raise KeyError(f"no version {vid!r}")
-        if only_if_empty and getattr(v, field):
-            return None
-        if side in ("back", "side", "hand", "feet") and cur.cls != "character":
-            raise ValueError(f"only a character has a {side} {'picture' if side in ('hand', 'feet') else 'view'}")
-        setattr(v, field, asset_id)
-        if side == "front" and asset_id != v.body_fit_from:
-            v.anim_ref_note = None                                   # S8: the note was about the reference it replaces
-        if side == "hand" and asset_id != (v.hand_points or {}).get("from"):
-            v.hand_note = None                                       # RG1: the note was about the picture it replaces
-        if side == "feet" and asset_id != (v.feet_points or {}).get("from"):
-            v.feet_note = None
-        p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
-        self.save_profile(p)
-        return p
+
+        def apply(v: ProfileVersion, cur: Profile) -> bool:
+            if only_if_empty and getattr(v, field):
+                return False
+            if side in ("back", "side", "hand", "feet") and cur.cls != "character":
+                raise ValueError(f"only a character has a {side} {'picture' if side in ('hand', 'feet') else 'view'}")
+            setattr(v, field, asset_id)
+            if side == "front" and asset_id != v.body_fit_from:
+                v.anim_ref_note = None                               # S8: the note was about the reference it replaces
+            if side == "hand" and asset_id != (v.hand_points or {}).get("from"):
+                v.hand_note = None                                   # RG1: the note was about the picture it replaces
+            if side == "feet" and asset_id != (v.feet_points or {}).get("from"):
+                v.feet_note = None
+            return True
+        return self._change_version(pid, vid, apply)
 
     def set_model(self, pid: str, vid: str, asset_id: str | None, source: str | None) -> Profile:
         """D110 (PS2): a prop version's 3D model and the image it was made from (None clears both). A product of the version like its
         animation reference: no revision guard, a final version takes it too."""
-        cur = self.profile(pid)
-        if cur is None:
-            raise KeyError(pid)
-        if cur.cls != "prop":
-            raise ValueError("only a prop has a 3D model")
-        versions = [v.model_copy() for v in cur.versions]
-        v = next((x for x in versions if x.id == vid), None)
-        if v is None:
-            raise KeyError(f"no version {vid!r}")
-        v.model_asset_id, v.model_from = asset_id, (source if asset_id else None)
-        p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
-        self.save_profile(p)
-        return p
+        def apply(v: ProfileVersion, cur: Profile) -> None:
+            if cur.cls != "prop":
+                raise ValueError("only a prop has a 3D model")
+            v.model_asset_id, v.model_from = asset_id, (source if asset_id else None)
+        return self._change_version(pid, vid, apply)
 
     def set_place_set(self, pid: str, vid: str, ps: PlaceSet | None, revision: int | None = None) -> Profile:
         """CW6: a place version's set (None clears it) — a fit landing, a bake, or the author's edit, which names the profile's revision it
@@ -2577,46 +2642,31 @@ class StoryStore(_ShotMixin, _FlowMixin):
     def set_fitted_body(self, pid: str, vid: str, body: Body, asset_id: str, points: dict[str, Any] | None = None, note: str | None = None) -> Profile:
         """CA1b (D104): the version's body fitted to its animation reference (SDPose's proportions), with the points it was fitted to and what
         the stance check saw (CS1: S4, S8). Like the reference itself, a product of the version (no revision guard, a final version too)."""
-        cur = self.profile(pid)
-        if cur is None:
-            raise KeyError(pid)
-        versions = [v.model_copy() for v in cur.versions]
-        v = next((x for x in versions if x.id == vid), None)
-        if v is None:
-            raise KeyError(f"no version {vid!r}")
-        v.body, v.body_fit_from, v.body_points, v.anim_ref_note = body, asset_id, points, note
-        p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
-        self.save_profile(p)
-        return p
+        def apply(v: ProfileVersion, cur: Profile) -> None:
+            v.body, v.body_fit_from, v.body_points, v.anim_ref_note = body, asset_id, points, note
+        return self._change_version(pid, vid, apply)
 
     def set_part_fit(self, pid: str, vid: str, part: str, *, shape: Any = None, points: dict[str, Any] | None = None, note: str | None = None) -> Profile:
         """RG1: a hand (or the feet) read from its picture — the shape on the body (the right one; a left the author unlinked stays its own,
         Q2), the points read on the version; or, when the read failed, only the note why (`shape` None: the last good read stays). A product
         of the version like the fitted body (no revision guard, a final version too)."""
         from .hands import Feet, Hands
-        cur = self.profile(pid)
-        if cur is None:
-            raise KeyError(pid)
-        versions = [v.model_copy() for v in cur.versions]
-        v = next((x for x in versions if x.id == vid), None)
-        if v is None:
-            raise KeyError(f"no version {vid!r}")
-        if shape is not None:
-            body = v.body or Body()
+
+        def apply(v: ProfileVersion, cur: Profile) -> None:
+            if shape is not None:
+                body = v.body or Body()
+                if part == "hand":
+                    body = body.model_copy(update={"hand_shape": Hands(right=shape, left=body.hand_shape.left if body.hand_shape else None)})
+                    v.hand_points = points
+                else:
+                    body = body.model_copy(update={"foot_shape": Feet(right=shape, left=body.foot_shape.left if body.foot_shape else None)})
+                    v.feet_points = points
+                v.body = Body.model_validate(body.model_dump())
             if part == "hand":
-                body = body.model_copy(update={"hand_shape": Hands(right=shape, left=body.hand_shape.left if body.hand_shape else None)})
-                v.hand_points = points
+                v.hand_note = note
             else:
-                body = body.model_copy(update={"foot_shape": Feet(right=shape, left=body.foot_shape.left if body.foot_shape else None)})
-                v.feet_points = points
-            v.body = Body.model_validate(body.model_dump())
-        if part == "hand":
-            v.hand_note = note
-        else:
-            v.feet_note = note
-        p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
-        self.save_profile(p)
-        return p
+                v.feet_note = note
+        return self._change_version(pid, vid, apply)
 
     def refit_part(self, pid: str, vid: str, part: str, points: dict[str, Any]) -> Profile:
         """RG3 (R4, F4): a hand (or a foot) fitted again on the CPU to points the author dragged on its picture — the hand's 21, or the foot's
@@ -2653,90 +2703,47 @@ class StoryStore(_ShotMixin, _FlowMixin):
     def set_stance_note(self, pid: str, vid: str, note: str | None) -> Profile:
         """D140: what a fit read of the reference's stance, when it fitted nothing (an arms-down picture): the body, its points and the
         picture it was fitted to stay as they were."""
-        cur = self.profile(pid)
-        if cur is None:
-            raise KeyError(pid)
-        versions = [v.model_copy() for v in cur.versions]
-        v = next((x for x in versions if x.id == vid), None)
-        if v is None:
-            raise KeyError(f"no version {vid!r}")
-        v.anim_ref_note = note
-        p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
-        self.save_profile(p)
-        return p
+        return self._change_version(pid, vid, lambda v, cur: setattr(v, "anim_ref_note", note))
 
     def set_pose(self, pid: str, vid: str, name: str, pose: Pose | None) -> Profile:
         """AP1b (D141): one of a character version's own poses saved under `name` (None deletes it). The version's product like its shell:
         no revision guard, a final version takes it too (a pose fitted later does not change the look)."""
-        cur = self.profile(pid)
-        if cur is None:
-            raise KeyError(pid)
-        if cur.cls != "character":
-            raise ValueError("only a character has poses")
         name = name.strip()
-        if not name or len(name) > 60:
-            raise ValueError("a pose's name is 1–60 characters")
-        versions = [v.model_copy() for v in cur.versions]
-        v = next((x for x in versions if x.id == vid), None)
-        if v is None:
-            raise KeyError(f"no version {vid!r}")
-        v.poses = {k: x for k, x in v.poses.items() if k != name} | ({name: pose} if pose is not None else {})
-        p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
-        self.save_profile(p)
-        return p
+
+        def apply(v: ProfileVersion, cur: Profile) -> None:
+            if cur.cls != "character":
+                raise ValueError("only a character has poses")
+            if not name or len(name) > 60:
+                raise ValueError("a pose's name is 1–60 characters")
+            v.poses = {k: x for k, x in v.poses.items() if k != name} | ({name: pose} if pose is not None else {})
+        return self._change_version(pid, vid, apply)
 
     def set_kept_from_idea(self, pid: str, vid: str, ref: dict[str, str], *, anim_ref_asset_id: str | None = None, body: Body | None = None,
                            body_points: dict[str, Any] | None = None, note: str | None = None, shell_asset_id: str | None = None) -> Profile:
         """CW1: a version made by *Keep ▶* — where it came from, and the variant's clay carried over: the A-pose picture as its animation
         reference, the body fitted to it with its points, the shell made from it."""
-        cur = self.profile(pid)
-        if cur is None:
-            raise KeyError(pid)
-        versions = [v.model_copy() for v in cur.versions]
-        v = next((x for x in versions if x.id == vid), None)
-        if v is None:
-            raise KeyError(f"no version {vid!r}")
-        v.from_idea = IdeaRef.model_validate(ref)
-        if anim_ref_asset_id:
-            v.anim_ref_asset_id = anim_ref_asset_id
-        if body is not None:                                           # fitted to that picture — or (Prototype ▸ on a figure in Clay) by hand
-            v.body, v.body_fit_from, v.body_points, v.anim_ref_note = body, anim_ref_asset_id, body_points if anim_ref_asset_id else None, note
-        if shell_asset_id:
-            v.shell_asset_id, v.shell_from = shell_asset_id, anim_ref_asset_id
-        p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
-        self.save_profile(p)
-        return p
+        def apply(v: ProfileVersion, cur: Profile) -> None:
+            v.from_idea = IdeaRef.model_validate(ref)
+            if anim_ref_asset_id:
+                v.anim_ref_asset_id = anim_ref_asset_id
+            if body is not None:                                       # fitted to that picture — or (Prototype ▸ on a figure in Clay) by hand
+                v.body, v.body_fit_from, v.body_points, v.anim_ref_note = body, anim_ref_asset_id, body_points if anim_ref_asset_id else None, note
+            if shell_asset_id:
+                v.shell_asset_id, v.shell_from = shell_asset_id, anim_ref_asset_id
+        return self._change_version(pid, vid, apply)
 
     def set_shell(self, pid: str, vid: str, asset_id: str | None, source: str | None) -> Profile:
         """CS2: a character version's shell and the reference it was made from (None clears both). A product of the version like its
         animation reference: no revision guard, a final version takes it too."""
-        cur = self.profile(pid)
-        if cur is None:
-            raise KeyError(pid)
-        if cur.cls != "character":
-            raise ValueError("only a character has a shell (a prop has its 3D model)")
-        versions = [v.model_copy() for v in cur.versions]
-        v = next((x for x in versions if x.id == vid), None)
-        if v is None:
-            raise KeyError(f"no version {vid!r}")
-        v.shell_asset_id, v.shell_from = asset_id, (source if asset_id else None)
-        p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
-        self.save_profile(p)
-        return p
+        def apply(v: ProfileVersion, cur: Profile) -> None:
+            if cur.cls != "character":
+                raise ValueError("only a character has a shell (a prop has its 3D model)")
+            v.shell_asset_id, v.shell_from = asset_id, (source if asset_id else None)
+        return self._change_version(pid, vid, apply)
 
     def set_anim_test(self, pid: str, vid: str, clip_id: str | None) -> Profile:
         """CA0: the version's latest test animation (a clip). No revision guard, a final version too (a product, like its reference)."""
-        cur = self.profile(pid)
-        if cur is None:
-            raise KeyError(pid)
-        versions = [v.model_copy() for v in cur.versions]
-        v = next((x for x in versions if x.id == vid), None)
-        if v is None:
-            raise KeyError(f"no version {vid!r}")
-        v.anim_test_clip_id = clip_id
-        p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
-        self.save_profile(p)
-        return p
+        return self._change_version(pid, vid, lambda v, cur: setattr(v, "anim_test_clip_id", clip_id))
 
     def version_of_album(self, gid: str) -> tuple[Profile, ProfileVersion] | None:
         """D122: the Cast version whose reference set is this album page, if any (an album trained on goes to its version)."""
@@ -2749,17 +2756,9 @@ class StoryStore(_ShotMixin, _FlowMixin):
     def set_version_lora(self, pid: str, vid: str, lora: str | None, trigger: str | None) -> Profile:
         """LT2: the trainer's promotion (and a delete's clearing) — server-side, no revision guard; a locked version takes it too (the LoRA is
         the version's product, not an edit of its reference set)."""
-        cur = self.profile(pid)
-        if cur is None:
-            raise KeyError(pid)
-        versions = [v.model_copy() for v in cur.versions]
-        v = next((x for x in versions if x.id == vid), None)
-        if v is None:
-            raise KeyError(f"no version {vid!r}")
-        v.lora, v.trigger = lora, trigger
-        p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
-        self.save_profile(p)
-        return p
+        def apply(v: ProfileVersion, cur: Profile) -> None:
+            v.lora, v.trigger = lora, trigger
+        return self._change_version(pid, vid, apply)
 
     def clear_lora(self, lid: str) -> list[Profile]:
         """Every version pointing at a deleted LoRA loses its slot (the trigger stays — a retrain reuses it)."""
@@ -2773,64 +2772,62 @@ class StoryStore(_ShotMixin, _FlowMixin):
 
     def new_version(self, pid: str, groups: GroupStore) -> Profile:
         """A full copy of the current version (loom R53 / R58): the reference set duplicated (its assets copied — an asset lives on one page,
-        D34), the fields copied, `derived_from` stamped; the copy becomes the current version, open."""
-        cur = self.profile(pid)
-        if cur is None:
-            raise KeyError(pid)
-        src = cur.version()
-        n = max(int(v.id[1:]) for v in cur.versions if v.id[1:].isdigit()) + 1
-        g = groups.duplicate_group(src.group_id)
-        groups.update(g.id, name=f"{cur.name} · v{n}")
-        from .bins import as_role, home
-        base = f"world/{cur.cls}/{cur.id}"
-        as_role(groups, g.id, home(groups, f"{base}/v{n}", {base: cur.name}), "reference")   # U2 (G1): the new version's home, its copy inside
-        g = groups.groups[g.id]
-        v = ProfileVersion.model_validate({**src.model_dump(include={*SHEET_FIELDS, "poses", "place_set"}), "id": f"v{n}", "group_id": g.id,   # D93 (B4): the sheet copied, a label of its own; AP1b: the poses fitted to its body; CW6: a place's set
-                                           "hero_asset_id": g.cover_id if src.hero_asset_id else None, "derived_from": src.id})
-        if v.place_set is not None and any(f.fill_job_id for f in v.place_set.faces):          # V24: a Fill running on the source stays the source's
-            v = v.model_copy(update={"place_set": v.place_set.model_copy(update={"faces": [f.model_copy(update={"fill_job_id": None}) for f in v.place_set.faces]})})
-        p = cur.model_copy(update={"versions": [*cur.versions, v], "current": v.id, "revision": cur.revision + 1, "updated_at": utc_now()})
-        check_profile(p)
-        self.save_profile(p)
-        return p
+        D34), the fields copied, `derived_from` stamped; the copy becomes the current version, open. Review K30: under the lock from the
+        read to the write (two at once would both be v{n}; a product landing meanwhile stays)."""
+        with _LOCK:
+            cur = self.profile(pid)
+            if cur is None:
+                raise KeyError(pid)
+            src = cur.version()
+            n = max(int(v.id[1:]) for v in cur.versions if v.id[1:].isdigit()) + 1
+            g = groups.duplicate_group(src.group_id)
+            groups.update(g.id, name=f"{cur.name} · v{n}")
+            from .bins import as_role, home
+            base = f"world/{cur.cls}/{cur.id}"
+            as_role(groups, g.id, home(groups, f"{base}/v{n}", {base: cur.name}), "reference")   # U2 (G1): the new version's home, its copy inside
+            g = groups.groups[g.id]
+            carried = {*SHEET_FIELDS, "poses", "place_set", *VERSION_CARRIED}                         # K (D157 Q6): the A-pose references, the fit, the shell, the model too
+            v = ProfileVersion.model_validate({**src.model_dump(include=carried), "id": f"v{n}", "group_id": g.id,   # D93 (B4): the sheet copied, a label of its own; AP1b: the poses fitted to its body; CW6: a place's set
+                                               "hero_asset_id": g.cover_id if src.hero_asset_id else None, "derived_from": src.id})
+            if v.place_set is not None and any(f.fill_job_id for f in v.place_set.faces):          # V24: a Fill running on the source stays the source's
+                v = v.model_copy(update={"place_set": v.place_set.model_copy(update={"faces": [f.model_copy(update={"fill_job_id": None}) for f in v.place_set.faces]})})
+            p = cur.model_copy(update={"versions": [*cur.versions, v], "current": v.id, "revision": cur.revision + 1, "updated_at": utc_now()})
+            check_profile(p)
+            self.save_profile(p)
+            return p
 
     def lock_version(self, pid: str, vid: str, groups: GroupStore) -> Profile:
         """The version becomes final: its reference group is locked (every mutation route answers 423), its fields read-only; mentions keep
-        resolving to it."""
-        cur = self.profile(pid)
-        if cur is None:
-            raise KeyError(pid)
-        v = cur.version(vid)
-        if v.state == "final":
-            return cur
-        if not v.hero_asset_id:
-            raise ValueError("a version without a hero cannot be locked")
-        groups.set_locked(v.group_id, True)
-        versions = [x.model_copy(update={"state": "final", "locked_at": utc_now()}) if x.id == vid else x for x in cur.versions]
-        p = cur.model_copy(update={"versions": versions, "revision": cur.revision + 1, "updated_at": utc_now()})
-        self.save_profile(p)
-        return p
+        resolving to it. Review K30: under the lock."""
+        with _LOCK:
+            cur = self.profile(pid)
+            if cur is None:
+                raise KeyError(pid)
+            v = cur.version(vid)
+            if v.state == "final":
+                return cur
+            if not v.hero_asset_id:
+                raise ValueError("a version without a hero cannot be locked")
+            groups.set_locked(v.group_id, True)
+            versions = [x.model_copy(update={"state": "final", "locked_at": utc_now()}) if x.id == vid else x for x in cur.versions]
+            return self._change_profile(pid, lambda c: c.model_copy(update={"versions": versions}))
 
     def set_candidates(self, pid: str, vid: str, group_id: str) -> Profile:
-        cur = self.profile(pid)
-        if cur is None:
-            raise KeyError(pid)
-        versions = [x.model_copy(update={"candidates_group_id": group_id}) if x.id == vid else x for x in cur.versions]
-        p = cur.model_copy(update={"versions": versions, "revision": cur.revision + 1, "updated_at": utc_now()})
-        self.save_profile(p)
-        return p
+        return self._change_version(pid, vid, lambda v, cur: setattr(v, "candidates_group_id", group_id))   # review K30
 
     def ensure_candidates(self, pid: str, vid: str | None, groups: GroupStore) -> tuple[Profile, str, bool]:
-        """The version's candidates page — made on first use (Expand, a casting run from Generate, "as a candidate"): (profile, its id, made)."""
-        p = self.profile(pid)
-        if p is None:
-            raise KeyError(pid)
-        v = p.version(vid)
-        if v.candidates_group_id and v.candidates_group_id in groups.groups:
-            return p, v.candidates_group_id, False
-        from .bins import version_home
-        gid = groups.create(f"{p.name} · {v.id} · candidates", parent_id=version_home(groups, p, v.id).id, kind="role", role="candidates").id   # U2 (G1)
-        return self.set_candidates(pid, v.id, gid), gid, True
+        """The version's candidates page — made on first use (Expand, a casting run from Generate, "as a candidate"): (profile, its id, made).
+        Review K30: checked and made under the lock (two first uses at once make one page)."""
+        with _LOCK:
+            p = self.profile(pid)
+            if p is None:
+                raise KeyError(pid)
+            v = p.version(vid)
+            if v.candidates_group_id and v.candidates_group_id in groups.groups:
+                return p, v.candidates_group_id, False
+            from .bins import version_home
+            gid = groups.create(f"{p.name} · {v.id} · candidates", parent_id=version_home(groups, p, v.id).id, kind="role", role="candidates").id   # U2 (G1)
+            return self.set_candidates(pid, v.id, gid), gid, True
 
     def add_assets(self, pid: str, vid: str | None, ids: list[str], role: Literal["hero", "reference", "candidate"], groups: GroupStore,
                    cat: Catalogue) -> dict[str, Any]:
@@ -2876,22 +2873,26 @@ class StoryStore(_ShotMixin, _FlowMixin):
                 copied[aid] = dup.id; out.append(dup.id)
         if role == "hero":
             groups.update(target, cover_id=out[0])
-            versions = [x.model_copy(update={"hero_asset_id": out[0]}) if x.id == v.id else x for x in p.versions]
-            p = p.model_copy(update={"versions": versions, "revision": p.revision + 1, "updated_at": utc_now()})
-            self.save_profile(p)
+
+            def hero(x: ProfileVersion, cur: Profile) -> None:              # review K30: into the profile as it is now, under the lock
+                if x.state != "open":
+                    raise VersionLocked(f"{cur.name} {x.id} is final — its look is fixed; make a new version to add to it")
+                x.hero_asset_id = out[0]
+            p = self._change_version(pid, v.id, hero)
         return {"profile": p, "group_id": target, "role": role, "asset_ids": out, "moved": moved, "copied": copied, "already": already, "made_page": made}
 
     def delete_profile(self, pid: str, groups: GroupStore | None = None) -> bool:
         """The record goes; its groups and images stay in the album (unlocked again)."""
-        p = self.profile(pid)
-        if p is None:
-            return False
-        if groups is not None:
-            for v in p.versions:
-                if v.group_id in groups.groups and groups.groups[v.group_id].locked:
-                    groups.set_locked(v.group_id, False)
-        self.profile_path(pid).unlink()
-        return True
+        with _LOCK:
+            p = self.profile(pid)
+            if p is None:
+                return False
+            if groups is not None:
+                for v in p.versions:
+                    if v.group_id in groups.groups and groups.groups[v.group_id].locked:
+                        groups.set_locked(v.group_id, False)
+            unlink(self.profile_path(pid), missing_ok=True)            # review K88: fsio's retries (a reader holding the file on Windows)
+            return True
 
 
 def resolve_style(recipe: T2I, store: StoryStore | None) -> T2I:

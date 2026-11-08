@@ -17,6 +17,12 @@ type Kind = Asset['kind']
 const KINDS: Record<Exclude<KindFilter, 'all'>, Kind[]> = { pictures: ['image', 'mask', 'document-render'], clips: ['video'], audio: ['audio'], models: ['mesh'] }
 export const kindsOf = (f: KindFilter): Kind[] => (f === 'all' ? [] : KINDS[f])
 export const passes = (it: BinThing, f: KindFilter): boolean => f === 'all' || KINDS[f].includes(it.asset.kind)
+/** The things the grid shows: a home's (its kind chip filters on the server) or a search's through its kind chip. Review K70: the selection,
+ *  the range, Select all, the arrows and the large view walk this list — they walked the unfiltered search, so Ctrl+A then Delete trashed
+ *  the hidden clips and sounds too. */
+export function shownItems(s: Pick<BinState, 'items' | 'query' | 'filter'>): BinThing[] {
+  return s.query && s.filter !== 'all' ? s.items.filter((x) => passes(x, s.filter)) : s.items
+}
 /** The roles as a tile's badge and the Inspector say them. */
 export const ROLE_LABEL: Record<string, string> = { hero: '★ hero', reference: 'ref', a_pose_front: 'A-pose front', a_pose_back: 'A-pose back', a_pose_side: 'A-pose side', hand_picture: 'hand picture', feet_picture: 'feet picture', set_picture: 'set picture',
   model: 'model', candidate: '', final: 'final', frame: 'frame', clip: 'clip', sample: 'sample', board: 'board' }
@@ -85,7 +91,8 @@ interface BinState {
   patch: (a: Asset) => void
   drop: (id: string) => void
   setFilter: (f: KindFilter) => void
-  select: (id: string | null, how?: 'single' | 'toggle' | 'range') => void
+  /** `primary` (review K95): the thing becomes the one the single verbs act on, the selection kept (a right-click inside a selection). */
+  select: (id: string | null, how?: 'single' | 'toggle' | 'range' | 'primary') => void
   selectAll: () => void
   pin: (a: Asset) => void
   unpinAll: () => void
@@ -120,7 +127,7 @@ export const useBin = create<BinState>()((set, get) => ({
     const first = !get().homes.length
     set({ homes: t.homes, trash: t.trash, ...(first ? { expanded: Object.fromEntries(t.homes.map((h) => [h.id, true])) } : {}) })
     const open = get().open
-    if (open && open !== TRASH && !homesById(t.homes).has(open)) set({ open: null, items: [], path: '', total: 0, next: null, selected: null, selection: [] })   // its home went (rehomed)
+    if (open && open !== TRASH && !homesById(t.homes).has(open)) set({ open: null, items: [], path: '', total: 0, next: null, selected: null, selection: [], viewing: false })   // its home went (rehomed)
     if (get().open === null && !get().query && t.homes.length) await get().openHome(t.homes[0].id)
   },
   openHome: async (id, shelf) => {
@@ -156,7 +163,9 @@ export const useBin = create<BinState>()((set, get) => ({
     try {
       const r = await unwrap(http.GET('/bin/search', { params: { query: { q } } }))
       if (n !== seq) return
-      set({ open: null, items: r.items, path: '', total: r.items.length, next: null, selected: null, selection: [] })
+      // review K69: a search read again (every asset or group frame during a job does) keeps what is selected and still found — it cleared
+      // the selection and the Inspector every few seconds while the large view stayed on
+      set({ open: null, items: r.items, path: '', total: r.items.length, next: null, ...kept(shownItems({ items: r.items, query: q, filter: get().filter }), get()) })
     } finally { if (n === seq) set({ loading: false }) }
   },
   reload: () => get().refresh({ tree: true, home: true }),
@@ -184,11 +193,18 @@ export const useBin = create<BinState>()((set, get) => ({
     set({ items: items.filter((x) => x.asset.id !== id), total: total !== null ? Math.max(0, total - 1) : null, selection: selection.filter((x) => x !== id),
       ...(selected === id ? { selected: null, viewing: false } : {}) })
   },
-  setFilter: (filter) => { if (filter === get().filter) return; set({ filter }); const o = get().open; if (o && !get().query) void get().openHome(o) },
+  setFilter: (filter) => {
+    if (filter === get().filter) return
+    set({ filter })
+    if (get().query) { set(kept(shownItems(get()), get())); return }               // review K70: a search's chip hides things — they leave the selection
+    const o = get().open; if (o) void get().openHome(o)
+  },
   select: (id, how = 'single') => {
-    const { items, selection, selected } = get()
+    const { selection, selected } = get()
+    const items = shownItems(get())                                                // review K70: the range runs over what is shown
     let next: string[]
     if (!id) next = []
+    else if (how === 'primary' && selection.includes(id)) next = selection
     else if (how === 'toggle') next = selection.includes(id) ? selection.filter((x) => x !== id) : [...selection, id]
     else if (how === 'range' && selected) {
       const order = items.map((x) => x.asset.id), a = order.indexOf(selected), b = order.indexOf(id)
@@ -198,7 +214,7 @@ export const useBin = create<BinState>()((set, get) => ({
     set({ selection: next, selected: primary, ...(primary ? {} : { viewing: false }) })
     postLoupe({ type: 'show', assetId: primary })                                     // D155: the detached loupe follows
   },
-  selectAll: () => { const ids = get().items.map((x) => x.asset.id); const cur = get().selected; set({ selection: ids, selected: cur && ids.includes(cur) ? cur : ids[0] ?? null }) },
+  selectAll: () => { const ids = shownItems(get()).map((x) => x.asset.id); const cur = get().selected; set({ selection: ids, selected: cur && ids.includes(cur) ? cur : ids[0] ?? null }) },
   pin: (a) => { const p = get().pins; set({ pins: p.some((x) => x.id === a.id) ? p.filter((x) => x.id !== a.id) : [...p, a].slice(-4) }) },
   unpinAll: () => set({ pins: [], comparing: false }),
   compare: (on) => set({ comparing: on && get().pins.length >= 2 }),
@@ -224,17 +240,19 @@ export const useBin = create<BinState>()((set, get) => ({
   toggle: (id) => set({ expanded: { ...get().expanded, [id]: !get().expanded[id] } }),
 }))
 
-/** What stays of the selection when the open place is read again: the things still in it. */
-function kept(items: BinThing[], s: Pick<BinState, 'selected' | 'selection'>): Pick<BinState, 'selected' | 'selection'> {
+/** What stays of the selection when the open place is read again: the things still in it; the large view only while it has a thing. */
+function kept(items: BinThing[], s: Pick<BinState, 'selected' | 'selection' | 'viewing'>): Pick<BinState, 'selected' | 'selection' | 'viewing'> {
   const ids = new Set(items.map((x) => x.asset.id))
   const selection = s.selection.filter((x) => ids.has(x))
-  return { selection, selected: s.selected && ids.has(s.selected) ? s.selected : selection[selection.length - 1] ?? null }
+  const selected = s.selected && ids.has(s.selected) ? s.selected : selection[selection.length - 1] ?? null
+  return { selection, selected, viewing: s.viewing && !!selected }
 }
 
-/** The things selected, in the grid's order (the verbs' subject): the selection, else the one the Inspector shows. */
-export function selectedThings(s: Pick<BinState, 'items' | 'selection' | 'selected'> = useBin.getState()): BinThing[] {
+/** The things selected, in the grid's order (the verbs' subject): the selection, else the one the Inspector shows — of the things shown
+ *  (review K70). */
+export function selectedThings(s: Pick<BinState, 'items' | 'selection' | 'selected'> & Partial<Pick<BinState, 'query' | 'filter'>> = useBin.getState()): BinThing[] {
   const ids = new Set(s.selection.length ? s.selection : s.selected ? [s.selected] : [])
-  return s.items.filter((x) => ids.has(x.asset.id))
+  return shownItems({ items: s.items, query: s.query ?? '', filter: s.filter ?? 'all' }).filter((x) => ids.has(x.asset.id))
 }
 
 /** Whether a frame touches the open place: a change of one of its pages, a thing landing on no page while the imports are open, the

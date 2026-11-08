@@ -15,7 +15,7 @@ import { useMakeFor } from '../../store/origin'
 import { useStory } from '../story/storyStore'
 import { PresetPanel } from '../../frame/PresetPanel'
 import { fieldGlyph } from '../../frame/presetGlyphs'
-import { handleKeysAt, markUsed, runCommand } from '../../frame/commands'
+import { command, handleKeysAt, keyLabel, markUsed, runCommand } from '../../frame/commands'
 import { inField, primaryInField } from '../../frame/fieldKeys'
 import { showMenu } from '../../frame/ContextMenu'
 import { WindowsView } from './WindowsView'
@@ -23,7 +23,7 @@ import type { SuiteParts } from '../../frame/suiteParts'
 import { byOrder, shortName } from '../../store/modelCaps'
 import { useSession } from '../../store/session'
 import { clipMenu, playerMenu } from './animateCommands'
-import { CAMERA_MOVES, DEFAULT_CAMERA, fmtTime, modelRules, MOTION_CHIPS, useAnimate, visibleClips, type AnimPanel, type CameraMove } from './animateStore'
+import { CAMERA_MOVES, DEFAULT_CAMERA, fmtTime, frameMin, modelRules, MOTION_CHIPS, settleModel, useAnimate, visibleClips, type AnimPanel, type CameraMove } from './animateStore'
 import { ClipFoot, StageClipCard, useStageLoad } from '../stage/StageParts'
 import { ShotHead } from '../stage/ShotStepper'
 import { FinalSection, FinalShotFoot } from '../stage/FinalPanel'
@@ -35,7 +35,6 @@ import './animate.css'
 import '../../frame/modelCards.css'   // D186: the model cards' base rules
 import { onlyAssets, useDropTarget, type DragPayload } from '../../frame/drag'
 import { beatDrop, endDrop, startDrop } from '../../frame/dropRules'
-import { navigate } from '../../frame/router'
 import { registerKeyHost } from '../../frame/keyHosts'
 
 const an = () => useAnimate.getState()
@@ -77,7 +76,7 @@ function InputsTab() {
   return (
     <div className="anim-form">
       <div className="slots full"><Slot which="start" /><span className="slot-swap"><CommandButton id="anim.swap" /></span><Slot which="end" /></div>
-      {p.end && cur && !beats && !cur.recipes.flf_holds && <span className="hint">First/last-frame on {cur.short}: a large pose or composition gap morphs mid-clip — try {beatModel ? `${beatModel.short} beats` : 'a different end frame'} or a shorter clip when it does (11 §3a).</span>}
+      {p.end && cur && !beats && !cur.recipes.flf_holds && <span className="hint full">may morph mid-clip <Help text={`First/last-frame on ${cur.short}: a large pose or composition gap morphs mid-clip — try ${beatModel ? `${beatModel.short} beats` : 'a different end frame'} or a shorter clip when it does (11 §3a).`} /></span>}{/* review K95: rule 11 */}
       <label>prompt</label>
       <div>
         <textarea value={p.prompt} onChange={(e) => an().set({ prompt: e.target.value })} placeholder="motion, camera, mood — e.g. she turns toward the window, soft push-in" />
@@ -87,7 +86,7 @@ function InputsTab() {
         <label>negative</label>
         <div>
           <label className="chk"><input type="checkbox" checked={p.use_negative} onChange={(e) => an().set({ use_negative: e.target.checked })} /> write my own</label>
-          {p.use_negative ? <textarea value={p.negative} onChange={(e) => an().set({ negative: e.target.value })} placeholder="what to avoid" /> : <span className="hint">{cur ? `${cur.short} uses its stock negative list${cfgPresets.length ? `; it only matters above CFG 1 (${cfgPresets.join(' / ')})` : ''}.` : 'the model uses its stock negative list.'}</span>}
+          {p.use_negative ? <textarea value={p.negative} onChange={(e) => an().set({ negative: e.target.value })} placeholder="what to avoid" /> : <span className="hint">stock list <Help text={cur ? `${cur.short} uses its stock negative list${cfgPresets.length ? `; it only matters above CFG 1 (${cfgPresets.join(' / ')})` : ''}.` : 'The model uses its stock negative list.'} /></span>}
         </div>
       </>}
       {beats && <>
@@ -102,7 +101,7 @@ function InputsTab() {
             </div>)}
           </div>
           <div ref={beatRef} className={`slot${beatOver ? ' over' : ''}`} style={{ aspectRatio: 'auto', minHeight: 40, marginTop: 6 }}>
-            drop frames here as mid-clip keyframes (strength 0.3–1.0; set each one's frame in its number field — the ♦ on the timeline shows where)
+            drop frames here <Help text="Frames dropped here are mid-clip keyframes (strength 0.3–1.0); set each one's frame in its number field — the ♦ on the timeline shows where." />
           </div>
         </div>
       </>}
@@ -178,13 +177,10 @@ function EstimateLine() {
       <span>runs at <b>{pv.width}×{pv.height}</b> · <b>{pv.frames}</b> f @ {pv.fps} fps ({(pv.frames / pv.fps).toFixed(1)} s)</span>
       <span>{pv.label}</span>
       <span>≈ <b>{Math.round(secs / 60)} min</b>{count > 1 ? ` × ${count}` : ''} <small>({pv.estimate.source})</small></span>
-      {pv.missing.length > 0 && <span className="missing">missing: {pv.missing.map((m) => m.model_id).join(', ')} <button onClick={() => navigate({ suite: 'models' })}>Fetch {pv.missing.reduce((a, m) => a + (m.approx_gb ?? 0), 0).toFixed(0)} GB</button></span>}
+      {pv.missing.length > 0 && <span className="missing">missing: {pv.missing.map((m) => m.model_id).join(', ')} <button onClick={() => useSession.getState().openModels({ missing: true })}>Fetch {pv.missing.reduce((a, m) => a + (m.approx_gb ?? 0), 0).toFixed(0)} GB</button></span>}{/* review K95: the sheet over Performance, not World behind it */}
     </div>
   )
 }
-
-/** D193: the smallest frame count on the model's grid (base + step·n) the panel offers — 9 for Wan / LTX, 22 for H3. */
-const frameMin = (r: { base: number; step: number }) => { let n = r.base; while (n < 9) n += r.step; return n }
 
 function LengthTab() {
   const p = useAnimate((s) => s.panel)
@@ -206,7 +202,7 @@ function LengthTab() {
       <label>frames</label>
       <div className="row"><input type="number" min={frameMin(r)} max={257} step={r.step} value={p.frames} onChange={num('frames', frameMin(r), 257)} /><span className="hint" style={{ margin: 0 }}>{r.step}n + {r.base} · {(p.frames / p.fps).toFixed(1)} s</span></div>
       <label>fps</label>
-      <div className="row"><input type="number" min={8} max={48} value={p.fps} onChange={num('fps', 8, 48)} disabled={r.fpsFixed} title={r.fpsFixed ? `${r.short} runs at ${r.fps} fps (its sound is made at that rate)` : undefined} /><span className="hint" style={{ margin: 0 }}>{r.fpsFixed ? `fixed at ${r.fps}` : `native ${r.fps}; the master keeps it, conform is an export step (D27)`}</span></div>
+      <div className="row"><input type="number" min={8} max={48} value={p.fps} onChange={num('fps', 8, 48)} disabled={r.fpsFixed} title={r.fpsFixed ? `${r.short} runs at ${r.fps} fps (its sound is made at that rate)` : undefined} /><span className="hint" style={{ margin: 0 }}>{r.fpsFixed ? `fixed at ${r.fps}` : <>native {r.fps} <Help text="The master keeps the rate it was made at; conforming to the project's rate is an export step (D27)." /></>}</span></div>
       <label>seed</label>
       <div className="row">
         <div className="segmented">{(['random', 'fixed', 'increment'] as const).map((m) => <button key={m} className={p.seed_mode === m ? 'active' : ''} onClick={() => an().set({ seed_mode: m })}>{m}</button>)}</div>
@@ -279,7 +275,7 @@ function useAnimateLoad(): void {
   useEffect(() => { if (project?.open) { an().refreshPreview(); void an().loadPresets() } }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
   // C3 / D65: no model yet, or a persisted one this build does not offer (LTX under `open`) → the variant's i2v default
   const def = useSession((s) => s.capabilities?.defaults.i2v)
-  useEffect(() => { if (caps && !caps.models[an().panel.model_id]) { const next = (def && caps.models[def] ? def : '') || byOrder(caps.models)[0]?.[0]; if (next) an().setModel(next) } }, [caps, def])
+  useEffect(() => { settleModel() }, [caps, def])                         // review K85: the store settles it on every /capabilities too
 }
 
 // D95 (AN1) → D121 (proto01_animate 26 §5.3): the Performance level's column — Shot · Performance · Clips (AW3: a clip's details under its row). The Performance
@@ -619,10 +615,13 @@ function FramesTab({ clip }: { clip: Clip }) {
       </div>
       <h4 className="sect">harvested ({pins.length})</h4>
       <div className="insp-thumbs">{[...pins].sort((x, y) => x.frame - y.frame).map((p) => <img key={p.asset_id} src={api.thumbUrl(p.asset_id, 256)} alt="" className={p.frame === frame ? 'cur' : ''} title={`frame ${p.frame} — click to go there`} onClick={() => an().setFrame(p.frame)} />)}</div>
-      {!pins.length && <span className="hint">No frames extracted. <Help text="Extract frame (F) or Extract range (Shift+F): the frames land in the Bin with frame-extract lineage and open in Edit." /></span>}
+      {!pins.length && <span className="hint">No frames extracted. <Help text={`Extract frame${keyOf('anim.extractFrame')} or Extract range${keyOf('anim.extractRange')}: the frames land in the Bin with frame-extract lineage and open in Edit.`} /></span>}
     </div>
   )
 }
+
+/** Review K95: a command's key as the help says it — the registry's (Alt+F, or the user's own), never a literal. */
+const keyOf = (id: string): string => { const k = command(id)?.keys; return k ? ` (${keyLabel(k)})` : '' }
 
 function LineageTab({ clip }: { clip: Clip }) {
   const caps = useSession((s) => s.capabilities)

@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api } from '../../api/client'
 import { Help } from '../../frame/Help'
 import { useSession } from '../../store/session'
+import { containedRect, pointIn } from '../story/placeThingsStore'
 import { useStage } from './stageStore'
 import { useThings } from './thingsStore'
 
@@ -37,18 +38,29 @@ export function ThingsSheet() {
   const shadows = useThings((s) => s.shadows)
   const o = useStage((s) => s.current?.objects.find((x) => x.id === setId))
   const [name, setName] = useState('')
-  const [disp, setDisp] = useState<{ w: number; h: number } | null>(null)
+  const [disp, setDisp] = useState<{ x: number; y: number; w: number; h: number } | null>(null)   // K113: the drawn picture inside the img box
   const [kept, setKept] = useState<Record<string, HTMLCanvasElement>>({})          // the kept things' tinted masks, by mask asset
   const canvas = useRef<HTMLCanvasElement>(null)
   const pic = useRef<HTMLImageElement>(null)
+  const sheet = useRef<HTMLDivElement>(null)
   const close = () => void useThings.getState().open(null)
 
+  // review K93: the sheet takes the focus when it opens — a modal owns its keys (the stage's key hook skips a target inside .modal); without it
+  // Ctrl+Z under the sheet undid a stage edit
+  useEffect(() => { if (setId && !sheet.current?.contains(document.activeElement)) sheet.current?.focus() }, [setId, o?.plate_asset_id])
   useEffect(() => {                                                                   // Escape closes (an open dialog keeps its own)
     if (!setId) return
     const h = (e: KeyboardEvent) => { if (e.key === 'Escape' && !useSession.getState().ask) { e.preventDefault(); e.stopImmediatePropagation(); void useThings.getState().open(null) } }
     window.addEventListener('keydown', h, { capture: true })
     return () => window.removeEventListener('keydown', h, { capture: true })
   }, [setId])
+  useEffect(() => {                                                                   // K113: re-measured when the sheet's size changes
+    const im = pic.current
+    if (!im || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => { if (im.naturalWidth) setDisp(containedRect(im.clientWidth, im.clientHeight, im.naturalWidth, im.naturalHeight)) })
+    ro.observe(im)
+    return () => ro.disconnect()
+  }, [setId, o?.plate_asset_id])
   useEffect(() => {                                                                   // the kept things' masks, loaded once each
     const things = o?.things ?? []
     for (const [k, t] of things.entries()) {
@@ -83,11 +95,12 @@ export function ThingsSheet() {
   }, [mask, shadows, points, disp, size, o?.things, kept])
 
   if (!setId || !o?.plate_asset_id) return null
-  const measure = () => { const im = pic.current; if (im) setDisp({ w: im.clientWidth, h: im.clientHeight }) }
+  // K113 (as K82): object-fit: contain letterboxes the picture below ~980 px of window height — the overlay lies over the drawn picture only
+  const measure = () => { const im = pic.current; if (im) setDisp(containedRect(im.clientWidth, im.clientHeight, im.naturalWidth, im.naturalHeight)) }
   const mark = (e: React.MouseEvent<HTMLCanvasElement>, label: 0 | 1) => {
     if (!size || !disp) return
-    const r = e.currentTarget.getBoundingClientRect()
-    void useThings.getState().addPoint(((e.clientX - r.left) / disp.w) * size.w, ((e.clientY - r.top) / disp.h) * size.h, label)
+    const q = pointIn(e.clientX, e.clientY, e.currentTarget.getBoundingClientRect(), size)
+    void useThings.getState().addPoint(q.x, q.y, label)
   }
   const coverage = mask && size ? (mask.reduce((a, v) => a + (v > 127 ? 1 : 0), 0) / (size.w * size.h)) * 100 : 0
   const things = o.things ?? []
@@ -95,7 +108,7 @@ export function ThingsSheet() {
   const keep = async () => { if (await useThings.getState().keep(name.trim())) setName('') }
   return (
     <div className="modal-backdrop" onClick={close}>
-      <div className="modal things-sheet" role="dialog" aria-label="Things in the picture" onClick={(e) => e.stopPropagation()}>
+      <div ref={sheet} tabIndex={-1} className="modal things-sheet" role="dialog" aria-label="Things in the picture" onClick={(e) => e.stopPropagation()}>
         <div className="head">Things in the picture · {o.name}
           <Help text="Pick each thing that stands in the place (a crate, a table, a chair): click it and SAM 3 finds it; a right-click — or Not it — marks a part that is not it. Keep it under a name. Make the things (the set's row) cleans the plate under them and under the shadows they cast (violet: found beside each thing, on the side away from the light), and makes each a 3D model standing where it stood." />
           <span className="spacer" /><button className="quiet" onClick={close} title="Close (Esc)" aria-label="Close"><X size={16} /></button></div>
@@ -110,7 +123,7 @@ export function ThingsSheet() {
           </div>
           <div className="things-pic">
             <img ref={pic} src={api.assetUrl(o.plate_asset_id)} alt="" draggable={false} onLoad={measure} />
-            <canvas ref={canvas} aria-label="the picture: click a thing" onClick={(e) => mark(e, mode)} onContextMenu={(e) => { e.preventDefault(); mark(e, mode === 1 ? 0 : 1) }} />
+            <canvas ref={canvas} aria-label="the picture: click a thing" style={disp ? { left: disp.x, top: disp.y, width: disp.w, height: disp.h } : undefined} onClick={(e) => mark(e, mode)} onContextMenu={(e) => { e.preventDefault(); mark(e, mode === 1 ? 0 : 1) }} />
           </div>
         </div>
         <div className="foot">

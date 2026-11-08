@@ -41,7 +41,7 @@ def test_the_inpaint_graphs_chain_the_deck_after_the_source(object_info: dict):
     last = lat[-1]
     assert fill.graph["9"]["inputs"]["conditioning"] == [last, 0]                           # the guider takes the chain's end
     assert fill.graph[last]["inputs"]["conditioning"] == [lat[1], 0] and fill.graph[lat[1]]["inputs"]["conditioning"] == ["8", 0]
-    assert any(n["class_type"] == "ImageScale" and n["inputs"]["width"] == 1024 for n in fill.graph.values())
+    assert not any(n["class_type"] == "ImageScale" for n in fill.graph.values())               # D194 (K1): a reference keeps its shape, fitted before the upload
     assert fill.summary["refs"] == 2 and not [p for p in fill.problems if "not in enum" not in p]
     match = graphs.compile_recipe(Inpaint(document_id="d", mode="fill_match", prompt_text="x", refs=two[:1], seeds=[1]), roster, object_info, 1, "loom2/t", ref_files=REFS, inputs=IMG)
     lat = _latents(match)

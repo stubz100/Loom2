@@ -26,6 +26,9 @@ export class LayerPixels {
   version = ++versionSeq        // D52: moves on every GPU upload — derived (feathered / density) masks recompute; F7: unique app-wide
   private damage: Rect | 'all' | null = 'all'   // D52: what changed since the derived-mask cache last looked
   private strokeTiles = new Map<string, TileSnapshot>()
+  /** review K94: a canvas derived from this one (a mask's feathered / density copy, maskDerived.ts) — destroyed with it (it kept its GPU
+   *  texture after the mask was gone). */
+  companion: { destroy(): void } | null = null
 
   width: number
   height: number
@@ -165,7 +168,20 @@ export class LayerPixels {
     return c.toDataURL('image/png')
   }
 
-  destroy(): void { this.texture.destroy(true) }
+  destroy(): void { this.companion?.destroy(); this.companion = null; this.texture.destroy(true) }
+}
+
+/** review K66: a canvas's thumbnail (PNG data URL) made again only when its version moved — the panels asked for one per layer and mask
+ *  on every revision bump (every scrub move, keystroke and lasso corner). */
+const THUMBS = new WeakMap<object, Map<number, { version: number; url: string }>>()
+export function cachedThumbnail(lp: Pick<LayerPixels, 'version' | 'thumbnail'>, size: number): string {
+  let bySize = THUMBS.get(lp)
+  if (!bySize) { bySize = new Map(); THUMBS.set(lp, bySize) }
+  const hit = bySize.get(size)
+  if (hit && hit.version === lp.version) return hit.url
+  const url = lp.thumbnail(size)
+  bySize.set(size, { version: lp.version, url })
+  return url
 }
 
 /** A canvas whose alpha is the selection/mask value (RGB white), for destination-out / source-in masking. */

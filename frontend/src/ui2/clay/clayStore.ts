@@ -172,6 +172,11 @@ export function useOpenScene(): Pick<StageDoc, 'id' | 'name' | 'purpose' | 'obje
 }
 
 export type SceneLite = { id: string; name: string; purpose: string; objects: number; cameras: number; range: { start: number; end: number }; fps: number }
+/** review K93: what the scene picker shows of the stage store's stages — a stage made, removed or renamed; not a save's new revision (every
+ *  save re-read every stage document of the project). */
+export function sceneListKey(stages: readonly { id: string; name: string }[], current: { id: string; name: string } | null | undefined): string {
+  return JSON.stringify([stages.map((s) => [s.id, s.name]), current ? [current.id, current.name] : null])
+}
 /** The project's scenes (the stages that are no bench): read when the Scenes rail opens, again when one is made or renamed. */
 export function useScenes(on: boolean): SceneLite[] {
   const [list, setList] = useState<SceneLite[]>([])
@@ -183,7 +188,7 @@ export function useScenes(on: boolean): SceneLite[] {
       .map((s) => ({ id: s.id, name: s.name, purpose: s.purpose ?? 'stage', objects: s.objects.length, cameras: s.cameras.length, range: { start: s.range?.start ?? 0, end: s.range?.end ?? 120 }, fps: s.size?.fps ?? 24 }))) }).catch(() => undefined)
     read()
     let off: (() => void) | undefined
-    void import('../../suites/stage/stageStore').then(({ useStage }) => { if (live) off = useStage.subscribe((x, p) => { if (x.stages !== p.stages || x.current?.name !== p.current?.name) read() }) })
+    void import('../../suites/stage/stageStore').then(({ useStage }) => { if (live) off = useStage.subscribe((x, p) => { if ((x.stages !== p.stages || x.current !== p.current) && sceneListKey(x.stages, x.current) !== sceneListKey(p.stages, p.current)) read() }) })   // review K93
     return () => { live = false; off?.() }
   }, [on, tick])
   return list

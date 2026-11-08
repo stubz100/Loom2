@@ -10,6 +10,7 @@ EDL text. Writes go through fsio (temp → fsync → replace); `revision` guards
 """
 from __future__ import annotations
 
+import logging
 import shutil
 from pathlib import Path
 from typing import Any, Callable
@@ -19,6 +20,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from .clips import ClipRecord
 from .fsio import atomic_write_json, atomic_write_text, new_id, plain_name, read_json, slugify, utc_now
 from .workspace import Workspace
+
+log = logging.getLogger("loom2.timelines")
 
 TIMELINE_SCHEMA_VERSION = 1
 
@@ -406,7 +409,12 @@ class TimelineStore:
         return self.view(Timeline.model_validate(read_json(p))) if p.is_file() else None
 
     def list(self) -> list[Timeline]:
-        out = [self.view(Timeline.model_validate(read_json(p))) for p in self.dir.glob("tl_*.json")]
+        out = []
+        for p in self.dir.glob("tl_*.json"):
+            try:
+                out.append(self.view(Timeline.model_validate(read_json(p))))
+            except Exception as e:  # noqa: BLE001 — review K90: one unreadable cut no longer fails every cut's listing
+                log.warning("cut %s left out of the list: %s", p.name, e)
         return sorted(out, key=lambda t: t.updated_at, reverse=True)
 
     def _filmcraft(self) -> bool:
@@ -436,7 +444,6 @@ class TimelineStore:
         merged = {**cur.model_dump(by_alias=True), **{k: v for k, v in data.items() if k in ("name", "fps", "w", "h", "clips", "overlaps", "route")},
                   "id": tl_id, "schema_version": TIMELINE_SCHEMA_VERSION, "revision": cur.revision + 1, "created_at": cur.created_at, "updated_at": utc_now()}
         tl = Timeline.model_validate(merged)
-        check(tl, clip_frames)
         if self._filmcraft():
             from .cuts import CUT_FILE
 
@@ -445,12 +452,14 @@ class TimelineStore:
             if cur.file and shape(cur) == shape(tl):                # CE2: the lane did not change (a rename): V1 and its edits stay as they are
                 self.save(tl.model_copy(update={"file": CUT_FILE, "clips": [], "overlaps": [], "route": None}))
                 return self.get(tl_id)                              # type: ignore[return-value]
+            check(tl, clip_frames)                                  # review K: after the short-cut — a rename never answers for the lane
             self.cuts.write(tl, records or {})
             self.save(tl.model_copy(update={"file": CUT_FILE, "clips": [], "overlaps": [], "route": None}))
             return self.get(tl_id)                              # type: ignore[return-value]
         if cur.file:
             from .cuts import CutError
             raise CutError("FilmCraft is not built, and this cut's file is a FilmCraft project: it can be read, not changed (scripts/build_filmcraft.py)")
+        check(tl, clip_frames)
         self.save(tl)
         return tl
 
@@ -473,12 +482,12 @@ class TimelineStore:
         p = self.path(tl_id)
         if not p.is_file():
             return False
-        p.unlink()
         d = self.export_dir(tl_id)
         if self.cuts is not None:
             self.cuts.forget(tl_id)                             # CE1: the session lets go of the cut's project first
         if d.is_dir():
             shutil.rmtree(d)                                    # its exports, the Resolve folder (D125) and the cut's project among them
+        p.unlink()                                              # review K90: the record last — a folder that cannot go leaves the cut listed
         return True
 
     def export(self, tl: Timeline, fmt: str, clips: dict[str, ClipRecord], name_of: Callable[[TimelineClip], str | None] | None = None,

@@ -4,7 +4,7 @@
 // LibraryWorld.tsx, D92). SY1: the Cast tab — Panel: the profiles by class; Strip: the
 // version selector; Stage: the readiness row (D125), the version page (hero, the character sheet — D93 B4, the coverage grid, the candidates and Add to the reference set);
 // Inspector: the profile and the version. Mouse-first (D32): every verb is a button or a menu entry.
-import { Film, ImagePlus, Lock } from 'lucide-react'
+import { CopyPlus, Film, ImagePlus, Lock, Pencil, Trash2 } from 'lucide-react'
 import { IdeaBench, IdeaInspector, IdeasList } from './Ideas'
 import { useIdeas } from './ideasStore'
 import { Help } from '../../frame/Help'
@@ -20,7 +20,7 @@ import type { Asset, Shot, ShotVersion, StoryBeat, StoryVariable, WorldStyle } f
 import { cellOf, coverageGrid } from './coverage'
 import { ITEM_LABEL, readinessOf, rowSummary, shotNeeds } from './castReady'
 import { spineTodo } from './episodeVerbs'
-import { ROUTE_LABEL, bareNode } from './board'
+import { ROUTE_LABEL, bareNode, lineVoiceStale } from './board'
 import { TrainingBlock } from './TrainingBlock'
 import { VoicesBlock } from './VoicesBlock'
 import { LipsyncBlock } from './LipsyncBlock'
@@ -39,7 +39,7 @@ import { FlowRecipe, ShotRecipe } from './recipe/StoryRecipe'
 import { flatGroups, useAlbum } from '../../store/album'
 import { findNode } from './styleSamples'
 import { storyKey } from './storyKeys'
-import { CLASS_LABEL, SECTIONS, revealClass, sy, ttsJobFor, useStory, voiceLabel, type ProfileClass, type Section } from './storyStore'
+import { CLASS_LABEL, SECTIONS, enumValues, revealClass, sy, ttsJobFor, useStory, variableName, voiceLabel, type ProfileClass, type Section } from './storyStore'
 import { FlowCanvas } from './flow/FlowCanvas'
 import { SequenceInspector, SequencePanel } from './episode/SequencePanel'
 import { SequenceStage } from './episode/SequenceStage'
@@ -422,13 +422,27 @@ function BeatRow({ b, i, active }: { b: StoryBeat; i: number; active: boolean })
   )
 }
 
+/** K79, K80: a field typed as raw text and committed on blur or Enter (Esc puts it back) — a variable's name renamed per keystroke lost the
+ *  focus at every character, and the enum values re-joined per keystroke ate a typed comma. */
+function CommitText({ value, label, placeholder, onCommit }: { value: string; label: string; placeholder?: string; onCommit: (text: string) => void }) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const commit = () => { if (draft !== null && draft !== value) onCommit(draft); setDraft(null) }
+  return <input type="text" value={draft ?? value} aria-label={label} placeholder={placeholder} onChange={(e) => setDraft(e.target.value)} onBlur={commit}
+    onKeyDown={(e) => { if (e.key === 'Enter') commit(); else if (e.key === 'Escape') setDraft(null) }} />
+}
+
 function VarRow({ v, active }: { v: StoryVariable; active: boolean }) {
+  const rename = (text: string) => {                                                  // K79: a name another variable has is refused, said
+    const r = variableName(text, (sy().world?.variables ?? []).filter((x) => x.name !== v.name).map((x) => x.name))
+    if ('why' in r) { useSession.getState().toast(r.why, 'error'); return }
+    if (r.name !== v.name) sy().setVariable(v.name, { name: r.name })
+  }
   return (
     <div className={`row-item var-row${active ? ' active' : ''}`} data-id={v.name} onClick={() => sy().select({ kind: 'variable', id: v.name })} onContextMenu={(e) => showMenu(e, menu('variable', v.name))}>
-      <input type="text" value={v.name} aria-label="variable name" placeholder="name" onChange={(e) => sy().setVariable(v.name, { name: e.target.value.replace(/[^A-Za-z0-9_]/g, '_') })} />
+      <CommitText value={v.name} label="variable name" placeholder="name" onCommit={rename} />
       <select value={v.type} aria-label="variable type" onChange={(e) => sy().setVariable(v.name, { type: e.target.value as StoryVariable['type'] })}><option value="bool">bool</option><option value="enum">enum</option></select>
       {v.type === 'enum'
-        ? <input type="text" value={v.values.join(', ')} aria-label="enum values" placeholder="values, comma-separated" onChange={(e) => sy().setVariable(v.name, { values: e.target.value.split(',').map((x) => x.trim()).filter(Boolean) })} />
+        ? <CommitText value={v.values.join(', ')} label="enum values" placeholder="values, comma-separated" onCommit={(text) => { const values = enumValues(text); if (values.length) sy().setVariable(v.name, { values }) }} />
         : <span className="k">true / false</span>}
       {v.type === 'enum'
         ? <select value={String(v.default)} aria-label="default value" onChange={(e) => sy().setVariable(v.name, { default: e.target.value })}>{v.values.map((x) => <option key={x} value={x}>{x}</option>)}</select>
@@ -446,13 +460,47 @@ export function FlowVariables() {
   useEffect(() => { if (!useStory.getState().world) void sy().load() }, [])
   if (!world) return null
   return (
-    <section className="flow-vars" data-testid="flow-variables">
-      <h4>Variables <Help text={"Bool or enum flags: the Flow's Conditions read them, its Actions set them, Play shows their values."} /></h4>
+    <>
+      <section className="flow-vars" data-testid="flow-variables">
+        <h4>Variables <Help text={"Bool or enum flags: the Flow's Conditions read them, its Actions set them, Play shows their values."} /></h4>
+        <div className="rows">
+          {world.variables.map((v, i) => <VarRow key={i} v={v} active={selected?.kind === 'variable' && selected.id === v.name} />)}{/* K79: keyed by place, not by the name being typed */}
+          {!world.variables.length && <span className="hint">none yet</span>}
+        </div>
+        <div className="adder"><CommandButton id="story.world.addVariable" text /></div>
+      </section>
+      <FlowTemplates />
+    </>
+  )
+}
+
+/** K81 (rule 3): the Shot templates' home in the shell — the Flow's left column, under the variables (World › Presets, where they were
+ *  listed, is the old shell's). A click picks one; its row's buttons and its right-click use, rename or delete it. They load with the Flow. */
+function FlowTemplates() {
+  const ts = useStory((s) => s.shotTemplates)
+  const selected = useStory((s) => s.selected)
+  const menu = (): MenuItem[] => [{ cmd: 'story.template.use' }, sep, { cmd: 'story.template.rename' }, { cmd: 'story.template.delete' }]
+  return (
+    <section className="flow-vars flow-templates" data-testid="flow-templates">
+      <h4>Shot templates <Help text={"Shots kept to start others from: a node's kind, its lines, its route and its camera. Save as a template… on a Shot's right-click keeps one; New Shot from it places one beside the node picked in the Flow (its scene, a camera on its stage)."} /></h4>
       <div className="rows">
-        {world.variables.map((v) => <VarRow key={v.name} v={v} active={selected?.kind === 'variable' && selected.id === v.name} />)}
-        {!world.variables.length && <span className="hint">none yet</span>}
+        {ts.map((t) => {
+          const pick = () => sy().select({ kind: 'template', id: t.id })
+          const verb = (id: string) => (e: ReactMouseEvent) => { e.stopPropagation(); pick(); runCommand(id) }
+          return (
+            <div key={t.id} className={`template-row${selected?.kind === 'template' && selected.id === t.id ? ' active' : ''}`} data-template={t.id} onClick={pick}
+              onContextMenu={(e) => { pick(); showMenu(e, menu()) }}>
+              <span className="name" title={`${NODE_LABEL[t.node_type]}${t.lines.length ? ` · ${t.lines.length} line${t.lines.length === 1 ? '' : 's'}` : ''}${t.route ? ` · ${ROUTE_LABEL[t.route] ?? t.route}` : ''}${t.camera ? ` · ${Math.round(t.camera.focal_mm)} mm` : ''}`}>{t.name}</span>
+              <span className="tools">
+                <button type="button" className="quiet" title={command('story.template.use')?.label} aria-label={`New Shot from ${t.name}`} onClick={verb('story.template.use')}><CopyPlus size={14} /></button>
+                <button type="button" className="quiet" title={command('story.template.rename')?.label} aria-label={`Rename ${t.name}`} onClick={verb('story.template.rename')}><Pencil size={14} /></button>
+                <button type="button" className="quiet" title={command('story.template.delete')?.label} aria-label={`Delete ${t.name}`} onClick={verb('story.template.delete')}><Trash2 size={14} /></button>
+              </span>
+            </div>
+          )
+        })}
+        {!ts.length && <span className="hint">none yet</span>}
       </div>
-      <div className="adder"><CommandButton id="story.world.addVariable" text /></div>
     </section>
   )
 }
@@ -493,7 +541,7 @@ function WorldEditor() {
       <section id="story-sec-variables">
         <h3>Variables<Help text={"Bool or enum flags the Flow's conditions read."} /></h3>
         <div className="rows">
-          {world.variables.map((v) => <VarRow key={v.name} v={v} active={selected?.kind === 'variable' && selected.id === v.name} />)}
+          {world.variables.map((v, i) => <VarRow key={i} v={v} active={selected?.kind === 'variable' && selected.id === v.name} />)}{/* K79: keyed by place, not by the name being typed */}
           {!world.variables.length && <div className="empty">No variables yet.</div>}
         </div>
         <div className="adder"><CommandButton id="story.world.addVariable" text /></div>
@@ -978,7 +1026,7 @@ function LineVoice({ n, i, l, available }: { n: FlowNode; i: number; l: FlowNode
   const jobs = useSession((s) => s.jobs)
   const job = ttsJobFor(jobs, n.id, i)
   const busy = !!job && ['staged', 'queued', 'running'].includes(job.status)
-  const stale = !!l.audio_asset_id && l.audio_text !== l.text
+  const stale = lineVoiceStale(l)                                                    // K96: trimmed, as the server compares
   const audio = l.audio_asset_id
   return (
     <span className="line-voice">

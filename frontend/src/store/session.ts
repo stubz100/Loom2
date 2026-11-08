@@ -84,6 +84,17 @@ export interface AskRequest extends AskOptions { kind: 'confirm' | 'prompt'; res
 let socket: EventsSocket | null = null
 let toastSeq = 1
 
+/** `/capabilities` taken in: the store's copy and the cut's strip and grade ranges (U7c) — every reader of a fresh copy goes through here
+ *  (review K84: the settings' reload skipped the ranges). */
+function applyCapabilities(set: (p: Partial<SessionState>) => void, capabilities: Capabilities): void {
+  set({ capabilities })
+  if (capabilities.cut) applyCutRanges(capabilities.cut.strip as Record<string, [number, number]>, capabilities.cut.grade as Record<string, [number, number]>)   // U7c
+}
+/** `/capabilities` read again and taken in. */
+async function loadCapabilities(set: (p: Partial<SessionState>) => void): Promise<void> {
+  applyCapabilities(set, await unwrap(http.GET('/capabilities')))
+}
+
 export const useSession = create<SessionState>()(
   persist(
     (set, get) => ({
@@ -142,8 +153,8 @@ export const useSession = create<SessionState>()(
           unwrap(http.GET('/engine')), unwrap(http.GET('/settings')), unwrap(http.GET('/capabilities')),
           unwrap(http.GET('/models')),
         ])
-        set({ health, project, recents: projects.recents, engine, settings, capabilities, models: models.items, fetches: models.fetches })
-        if (capabilities.cut) applyCutRanges(capabilities.cut.strip as Record<string, [number, number]>, capabilities.cut.grade as Record<string, [number, number]>)   // U7c
+        set({ health, project, recents: projects.recents, engine, settings, models: models.items, fetches: models.fetches })
+        applyCapabilities(set, capabilities)
         if (project.open) {
           const [queue, jobs] = await Promise.all([unwrap(http.GET('/queue')), unwrap(http.GET('/jobs'))])
           set({ queue, jobs: Object.fromEntries(jobs.items.map((j) => [j.id, j])) })
@@ -210,9 +221,12 @@ export const useSession = create<SessionState>()(
       saveSettings: async (patch) => {
         const settings = await unwrap(http.PUT('/settings', { body: patch }))
         set({ settings })
-        await get().scanModels()
-        set({ capabilities: await unwrap(http.GET('/capabilities')) })   // D193: what a setting offers (H3's confirmation) shows at once
         get().toast('Settings saved', 'success')
+        // D193: what a setting offers (H3's confirmation) shows at once. Review K84: the save is done once the PUT answers — the rescan and
+        // the capabilities run beside each other after it, a failure of theirs said on its own, never the save's
+        const after = await Promise.allSettled([get().scanModels(), loadCapabilities(set)])
+        const failed = after.find((r): r is PromiseRejectedResult => r.status === 'rejected')
+        if (failed) get().toast(`Settings saved, but reading what they offer failed: ${(failed.reason as ApiError)?.detail ?? failed.reason}`, 'error')
       },
 
       toast: (text, kind = 'info', act) => {

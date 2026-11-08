@@ -34,7 +34,8 @@ import { clipDrop, correctionWords } from './corrections'
 import type { DragPayload } from '../../frame/drag'
 import { AnimColumn, Sec } from '../animate/column'
 import type { StageCamera, StageDoc, StageObject } from '../../api/types'
-import { keyedFrames as keyedFramesOf, keyframesOf, sampleCamera, sampleDoc } from './anim'
+import { keyedFrames as keyedFramesOf, keyframesOf, objectSampler, sampleCamera, sampleDoc } from './anim'
+import { NumField } from './NumField'
 import { applyTemplate, useTemplates, blockMenu, dragBlock, saveRangeAsAnimation } from './blockEdit'
 import { blocksReady, useBlocks, type MotionBlock } from './blocks'
 import { awayStretches, lineSpans } from './tracks'
@@ -59,7 +60,6 @@ import './stage.css'
 import { registerKeyHost } from '../../frame/keyHosts'
 
 const FOCALS = [24, 35, 50, 85]
-const num = (v: number) => +v.toFixed(2)
 
 /** Dev hook (`window.__loom2Stage`, DEV_HOOKS only): the smoke test and scripts/st_acceptance.py drive the suite through the store — present as
  *  soon as the suite's code loads; the viewport adds `screenOf` when it mounts. */
@@ -380,7 +380,12 @@ function SetThings({ o }: { o: StageObject }) {
 /** D119 (SC1) → C1: an object's editor, in the Inspector — the transform, the kind's own fields, the parent, the object verbs. */
 function ObjectEditor({ o }: { o: StageObject }) {
   const current = useStage((s) => s.current)
-  const t = o.transform
+  const frame = useStage((s) => s.frame)
+  const blocks = useBlocks((s) => s.version)
+  // review K59 (T8): the object as the viewport shows it at the playhead — a keyed one's fields showed its unkeyed base, and a y typed at frame 60
+  // wrote a key with the start's x and z: the figure snapped back
+  const shown = useMemo(() => (current ? objectSampler(current, o.id)?.(frame) ?? o : o), [current, o, frame, blocks]) // eslint-disable-line react-hooks/exhaustive-deps
+  const t = shown.transform
   if (!current) return null
   return (
     <div className="sel-editor stage-insp" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
@@ -394,7 +399,7 @@ function ObjectEditor({ o }: { o: StageObject }) {
       {o.kind === 'light' && <LightControls o={o} />}
       {o.kind === 'set' && o.preset === 'image' && <ImageSetFields key={`${o.id}:${o.lens_deg}`} o={o} />}
       {o.kind === 'set' && !!o.profile_id && !!o.place_set?.things?.length && <div className="verbs"><CommandButton id="stage.set.things" text /></div>}{/* D180 */}
-      {o.kind === 'mannequin' && <div className="kv"><span>pose</span><span><select value={o.pose?.preset ?? 'stand'} onChange={(e) => st().applyPose(o.id, e.target.value)}>{POSE_NAMES.map((p) => <option key={p} value={p}>{p}</option>)}</select> <span className="hint">(Pose, over the viewport, poses the joints)</span></span></div>}
+      {o.kind === 'mannequin' && <div className="kv"><span>pose</span><span><select value={shown.pose?.preset ?? 'stand'} onChange={(e) => st().applyPose(o.id, e.target.value)}>{POSE_NAMES.map((p) => <option key={p} value={p}>{p}</option>)}</select> <span className="hint">(Pose, over the viewport, poses the joints)</span></span></div>}
       {o.kind === 'mannequin' && <PathFields o={o} />}{/* C2 (P9): the path as an object */}
       {o.kind === 'plane' && <div className="kv"><span>faces camera</span><input type="checkbox" checked={o.billboard} onChange={(e) => st().updateObject(o.id, { billboard: e.target.checked })} /></div>}
       {!o.parent_joint && <div className="kv"><span>parent <Help text="It moves with its parent and stays where it stands when you pick one; its transform below is then its place on the parent." /></span><select value={o.parent ?? ''} onChange={(e) => { const [k, fid, hand] = e.target.value.split(':'); if (k === 'hand') st().hold(o.id, fid, hand as 'r_hand' | 'l_hand'); else st().setParent(o.id, e.target.value || null) }}>
@@ -408,9 +413,11 @@ function ObjectEditor({ o }: { o: StageObject }) {
 
 /** D119 (SC1) → C1: a camera's editor, in the Inspector — the lens, the roll, where it stands and what it looks at, and its verbs (Look
  *  through, Set from view, To shot, Key camera, rename, delete). In the viewport the camera's body takes the gizmo while its row is selected. */
-function CameraEditor({ c }: { c: StageCamera }) {
+function CameraEditor({ c: raw }: { c: StageCamera }) {
   const current = useStage((s) => s.current)
   const view = useStage((s) => s.view)
+  const frame = useStage((s) => s.frame)
+  const c = useMemo(() => (current ? sampleCamera(raw, keyframesOf(current).camera[raw.id], frame) : raw), [current, raw, frame])   // review K59 (T8): as keyed at the playhead
   if (!current) return null
   markUsed('stage.camera.setFromView'); markUsed('stage.camera.delete'); markUsed('stage.view.camera'); markUsed('stage.camera.rename'); markUsed('stage.anim.keyCamera')
   return (
@@ -420,9 +427,9 @@ function CameraEditor({ c }: { c: StageCamera }) {
       <Vec label="target" v={c.target} onChange={(target) => st().updateCamera(c.id, { target })} />
       <div className="kv"><span>focal</span>
         <span className="focals">{FOCALS.map((f) => <button key={f} className={c.focal_mm === f ? 'active' : ''} onClick={() => st().updateCamera(c.id, { focal_mm: f })}>{f}</button>)}
-          <input type="number" min={8} max={400} step={1} value={c.focal_mm} onChange={(e) => st().updateCamera(c.id, { focal_mm: Math.max(8, Math.min(400, Number(e.target.value) || 35)) })} /> mm</span></div>
+          <NumField label="focal length (mm)" min={8} max={400} step={1} digits={1} value={c.focal_mm} onCommit={(v) => st().updateCamera(c.id, { focal_mm: Math.max(8, Math.min(400, v)) })} /> mm</span></div>
       <div className="kv"><span>sensor</span><span>{c.sensor_mm} mm · frame {current.size.w}×{current.size.h}</span></div>
-      <div className="kv"><span>roll</span><input type="number" step={1} value={c.roll} onChange={(e) => st().updateCamera(c.id, { roll: Number(e.target.value) || 0 })} /></div>
+      <div className="kv"><span>roll</span><NumField label="roll (°)" step={1} value={c.roll} onCommit={(v) => st().updateCamera(c.id, { roll: v })} /></div>
       <div className="verbs">
         <CommandButton id="stage.view.camera" text label={view === 'camera' ? 'Back to the free view' : 'Look through'} active={view === 'camera'} />
         <CommandButton id="stage.camera.setFromView" text label="Set from view" />
@@ -986,7 +993,8 @@ function Timeline() {
     <div className="stage-timeline" onPointerDown={(e) => e.stopPropagation()}>
       <TransportBar frame={frame} last={span[1]} playing={playing} onFrame={(f) => st().setFrame(f)} counter={`${(frame / Math.max(1, current.size.fps)).toFixed(2)} s`}>
         <span className="range-field" title="the clip's range (frames, inclusive) at the project's fps — or drag its ends on the ruler">
-          <input type="number" min={0} value={start} onChange={(e) => st().setRange(Number(e.target.value) || 0, end)} />–<input type="number" min={1} value={end} onChange={(e) => st().setRange(start, Number(e.target.value) || 1)} /> · {current.size.fps} fps
+          {/* review K60: committed on blur / Enter — every keystroke was a range, an undo step and a clamp with a toast (48 typed into the end gave 25) */}
+          <NumField label="the range's first frame" min={0} step={1} digits={0} value={start} onCommit={(v) => st().setRange(Math.round(v), end)} />–<NumField label="the range's last frame" min={1} step={1} digits={0} value={end} onCommit={(v) => st().setRange(start, Math.round(v))} /> · {current.size.fps} fps
         </span>
         <CommandRow ids={['anim.setIn', 'anim.setOut']} />
         <span className="sep" />
@@ -1155,17 +1163,25 @@ function Viewport() {
   useEffect(() => { if (frameReq.n) engineRef.current?.frame(frameReq.ids) }, [frameReq])
   useEffect(() => { engineRef.current?.setPoseMode(poseMode); if (!poseMode) st().selectJoint(null) }, [poseMode])
   useEffect(() => { const e = engineRef.current; if (e && selected) e.selectJoint(selected, selectedJoint as Joint | null) }, [selectedJoint]) // eslint-disable-line react-hooks/exhaustive-deps
-  const down = useRef<{ x: number; y: number; t: number; hot: boolean } | null>(null)
+  const down = useRef<{ x: number; y: number; t: number; hot: boolean; picker: boolean } | null>(null)
   const rightDown = useRef<{ x: number; y: number } | null>(null)
   const yielded = useRef(false)
+  const onPicker = useRef(false)                                                                // review K108: this press began on a joint or a cube
   // viewport check: the posed joint's rings cover the neighbouring pickers and the hand / foot cubes — a press on another picker is the
-  // picker's (the gizmo's own listener on the canvas runs after this capture-phase one)
+  // picker's (the gizmo's own listener on the canvas runs after this capture-phase one, and so do the orbit's)
   const onDownCapture = (e: ReactPointerEvent) => {
+    onPicker.current = false
     if (e.button !== 0) return
     const eng = engineRef.current, s = st()
-    if (!eng || !s.posing || s.mode === 'record' || !eng.gizmo.object) return
+    if (!eng || !s.posing || s.mode === 'record') return
     const p = eng.pick(e.clientX, e.clientY)
-    if ((p.joint && p.joint !== s.selectedJoint) || (p.ik && p.ik !== eng.ikChain())) { eng.yieldPress(); yielded.current = true }   // not the live handle's own cube
+    if (p.ik && p.id && p.ik !== eng.ikChain() && s.tool !== 'rotate') {                         // review K108: a press on a hand / foot cube grabs it —
+      st().selectJoint(null); eng.grabIk(p.id, p.ik); return                                     // a press-drag moves the hand (it orbited the view)
+    }
+    if ((p.joint && p.joint !== s.selectedJoint) || (p.ik && p.ik !== eng.ikChain())) {      // not the live handle's own cube
+      if (eng.gizmo.object) { eng.yieldPress(); yielded.current = true }
+      onPicker.current = true; eng.holdOrbit()                                                  // review K108: a press on a picker never swings the view
+    }
   }
   const onDown = (e: ReactPointerEvent) => {
     if (e.button === 2) { rightDown.current = { x: e.clientX, y: e.clientY }; return }   // viewport check: a right-drag pans (OrbitControls) — no menu after it
@@ -1178,7 +1194,7 @@ function Viewport() {
       eng!.beginPathDrag(); e.currentTarget.setPointerCapture(e.pointerId); down.current = null
       return
     }
-    down.current = { x: e.clientX, y: e.clientY, t: Date.now(), hot: hot && !yielded.current }   // on a gizmo handle: the click is the gizmo's
+    down.current = { x: e.clientX, y: e.clientY, t: Date.now(), hot: hot && !yielded.current, picker: onPicker.current }   // on a gizmo handle: the click is the gizmo's
   }
   const onMove = (e: ReactPointerEvent) => {
     lastPointer.current = { x: e.clientX, y: e.clientY }
@@ -1203,7 +1219,7 @@ function Viewport() {
     const d = down.current; down.current = null
     const eng = engineRef.current
     if (yielded.current) { yielded.current = false; queueMicrotask(() => eng?.regizmo()) }   // the gizmo back after the press (a pick below re-targets it)
-    if (!d || !eng || e.button !== 0 || d.hot || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4 || eng.gizmo.dragging) return
+    if (!d || !eng || e.button !== 0 || d.hot || (!d.picker && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4) || eng.gizmo.dragging) return   // review K108: a press on a picker is its pick, moved or not
     const s = st()
     if (s.mode === 'record') return                                                    // C1: nothing is picked in Record
     const fig = s.object(s.selected)
@@ -1302,8 +1318,8 @@ function PathFields({ o }: { o: StageObject }) {
       <div className="kv"><span>path <Help text="The floor path a clip walks along: its points in metres on the floor (x · z). Drag a point in the viewport, type it here, or right-click it to remove it — the walk re-flows. The Path tool adds points by clicking the floor; with Snap on a point lands on the quarter metre." /></span>
         <span className="hint">{pts.length ? `${pts.length} point${pts.length === 1 ? '' : 's'}` : 'none'}</span></div>
       {pts.map((p, i) => <div key={i} className="kv path-point" data-point={i}><span>{i + 1}</span><span className="vec">
-        <input type="number" step={0.05} aria-label={`point ${i + 1} x`} value={num(p[0])} onChange={(e) => st().setPathPoint(o.id, i, [Number(e.target.value) || 0, p[1]])} />
-        <input type="number" step={0.05} aria-label={`point ${i + 1} z`} value={num(p[1])} onChange={(e) => st().setPathPoint(o.id, i, [p[0], Number(e.target.value) || 0])} />
+        <NumField step={0.05} label={`point ${i + 1} x`} value={p[0]} onCommit={(v) => st().setPathPoint(o.id, i, [v, p[1]])} />
+        <NumField step={0.05} label={`point ${i + 1} z`} value={p[1]} onCommit={(v) => st().setPathPoint(o.id, i, [p[0], v])} />
         <button type="button" className="quiet danger" title="Remove this point" aria-label={`remove point ${i + 1}`} onClick={() => st().removePathPoint(o.id, i)}>✕</button></span></div>)}
       <div className="verbs"><CommandButton id="stage.tool.path" text label={pts.length ? 'Add points (click the floor)' : 'Draw a path (click the floor)'} />{pts.length > 0 && <CommandButton id="stage.path.clear" text />}</div>
     </div>
@@ -1311,9 +1327,10 @@ function PathFields({ o }: { o: StageObject }) {
 }
 
 // ------------------------------------------------------------------ Inspector
+/** Three numbers (a position, a turn, a scale, a joint's angles); review K93: each typed whole, committed on blur / Enter ("-90" became 90). */
 function Vec({ label, v, onChange, step = 0.05 }: { label: string; v: number[]; onChange: (v: number[]) => void; step?: number }) {
   return (
-    <div className="kv"><span>{label}</span><span className="vec">{v.map((x, i) => <input key={i} type="number" step={step} value={num(x)} onChange={(e) => { const n = [...v]; n[i] = Number(e.target.value) || 0; onChange(n) }} />)}</span></div>
+    <div className="kv"><span>{label}</span><span className="vec">{v.map((x, i) => <NumField key={i} step={step} label={`${label} ${'xyz'[i] ?? i}`} value={x} onCommit={(n) => { const next = [...v]; next[i] = n; onChange(next) }} />)}</span></div>
   )
 }
 

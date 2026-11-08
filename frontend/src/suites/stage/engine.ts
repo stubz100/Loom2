@@ -24,6 +24,7 @@ import { bindProxy, FACE_LANDMARKS, FEET_LANDMARKS, shellPoints, shellStance, ty
 import { depthMaterial, depthRangeFor, drawPose, maskColour, projectMarkers, toBlob, type Keypoint, type PassName, type WholeBody } from './passes'
 import type { RenderedPasses, Tool, Transform, View } from './stageStore'
 import { sizedExtent } from './meshSize'
+import { disposeObject } from './gpu'
 
 export interface EngineHooks {
   onPick: (id: string | null) => void
@@ -47,28 +48,15 @@ const deg = THREE.MathUtils.radToDeg, rad = THREE.MathUtils.degToRad
 const BEAUTY_ENV = 0.8                            // D109: the beauty pass's room-environment intensity (E28c: the models read near the plate's brightness)
 const BACKDROP_MARGIN = 0.06                      // SC3e: the picture behind a set carried on past its edge, a share of its size each side
 
-/** V78: every GPU resource under an object — its geometries, its materials and their textures — freed when it leaves the scene (a
- *  rebuild, a removal, the engine's end); three.js frees nothing by itself. `keep` holds the engine's shared materials: freed, they
- *  would only be compiled again on the next frame (a CS3 body transition rebuilds a figure every frame), so they outlive their objects.
- *  Each resource is freed once however many meshes share it. */
-export function disposeObject(root: THREE.Object3D, keep: ReadonlySet<THREE.Material> = new Set()): { geometries: number; materials: number; textures: number } {
-  const seen = new Set<object>()
-  const n = { geometries: 0, materials: 0, textures: 0 }
-  root.traverse((o) => {
-    const m = o as THREE.Mesh
-    if (m.geometry && !seen.has(m.geometry)) { seen.add(m.geometry); m.geometry.dispose(); n.geometries++ }
-    const mats = Array.isArray(m.material) ? m.material : m.material ? [m.material] : []
-    for (const mat of mats) {
-      if (!mat || keep.has(mat) || seen.has(mat)) continue
-      seen.add(mat)
-      for (const v of Object.values(mat) as unknown[]) {
-        const t = v as THREE.Texture | null
-        if (t && t.isTexture && !seen.has(t)) { seen.add(t); t.dispose(); n.textures++ }
-      }
-      mat.dispose(); n.materials++
-    }
-  })
-  return n
+/** V78: every GPU resource under an object, freed (gpu.ts — the rigging benches use it too, review K61). */
+export { disposeObject }
+
+/** review K57: with a gaze the live neck and head are aimHead's turn, not the pose's — the pose's own (the preset's under its joints) go back
+ *  into what a pose edit writes (the gaze's turn was saved as the pose's own joints: Stop looking left the head turned, Save pose stored it). */
+export function withOwnHead(joints: Record<string, number[]>, pose: StageObject['pose'] | null | undefined): Record<string, number[]> {
+  const preset = POSES[pose?.preset ?? 'stand'] ?? POSES.stand
+  const own = (j: 'neck' | 'head') => [...(pose?.joints?.[j] ?? preset.j[j] ?? [0, 0, 0])]
+  return { ...joints, neck: own('neck'), head: own('head') }
 }
 
 const STANDS_ON = 0.7                                                                // M10: a surface faces up enough to stand on
@@ -194,7 +182,21 @@ export class StageEngine {
     this.dirty = true
     this.syncGizmoViewport()
   }
+  /** review K62: the renders in flight on this engine (passes, a sequence, the plate projected, a depth range, a snapshot) — unmounting the
+   *  viewport freed the engine under a Record or a Render sequence: the crowds dropped, the shells never attached, the wrong frames uploaded. */
+  private busy = 0
+  private disposeAfter = false
+  private async working<T>(run: () => Promise<T>): Promise<T> {
+    this.busy++
+    try { return await run() } finally { this.busy--; if (!this.busy && this.disposeAfter) this.dispose() }
+  }
+  /** The engine's end — deferred while a render runs on it (review K62): the viewport stops drawing now, the GPU goes when the render ends. */
   dispose(): void {
+    if (this.disposed) return
+    if (this.busy) { this.disposeAfter = true; this.stop(); return }
+    this.release()
+  }
+  private release(): void {
     this.disposed = true
     this.stop()
     for (const c of this.crowds) dropCrowd(c)
@@ -208,7 +210,7 @@ export class StageEngine {
   }
   /** The materials every object shares (V78: kept across rebuilds; freed with the engine). */
   private sharedMaterials(): Set<THREE.Material> {
-    return new Set([this.clayMat, this.ghostMat, this.pickerMat, this.ikMat, this.pinMat, this.setMat, this.camMat, this.camActiveMat, this.catcherMat, this.pathMat, this.whiteMat, this.aimMat].filter(Boolean) as THREE.Material[])
+    return new Set([this.clayMat, this.ghostMat, this.pickerMat, this.ikMat, this.pinMat, this.setMat, this.camMat, this.camActiveMat, this.catcherMat, this.pathMat, this.pathDot, this.whiteMat, this.aimMat].filter(Boolean) as THREE.Material[])
   }
   /** V78: an entry leaves the scene with its GPU resources (a rebuild, a removal). */
   private disposeEntry(e: Entry): void {
@@ -258,6 +260,7 @@ export class StageEngine {
   }
   /** Fit the free view to objects (or everything). */
   frame(ids: string[] | null): void {
+    if (this.view === 'camera') return                                             // review K108: never the hidden free camera (the store goes to the free view first)
     const box = new THREE.Box3()
     const list = ids ? ids.map((i) => this.entries.get(i)?.holder).filter((x): x is THREE.Group => !!x) : [...this.entries.values()].map((e) => e.holder)
     if (!list.length) { box.set(new THREE.Vector3(-3, 0, -3), new THREE.Vector3(3, 2, 3)) } else list.forEach((o) => box.expandByObject(o))
@@ -415,6 +418,12 @@ export class StageEngine {
     this.seatIk()
     this.refreshGizmo()
   }
+  /** review K108: a press on a hand / foot cube grabs it — the handle is put on the cube before the press reaches the gizmo, which takes it
+   *  as a drag (a press-drag orbited the view: the handle came only with a click, and the help says drag it). */
+  grabIk(id: string, chain: Chain): void {
+    this.startIk(id, chain)
+    if (this.ik) this.gizmo.getHelper().updateMatrixWorld(true)                     // its pickers where the handle is now, for this press
+  }
   /** The handle at the hand / foot the bones reach now (after a solve, a pose drawn from the document, a rebuild). */
   private seatIk(): void {
     const e = this.ik ? this.entries.get(this.ik.id) : undefined
@@ -514,7 +523,9 @@ export class StageEngine {
   private commitPose(): void {
     const id = this.posing?.id ?? this.ik?.id
     if (!id) return
-    const joints = this.jointsOf(id)
+    const e = this.entries.get(id)
+    let joints = this.jointsOf(id)
+    if (joints && e && gazeTarget(e.doc.pose?.gaze as Gaze | null, this.framesOf(e, this.lastDoc))) joints = withOwnHead(joints, e.doc.pose)   // review K57: not the gaze's turn
     if (joints) this.hooks.onPosed(id, joints, this.ik ? this.ik.chain : chainOf(this.posing?.joint))
     this.seatIk()                                                  // viewport check: the handle stays on the hand for the next drag (it was removed after each)
   }
@@ -544,15 +555,16 @@ export class StageEngine {
   /** What is under a client-space point: an object, a joint picker or an IK handle of the selected figure, or nothing. */
   pick(x: number, y: number): Pick {
     this.ray.setFromCamera(this.ndc(x, y), this.camera())
-    const dots = [...this.paths.values()].flatMap((p) => (p.obj.visible ? p.dots : []))   // C2 (P9): a path point before anything else — it is small and lies on the floor
-    const dot = dots.length ? this.ray.intersectObjects(dots, false)[0] : undefined
-    if (dot) { const pp = dot.object.userData.pathPoint as { id: string; index: number }; return { id: pp.id, pathPoint: pp.index } }
-    // pose mode: the selected figure's pickers first — a joint sphere sits inside its limb, so the body would always win on distance
+    // pose mode: the selected figure's pickers first — a joint sphere sits inside its limb, so the body would always win on distance; review
+    // K108: before the path's points too (drawn over everything, a foot's cube lost to the path point under it)
     const sel = this.selectedId ? this.entries.get(this.selectedId) : undefined
     if (this.poseMode && sel?.pickers && sel.doc.visible) {
       const hit = this.ray.intersectObjects(sel.pickers.filter((p) => p.visible), false)[0]
       if (hit) return hit.object.userData.joint ? { id: this.selectedId, joint: hit.object.userData.joint as Joint } : { id: this.selectedId, ik: hit.object.userData.ik as Chain }
     }
+    const dots = [...this.paths.values()].flatMap((p) => (p.obj.visible ? p.dots : []))   // C2 (P9): a path point before the things — it is small and lies on the floor
+    const dot = dots.length ? this.ray.intersectObjects(dots, false)[0] : undefined
+    if (dot) { const pp = dot.object.userData.pathPoint as { id: string; index: number }; return { id: pp.id, pathPoint: pp.index } }
     const shells = [...this.entries.values()].flatMap((e) => (e.doc.visible ? e.proxy?.meshes ?? [] : []))                // CS3: a figure is its shell
     // viewport check: a figure at body scale 1 is its Detailed mannequin alone (the Simple shapes hidden) — it was not pickable; skinned meshes
     // keep the bounding sphere of their first pick, so a shell that moved missed the clicks: recomputed from the bones now
@@ -599,6 +611,7 @@ export class StageEngine {
   // ---- the document → the scene ---------------------------------------------------------------------------------------------------
   sync(doc: StageDoc): void {
     const seen = new Set<string>()
+    let rebuilt = false
     for (const o of doc.objects) {
       seen.add(o.id)
       let e = this.entries.get(o.id)
@@ -606,6 +619,7 @@ export class StageEngine {
         || (e.doc.detail ?? null) !== (o.detail ?? null) || (e.doc.shadow_proxy ?? null) !== (o.shadow_proxy ?? null) || (e.doc.floor_y ?? null) !== (o.floor_y ?? null)
         || (e.doc.height_m ?? null) !== (o.height_m ?? null) || JSON.stringify(e.doc.place_set ?? null) !== JSON.stringify(o.place_set ?? null)) {
         if (e) this.disposeEntry(e)                                                  // V78: the old one's GPU resources go with it
+        rebuilt = true
         e = this.build(o)
         this.entries.set(o.id, e)
         this.scene.add(e.holder)                                                     // placeChildren hangs it under its parent below
@@ -628,6 +642,7 @@ export class StageEngine {
       this.syncPins(e)
     }
     for (const [id, e] of [...this.entries]) if (!seen.has(id)) { this.disposeEntry(e); this.entries.delete(id); if (this.selectedId === id) this.select(null) }
+    if (rebuilt) { this.showPickers(); this.seatIk() }                                // review K108: an undo that rebuilt the posed figure keeps its pickers and its handle
     if (!this.gizmo.dragging) {                                                       // viewport check: a rebuilt entry (♀/♂, a body, a shell) or a lock
       const o = this.gizmo.object
       let inScene = false
@@ -643,7 +658,7 @@ export class StageEngine {
     this.syncPaths(doc)
     // cameras: helpers for the inactive ones, the active one drives the render camera
     const cams = new Set(doc.cameras.map((c) => c.id))
-    for (const [id, h] of [...this.camHelpers]) if (!cams.has(id)) { this.scene.remove(h); this.camHelpers.delete(id) }
+    for (const [id, h] of [...this.camHelpers]) if (!cams.has(id)) { this.scene.remove(h); disposeObject(h, this.sharedMaterials()); this.camHelpers.delete(id) }   // review K93: its box and lens freed
     for (const c of doc.cameras) {
       let h = this.camHelpers.get(c.id)
       if (!h) { h = this.cameraGlyph(c.id); this.camHelpers.set(c.id, h); this.scene.add(h) }
@@ -947,6 +962,11 @@ export class StageEngine {
     this.dirty = true
   }
   endPathDrag(): void { this.orbit.enabled = this.view === 'free' }
+  /** review K108: a press on a joint or a cube is not an orbit — the view holds until the press ends (anywhere: released off the canvas too). */
+  holdOrbit(): void {
+    this.orbit.enabled = false
+    window.addEventListener('pointerup', () => { if (!this.gizmo.dragging) this.orbit.enabled = this.view === 'free' }, { once: true, capture: true })
+  }
   private syncPaths(doc: StageDoc): void {
     const seen = new Set<string>()
     for (const o of doc.objects) {
@@ -956,7 +976,7 @@ export class StageEngine {
       const key = JSON.stringify(pts)
       if (this.paths.get(o.id)?.key === key) continue
       const old = this.paths.get(o.id)
-      if (old) this.scene.remove(old.obj)
+      if (old) { this.scene.remove(old.obj); disposeObject(old.obj, this.sharedMaterials()) }   // review K93: the line and the dots freed (the materials are shared)
       const g = new THREE.Group(); g.userData.helper = 'path'
       const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(this.pathLine(pts)), this.pathMat)
       g.add(line)
@@ -964,7 +984,7 @@ export class StageEngine {
       this.scene.add(g)
       this.paths.set(o.id, { key, obj: g, line, dots })
     }
-    for (const [id, p] of [...this.paths]) if (!seen.has(id)) { this.scene.remove(p.obj); this.paths.delete(id) }
+    for (const [id, p] of [...this.paths]) if (!seen.has(id)) { this.scene.remove(p.obj); disposeObject(p.obj, this.sharedMaterials()); this.paths.delete(id) }
   }
   /** CA1: every Detailed figure after its joints (a key, a gizmo drag, the IK, a sampled frame). */
   /** D129 (HP1): a held thing follows its figure's hand — its transform is local to the wrist marker, re-placed after every pose. */
@@ -1082,8 +1102,9 @@ export class StageEngine {
    *  Lambert — image planes become grey cards, D81), depth (linear disparity around the subject), normals, the object-ID masks (a flat
    *  colour per object, the legend returned) and the pose (every figure's COCO-18 in OpenPose colours). Helpers, pickers and the gizmo
    *  stay out; hidden objects too. The viewport's own renderer and state are untouched. */
-  async renderPasses(cam: StageCamera, w: number, h: number): Promise<RenderedPasses> {
-    await this.settled()                                                             // SC3e: no stand-in in a pass
+  renderPasses(cam: StageCamera, w: number, h: number): Promise<RenderedPasses> { return this.working(() => this.passesNow(cam, w, h)) }   // review K62
+  private async passesNow(cam: StageCamera, w: number, h: number): Promise<RenderedPasses> {
+    await this.settled()                                                            // SC3e: no stand-in in a pass
     const r = this.passRenderer(w, h)
     const camera = this.shotCamera(cam, w / h)
     const restore = this.hideHelpers(camera)
@@ -1134,8 +1155,12 @@ export class StageEngine {
   /** ST4 (16 §8): one pass per frame of an animated range — the scene synced to each frame's sampled document and camera (anim.ts),
    *  the depth (the IC-LoRA guide, D76) or the pose sequence, with every frame's COCO-18 keypoints for the rig's scoring. The scene
    *  is left at `restoreDoc` (the frame the viewport shows). */
-  async renderSequence(frames: { cam: StageCamera; doc: StageDoc; frame?: number }[], w: number, h: number, kind: 'depth' | 'pose' | 'clay' | 'proxy' | 'proxymask' | 'beauty', restoreDoc: StageDoc,
-                       onProgress?: (done: number, total: number) => void, depth?: { near: number; far: number } | null): Promise<{ blobs: Blob[]; keypoints: Keypoint[][][]; wholebody: (WholeBody | null)[][] }> {
+  renderSequence(frames: { cam: StageCamera; doc: StageDoc; frame?: number }[], w: number, h: number, kind: 'depth' | 'pose' | 'clay' | 'proxy' | 'proxymask' | 'beauty', restoreDoc: StageDoc,
+                 onProgress?: (done: number, total: number) => void, depth?: { near: number; far: number } | null): Promise<{ blobs: Blob[]; keypoints: Keypoint[][][]; wholebody: (WholeBody | null)[][] }> {
+    return this.working(() => this.sequenceNow(frames, w, h, kind, restoreDoc, onProgress, depth))                                  // review K62
+  }
+  private async sequenceNow(frames: { cam: StageCamera; doc: StageDoc; frame?: number }[], w: number, h: number, kind: 'depth' | 'pose' | 'clay' | 'proxy' | 'proxymask' | 'beauty', restoreDoc: StageDoc,
+                            onProgress?: (done: number, total: number) => void, depth?: { near: number; far: number } | null): Promise<{ blobs: Blob[]; keypoints: Keypoint[][][]; wholebody: (WholeBody | null)[][] }> {
     if (frames.length) { this.sync(frames[0].doc); await this.settled() }          // SC3e: what the frames show, loaded
     this.depthShared = depth ?? null                                                 // D167: the final's one range, every layer's depth alike
     const r = this.passRenderer(w, h)
@@ -1187,8 +1212,12 @@ export class StageEngine {
    *  show the set alone (the caller hides the actors). D132 / D133 (E35c–d): `coverage` renders how the still saw each pixel instead —
    *  inside its frustum, the cosine between the surface's normal and the way to the still's camera as grey (white head-on, black at a
    *  grazing angle or outside, where the colour pass clamps: the smear); the caller picks its threshold. */
-  async renderProjected(frames: { cam: StageCamera; doc: StageDoc }[], w: number, h: number, plate: TexImageSource, proj: StageCamera, projAspect: number,
-                        restoreDoc: StageDoc, onProgress?: (done: number, total: number) => void, coverage = false): Promise<Blob[]> {
+  renderProjected(frames: { cam: StageCamera; doc: StageDoc }[], w: number, h: number, plate: TexImageSource, proj: StageCamera, projAspect: number,
+                  restoreDoc: StageDoc, onProgress?: (done: number, total: number) => void, coverage = false): Promise<Blob[]> {
+    return this.working(() => this.projectedNow(frames, w, h, plate, proj, projAspect, restoreDoc, onProgress, coverage))           // review K62
+  }
+  private async projectedNow(frames: { cam: StageCamera; doc: StageDoc }[], w: number, h: number, plate: TexImageSource, proj: StageCamera, projAspect: number,
+                             restoreDoc: StageDoc, onProgress?: (done: number, total: number) => void, coverage = false): Promise<Blob[]> {
     if (frames.length) { this.sync(frames[0].doc); await this.settled() }          // SC3e: the set loaded
     const r = this.passRenderer(w, h)
     const tex = new THREE.Texture(plate as HTMLImageElement)
@@ -1233,7 +1262,8 @@ export class StageEngine {
    *  engine's RenderMesh cannot make (its camera sits inside some props). */
   /** CW3: one object alone as Clay draws it (its shell with a figure), a lit three-quarter view framing it — the picture *Prototype ▸* gives
    *  its idea. The live scene, everything else hidden for the moment (a skinned figure does not clone). */
-  async snapshotOf(id: string, size = 512): Promise<Blob | null> {
+  snapshotOf(id: string, size = 512): Promise<Blob | null> { return this.working(() => this.snapshotNow(id, size)) }   // review K62
+  private async snapshotNow(id: string, size: number): Promise<Blob | null> {
     const e = this.entries.get(id)
     if (!e) return null
     const r = this.passRenderer(size, size)
@@ -1378,7 +1408,8 @@ export class StageEngine {
     return out
   }
   /** D167: a final's depth range — every figure (hidden or not) over all its frames, measured once before any pass is rendered. */
-  async depthRangeOf(frames: { cam: StageCamera; doc: StageDoc }[], restoreDoc: StageDoc): Promise<{ near: number; far: number }> {
+  depthRangeOf(frames: { cam: StageCamera; doc: StageDoc }[], restoreDoc: StageDoc): Promise<{ near: number; far: number }> { return this.working(() => this.depthRangeNow(frames, restoreDoc)) }   // review K62
+  private async depthRangeNow(frames: { cam: StageCamera; doc: StageDoc }[], restoreDoc: StageDoc): Promise<{ near: number; far: number }> {
     const dists: number[] = []
     try {
       for (const { cam, doc } of frames) {

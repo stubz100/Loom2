@@ -3,7 +3,7 @@
 // centre is the version's bin (one grid, roles as badges and filters), the Inspector the selected creation.
 // U3a: the frame, the header, the bin and the Inspector; Make and Edit come into the left column in U3b.
 import { Box, MapPin, Palette, PenLine, User } from 'lucide-react'
-import { lazy, Suspense, useEffect } from 'react'
+import { lazy, memo, Suspense, useEffect } from 'react'
 import { api } from '../../api/client'
 import { CommandButton, MenuButton } from '../../frame/CommandButton'
 import { command, isEnabled, runCommand, type MenuItem } from '../../frame/commands'
@@ -101,7 +101,8 @@ function Header() {
   )
 }
 
-function Tile({ it }: { it: BinItem }) {
+/** K83: a tile re-draws only when its own item or selection changes — a sheet keystroke re-rendered the whole grid. */
+const Tile = memo(function Tile({ it }: { it: BinItem }) {
   const sel = useWorld((s) => s.selected === it.asset.id)
   const badge = it.roles.map((r) => BADGE[r]).find(Boolean)
   const menu = (): MenuItem[] => [{ cmd: 'world.mode.edit' }, { sep: true }, { cmd: 'world.creation.hero' }, { cmd: 'world.creation.reference' }, { cmd: 'world.creation.candidate' },
@@ -113,19 +114,21 @@ function Tile({ it }: { it: BinItem }) {
       {badge && <span className="w-badge">{badge}</span>}
     </button>
   )
-}
+})
 
 function Bin() {
-  const p = useStory((s) => s.profiles.find((x) => x.id === s.profileId))
+  const cls = useStory((s) => s.profiles.find((x) => x.id === s.profileId)?.cls)      // K83: the class and name, not the profile (a sheet keystroke)
+  const name = useStory((s) => s.profiles.find((x) => x.id === s.profileId)?.name)
+  const vid = useStory((s) => s.versionId)
   const bin = useWorld((s) => s.bin)
   const filter = useWorld((s) => s.filter)
   const loading = useWorld((s) => s.loading)
-  if (!p) return <div className="w-empty">Pick or make one in the header.</div>
+  if (!cls) return <div className="w-empty">Pick or make one in the header.</div>
   const items = (bin?.items ?? []).filter((x) => passes(x, filter))
   return (
     <div className="w-bin" data-testid="world-bin" onClick={(e) => { const t = e.target as HTMLElement; if (t === e.currentTarget || t.classList.contains('w-grid')) useWorld.getState().select(null) }}>{/* W12: a click around the pictures */}
       <div className="w-bin-head">
-        <span className="w-path" title={bin?.path ?? ''}>bin/world/{p.cls}/{p.name}/{useStory.getState().versionId}</span>
+        <span className="w-path" title={bin?.path ?? ''}>bin/world/{cls}/{name}/{vid}</span>
         <span className="w-chips">{FILTERS.map(([f, l]) => <button key={f} className={filter === f ? 'active' : ''} onClick={() => useWorld.getState().setFilter(f)}>{l}</button>)}</span>
       </div>
       {items.length ? <div className="w-grid">{items.map((it) => <Tile key={it.asset.id} it={it} />)}</div>

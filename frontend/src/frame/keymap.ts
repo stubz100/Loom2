@@ -3,7 +3,7 @@
 // either is global) already answers to it — unless the pair is declared below as never firing together. Mouse placements stay mandatory
 // (D32): a key is only ever an accelerator.
 import { create } from 'zustand'
-import { allCommands, applyKeyOverrides, command, defaultKeysOf, isFixedChord, parseChord, type Command, type Scope } from './commands'
+import { allCommands, allReaches, applyKeyOverrides, command, defaultKeysOf, isFixedChord, parseChord, type Command, type Reach, type Scope } from './commands'
 import { loadOverrides, saveOverrides, type Overrides } from './keyStore'
 
 /** Chords two commands may share, each with the reason they never fire together. Sorted ids, normalised chord. The D32 audit test
@@ -32,7 +32,11 @@ export const SHARED_KEYS: { scope: Scope; chord: string; ids: [string, string]; 
 
 export const normChord = (s: string): string => { const c = parseChord(s); return `${c.ctrl ? 'ctrl+' : ''}${c.alt ? 'alt+' : ''}${c.shift ? 'shift+' : ''}${c.key}` }
 export const chordsOf = (c: Pick<Command, 'keys' | 'alt'>): string[] => [c.keys, ...(c.alt ?? [])].filter((k): k is string => !!k)
-const overlaps = (a: Scope, b: Scope) => a === b || a === 'global' || b === 'global'
+/** Whether a reach answers with the command (its scope, and its filter). */
+const inReach = (r: Reach[], c: Command) => r.some(({ scope, only }) => scope === c.scope && (!only || only(c)))
+/** Two commands can fire in the same place: one scope, either global, or (review K95) one suite's reach joining both — Clay answers with the
+ *  stage's commands and the animate scope's transport, so a stage command remapped onto `1` collided with Shots · Clay unnoticed. */
+const overlaps = (a: Command, b: Command) => a.scope === b.scope || a.scope === 'global' || b.scope === 'global' || allReaches().some((r) => inReach(r, a) && inReach(r, b))
 const declared = (a: string, b: string, chord: string) => SHARED_KEYS.some((x) => x.chord === chord && x.ids.includes(a) && x.ids.includes(b))
 
 /** Commands other than `id` that would answer to `chord` where `id` can fire (undeclared pairs only). */
@@ -40,7 +44,7 @@ export function conflictsFor(id: string, chord: string, cmds: Command[] = allCom
   const me = cmds.find((c) => c.id === id)
   if (!me) return []
   const n = normChord(chord)
-  return cmds.filter((c) => c.id !== id && overlaps(c.scope, me.scope) && chordsOf(c).some((k) => normChord(k) === n) && !declared(id, c.id, n))
+  return cmds.filter((c) => c.id !== id && overlaps(c, me) && chordsOf(c).some((k) => normChord(k) === n) && !declared(id, c.id, n))
 }
 
 /** A KeyboardEvent as a chord string ('Ctrl+Shift+K', 'G', 'F2', '['), or null for a lone modifier. Punctuation is recorded as the

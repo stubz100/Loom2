@@ -5,7 +5,7 @@
 import { create } from 'zustand'
 import { ApiError, api, http, unwrap } from '../../api/client'
 import { useSession } from '../../store/session'
-import { useStory } from './storyStore'
+import { storeProfile, useStory } from './storyStore'
 
 export interface ThingPoint { x: number; y: number; label: 0 | 1 }
 interface Target { pid: string; vid: string }
@@ -32,6 +32,17 @@ const detail = (e: unknown) => (e as ApiError).detail ?? String(e)
 /** The set picture of a place version (its first source), or null. */
 export const setPicture = (pid: string, vid: string): string | null =>
   useStory.getState().profiles.find((p) => p.id === pid)?.versions.find((v) => v.id === vid)?.place_set?.sources[0]?.asset_id ?? null
+
+/** K82: where an `object-fit: contain` picture is drawn inside its box, in the box's pixels — letterboxed when the box's shape is not the
+ *  picture's (the sheet's picture below ~980 px of window height): the clicks and the overlay map against this, not the box. */
+export function containedRect(boxW: number, boxH: number, natW: number, natH: number): { x: number; y: number; w: number; h: number } {
+  if (!(boxW > 0 && boxH > 0 && natW > 0 && natH > 0)) return { x: 0, y: 0, w: boxW, h: boxH }
+  const k = Math.min(boxW / natW, boxH / natH), w = natW * k, h = natH * k
+  return { x: (boxW - w) / 2, y: (boxH - h) / 2, w, h }
+}
+/** K82: a click on the overlay (laid over the drawn picture) as a point in the picture's pixels. */
+export const pointIn = (clientX: number, clientY: number, r: { left: number; top: number; width: number; height: number }, size: { w: number; h: number }): { x: number; y: number } =>
+  ({ x: ((clientX - r.left) / r.width) * size.w, y: ((clientY - r.top) / r.height) * size.h })
 
 export const usePlaceThings = create<PlaceThingsState>()((set, get) => ({
   target: null, size: null, points: [], mode: 1, job: null, docId: null, mask: null,
@@ -60,7 +71,7 @@ export const usePlaceThings = create<PlaceThingsState>()((set, get) => ({
     if (!target || !mask) return false
     try {
       const p = await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/set/things', { params: { path: { pid: target.pid, vid: target.vid } }, body: { name, points } }))
-      useStory.setState({ profiles: useStory.getState().profiles.map((x) => (x.id === p.id ? p : x)) })
+      storeProfile(p)                                                               // K75: a typed sheet word stays on screen
       set({ points: [], mask: null })
       return true
     } catch (e) { toast(`Keep the thing: ${detail(e)}`); return false }
@@ -82,7 +93,7 @@ export const usePlaceThings = create<PlaceThingsState>()((set, get) => ({
   remove: async (pid, vid, tid) => {
     try {
       const p = await unwrap(http.DELETE('/story/profiles/{pid}/versions/{vid}/set/things/{tid}', { params: { path: { pid, vid, tid } } }))
-      useStory.setState({ profiles: useStory.getState().profiles.map((x) => (x.id === p.id ? p : x)) })
+      storeProfile(p)
     } catch (e) { toast(`Remove the thing: ${detail(e)}`) }
   },
 }))

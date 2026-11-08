@@ -81,12 +81,13 @@ function Tiles({ kind }: { kind: LibKind }) {
   )
 }
 
-/** Lights, cameras and animations: what the kind holds and where it is used (their pages grow with C1–C2). */
+/** Lights, cameras and animations: what the kind holds and where it is used. review K93 (rule 11): a short line, the how behind its ? (it was
+ *  a block of text, and promised pages "with C1" that C1 did not bring). */
 function KindNote({ kind }: { kind: LibKind }) {
   if (kind === 'animation') return <Part label="The animations" fallback={<div className="w-empty">Reading the animations…</div>}><AnimationsGrid /></Part>
   return <div className="c-kind-note" data-testid="clay-kind-note">{kind === 'light'
-    ? 'Lights are added in a scene: the outliner\'s ＋ offers the templates (a window, the sun, a lamp…), and the light editor is under the light\'s row. Saved templates come here with C1.'
-    : 'Cameras belong to scenes: one per shot, added in the outliner, its lens and height under its row. Lens presets come here with C1.'}</div>
+    ? <>Lights are added in a scene <Help text="In a scene's Scene section, the Lights row's Add light puts a sun above the view's centre, aimed at it; its editor in the Inspector sets the look (window, sun, lamp), the strength, the colour, the shadow's softness and the aim. A stage template keeps a scene's lights with its set." /></>
+    : <>Cameras are added in a scene <Help text="One camera per shot: the Scene section's Cameras row adds one; its editor in the Inspector sets the lens, the roll, where it stands and what it looks at. The pill over the viewport looks through it." /></>}</div>
 }
 
 function LibraryHeader() {
@@ -236,9 +237,12 @@ function FigureSwitch() {
   </div>
 }
 
+/** review K93 (rule 11): the short line; the why behind its ?. */
 function KindHint({ kind }: { kind: LibKind }) {
   const k = KINDS.find((x) => x.id === kind)!
-  return <span className="hint">{k.cls ? `A ${k.one} is a ${k.cls} from World with its 3D made here. Pick one in the grid.` : k.id === 'animation' ? 'An animation is yours to edit: open one on the bench, pose the figure at the frames you want, Save. A downloaded clip becomes yours with Make it mine.' : `${k.label} are made in a scene.`}</span>
+  return <span className="hint" data-testid="clay-kind-hint">{k.cls ? <>Pick a {k.one} in the grid <Help text={`A ${k.one} is a ${k.cls} from World with its 3D made here.`} /></>
+    : k.id === 'animation' ? <>Pick an animation <Help text="An animation is yours to edit: open one on the bench, pose the figure at the frames you want, Save. A downloaded clip becomes yours with Make it mine." /></>
+    : `${k.label} are made in a scene.`}</span>
 }
 
 /** Scenes: the scene open in the editor (a picker of the project's scenes with the shots each serves), the way back to the shot, then the

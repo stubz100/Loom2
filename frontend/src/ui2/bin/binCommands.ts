@@ -19,7 +19,7 @@ import { askConfirm, askText, useSession } from '../../store/session'
 import { castTarget } from '../../suites/story/addToCast'
 import { useStory } from '../../suites/story/storyStore'
 import type { OpenWith } from '../../frame/openWith'
-import { HEADINGS, homesById, pathLabel, ROLE_WORDS, selectedThings, TILE, TRASH, useBin } from './binStore'
+import { HEADINGS, homesById, pathLabel, ROLE_WORDS, selectedThings, shownItems, TILE, TRASH, useBin } from './binStore'
 
 const b = () => useBin.getState()
 export const selectedItem = (): BinThing | null => b().items.find((x) => x.asset.id === b().selected) ?? null
@@ -177,7 +177,7 @@ const holds = () => { const n = openNode(); return !!n && !b().query && !n.gone 
 /** The node a page sits in: its home, or the page around it. */
 const parentOf = (page: BinNode): BinNode | undefined => [...homesById(b().homes).values()].find((x) => x.children.some((k) => k.id === page.id))
 const live = () => n() > 0 && !inTrash()
-const order = () => b().items.map((x) => x.asset.id)
+const order = () => shownItems(b()).map((x) => x.asset.id)            // review K70: the large view walks what is shown
 const step = (d: number) => { const o = order(), i = o.indexOf(b().selected ?? ''); const j = i + d; if (j >= 0 && j < o.length) b().select(o[j]) }
 /** The large view's Fit and 1:1, set while it is open (the view owns its transform). */
 export const loupeView: { fit?: () => void; one?: () => void } = {}

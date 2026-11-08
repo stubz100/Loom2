@@ -6,13 +6,15 @@ stale base). The frontend's engine (suites/stage/) renders from this document an
 from __future__ import annotations
 
 import math
+import os
+import threading
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from .body import Body
-from .fsio import atomic_write_json, new_id, plain_name, read_json, utc_now
+from .fsio import atomic_write_json, new_id, plain_name, read_json, unlink, utc_now
 from .workspace import SCENE_SECONDS_DEFAULT, SCENE_SECONDS_MAX, Workspace
 
 STAGE_SCHEMA_VERSION = 4                           # 2 (D108): a set is architecture; schema 1's set blocks are read as props;
@@ -25,14 +27,36 @@ SET_BLOCKS_V1: dict[str, list[tuple[tuple[float, float, float], tuple[float, flo
 }
 Kind = Literal["mannequin", "set", "prop", "plane", "mesh", "light"]
 
+# review K50: one lock per stage file (and per one-of-a-kind stage: a bench, the line-up, the animation bench), across every StageStore —
+# every read-modify-write of a stage holds its stage's lock, so an image set landing and the client's autosave take turns (the second
+# sees the first's revision: a 409, not a lost edit). Slow work (a relief read) is done before the lock is taken.
+_STAGE_LOCKS: dict[str, threading.RLock] = {}
+_STAGE_LOCKS_GUARD = threading.Lock()
 
-def _level(obj: "StageObject", cam: "StageCamera | None", relief_path: Path | None) -> None:
+
+def _lock_for(path: Path) -> threading.RLock:
+    key = os.path.normcase(os.path.abspath(path))
+    with _STAGE_LOCKS_GUARD:
+        lk = _STAGE_LOCKS.get(key)
+        if lk is None:
+            lk = _STAGE_LOCKS[key] = threading.RLock()
+        return lk
+
+
+def _frame(relief_path: Path | None, floor_y: float | None) -> tuple[dict | None, float | None]:
+    """SC3d / SC3e: what `_level` reads from a relief (its levelling and its subject distance) at the set's floor — review K50: read before
+    the stage's lock is taken (hundreds of ms)."""
+    from .relief import frame_of_glb
+    return frame_of_glb(relief_path, -(floor_y if floor_y is not None else -1.0)) if relief_path is not None else (None, None)
+
+
+def _level(obj: "StageObject", cam: "StageCamera | None", relief_path: Path | None, frame: tuple[dict | None, float | None] | None = None) -> None:
     """SC3d: a picture set laid level by the floor fitted to its relief (`relief.frame_of_glb`, at the lift the engine gives it) — the set
     turned and raised (its transform), its picture camera where the picture was taken in that frame (pitched and, SC3f, rolled as the
     photograph's camera was); without a relief, too little floor or too steep a one, as it came (the floor's lift alone). SC3e: the camera looks at the
-    distance whose depth pass holds the picture's depths (`relief.subject_distance`; 1 m when the relief cannot say)."""
-    from .relief import frame_of_glb
-    level, subject = frame_of_glb(relief_path, -(obj.floor_y if obj.floor_y is not None else -1.0)) if relief_path is not None else (None, None)
+    distance whose depth pass holds the picture's depths (`relief.subject_distance`; 1 m when the relief cannot say). `frame`: `_frame`'s
+    reading for the set's floor, read beforehand (review K50)."""
+    level, subject = frame if frame is not None else _frame(relief_path, obj.floor_y)
     obj.transform = Transform(pos=list(level["pos"]), rot=list(level["rot"]), scale=[1.0, 1.0, 1.0]) if level else Transform()
     obj.level = {k: level[k] for k in ("pitch_deg", "roll_deg")} | {"residual": level["fit"]["residual"]} if level else None
     if cam is None:
@@ -516,9 +540,23 @@ class StageStore:
     def save(self, st: Stage) -> None:
         atomic_write_json(self.path(st.id), st.model_dump())
 
+    def lock(self, st_id: str) -> threading.RLock:
+        """Review K50: the stage's lock — held across a read-modify-write of its document."""
+        return _lock_for(self.path(st_id))
+
+    def _kind_lock(self, kind: str) -> threading.RLock:
+        """Review K50 / K91: the lock of a one-of-a-kind stage (found by a search, then made or remade): a bench, the line-up, the
+        animation bench — two requests at once find the same one, never make two."""
+        return _lock_for(self.dir / f"#{kind}")
+
     def bench(self, profile: Any, version_id: str, size: dict[str, int] | None = None) -> tuple[Stage, bool]:
         """D142: a Cast version's bench — made once and kept (the author's camera and light stay): a character's figure bound to it, or a
-        prop's model at its height with a 1.75 m figure beside it for scale. (stage, made now)."""
+        prop's model at its height with a 1.75 m figure beside it for scale. (stage, made now). Review K91: the search and the making under
+        one lock (two opens at once make one bench)."""
+        with self._kind_lock("bench"):
+            return self._bench(profile, version_id, size)
+
+    def _bench(self, profile: Any, version_id: str, size: dict[str, int] | None) -> tuple[Stage, bool]:
         for st in self.list():
             if st.purpose == "bench" and st.bound is not None and st.bound.profile_id == profile.id and st.bound.version == version_id:
                 return st, False
@@ -589,26 +627,30 @@ class StageStore:
                            transform=Transform(scale=[round(max(0.35, (total + 1.5) / 8.0), 3), 1.0, 1.0]))   # the wall as wide as the row (8 m at 1)
         d = max(2.5, total * 0.95, tallest * 2.0)
         cam = StageCamera(id=new_id("cam"), name="Line-up camera", pos=[0.0, round(tallest * 0.6, 3), round(d, 3)], target=[0.0, round(tallest * 0.5, 3), 0.0])
-        cur = next((s for s in self.list() if s.purpose == "lineup"), None)
-        st = Stage(id=cur.id if cur else new_id("stg"), name="Line-up", purpose="lineup", size=size or {"w": 1920, "h": 1080, "fps": 24},
-                   objects=[wall, *objects], cameras=[cam], active_camera=cam.id, revision=(cur.revision + 1) if cur else 0,
-                   created_at=cur.created_at if cur else utc_now())
-        check(st)
-        self.save(st)
-        return st
+        with self._kind_lock("lineup"):                                     # review K50: found and remade as one change
+            cur = next((s for s in self.list() if s.purpose == "lineup"), None)
+            st = Stage(id=cur.id if cur else new_id("stg"), name="Line-up", purpose="lineup", size=size or {"w": 1920, "h": 1080, "fps": 24},
+                       objects=[wall, *objects], cameras=[cam], active_camera=cam.id, revision=(cur.revision + 1) if cur else 0,
+                       created_at=cur.created_at if cur else utc_now())
+            check(st)
+            with self.lock(st.id):
+                self.save(st)
+            return st
 
     def animation_bench(self, name: str, frames: int, size: dict[str, int] | None = None) -> Stage:
         """D182 (C2b): the animation bench — the project's one stage of purpose `animation`, made again each time: a figure standing at
         the origin, facing +Z, one camera framing it from the front and a little to the side, the range the animation's frames."""
-        cur = next((s for s in self.list() if s.purpose == "animation"), None)
-        fig = StageObject(id=new_id("fig"), kind="mannequin", name="Figure", preset="adult", detail="female", pose=Pose(preset="stand"), colour_id=1)
-        cam = StageCamera(id=new_id("cam"), name="Bench camera", pos=[1.4, 1.2, 3.6], target=[0.0, 0.9, 0.0])
-        st = Stage(id=cur.id if cur else new_id("stg"), name=f"Animation · {name.strip() or 'Animation'}"[:120], purpose="animation",
-                   size=size or {"w": 1920, "h": 1080, "fps": 24}, objects=[fig], cameras=[cam], active_camera=cam.id,
-                   range=StageRange(start=0, end=max(1, frames - 1)), revision=(cur.revision + 1) if cur else 0)
-        check(st)
-        self.save(st)
-        return st
+        with self._kind_lock("animation"):                                  # review K50: found and remade as one change
+            cur = next((s for s in self.list() if s.purpose == "animation"), None)
+            fig = StageObject(id=new_id("fig"), kind="mannequin", name="Figure", preset="adult", detail="female", pose=Pose(preset="stand"), colour_id=1)
+            cam = StageCamera(id=new_id("cam"), name="Bench camera", pos=[1.4, 1.2, 3.6], target=[0.0, 0.9, 0.0])
+            st = Stage(id=cur.id if cur else new_id("stg"), name=f"Animation · {name.strip() or 'Animation'}"[:120], purpose="animation",
+                       size=size or {"w": 1920, "h": 1080, "fps": 24}, objects=[fig], cameras=[cam], active_camera=cam.id,
+                       range=StageRange(start=0, end=max(1, frames - 1)), revision=(cur.revision + 1) if cur else 0)
+            check(st)
+            with self.lock(st.id):
+                self.save(st)
+            return st
 
     def new_length(self, size: dict[str, int], seconds: float | None = None) -> int:
         """C3 (Q4): a new scene's length in frames — `seconds`, else the project's default (project.json's scene_seconds)."""
@@ -630,64 +672,79 @@ class StageStore:
         return st
 
     def put(self, st_id: str, data: dict[str, Any]) -> Stage:
-        """Replace the document from a client body based on `revision` (409 when stale); id, schema and timestamps are the server's."""
-        cur = self.get(st_id)
-        if cur is None:
-            raise KeyError(st_id)
-        base = data.get("revision")
-        if base is not None and int(base) != cur.revision:
-            raise StaleStage(f"the stage is at revision {cur.revision}, the change is based on {base} — reload it first")
-        keep = ("name", "size", "objects", "cameras", "active_camera", "keyframes", "tracks", "range", "length", "passes", "ambient")
-        merged = {**cur.model_dump(), **{k: v for k, v in data.items() if k in keep}, "id": st_id, "schema_version": STAGE_SCHEMA_VERSION,
-                  "revision": cur.revision + 1, "created_at": cur.created_at, "updated_at": utc_now()}
-        alive = {o.get("id") for o in merged.get("objects") or [] if isinstance(o, dict)}
-        merged["tracks"] = {k: v for k, v in (merged.get("tracks") or {}).items() if k in alive}   # U5: a figure removed takes its track
-        st = Stage.model_validate(merged)
-        check(st)
-        self.save(st)
-        return st
+        """Replace the document from a client body based on `revision` (409 when stale); id, schema and timestamps are the server's.
+        Review K50: checked and written under the stage's lock."""
+        with self.lock(st_id):
+            cur = self.get(st_id)
+            if cur is None:
+                raise KeyError(st_id)
+            base = data.get("revision")
+            if base is not None and int(base) != cur.revision:
+                raise StaleStage(f"the stage is at revision {cur.revision}, the change is based on {base} — reload it first")
+            keep = ("name", "size", "objects", "cameras", "active_camera", "keyframes", "tracks", "range", "length", "passes", "ambient")
+            merged = {**cur.model_dump(), **{k: v for k, v in data.items() if k in keep}, "id": st_id, "schema_version": STAGE_SCHEMA_VERSION,
+                      "revision": cur.revision + 1, "created_at": cur.created_at, "updated_at": utc_now()}
+            alive = {o.get("id") for o in merged.get("objects") or [] if isinstance(o, dict)}
+            merged["tracks"] = {k: v for k, v in (merged.get("tracks") or {}).items() if k in alive}   # U5: a figure removed takes its track
+            held = {o.id: o.things_document_id for o in cur.objects if o.things_document_id}
+            for o in merged.get("objects") or []:                          # review K91: a picture set's own document is the server's pointer,
+                if isinstance(o, dict) and not o.get("things_document_id") and held.get(o.get("id")):   # written without a new revision (set_things.
+                    o["things_document_id"] = held[o["id"]]                # ensure_document): a client that never saw it keeps it
+            st = Stage.model_validate(merged)
+            check(st)
+            self.save(st)
+            return st
 
     def add_image_set(self, st_id: str, asset_id: str, plate_id: str, lens_deg: float | None, floor_y: float | None, relief_path: Path | None = None) -> Stage:
         """SC3 (D120): the relief as a locked set standing on the floor (raised by the floor's depth under the picture's camera) and the
         picture's camera at that height looking down −Z with the lens, made the active one — the shot the picture already is."""
         from .relief import DEFAULT_LENS_DEG, focal_mm_for
-        st = self.get(st_id)
-        if st is None:
+        if not self.path(st_id).is_file():
             raise KeyError(st_id)
         lens = float(lens_deg) if lens_deg else DEFAULT_LENS_DEG
         floor = float(floor_y) if floor_y is not None and -4.0 <= floor_y <= -0.05 else -1.0
-        n = sum(1 for o in st.objects if o.kind == "set" and o.preset == "image") + 1
-        suffix = f" {n}" if n > 1 else ""
-        cam = StageCamera(id=new_id("cam"), name=f"Picture camera{suffix}", pos=[0.0, round(-floor, 3), 0.0], target=[0.0, round(-floor, 3), -1.0],
-                          focal_mm=focal_mm_for(lens), sensor_mm=36.0)
-        obj = StageObject(id=new_id("set"), kind="set", name=f"Picture set{suffix}", preset="image", asset_id=asset_id, plate_asset_id=plate_id,
-                          lens_deg=round(lens, 2), floor_y=round(floor, 3), plate_camera_id=cam.id, locked=True, colour_id=(len(st.objects) % 12) + 1)
-        _level(obj, cam, relief_path)
-        st.objects.append(obj)
-        st.cameras.append(cam)
-        st.active_camera = cam.id
-        st.revision += 1
-        st.updated_at = utc_now()
-        check(st)
-        self.save(st)
-        return st
+        frame = _frame(relief_path, round(floor, 3))                       # review K50: the relief read first, outside the lock
+        with self.lock(st_id):
+            st = self.get(st_id)
+            if st is None:
+                raise KeyError(st_id)
+            n = sum(1 for o in st.objects if o.kind == "set" and o.preset == "image") + 1
+            suffix = f" {n}" if n > 1 else ""
+            cam = StageCamera(id=new_id("cam"), name=f"Picture camera{suffix}", pos=[0.0, round(-floor, 3), 0.0], target=[0.0, round(-floor, 3), -1.0],
+                              focal_mm=focal_mm_for(lens), sensor_mm=36.0)
+            obj = StageObject(id=new_id("set"), kind="set", name=f"Picture set{suffix}", preset="image", asset_id=asset_id, plate_asset_id=plate_id,
+                              lens_deg=round(lens, 2), floor_y=round(floor, 3), plate_camera_id=cam.id, locked=True, colour_id=(len(st.objects) % 12) + 1)
+            _level(obj, cam, relief_path, frame)
+            st.objects.append(obj)
+            st.cameras.append(cam)
+            st.active_camera = cam.id
+            st.revision += 1
+            st.updated_at = utc_now()
+            check(st)
+            self.save(st)
+            return st
 
     def replace_image_set(self, st_id: str, set_id: str, asset_id: str, lens_deg: float | None, floor_y: float | None, plate_id: str | None = None,
                           relief_path: Path | None = None) -> Stage:
         """SC3b (D120): a picture set rebuilt in place — a corrected lens gives a new relief: the set takes it, its lens and its floor, and its
         picture camera goes back to where the picture was taken (the floor's height, looking down −Z, the new lens). The old relief stays in
         the Catalogue. KeyError for a missing stage or set; ValueError for an object that is not a picture set."""
+        def floor_of(o: StageObject) -> float:
+            return float(floor_y) if floor_y is not None and -4.0 <= floor_y <= -0.05 else (o.floor_y if o.floor_y is not None else -1.0)
+        _, was = self.picture_set(st_id, set_id)
+        floor = floor_of(was)
+        frame = _frame(relief_path, round(floor, 3))                       # review K50: the relief read first, outside the lock …
+        with self.lock(st_id):
+            st, obj = self.picture_set(st_id, set_id)                      # … the set as it is now
+            if floor_of(obj) != floor:                                     # its floor moved meanwhile (rare): read again for it
+                floor = floor_of(obj)
+                frame = _frame(relief_path, round(floor, 3))
+            return self._replace_image_set(st, obj, asset_id, lens_deg, floor, plate_id, relief_path, frame)
+
+    def _replace_image_set(self, st: Stage, obj: StageObject, asset_id: str, lens_deg: float | None, floor: float, plate_id: str | None,
+                           relief_path: Path | None, frame: tuple[dict | None, float | None]) -> Stage:
         from .relief import DEFAULT_LENS_DEG, focal_mm_for
-        st = self.get(st_id)
-        if st is None:
-            raise KeyError(st_id)
-        obj = next((o for o in st.objects if o.id == set_id), None)
-        if obj is None:
-            raise KeyError(set_id)
-        if obj.kind != "set" or obj.preset != "image":
-            raise ValueError(f"{set_id} is not a picture set")
         lens = float(lens_deg) if lens_deg else (obj.lens_deg or DEFAULT_LENS_DEG)
-        floor = float(floor_y) if floor_y is not None and -4.0 <= floor_y <= -0.05 else (obj.floor_y if obj.floor_y is not None else -1.0)
         obj.asset_id, obj.lens_deg, obj.floor_y = asset_id, round(lens, 2), round(floor, 3)
         if plate_id:                                                                # D123 (SC3c-3): rebuilt from the clean plate — the set's picture now
             obj.plate_asset_id = plate_id
@@ -698,7 +755,7 @@ class StageStore:
         cam = next((c for c in st.cameras if c.id == obj.plate_camera_id), None)
         if cam is not None:
             cam.pos, cam.target, cam.focal_mm, cam.roll = [0.0, round(-floor, 3), 0.0], [0.0, round(-floor, 3), -1.0], focal_mm_for(lens), 0.0
-        _level(obj, cam, relief_path)
+        _level(obj, cam, relief_path, frame)
         st.revision += 1
         st.updated_at = utc_now()
         check(st)
@@ -717,49 +774,56 @@ class StageStore:
             raise ValueError(f"{set_id} is not a picture set")
         return st, obj
 
-    def edit_picture_set(self, st_id: str, set_id: str, fn: Any) -> Stage:
-        """D123: a server-side change to a picture set (`fn(stage, set)`), saved at a new revision (the client reloads)."""
-        st, obj = self.picture_set(st_id, set_id)
-        fn(st, obj)
-        st.revision += 1
-        st.updated_at = utc_now()
-        check(st)
-        self.save(st)
-        return st
+    def edit_picture_set(self, st_id: str, set_id: str, fn: Any, bump: bool = True) -> Stage:
+        """D123: a server-side change to a picture set (`fn(stage, set)`), saved at a new revision (the client reloads). Review K50: under
+        the stage's lock — `fn` does no slow work (read what it needs first). Review K91: `bump` False writes a server pointer the client
+        never sends back (the set's own document) at the same revision — its next autosave is no 409, and `put` keeps the pointer."""
+        with self.lock(st_id):
+            st, obj = self.picture_set(st_id, set_id)
+            fn(st, obj)
+            if bump:
+                st.revision += 1
+                st.updated_at = utc_now()
+            check(st)
+            self.save(st)
+            return st
 
     def set_passes(self, st_id: str, entry: dict[str, Any], group_id: str | None) -> Stage:
         """ST3: record the passes rendered for one camera (replacing that camera's earlier entry) and the stage's album page; a server-side
-        change, so the revision moves — the client takes the returned document."""
-        cur = self.get(st_id)
-        if cur is None:
-            raise KeyError(st_id)
-        passes = [p for p in cur.passes if p.get("camera_id") != entry.get("camera_id")] + [entry]
-        st = cur.model_copy(update={"passes": passes, "group_id": group_id or cur.group_id, "revision": cur.revision + 1, "updated_at": utc_now()})
-        self.save(st)
-        return st
+        change, so the revision moves — the client takes the returned document. Review K50: under the stage's lock."""
+        with self.lock(st_id):
+            cur = self.get(st_id)
+            if cur is None:
+                raise KeyError(st_id)
+            passes = [p for p in cur.passes if p.get("camera_id") != entry.get("camera_id")] + [entry]
+            st = cur.model_copy(update={"passes": passes, "group_id": group_id or cur.group_id, "revision": cur.revision + 1, "updated_at": utc_now()})
+            self.save(st)
+            return st
 
     def set_guide(self, st_id: str, camera_id: str, kind: str, guide: dict[str, Any], group_id: str | None) -> Stage:
         """ST4: record a camera's rendered pass sequence under its passes entry (`guides[kind]`), making the entry when the stills were
-        never rendered; the revision moves like set_passes."""
-        cur = self.get(st_id)
-        if cur is None:
-            raise KeyError(st_id)
-        passes = [dict(p) for p in cur.passes]
-        entry = next((p for p in passes if p.get("camera_id") == camera_id), None)
-        if entry is None:
-            entry = {"camera_id": camera_id, "revision": guide.get("revision", cur.revision), "size": guide.get("size"), "assets": {}, "keypoints": [], "legend": {}}
-            passes.append(entry)
-        entry.setdefault("guides", {})[kind] = guide
-        st = cur.model_copy(update={"passes": passes, "group_id": group_id or cur.group_id, "revision": cur.revision + 1, "updated_at": utc_now()})
-        self.save(st)
-        return st
+        never rendered; the revision moves like set_passes. Review K50: under the stage's lock."""
+        with self.lock(st_id):
+            cur = self.get(st_id)
+            if cur is None:
+                raise KeyError(st_id)
+            passes = [dict(p) for p in cur.passes]
+            entry = next((p for p in passes if p.get("camera_id") == camera_id), None)
+            if entry is None:
+                entry = {"camera_id": camera_id, "revision": guide.get("revision", cur.revision), "size": guide.get("size"), "assets": {}, "keypoints": [], "legend": {}}
+                passes.append(entry)
+            entry.setdefault("guides", {})[kind] = guide
+            st = cur.model_copy(update={"passes": passes, "group_id": group_id or cur.group_id, "revision": cur.revision + 1, "updated_at": utc_now()})
+            self.save(st)
+            return st
 
     def delete(self, st_id: str) -> bool:
         p = self.path(st_id)
-        if not p.is_file():
-            return False
-        p.unlink()
-        return True
+        with self.lock(st_id):
+            if not p.is_file():
+                return False
+            unlink(p, missing_ok=True)
+            return True
 
 
 def encode_guide(frames: list[Path], out: Path, fps: int) -> None:

@@ -2545,13 +2545,16 @@ async def voice_patch(svc: Svc, vid: str, body: VoicePatch):
     rec = await asyncio.to_thread(store.get, vid)
     if rec is None:
         raise HTTPException(404, "voice not found")
-    rec = rec.model_copy(update={**body.model_dump(exclude_none=True), "updated_at": utc_now()})
+    upd = {**body.model_dump(exclude_none=True), "updated_at": utc_now()}
+    rec = rec.model_copy(update=upd)
     ref = await asyncio.to_thread(cat.get, rec.reference_asset_id) if rec.reference_asset_id else None
     try:
         check_voice(rec, ref.model_dump() if ref else None)
     except ValueError as e:
         raise HTTPException(422, str(e))
-    await asyncio.to_thread(store.save, rec)
+    rec = await asyncio.to_thread(store.change, vid, lambda r: [setattr(r, k, v) for k, v in upd.items()])   # review K90: on the record as it is now
+    if rec is None:
+        raise HTTPException(404, "voice not found")
     _voice_changed(svc, vid)
     return rec.model_dump()
 

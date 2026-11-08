@@ -23,6 +23,16 @@ from .deps import Svc
 router = APIRouter(tags=["finals"])
 
 
+async def _drop_made(svc: Any, cat: Any, ids: list[str]) -> None:
+    """Review K89: an image a route made for a job the queue then refused (a 422) goes again — each refusal left one in the Bin."""
+    def drop() -> None:
+        cat.trash(ids)
+        cat.purge(ids)
+    await asyncio.to_thread(drop)
+    for i in ids:
+        svc.hub.broadcast("asset.deleted", {"id": i})
+
+
 class FinalLayerIn(BaseModel):
     id: str
     kind: str
@@ -260,6 +270,7 @@ async def final_plate(svc: Svc, fid: str, body: PlateBody):
     try:
         jobs = svc.queue.submit(recipe, origin=JobOrigin(suite="stage", surface=FINAL_PLATE_SURFACE, ref=fid, payload=payload))
     except ValueError as e:
+        await _drop_made(svc, cat, [rec.id])                           # review K89: the clay pass made for it
         raise HTTPException(422, str(e))
     await svc.queue.flush()
     f = await asyncio.to_thread(store.add_job, fid, "plate", jobs[0].id, status="queued", error=None, clip_id=None, frames_done=0,
@@ -375,6 +386,7 @@ async def final_plate_key(svc: Svc, fid: str, body: KeyBody):
     rec, mask = await asyncio.to_thread(prepare)
     svc.hub.broadcast("asset.created", rec.model_dump())
     if mask.shape != (rec.h, rec.w):
+        await _drop_made(svc, cat, [rec.id])                           # review K89
         raise HTTPException(422, f"the mask ({mask.shape[1]}×{mask.shape[0]}) is not the keyframe's size ({rec.w}×{rec.h})")
     share = float(mask.mean())
     key: dict[str, Any] = {"frame": body.frame, "asset_id": rec.id, "filled": round(share, 4), "job_id": None, "heal": body.heal}
@@ -399,6 +411,8 @@ async def final_plate_key(svc: Svc, fid: str, body: KeyBody):
                             "document_id": od.doc.id, "prompt_text": plate_fill_prompt(plate.prompt), "seeds": [seed], "expand": 48, "feather": 32},
                            origin=JobOrigin(suite="stage", surface=FINAL_PLATE_KEY_SURFACE, ref=fid, payload={"frame": body.frame, "document_id": od.doc.id}))[0]
         except ValueError as e:
+            await asyncio.to_thread(docs.delete, od.doc.id)            # review K89: the keyframe and its document made for the refused fill
+            await _drop_made(svc, cat, [rec.id])
             raise HTTPException(422, str(e))
         await q.flush()
         key.update(asset_id=None, job_id=job.id)
@@ -536,6 +550,8 @@ async def final_layer_run(svc: Svc, fid: str, lid: str, body: RunBody):
         jobs = svc.queue.submit(character_recipe(f, layer, spec.id, prompt, plan[0], None), stage=body.stage,
                                 origin=JobOrigin(suite="stage", surface=FINAL_LAYER_SURFACE, ref=fid, payload={"layer": lid, "batch": 0, "batches": len(plan), "prompt": prompt}))
     except ValueError as e:
+        if placed:
+            await _drop_made(svc, cat, [ref_id])                       # review K89: the placed reference made for it
         raise HTTPException(422, str(e))
     await svc.queue.flush()
     from ..boxes import sig

@@ -197,6 +197,11 @@ PAST_SWATCH_DEFAULTS: dict[str, frozenset[str]] = {
 }
 
 
+# Review K92: the style sample's built-in prompts of earlier versions — when STYLE_SAMPLE_PROMPT changes, the old text goes here, so a
+# settings file that saved it verbatim follows the new one (none changed yet)
+PAST_STYLE_DEFAULTS: tuple[str, ...] = ()
+
+
 class SampleSettings(BaseModel):
     """D90: the prompt a style's sample is rendered with (the style's fragment is appended by the server), and the scene each look
     preset's swatch is rendered on. Editable in Settings › Samples; a blank entry is its default again, a scene without `{value}` gets it
@@ -214,7 +219,8 @@ class SampleSettings(BaseModel):
     @field_validator("style_prompt")
     @classmethod
     def _style(cls, v: str) -> str:
-        return v.strip() or STYLE_SAMPLE_PROMPT
+        t = v.strip()                                                  # review K92: as the swatches — the built-in saved verbatim (Settings sends the
+        return STYLE_SAMPLE_PROMPT if not t or t in PAST_STYLE_DEFAULTS else t   # whole object back) follows the built-in, old or new
 
     @field_validator("swatch_prompts")
     @classmethod

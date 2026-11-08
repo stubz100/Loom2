@@ -26,6 +26,26 @@ export function publish(f: RecordFrame): void {
   }
 }
 
+/** Review K83: the story kinds the used-by lines (`usedby.py`: profiles, ideas, the world's styles, the Flow's boards, the library) are
+ *  never read from — a shot's record, the panels, a voice, the templates; an unknown kind still refetches. */
+const NOT_USED_BY: ReadonlySet<string> = new Set(['shot', 'panels', 'voice', 'templates'])
+/** Review K83: a burst of story.changed frames (a job's finisher writing a profile several times, the Flow's saves) refetches once. */
+export const BURST_MS = 250
+let burst: { usedBy: boolean; shots: Set<string> } | null = null
+function later(usedBy: boolean, shot: string | null): void {
+  if (!usedBy && !shot) return
+  if (!burst) { burst = { usedBy: false, shots: new Set() }; setTimeout(flush, BURST_MS) }
+  burst.usedBy ||= usedBy
+  if (shot) burst.shots.add(shot)
+}
+function flush(): void {
+  const b = burst
+  burst = null
+  if (!b) return
+  if (b.shots.size) void import('../suites/story/recipeTick').then((m) => { for (const id of b.shots) m.useRecipeTick.getState().bump(id) })
+  if (b.usedBy) void import('./album').then((m) => void m.useAlbum.getState().loadUsedBy())
+}
+
 const ids = (f: { data?: unknown }): string[] => ((f.data as { ids?: string[] } | null)?.ids) ?? []
 
 /** Today's record holders, by kind (moved here from session.applyEvent unchanged). */
@@ -61,8 +81,9 @@ function route(f: RecordFrame): void {
     case 'story.changed': {                                       // 17 (D85): the world (later profiles, shots, the flow) moved on the server
       const d = f.data as { kind?: string; id?: string } | null
       void import('../suites/story/storyStore').then((m) => m.useStory.getState().onChanged(f.data as never))
-      if (d?.kind === 'shot' && d.id) { const id = d.id; void import('../suites/story/recipeTick').then((m) => m.useRecipeTick.getState().bump(id)) }   // RC0: an open recipe refetches
-      void import('./album').then((m) => void m.useAlbum.getState().loadUsedBy())      // D92 §4.2: a version, style, board or entry may name another group
+      // RC0: an open recipe refetches (a shot's); D92 §4.2: a version, style, board or entry may name another group — review K83: only the
+      // kinds the used-by lines are read from, and once per burst
+      later(!(d?.kind && NOT_USED_BY.has(d.kind)), d?.kind === 'shot' && d.id ? d.id : null)
       if (d?.kind === 'profile' && d.id) { const id = d.id; void import('../suites/generate/generateStore').then((m) => m.mentionsMoved({ profile: id })) }   // D93: a linked character got a hero
       return
     }

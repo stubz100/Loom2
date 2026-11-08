@@ -141,7 +141,7 @@ def test_output_collector_takes_the_glb_record_and_skips_the_bare_result():
                         "322": {"result": ["loom2/job_x_00001.glb", None, []], "3d": [{"filename": "job_x_00001.glb", "subfolder": "loom2", "type": "output"}]},
                         "901": {"images": [{"filename": "job_x_view_00001_.png", "subfolder": "loom2", "type": "output"}]}}}
     files = EngineFollower.outputs(hist)
-    assert files == [{"filename": "job_x_00001.glb", "subfolder": "loom2"}, {"filename": "job_x_view_00001_.png", "subfolder": "loom2"}]
+    assert files == [{"filename": "job_x_00001.glb", "subfolder": "loom2", "key": "3d"}, {"filename": "job_x_view_00001_.png", "subfolder": "loom2", "key": "images"}]   # K85: with the output's kind
 
 
 def test_client_thumbnail_route(tmp_path: Path):

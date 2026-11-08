@@ -5,6 +5,7 @@ three.js (GLTFLoader, FBXLoader), lists their clips and retargets them onto the 
 from __future__ import annotations
 
 import hashlib
+import time
 from pathlib import Path
 from typing import Literal
 
@@ -51,10 +52,17 @@ def scan(starter: Path | None, local: Path | None) -> list[MotionFile]:
     return out
 
 
+_INDEX: dict[tuple[str, str], tuple[float, dict[str, Path]]] = {}
+INDEX_TTL_S = 10.0                                 # review K91: a library's clips are fetched in a burst — one scan serves the burst
+
+
 def resolve(file_id: str, starter: Path | None, local: Path | None) -> Path | None:
-    """The file behind an id from `scan`, or None (ids are recomputed: a renamed file gets a new one)."""
-    for f in scan(starter, local):
-        if f.id == file_id:
-            root = starter if f.source == "starter" else local
-            return (root / f.rel) if root else None
-    return None
+    """The file behind an id from `scan`, or None (ids are recomputed: a renamed file gets a new one). Review K91: every GET walked both
+    folders; the id → path map is kept for a few seconds (a miss rescans at once, so a file just added is found)."""
+    key = (str(starter or ""), str(local or ""))
+    at, index = _INDEX.get(key, (0.0, {}))
+    if file_id not in index or time.monotonic() - at > INDEX_TTL_S:
+        index = {f.id: ((starter if f.source == "starter" else local) / f.rel) for f in scan(starter, local)   # type: ignore[operator]
+                 if (starter if f.source == "starter" else local) is not None}
+        _INDEX[key] = (time.monotonic(), index)
+    return index.get(file_id)

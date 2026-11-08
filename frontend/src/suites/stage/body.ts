@@ -24,6 +24,13 @@ export const ENDS = ['r_wrist', 'l_wrist', 'r_ankle', 'l_ankle'] as const
 export type End = (typeof ENDS)[number]
 /** D183: how many joints and ends a body has placed by hand. */
 export const placedCount = (b: Body | null | undefined): number => Object.keys(b?.joint_offsets ?? {}).length
+/** D183 (*Reset clears one or all*) — review K113: one joint or end back where the fitted body has it (null: all of them). */
+export function resetPlaced(b: Body, key: string | null): Body {
+  if (key === null) return { ...b, joint_offsets: {} }
+  const rest = { ...(b.joint_offsets ?? {}) }
+  delete rest[key]
+  return { ...b, joint_offsets: rest }
+}
 /** S6: the upper arm's and the thigh's shares of their limbs at ×1 (0.29 + 0.27, 0.44 + 0.43): body.py ELBOW_AT, KNEE_AT. */
 export const ELBOW_AT = 29 / 56, KNEE_AT = 44 / 87
 export const DEFAULT_BODY: Body = { height_m: 1.75, build: 'average', head: 1, torso: 1, shoulders: 1, arms: 1, legs: 1, neck: 1, hands: 1, feet: 1,

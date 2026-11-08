@@ -234,6 +234,17 @@ export interface FootShapes { right: FootShape; left?: FootShape | null }
 export const FOOT_PER_LEG = 0.3
 /** RG2b: how near the shell's surface a placed foot's ball and toe must lie for its shoe to be rigged (metres). */
 export const FOOT_REACH = 0.06
+/** Review K113: the shoe bent (`bend` turns the foot's bones) — each of the foot's points' move from the shoe as it stands: the heel and the
+ *  ball ride the ankle's bone, the toe the ball's (a stiff sole's: the ankle's). The view drew the points where the flat shoe has them. */
+export function bentFoot(root: THREE.Object3D, side: 'r' | 'l', bend: () => void): Record<'heel' | 'ball' | 'toe', THREE.Matrix4> {
+  const ankle = root.getObjectByName(`${side}_ankle_rig`), ball = root.getObjectByName(`${side}_ball_rig`)
+  root.updateMatrixWorld(true)
+  const was = { ankle: ankle?.matrixWorld.clone(), ball: ball?.matrixWorld.clone() }
+  bend(); root.updateMatrixWorld(true)
+  const moved = (o: THREE.Object3D | undefined, w: THREE.Matrix4 | undefined) => (o && w ? o.matrixWorld.clone().multiply(w.clone().invert()) : new THREE.Matrix4())
+  const ma = moved(ankle, was.ankle)
+  return { heel: ma, ball: ma, toe: ball ? moved(ball, was.ball) : ma }
+}
 export interface BindOptions {
   weights?: Weighting; stance?: Record<string, number[]> | null; visible?: boolean
   /** CS3 (06 §2.5): the character's hand rig draws the hands — the shell's own (Pixal3D's mittens) collapse into the wrists. */

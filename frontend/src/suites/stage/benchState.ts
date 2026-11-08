@@ -92,6 +92,15 @@ export function movedOf(pts: Points | null): number[] {
   return pts.pose.flatMap((q, k) => (seen(q) && sd[k] && Math.hypot(q[0] - sd[k][0], q[1] - sd[k][1]) > 0.5 ? [k] : []))
 }
 
+/** Review K113: the moved points in the order they were moved (Mirror copies the side moved last) — after a refit the version's read says
+ *  which are moved, in the joints' order: those moved before this session first, then this session's in its order. Mirror took the last
+ *  by index after every refit (a left point beat the right one just dragged). */
+export function orderMoved(was: number[], now: number[]): number[] {
+  return [...now.filter((k) => !was.includes(k)), ...was.filter((k) => now.includes(k))]
+}
+/** Review K113: a point moved again goes last (it stayed where it first was in the order). */
+export const movedLast = (was: number[], k: number): number[] => [...was.filter((x) => x !== k), k]
+
 /** The bench's commands' state (storyCommands registers them; the view publishes what they act on). */
 export const bench = {
   points: () => ui.pts, moved: () => ui.moved,
@@ -99,11 +108,14 @@ export const bench = {
   mirror: (): boolean => {                                                   // the side last moved onto the other, about the nose–ankles axis
     const pts = ui.pts; if (!pts || !ui.moved.length) return false
     const pairs: [number, number][] = [[2, 5], [3, 6], [4, 7], [8, 11], [9, 12], [10, 13], [14, 15], [16, 17]]
-    const last = ui.moved[ui.moved.length - 1], from = pairs.some(([a]) => a === last) ? 0 : 1
+    const last = [...ui.moved].reverse().find((k) => pairs.some((pr) => pr.includes(k)))     // review K113: a nose or a neck has no side
+    if (last === undefined) return false
+    const from = pairs.some(([a]) => a === last) ? 0 : 1
     const ax = (pts.pose[0][0] + (pts.pose[10][0] + pts.pose[13][0]) / 2) / 2
     const next = JSON.parse(JSON.stringify(pts)) as Points
     for (const pr of pairs) { const a = pr[from], c = pr[1 - from]; if (seen(pts.pose[a])) next.pose[c] = [2 * ax - pts.pose[a][0], pts.pose[a][1], pts.pose[a][2]] }
-    setUi({ pts: next, moved: [...new Set([...ui.moved, ...pairs.map((pr) => pr[1 - from])])] })
+    const copied = pairs.filter((pr) => seen(pts.pose[pr[from]])).map((pr) => pr[1 - from])
+    setUi({ pts: next, moved: [...copied.filter((k) => !ui.moved.includes(k)), ...ui.moved] })   // review K113: the side copied from stays last
     return true
   },
 }

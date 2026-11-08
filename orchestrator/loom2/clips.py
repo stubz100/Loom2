@@ -5,6 +5,7 @@ frames into the Catalogue as images with `frame-extract` lineage.
 """
 from __future__ import annotations
 
+import threading
 from fractions import Fraction
 
 from pathlib import Path
@@ -58,6 +59,9 @@ class ClipRecord(BaseModel):
     sound_path: str | None = None                 # D193: the sound the model made with the picture (H3), project-relative (`sound.flac`); the proxy carries it
 
 
+_LOCK = threading.RLock()                          # review K86: clip.json's read-modify-writes (identity, extract, the FaceSim side task) take turns
+
+
 class ClipStore:
     def __init__(self, ws: Workspace) -> None:
         self.ws = ws
@@ -89,12 +93,23 @@ class ClipStore:
     def save(self, rec: ClipRecord) -> None:
         atomic_write_json(self.json_path(rec.id), rec.model_dump())
 
+    def change(self, clip_id: str, fn: Any) -> ClipRecord | None:
+        """Review K86: the record read, changed by `fn(rec)` and written as one — a FaceSim run of minutes saved its whole copy over an
+        extract that landed meanwhile (the frame's asset lost from `extracted_asset_ids`). None when the clip is gone."""
+        with _LOCK:
+            rec = self.get(clip_id)
+            if rec is None:
+                return None
+            fn(rec)
+            self.save(rec)
+            return rec
+
     def keep_sound(self, rec: ClipRecord, src: Path) -> ClipRecord:
-        """D193: the engine's sound file (H3's audio VAE decode, FLAC) moved into the clip's folder as `sound.<ext>` and recorded."""
-        dst = self.dir(rec.id) / f"sound{Path(src).suffix.lower() or '.flac'}"
+        """D193: the engine's sound file (H3's audio VAE decode, FLAC) moved into the clip's folder as `sound.<ext>` and recorded on the record
+        (review K85: saved once, by `encode_proxy` after it — it wrote clip.json twice)."""
+        dst = self.dir(rec.id) / f"sound{Path(src).suffix.lower()}"
         atomic_move(Path(src), dst)
         rec.sound_path = dst.relative_to(self.ws.path).as_posix()
-        self.save(rec)
         return rec
 
     def sound_file(self, rec: ClipRecord) -> Path | None:

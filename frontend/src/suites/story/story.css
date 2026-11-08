@@ -417,7 +417,7 @@
 .skel-foot { border-top: 1px solid var(--line2); flex-wrap: wrap; }
 .skel-strip .spacer, .skel-foot .spacer { flex: 1; }
 .skel-panes { flex: 1; display: grid; grid-template-columns: 1.5fr 1fr; gap: 8px; padding: 8px; min-height: 0; }   /* D140: the reference (the figure over it) and the guide */
-.skel-pane { position: relative; border: 1px solid var(--line2); border-radius: var(--radius); background: var(--bg1); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.skel-pane { position: relative; border: 1px solid var(--line2); border-radius: var(--radius); background: var(--bg1); display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
 .skel-pane .lab { position: absolute; left: 8px; top: 6px; font-size: 11px; color: var(--fg3); z-index: 2; pointer-events: none; }
 .skel-pane .tools { position: absolute; right: 6px; top: 4px; display: flex; gap: 6px; z-index: 2; }
 .skel-pane > .hint { padding: 6px 8px; }
@@ -439,8 +439,9 @@
 .skel-ref circle.joint { fill: #2f9be8; stroke: #0b2a44; stroke-width: 1px; cursor: pointer; }
 .skel-ref circle.joint.sel { fill: #f0a030; }
 .skel-ref circle.joint.out { fill: #e5484d; stroke: #fff; stroke-width: 1.5px; }
-.skel-3d { flex: 1; min-height: 0; }
-.skel-3d canvas { display: block; width: 100%; height: 100%; }
+/* review K113: the canvas sized by the pane, never the pane by the canvas (its pixel size held the pane open: the 3D panes never shrank) */
+.skel-3d { flex: 1; min-height: 0; min-width: 0; position: relative; overflow: hidden; }
+.skel-3d canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
 .skel-guide { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; padding-top: 26px; }
 .skel-guide .frame { position: relative; height: 100%; max-width: 100%; background: #000; overflow: hidden; }
 .skel-guide img.under { position: absolute; opacity: 0.45; }

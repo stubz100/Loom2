@@ -40,6 +40,11 @@ export function disagreements(pose: number[][], fig: XY[], limit = 0.03): { k: n
 
 /** The reference cropped to the figure: its points' box (the body's, the hands' and the feet's) with a margin of 8 % of the figure's
  *  height, kept inside the picture — the pane's viewBox [x, y, w, h]. Null without a whole figure. */
+/** Review K113: the points as SDPose read them (the version keeps its own read apart, `sdpose`, D191), else as kept — what the picture is
+ *  cropped to, so a drop does not re-crop it. */
+export function readOf(p: (Points & { sdpose?: Partial<Points> }) | null): Points | null {
+  return p ? { ...p, ...(p.sdpose ?? {}) } as Points : null
+}
 export function cropOf(p: Points, w: number, h: number): [number, number, number, number] | null {
   const all = [...p.pose, ...(p.hand_left ?? []), ...(p.hand_right ?? []), ...(p.feet ?? [])].filter(seen)
   if (all.length < 4) return null

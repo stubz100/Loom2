@@ -20,14 +20,14 @@ import { CommandButton } from '../../frame/CommandButton'
 import { Help } from '../../frame/Help'
 import { askConfirm, useSession } from '../../store/session'
 import { fitBlocked, shellBlocked, shellFromArmsDown, useStory, versionPointsOfShell } from '../story/storyStore'
-import { DEFAULT_BODY, ENDS, placedCount, rangeOf, type Body, type End } from './body'
+import { DEFAULT_BODY, ENDS, placedCount, rangeOf, resetPlaced, type Body, type End } from './body'
 import { JOINTS, mannequin, POSE_NAMES, POSES, type Joint, type Mannequin } from './builders'
 import { HAND_PRESETS, makeDetailed } from './detailed'
 import type { HandShapes } from './clayHand'
 import { bindProxy, insideShell, setShellPoints, stanceOf, type Proxy } from './proxy'
 import { clearContent, loadOnce } from './gpu'
-import { COCO, cropOf, defaultOf, disagreements, dragFactor, lengthCm, outside, pictureMap, ROWS, seen, setLocked, unlock, type Points, type RowKey, type XY } from './skeleton'
-import { bench, handFromPicture, movedOf, readPicture, setUi, ui, useUi } from './benchState'
+import { COCO, cropOf, readOf, defaultOf, disagreements, dragFactor, lengthCm, outside, pictureMap, ROWS, seen, setLocked, unlock, type Points, type RowKey, type XY } from './skeleton'
+import { bench, handFromPicture, movedLast, movedOf, orderMoved, readPicture, setUi, ui, useUi } from './benchState'
 import { FeetPanes, FeetParts, HandParts, HandsPanes } from './RigBench'
 import { HumanoidSwitch } from './HumanoidSwitch'
 import { showMenu } from '../../frame/ContextMenu'
@@ -123,7 +123,10 @@ export default function SkeletonBench() {
   const key = p && v ? `${p.id}/${v.id}` : null
   const fitted = v?.body_points ?? null
   useEffect(() => {                                                          // another character or version, or a new fit: its points
-    if (key) setUi({ pts: fitted ? JSON.parse(JSON.stringify(fitted)) : null, forVersion: key, moved: movedOf(fitted as Points | null), handPts: null, footPts: null })   // RG3: a new read drops the drags too; D191: the moved ones are those apart from SDPose's
+    // RG3: a new read drops the drags too; D191: the moved ones are those apart from SDPose's — review K113: in the order they were moved
+    // while the version stays (a refit's new points), so Mirror copies the side moved last
+    const moved = movedOf(fitted as Points | null)
+    if (key) setUi({ pts: fitted ? JSON.parse(JSON.stringify(fitted)) : null, forVersion: key, moved: ui.forVersion === key ? orderMoved(ui.moved, moved) : moved, handPts: null, footPts: null })
   }, [key, fitted])
   const handRead = v?.hand_points ?? null, feetRead = v?.feet_points ?? null
   useEffect(() => { setUi({ handPts: null }) }, [handRead])
@@ -185,18 +188,21 @@ function RefPane({ v, body, stance, side }: { v: Profile['versions'][number]; bo
   const map = useMemo(() => (pts && side === 'front' ? pictureMap(pts.pose, fig) : null), [pts, side, fig])
   const over = useOverlay(body, stance, look, shell, view === 'front' ? map : null, w, h, (v.body_points ?? null) as Points | null)
   if (!id) return <div className="skel-pane"><span className="hint">No animation reference yet — Cast's *Make an animation reference*.</span></div>
-  const crop = pts && side === 'front' ? cropOf(pts, w, h) ?? [0, 0, w, h] : null      // the figure fills the pane (the SVG letterboxes it)
+  // the figure fills the pane (the SVG letterboxes it); review K113: cropped to the read (SDPose's points), not to the points as dragged —
+  // the picture re-cropped under the pointer after every drop
+  const crop = pts && side === 'front' ? cropOf(readOf((v.body_points ?? null) as Points | null) ?? pts, w, h) ?? [0, 0, w, h] : null
+  const open = v.state === 'open'                                          // review K113: a final version's points are not dragged (they looked kept)
   const at = (e: React.PointerEvent): XY => { const m = svg.current!.getScreenCTM()!.inverse(); const q = new DOMPoint(e.clientX, e.clientY).matrixTransform(m); return [q.x, q.y] }
   const r = Math.max(3, (crop?.[3] ?? h) / 110)
   const rows = (key: 'pose' | 'hand_left' | 'hand_right' | 'feet') => (pts?.[key] ?? []) as number[][]
   const move = (e: React.PointerEvent) => { if (drag) setDrag({ ...drag, at: at(e), moved: drag.moved || Math.hypot(e.clientX - drag.c0[0], e.clientY - drag.c0[1]) > 3 }) }
   const drop = () => {
-    if (!drag || !pts || !drag.moved) { setDrag(null); return }                             // a click: nothing moved, nothing kept or locked
+    if (!drag || !pts || !drag.moved || !open) { setDrag(null); return }                   // a click: nothing moved, nothing kept or locked
     if (drag.kind === 'white') {
       const next = JSON.parse(JSON.stringify(pts)) as Points
       const list = (next as unknown as Record<string, number[][]>)[drag.key]
       list[drag.k] = [Math.round(drag.at[0] * 10) / 10, Math.round(drag.at[1] * 10) / 10, list[drag.k]?.[2] ?? 1]
-      setUi({ pts: next, moved: drag.key === 'pose' && !ui.moved.includes(drag.k) ? [...ui.moved, drag.k] : ui.moved })
+      setUi({ pts: next, moved: drag.key === 'pose' ? movedLast(ui.moved, drag.k) : ui.moved })
       if (v.state === 'open' && !fitBlocked(v)) void useStory.getState().refitBody(next as never).then((ok) => {   // D191: fitted and kept as it is let go
         if (!ok) { const was = (v.body_points ?? null) as Points | null; setUi({ pts: was ? JSON.parse(JSON.stringify(was)) : null, moved: movedOf(was) }) } })
     } else if (map) {
@@ -223,9 +229,9 @@ function RefPane({ v, body, stance, side }: { v: Profile['versions'][number]; bo
   )
   if (view === 'side') return (
     <div className="skel-pane ref" aria-label="the reference">
-      <span className="lab" title="D183: drag a joint (blue) or a hand's or foot's end (green) to place it on the shell — the shell is bound again from the placed skeleton; Reset puts them back where the fitted body has them">the figure · side</span>
+      <span className="lab" title="D183: drag a joint (blue) or a hand's or foot's end (green) to place it on the shell — the shell is bound again from the placed skeleton; right-click a placed one to reset it, Reset puts them all back where the fitted body has them">the figure · side</span>
       {tools}
-      <FigurePane body={body} stance={stance} shell={shell} look={look} points={(v.body_points ?? null) as Points | null} />
+      <FigurePane body={body} stance={stance} shell={shell} look={look} points={(v.body_points ?? null) as Points | null} open={v.state === 'open'} />
     </div>
   )
   return (
@@ -247,11 +253,11 @@ function RefPane({ v, body, stance, side }: { v: Profile['versions'][number]; bo
             if (!seen(pt)) return null
             const q = drag?.kind === 'white' && drag.key === key && drag.k === k ? drag.at : [pt[0], pt[1]]
             return <circle key={`${key}${k}`} cx={q[0]} cy={q[1]} r={key === 'pose' ? r : r * 0.55} className={`white${key === 'pose' && ui.moved.includes(k) ? ' moved' : ''}`} data-k={k}
-              onPointerDown={(e) => { if (e.button !== 0) return; (e.target as Element).setPointerCapture?.(e.pointerId); setDrag({ kind: 'white', key, k, at: at(e), c0: [e.clientX, e.clientY], moved: false }) }}><title>{`${key === 'pose' ? COCO[k] : key} — SDPose's: drag where it is; the body is fitted and kept when you let go`}</title></circle>
+              onPointerDown={(e) => { if (e.button !== 0 || !open) return; (e.target as Element).setPointerCapture?.(e.pointerId); setDrag({ kind: 'white', key, k, at: at(e), c0: [e.clientX, e.clientY], moved: false }) }}><title>{`${key === 'pose' ? COCO[k] : key} — SDPose's${open ? ': drag where it is; the body is fitted and kept when you let go' : ' (a final version)'}`}</title></circle>
           }))}
           {map && fig.map((f, k) => { const q = drag?.kind === 'blue' && drag.k === k ? drag.at : map.toPic(f)
             return <circle key={`b${k}`} cx={q[0]} cy={q[1]} r={r * 0.5} className="blue" data-k={k}
-              onPointerDown={(e) => { if (e.button !== 0) return; (e.target as Element).setPointerCapture?.(e.pointerId); setDrag({ kind: 'blue', key: 'pose', k, at: at(e), c0: [e.clientX, e.clientY], moved: false }) }}><title>{`${COCO[k]} — the figure's: drag to set the part it ends (locked)`}</title></circle> })}
+              onPointerDown={(e) => { if (e.button !== 0 || !open) return; (e.target as Element).setPointerCapture?.(e.pointerId); setDrag({ kind: 'blue', key: 'pose', k, at: at(e), c0: [e.clientX, e.clientY], moved: false }) }}><title>{`${COCO[k]} — the figure's${open ? ': drag to set the part it ends (locked)' : ' (a final version)'}`}</title></circle> })}
         </svg>}
       </div>
       <div className="skel-hints">{/* D191: over the pane's foot — a line coming or going no longer rescales the picture under a drag */}
@@ -264,8 +270,9 @@ function RefPane({ v, body, stance, side }: { v: Profile['versions'][number]; bo
 }
 
 // ------------------------------------------------------------------ the figure from the side (the reference pane's *side*)
-function FigurePane({ body, stance, shell, look, points }: { body: Body; stance: Record<string, number[]>; shell: string | null; look: Look; points: Points | null }) {
+function FigurePane({ body, stance, shell, look, points, open }: { body: Body; stance: Record<string, number[]>; shell: string | null; look: Look; points: Points | null; open: boolean }) {
   const host = useRef<HTMLDivElement>(null)
+  const openRef = useRef(open); useEffect(() => { openRef.current = open }, [open])   // review K113: a final version's joints are not dragged (they looked kept)
   const [outside, setOutside] = useState<Joint[]>([])                       // the joints the shell's volume does not hold (ringed)
   const u = useUi()
   // viewport check: `framed` — the figure the camera was framed on (framed again only for another figure or height, never after an edit: the
@@ -290,7 +297,7 @@ function FigurePane({ body, stance, shell, look, points }: { body: Body; stance:
     world.current = w
     let raf = 0
     const loop = () => { raf = requestAnimationFrame(loop); r.render(scene, cam) }
-    const fit = () => { const b = el.getBoundingClientRect(); r.setSize(b.width, b.height); cam.aspect = b.width / Math.max(1, b.height); cam.updateProjectionMatrix() }
+    const fit = () => { const b = el.getBoundingClientRect(); r.setSize(b.width, b.height, false); cam.aspect = b.width / Math.max(1, b.height); cam.updateProjectionMatrix() }
     const ro = new ResizeObserver(fit); ro.observe(el); fit(); loop()
     const click = (e: MouseEvent) => {
       if (!w.clickOk) return                                              // viewport check: the end of a drag or an orbit is no click on a row
@@ -310,7 +317,7 @@ function FigurePane({ body, stance, shell, look, points }: { body: Body; stance:
     const release = (e: PointerEvent) => { w.pressed = false; w.clickOk = !!w.pressAt && Math.hypot(e.clientX - w.pressAt[0], e.clientY - w.pressAt[1]) < 3 }
     r.domElement.addEventListener('pointerdown', press, { capture: true }); window.addEventListener('pointerup', release, { capture: true })
     const down = (e: PointerEvent) => {
-      if (e.button !== 0) return
+      if (e.button !== 0 || !openRef.current) return
       ray.setFromCamera(ndc(e), cam)
       const hit = ray.intersectObjects([...w.balls.values(), ...w.ends.values()], false)[0]
       const key = (hit?.object.userData.joint ?? hit?.object.userData.end) as Joint | End | undefined
@@ -341,8 +348,21 @@ function FigurePane({ body, stance, shell, look, points }: { body: Body; stance:
       const next = [was[0] + delta.x, was[1] + delta.y, was[2] + delta.z].map((x) => Math.max(-0.6, Math.min(0.6, +x.toFixed(4))))
       saveBody({ ...b, joint_offsets: { ...(b.joint_offsets ?? {}), [d.key]: next } })
     }
+    // review K113 (D183: Reset clears one or all): a right-click on a placed joint or end — not the end of a right-drag pan — resets it
+    const menu = (e: MouseEvent) => {
+      e.preventDefault()
+      if (!w.clickOk || !openRef.current) return
+      ray.setFromCamera(ndc(e as PointerEvent), cam)
+      const hit = ray.intersectObjects([...w.balls.values(), ...w.ends.values()], false)[0]
+      const key = (hit?.object.userData.joint ?? hit?.object.userData.end) as Joint | End | undefined
+      const b = bodyRef.current
+      if (!key || !b.joint_offsets?.[key]) return
+      showMenu(e, [{ label: `Reset ${key.replace(/_/g, ' ')}`, run: () => saveBody(resetPlaced(bodyRef.current, key)) },
+        { label: 'Reset all placed', run: () => saveBody(resetPlaced(bodyRef.current, null)) }])
+    }
+    r.domElement.addEventListener('contextmenu', menu)
     r.domElement.addEventListener('pointerdown', down); r.domElement.addEventListener('pointermove', move); r.domElement.addEventListener('pointerup', up)
-    return () => { cancelAnimationFrame(raf); ro.disconnect(); r.domElement.removeEventListener('click', click); r.domElement.removeEventListener('pointerdown', press, { capture: true }); window.removeEventListener('pointerup', release, { capture: true }); r.domElement.removeEventListener('pointerdown', down); r.domElement.removeEventListener('pointermove', move); r.domElement.removeEventListener('pointerup', up)
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); r.domElement.removeEventListener('click', click); r.domElement.removeEventListener('contextmenu', menu); r.domElement.removeEventListener('pointerdown', press, { capture: true }); window.removeEventListener('pointerup', release, { capture: true }); r.domElement.removeEventListener('pointerdown', down); r.domElement.removeEventListener('pointermove', move); r.domElement.removeEventListener('pointerup', up)
       w.px?.dispose(); clearContent(w.content); orbit.dispose(); r.dispose(); r.forceContextLoss(); r.domElement.remove(); world.current = null }   // review K61 (V82): the GL context goes now
   }, [])
   useEffect(() => {                                                          // the figure, whenever the body, the stance or the look change
@@ -426,7 +446,7 @@ function FigurePane({ body, stance, shell, look, points }: { body: Body; stance:
     <>
       <div ref={host} className="skel-3d" />
       {look === 'shell' && outside.length > 0 && <span className="hint warn" title={outside.join(', ')}>{outside.length} joint{outside.length === 1 ? '' : 's'} outside the shell</span>}
-      {placedCount(body) > 0 && <span className="hint" data-testid="placed-joints">{placedCount(body)} placed by hand · <button type="button" className="quiet" title="The joints and ends back where the fitted body puts them" onClick={() => saveBody({ ...body, joint_offsets: {} })}>Reset</button></span>}
+      {placedCount(body) > 0 && <span className="hint" data-testid="placed-joints">{placedCount(body)} placed by hand · <button type="button" className="quiet" disabled={!open} title="The joints and ends back where the fitted body puts them (right-click one on the figure to reset it alone)" onClick={() => saveBody(resetPlaced(body, null))}>Reset</button></span>}
     </>
   )
 }

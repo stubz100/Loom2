@@ -188,7 +188,7 @@ class EngineFollower:
             for key in ("images", "gifs", "videos", "3d", "meshes", "files", "audio"):       # P18: Save3DAdvanced reports its GLB under "3d" …; D193: SaveAudio under "audio"
                 for f in node_out.get(key, []) or []:
                     if isinstance(f, dict) and f.get("filename") and f.get("type", "output") == "output":   # … and a bare path list under "result" (skipped)
-                        files.append({"filename": f["filename"], "subfolder": f.get("subfolder", "")})
+                        files.append({"filename": f["filename"], "subfolder": f.get("subfolder", ""), "key": key})   # review K85: what kind of output
             for t in (node_out.get("text", []) or []) if text else []:                     # CA1b: PreviewAny's text (the keypoints job only)
                 if isinstance(t, str):
                     files.append({"text": t})

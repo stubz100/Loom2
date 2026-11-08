@@ -16,7 +16,7 @@ roles.extra = { audio_vae = "minimax-h3-audio-vae", turbo_lora = "minimax-h3-tur
 sampling = { sampler = "res_multistep", scheduler = "simple" }   # ComfyUI's "Image to Video (MiniMax H3)" blueprint
 recipes = { i2v = true, flf = true, flf_holds = true }   # E64: a gradual rise to the end pose, no morph
 geometry = { size_mult = 32, frame_step = 17, frame_base = 5, fps = 24, fps_fixed = true, frames = 124, size = [864, 480], max_px = 589824, tiers = { draft = [864, 480], hd = [1024, 576], portrait = [480, 864], square = [640, 640] } }
-estimates = { vram_gb = 10.0, work_exponent = 1.58 }   # E64: 9.67 GB peak; 241 / 138 s at 1.42× the pixels → 1.58
+estimates = { vram_gb = 10.0, work_exponent = 1.58, source = "baseline (E64 2026-11-05)" }   # E64: 9.67 GB peak; 241 / 138 s at 1.42× the pixels → 1.58
 
 [model.video]
 label = "MiniMax H3 · hero, with sound"

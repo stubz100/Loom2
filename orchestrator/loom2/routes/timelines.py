@@ -103,6 +103,15 @@ class TimelineRender(BaseModel):
     conform: bool = False                          # U7c: the cut's 16 fps takes conformed to its 24 fps by RIFE (one undo step), no render
 
 
+def _has_video(store: TimelineStore, tl: Any) -> bool:
+    """Review K90: anything on a FilmCraft cut's video tracks — a placed picture or clip is not a take, so the lane can be empty."""
+    from ..cuts import read, tracks
+    try:
+        return any(t.items for t in tracks(read(store.export_dir(tl.id) / tl.file)).video)
+    except Exception:  # noqa: BLE001 — an unreadable project is said by the render itself
+        return False
+
+
 @router.post("/timelines/{tl_id}/render", response_model=JobsSubmitted)
 async def timeline_render(svc: Svc, tl_id: str, body: TimelineRender | None = None):
     """P17: the draft render as a CPU job (no engine) — the result is a Catalogue clip with lineage to every clip on the lane. RC3: `movie`
@@ -112,7 +121,7 @@ async def timeline_render(svc: Svc, tl_id: str, body: TimelineRender | None = No
     tl = await asyncio.to_thread(store.get, tl_id)
     if tl is None:
         raise HTTPException(404, "sequence not found")
-    if not tl.clips:
+    if not tl.clips and not (tl.file and await asyncio.to_thread(_has_video, store, tl)):   # review K90: a FilmCraft cut of placed pictures only renders
         raise HTTPException(422, "the sequence is empty")
     recs = {c.id for c in await asyncio.to_thread(clips.list)}
     missing = [c.clip_id for c in tl.clips if c.clip_id not in recs]

@@ -77,23 +77,57 @@ export function maskPathD(m: Pick<MaskInfo, 'vertices' | 'inTangents' | 'outTang
  *  comp = position + rotate(rotation) · scale(scale %) · (layer − anchor). The overlay drew the masks at (position − anchor) of the
  *  layer's unsampled values: off on a keyed, scaled or turned layer. */
 export interface LayerXf { pos: [number, number]; anchor: [number, number]; scale: [number, number]; rot: number }
+const XF_PATHS = ['transform/anchor', 'transform/position', 'transform/scale', 'transform/rotation']
 const vec2 = (v: unknown, d: [number, number]): [number, number] => (Array.isArray(v) ? [Number(v[0] ?? d[0]), Number(v[1] ?? d[1])] : d)
 export function layerXf(props: Pick<FlatProp, 'path' | 'value'>[]): LayerXf {
   const at = (k: string) => props.find((p) => p.path === `transform/${k}`)?.value
   const sc = vec2(at('scale'), [100, 100])
   return { pos: vec2(at('position'), [0, 0]), anchor: vec2(at('anchor'), [0, 0]), scale: [sc[0] / 100 || 1, sc[1] / 100 || 1], rot: Number(at('rotation') ?? 0) || 0 }
 }
+/** Review K116 (the parent): a layer's pixels → composition pixels as an affine map [a, b, c, d, e, f] (SVG's `matrix`: x' = a·x + c·y + e,
+ *  y' = b·x + d·y + f). A parented layer's own transform is in its parent's pixels (a character's matte is parented to her, D111), so
+ *  the masks' space is the parent chain's transforms composed — one layer's alone drew and edited them offset on the matte. */
+export type Affine = [number, number, number, number, number, number]
+export type Xf = LayerXf | Affine
+export function affineOf(x: Xf): Affine {
+  if (Array.isArray(x)) return x
+  const r = (x.rot * Math.PI) / 180, cos = Math.cos(r), sin = Math.sin(r)
+  const a = cos * x.scale[0], b = sin * x.scale[0], c = -sin * x.scale[1], d = cos * x.scale[1]
+  return [a, b, c, d, x.pos[0] - a * x.anchor[0] - c * x.anchor[1], x.pos[1] - b * x.anchor[0] - d * x.anchor[1]]
+}
+/** `m ∘ n`: n applied first. */
+export function mulAffine([a1, b1, c1, d1, e1, f1]: Affine, [a2, b2, c2, d2, e2, f2]: Affine): Affine {
+  return [a1 * a2 + c1 * b2, b1 * a2 + d1 * b2, a1 * c2 + c1 * d2, b1 * c2 + d1 * d2, a1 * e2 + c1 * f2 + e1, b1 * e2 + d1 * f2 + f1]
+}
+/** The layer's own transform under its parents' (nearest first): the layer's own when it has none. */
+export function chainXf(own: LayerXf, parents: LayerXf[]): Xf {
+  return parents.reduce<Affine | LayerXf>((m, p) => mulAffine(affineOf(p), affineOf(m)), own)
+}
+/** The ids of a layer's parents, nearest first (a loop or a missing layer ends the chain). */
+export function parentChain(layers: Pick<CompLayer, 'id' | 'parent'>[], id: number): number[] {
+  const out: number[] = []
+  let at = layers.find((l) => l.id === id)?.parent ?? null
+  while (at !== null && at !== id && !out.includes(at) && out.length < 32) {
+    out.push(at)
+    at = layers.find((l) => l.id === at)?.parent ?? null
+  }
+  return out
+}
+/** The transform's mean scale (a handle's size in the layer's pixels). */
+export const xfScale = (x: Xf): number => { const [a, b, c, d] = affineOf(x); return Math.sqrt(Math.abs(a * d - b * c)) || 1 }
 /** The transform as an SVG attribute (layer pixels → composition pixels). */
-export const xfAttr = (x: LayerXf): string => `translate(${x.pos[0]} ${x.pos[1]}) rotate(${x.rot}) scale(${x.scale[0]} ${x.scale[1]}) translate(${-x.anchor[0]} ${-x.anchor[1]})`
+export const xfAttr = (x: Xf): string => Array.isArray(x) ? `matrix(${x.map((n) => Math.round(n * 1e6) / 1e6).join(' ')})`
+  : `translate(${x.pos[0]} ${x.pos[1]}) rotate(${x.rot}) scale(${x.scale[0]} ${x.scale[1]}) translate(${-x.anchor[0]} ${-x.anchor[1]})`
 /** A move on the frame (composition pixels) as a move in the layer's pixels. */
-export function deltaToLayer(x: LayerXf, [dx, dy]: [number, number]): [number, number] {
-  const r = (-x.rot * Math.PI) / 180
-  return [(dx * Math.cos(r) - dy * Math.sin(r)) / x.scale[0], (dx * Math.sin(r) + dy * Math.cos(r)) / x.scale[1]]
+export function deltaToLayer(x: Xf, [dx, dy]: [number, number]): [number, number] {
+  const [a, b, c, d] = affineOf(x)
+  const det = a * d - b * c || 1
+  return [(d * dx - c * dy) / det, (a * dy - b * dx) / det]
 }
 /** A composition point in the layer's pixels (the inverse of the transform). */
-export function toLayerPx(x: LayerXf, [cx, cy]: [number, number]): [number, number] {
-  const [lx, ly] = deltaToLayer(x, [cx - x.pos[0], cy - x.pos[1]])
-  return [lx + x.anchor[0], ly + x.anchor[1]]
+export function toLayerPx(x: Xf, [cx, cy]: [number, number]): [number, number] {
+  const m = affineOf(x)
+  return deltaToLayer(m, [cx - m[4], cy - m[5]])
 }
 /** AE2d: seconds snapped to the composition's frames. */
 export const snapTime = (sec: number, rate: number): number => Math.round(sec * rate) / rate
@@ -140,6 +174,8 @@ interface CompState {
   props: FlatProp[]
   /** Review K116: the frame the properties' values were read at (read again when the playhead rests elsewhere). */
   propsAt: number | null
+  /** Review K116: the selected layer's parents' transforms at the same frame, nearest first (the masks' space is the chain's). */
+  parentXfs: LayerXf[]
   keysOf: Record<string, PropKey[]>
   uidOf: Record<string, number | string>
   busy: boolean
@@ -345,6 +381,11 @@ export const useComposition = create<CompState>((set, get) => {
     if (restTimer !== null) window.clearTimeout(restTimer)
     restTimer = window.setTimeout(() => { restTimer = null; get().settle() }, REST_MS)
   }
+  /** Review K116: a layer's transform at `t` (a parent of the selected layer); a property that cannot be read stays at its default. */
+  const transformAt = async (fid: string, lid: number, t: number): Promise<LayerXf> => layerXf(await Promise.all(XF_PATHS.map(async (path) => {
+    try { return { path, value: (await unwrap(http.GET('/finals/{fid}/composition/layers/{lid}/property', { params: { path: { fid, lid: String(lid) }, query: { path, t } } })) as { value?: unknown }).value } }
+    catch { return { path, value: undefined } }
+  })))
   /** After an edit: the composition again (its revision moved: the cache dropped, the frame asked again), the lists, the properties. */
   const edited = async (): Promise<void> => {
     await get().reload()
@@ -357,23 +398,27 @@ export const useComposition = create<CompState>((set, get) => {
   }
   return {
     finalId: null, final: null, comp: null, frame: 0, playing: false, shown: null, fetching: false, filled: 0, error: null,
-    layers: [], selected: null, props: [], propsAt: null, keysOf: {}, uidOf: {}, busy: false, masks: [], maskTool: 'off', selectedMask: null, poly: [], maskView: 'lines', editorTab: 'props', passPreset: 'cleanup', passStrength: 0.1, passMouth: 'head', passScope: 'layer', effects: [], fxValues: {}, catalog: {}, before: null,
+    layers: [], selected: null, props: [], propsAt: null, parentXfs: [], keysOf: {}, uidOf: {}, busy: false, masks: [], maskTool: 'off', selectedMask: null, poly: [], maskView: 'lines', editorTab: 'props', passPreset: 'cleanup', passStrength: 0.1, passMouth: 'head', passScope: 'layer', effects: [], fxValues: {}, catalog: {}, before: null,
     loadLayers: async () => {
       const fid = get().finalId
       if (!fid || !get().comp) { set({ layers: [] }); return }
       try {
         const r = await unwrap(http.GET('/finals/{fid}/composition/layers', { params: { path: { fid } } }))
         const layers = r.items as unknown as CompLayer[]
+        const sel = get().selected, chainWas = sel === null ? '' : parentChain(get().layers, sel).join()
         set({ layers })
-        if (get().selected !== null && !layers.some((l) => l.id === get().selected)) set({ selected: null, props: [], propsAt: null, keysOf: {}, uidOf: {} })
+        // review K116: the list lands after the properties (reload does not wait for it) — a parent chain that changed reads its transforms again
+        if (sel !== null && get().selected === sel && layers.some((l) => l.id === sel) && parentChain(layers, sel).join() !== chainWas) void get().loadProps()
+        if (get().selected !== null && !layers.some((l) => l.id === get().selected)) set({ selected: null, props: [], propsAt: null, parentXfs: [], keysOf: {}, uidOf: {} })
       } catch (e) { set({ error: detail(e) }) }
     },
-    select: (id) => { set({ selected: id, props: [], propsAt: null, keysOf: {}, uidOf: {}, masks: [], effects: [], fxValues: {}, selectedMask: null, maskTool: 'off', poly: [] }); if (id !== null) { void get().loadProps(); void get().loadMasks() } },
+    select: (id) => { set({ selected: id, props: [], propsAt: null, parentXfs: [], keysOf: {}, uidOf: {}, masks: [], effects: [], fxValues: {}, selectedMask: null, maskTool: 'off', poly: [] }); if (id !== null) { void get().loadProps(); void get().loadMasks() } },
     loadProps: async () => {
       const fid = get().finalId, sel = get().selected
       if (!fid || sel === null) return
       const n = ++propsSeq
       const frame = get().frame, t = frame / (get().final?.rate ?? 16)
+      const parents = Promise.all(parentChain(get().layers, sel).map((lid) => transformAt(fid, lid, t)))
       try {
         const r = await unwrap(http.GET('/finals/{fid}/composition/layers/{lid}', { params: { path: { fid, lid: String(sel) } } })) as { properties?: FlatProp[] }
         const listed = (r.properties ?? []).filter((p) => (EDITABLE as readonly string[]).includes(p.path))
@@ -391,7 +436,8 @@ export const useComposition = create<CompState>((set, get) => {
           if (k.value !== undefined) value[p.path] = k.value
         }))
         const props = listed.map((p) => (p.path in value ? { ...p, value: value[p.path] } : p))
-        if (get().selected === sel && n === propsSeq) set({ props, keysOf, uidOf, propsAt: frame })      // a newer read (another frame) wins
+        const parentXfs = await parents                                                     // review K116: the parents' transforms at the same frame
+        if (get().selected === sel && n === propsSeq) set({ props, keysOf, uidOf, propsAt: frame, parentXfs })      // a newer read (another frame) wins
       } catch (e) { set({ error: detail(e) }) }
     },
     command: (id, params, what) => run(what, () => unwrap(http.POST('/finals/{fid}/composition/command', { params: { path: { fid: get().finalId! } }, body: { id, params } }))),
@@ -665,7 +711,7 @@ export const useComposition = create<CompState>((set, get) => {
     // ---- AE2d: timing ----
     setTiming: (id, patch) => get().command('layer.timing', { layers: [id], ...patch }, 'Timing'),
     slip: (id, delta) => get().command('layer.slip', { layers: [id], delta }, 'Slip'),
-    close: () => set({ finalId: null, final: null, comp: null, frame: 0, playing: false, shown: null, fetching: false, filled: 0, error: null, layers: [], selected: null, propsAt: null }),
+    close: () => set({ finalId: null, final: null, comp: null, frame: 0, playing: false, shown: null, fetching: false, filled: 0, error: null, layers: [], selected: null, propsAt: null, parentXfs: [] }),
     open: async (finalId) => {
       if (get().finalId !== finalId) { get().togglePlay(false); set({ finalId, frame: 0, shown: null, comp: null, final: null }) }
       await get().reload()

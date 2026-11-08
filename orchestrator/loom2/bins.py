@@ -627,12 +627,32 @@ def rehome(groups: GroupStore, gid: str, to_path: str = "world/sketches") -> dic
         g = groups.groups.get(gid)
         if g is None or g.kind != "bin":
             raise KeyError(gid)
+        _refuse_live(groups, g, {gid, *groups._descendants(gid)})
         ids = [it.id for sub in [gid, *groups._descendants(gid)] for it in groups.groups[sub].items if it.kind == "asset"]
         parent = groups.parent.get(("group", gid))
     dest = home(groups, to_path)
     changed = groups.move([("asset", a) for a in ids], dest.id) if ids else set()
     groups.delete(gid)
     return {"moved": len(ids), "to": dest.id, "changed": sorted({*changed, dest.id, *([parent] if parent else [])})}
+
+
+def _refuse_live(groups: GroupStore, g: GroupRecord, pages: set[str]) -> None:
+    """Review K92: a rehome deletes the home and every page under it — only for a record that is gone (the client's word was taken: a list
+    not loaded yet read as gone), and never a page a live version still names as its reference set or candidates. ValueError (409) else."""
+    from .story import StoryStore
+    st = StoryStore(groups.ws)
+    parts = (g.path or "").split("/")
+    if parts[0] == "world" and len(parts) >= 3:
+        prof = st.profile(parts[2])
+        if prof is not None and (len(parts) == 3 or any(v.id == parts[3] for v in prof.versions)):
+            raise ValueError(f"{prof.name} is still in the project — its home is not given away")
+    if parts[0] == "shots" and len(parts) >= 2:
+        sh = st.shot(parts[1])
+        if sh is not None and (len(parts) == 2 or any(v.id == parts[2] for v in sh.versions)):
+            raise ValueError("the shot is still in the project — its home is not given away")
+    named = {x for p in st.profiles() for v in p.versions for x in (v.group_id, v.candidates_group_id) if x}
+    if pages & named:
+        raise ValueError("a page under this home is a live version's reference set — move it first")
 
 
 def subtree_pages(groups: GroupStore, gid: str) -> tuple[list[str], bool]:

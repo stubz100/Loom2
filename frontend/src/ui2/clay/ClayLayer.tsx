@@ -151,9 +151,13 @@ function MakeShells({ profiles }: { profiles: Profile[] }) {
 function TryOn() {
   const profiles = useStory((s) => s.profiles)
   const [who, setWho] = useState<string | null>(null)
-  useEffect(() => { let live = true; void import('../../suites/stage/animationBench').then((m) => { if (live) setWho(m.tryOnWho()) }); return () => { live = false } }, [])
+  useEffect(() => {                                                          // review K113: followed, not read once at the mount (the bench opens after it)
+    let live = true, off: (() => void) | null = null
+    void import('../../suites/stage/animationBench').then((m) => { if (live) off = m.watchTryOn(setWho) })
+    return () => { live = false; off?.() }
+  }, [])
   const chars = profiles.filter((p) => p.cls === 'character')
-  const pick = (id: string | null) => void import('../../suites/stage/animationBench').then((m) => m.tryOn(id)).then(() => setWho(id))
+  const pick = (id: string | null) => void import('../../suites/stage/animationBench').then((m) => m.tryOn(id))
   const items = (): MenuItem[] => [{ label: 'the dummy', checked: !who, run: () => pick(null) },
     ...chars.map((p) => ({ label: `${p.name}${p.versions.find((v) => v.id === p.current)?.shell_asset_id ? '' : ' · no shell yet'}`, checked: who === p.id, run: () => pick(p.id) }))]
   const name = who ? chars.find((p) => p.id === who)?.name ?? '…' : 'the dummy'

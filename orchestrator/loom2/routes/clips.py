@@ -88,9 +88,9 @@ async def clip_identity(svc: Svc, clip_id: str):
         raise HTTPException(409, "FaceSim weights are not fetched (scripts/fetch_facesim.py)")
     start = await asyncio.to_thread(cat.get, rec.start_asset_id)
     ref = cat.abs_path(start) if start else None
-    rec.identity = await asyncio.to_thread(compute_identity, svc.app.settings.models_root, store, rec, ref)
-    await asyncio.to_thread(store.save, rec)
-    svc.hub.broadcast("clip.updated", {"clip_id": rec.id, "identity": rec.identity})
+    ident = await asyncio.to_thread(compute_identity, svc.app.settings.models_root, store, rec, ref)
+    rec = await asyncio.to_thread(store.change, clip_id, lambda r: setattr(r, "identity", ident)) or rec   # review K86: written on the record as it is now
+    svc.hub.broadcast("clip.updated", {"clip_id": rec.id, "identity": ident})
     return rec.model_dump()
 
 
@@ -119,8 +119,8 @@ async def clip_extract(svc: Svc, clip_id: str, body: ClipExtract):
         a = await asyncio.to_thread(cat.make_thumbs, a)
         svc.hub.broadcast("asset.created", a.model_dump())
         out.append(a.model_dump())
-        rec.extracted_asset_ids.append(a.id)
-    await asyncio.to_thread(store.save, rec)
+    made = [x["id"] for x in out]
+    rec = await asyncio.to_thread(store.change, rec.id, lambda r: r.extracted_asset_ids.extend(made)) or rec   # review K86
     return {"items": out, "clip": rec.model_dump()}
 
 
@@ -165,8 +165,7 @@ async def clip_extend(svc: Svc, clip_id: str, body: ExtendBody):
                                 params={"clip_id": rec.id, "frame_index": n, "fps": rec.fps, "time_s": round(n / rec.fps, 3), "preset": rec.preset, "extend": True})
     a = await asyncio.to_thread(cat.make_thumbs, a)
     svc.hub.broadcast("asset.created", a.model_dump())
-    rec.extracted_asset_ids.append(a.id)
-    await asyncio.to_thread(store.save, rec)
+    await asyncio.to_thread(store.change, rec.id, lambda r: r.extracted_asset_ids.append(a.id))   # review K86
     recipe = {"kind": "i2v", "model_id": rec.model_id, "start_asset": a.id, "prompt_text": (body.prompt_text if body.prompt_text is not None else rec.prompt),
               "frames": int(prev.get("frames") or rec.frames), "fps": rec.fps, "width": int(prev.get("width") or rec.w),
               "height": int(prev.get("height") or rec.h), "preset": rec.preset,
@@ -181,10 +180,7 @@ async def clip_extend(svc: Svc, clip_id: str, body: ExtendBody):
         def undo() -> None:
             cat.trash([a.id])
             cat.purge([a.id])
-            cur = store.get(rec.id)
-            if cur is not None and a.id in cur.extracted_asset_ids:
-                cur.extracted_asset_ids.remove(a.id)
-                store.save(cur)
+            store.change(rec.id, lambda r: r.extracted_asset_ids.remove(a.id) if a.id in r.extracted_asset_ids else None)
         await asyncio.to_thread(undo)
         svc.hub.broadcast("asset.deleted", {"id": a.id})
         raise HTTPException(422, str(e))

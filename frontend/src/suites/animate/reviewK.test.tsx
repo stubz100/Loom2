@@ -11,7 +11,7 @@ import { command, isEnabled } from '../../frame/commands'
 import { useSession } from '../../store/session'
 import { DEFAULT_PANEL, frameMin, modelRules, otherRecipe, useAnimate } from './animateStore'
 import './animateCommands'
-import { deltaToLayer, layerXf, toLayerPx, useComposition, xfAttr } from './compositionStore'
+import { chainXf, deltaToLayer, layerXf, parentChain, toLayerPx, useComposition, xfAttr } from './compositionStore'
 import { ColorField } from './Effects'
 import { FinalLanes } from './FinalViewer'
 import { useAnimRoute } from './routeStore'
@@ -185,6 +185,28 @@ describe('the Final level (K116)', () => {
     useComposition.setState({ comp: null })                                              // the edit's reload is not this case's
     await useComposition.getState().setProp('transform/position', [10, 10, 0])
     expect(calls.find((c) => c.path === '/finals/fin_1/composition/property')?.body).toMatchObject({ layer: 2, path: 'transform/position', time: 0.8 })
+  })
+  it("places a parented layer's masks under its parents' transforms (her matte under her)", async () => {
+    expect(parentChain([{ id: 2, parent: 1 }, { id: 1, parent: 3 }, { id: 3, parent: 2 }], 2)).toEqual([1, 3])   // a loop ends the chain
+    const own = layerXf([{ path: 'transform/position', value: [10, 0, 0] }, { path: 'transform/anchor', value: [0, 0, 0] }])
+    const parent = layerXf([{ path: 'transform/position', value: [400, 200, 0] }, { path: 'transform/anchor', value: [100, 100, 0] }, { path: 'transform/scale', value: [200, 200, 100] }, { path: 'transform/rotation', value: 90 }])
+    const xf = chainXf(own, [parent])
+    // the layer's (5, 0) → the parent's (15, 0) → (15 − 100, 0 − 100) · 2 = (−170, −200) turned 90°: (200, −170) + (400, 200)
+    const fwd = toLayerPx(xf, [600, 30])
+    expect(fwd[0]).toBeCloseTo(5); expect(fwd[1]).toBeCloseTo(0)
+    expect(xfAttr(xf)).toBe('matrix(0 2 -2 0 600 20)')
+    const d = deltaToLayer(xf, [0, 10]); expect(d[0]).toBeCloseTo(5); expect(d[1]).toBeCloseTo(0)
+    expect(chainXf(own, [])).toBe(own)
+    reply = (c) => {
+      if (c.path === '/finals/fin_1/composition/layers/2') return json({ properties: [{ path: 'transform/position', type: 'vec3', value: [10, 0, 0] }] })
+      if (c.path === '/finals/fin_1/composition/layers/2/property') return json({ value: [10, 0, 0], keys: [] })
+      if (c.path === '/finals/fin_1/composition/layers/1/property') return json({ value: ({ 'transform/position': [400, 200, 0], 'transform/anchor': [100, 100, 0], 'transform/scale': [200, 200, 100], 'transform/rotation': 90 } as Record<string, unknown>)[c.query.get('path')!] })
+      return json({ detail: 'no' }, 404)
+    }
+    useComposition.setState({ layers: [{ id: 2, parent: 1 }, { id: 1, parent: null }] as never, frame: 3 })
+    await useComposition.getState().loadProps()
+    expect(calls.filter((c) => c.path === '/finals/fin_1/composition/layers/1/property').every((c) => c.query.get('t') === '0.3')).toBe(true)
+    expect(useComposition.getState().parentXfs).toEqual([parent])
   })
 })
 

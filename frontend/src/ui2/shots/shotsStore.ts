@@ -196,6 +196,7 @@ export const useShots = create<ShotsState>()((set, get) => ({
   flowView: 'canvas',
   setFlowView: (flowView) => set({ flowView }),
   setLevel: (level) => {
+    opens++                                                             // e2e 2026-11-08: a level picked counts as a place chosen, as an open does
     if (level === 'clay') { void openInClay(); return }                   // C0 (D181): Clay is its own layer
     set({ level })
     navigate(suiteOf(level))
@@ -238,7 +239,8 @@ export function startShots(): () => void {
     void Promise.all([st.loadFlow(), st.loadShots(), st.loadProfiles()]).then(() => {
       void useStory.getState().loadBoard()
       const sh = useShots.getState()
-      if (opens !== n) return
+      if (opens !== n) return                                           // a shot opened or a level picked meanwhile (the rail's Performance while a big
+                                                                        // project loaded) — the hash read at the start no longer sends it back to the Flow
       const bare = location.hash.slice(1) === 'shots' || location.hash.slice(1) === 'shots/'   // the layer's tab, from another layer
       if (from?.shot && useStory.getState().shots.some((x) => x.id === from.shot)) sh.open(from.shot, from.level)
       else if (bare && useStory.getState().shotId && sh.level !== 'flow') sh.setLevel(sh.level)   // C0 (D181): the tab lands where Shots was left — the open shot at its level, not the Flow

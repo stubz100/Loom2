@@ -308,9 +308,12 @@ class ClipFinisher:
     async def finish(self, job: JobRecord, recipe: I2V, files: list[dict], sub: Submission, q: JobQueue) -> None:
         """The decoded frames become `clips/<id>/master`, the proxy is encoded, and the proxy is the Catalogue asset."""
         compiled = sub.compiled
-        found = [p for p in (output_path(q, f) for f in sorted(files, key=lambda x: x["filename"])) if p.is_file()]
-        sounds = [p for p in found if p.suffix.lower() in SOUND_SUFFIXES]   # D193: H3's sound beside its frames
-        paths = [p for p in found if p.suffix.lower() not in SOUND_SUFFIXES]
+        found = [(f, p) for f, p in ((f, output_path(q, f)) for f in sorted(files, key=lambda x: x["filename"])) if p.is_file()]
+
+        def is_sound(f: dict, p: Path) -> bool:                       # review K85: the engine says which output is audio (SaveAudio's "audio");
+            return f.get("key") == "audio" if f.get("key") else p.suffix.lower() in SOUND_SUFFIXES   # the suffix only for an old record
+        sounds = [p for f, p in found if is_sound(f, p)]                # D193: H3's sound beside its frames
+        paths = [p for f, p in found if not is_sound(f, p)]
         if not paths:
             raise ValueError("the engine produced no frames")
         tone_match = None
@@ -802,10 +805,7 @@ async def identity_task(q: JobQueue, clip_id: str) -> None:
         result = await asyncio.wait_for(asyncio.to_thread(compute_identity, q.app.settings.models_root, clips, rec, ref), 240)
     except Exception as e:  # noqa: BLE001
         result = {"status": f"error: {type(e).__name__}: {e}", "sampled": 0, "with_face": 0}
-    rec = clips.get(clip_id)
-    if rec:
-        rec.identity = result
-        clips.save(rec)
+    if clips.change(clip_id, lambda r: setattr(r, "identity", result)) is not None:   # review K86: on the record as it is now
         q.hub.broadcast("clip.updated", {"clip_id": clip_id, "identity": result})
 
 
@@ -1153,8 +1153,7 @@ class MatteFinisher:
                 for part in (["window/"] if wins else []) + [""]:
                     kept, other = store.pass_dir(f.id, recipe.layer_id, f"{part}matte"), store.pass_dir(f.id, recipe.layer_id, f"{part}matte_retry")
                     if better:
-                        shutil.rmtree(kept, ignore_errors=True)
-                        other.rename(kept)
+                        _swap_frames(other, kept)
                     else:
                         shutil.rmtree(other, ignore_errors=True)
             await asyncio.to_thread(settle)
@@ -1416,6 +1415,22 @@ def finisher_for(recipe: AnyRecipe) -> Finisher:
 
 
 # ---- D62 Quick Remove: no engine -------------------------------------------------------------------------------------------------
+def _swap_frames(src: Path, dst: Path) -> None:
+    """Review K86: the retried matte's frames over the first's, file by file with D42's retries — an rmtree-then-rename left a frame the
+    viewer held open in place and the rename then failed (Windows); frames the new set lacks go, then the retry's folder."""
+    from ..fsio import replace, unlink
+    dst.mkdir(parents=True, exist_ok=True)
+    names = set()
+    for p in sorted(src.iterdir()):
+        if p.is_file():
+            replace(p, dst / p.name)
+            names.add(p.name)
+    for p in list(dst.iterdir()):
+        if p.is_file() and p.name not in names:
+            unlink(p, missing_ok=True)
+    shutil.rmtree(src, ignore_errors=True)
+
+
 async def run_cpu(job: JobRecord, recipe: AnyRecipe, q: JobQueue) -> bool:
     """The jobs that never start the engine (plan().engine is False): Quick Remove (D62) and the sequence draft render (P17)."""
     if isinstance(recipe, Render):
@@ -1797,12 +1812,12 @@ async def run_movie(job: JobRecord, recipe: Render, q: JobQueue) -> bool:
     missing = [c.clip_id for c in tl.clips if c.clip_id not in recs]
     if missing:
         raise ValueError(f"clips missing from the project: {', '.join(missing)}")
+    fc = getattr(q, "filmcraft", None)
+    if tl.file and fc is not None and fc.available():                  # CE1 (D126 #5): the cut is a FilmCraft project — its own export
+        return await run_movie_filmcraft(job, recipe, q, tl, recs)     # (review K90: before the lane's length — placed media only renders)
     total = duration(tl)
     if total <= 0:
         raise ValueError("the sequence is empty")
-    fc = getattr(q, "filmcraft", None)
-    if tl.file and fc is not None and fc.available():                  # CE1 (D126 #5): the cut is a FilmCraft project — its own export
-        return await run_movie_filmcraft(job, recipe, q, tl, recs)
     s = starts(tl)
     W, H = tl.w - tl.w % 2, tl.h - tl.h % 2
     tmp = q.ws.temp_dir / f"movie-{job.id}"

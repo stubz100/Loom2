@@ -5,12 +5,17 @@ the poses); *Save to my library* copies it into the app's state (`<state>/animat
 (Q4). The motion library lists both as *Mine*."""
 from __future__ import annotations
 
+import logging
+import threading
 from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .fsio import atomic_write_json, new_id, plain_name, read_json_or, unlink, utc_now
+from .fsio import StateError, atomic_write_json, new_id, plain_name, read_json_or, unlink, utc_now
+
+log = logging.getLogger("loom2.animations")
+_LOCK = threading.RLock()                          # review K91: the project's book and the library are read-modify-written from route threads
 
 ANIMATIONS_SCHEMA_VERSION = 1
 
@@ -76,6 +81,10 @@ class AnimationStore:
 
     def put(self, revision: int, items: list[AnimationTemplate]) -> AnimationBook:
         """The project's templates replaced (the client sends the revision it read: 409 when they changed meanwhile)."""
+        with _LOCK:
+            return self._put(revision, items)
+
+    def _put(self, revision: int, items: list[AnimationTemplate]) -> AnimationBook:
         cur = self.book()
         if revision != cur.revision:
             raise StaleAnimations(f"the animations are at revision {cur.revision}, the change is based on {revision} — reload them first")
@@ -94,7 +103,11 @@ class AnimationStore:
             return []
         out = []
         for p in self.lib.glob("anm_*.json"):
-            raw = read_json_or(p, None)
+            try:
+                raw = read_json_or(p, None)
+            except StateError as e:                                    # review K91: one torn file no longer fails the whole library (a 400)
+                log.warning("library animation %s left out: %s", p.name, e)
+                continue
             if isinstance(raw, dict):
                 try:
                     out.append(AnimationTemplate.model_validate(raw))
@@ -121,14 +134,19 @@ class AnimationStore:
         """D182 (C2b): a library animation written over (*Save* on the animation bench, a rename) — its file replaced; KeyError when it is
         not in the library (a project animation goes through `put`)."""
         p = self.lib / f"{plain_name(t.id)}.json"
-        if not p.is_file():
-            raise KeyError(t.id)
-        check_template(t)
-        atomic_write_json(p, t.model_dump())
+        with _LOCK:
+            if not p.is_file():
+                raise KeyError(t.id)
+            check_template(t)
+            atomic_write_json(p, t.model_dump())
         return t
 
     def set_thumb(self, aid: str, asset_id: str) -> AnimationTemplate:
         """D182 (C2b): the animation's thumbnail — the project's item, else the library's (KeyError: neither)."""
+        with _LOCK:                                                    # review K91: read → write as one
+            return self._set_thumb(aid, asset_id)
+
+    def _set_thumb(self, aid: str, asset_id: str) -> AnimationTemplate:
         b = self.book()
         for t in b.items:
             if t.id == aid:

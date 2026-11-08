@@ -270,7 +270,9 @@ def main() -> int:
         index["files"] = [f for f in index["files"] if f["path"] != str(dest)] + [dict(
             path=str(dest), folder=m["dest"], repo=m["repo"], file=m["file"], size=size, sha256=digest,
             license=m["license"], spike=m["spike"], fetched=time.strftime("%Y-%m-%d %H:%M:%S"))]
-        index_path.write_text(json.dumps(index, indent=1), encoding="utf-8")
+        part = index_path.with_name(f"{index_path.name}.{os.getpid()}-{int(time.time() * 1000)}.tmp")   # review K87: never written in place —
+        part.write_text(json.dumps(index, indent=1), encoding="utf-8")                                  # a reader (the app's Models sheet) or a
+        os.replace(part, index_path)                                                                    # crash never sees half an index
     # clean this run's empty staging dirs (only its own)
     for p in sorted(tmp.rglob("*"), reverse=True):
         if p.is_dir() and not any(p.iterdir()):

@@ -79,18 +79,31 @@ export async function openAnimationBench(ref: AnimRef): Promise<boolean> {
   st().select(fig.id)
   st().setFrame(0)
   bench = { ref, figure: fig.id, stage: stage.id }
+  benchMoved()
   if (t?.try_on) st().bindFigure(fig.id, t.try_on)                           // D183 (C2c): the character it is tried on — its body and shell
   if (t && !t.thumb_asset_id) void thumbnailLater(t.id, fig.id)
   return true
 }
 
-export function closeAnimationBench(): void { bench = null }
+export function closeAnimationBench(): void { bench = null; benchMoved() }
 
 /** D183 (C2c): who the bench figure is — the character whose shell it wears for this animation (null: the dummy). */
 export function tryOnWho(): string | null {
   if (!bench) return null
   const figure = bench.figure
   return useStage.getState().current?.objects.find((o) => o.id === figure)?.profile_id ?? null
+}
+
+/** Review K113: who the bench figure is, told now and whenever it may change (the bench opened or closed, a figure bound) — the header read
+ *  it once at its mount, before the bench had opened: the last animation's figure, or the dummy while the figure wore its character. */
+const watchers = new Set<() => void>()
+const benchMoved = (): void => { for (const f of watchers) f() }
+export function watchTryOn(tell: (who: string | null) => void): () => void {
+  const f = () => tell(tryOnWho())
+  watchers.add(f)
+  const off = useStage.subscribe(f)
+  f()
+  return () => { watchers.delete(f); off() }
 }
 
 /** D183 (C2c): *Try it on ‹character›* — the bench figure bound to the character (its body and shell follow), remembered on the

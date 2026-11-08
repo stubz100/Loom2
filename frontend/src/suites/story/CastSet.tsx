@@ -124,20 +124,26 @@ function SetOverlay({ pic, ps, cam, assumed, onEdit }: { pic: string; ps: PlaceS
   const hs = size && ps && cam ? handles(ps as PlaceSetDoc, cam, size[0], size[1], assumed) : []
   const at = (e: ReactPointerEvent): [number, number] => { const r = svg.current!.getBoundingClientRect(); return [((e.clientX - r.left) / r.width) * size![0], ((e.clientY - r.top) / r.height) * size![1]] }
   const shownHandles = drag && size ? handles(drag.set, drag.camera, size[0], size[1], assumed) : hs
+  // review K113: the drag lives on the svg, not on the handle's group — a handle dragged past the picture is no longer drawn, its group went
+  // with the pointer's capture, and the drag was lost (never saved, the set left as it was being dragged)
+  const dragMove = (e: ReactPointerEvent) => { if (!drag || !ps || !cam || !size) return; const r = dragTo(ps as PlaceSetDoc, cam, size[0], size[1], drag.h, at(e)); if (r) setDrag({ h: drag.h, ...r }) }
+  const dragEnd = (e: ReactPointerEvent) => {
+    if (svg.current?.hasPointerCapture?.(e.pointerId)) svg.current.releasePointerCapture(e.pointerId)
+    if (drag && ps) { const d = drag; onEdit((cur) => withCamera({ ...cur, sizes: d.set.sizes }, d.camera)) /* K78: the drag's sizes and camera, the rest as it is now */ }
+    setDrag(null)
+  }
   return (
     <div className="set-view" style={size ? { aspectRatio: `${size[0]} / ${size[1]}` } : undefined} data-set={ps?.kind ?? 'none'}
       onContextMenu={(e) => showMenu(e, [{ cmd: 'cast.place.build' }, { cmd: 'cast.place.picture' }, { cmd: 'cast.place.bake' }, { cmd: 'cast.place.fill' }, sep, { cmd: 'cast.place.clear' }])}>
       <img src={api.thumbUrl(pic, 1024)} alt="the set picture" draggable={false} onLoad={(e) => setSize([e.currentTarget.naturalWidth, e.currentTarget.naturalHeight])} />
-      {size && <svg ref={svg} className="set-overlay" viewBox={`0 0 ${size[0]} ${size[1]}`} preserveAspectRatio="none">
+      {size && <svg ref={svg} className="set-overlay" viewBox={`0 0 ${size[0]} ${size[1]}`} preserveAspectRatio="none"
+        onPointerMove={dragMove} onPointerUp={dragEnd} onPointerCancel={() => setDrag(null)}>
         {lines.filter((o) => o.points.length > 2).map((o) => <polygon key={o.id} className="face" data-face={o.id} points={o.points.map((q) => q.join(',')).join(' ')} />)}
         {shownHandles.map((h) => {
           const live = hs.find((x) => x.id === h.id) ?? h
           return (
             <g key={h.id} className={`handle${h.assumed ? ' assumed' : ''}${drag?.h.id === h.id ? ' on' : ''}`} data-handle={h.id}
-              onPointerDown={(e) => { if (e.button !== 0 || !ps || !cam) return; e.currentTarget.setPointerCapture(e.pointerId); setDrag({ h: live, set: ps as PlaceSetDoc, camera: cam }) }}
-              onPointerMove={(e) => { if (!drag || drag.h.id !== h.id || !ps || !cam) return; const r = dragTo(ps as PlaceSetDoc, cam, size[0], size[1], drag.h, at(e)); if (r) setDrag({ h: drag.h, ...r }) }}
-              onPointerUp={() => { if (drag && ps) { const d = drag; onEdit((cur) => withCamera({ ...cur, sizes: d.set.sizes }, d.camera)) /* K78: the drag's sizes and camera, the rest as it is now */ } setDrag(null) }}
-              onPointerCancel={() => setDrag(null)}>
+              onPointerDown={(e) => { if (e.button !== 0 || !ps || !cam) return; svg.current?.setPointerCapture?.(e.pointerId); setDrag({ h: live, set: ps as PlaceSetDoc, camera: cam }) }}>
               <title>{(HANDLE_TIP[h.id] ?? h.id) + (h.assumed ? ' (guessed — the picture does not show it)' : '')}</title>
               <line className="hit" x1={h.a[0]} y1={h.a[1]} x2={h.b[0]} y2={h.b[1]} />
               <line className="edge" x1={h.a[0]} y1={h.a[1]} x2={h.b[0]} y2={h.b[1]} />

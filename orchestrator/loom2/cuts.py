@@ -1123,8 +1123,13 @@ class Cuts:
                                                                      "sourceIn": ti["source_in"], "duration": ti["duration"],
                                                                      **({"audio": False} if t in seq["video_tracks"] else {"video": False})}}])[0]["clips"][0]
             steps: list[dict] = [{"id": "edit.pasteAttributes", "params": {"clips": [new]}}]
-            if abs(float(ti.get("speed") or 1.0) - 1.0) > 1e-9:
-                steps.append({"id": "clip.speedDuration", "params": {"clips": [new], "speed": round(float(ti["speed"]) * 100, 4), "ripple": False}})
+            speed = abs(float(ti.get("speed") or 1.0))
+            if abs(speed - 1.0) > 1e-9 or ti.get("reverse"):          # review K90: reversed stays reversed
+                steps.append({"id": "clip.speedDuration", "params": {"clips": [new], "speed": round(speed * 100, 4), "reverse": bool(ti.get("reverse")), "ripple": False}})
+            if ti.get("enabled", True) is False:                       # a disabled clip stays disabled (clip.enable toggles)
+                steps.append({"id": "clip.enable", "params": {"clips": [new]}})
+            if ti.get("name"):                                         # and keeps its name (a placed clip takes its item's)
+                steps.append({"id": "clip.rename", "params": {"clip": new, "name": ti["name"]}})
             self.fc.batch(steps)
             return {"removed": tid, "clip": new}
         raise CutError(f"no transition {tid} on the cut")
@@ -1171,8 +1176,14 @@ class Cuts:
         """*Update* (D125 S13) on a FilmCraft cut: the track's clip plays another take in place — its start and length kept, the source
         from the take's start — so the edits around it survive."""
         def run(p: Path) -> dict:
-            item = self._media_item(read(p), tl, use, rec)
-            self.fc.batch([{"id": "clip.replaceFromBin", "params": {"clips": [clip], "item": item, "keepSourceIn": False}}])
+            doc = read(p)
+            _, _, seq = sequence(doc)
+            name = next((x.get("name") for t in seq["video_tracks"] + seq["audio_tracks"] for x in t["items"] if x["id"] == clip), None)
+            item = self._media_item(doc, tl, use, rec)
+            steps: list[dict] = [{"id": "clip.replaceFromBin", "params": {"clips": [clip], "item": item, "keepSourceIn": False}}]
+            if name:                                                   # review K90: the clip keeps its name (the replace names it after the item)
+                steps.append({"id": "clip.rename", "params": {"clip": clip, "name": name}})
+            self.fc.batch(steps)
             self._markers(p)
             return {"clip": clip, "item": item}
         return self.changing(tl, run)
@@ -1371,7 +1382,7 @@ class Cuts:
         on any audio track counts, and a line the cut placed before that is gone now was lifted by the author and stays out."""
         if self.audio_of is None:
             return 0
-        if self._line_steps_now(read(self.path(tl.id))) is None:
+        if self._line_steps_now(read(self.path(tl.id)), dry=True) is None:   # review K90: the look before the change imports nothing
             return 0
 
         def run(p: Path) -> int:
@@ -1381,7 +1392,7 @@ class Cuts:
             return len(steps)
         return self.changing(tl, run)
 
-    def _line_steps_now(self, doc: dict, forget: set[str] | frozenset[str] = frozenset()) -> list[dict] | None:
+    def _line_steps_now(self, doc: dict, forget: set[str] | frozenset[str] = frozenset(), dry: bool = False) -> list[dict] | None:
         """sync_lines' steps on the cut as it stands (None: nothing to do). `forget`: lines the cut placed and took off with their shot
         (U7b) — placed again, not taken for the author's. U7b (F39): a shot's missing lines stay inside its run when they fit there — each
         after the one before it, and early enough for the rest; a line longer than the run is pushed past what is on A1 as before."""
@@ -1409,6 +1420,8 @@ class Cuts:
                 prev = t + lens[k]
         if not missing and not revoiced:
             return None
+        if dry:                                                        # review K90: something to do — the steps (their imports) only inside the change
+            return []
         steps: list[dict] = []
         for ex, cue in revoiced:
             steps.append({"id": "clip.replaceFromBin", "params": {"clips": [ex.id], "item": self._line_item(cue), "keepSourceIn": True}})

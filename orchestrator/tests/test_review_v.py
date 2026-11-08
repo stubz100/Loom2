@@ -989,7 +989,7 @@ async def test_v18_the_history_is_read_again(tmp_path: Path, object_info: dict, 
         monkeypatch.setattr(q.engine.client, "history", history)
         monkeypatch.setattr(aio, "sleep", nap)
         job = JobRecord(id="job_x", kind="t2i", recipe={"kind": "t2i"}, status="running", prompt_id="p1")
-        assert await q._outputs_after_success(job) == [{"filename": "job_x_00001_.png", "subfolder": ""}]
+        assert await q._outputs_after_success(job) == [{"filename": "job_x_00001_.png", "subfolder": "", "key": "images"}]
         assert answers == [] and len(naps) == 2
     finally:
         await rig.close()

@@ -9,11 +9,12 @@ import hashlib
 import json
 import os
 import shutil
+import threading
 import time
 from pathlib import Path
 
 from ..events import EventHub
-from ..fsio import replace
+from ..fsio import atomic_write_json, plain_name
 from ..roster import RosterEntry
 
 
@@ -25,15 +26,17 @@ def sha256_of(p: Path) -> str:
     return h.hexdigest()
 
 
+_LEDGER = threading.Lock()                         # review K87: two fetches ending together read-modify-wrote the ledger through one temp name
+
+
 def _append_ledger(models_root: Path, entry: RosterEntry, dest: Path, digest: str) -> None:
     index_path = models_root / "roster.index.json"
-    index = json.loads(index_path.read_text(encoding="utf-8")) if index_path.exists() else {"files": []}
-    index["files"] = [f for f in index["files"] if f["path"] != str(dest)] + [dict(
-        path=str(dest), folder=entry.folder, repo=entry.repo, file=entry.file, size=dest.stat().st_size, sha256=digest,
-        license=entry.license, spike="app", fetched=time.strftime("%Y-%m-%d %H:%M:%S"))]
-    tmp = index_path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(index, indent=1), encoding="utf-8")
-    replace(tmp, index_path)
+    with _LEDGER:
+        index = json.loads(index_path.read_text(encoding="utf-8")) if index_path.exists() else {"files": []}
+        index["files"] = [f for f in index["files"] if f["path"] != str(dest)] + [dict(
+            path=str(dest), folder=entry.folder, repo=entry.repo, file=entry.file, size=dest.stat().st_size, sha256=digest,
+            license=entry.license, spike="app", fetched=time.strftime("%Y-%m-%d %H:%M:%S"))]
+        atomic_write_json(index_path, index)                           # a temp name of its own, fsync, replace
 
 
 class FetchJob:
@@ -61,14 +64,20 @@ class FetchJob:
         from huggingface_hub import hf_hub_download
         if self.hf_home:
             os.environ.setdefault("HF_HOME", self.hf_home)
-        tmp = self.models_root / "_incoming"
+        tmp = self.staging()
         tmp.mkdir(parents=True, exist_ok=True)
         local = Path(hf_hub_download(self.entry.repo, self.entry.file, local_dir=str(tmp), token=None))  # type: ignore[arg-type]
         self.dest.parent.mkdir(parents=True, exist_ok=True)
         if self.dest.exists():
             self.dest.unlink()
         shutil.move(str(local), str(self.dest))
+        shutil.rmtree(tmp, ignore_errors=True)                        # its own staging (hf's .cache metadata with it)
         return self.dest
+
+    def staging(self) -> Path:
+        """Review K87: each fetch stages in a folder of its own, so its progress is what is in it — hf keeps the partial file as
+        `.cache/huggingface/download/<hash>.incomplete`, a name the probe (looking for the weight's name) never matched."""
+        return self.models_root / "_incoming" / plain_name(self.entry.id)
 
     async def _run(self) -> None:
         self.status, self.started_at = "downloading", time.time()
@@ -78,13 +87,12 @@ class FetchJob:
             self.hub.broadcast("model.fetch", self.state())
             return
         work = asyncio.create_task(asyncio.to_thread(self._download))
-        incoming = self.models_root / "_incoming"
+        incoming = self.staging()
         try:
             while not work.done():
                 await asyncio.sleep(2.0)
-                try:
-                    cand = [p for p in incoming.rglob("*") if p.is_file() and self.entry.name.split(".")[0] in p.name]
-                    self.bytes_done = max((p.stat().st_size for p in cand), default=self.bytes_done)
+                try:                                                   # the largest file in this fetch's own staging: the partial download
+                    self.bytes_done = max((p.stat().st_size for p in incoming.rglob("*") if p.is_file() and not p.name.endswith(".lock")), default=self.bytes_done)
                 except OSError:
                     pass
                 self.hub.broadcast("model.fetch", self.state())

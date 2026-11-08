@@ -12,6 +12,7 @@ import os
 import re
 import shutil
 import subprocess
+import threading
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
@@ -20,6 +21,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .fsio import atomic_write_json, new_id, plain_name, read_json, utc_now
 from .recipes import TTS
+
+_LOCK = threading.RLock()                          # review K90: a voice's read-modify-writes take turns (the TTS job, a rename, a delete)
 
 if TYPE_CHECKING:
     from .config import Settings
@@ -117,11 +120,23 @@ class VoiceStore:
         atomic_write_json(self.path(rec.id), rec.model_dump())
 
     def delete(self, vid: str) -> bool:
-        p = self.path(vid)
-        if not p.is_file():
-            return False
-        p.unlink()
-        return True
+        with _LOCK:
+            p = self.path(vid)
+            if not p.is_file():
+                return False
+            p.unlink()
+            return True
+
+    def change(self, vid: str, fn: Any) -> VoiceRecord | None:
+        """Review K90: read, change by `fn(rec)`, write — as one. The TTS job saved its whole copy at the end (minutes after it read it): a
+        rename meanwhile was undone, a voice deleted meanwhile came back. None when the voice is gone (it stays gone)."""
+        with _LOCK:
+            rec = self.get(vid)
+            if rec is None:
+                return None
+            fn(rec)
+            self.save(rec)
+            return rec
 
 
 # ---- what the submission checks -----------------------------------------------------------------------------------------------------
@@ -295,10 +310,12 @@ async def run_tts(job: "JobRecord", recipe: TTS, q: "JobQueue") -> bool:
         q.hub.broadcast("story.changed", {"kind": "flow", "id": nid, "revision": 0})
     speech = sum(float(x["duration_s"] or 0) for x in out)
     spoken = sum(float(x["seconds"] or 0) for x in out)
-    voice.measured = {"rtf": round(spoken / speech, 2) if speech else None, "load_s": result.get("load_s"), "peak_vram_gb": result.get("peak_vram_gb"),
-                      "lines": len(out), "at": utc_now()}
-    voice.updated_at = utc_now()
-    vstore.save(voice)
+    measured = {"rtf": round(spoken / speech, 2) if speech else None, "load_s": result.get("load_s"), "peak_vram_gb": result.get("peak_vram_gb"),
+                "lines": len(out), "at": utc_now()}
+
+    def measure(v: Any) -> None:
+        v.measured, v.updated_at = measured, utc_now()
+    await asyncio.to_thread(vstore.change, voice.id, measure)           # review K90: on the voice as it is now (renamed, or gone: not resurrected)
     q.hub.broadcast("story.changed", {"kind": "voice", "id": voice.id, "revision": 0})
     job.result = {"asset_ids": [x["asset_id"] for x in out], "voice_id": voice.id, "tier": recipe.tier, "items": out, "load_s": result.get("load_s"),
                   "peak_vram_gb": result.get("peak_vram_gb"), "wall_s": round(time.time() - t0, 1), "log": str(log_path)}

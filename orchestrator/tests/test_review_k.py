@@ -564,3 +564,52 @@ def test_k45_a_failed_print_leaves_the_earlier_ones_known(tmp_path: Path, monkey
         raw = json.loads((tmp_path / "proj" / "timelines" / tl["id"] / "cut.fcproj").read_text(encoding="utf-8"))
         seq = next(it["kind"]["Sequence"] for it in raw["project"]["items"].values() if "Sequence" in it["kind"])
         assert len(seq["audio_tracks"]) == 3 + 2                              # A1–A3 and one companion each — not a second for A2
+
+
+def test_k92_a_live_records_home_is_not_rehomed(tmp_path: Path):
+    """The rehome deletes a home and its pages on the client's word that the record is gone — refused while the profile lives."""
+    from loom2.bins import home_of, rehome, version_home
+    from test_bin_b0 import _setup
+    ws, cat, groups, ids = _setup(tmp_path, n=2)
+    st = StoryStore(ws)
+    ines = st.create_profile("Ines", "character", groups, hero_asset_id=ids[0])
+    vh = version_home(groups, ines, "v1")
+    top = home_of(groups, groups.parent.get(("group", vh.id)))
+    with pytest.raises(ValueError, match="still in the project"):
+        rehome(groups, top.id)
+    with pytest.raises(ValueError, match="still in the project"):
+        rehome(groups, vh.id)
+    assert vh.id in groups.groups                                       # nothing deleted
+
+
+def test_k90_a_voice_job_writes_on_the_voice_as_it_is_now(tmp_path: Path):
+    """The TTS job's measurements land on the record as it is now: a rename meanwhile stays, a deleted voice stays deleted."""
+    from loom2.voices import VoiceRecord, VoiceStore
+    ws = _ws(tmp_path)
+    vs = VoiceStore(ws)
+    rec = VoiceRecord(name="Narrator", tier="draft", voice="af_heart")
+    vs.save(rec)
+    stale = vs.get(rec.id)                                               # the job read it …
+    vs.change(rec.id, lambda r: setattr(r, "name", "Old sailor"))       # … the author renamed it meanwhile
+    vs.change(stale.id, lambda r: setattr(r, "measured", {"lines": 3}))
+    got = vs.get(rec.id)
+    assert got.name == "Old sailor" and got.measured == {"lines": 3}
+    vs.delete(rec.id)
+    assert vs.change(rec.id, lambda r: setattr(r, "measured", {"lines": 4})) is None and vs.get(rec.id) is None
+
+
+def test_k91_a_torn_library_animation_is_left_out(tmp_path: Path):
+    from loom2.animations import AnimationStore
+    lib = tmp_path / "state" / "animations"
+    lib.mkdir(parents=True)
+    (lib / "anm_torn.json").write_text("{torn", encoding="utf-8")
+    assert AnimationStore(tmp_path / "stages", tmp_path / "state").library() == []   # it raised (a 400 for the whole library)
+
+
+def test_k87_a_camera_move_on_a_model_without_one_is_refused():
+    from loom2.engine.graphs import CompileError, build_i2v
+    from loom2.models import registry
+    from loom2.recipes import I2V
+    ltx = next(s for s in registry.video_specs() if s.graph == "ltx23")
+    with pytest.raises(CompileError, match="takes no camera move"):
+        build_i2v(I2V(model_id=ltx.id, start_asset="ast_x", prompt_text="x", camera={"move": "pan_left", "speed": 1.0}), None, 1, "loom2/t", "s.png")   # type: ignore[arg-type]

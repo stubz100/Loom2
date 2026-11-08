@@ -252,6 +252,8 @@ async def bin_rehome(svc: Svc, gid: str):
         out = await asyncio.to_thread(rehome, svc.require_groups(), gid)
     except KeyError:
         raise HTTPException(404, "no such home")
+    except ValueError as e:                                            # review K92: its record (or a page under it) is still live
+        raise HTTPException(409, str(e))
     svc.group_changed(out["changed"])
     return out
 

@@ -172,6 +172,8 @@ def build_i2v(recipe: I2V, roster: Roster, seed: int, out_prefix: str, start_nam
     frame 0 — the E11 graph."""
     ep = i2v_params(recipe)
     spec = video_spec(recipe.model_id)
+    if recipe.camera and not spec.recipes.camera:                    # review K87: LTX / Animate / S2V compiled without the move and recorded it
+        raise CompileError(f"{spec.label} takes no camera move — pick the camera model")
     if recipe.extend_from and spec.recipes.extend_lead is None:
         raise CompileError(f"{spec.label} does not continue clips (extend)")
     if recipe.extend_from and recipe.extend_from.lead > 1 and not lead_name:
@@ -444,7 +446,7 @@ def _estimate_i2v_plain(recipe: I2V) -> dict[str, Any]:
     work = (ep["width"] * ep["height"] * ep["frames"]) / (size[0] * size[1] * frames)
     base, steps_ref = p.seconds or 240.0, p.steps
     work = work ** spec.estimates.work_exponent
-    src = "baseline (E64 2026-11-05)" if spec.graph == "minimax_h3" else "baseline (E4/E5 spikes)"
+    src = spec.estimates.source or "baseline (E4/E5 spikes)"        # review K85: the spec's own, not told by its graph
     return {"seconds": round(base * work * (0.5 + 0.5 * ep["steps"] / steps_ref), 1), "source": src}
 
 

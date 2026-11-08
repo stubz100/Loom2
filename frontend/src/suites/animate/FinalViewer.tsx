@@ -10,7 +10,7 @@ import { CommandButton } from '../../frame/CommandButton'
 import { Help } from '../../frame/Help'
 import { useSession } from '../../store/session'
 import { fmtTime } from './animateStore'
-import { chipText, deltaToLayer, layerXf, maskPathD, snapTime, toLayerPx, useComposition, xfAttr, type LayerXf } from './compositionStore'
+import { chainXf, chipText, deltaToLayer, layerXf, maskPathD, snapTime, toLayerPx, useComposition, xfAttr, xfScale, type Xf } from './compositionStore'
 import { Timeline as TimelineView, TransportBar, type BarDrag, type TLRow } from './Timeline'
 
 interface Drag { x0: number; y0: number; dx: number; dy: number; box: DOMRect; vbox: DOMRect }                 // the frame's and the view's boxes at the press
@@ -36,7 +36,8 @@ export function FinalViewer() {
   const view = useRef<HTMLDivElement>(null)
   const poly = useComposition((s) => s.poly)                               // the points tool's points so far, in comp pixels (the store clears them with the tool)
   const props = useComposition((s) => s.props)
-  const xf = useMemo(() => layerXf(props), [props])
+  const parentXfs = useComposition((s) => s.parentXfs)
+  const xf = useMemo(() => chainXf(layerXf(props), parentXfs), [props, parentXfs])     // review K116: under its parents' (a matte under her)
   const [drag, setDrag] = useState<Drag | null>(null)
   const [settling, setSettling] = useState<{ dx: number; dy: number } | null>(null)   // viewport check: a move shown where it was dropped until it is applied
   useEffect(() => { const t = window.setInterval(() => void useComposition.getState().tick(), 250); return () => window.clearInterval(t) }, [])
@@ -81,7 +82,15 @@ export function FinalViewer() {
     if (maskTool !== 'off') {
       const x = Math.min(drag.x0, drag.x0 + drag.dx) - pic.left, y = Math.min(drag.y0, drag.y0 + drag.dy) - pic.top
       const w = Math.abs(drag.dx), h = Math.abs(drag.dy)
-      if (w >= 4 && h >= 4) { void cp.addMask([Math.round(x * scale), Math.round(y * scale), Math.round(w * scale), Math.round(h * scale)], maskTool); cp.setMaskTool('off') }
+      if (w >= 4 && h >= 4) {                                     // review K116: EffectCraft keeps a mask in the layer's own pixels — the drawn box mapped there
+        const corners = ([[x, y], [x + w, y], [x + w, y + h], [x, y + h]] as [number, number][]).map((q) => toLayer([q[0] * scale, q[1] * scale]))
+        if (maskTool === 'rect') void cp.addPolyMask(corners)          // exact under any move, scale, turn or parent
+        else {                                                    // an ellipse: its box in the layer (exact without a turn)
+          const xs = corners.map((c) => c[0]), ys = corners.map((c) => c[1])
+          void cp.addMask([Math.round(Math.min(...xs)), Math.round(Math.min(...ys)), Math.round(Math.max(...xs) - Math.min(...xs)), Math.round(Math.max(...ys) - Math.min(...ys))], maskTool)
+        }
+        cp.setMaskTool('off')
+      }
       return
     }
     const dx = Math.round(drag.dx * scale), dy = Math.round(drag.dy * scale)
@@ -89,6 +98,7 @@ export function FinalViewer() {
   }
   const onDouble = () => { if (maskTool === 'poly' && poly.length >= 3) { void useComposition.getState().addPolyMask(poly.map(toLayer)); useComposition.getState().setMaskTool('off') } }
   // masks are in the layer's own pixels; review K116: placed by the layer's transform at the playhead (position, anchor, scale, rotation)
+  // under its parents' transforms
   const toLayer = (p: [number, number]): [number, number] => toLayerPx(xf, p)
   if (!finalId || !final) {
     return <div className="anim-stage final-viewer"><div className="anim-view"><div className="anim-empty"><h2>Final</h2>no final open — open one in the Shot section <Help text="Performance › Final shot makes a final: the scene split into layers, performed, matted and assembled; Make the composition, then Open it here." /></div></div></div>
@@ -135,7 +145,7 @@ function pictureRect(box: DOMRect, w: number, h: number) {
 /** UX9 U3: the selected layer's masks drawn over the frame — the selected one brighter, its points draggable; the points tool's shape.
  *  Review K116: the masks sit in a group carrying the layer's transform at the playhead; an outline is picked by a wide invisible stroke
  *  only, so a press inside a mask reaches the frame and moves the layer (a filled mask over the figure blocked every move). */
-function MaskOverlay({ w, h, xf, poly, scaleOf }: { w: number; h: number; xf: LayerXf; poly: [number, number][]; scaleOf: () => number }) {
+function MaskOverlay({ w, h, xf, poly, scaleOf }: { w: number; h: number; xf: Xf; poly: [number, number][]; scaleOf: () => number }) {
   const masks = useComposition((s) => s.masks)
   const selectedMask = useComposition((s) => s.selectedMask)
   const view = useComposition((s) => s.maskView)
@@ -144,7 +154,7 @@ function MaskOverlay({ w, h, xf, poly, scaleOf }: { w: number; h: number; xf: La
   const [vd, setVd] = useState<VertexDrag | null>(null)
   const k = scaleOf()
   const r = 4 * k                                                         // a handle 4 css px wide, in comp pixels
-  const rl = r / Math.max(1e-3, (Math.abs(xf.scale[0]) + Math.abs(xf.scale[1])) / 2)   // … in the layer's pixels (inside the group)
+  const rl = r / Math.max(1e-3, xfScale(xf))                              // … in the layer's pixels (inside the group)
   const dl = (d: VertexDrag) => deltaToLayer(xf, [d.dx * k, d.dy * k])     // a drag in css pixels as the layer's
   const start = (e: ReactPointerEvent<SVGCircleElement>, uid: number, index: number) => {
     if (e.button !== 0 || busy) return

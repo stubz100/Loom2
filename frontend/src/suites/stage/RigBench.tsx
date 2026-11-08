@@ -22,7 +22,7 @@ import { mannequin, POSES, type Mannequin } from './builders'
 import { FINGERS, HIDDEN, type FingerName, type HandShapes } from './clayHand'
 import { HAND_PRESETS, makeDetailed, type HandPreset } from './detailed'
 import { HAND_EDGES } from './passes'
-import { bindProxy, FOOT_REACH, stanceOf, type FootShapes, type Proxy } from './proxy'
+import { bentFoot, bindProxy, FOOT_REACH, stanceOf, type FootShapes, type Proxy } from './proxy'
 import { clearContent, loadOnce } from './gpu'
 import { footOf, handOf, linked, moveAnkle, placeOffset, setClaw, setCount, setFinger, setFoot, type Side } from './rigEdit'
 import { setUi, useUi } from './benchState'
@@ -52,8 +52,10 @@ function around(pts: number[][], w: number, h: number, pad: number, min = 120): 
 }
 
 /** Points dragged over a picture: an SVG in the picture's pixels, each point a circle; `onDrop` gets the moved point's index and place. */
-function DragPicture({ src, w, h, view, points, edges, dim, onDrop, children, label }: { src: string; w: number; h: number; view: [number, number, number, number]; points: number[][];
-  edges: [number, number, string][]; dim?: (k: number) => boolean; onDrop: (k: number, at: [number, number]) => void; children?: React.ReactNode; label: (k: number) => string }) {
+function DragPicture({ src, w, h, view, points, edges, dim, onDrop, children, label, locked }: { src: string; w: number; h: number; view: [number, number, number, number]; points: number[][];
+  edges: [number, number, string][]; dim?: (k: number) => boolean; onDrop: (k: number, at: [number, number]) => void; children?: React.ReactNode; label: (k: number) => string
+  /** Review K113: a final version's points — not dragged. */
+  locked?: boolean }) {
   const svg = useRef<SVGSVGElement>(null)
   const [drag, setDrag] = useState<{ k: number; at: [number, number]; c0: [number, number]; moved: boolean } | null>(null)   // viewport check: a click is no drop
   const at = (e: React.PointerEvent): [number, number] => { const m = svg.current!.getScreenCTM()!.inverse(); const q = new DOMPoint(e.clientX, e.clientY).matrixTransform(m); return [q.x, q.y] }
@@ -68,7 +70,7 @@ function DragPicture({ src, w, h, view, points, edges, dim, onDrop, children, la
         ? <line key={`${a}-${b}`} x1={pos(a)[0]} y1={pos(a)[1]} x2={pos(b)[0]} y2={pos(b)[1]} stroke={colour} strokeWidth={r * 0.45} opacity={dim?.(b) ? 0.3 : 0.9} /> : null)}
       {points.map((q, k) => (q[2] ?? 0) > 0 && (
         <circle key={k} cx={pos(k)[0]} cy={pos(k)[1]} r={r} className={`white${dim?.(k) ? ' off' : ''}`} data-k={k}
-          onPointerDown={(e) => { if (e.button !== 0) return; (e.target as Element).setPointerCapture?.(e.pointerId); setDrag({ k, at: at(e), c0: [e.clientX, e.clientY], moved: false }) }}><title>{label(k)}</title></circle>))}
+          onPointerDown={(e) => { if (e.button !== 0 || locked) return; (e.target as Element).setPointerCapture?.(e.pointerId); setDrag({ k, at: at(e), c0: [e.clientX, e.clientY], moved: false }) }}><title>{locked ? `${label(k).split(' — ')[0]} (a final version)` : label(k)}</title></circle>))}
     </svg>
   )
 }
@@ -81,7 +83,9 @@ export function HandsPanes({ v, body }: { v: Version; body: Body }) {
   const pts = u.handPts ?? hp?.hand ?? null
   const pic = v.hand_ref_asset_id
   const [w, h] = (hp?.canvas?.length === 2 ? hp.canvas : [1024, 1024]) as [number, number]
-  const view = useMemo(() => (pts ? around(pts, w, h, 0.25) : [0, 0, w, h] as [number, number, number, number]), [pts, w, h])
+  // review K113: framed on the read (SDPose's points, else the kept ones), not the points as dragged — the picture re-cropped after a drop
+  const read = hp?.sdpose ?? hp?.hand ?? null
+  const view = useMemo(() => (read ?? pts ? around((read ?? pts)!, w, h, 0.25) : [0, 0, w, h] as [number, number, number, number]), [read, pts, w, h])
   const hidden = shape ? HIDDEN[handOf(shape, 'r').count ?? 5] : []
   const edges = HAND_EDGES.map(([a, b], k) => [a, b, hue(k)] as [number, number, string])
   const stale = !!pic && hp?.from !== pic
@@ -99,7 +103,7 @@ export function HandsPanes({ v, body }: { v: Version; body: Body }) {
         <span className="lab">the hand picture · SDPose's points</span>
         {!pic ? <div className="hint rig-none">No hand picture — pick or make one in the panel</div>
           : !pts || stale ? <div className="hint rig-none">{stale ? 'The hand picture is not read yet' : 'No hand read'} <CommandButton id="story.cast.readHand" text /></div>
-          : <div className="skel-ref"><DragPicture src={api.assetUrl(pic)} w={w} h={h} view={view} points={pts} edges={edges} dim={(k) => { const f = FINGER_OF(k); return !!f && hidden.includes(f) }}
+          : <div className="skel-ref"><DragPicture src={api.assetUrl(pic)} w={w} h={h} view={view} points={pts} edges={edges} locked={v.state !== 'open'} dim={(k) => { const f = FINGER_OF(k); return !!f && hidden.includes(f) }}
               onDrop={drop} label={(k) => `${k === 0 ? 'the wrist' : `${FINGER_OF(k)} ${((k - 1) % 4) + 1}`} — drag where it is: the hand is fitted and kept when you let go`} /></div>}
         <div className="rig-foot">
           <CommandButton id="cast.rig.handSdpose" text />
@@ -135,7 +139,7 @@ function ClayHandView({ body, side, preset }: { body: Body; side: Side; preset: 
     world.current = { r, scene, cam, orbit, content }
     let raf = 0
     const loop = () => { raf = requestAnimationFrame(loop); r.render(scene, cam) }
-    const fit = () => { const b = el.getBoundingClientRect(); r.setSize(b.width, b.height); cam.aspect = b.width / Math.max(1, b.height); cam.updateProjectionMatrix() }
+    const fit = () => { const b = el.getBoundingClientRect(); r.setSize(b.width, b.height, false); cam.aspect = b.width / Math.max(1, b.height); cam.updateProjectionMatrix() }
     const ro = new ResizeObserver(fit); ro.observe(el); fit(); loop()
     return () => { cancelAnimationFrame(raf); ro.disconnect(); clearContent(content); orbit.dispose(); r.dispose(); r.forceContextLoss(); r.domElement.remove(); world.current = null }   // review K61 (V82)
   }, [])
@@ -235,7 +239,8 @@ export function FeetPanes({ v, body }: { v: Version; body: Body }) {
   const cur = useMemo(() => dragged ?? (fp?.foot ? { foot: fp.foot, ankle: fp.ankle ?? null, leg: fp.leg ?? null, floor: fp.floor ?? null } : null), [dragged, fp])
   const pts = useMemo(() => (cur ? [...cur.foot, cur.ankle ?? [0, 0, 0]] : null), [cur])   // big toe, small toe, heel, the ankle
   const [w, h] = (fp?.canvas?.length === 2 ? fp.canvas : [1024, 1024]) as [number, number]
-  const view = useMemo(() => (pts ? around(pts, w, h, 0.45, 160) : [0, 0, w, h] as [number, number, number, number]), [pts, w, h])
+  const read = useMemo(() => { const r = fp?.sdpose?.foot ? fp.sdpose : fp?.foot ? fp : null; return r?.foot ? [...r.foot, r.ankle ?? [0, 0, 0]] : null }, [fp])   // review K113: framed on the read
+  const view = useMemo(() => (read ?? pts ? around((read ?? pts)!, w, h, 0.45, 160) : [0, 0, w, h] as [number, number, number, number]), [read, pts, w, h])
   const stale = !!pic && fp?.from !== pic
   const moved = fp?.foot && fp.sdpose?.foot ? apart([...fp.foot, fp.ankle ?? [0, 0, 0]], [...fp.sdpose.foot, fp.sdpose.ankle ?? [0, 0, 0]]) : 0
   const drop = (k: number, at: [number, number]) => {                       // D191: fitted and kept as it is let go
@@ -252,7 +257,7 @@ export function FeetPanes({ v, body }: { v: Version; body: Body }) {
         <span className="lab">{pic && pic === v.anim_ref_side_asset_id ? 'the A-pose side view' : 'the feet picture'} · SDPose's points</span>
         {!pic ? <div className="hint rig-none">No feet picture — pick or make one in the panel</div>
           : !pts || stale ? <div className="hint rig-none">{stale ? 'The feet picture is not read yet' : 'No foot read'} <CommandButton id="story.cast.readFeet" text /></div>
-          : <div className="skel-ref"><DragPicture src={api.assetUrl(pic)} w={w} h={h} view={view} points={pts} edges={FOOT_EDGES}
+          : <div className="skel-ref"><DragPicture src={api.assetUrl(pic)} w={w} h={h} view={view} points={pts} edges={FOOT_EDGES} locked={v.state !== 'open'}
               onDrop={drop} label={(k) => `${['the big toe', 'the small toe', 'the heel', 'the ankle'][k]} — drag where it is: the foot is fitted and kept when you let go`}>
               {cur?.floor != null && <line x1={view[0]} x2={view[0] + view[2]} y1={cur.floor} y2={cur.floor} className="rig-floor"><title>the floor the read took</title></line>}
             </DragPicture></div>}
@@ -285,6 +290,7 @@ function ShoeView({ v, body, side }: { v: Version; body: Body; side: Side }) {
   const glb = useRef<{ id: string; p: Promise<THREE.Object3D> } | null>(null)            // review K61: the shell parsed once, not on every rebuild
   const bodyRef = useRef(body); useEffect(() => { bodyRef.current = body }, [body])
   const sideRef = useRef(side); useEffect(() => { sideRef.current = side }, [side])
+  const openRef = useRef(v.state === 'open'); useEffect(() => { openRef.current = v.state === 'open' }, [v.state])   // review K113: a final version's points are not dragged
   const shell = v.shell_asset_id ?? null
   const points = v.body_points ?? null
   useEffect(() => {
@@ -298,14 +304,14 @@ function ShoeView({ v, body, side }: { v: Version; body: Body; side: Side }) {
     world.current = w
     let raf = 0
     const loop = () => { raf = requestAnimationFrame(loop); r.render(scene, cam) }
-    const fit = () => { const b = el.getBoundingClientRect(); r.setSize(b.width, b.height); cam.aspect = b.width / Math.max(1, b.height); cam.updateProjectionMatrix() }
+    const fit = () => { const b = el.getBoundingClientRect(); r.setSize(b.width, b.height, false); cam.aspect = b.width / Math.max(1, b.height); cam.updateProjectionMatrix() }
     const ro = new ResizeObserver(fit); ro.observe(el); fit(); loop()
     // F4: a heel, ball or toe dragged on the view's plane — the three written as the foot's placement by hand, metres from the ankle
     const ray = new THREE.Raycaster(), plane = new THREE.Plane(), hit = new THREE.Vector3()
     let drag: { ball: THREE.Mesh; moved: boolean; start: [number, number] } | null = null
     const ndc = (e: PointerEvent) => { const b = r.domElement.getBoundingClientRect(); return new THREE.Vector2(((e.clientX - b.left) / b.width) * 2 - 1, -((e.clientY - b.top) / b.height) * 2 + 1) }
     const down = (e: PointerEvent) => {
-      if (e.button !== 0) return
+      if (e.button !== 0 || !openRef.current) return
       ray.setFromCamera(ndc(e), cam)
       const got = ray.intersectObjects([...w.balls.values()], false)[0]
       if (!got) return
@@ -334,7 +340,8 @@ function ShoeView({ v, body, side }: { v: Version; body: Body; side: Side }) {
         saveBody(moveAnkle(bodyRef.current, s, d.ball.position.clone().sub(A).toArray(), toLocal)); return
       }
       if (!f) return
-      const place = Object.fromEntries((['heel', 'ball', 'toe'] as const).map((k) => [k, placeOffset(w.balls.get(k)!.position.toArray() as [number, number, number], a, s, linked(f))]))
+      const flat = (m: THREE.Mesh) => m.position.clone().applyMatrix4((m.userData.unbend as THREE.Matrix4 | undefined) ?? new THREE.Matrix4())   // review K113: on the shoe as it stands
+      const place = Object.fromEntries((['heel', 'ball', 'toe'] as const).map((k) => [k, placeOffset(flat(w.balls.get(k)!).toArray() as [number, number, number], a, s, linked(f))]))
       saveBody({ ...bodyRef.current, foot_shape: setFoot(f, s, { place: place as never }) as never })
     }
     r.domElement.addEventListener('pointerdown', down); r.domElement.addEventListener('pointermove', move); r.domElement.addEventListener('pointerup', up)
@@ -371,7 +378,10 @@ function ShoeView({ v, body, side }: { v: Version; body: Body; side: Side }) {
         const b = w.r.domElement.getBoundingClientRect(), q = o.position.clone().project(w.cam)
         return [b.left + ((q.x + 1) / 2) * b.width, b.top + ((1 - q.y) / 2) * b.height] } }
       const [ea, eb] = BENDS[bend]
-      px.feet({ [`${side}_ankle`]: [ea, 0, 0], [`${side}_ball`]: [eb, 0, 0] }); g.updateMatrixWorld(true)
+      // review K113: the heel, ball and toe drawn on the bent shoe (they stayed where the flat one has them); a drag there is taken back to
+      // the shoe as it stands before it is written
+      const bent = bentFoot(g, side, () => px.feet({ [`${side}_ankle`]: [ea, 0, 0], [`${side}_ball`]: [eb, 0, 0] }))
+      for (const k of ['heel', 'ball', 'toe'] as const) { const m = w.balls.get(k); if (m) { m.position.applyMatrix4(bent[k]); m.userData.unbend = bent[k].clone().invert() } }
       const toeAt = fpt?.toe ?? A.clone().add(new THREE.Vector3(0, -A.y, 0.2))
       const target = A.clone().lerp(toeAt, 0.5).setY(Math.max(0.03, A.y * 0.6))      // the foot's middle
       const out = side === 'r' ? -1 : 1                                          // from the foot's own side, a little ahead: its sideways place shows

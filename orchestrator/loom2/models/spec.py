@@ -163,6 +163,7 @@ class Estimates(Strict):
     ref_step_seconds: float | None = None          # F27 (U0): one reference at ≤ 512² adds this per sampling step (a ≤ 1024² one four times it)
     ref_fit: float | None = None                   # F27: the reference load (in ≤ 512² references) past which the job spills out of VRAM
     work_exponent: float = 1.0                     # D193: video seconds grow with (pixels × frames)^this over the Draft clip's (E64: H3 1.58)
+    source: str | None = None                      # review K85: where the preset seconds were measured (the estimate says so); None: E4/E5
 
 
 class EngineHints(Strict):

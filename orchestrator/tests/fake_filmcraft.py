@@ -689,6 +689,13 @@ class Fake:
             for c in p.get("clips") or []:
                 _, ti = self.find_clip(int(c))
                 ti["speed"] = float(p.get("speed", 100)) / 100.0
+                ti["reverse"] = bool(p.get("reverse", False))              # as FilmCraft's (its `reverse` param)
+            return None
+        if cid == "clip.enable":                                           # as FilmCraft's: a toggle of the selection (all on → off)
+            its = [self.find_clip(int(c))[1] for c in p.get("clips") or []]
+            target = not all(x.get("enabled", True) for x in its)
+            for x in its:
+                x["enabled"] = target
             return None
         if cid == "clip.frameHold":
             out = []

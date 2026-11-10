@@ -6325,6 +6325,11 @@ export interface components {
              */
             shoulders?: number;
             /**
+             * Sole
+             * @default 0
+             */
+            sole?: number;
+            /**
              * Torso
              * @default 1
              */
@@ -6434,6 +6439,11 @@ export interface components {
              * @default 1
              */
             shoulders: number;
+            /**
+             * Sole
+             * @default 0
+             */
+            sole: number;
             /**
              * Torso
              * @default 1

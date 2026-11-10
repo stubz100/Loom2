@@ -854,7 +854,7 @@ class MeshFinisher:
         if job.origin and job.origin.surface == PROP_MODEL_SURFACE:                            # D110 (PS2): a Cast prop version's own model
             await asyncio.to_thread(_prop_model_result, q, job, rec.id)
         if job.origin and job.origin.surface == SHELL_SURFACE:                                 # CS2: a Cast character version's shell
-            await asyncio.to_thread(_shell_result, q, job, rec.id)
+            await asyncio.to_thread(_shell_result, q, job, rec.id, box)                       # D196: its soles under the ankles
         if job.origin and job.origin.surface == IDEA_CLAY_SURFACE:                             # CW1: an idea variant's shell
             await asyncio.to_thread(ideas.clay_shell_landed, q, job, rec.id)
         if job.origin and job.origin.surface == set_things.MODEL_SURFACE:                      # D123 (SC3c-3): a picture set's thing, stood on its relief
@@ -937,12 +937,13 @@ def _prop_model_result(q: JobQueue, job: JobRecord, asset_id: str) -> None:
         q.hub.broadcast("story.changed", {"kind": "profile", "id": pid, "revision": 0, "error": f"3D model not set: {e}"})
 
 
-def _shell_result(q: JobQueue, job: JobRecord, asset_id: str) -> None:
-    """CS2: the mesh becomes its character version's shell, with the reference it was made from. Never the job's failure."""
+def _shell_result(q: JobQueue, job: JobRecord, asset_id: str, box: list | None = None) -> None:
+    """CS2: the mesh becomes its character version's shell, with the reference it was made from (D196: and the body its sole, from the
+    figure box). Never the job's failure."""
     from ..story import StoryStore
     pid, payload = str(job.origin.ref or ""), job.origin.payload or {}
     try:
-        p = StoryStore(q.ws).set_shell(pid, str(payload.get("version") or ""), asset_id, str(payload.get("from") or "") or None)
+        p = StoryStore(q.ws).set_shell(pid, str(payload.get("version") or ""), asset_id, str(payload.get("from") or "") or None, box)
         q.hub.broadcast("story.changed", {"kind": "profile", "id": p.id, "revision": p.revision})
     except Exception as e:  # noqa: BLE001
         job.log_tail.append(f"the shell was not set on the character: {e}")
@@ -1048,7 +1049,7 @@ def _body_fit_result(q: JobQueue, job: JobRecord, recipe: Keypoints, people: lis
     """CA1b: the version's body fitted to the reference's proportions (the height, build, head, feet and attachments stay). A reference that
     shows no whole figure fails the job, so the author sees why."""
     from ..body import body_points, figures_in, fit_body, reference_ratios, seed_body, stance_note
-    from ..story import NOT_WHOLE, SEVERAL, StoryStore
+    from ..story import NOT_WHOLE, SEVERAL, StoryStore, shell_box, with_sole
     store = StoryStore(q.ws)
     pid, vid = str(job.origin.ref or ""), str((job.origin.payload or {}).get("version") or "")
     cur = store.profile(pid)
@@ -1075,7 +1076,9 @@ def _body_fit_result(q: JobQueue, job: JobRecord, recipe: Keypoints, people: lis
         raise ValueError(ARMS_DOWN)
     base = seed_body(v.body, " ".join([v.appearance, v.label, v.marks]))      # D168 (M9): an untouched body starts from the sheet's words
     body, report = fit_body(measured, base, base.locks)                        # CS2: the locked factors stay the author's
-    p = store.set_fitted_body(pid, v.id, body, recipe.asset_id, body_points(people[0], job.result.get("canvas")), note)
+    pts = body_points(people[0], job.result.get("canvas"))
+    body = with_sole(body, pts, recipe.asset_id, v.shell_from, shell_box(q.catalogue, v))   # D196: the shell's shoes, when it is of this picture
+    p = store.set_fitted_body(pid, v.id, body, recipe.asset_id, pts, note)
     job.result["body"] = body.model_dump()
     job.result["fit"] = report
     job.log_tail.append("body fitted: " + ", ".join(f"{k} {body.model_dump()[k]}" for k in ("neck", "torso", "shoulders", "arms", "legs", "hands")))

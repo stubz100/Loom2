@@ -23,7 +23,7 @@ from ..stages import PlaceSet, Pose, SetFace, StageStore, encode_guide
 from ..shot_recipe import TEMPLATES, StampReader, Template, recipe_state, rerun_recipe, stale_plan, used_run
 from ..shot_graph import ShotGraph, clay_rows, final_for, shot_graph
 from ..shot_prompt import ShotPrompt, shot_prompt
-from ..story import FOR_SHOT, Animatic, version_stage_stale, NODE_TYPES, VISUAL_TYPES, has_lines, node_type, StaleScenes, CastUse, cast_uses, body_fit_origin, fit_if_untouched, queue_part_fit, model_source, prop_model_origin, shell_origin, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
+from ..story import FOR_SHOT, Animatic, version_stage_stale, NODE_TYPES, VISUAL_TYPES, has_lines, node_type, StaleScenes, CastUse, cast_uses, body_fit_origin, fit_if_untouched, queue_part_fit, model_source, prop_model_origin, shell_box, shell_origin, with_sole, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
 from ..voices import VoiceRecord, VoiceStore, check_voice
 from .deps import Svc
 
@@ -480,7 +480,7 @@ async def profile_body_refit(svc: Svc, pid: str, vid: str, body: BodyRefit):
     """CS2 (proto01_UIcast 03 §3.2, *Fit again*): the body fitted to the given points at once, on the CPU — the bench's corrected points; the
     locked factors stay; the points are kept on the version (the reference it was fitted to stays the same)."""
     from ..body import Body, fit_body, person_of, reference_ratios, stance_note
-    ws, _, _ = svc.require_project()
+    ws, cat, _ = svc.require_project()
     store = StoryStore(ws)
     p = await asyncio.to_thread(store.profile, pid)
     if p is None:
@@ -511,7 +511,9 @@ async def profile_body_refit(svc: Svc, pid: str, vid: str, body: BodyRefit):
     except (ValueError, ArithmeticError) as e:                                             # a degenerate measure is the reference's fault, not a 500
         raise HTTPException(422, f"the reference cannot be fitted: {e}")
     pts = {**{k: x for k, x in body.points.items() if k != "sdpose"}, "canvas": body.points.get("canvas") or before.get("canvas") or [], "sdpose": sdpose}
-    p = await asyncio.to_thread(store.set_fitted_body, pid, v.id, fitted, v.body_fit_from or v.anim_ref_asset_id or "", pts, note)
+    picture = v.body_fit_from or v.anim_ref_asset_id or ""
+    fitted = with_sole(fitted, pts, picture, v.shell_from, await asyncio.to_thread(shell_box, cat, v))   # D196: the ankles dragged move the sole too
+    p = await asyncio.to_thread(store.set_fitted_body, pid, v.id, fitted, picture, pts, note)
     _changed(svc, p)
     return {"profile": p.model_dump(), "fit": report}
 

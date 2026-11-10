@@ -21,6 +21,7 @@ ELBOW_AT = 29 / 56               # the upper arm's share of the arm (builders.ts
 JOINT_KEYS = frozenset(("root", "spine", "neck", "head", "r_shoulder", "r_elbow", "l_shoulder", "l_elbow", "r_hip", "r_knee", "l_hip", "l_knee",
                         "r_wrist", "l_wrist", "r_ankle", "l_ankle"))   # D183: the twelve joints and the four ends a hand can place on the shell
 KNEE_AT = 44 / 87                # the thigh's share of the leg (0.44 + 0.43)
+SOLE_MAX = 0.4                   # D196: the most a shoe lifts the ankle (dummy units ≈ metres at 1.75 m; char01's work boots 0.12)
 
 
 class BodyAttachment(BaseModel):
@@ -65,6 +66,8 @@ class Body(BaseModel):
     head_forward: float = Field(0.0, ge=-30.0, le=40.0)   # CS2: the head carried forward of the neck (degrees: a stoop +, a proud stance −)
     shoulder_drop: float = Field(1.0, ge=0.0, le=3.0)     # CS2: the shoulders under the neck joint (×1: 0.04 · torso; 0 square, 2–3 sloped)
     feet_out: float = Field(0.0, ge=-20.0, le=45.0)       # CS2: the feet turned out at rest (degrees)
+    sole: float = Field(0.0, ge=0.0, le=SOLE_MAX)         # D196: the ankle's lift over the floor in the character's shoes, in the dummy's
+    #                                                       units (over ×1's bare 0.04): set from the shell's picture (sole_of), 0 without one
     locks: list[str] = Field(default_factory=list, max_length=16)   # CS2: the factors *Fit again* leaves as the author set them
     attachments: list[BodyAttachment] = Field(default_factory=list, max_length=6)
     joint_offsets: dict[str, list[float]] = Field(default_factory=dict)   # D183 (C2c): a joint placed on the shell by hand — metres from where
@@ -156,18 +159,46 @@ PULL = 0.02                   # S7: the weight of each factor's pull toward its 
 DEFAULTS = {"elbow": ELBOW_AT, "knee": KNEE_AT}
 
 
+def _nose_ankle(b: Body) -> tuple[float, float]:
+    """The dummy's nose and ankles over its floor, in its own units (builders.ts `mannequin`; D196: the sole under the ankles)."""
+    import math
+    hip = 0.07 + 0.88 * b.legs + b.sole
+    nose_y = hip + 0.06 + 0.44 * b.torso + 0.12 * b.neck * math.cos(math.radians(b.head_forward)) + 0.02 * b.head   # S3: the neck to the pivot (CS2: leaning), the nose
+    return nose_y, hip - 0.04 - 0.87 * b.legs
+
+
+def sole_of(points: dict[str, Any] | None, figure_box: list | None, b: Body) -> float:
+    """D196: the ankle's lift over the floor in the character's shoes, in the dummy's units — the picture's soles (the bottom of the shell's
+    figure box: its matte's lowest row) under its ankles, as a share of its nose → ankle height, onto the fitted dummy's (every other ratio
+    is over that height, so the sole is solved after the fit and moves none of them). char01's work boots: SDPose's ankles 16 cm over the
+    soles where the bare dummy's stand 4 cm, which left everything under her nose 9 % long against her shell. 0 when the box or the points
+    do not tell (a shell made before figure boxes, an ankle not seen)."""
+    import math
+    pose = (points or {}).get("pose") or []
+    if not figure_box or len(figure_box) < 6 or len(pose) < 14 or not figure_box[5]:
+        return 0.0
+    if any(len(pose[i]) < 3 or pose[i][2] < 0.3 for i in (0, 10, 13)):
+        return 0.0
+    canvas = (points or {}).get("canvas") or []
+    soles = figure_box[3] * (canvas[1] / figure_box[5] if len(canvas) == 2 else 1.0)   # the box is in the matte's pixels, the points in the fit's
+    ax, ay = (pose[10][0] + pose[13][0]) / 2, (pose[10][1] + pose[13][1]) / 2
+    h = math.hypot(pose[0][0] - ax, pose[0][1] - ay)                            # as reference_ratios measures it
+    if h <= 1 or soles <= ay:
+        return 0.0
+    nose_y, ankle_y = _nose_ankle(b.model_copy(update={"sole": 0.0}))
+    return round(min(SOLE_MAX, max(0.0, (soles - ay) / h * (nose_y - ankle_y) - ankle_y)), 4)
+
+
 def dummy_ratios(b: Body) -> dict[str, float]:
     """The Stage dummy (frontend builders.ts `mannequin`) seen from the front in the A-pose, as SDPose would read it: each measure a fraction
     of the height from the nose to the ankles. Kept in step with builders.ts by tests/test_body_fit_ca1b.py's numbers."""
     w = BUILD_WIDTH.get(b.build, 1.0)
-    hip = 0.07 + 0.88 * b.legs
-    import math
+    hip = 0.07 + 0.88 * b.legs + b.sole                                      # D196: the shoes lift it all (no ratio moves with them)
     leg, arm = 0.87 * b.legs, 0.56 * b.arms
     spine = hip + 0.06
     shoulder_y = spine + 0.44 * b.torso - 0.04 * b.torso * b.shoulder_drop   # the shoulders' midpoint = OpenPose's neck point (CA1b); CS2's drop
-    nose_y = spine + 0.44 * b.torso + 0.12 * b.neck * math.cos(math.radians(b.head_forward)) + 0.02 * b.head   # S3: the neck to the pivot (CS2: leaning), the nose
+    nose_y, ankle_y = _nose_ankle(b)
     hip_y = hip - 0.04
-    ankle_y = hip_y - leg
     h = nose_y - ankle_y
     sx = 0.21 * b.shoulders * (0.5 + 0.5 * w)
     r = {"head_neck": (nose_y - shoulder_y) / h, "torso": (shoulder_y - hip_y) / h, "shoulders": 2 * sx / h, "hips": 0.2 * w * b.hips / h,

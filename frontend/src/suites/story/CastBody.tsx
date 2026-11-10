@@ -131,7 +131,7 @@ function Silhouette({ b }: { b: Body }) {
         <circle cx={cx} cy={y(pivot + 0.04 * x.head)} r={hw(0.11 * x.head)} />
         <rect x={cx - hw(0.19 * w * x.shoulders)} y={y(neck)} width={hw(0.38 * w * x.shoulders)} height={hw(0.42 * x.torso + 0.06)} rx={2} />
         {[-1, 1].map((side) => <line key={`a${side}`} x1={cx + side * hw(sx)} y1={y(shoulderY)} x2={cx + side * hw(sx + 0.05)} y2={y(shoulderY - armLen)} strokeWidth={hw(0.1 * w)} />)}
-        {[-1, 1].map((side) => <line key={`l${side}`} x1={cx + side * hw(0.1 * w * (x.hips ?? 1))} y1={y(d.hip - 0.04)} x2={cx + side * hw(0.11 * w * (x.hips ?? 1))} y2={y(d.hip - 0.04 - legLen)} strokeWidth={hw(0.13 * w)} />)}
+        {[-1, 1].map((side) => <line key={`l${side}`} x1={cx + side * hw(0.1 * w * (x.hips ?? 1))} y1={y(d.hip - 0.04)} x2={cx + side * hw(0.11 * w * (x.hips ?? 1))} y2={y(d.hip - 0.04 - legLen - (x.sole ?? 0))} strokeWidth={hw(0.13 * w)} />)}{/* D196: down through the shoes */}
       </>
     )
   }

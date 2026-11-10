@@ -16928,3 +16928,46 @@ The author: "Let's continue, but with fewer agents". The open list of 2026-11-08
 Checks: offline 890 (4 new in `test_review_k.py`; two tests expect the output's kind now), Vitest 806 + 3 skipped (9 new: `reviewK113.test.ts`, the parent chain, the burst), typecheck, build, lint 63, settings audit 326 / 0, model literals 0, agents 0, the API contract unchanged; e2e alone: a full run 90 / 92 (the Shots race above), then 92 / 92 in 7.3 min. Nothing on the GPU.
 
 The K register (K1–K116) is closed, except the in-app fetch's stall restart (above) — the scripts' `--stall-s` remains the way.
+
+## 2026-11-08 15:42 — D196: a shell's skeleton stands in its shoes and in its picture's legs (char01)
+
+The author, on char01 in the new stubz002 (a place and a character made, both in Clay): "The clay shell is still disproportionate to the
+original model, and therefore it results in a clay shell with distorted hands and feet." Measured before anything was changed, with a new
+check (`engine/spikes/shell_fit.cjs` + `frontend/src/spikes/shellFit.ts`: headless Edge, the bind drawn on a 2D canvas over the picture, the
+skeleton's COCO markers against SDPose's points in the figure's frame, the posed shell's triangle stretch at stand and walk):
+
+| char01 (shell `ast_f8f56bf5`, Pixal3D from `ast_e34e5ddd`) | before | after |
+| --- | --- | --- |
+| skeleton marker → the picture's point, mean / max | 6.3 / 14.3 cm | 0.3 / 0.7 cm |
+| hips · knees · ankles low by | 5–6 · 9–10 · 12.5 cm | ≤ 0.7 cm |
+| wrists | 6 cm low, 3.5 cm out (in the palms) | 0.1–0.2 cm |
+| ankles across | 7 cm inside each boot | 0.5 cm |
+| the shoe rig's points off the sole | 5.2 cm | 0.5–1.2 cm |
+| triangles over 2× in a walk | 0.1 % | 0.1 % |
+
+Why: the shell is placed by its picture — the nose on the nose, the figure box's bottom (the soles) on the floor (D140) — while the
+skeleton is fitted to the picture's ratios over the nose → ankle height (CA1b) with the bare dummy's ankle 4 cm over the floor. SDPose reads
+char01's ankles in her work boots 16 cm over the soles, so the fitted skeleton's nose → ankle was 9 % longer than the shell's and every joint
+under the nose sank in proportion; and the bind stance (S4) read the arms only, so the picture's legs, 6° apart, were bound to straight
+ones. The hands then folded into a wrist in the palm (CS3), the shoes were rigged to an ankle in the sole (RG2b).
+
+**D196** recorded first, then built:
+- `Body.sole` (body.py, `SOLE_MAX` 0.4): the ankle's lift over the floor in the character's shoes, in the dummy's units. `sole_of(points,
+  figure_box, body)` solves it from the picture's soles under its ankles over its nose → ankle height — after the fit, since no other
+  ratio moves with it (`dummy_ratios` with a sole equals without; the fit keeps it). `story.with_sole` / `shell_box`: set when the shell
+  lands (`_shell_result` passes the figure box to `set_shell`), by the body fit (`_body_fit_result`) and by the skeleton bench's refit
+  route when the shell is of the fitted picture; 0 for a shell of another picture, none, or one made before figure boxes.
+- The dummy stands on it: `bodyDims` (the hip), `mannequin` (the foot's block down to the floor), `skeleton.ts`'s nose unit; the Detailed
+  mannequin's foot drops to the floor (`DetailedBody.sole`, every caller — hidden on a shell, its toe and heel markers kept on the shoe);
+  Cast's silhouette draws the legs through the shoes. The height stays the author's: the legs shorten in metres.
+- `stanceOf` reads each hip's and knee's swing from the picture's hip, knee and ankle as the arms' (within `LEG_STANCE_MAX` 25°).
+- char01 given its sole through `StoryStore.set_shell` (its shell and picture unchanged; sole 0.1429, the profile's revision 43 → 44; a copy
+  of the profile before it in the session's scratchpad). Its bench and scene figures take the version's body when they load.
+
+`.docs/proto01/img/d196-shell-fit.jpg`: the bind over the picture before and after (red the skeleton, green the picture's points), the
+posed shell before and after (stand, walk; front, side).
+
+Checks: offline 894 (4 new, `tests/test_d196_sole.py`), Vitest 811 + 3 skipped (5 new, `d196Sole.test.ts`), typecheck, build, lint 63 warnings as before, settings audit 326 / 0, model literals 0, agents 0, the API contract regenerated (`Body.sole`), e2e 92 / 92 alone (7.5 min). Nothing on the GPU (the check draws on a 2D canvas in headless Edge).
+
+Owed: the author's look in Clay (the skeleton bench and the scene) — no headed check was run, the app being the author's.
+

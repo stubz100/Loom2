@@ -18,6 +18,8 @@ export interface Body {
   foot_shape?: components['schemas']['Feet-Output'] | null                        // RG1 (D188): its own feet, read from its feet picture (or the A-pose side view)
   joint_offsets?: Record<string, number[]>                                 // D183 (C2c): a joint placed on the shell by hand — from where the fitted body
   //                                                                          puts it, in its parent's frame, in the figure's own units (the 1.75 m adult's)
+  sole?: number                                                            // D196: the ankle's lift in the character's shoes (dummy units), from its shell's
+  //                                                                          picture (body.py sole_of); 0 / absent: the bare dummy's ankle 0.04 over the floor
 }
 /** D183: the four ends a hand can place besides the twelve joints (the wrist and ankle markers). */
 export const ENDS = ['r_wrist', 'l_wrist', 'r_ankle', 'l_ankle'] as const
@@ -51,7 +53,7 @@ export function bodyDims(b: Body | null | undefined) {
   const elbow = x.elbow ?? ELBOW_AT, knee = x.knee ?? KNEE_AT                // S6 (a body stored before CS1 has neither: ×1's places)
   const limbs: Limbs = { upper_arm: 0.29 * x.arms * (elbow / ELBOW_AT), forearm: 0.27 * x.arms * ((1 - elbow) / (1 - ELBOW_AT)),   // ×1's 0.29 / 0.27 exactly
     thigh: 0.44 * x.legs * (knee / KNEE_AT), shin: 0.43 * x.legs * ((1 - knee) / (1 - KNEE_AT)) }
-  const hip = b ? 0.07 + 0.88 * x.legs : 0.95
+  const hip = b ? 0.07 + 0.88 * x.legs + (x.sole ?? 0) : 0.95             // D196: standing in its shoes (body.py _nose_ankle)
   const lean = Math.cos(((x.head_forward ?? 0) * Math.PI) / 180)          // CS2: a head carried forward stands a little lower
   const top = hip + 0.06 + 0.44 * x.torso + 0.12 * (x.neck ?? 1) * lean + 0.161 * x.head    // S3: the neck to the head's pivot, the head's top above it
   return { limbs, hip, top, scale: b ? x.height_m / top : 1 }

@@ -20,21 +20,28 @@ import { applyPose, JOINTS, POSES, type Joint, type Limbs } from './builders'
 export const A_POSE: Record<string, number[]> = { r_shoulder: [0, 0, -22], l_shoulder: [0, 0, 22], r_elbow: [0, 0, 0], l_elbow: [0, 0, 0] }
 export type StancePoints = { pose?: number[][] } | null | undefined
 
+/** D196: the most a leg's stance is read out from straight down (a hip's swing, a knee's on from it) — a wide stance, not a split. */
+export const LEG_STANCE_MAX = 25
+
 /** S4: the arms as the reference holds them, from SDPose's body points (OpenPose-18: 2–4 the right shoulder, elbow, wrist — on the picture's
  *  left for a figure facing it — 5–7 the left's): each upper arm's swing out from hanging down, each forearm's on from it, in the picture's
- *  plane (the front view). Missing points: A_POSE. */
+ *  plane (the front view). D196: the legs too (8–10 the right hip, knee, ankle, 11–13 the left's), within LEG_STANCE_MAX — the picture's
+ *  feet apart had left each of char01's boots 7 cm outside the skeleton's ankle, bound to a straight leg. Missing points: A_POSE (the
+ *  legs straight). */
 export function stanceOf(points: StancePoints): Record<string, number[]> {
   const p = points?.pose
   if (!p || p.length < 8) return A_POSE
   const seen = (i: number) => (p[i]?.[2] ?? 0) >= 0.3
   const out: Record<string, number[]> = { ...A_POSE }
-  for (const [s, e, wr, side] of [[2, 3, 4, -1], [5, 6, 7, 1]] as const) {
+  const limbs = [[2, 3, 4, -1, 'shoulder', 'elbow', 180], [5, 6, 7, 1, 'shoulder', 'elbow', 180], [8, 9, 10, -1, 'hip', 'knee', LEG_STANCE_MAX], [11, 12, 13, 1, 'hip', 'knee', LEG_STANCE_MAX]] as const
+  for (const [s, e, wr, side, top, mid, max] of limbs) {
     if (!seen(s) || !seen(e) || !seen(wr)) continue
     const out1 = (a: number, b: number) => Math.atan2(side * (p[b][0] - p[a][0]), p[b][1] - p[a][1]) * 180 / Math.PI   // outward from straight down
-    const upper = out1(s, e), fore = out1(e, wr)
+    const clamp = (x: number) => Math.max(-max, Math.min(max, x))
+    const upper = clamp(out1(s, e)), fore = clamp(out1(e, wr))
     const name = side < 0 ? 'r' : 'l'
-    out[`${name}_shoulder`] = [0, 0, +(side * upper).toFixed(1)]
-    out[`${name}_elbow`] = [0, 0, +(side * (fore - upper)).toFixed(1)]
+    out[`${name}_${top}`] = [0, 0, +(side * upper).toFixed(1)]
+    out[`${name}_${mid}`] = [0, 0, +(side * (fore - upper)).toFixed(1)]
   }
   return out
 }

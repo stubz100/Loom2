@@ -106,7 +106,7 @@ export function dragFactor(b: Body, fig: XY[], k: number, to: XY): { factor: key
   if (name === 'r_shoulder' || name === 'l_shoulder') { const c = mid(fig[2], fig[5]); return { factor: 'shoulders', value: clamp(b.shoulders * Math.abs(to[0] - c[0]) / (Math.abs(fig[k][0] - c[0]) || 1e-6), 0.6, 1.8) } }
   if (name === 'r_hip' || name === 'l_hip') { const c = mid(fig[8], fig[11]); return { factor: 'hips', value: clamp((b.hips ?? 1) * Math.abs(to[0] - c[0]) / (Math.abs(fig[k][0] - c[0]) || 1e-6), 0.6, 1.6) } }
   if (name === 'nose') {                                                       // the nose's rise over the shoulders' line: the neck's length (0.12 · neck)
-    const unit = d(fig[0], mid(fig[10], fig[13])) / (bodyDims(b).top - 0.04)   // the front plane's units per dummy unit (≈ the scale)
+    const unit = d(fig[0], mid(fig[10], fig[13])) / (bodyDims(b).top - 0.04 - (b.sole ?? 0))   // the front plane's units per dummy unit (≈ the scale; D196: over the sole)
     return { factor: 'neck', value: clamp((b.neck ?? 1) + (to[1] - fig[0][1]) / (0.12 * unit), 0.5, 3) }
   }
   if (name === 'r_ear' || name === 'l_ear') { const c = mid(fig[16], fig[17]); return { factor: 'head', value: clamp(b.head * Math.abs(to[0] - c[0]) / (Math.abs(fig[k][0] - c[0]) || 1e-6), 0.5, 2.5) } }

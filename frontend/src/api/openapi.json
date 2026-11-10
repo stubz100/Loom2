@@ -2590,6 +2590,13 @@
             "title": "Shoulders",
             "type": "number"
           },
+          "sole": {
+            "default": 0.0,
+            "maximum": 0.4,
+            "minimum": 0.0,
+            "title": "Sole",
+            "type": "number"
+          },
           "torso": {
             "default": 1.0,
             "maximum": 1.6,
@@ -2776,6 +2783,13 @@
             "title": "Shoulders",
             "type": "number"
           },
+          "sole": {
+            "default": 0.0,
+            "maximum": 0.4,
+            "minimum": 0.0,
+            "title": "Sole",
+            "type": "number"
+          },
           "torso": {
             "default": 1.0,
             "maximum": 1.6,
@@ -2803,6 +2817,7 @@
           "head_forward",
           "shoulder_drop",
           "feet_out",
+          "sole",
           "locks",
           "attachments",
           "joint_offsets",

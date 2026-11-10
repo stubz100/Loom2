@@ -61,7 +61,8 @@ const rad = THREE.MathUtils.degToRad
 /** The default dummy's leg (hip joint → ankle, builders.ts at ×1): the size the starter mannequin's head is drawn for. */
 const DEFAULT_LEG = 0.87
 /** What a figure's body gives its Detailed mannequin beyond the limb lengths (body.ts; none: the default adult, relaxed hands). */
-export interface DetailedBody { hands?: number; feet?: number; head?: number; handRest?: { preset: HandPreset; curl: number; spread?: number; thumb?: number } | null; feetOut?: number
+export interface DetailedBody { hands?: number; feet?: number; head?: number; sole?: number;   // D196: the foot dropped to the floor under a lifted ankle
+  handRest?: { preset: HandPreset; curl: number; spread?: number; thumb?: number } | null; feetOut?: number
   handShape?: HandShapes | null }                                         // RG2 (D187): the character's own hands (body.hand_shape)
 
 function bonesOf(root: THREE.Object3D): Map<string, THREE.Object3D> {
@@ -128,7 +129,9 @@ export function makeDetailed(mannequin: THREE.Object3D, rig: RigName, parent: TH
   }
   const headHave = inFig(part('head')).distanceTo(N)                        // the neck: the head's pivot a neck's length above it (S3: 0.12 · neck)
   if (headHave > 1e-6) { part('head').position.multiplyScalar(off('head').length() / headHave); object.updateMatrixWorld(true) }
-  const ends: [Part, Part, number][] = [['r_lower', 'r_hand', limbs.forearm], ['l_lower', 'l_hand', limbs.forearm], ['r_calf', 'r_foot', limbs.shin], ['l_calf', 'l_foot', limbs.shin]]
+  const sole = size.sole ?? 0                                                // D196: in a shoe the skeleton's ankle stands over the foot's; the foot
+  //                                                                          (hidden on a shell, its markers kept) goes down to the floor
+  const ends: [Part, Part, number][] = [['r_lower', 'r_hand', limbs.forearm], ['l_lower', 'l_hand', limbs.forearm], ['r_calf', 'r_foot', limbs.shin + sole], ['l_calf', 'l_foot', limbs.shin + sole]]
   for (const [a, b, len] of ends) {                                         // the forearms and shins: the hand at the wrist point, the foot at the ankle
     const have = inFig(part(a)).distanceTo(inFig(part(b)))
     if (have > 1e-6) part(b).position.multiplyScalar(len / have)

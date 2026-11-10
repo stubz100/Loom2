@@ -1005,6 +1005,21 @@ def shell_origin(pid: str, vid: str, source: str) -> JobOrigin:
     return JobOrigin(suite="story", surface=SHELL_SURFACE, ref=pid, payload={"version": vid, "from": source})
 
 
+def shell_box(catalogue: Any, v: ProfileVersion) -> list | None:
+    """D196: the figure box (the matte's cut-out, D140) the version's shell was made with — the picture's soles; None without a shell."""
+    rec = catalogue.get(v.shell_asset_id) if v.shell_asset_id else None
+    box = (rec.params or {}).get("figure_box") if rec is not None else None
+    return box if isinstance(box, list) else None
+
+
+def with_sole(body: Body, points: dict[str, Any] | None, picture: str | None, shell_from: str | None, box: list | None) -> Body:
+    """D196: the body standing in its shell's shoes — the sole measured when the shell was made from the picture the body is fitted to,
+    else 0 (no shell to meet, or one from another picture: the skeleton keeps the bare dummy's ankle)."""
+    from .body import sole_of
+    sole = sole_of(points, box, body) if picture and shell_from == picture else 0.0
+    return body if body.sole == sole else Body.model_validate({**body.model_dump(), "sole": sole})
+
+
 def model_source(v: ProfileVersion) -> str | None:
     """D110: the image a prop's model is made from — its animation reference (the prop alone, a three-quarter view), else its hero."""
     return v.anim_ref_asset_id or v.hero_asset_id
@@ -2732,13 +2747,16 @@ class StoryStore(_ShotMixin, _FlowMixin):
                 v.shell_asset_id, v.shell_from = shell_asset_id, anim_ref_asset_id
         return self._change_version(pid, vid, apply)
 
-    def set_shell(self, pid: str, vid: str, asset_id: str | None, source: str | None) -> Profile:
+    def set_shell(self, pid: str, vid: str, asset_id: str | None, source: str | None, figure_box: list | None = None) -> Profile:
         """CS2: a character version's shell and the reference it was made from (None clears both). A product of the version like its
-        animation reference: no revision guard, a final version takes it too."""
+        animation reference: no revision guard, a final version takes it too. D196: the body takes the sole the shell's picture shows
+        (`figure_box`, the matte's cut-out) when the body was fitted to that picture; a shell cleared takes it off."""
         def apply(v: ProfileVersion, cur: Profile) -> None:
             if cur.cls != "character":
                 raise ValueError("only a character has a shell (a prop has its 3D model)")
             v.shell_asset_id, v.shell_from = asset_id, (source if asset_id else None)
+            if v.body is not None:
+                v.body = with_sole(v.body, v.body_points, v.body_fit_from, v.shell_from, figure_box)
         return self._change_version(pid, vid, apply)
 
     def set_anim_test(self, pid: str, vid: str, clip_id: str | None) -> Profile:

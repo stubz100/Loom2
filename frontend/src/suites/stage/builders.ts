@@ -109,8 +109,8 @@ export function mannequin(mat: THREE.Material, pose: Pose = POSES.stand, joints?
     limb(J[hipJ], limbs.thigh, 0.07 * w, mat)
     J[hipJ].add(J[knee]); J[knee].position.set(0, -limbs.thigh, 0)
     limb(J[knee], limbs.shin, 0.055 * w, mat)
-    const fs = x.feet ?? 1
-    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.1 * w * fs, 0.06, 0.24 * fs), mat); foot.position.set(0, -limbs.shin - 0.01, 0.06 * fs); J[knee].add(foot)
+    const fs = x.feet ?? 1, sole = x.sole ?? 0                       // D196: the shoe's block reaches the floor under a lifted ankle
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.1 * w * fs, 0.06 + sole, 0.24 * fs), mat); foot.position.set(0, -limbs.shin - 0.01 - sole / 2, 0.06 * fs); J[knee].add(foot)
     return [marker(J[hipJ], 0, 0, 0), marker(J[knee], 0, 0, 0), marker(J[knee], 0, -limbs.shin, 0)]
   }
   const [rH, rK, rA] = leg('r_hip', 'r_knee', -1), [lH, lK, lA] = leg('l_hip', 'l_knee', 1)

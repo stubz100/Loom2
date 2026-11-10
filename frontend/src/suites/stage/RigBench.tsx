@@ -156,7 +156,7 @@ function ClayHandView({ body, side, preset }: { body: Body; side: Side; preset: 
       fig.root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.visible = false })
       const { root, rig } = await mannequinClone(body.figure ?? 'female', clay)
       if (!live) return
-      const d = makeDetailed(root, rig, fig.joints.root.parent!, fig.joints, fig.limbs, { hands: body.hands, feet: body.feet, head: body.head, handRest: body.hand_rest, feetOut: body.feet_out, handShape: handsOf(body) })
+      const d = makeDetailed(root, rig, fig.joints.root.parent!, fig.joints, fig.limbs, { hands: body.hands, feet: body.feet, head: body.head, sole: body.sole, handRest: body.hand_rest, feetOut: body.feet_out, handShape: handsOf(body) })
       d.handsOnly(true)
       d.follow(fig.joints, { ...d.handPreset('r', preset), ...d.handPreset('l', preset) }); g.updateMatrixWorld(true)
       const marks = side === 'r' ? d.wholebody?.right : d.wholebody?.left

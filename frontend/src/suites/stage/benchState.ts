@@ -70,7 +70,7 @@ export async function handFromPicture(body: Body, pts: Points | null): Promise<{
     const fig = mannequin(mat, POSES.stand, stance, body)
     const g = new THREE.Group(); g.add(fig.root); g.updateMatrixWorld(true)
     const { root, rig } = await mannequinClone(body.figure ?? 'female', mat)
-    const d = makeDetailed(root, rig, fig.joints.root.parent!, fig.joints, fig.limbs, { hands: body.hands, feet: body.feet, head: body.head, handRest: { preset, curl, spread: body.hand_rest.spread, thumb: body.hand_rest.thumb }, handShape: (body.hand_shape as HandShapes | null | undefined) ?? null })   // RG2: its own hands
+    const d = makeDetailed(root, rig, fig.joints.root.parent!, fig.joints, fig.limbs, { hands: body.hands, feet: body.feet, head: body.head, sole: body.sole, handRest: { preset, curl, spread: body.hand_rest.spread, thumb: body.hand_rest.thumb }, handShape: (body.hand_shape as HandShapes | null | undefined) ?? null })   // RG2: its own hands
     d.follow(fig.joints, null); g.updateMatrixWorld(true)
     if (!d.wholebody) return null
     let sum = 0, n = 0

@@ -931,7 +931,7 @@ export class StageEngine {
       if (this.disposed || this.entries.get(id) !== e || !e.figure) return
       e.holder.updateMatrixWorld(true)
       const b = e.doc.body
-      const d = makeDetailed(root, rig, e.figure.joints.root.parent!, e.figure.joints, e.figure.limbs, { hands: b?.hands, feet: b?.feet, head: b?.head, handRest: b?.hand_rest ?? null, feetOut: b?.feet_out ?? 0,
+      const d = makeDetailed(root, rig, e.figure.joints.root.parent!, e.figure.joints, e.figure.limbs, { hands: b?.hands, feet: b?.feet, head: b?.head, sole: b?.sole, handRest: b?.hand_rest ?? null, feetOut: b?.feet_out ?? 0,
         handShape: (b?.hand_shape as HandShapes | null | undefined) ?? null })   // CS1 (S1, S2); CS2; RG2 (D187): its own hands
       d.object.traverse((c) => { c.userData.stageId = id; const m = c as THREE.Mesh; if (m.isMesh) { m.castShadow = !e.proxy; m.receiveShadow = true } })
       const inside = (o: THREE.Object3D) => { for (let p: THREE.Object3D | null = o; p; p = p.parent) if (p === d.object) return true; return false }

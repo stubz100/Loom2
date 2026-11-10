@@ -4,7 +4,8 @@
 Started 2026-11-10 at `79ebcfc` (D196 built in the working tree, not committed). **Status: the evaluation and the plan written; the author
 answered all 22 questions the same day ([06](06-answers.md)), the documents amended to them, D197 recorded, D196 committed as it was — RS0 done.
 The plan then gained RS0b (the findings that are faults today, fixed first) and a table of where every finding is fixed (03 §3), on the
-author's ask. Next: RS0b, then RS1 (World › Clay) and RS3 (a shot is its scene), on the author's word. Nothing in the code was changed by proto02.**
+author's ask. RS0b built the same day (the A-pose frame, the stage's size, the clip's range, a used stage kept, D181's record). Next: RS1 (World ›
+Clay) and RS3 (a shot is its scene). Nothing in the code was changed by proto02.**
 
 ## 1. The request
 

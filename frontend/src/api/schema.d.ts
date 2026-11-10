@@ -2810,7 +2810,11 @@ export interface paths {
         /** Stage Put */
         put: operations["stage_put_stages__st_id__put"];
         post?: never;
-        /** Stage Delete */
+        /**
+         * Stage Delete
+         * @description A stage deleted. RS0b (proto02 PG20): refused while a shot looks at it (any of its versions, a final one too) — the shot would keep a
+         *     scene that is gone; the shot is deleted or given another scene first (RS3 makes the two one).
+         */
         delete: operations["stage_delete_stages__st_id__delete"];
         options?: never;
         head?: never;
@@ -3731,8 +3735,10 @@ export interface paths {
         put: operations["profile_anim_ref_pick_story_profiles__pid__versions__vid__anim_ref_put"];
         /**
          * Profile Anim Ref Make
-         * @description CA0: make a version's animation reference (or its back view) — 16:9 at the Draft height, the clay-reference model with the version's
-         *     references and sheet; the results land on its candidates page, the first becomes the reference while it has none.
+         * @description CA0: make a version's animation reference (or its back or side view, its hand or feet picture) — the clay-reference model with the
+         *     version's references and sheet; the results land on its candidates page, the first becomes the reference while it has none. RS0b (D177,
+         *     proto02 PG22): at the frame Make's reference framing sets (`anim_ref_frame`) — a character's A-pose a 2:3 portrait, a prop's view and a set
+         *     picture the project's frame at the Draft height, a hand or feet picture 1024².
          */
         post: operations["profile_anim_ref_make_story_profiles__pid__versions__vid__anim_ref_post"];
         delete?: never;

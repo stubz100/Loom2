@@ -529,6 +529,16 @@ class StageStore:
     def path(self, st_id: str) -> Path:
         return self.dir / f"{plain_name(st_id)}.json"
 
+    def default_size(self) -> dict[str, int]:
+        """RS0b (proto02 PG26): the size and rate a stage is made at when none is asked — the project's format (D18), as Clay's *New stage…*
+        always took it; a stage made by *New shot*, a re-scene, a bench or the line-up got 1920×1080 at 24 written here whatever the project.
+        A workspace without a project record (a bench in a test) keeps that fallback."""
+        try:
+            fmt = self.ws.load().format
+        except Exception:  # noqa: BLE001 — no project record: the format's own defaults
+            return {"w": 1920, "h": 1080, "fps": 24}
+        return {"w": fmt.width, "h": fmt.height, "fps": fmt.fps}
+
     def get(self, st_id: str) -> Stage | None:
         p = self.path(st_id)
         return Stage.model_validate(migrate(read_json(p))) if p.is_file() else None
@@ -568,7 +578,7 @@ class StageStore:
             c = v.place_set.sources[0].camera
             cam = StageCamera(id=new_id("cam"), name="The picture's camera", pos=list(c.pos), target=list(c.target), roll=c.roll, focal_mm=c.focal_mm, sensor_mm=c.sensor_mm)
         st = Stage(id=new_id("stg"), name=f"Bench · {profile.name} {v.id}", purpose="bench", bound=StageBound(profile_id=profile.id, version=v.id),
-                   size=size or {"w": 1920, "h": 1080, "fps": 24}, objects=objects, cameras=[cam], active_camera=cam.id)
+                   size=size or self.default_size(), objects=objects, cameras=[cam], active_camera=cam.id)
         check(st)
         self.save(st)
         return st, True
@@ -586,7 +596,7 @@ class StageStore:
         if ps.sources:
             c = ps.sources[0].camera
             cam = StageCamera(id=new_id("cam"), name="Camera 1", pos=list(c.pos), target=list(c.target), roll=c.roll, focal_mm=c.focal_mm, sensor_mm=c.sensor_mm)
-        size = size or {"w": 1920, "h": 1080, "fps": 24}
+        size = size or self.default_size()
         length = self.new_length(size)                                        # C3 (Q4): the project's default length
         st = Stage(id=new_id("stg"), name=name.strip() or "Stage", size=size, objects=objects, cameras=[cam], active_camera=cam.id, length=length, range=StageRange(start=0, end=length - 1))
         check(st)
@@ -629,7 +639,7 @@ class StageStore:
         cam = StageCamera(id=new_id("cam"), name="Line-up camera", pos=[0.0, round(tallest * 0.6, 3), round(d, 3)], target=[0.0, round(tallest * 0.5, 3), 0.0])
         with self._kind_lock("lineup"):                                     # review K50: found and remade as one change
             cur = next((s for s in self.list() if s.purpose == "lineup"), None)
-            st = Stage(id=cur.id if cur else new_id("stg"), name="Line-up", purpose="lineup", size=size or {"w": 1920, "h": 1080, "fps": 24},
+            st = Stage(id=cur.id if cur else new_id("stg"), name="Line-up", purpose="lineup", size=size or self.default_size(),
                        objects=[wall, *objects], cameras=[cam], active_camera=cam.id, revision=(cur.revision + 1) if cur else 0,
                        created_at=cur.created_at if cur else utc_now())
             check(st)
@@ -645,7 +655,7 @@ class StageStore:
             fig = StageObject(id=new_id("fig"), kind="mannequin", name="Figure", preset="adult", detail="female", pose=Pose(preset="stand"), colour_id=1)
             cam = StageCamera(id=new_id("cam"), name="Bench camera", pos=[1.4, 1.2, 3.6], target=[0.0, 0.9, 0.0])
             st = Stage(id=cur.id if cur else new_id("stg"), name=f"Animation · {name.strip() or 'Animation'}"[:120], purpose="animation",
-                       size=size or {"w": 1920, "h": 1080, "fps": 24}, objects=[fig], cameras=[cam], active_camera=cam.id,
+                       size=size or self.default_size(), objects=[fig], cameras=[cam], active_camera=cam.id,
                        range=StageRange(start=0, end=max(1, frames - 1)), revision=(cur.revision + 1) if cur else 0)
             check(st)
             with self.lock(st.id):
@@ -665,7 +675,7 @@ class StageStore:
         """A new stage with one camera (35 mm, eye level) looking at the origin — a shot is always framed by something. C3 (Q4): its length
         is `seconds`, else the project's default; the range is the whole scene."""
         cam = StageCamera(id=new_id("cam"), name="Camera 1")
-        size = size or {"w": 1920, "h": 1080, "fps": 24}
+        size = size or self.default_size()
         length = self.new_length(size, seconds)
         st = Stage(id=new_id("stg"), name=name.strip() or "Stage", size=size, cameras=[cam], active_camera=cam.id, length=length, range=StageRange(start=0, end=length - 1))
         self.save(st)

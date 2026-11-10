@@ -276,6 +276,8 @@ interface StageState {
   clipCaps: () => ClipCaps | null
   /** Frames the next sequence covers: the range on the method's frame grid, capped at its window. */
   guideFrames: () => number
+  /** RS0b (proto02 PG27): the frames the stage clip covers — the open shot's range on this stage, as the final and the animatic read it. */
+  clipRange: () => { start: number; end: number } | null
   /** D111 (PS5a): wait for the pending save, so a render names the stage's saved revision. */
   flush: () => Promise<void>
   setShotStart: (id: string | null) => void
@@ -687,17 +689,24 @@ export const useStage = create<StageState>()((set, get) => ({
   setClipMethod: (clipMethod) => set({ clipMethod, guideKind: clipMethod === 'animate' ? 'pose' : get().guideKind }),     // Animate performs the pose pass
   clipCaps: () => { const st = useSession.getState().capabilities?.stage; return ((get().clipMethod === 'animate' ? st?.animate : st?.clip) ?? null) as ClipCaps | null },
   flush: () => flushSave(get, set),
+  clipRange: () => {
+    const cur = get().current
+    if (!cur) return null
+    const v = useStory.getState().shotVersion()                                           // the open shot (Shots' or Clay's); its range when it looks at this stage
+    const r = v && v.stage_id === cur.id ? v.range : null
+    return r ? { start: r.start, end: r.end } : { start: cur.range.start, end: cur.range.end }
+  },
   guideFrames: () => {
-    const cur = get().current, c = get().clipCaps()
-    if (!cur) return 0
+    const r = get().clipRange(), c = get().clipCaps()
+    if (!r) return 0
     const step = c?.frame_step ?? 8
-    const n = clipFrames(cur.range.start, cur.range.end, step)
+    const n = clipFrames(r.start, r.end, step)
     const max = (c as { frames_max?: number | null } | null)?.frames_max
     return max ? Math.min(n, Math.floor((max - 1) / step) * step + 1) : n                     // Animate: one window (E19: 77 frames)
   },
   setShotStart: (shotStart) => set({ shotStart }),
   guideEntry: () => { const e = get().passesEntry() as (PassesEntry & { guides?: Record<string, GuideEntry> }) | null; return e?.guides?.[get().guideKind] ?? null },
-  guideStale: () => { const g = get().guideEntry(); const cur = get().current; return !g || !cur || g.range.start !== cur.range.start || g.frames !== get().guideFrames() || cur.revision > g.revision + 1 },
+  guideStale: () => { const g = get().guideEntry(); const cur = get().current; const r = get().clipRange(); return !g || !cur || !r || g.range.start !== r.start || g.frames !== get().guideFrames() || cur.revision > g.revision + 1 },
   guideSize: () => {
     const cur = get().current
     const aspect = cur ? cur.size.w / Math.max(1, cur.size.h) : 16 / 9
@@ -720,7 +729,7 @@ export const useStage = create<StageState>()((set, get) => ({
       if (!doc) return false
       await blocksReady(doc)                                                          // U5: every clip block evaluated before a frame is sampled
       const kind = get().guideKind
-      const { start } = doc.range
+      const { start } = get().clipRange() ?? doc.range                                 // RS0b (PG27): the shot's frames, as the final and the animatic
       const n = get().guideFrames()
       const frames = Array.from({ length: n }, (_, i) => { const d = sampleDoc(doc, start + i); return { cam: d.cameras.find((c) => c.id === cam.id) ?? cam, doc: d } })
       const [w, h] = get().guideSize()
@@ -741,9 +750,9 @@ export const useStage = create<StageState>()((set, get) => ({
   /** D184 (C5): the stage's stills rendered at other frames of the range than the start's — LTX keyframe beats at the clip's frame for each
    *  (a still's frame is on its recipe, D184; a still from before carries none and anchors nothing). */
   clipAnchors: () => {
-    const cur = get().current, g = get().guideEntry(), start = get().shotStart
-    if (!cur || !g) return []
-    const { start: a, end: b } = cur.range
+    const cur = get().current, g = get().guideEntry(), start = get().shotStart, r = get().clipRange()
+    if (!cur || !g || !r) return []
+    const { start: a, end: b } = r
     const frameOf = (x: { params?: Record<string, unknown> | null }) => { const f = ((x.params?.recipe as { frame?: number } | undefined)?.frame); return typeof f === 'number' ? f : null }
     const startFrame = frameOf(get().shots.find((x) => x.id === start) ?? {}) ?? a
     const seen = new Set<number>()

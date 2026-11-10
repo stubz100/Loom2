@@ -20,6 +20,7 @@ id and the exact text that ran, and re-running a stored recipe uses the text it 
 """
 from __future__ import annotations
 
+import math
 import re
 import threading
 from pathlib import Path
@@ -1028,6 +1029,27 @@ def model_source(v: ProfileVersion) -> str | None:
 ANIM_REF_SURFACE = "anim_ref"                    # CA0: origin.surface of an animation-reference job; payload {version, side, group_id}
 AnimRefSide = Literal["front", "back", "side", "hand", "feet"]   # RG1 (D187, D188): the hand and the feet pictures beside the A-pose
 PART_PX = 1024                                   # RG1: a hand or feet picture is square at 1024² (E62 a measured it there: Klein 21–24 s warm)
+ANIM_REF_HEIGHT = 720                            # CA0: the Draft height a reference's project frame is taken at
+
+
+def _snap16(x: float) -> int:
+    """A side as a multiple of 16, at least 64 — rounded half up, as `make.ts`'s `snap` (JavaScript's Math.round) does."""
+    return max(64, math.floor(x / 16 + 0.5) * 16)
+
+
+def anim_ref_frame(cls: str, side: str, fmt_width: int, fmt_height: int) -> tuple[int, int]:
+    """RS0b (D177, proto02 PG22): the frame an animation reference is made at — the frame Make's reference framing sets (`make.ts` refFrame),
+    so the buttons and Make agree: a character's A-pose (front, back, side) a 2:3 portrait of about the pixels of the project's frame at the
+    Draft height (`to23`; FLUX.2 at 16:9 cut a standing figure at the thighs); a prop's view and a set picture the project's frame at that
+    height; a hand or feet picture square at PART_PX."""
+    if side in ("hand", "feet"):
+        return PART_PX, PART_PX
+    h = ANIM_REF_HEIGHT
+    w = max(64, round(h * fmt_width / fmt_height / 16) * 16)                    # CA0's project frame, as the route always took it
+    if cls != "character":
+        return w, h
+    tall = _snap16(math.sqrt(w * h * 3 / 2))
+    return _snap16(tall * 2 / 3), tall
 
 
 def anim_ref_sentence(cls: str, side: str) -> str:

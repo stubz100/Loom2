@@ -643,7 +643,13 @@ async def stage_guide(svc: Svc, st_id: str, body: GuideUpload):
 
 @router.delete("/stages/{st_id}", response_model=Deleted)
 async def stage_delete(svc: Svc, st_id: str):
+    """A stage deleted. RS0b (proto02 PG20): refused while a shot looks at it (any of its versions, a final one too) — the shot would keep a
+    scene that is gone; the shot is deleted or given another scene first (RS3 makes the two one)."""
     ws, _, _ = svc.require_project()
+    from ..story import StoryStore
+    users = await asyncio.to_thread(lambda: sorted({s.name or s.id for s in StoryStore(ws).shots() if any(v.stage_id == st_id for v in s.versions)}))
+    if users:
+        raise HTTPException(409, f"the scene of {', '.join(users)} — delete the shot or give it another scene first")
     if not await asyncio.to_thread(StageStore(ws).delete, st_id):
         raise HTTPException(404, "stage not found")
     svc.hub.broadcast("stage.deleted", {"id": st_id})

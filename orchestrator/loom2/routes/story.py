@@ -23,7 +23,7 @@ from ..stages import PlaceSet, Pose, SetFace, StageStore, encode_guide
 from ..shot_recipe import TEMPLATES, StampReader, Template, recipe_state, rerun_recipe, stale_plan, used_run
 from ..shot_graph import ShotGraph, clay_rows, final_for, shot_graph
 from ..shot_prompt import ShotPrompt, shot_prompt
-from ..story import FOR_SHOT, Animatic, version_stage_stale, NODE_TYPES, VISUAL_TYPES, has_lines, node_type, StaleScenes, CastUse, cast_uses, body_fit_origin, fit_if_untouched, queue_part_fit, model_source, prop_model_origin, shell_box, shell_origin, with_sole, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
+from ..story import FOR_SHOT, Animatic, anim_ref_frame, version_stage_stale, NODE_TYPES, VISUAL_TYPES, has_lines, node_type, StaleScenes, CastUse, cast_uses, body_fit_origin, fit_if_untouched, queue_part_fit, model_source, prop_model_origin, shell_box, shell_origin, with_sole, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
 from ..voices import VoiceRecord, VoiceStore, check_voice
 from .deps import Svc
 
@@ -396,8 +396,10 @@ class AnimRefQueued(BaseModel):
 
 @router.post("/story/profiles/{pid}/versions/{vid}/anim-ref", response_model=AnimRefQueued)
 async def profile_anim_ref_make(svc: Svc, pid: str, vid: str, body: AnimRefBody):
-    """CA0: make a version's animation reference (or its back view) — 16:9 at the Draft height, the clay-reference model with the version's
-    references and sheet; the results land on its candidates page, the first becomes the reference while it has none."""
+    """CA0: make a version's animation reference (or its back or side view, its hand or feet picture) — the clay-reference model with the
+    version's references and sheet; the results land on its candidates page, the first becomes the reference while it has none. RS0b (D177,
+    proto02 PG22): at the frame Make's reference framing sets (`anim_ref_frame`) — a character's A-pose a 2:3 portrait, a prop's view and a set
+    picture the project's frame at the Draft height, a hand or feet picture 1024²."""
     ws, _, _ = svc.require_project()
     groups = svc.require_groups()
     if svc.queue is None:
@@ -411,8 +413,7 @@ async def profile_anim_ref_make(svc: Svc, pid: str, vid: str, body: AnimRefBody)
     except KeyError as e:
         raise HTTPException(404, str(e))
     fmt = ws.load().format
-    h = 720
-    w = max(64, round(h * fmt.width / fmt.height / 16) * 16)
+    w, h = anim_ref_frame(p.cls, body.side, fmt.width, fmt.height)          # RS0b (D177): the buttons make what Make's framing makes
     if body.words is not None and body.side in ("hand", "feet"):              # RG1 (Q4): the words go on the version first, as the sheet's do
         try:
             await asyncio.to_thread(store.patch_profile, pid, {"versions": [{"id": v.id, f"{body.side}_words": body.words.strip()}]})

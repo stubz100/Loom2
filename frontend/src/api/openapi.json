@@ -37049,6 +37049,7 @@
     },
     "/stages/{st_id}": {
       "delete": {
+        "description": "A stage deleted. RS0b (proto02 PG20): refused while a shot looks at it (any of its versions, a final one too) — the shot would keep a\nscene that is gone; the shot is deleted or given another scene first (RS3 makes the two one).",
         "operationId": "stage_delete_stages__st_id__delete",
         "parameters": [
           {
@@ -39701,7 +39702,7 @@
     },
     "/story/profiles/{pid}/versions/{vid}/anim-ref": {
       "post": {
-        "description": "CA0: make a version's animation reference (or its back view) — 16:9 at the Draft height, the clay-reference model with the version's\nreferences and sheet; the results land on its candidates page, the first becomes the reference while it has none.",
+        "description": "CA0: make a version's animation reference (or its back or side view, its hand or feet picture) — the clay-reference model with the\nversion's references and sheet; the results land on its candidates page, the first becomes the reference while it has none. RS0b (D177,\nproto02 PG22): at the frame Make's reference framing sets (`anim_ref_frame`) — a character's A-pose a 2:3 portrait, a prop's view and a set\npicture the project's frame at the Draft height, a hand or feet picture 1024².",
         "operationId": "profile_anim_ref_make_story_profiles__pid__versions__vid__anim_ref_post",
         "parameters": [
           {

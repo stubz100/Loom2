@@ -20,6 +20,8 @@ The author, 2026-11-03, on [04](04-rethink.md) §6: "I'll take all your recommen
 | Q12 | The Bin's kinds | **a closed vocabulary per class**, read from the lineage kinds; tags for the author's own grouping | `lineage_kind` becomes a `Literal` with a shelf each; a job cannot land outside it |
 | Q13 | Working files | **their own kinds, shown always** | the depth, the coverage masks, the fit's keypoints as kinds with counts |
 
+**Correction 2026-11-10 (proto02 02 PG4):** the waves below were built, but two parts of [04](04-rethink.md) were not, though the status reads as if every part were: §4.6's records — `shots/<nn>/scene.json` with no `purpose`, the library records `clay/<kind>/<id>.json` (scenes stayed stages with a `purpose`; the body, the shell, the model and the set stayed on the Cast version) — and §5's removals (Final as a level of its own, Performance's method cards, the stage picker, the two *New shot* entries). D197 (proto02) supersedes them.
+
 ## The order
 
 | Wave | What | ≈ | Rig |

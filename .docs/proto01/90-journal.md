@@ -17017,3 +17017,30 @@ corrected — §4.6's records and §5's removals were never built (PG4). RS3 dro
 the stage picker and the recipe select (PG17), RS6 opens Final for every method — checked first: a composition is made only from a final
 (`POST /finals/{fid}/composition`), and only *Make the final shot…* (Layered) makes one — and makes the final's rate the shot's (PG28). 02 numbers
 three findings that had none (PG26–PG28); 03 §3 maps PG1–PG28 to their waves. Documents only; nothing in the code changed.
+
+## 2026-11-10 19:59 — RS0b: the findings that were faults, fixed — the A-pose frame, the stage's size, the clip's range, a used stage kept, D181's record
+
+proto02 03's RS0b, on the author's "continue" after the plan gained it:
+
+- **PG22 — the A-pose buttons make what Make's framing makes (D177).** `story.anim_ref_frame` (Make's `to23` mirrored, rounded half up): a
+  character's front, back and side **784×1168** in a 1920×1080 project (was 1280×720), a prop's view and a set picture the project's frame at
+  720, a hand or feet picture 1024²; the route's docstring said "16:9". **Rig** (`scripts/rs0b_apose_rig.py`: a scratch state, char01's hero and
+  words copied from stubz002, nothing written there; alone on the GPU): Klein 9B 69.9 s with the engine starting, peak 8.18 GB, 784×1168; SDPose
+  finds the whole figure (ankles 0.90 / 0.87; 127 px clear above, 123 below). `.docs/proto01/img/rs0b-apose-frame.jpg` sets it beside char01's
+  picked front (Make, 1184×1776) and Nora's by the button (1280×720), sent to the author. That seed holds the arms higher than the A-pose's words
+  ask — the seed's, not the frame's; the pick stays the author's (D161).
+- **The A-poses already made at 16:9** (read-only): propo02-followed — every picked one (Nora front, back, side; the man with a newspaper and the
+  woman with shopping, front and back), 1280×720, made by the buttons on 2026-11-03, after D177; stubz001 — rippley's back; stubz002 — none
+  (char01's three are 1184×1776 from Make). Kept unless the author remakes them.
+- **PG26 — a stage takes the project's format.** `StageStore.default_size()`: a stage made with no size (*New shot*, a re-scene, a bench, the
+  line-up, the animation bench) takes the project's format; the five `1920×1080 @ 24` literals gone. The author's projects are all 1920×1080 @ 24:
+  no stage of stubz002, Followed or stubz001 differs (read-only check).
+- **PG27 (until RS3) — the stage clip covers the shot.** `stageStore.clipRange()`: the guide sequence, its staleness and the anchors read the open
+  shot's range when that shot looks at the stage, as the final and the animatic do; a stage no open shot looks at keeps its own.
+- **PG20 (until RS3) — a used stage stays.** `DELETE /stages/{id}` is refused (409, naming the shots) while a shot's version looks at it.
+- **PG4 — the record.** D181's row in 13 and propo02 05 corrected: §4.6's records and §5's removals were never built; D197 supersedes them.
+
+Checks: offline 897 (3 new, `test_rs0b.py`; CA0's route test now expects 784×1168), Vitest 813 + 3 skipped (2 new, `rs0b.test.ts`), typecheck +
+build, lint 63 warnings as before, settings audit 326 / 0, model literals 0, agents 0, the API contract regenerated (two docstrings), e2e alone: a
+first full run 90 / 92 (the live character sheet's mention and the recipe graph's Clay rail — both passed alone at once, 2 / 2), then **92 / 92**
+(7.0 min). One GPU job (the rig's make, then its SDPose read). Next: RS1 (World › Clay) and RS3 (a shot is its scene).

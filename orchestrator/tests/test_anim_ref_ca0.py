@@ -97,7 +97,7 @@ def test_the_routes(tmp_path: Path):
         assert len(out["job_ids"]) == 2 and out["group_id"] and out["model_id"] == expand_spec("full").id
         jobs = {j["id"]: j for j in cl.get("/jobs").json()["items"]}
         j = jobs[out["job_ids"][0]]
-        assert j["status"] == "staged" and (j["recipe"]["width"], j["recipe"]["height"]) == (1280, 720) and j["origin"]["surface"] == "anim_ref"
+        assert j["status"] == "staged" and (j["recipe"]["width"], j["recipe"]["height"]) == (784, 1168) and j["origin"]["surface"] == "anim_ref"   # RS0b (D177): a character's A-pose a 2:3 portrait
         assert cl.put(f"/story/profiles/{p['id']}/versions/v1/anim-ref", json={"side": "front", "asset_id": hero}).json()["versions"][0]["anim_ref_asset_id"] == hero
         assert cl.put(f"/story/profiles/{p['id']}/versions/v1/anim-ref", json={"side": "front", "asset_id": "ast_nope"}).status_code == 422
         assert cl.put(f"/story/profiles/{p['id']}/versions/v9/anim-ref", json={"side": "front", "asset_id": None}).status_code == 404

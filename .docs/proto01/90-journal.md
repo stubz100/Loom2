@@ -16971,3 +16971,49 @@ Checks: offline 894 (4 new, `tests/test_d196_sole.py`), Vitest 811 + 3 skipped (
 
 Owed: the author's look in Clay (the skeleton bench and the scene) — no headed check was run, the app being the author's.
 
+## 2026-11-10 12:07 — proto02: the application described again, the evaluation, the plan (nothing built)
+
+The author asked for the workflow they want — World › Make · Edit · Clay (the entity's 3D back in World, no *Open in Clay* / *Open in World*),
+Clay as the shot bench with every shot setting and a thin shot graph on top, a scene and a shot created together, a Process step on the clay (v2v /
+i2v only, chains copyable across shots), Episode as cut and post — and for the application's description, an investigation of where loom2 is and a
+plan, before any change; and two guidelines: no hard-coded templates the tool cannot recreate (generations with baked parameters included), and
+templating / quick access not a priority.
+
+Written in `.docs/proto02` 00–05: the application as wanted (01), the evaluation with every claim cited (02, gaps PG1–PG25), the plan RS0–RS10
+(03), the questions Q1–Q22 (04), the inventory of every generation A1–A47 and every template B1–B45 with a verdict against the guidelines (05). Two
+read-only agents side by side (the jobs and templates; the shot → process → episode path), their claims spot-checked against the code.
+
+The author's three checks answered: Pixal3D is the only 3D model (its resolution, faces and seeds exist in the recipe, no button sends them); the
+scene's cap is **20 s** (D181 Q4, `sceneLength.ts:5`), not 15 s — Q3 asks; **EffectCraft is still in loom2** (v0.12.0, the Final level's
+compositor and passes) — it reads as gone because only a *Layered* performance's *Make the composition* reaches it. Also found: the A-pose buttons
+still make 16:9 at 720 px against D177's 2:3 (`routes/story.py:413–415`); D181's scene record (`shots/<nn>/scene.json`, no `purpose`) and its
+library records were never built — the 3D lives on the Cast version, so RS1 moves no file; stages made from Shots get 1920×1080@24 from the code,
+not the project's format (`stages.py:589, 668`); the stage clip renders the stage's range, the final and the animatic the shot's; 24 of 47 jobs are
+a button with nothing to set.
+
+D196 stays uncommitted in the tree (Q14). Nothing in the code changed; no GPU job; no check run. Next: the author's answers, then D197.
+
+## 2026-11-10 12:39 — proto02 answered → D197; D196 committed (RS0)
+
+The author answered proto02 04's Q1–Q22 in four rounds, with two follow-ups (Q2b, Q6b); seven against the recommendation: **one scene per shot,
+strictly** (no coverage; *another angle* copies the scene), the scene's length is the shot's (no range), the cap **kept at 20 s**, **Process | Final
+as two modes** of the shot in Clay, the copy's scope **chosen per copy** (Process and / or Final ticked, a snapshot), **free image to video kept in
+World › Sketches** (never in a shot), **Speaking and Extend kept** as experimental steps, **Expand kept** in Sketches; Q22 in the author's words —
+the stand-ins and preset sets go (things are props, a scene's geometry is blocks), a background from an image and the box set stay, and a new spike
+on a scene's background in 3D from images (E67, survey first). Recorded in `.docs/proto02/06-answers.md`; 01, 03 and 05 amended to the answers;
+**D197** recorded in 13.
+
+RS0: D196 committed as it was (`36acbf3`, the author's Q14) after the offline checks were run again on the tree — offline 894 passed (5 min 13 s),
+Vitest 811 + 3 skipped, as on 2026-11-08; the e2e not re-run (1420 may be the author's). Nothing else in the code changed; no GPU job. Next: RS1
+(World › Clay) and RS3 (a shot is its scene), on the author's word.
+
+## 2026-11-10 13:00 — proto02's plan amended: the findings fixed too (RS0b, 03 §3)
+
+The author: "Please incorporate fixes into the build plan to the unexpected findings also." proto02 03 gains **RS0b**, before the restructure,
+for the findings that are faults today: the A-pose route makes a character's front / back / side at D177's 2:3 for every caller (the 16:9 ones in
+stubz002 and Followed listed, PG22); a stage made from Shots takes the project's format, not 1920×1080 @ 24 (PG26); until RS3 the stage clip renders
+the shot's range as the final and the animatic do (PG27); until RS3's cascade a stage a shot uses cannot be deleted (PG20); D181's row and propo02 05
+corrected — §4.6's records and §5's removals were never built (PG4). RS3 drops the sequence's `stage_id` (PG19), RS4 mounts Process / Final without
+the stage picker and the recipe select (PG17), RS6 opens Final for every method — checked first: a composition is made only from a final
+(`POST /finals/{fid}/composition`), and only *Make the final shot…* (Layered) makes one — and makes the final's rate the shot's (PG28). 02 numbers
+three findings that had none (PG26–PG28); 03 §3 maps PG1–PG28 to their waves. Documents only; nothing in the code changed.

@@ -1,45 +1,40 @@
-// C0 (D181, propo02 04 §4.3): Clay's own view state — the rail (Library · Scenes), the Library's kind and the asset open on it (a World
-// entity version, its 3D made here: the body, the prop's model, the place's set), the bench in place of the tiles, and the scene open
-// in the editor with where *← Back* goes (the shot it was opened from). The place is kept in the hash: #clay/library/<kind>/<profile>/
-// <version>[/bench] and #clay/scene/<stage>. The entity is the Story store's selection (the builders' commands act on it), the scene the
-// stage store's open stage (loaded on demand: three.js stays out of the layer until the editor shows).
+// C0 (D181, propo02 04 §4.3): Clay's own view state — the rail (Library · Scenes), the animation on the bench, and the scene open in the
+// editor with where *← Back* goes (the shot it was opened from). RS1 (D197, proto02 01 §4.2): the Library holds the animations only — an
+// entity's 3D (a character's body, shell and skeleton, a prop's model, a place's set) and its bench are World's Clay mode again
+// (ui2/world/worldStore.ts); a link to the old pages (#clay/library/figure|prop|set/<profile>/<version>[/bench|/skeleton]) lands there.
+// The place is kept in the hash: #clay/library, #clay/library/animation/anm/<id> and #clay/scene/<stage>. The scene is the stage store's
+// open stage (loaded on demand: three.js stays out of the layer until the editor shows).
 import { create } from 'zustand'
 import { useEffect, useState } from 'react'
 import { http, unwrap } from '../../api/client'
 import type { StageDoc } from '../../api/types'
 import { navigate, onNavigate } from '../../frame/router'
 import { useSession } from '../../store/session'
-import { useStory, type ProfileClass } from '../../suites/story/storyStore'
+import { useStory } from '../../suites/story/storyStore'
 import type { AnimRef } from '../../suites/stage/animationBench'
 
 export type ClayRail = 'library' | 'scenes'
-export type LibKind = 'figure' | 'prop' | 'set' | 'light' | 'camera' | 'animation'
-export const KINDS: { id: LibKind; label: string; one: string; cls: ProfileClass | null }[] = [
-  { id: 'figure', label: 'Figures', one: 'figure', cls: 'character' }, { id: 'prop', label: 'Props', one: 'prop', cls: 'prop' }, { id: 'set', label: 'Sets', one: 'set', cls: 'place' },
-  { id: 'light', label: 'Lights', one: 'light', cls: null }, { id: 'camera', label: 'Cameras', one: 'camera', cls: null }, { id: 'animation', label: 'Animations', one: 'animation', cls: null },
-]
-export const kindOfClass = (cls: ProfileClass): LibKind => (cls === 'character' ? 'figure' : cls === 'prop' ? 'prop' : 'set')
-export const classOfKind = (k: LibKind): ProfileClass | null => KINDS.find((x) => x.id === k)?.cls ?? null
-const isKind = (x: string | undefined): x is LibKind => KINDS.some((k) => k.id === x)
+/** RS1: the class of an old Library kind (a link from before the move). */
+const OLD_KIND: Record<string, 'build'> = { figure: 'build', prop: 'build', set: 'build' }
 
-export interface ClayPlace { rail: ClayRail; kind: LibKind; profile: string | null; version: string | null; bench: boolean; stage: string | null; anim: AnimRef | null
-  skeleton?: boolean }                                                             // D190: a character on Skeleton (…/<version>/skeleton)
-/** The hash's Clay place: #clay/library/<kind>/<profile>/<version>/bench (or /skeleton), #clay/scene/<stage> (the parts optional). */
+export interface ClayPlace { rail: ClayRail; stage: string | null; anim: AnimRef | null
+  /** RS1: an old Library link's entity — opened in World's Clay (on its bench or its skeleton when the link said so). */
+  entity?: { profile: string; version: string | null; tab: 'build' | 'bench' | 'skeleton' } }
+/** The hash's Clay place: #clay/library[/animation/anm/<id> | /animation/clip/<file>/<clip>], #clay/scene/<stage> (the parts optional). */
 export function placeOfHash(hash: string): ClayPlace | null {
   const [layer, rail, a, b, c, d] = hash.replace(/^#/, '').split('/')
   if (layer !== 'clay') return null
-  if (rail === 'scene') return { rail: 'scenes', kind: 'figure', profile: null, version: null, bench: false, stage: a || null, anim: null }
-  const kind = isKind(a) ? a : 'figure'
-  if (kind === 'animation') {                                                       // D182 (C2b): #clay/library/animation/anm/<id> · /clip/<file>/<clip>
+  if (rail === 'scene') return { rail: 'scenes', stage: a || null, anim: null }
+  if (a === 'animation') {                                                          // D182 (C2b): #clay/library/animation/anm/<id> · /clip/<file>/<clip>
     const anim: AnimRef | null = b === 'anm' && c ? { kind: 'template', id: c } : b === 'clip' && c && d ? { kind: 'clip', file: c, clip: decodeURIComponent(d) } : null
-    return { rail: 'library', kind, profile: null, version: null, bench: false, stage: null, anim }
+    return { rail: 'library', stage: null, anim }
   }
   const tail = [b, c, d], named = (x?: string) => (x && x !== 'bench' && x !== 'skeleton' ? x : null)
-  return { rail: 'library', kind, profile: named(b), version: named(c), bench: tail.includes('bench'), skeleton: tail.includes('skeleton'), stage: null, anim: null }
+  const profile = a && OLD_KIND[a] ? named(b) : null
+  return { rail: 'library', stage: null, anim: null,
+    ...(profile ? { entity: { profile, version: named(c), tab: tail.includes('skeleton') ? 'skeleton' as const : tail.includes('bench') ? 'bench' as const : 'build' as const } } : {}) }
 }
 const writeHash = (h: string): void => { if (location.hash !== h) history.replaceState(null, '', `${location.pathname}${location.search}${h}`) }
-const libraryHash = (kind: LibKind, asset: { profile: string; version: string } | null, bench: boolean): string =>
-  `#clay/library/${kind}${asset ? `/${asset.profile}/${asset.version}` : ''}${bench ? '/bench' : asset && kind === 'figure' && useStory.getState().skeleton ? '/skeleton' : ''}`
 const animHash = (a: AnimRef): string => (a.kind === 'template' ? `#clay/library/animation/anm/${a.id}` : `#clay/library/animation/clip/${a.file}/${encodeURIComponent(a.clip)}`)
 
 /** A scene's shots: the shots whose current version is a camera on the stage (the storyboard's names). */
@@ -51,21 +46,13 @@ export interface From { shot: string; version: string; camera: string | null; re
 
 interface ClayState {
   rail: ClayRail
-  kind: LibKind
-  asset: { profile: string; version: string } | null            // the Library asset open: a World entity version
-  view: 'page' | 'bench' | 'animation'                           // the asset's page (its tiles behind it), Clay opened for it (D142's bench, the line-up), or the animation bench (D182)
+  view: 'page' | 'animation'                                     // the animations' tiles, or the animation bench (D182)
   animation: AnimRef | null                                      // D182 (C2b): the animation on the bench
   animSel: AnimRef | null                                        // D182: the animation a tile's right-click acts on
   from: From | null                                              // the shot the scene was opened from (← Back to the shot)
   setRail: (rail: ClayRail) => void
-  setKind: (kind: LibKind) => void
-  /** The Library on a kind, and on an entity version when named (the Story store's selection follows: the builders act on it). */
-  openLibrary: (kind: LibKind, profile?: string | null, version?: string | null) => void
-  /** D142 → C0: Clay opened for the asset (its figure, its model beside a 1.75 m figure, its set from the picture's camera), in the centre. */
-  openBench: () => Promise<void>
-  /** CW5 → C0: the kind's entities side by side at their sizes (the open one first, twelve at most). */
-  openLineup: () => Promise<void>
-  closeBench: () => void
+  /** The Library: the animations' tiles. */
+  openLibrary: () => void
   /** D182 (C2b): an animation opened on the animation bench (a figure playing it as its one block), and the way back to the tiles. */
   openAnimation: (ref: AnimRef) => Promise<void>
   closeAnimation: () => void
@@ -75,56 +62,28 @@ interface ClayState {
   backToShot: () => Promise<void>
 }
 
+/** RS1: an entity's 3D is World's — the layer and the part (the dynamic import keeps World's store out of Clay's until a link needs it). */
+export function openInWorld(profile: string, version: string | null, tab: 'build' | 'bench' | 'skeleton' | 'poses' = 'build'): void {
+  void import('../world/worldStore').then((m) => m.useWorld.getState().openClay(profile, version, tab))
+}
+
 export const useClay = create<ClayState>()((set, get) => ({
-  rail: placeOfHash(location.hash)?.rail ?? 'library', kind: placeOfHash(location.hash)?.kind ?? 'figure', asset: null, view: 'page', animation: null, animSel: null, from: null,
+  rail: placeOfHash(location.hash)?.rail ?? 'library', view: 'page', animation: null, animSel: null, from: null,
   setRail: (rail) => {
-    if (rail === 'library') { get().openLibrary(get().kind, get().asset?.profile, get().asset?.version); return }
+    if (rail === 'library') { get().openLibrary(); return }
     if (get().view === 'animation') get().closeAnimation()
     set({ rail, view: 'page' })
     navigate({ suite: 'stage' })
     void import('../../suites/stage/stageStore').then((m) => writeHash(`#clay/scene${m.useStage.getState().current?.id ? `/${m.useStage.getState().current!.id}` : ''}`))
   },
-  setKind: (kind) => get().openLibrary(kind),
-  openLibrary: (kind, profile = null, version = null) => {
-    const st = useStory.getState()
-    const cls = classOfKind(kind)
-    const p = profile ? st.profiles.find((x) => x.id === profile) : undefined
-    if (p && p.cls !== cls) { get().openLibrary(kindOfClass(p.cls), profile, version); return }   // the entity's own kind
-    if (p) st.selectProfile(p.id, version ?? p.current)
-    const asset = p ? { profile: p.id, version: useStory.getState().versionId ?? p.current } : null
+  openLibrary: () => {
     if (get().view === 'animation') void import('../../suites/stage/animationBench').then((m) => m.closeAnimationBench())
-    set({ rail: 'library', kind, asset, view: 'page', animation: null })
-    navigate({ suite: 'story', tab: 'cast', layer: 'clay' })                        // the builders' commands (cast.*, story.cast.*) are in reach
-    writeHash(libraryHash(kind, asset, false))
-  },
-  openBench: async () => {
-    const a = get().asset
-    const st = useStory.getState()
-    const p = a ? st.profiles.find((x) => x.id === a.profile) : st.profile()
-    if (!p) return
-    const version = a?.version ?? st.versionId ?? p.current
-    if (!a) get().openLibrary(kindOfClass(p.cls), p.id, version)
-    const m = await import('../../suites/stage/stageStore')
-    if (await m.st().openBench(p.id, version, 'clay', () => get().closeBench())) { set({ view: 'bench' }); writeHash(libraryHash(get().kind, get().asset, true)) }
-  },
-  openLineup: async () => {
-    const cls = classOfKind(get().kind)
-    if (!cls || cls === 'place') return
-    const st = useStory.getState(), here = get().asset?.profile ?? null
-    const all = st.profiles.filter((p) => p.cls === cls && (p.cls === 'character' || !!p.versions.find((v) => v.id === p.current)?.model_asset_id))
-    const items = [...all.filter((p) => p.id === here), ...all.filter((p) => p.id !== here)].slice(0, 12).map((p) => ({ profile_id: p.id }))
-    if (!items.length) return
-    const m = await import('../../suites/stage/stageStore')
-    if (await m.st().openLineup(items, () => get().closeBench(), 'clay')) { set({ view: 'bench' }); writeHash(libraryHash(get().kind, get().asset, true)) }
-  },
-  closeBench: () => {
-    if (get().view !== 'bench') return
-    set({ view: 'page' })
+    set({ rail: 'library', view: 'page', animation: null })
     navigate({ suite: 'story', tab: 'cast', layer: 'clay' })
-    writeHash(libraryHash(get().kind, get().asset, false))
+    writeHash('#clay/library')
   },
   openAnimation: async (ref) => {
-    set({ rail: 'library', kind: 'animation', asset: null, view: 'animation', animation: ref, animSel: ref })
+    set({ rail: 'library', view: 'animation', animation: ref, animSel: ref })
     const m = await import('../../suites/stage/animationBench')
     if (!(await m.openAnimationBench(ref))) { set({ view: 'page', animation: null }); return }
     navigate({ suite: 'stage', layer: 'clay' })
@@ -135,7 +94,7 @@ export const useClay = create<ClayState>()((set, get) => ({
     void import('../../suites/stage/animationBench').then((m) => m.closeAnimationBench())
     set({ view: 'page', animation: null })
     navigate({ suite: 'story', tab: 'cast', layer: 'clay' })
-    writeHash(libraryHash('animation', null, false))
+    writeHash('#clay/library')
   },
   selectAnimation: (animSel) => set({ animSel }),
   openScene: async (stageId, from, section) => {
@@ -208,9 +167,8 @@ export function startClay(): () => void {
       const c = useClay.getState()
       if (from?.rail === 'scenes') { if (from.stage) void c.openScene(from.stage); else c.setRail('scenes'); return }
       if (from?.anim) { void c.openAnimation(from.anim); return }
-      if (from?.skeleton) useStory.getState().setSkeleton(true)                  // D190: the side of Figure | Skeleton the link names
-      c.openLibrary(from?.kind ?? c.kind, from?.profile ?? null, from?.version ?? null)
-      if (from?.bench) void c.openBench()
+      if (from?.entity) { openInWorld(from.entity.profile, from.entity.version, from.entity.tab); return }   // RS1: an old Library link
+      if (c.rail === 'scenes') c.setRail('scenes'); else c.openLibrary()
     })
   }
   const offSession = useSession.subscribe((s, prev) => { if (s.project !== prev.project) go() })
@@ -220,23 +178,15 @@ export function startClay(): () => void {
     if (!at || !opened) return
     if (at.rail === 'scenes') { if (at.stage) void c.openScene(at.stage); else if (c.rail !== 'scenes') c.setRail('scenes'); return }
     if (at.anim) { if (c.view !== 'animation' || JSON.stringify(c.animation) !== JSON.stringify(at.anim)) void c.openAnimation(at.anim); return }
-    if (at.kind === 'figure' && at.profile && !at.bench && !!at.skeleton !== useStory.getState().skeleton) useStory.getState().setSkeleton(!!at.skeleton)   // D190
-    if (at.profile !== (c.asset?.profile ?? null) || at.kind !== c.kind || c.rail !== 'library' || (at.bench && c.view !== 'bench')) {
-      c.openLibrary(at.kind, at.profile, at.version)
-      if (at.bench) void c.openBench()
-    }
+    if (at.entity) { openInWorld(at.entity.profile, at.entity.version, at.entity.tab); return }                 // RS1
+    if (c.rail !== 'library' || c.view !== 'page') c.openLibrary()
   }
   window.addEventListener('hashchange', onHash)
   const offNav = onNavigate((p) => {                                       // the editor opened from anywhere shows under Scenes
     const c = useClay.getState()
-    if (p.suite !== 'stage' || p.layer === 'clay' || c.view === 'bench' || c.view === 'animation' || c.rail === 'scenes') return
+    if (p.suite !== 'stage' || p.layer || c.view === 'animation' || c.rail === 'scenes') return   // RS1: the stage suite on another layer (World's bench) is not Clay's
     useClay.setState({ rail: 'scenes', view: 'page' })
     void import('../../suites/stage/stageStore').then((m) => writeHash(`#clay/scene${m.useStage.getState().current?.id ? `/${m.useStage.getState().current!.id}` : ''}`))
   })
-  const offSkel = useStory.subscribe((s, prev) => {                       // D190: Figure | Skeleton kept in the hash
-    if (s.skeleton === prev.skeleton) return
-    const c = useClay.getState()
-    if (c.rail === 'library' && c.view === 'page' && location.hash.startsWith('#clay/')) writeHash(libraryHash(c.kind, c.asset, false))
-  })
-  return () => { offSession(); offNav(); offSkel(); window.removeEventListener('hashchange', onHash) }
+  return () => { offSession(); offNav(); window.removeEventListener('hashchange', onHash) }
 }

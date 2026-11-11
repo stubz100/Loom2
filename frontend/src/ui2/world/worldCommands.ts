@@ -1,6 +1,6 @@
 // U3 (D157, proto01_UI2 03 §8): World's commands (rule 3: every action a command with a mouse home; keys are accelerators). They act on the
 // entity and version the header shows (the Story store's selection) and on the creation selected in the bin.
-import { ArrowLeft, Box, CopyPlus, Footprints, Hand, ImagePlus, Lock, Pencil, PersonStanding, Plus, Sparkles, Star, Trash2, UserRoundPlus } from 'lucide-react'
+import { ArrowLeft, Box, CopyPlus, Footprints, Hammer, Hand, ImagePlus, Lock, Pencil, PersonStanding, Plus, Sparkles, Star, Trash2, UserRoundPlus, Users } from 'lucide-react'
 import { http, unwrap } from '../../api/client'
 import { registerCommands } from '../../frame/commands'
 import { navigate } from '../../frame/router'
@@ -18,8 +18,12 @@ const cls = () => { const r = w().rail; return r === 'look' || r === 'sketches' 
 const NEEDS: Record<string, string> = { character: 'its pictures, A-pose and body are made', prop: 'its pictures and 3D model are made', place: 'its set picture and set are made' }
 
 registerCommands([
-  // U3c (03 §4): Make or Edit in the left column — Edit opens the selected creation in Image's editor (the World layer stays). C0 (D181):
-  // the bench, the line-up and Build's 3D are Clay's Library (clay.bench.open, clay.lineup, clay.asset.open)
+  // U3c (03 §4): Make or Edit in the left column — Edit opens the selected creation in Image's editor (the World layer stays). RS1 (D197):
+  // Clay is the third mode — the entity's 3D, its bench and the class's line-up are here again (D181's Library kinds are gone)
+  { id: 'world.mode.clay', scope: 'world', label: 'Clay', icon: Hammer, placement: ['panel'], when: () => !!sy().profile() && !!sy().version() && w().mode !== 'clay',
+    hint: "the entity's 3D: a character's figure, shell, skeleton and poses; a prop's model; a place's set — on its bench", run: () => w().setMode('clay') },
+  { id: 'world.lineup', scope: 'world', label: 'Line-up ▶', icon: Users, placement: ['rail', 'context'], hint: "this class's characters or props side by side at their sizes on the bench (twelve at most)",
+    when: () => { const c = cls(); return (c === 'character' || c === 'prop') && sy().profile()?.cls === c }, run: () => void w().openLineup() },
   { id: 'world.creation.aposeFront', scope: 'world', label: 'Use as the A-pose front', icon: PersonStanding, placement: ['inspector', 'context'],
     hint: 'the animation reference: full body, A-pose, 16:9, plain ground', when: () => !!selected() && open() && (sy().profile()?.cls === 'character' || sy().profile()?.cls === 'prop'),
     run: () => { const s = selected(); if (s) void sy().setAnimRef('front', s.asset.id) } },

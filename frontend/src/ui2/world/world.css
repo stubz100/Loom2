@@ -89,3 +89,7 @@ button.w-ready-item { background: transparent; border: 1px dashed var(--line2); 
 .w-framing { display: flex; flex-direction: column; gap: 6px; min-width: 0; }   /* D162: the chips, then the framing words */
 .w-framing textarea { resize: vertical; font: inherit; width: 100%; box-sizing: border-box; }
 .w-chips.left button.active { border-color: var(--accent); color: var(--fg); }
+
+/* RS1 (D197): the parts of World's Clay under the mode rail */
+.w-clay-tabs { margin-top: 4px; }
+.w-clay-tabs button { font-size: 11px; }

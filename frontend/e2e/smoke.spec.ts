@@ -263,12 +263,16 @@ async function perfCardOf(page: import('@playwright/test').Page, card: 'Image to
   await expect(page.locator('.perf-cards button.active')).toHaveText(card)
 }
 
-/** B2a → C0 (D181): an entity version's 3D in Clay's Library — its builder (the body, the model or the set) in the left column, its kind's tiles behind. */
+/** B2a → C0 → RS1 (D197): an entity version's 3D in World's Clay mode — its builder (the body, the model or the set) in the left column, its bench in the centre. */
 async function openLibrary(page: import('@playwright/test').Page, cls: 'character' | 'prop' | 'place', id: string, version = 'v1'): Promise<void> {
-  const kind = cls === 'character' ? 'figure' : cls === 'prop' ? 'prop' : 'set'
-  await openShell(page, `clay/library/${kind}/${id}/${version}`)
-  await expect(page.locator('[data-testid="clay-library-header"]')).toContainText(version)
-  await expect(page.locator('[data-testid="clay-builder"]')).toBeVisible()
+  await openShell(page, `world/${cls}/${id}/${version}/clay`)
+  await expect(page.locator('[data-testid="world-header"]')).toContainText(version)
+  await expect(page.locator('[data-testid="world-clay-builder"]')).toBeVisible()
+}
+/** RS1: a part of World's Clay (Figure · Skeleton · Poses · Bench; Model; Set). */
+async function clayTab(page: import('@playwright/test').Page, label: string): Promise<void> {
+  await page.locator('[data-testid="world-clay-tabs"] button', { hasText: label }).click()
+  await expect(page.locator('[data-testid="world-clay-tabs"] button.active')).toHaveText(label)
 }
 
 /** D161: World's Make — the sheet's words at its top, then the picture settings. */
@@ -1012,7 +1016,7 @@ test("the pose editor (AP1b, D141): a crouch stands on the character's feet, the
   // the skeleton bench (World's Sheet) lists the character's poses
   await openLibrary(page, 'character', p.id)
   await page.locator('.cast-body button', { hasText: 'body' }).click()                                    // a body of its own (the default adult's)
-  await page.locator('[data-testid="clay-figure-switch"] button', { hasText: 'Skeleton' }).click()   // D190: Figure | Skeleton
+  await clayTab(page, 'Skeleton')                                                                       // D190 → RS1: Clay's Skeleton part
   await expect(page.locator('.skel-parts [data-group="poses"] [data-pose="crouch"]')).toContainText('its starter pose · 3 pinned')
   await page.locator('.skel-parts [data-group="poses"]').scrollIntoViewIfNeeded()
   await page.screenshot({ path: 'node_modules/.e2e/ap1b-bench-poses.png' })
@@ -1212,9 +1216,9 @@ test('a prop (D110 PS1–PS2, D125): Cast\'s props class lists the props (the ol
   const name = `Crate ${Date.now().toString(36)}`
   const prop = await api<{ id: string; current: string }>('POST', '/story/profiles', { name, cls: 'prop', hero_asset_id: img, appearance: 'an old wooden slatted crate' })
   await openLibrary(page, 'prop', prop.id)                                                                    // D157: World's Props, the prop's Sheet
-  await expect(page.locator('.c-kinds button', { hasText: 'Props' })).toHaveClass(/active/)                 // C0: the Library's kind
-  await expect(page.locator('[data-testid="clay-library-header"]')).toContainText(name)
-  const section = page.locator('[data-testid="clay-builder"] .prop-model')
+  await expect(page.locator('.w-rail-btn[data-rail="prop"]')).toHaveClass(/active/)                           // RS1: World's Props
+  await expect(page.locator('[data-testid="world-header"]')).toContainText(name)
+  const section = page.locator('[data-testid="world-clay-builder"] .prop-model')
   await expect(section).toBeVisible()
   await expect(section.locator('.model-view.empty')).toBeVisible()
   const make = section.locator('button', { hasText: 'Make the 3D model' })
@@ -2447,8 +2451,10 @@ test("the bench and a prop's height (D142, CW4): Bench ▶ opens Clay for the ch
   await api('PATCH', `/story/profiles/${mara.id}`, { revision: 0, versions: [{ id: 'v1', body: { height_m: 1.62 } }] })
   await openLibrary(page, 'character', mara.id)
   await page.locator('.cast-body button', { hasText: /^Bench/ }).first().click()
-  await expect(page.locator('[data-testid="clay-bench"] canvas').first()).toBeVisible({ timeout: 20_000 })   // the bench, in Clay's Library (C0)
-  await expect(page.locator('[data-testid="clay-layer"]')).toHaveAttribute('data-rail', 'library')
+  await expect(page.locator('[data-testid="world-clay"] canvas').first()).toBeVisible({ timeout: 20_000 })   // the bench, in World's Clay (RS1)
+  await expect(page.locator('[data-testid="world-clay-tabs"] button.active')).toHaveText('Bench')
+  await expect(page.locator('[data-testid="world-layer"] .w-left .anim-column #anim-sec-scene')).toBeVisible()   // RS1: the bench's own column, and its Inspector
+  await expect(page.locator('[data-testid="world-clay-inspector"]')).toBeVisible()
   const benches = async () => (await api<{ items: StageLite[] }>('GET', '/stages?purpose=bench')).items
   await expect.poll(async () => (await benches()).some((b) => b.bound?.profile_id === mara.id), { timeout: 10_000 }).toBe(true)
   const bench = (await benches()).find((b) => b.bound?.profile_id === mara.id)!
@@ -2456,8 +2462,8 @@ test("the bench and a prop's height (D142, CW4): Bench ▶ opens Clay for the ch
   expect(bench.objects[0].body?.height_m).toBe(1.62)
   expect((await api<{ items: StageLite[] }>('GET', '/stages')).items.map((s) => s.id)).not.toContain(bench.id)          // out of the stage list
   await page.screenshot({ path: 'node_modules/.e2e/cw3-bench.png' })
-  await page.locator('[data-testid="clay-library-header"] button', { hasText: 'Back to the Library' }).click()
-  await expect(page.locator('[data-testid="clay-builder"]')).toBeVisible()
+  await clayTab(page, 'Figure')
+  await expect(page.locator('[data-testid="world-clay-builder"]')).toBeVisible()
   // CW4: a prop's height — read from its name, edited in Cast; its bench stands the model at it
   const cup = await api<ProfileLite>('POST', '/story/profiles', { name: `Grandma cup ${tag}`, cls: 'prop' })
   expect(cup.versions[0].height_m).toBe(0.1)
@@ -2469,7 +2475,7 @@ test("the bench and a prop's height (D142, CW4): Bench ▶ opens Clay for the ch
   await h.fill('0.12'); await h.press('Enter')
   await expect.poll(async () => (await api<ProfileLite>('GET', `/story/profiles/${cup.id}`)).versions[0].height_m, { timeout: 10_000 }).toBe(0.12)
   await page.locator('.prop-model button', { hasText: /^Bench/ }).click()
-  await expect(page.locator('[data-testid="clay-bench"] canvas').first()).toBeVisible({ timeout: 20_000 })
+  await expect(page.locator('[data-testid="world-clay"] canvas').first()).toBeVisible({ timeout: 20_000 })
   const pb = (await benches()).find((b) => b.bound?.profile_id === cup.id)!
   expect(pb.objects.map((o) => o.kind)).toEqual(['mesh', 'mannequin'])
   expect(pb.objects[0].height_m).toBe(0.12)
@@ -2598,7 +2604,7 @@ test("a place's set (CW6, D143): Build the set ▶ queues MoGe on the set pictur
   await expect(sec.locator('button', { hasText: /^Clean the set picture again/ })).toBeEnabled()
   // Bench ▶: Clay on the set, bound to the place, from the picture's camera
   await sec.locator('button', { hasText: /^Bench/ }).click()
-  await expect(page.locator('[data-testid="clay-bench"] canvas').first()).toBeVisible({ timeout: 20_000 })   // Clay on the set, in the Library (C0)
+  await expect(page.locator('[data-testid="world-clay"] canvas').first()).toBeVisible({ timeout: 20_000 })   // Clay on the set, in World's Clay (RS1)
   type StageLite = { bound: { profile_id: string } | null; objects: { kind: string; preset: string | null; profile_id: string | null; place_set: PS | null }[]; cameras: { pos: number[] }[] }
   const bench = (await api<{ items: StageLite[] }>('GET', '/stages?purpose=bench')).items.find((b) => b.bound?.profile_id === place.id)!
   expect(bench.objects[0]).toMatchObject({ kind: 'set', preset: 'built', profile_id: place.id })
@@ -2700,10 +2706,11 @@ test("Cast in Clay and the line-up (CW3, CW5): a Cast character's card adds its 
   expect(free.name).toBe(`Ines ${tag} (free)`)
   // CW5: Line-up ▶ in World's Sheet — the class's characters side by side before 0.5 m marks, the one open first; Send to a stage ▸ copies them
   await openLibrary(page, 'character', ines.id)
-  await page.locator('[data-testid="clay-library-header"] button', { hasText: /^Line-up/ }).click()
+  await page.locator('.w-rail-btn[data-rail="character"]').click({ button: 'right' })                     // RS1: the class's line-up, on the rail's right-click
+  await page.locator('.ctx-menu button.item', { hasText: /^Line-up/ }).click()
   const chip = page.locator('[data-testid="bench-chip"]')
   await expect(chip).toContainText('Line-up ·')
-  await expect(page.locator('[data-testid="clay-layer"]')).toHaveAttribute('data-rail', 'library')             // in Clay's Library (C0)
+  await expect(page.locator('[data-testid="world-clay"]')).toHaveAttribute('data-lineup', 'true')              // on World's bench (RS1)
   const lineup = (await api<{ items: StageLite[] }>('GET', '/stages?purpose=lineup')).items[0]
   expect(lineup.objects[0].preset ?? lineup.objects[0].kind).toBe('lineup')
   expect(lineup.objects[1].profile_id).toBe(ines.id)                                                       // the one open first
@@ -2827,8 +2834,8 @@ test('the skeleton bench (proto01_UIcast CS2, D190, D191): Figure | Skeleton ope
   const prof = async () => (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0]
   await expect.poll(async () => (await prof()).body_points?.pose.length ?? 0, { timeout: 60_000 }).toBe(18)
   const fitted = (await prof()).body!, read = (await prof()).body_points!.pose[8][1]
-  await page.locator('[data-testid="clay-figure-switch"] button', { hasText: 'Skeleton' }).click()   // D190: Figure | Skeleton
-  await expect(page).toHaveURL(/\/v1\/skeleton$/)                                                       // the hash keeps the side
+  await clayTab(page, 'Skeleton')                                                                       // D190 → RS1: Clay's Skeleton part
+  await expect(page).toHaveURL(/\/v1\/clay\/skeleton$/)                                                 // the hash keeps the part
   const bench = page.locator('.skel-bench')
   await expect(bench.locator('.skel-ref circle.white')).toHaveCount(18 + 42, { timeout: 15_000 })   // the body's 18 and both hands' 21 (the fake has no feet)
   await expect(bench.locator('.skel-ref circle.blue')).toHaveCount(18)
@@ -2867,10 +2874,10 @@ test('the skeleton bench (proto01_UIcast CS2, D190, D191): Figure | Skeleton ope
   await bench.locator('.skel-motions button', { hasText: 'walk' }).click()
   await expect(bench.locator('.skel-guide img.pose')).toHaveCount(1, { timeout: 20_000 })
   await page.screenshot({ path: 'node_modules/.e2e/cs2-bench.png' })
-  await page.locator('[data-testid="clay-figure-switch"] button', { hasText: 'Figure' }).click()          // D190: the way back is the switch
-  await expect(page.locator('[data-testid="clay-builder"]')).toBeVisible()
-  await expect(page).toHaveURL(/\/v1$/)
-  await expect(page.locator('[data-testid="clay-tiles"]')).toBeVisible()                                      // the tiles back in the centre (C0)
+  await clayTab(page, 'Figure')                                                                          // D190 → RS1: the way back is the part
+  await expect(page.locator('[data-testid="world-clay-builder"]')).toBeVisible()
+  await expect(page).toHaveURL(/\/v1\/clay$/)
+  await expect(page.locator('[data-testid="world-clay"] canvas').first()).toBeVisible({ timeout: 20_000 })   // the bench back in the centre (RS1)
 })
 
 test("the rigging screen's hands and feet (RG3, D187 R4, D188 F4, D190): a hand picture picked is read; the skeleton panel makes candidates on the card picked and one is picked by hand; the skeleton bench's Hands shows its 21 points and the clay hand, a point dragged is fitted and kept as it is let go with SDPose's kept beside (D191); the count and Unlink from the Inspector; Feet & legs: no feet picture, Start from a plain foot, a stiff sole, the shoe's ankle dragged (D191) (Clay)", async ({ page }) => {
@@ -2887,7 +2894,7 @@ test("the rigging screen's hands and feet (RG3, D187 R4, D188 F4, D190): a hand 
   await expect.poll(async () => (await ver()).hand_points?.hand.length ?? 0, { timeout: 60_000 }).toBe(21)
   expect((await ver()).body!.hand_shape!.right.count).toBe(5)
   await openLibrary(page, 'character', p.id)
-  await page.locator('[data-testid="clay-figure-switch"] button', { hasText: 'Skeleton' }).click()   // D190: Figure | Skeleton
+  await clayTab(page, 'Skeleton')                                                                       // D190 → RS1: Clay's Skeleton part
   const bench = page.locator('.skel-bench'), panel = page.locator('[data-testid="rig-panel"]')
   await panel.locator('[data-testid="rig-parts"] button', { hasText: 'Hands' }).click()             // D190: the part is switched in the panel
   const picture = bench.locator('[data-testid="rig-hand-picture"]')
@@ -3994,14 +4001,14 @@ test('World\'s owed parts (U3f, D157 · proto01_UI2 03 §2, §5, §8): a charact
   await expect(insp.locator('[data-testid="world-uses"]')).toContainText('none yet')
   await expect(insp).toContainText('v1')
   await expect(insp.locator('button', { hasText: `Delete Maren ${tag}…` })).toBeVisible()
-  await head.locator('button', { hasText: 'Open in Clay ▸' }).click()                                    // C0 (D181): the Library on the character
-  await expect(page.locator('[data-testid="clay-builder"]')).toBeVisible()
-  await page.locator('[data-testid="clay-library-header"] button', { hasText: 'Bench ▶' }).click()
-  await expect(page.locator('[data-testid="clay-bench"] canvas').first()).toBeVisible({ timeout: 20_000 })
-  expect(new URL(page.url()).hash).toMatch(/^#clay\/library\/figure/)                                     // the bench is the Library's
+  await expect(head.locator('button', { hasText: 'Open in Clay' })).toHaveCount(0)                       // RS1 (D197): one home — no jump to another layer
+  await page.locator('.w-mode button[data-mode="clay"]').click()                                         // Clay, the third mode
+  await expect(page.locator('[data-testid="world-clay-builder"]')).toBeVisible()
+  await expect(page.locator('[data-testid="world-clay"] canvas').first()).toBeVisible({ timeout: 20_000 })
+  expect(new URL(page.url()).hash).toMatch(/^#world\/character\/.+\/clay$/)                              // the bench is World's
   type StageLite = { purpose: string; bound: { profile_id: string } | null }
   await expect.poll(async () => (await api<{ items: StageLite[] }>('GET', '/stages?purpose=bench')).items.some((s) => s.bound?.profile_id === prof.id), { timeout: 10_000 }).toBe(true)
-  await page.locator('nav.tabs button.tab', { hasText: 'World' }).click()
+  await page.locator('.w-mode button', { hasText: 'Make' }).click()                                      // RS1: back to Make, the same layer
   await expect(page.locator('[data-testid="world-make"]')).toBeVisible()
 })
 
@@ -4443,7 +4450,7 @@ test('shells only (D183, C2c): a scene\'s Figures ＋ lists characters and no du
   await expect.poll(async () => (await api<Ver>('GET', `/story/profiles/${who.id}`)).versions[0].body_fit_from, { timeout: 60_000 }).toBeTruthy()
   await expect.poll(async () => (await api<Ver>('GET', `/story/profiles/${who.id}`)).versions[0].shell_asset_id, { timeout: 60_000 }).toBeTruthy()   // the shell followed the fit
   await openLibrary(page, 'character', who.id)
-  await page.locator('[data-testid="clay-figure-switch"] button', { hasText: 'Skeleton' }).click()   // D190: Figure | Skeleton
+  await clayTab(page, 'Skeleton')                                                                       // D190 → RS1: Clay's Skeleton part
   const bench = page.locator('.skel-bench')
   await expect(bench).toBeVisible()
   await bench.locator('.tools button', { hasText: /^side$/ }).click()

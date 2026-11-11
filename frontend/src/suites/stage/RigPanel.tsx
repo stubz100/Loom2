@@ -62,7 +62,7 @@ function BodyRefs({ v }: { v: Version }) {
       <h4>The reference <Help text="The skeleton is fitted to the A-pose picked in World (its back view shows the other side); the shell is made from it. The A-pose is made and picked in World › Make." /></h4>
       <div className="rig-thumbs">{views.filter(([, id]) => !!id).map(([label, id]) => <span key={label} className="rig-thumb still" title={label}><img src={api.thumbUrl(id!, 256)} alt={label} draggable={false} /><small>{label}</small></span>)}
         {!v.anim_ref_asset_id && <span className="hint">no A-pose picked</span>}</div>
-      <div className="w-verbs"><CommandButton id="story.cast.fitBody" text /><CommandButton id="cast.shell.make" text /><CommandButton id="clay.asset.world" text /></div>
+      <div className="w-verbs"><CommandButton id="story.cast.fitBody" text /><CommandButton id="cast.shell.make" text /></div>
     </section>
   )
 }

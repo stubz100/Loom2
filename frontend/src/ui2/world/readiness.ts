@@ -1,6 +1,6 @@
 // U3 (D157, proto01_UI2 03 §2): the readiness line — what an entity version still needs of its pictures. Each item is done, owed or
-// optional; the line ends in "Pictures done" or "N to go". Pure, from the version's record and its reference count. C0 (D181): the 3D
-// (the body, the model, the set) is Clay's readiness (ui2/clay/readiness.ts).
+// optional; the line ends in "Pictures done" or "N to go". Pure, from the version's record and its reference count. RS1 (D197): the 3D
+// (the body, the shell, the model, the set — `clayReadiness`, below) follows on the same line: `entityReadiness`.
 import type { Profile, ProfileVersion } from '../../api/types'
 import { sentColours } from '../../suites/generate/sheet'
 
@@ -68,4 +68,41 @@ export function readiness(p: Pick<Profile, 'cls' | 'voice_id'>, v: ProfileVersio
   }
   const owed = items.filter((x) => x.state === 'owed').length
   return { items, owed, line: owed ? `${owed} to go` : 'Pictures done' }
+}
+
+export interface ClayReadiness { items: ReadyItem[]; owed: number; line: string }
+
+/** C0 (D181) → RS1: the 3D readiness of an entity version — a figure's A-pose (a picture), body and shell; a prop's picture, model and
+ *  height; a set's picture, build and fills. Pure, from the version's record. */
+export function clayReadiness(p: Pick<Profile, 'cls'>, v: ProfileVersion): ClayReadiness {
+  let items: ReadyItem[]
+  if (p.cls === 'character') {
+    items = [
+      item('a_pose', 'A-pose', !!v.anim_ref_asset_id, v.anim_ref_asset_id ? undefined : '— in Make'),
+      item('body', 'body fitted', !!v.body_fit_from, v.body_fit_from && v.body ? bodyText(v.body) : v.anim_ref_note === 'not_whole' ? '— the A-pose is cut'
+        : v.anim_ref_note === 'several' ? '— the A-pose shows more than one figure' : undefined),
+      item('shell', 'shell', !!v.shell_asset_id),
+      item('back', 'back view', !!v.anim_ref_back_asset_id, undefined, true),
+    ]
+  } else if (p.cls === 'prop') {
+    items = [item('picture', 'picture', !!(v.anim_ref_asset_id || v.hero_asset_id), v.anim_ref_asset_id || v.hero_asset_id ? undefined : '— in Make'),
+      item('model', '3D model', !!v.model_asset_id), item('height', 'height', !!v.height_m, v.height_m ? `${v.height_m} m` : undefined)]
+  } else {
+    const ps = v.place_set, faces = ps?.faces ?? []
+    const ok = faces.filter((f) => f.filled || !f.bad).length
+    const pct = faces.length ? Math.round((100 * ok) / faces.length) : 0
+    items = [item('set_picture', 'set picture', !!ps?.sources.length, ps?.sources.length ? undefined : '— in Make'), item('set', 'set built', faces.length > 0),
+      item('faces', 'faces filled', faces.length > 0 && ok === faces.length, faces.length ? `${pct} %` : undefined)]
+  }
+  const owed = items.filter((x) => x.state === 'owed').length
+  return { items, owed, line: owed ? `${owed} to go` : 'Ready for a scene' }
+}
+
+const REPEATS = ['a_pose', 'back', 'picture', 'set_picture']                 // the pictures the 3D reads: World's own items say them already
+/** RS1 (D197, proto02 01 §4.2): the one readiness line of an entity version — its pictures (`readiness`), then its 3D (`clayReadiness`
+ *  without the items that repeat a picture), counted together: "N to go", else "Ready for a scene". */
+export function entityReadiness(p: Pick<Profile, 'cls' | 'voice_id'>, v: ProfileVersion, refs: number, prompts: Partial<Record<'hero' | 'a_pose_front', string | null>> = {}): Readiness {
+  const items = [...readiness(p, v, refs, prompts).items, ...clayReadiness(p, v).items.filter((x) => !REPEATS.includes(x.id))]
+  const owed = items.filter((x) => x.state === 'owed').length
+  return { items, owed, line: owed ? `${owed} to go` : 'Ready for a scene' }
 }

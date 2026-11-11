@@ -12,12 +12,13 @@ router, the drag manager and the loupe.
 
 The shell's five layers (World · Clay · Shots · Episode · Bin, `ui2/layers.ts`; C0 of D181 added Clay) place the parts a suite's code
 exports — `SuiteParts {Panel, Strip, Stage, Inspector, PrimaryAction?}` (`suiteParts.ts`): Shots' Performance and Final are `AnimateSuite` and
-`FinalSuite`, World's Edit is `EditSuite`, Clay's editor (its Scenes, and the Library's bench) is `StageParts`, the Flow and Episode are
-`StoryParts`. Clay's Library (`ui2/clay/ClayLayer.tsx`) holds the builders that were World's Build — `CastBody`, `CastParts.PropModel`,
-`CastSet.PlaceSetSection`, the skeleton bench — on the entity version the Story store selects; World is Make | Edit. A layer loads them lazily (`React.lazy` in the layer) and unmounts
+`FinalSuite`, World's Edit is `EditSuite`, Clay's editor (its Scenes, the animation bench, and World's bench) is `StageParts`, the Flow and Episode are
+`StoryParts`. World is Make | Edit | Clay (RS1, D197): its Clay mode (`ui2/world/WorldClay.tsx`) holds the entity's 3D — `CastBody`, `CastParts.PropModel`,
+`CastSet.PlaceSetSection`, the skeleton bench, the poses and the bench — on the entity version the Story store selects; Clay's Library
+(`ui2/clay/ClayLayer.tsx`) keeps the animations. A layer loads them lazily (`React.lazy` in the layer) and unmounts
 what it does not show; `useStageActive()` (`stageKeep.ts`) is true unless a host says otherwise.
 
-- **Places.** The hash names a layer's place (`#world/<class>/<profile>/<version>`, `#clay/library/<kind>/<profile>/<version>[/bench]`,
+- **Places.** The hash names a layer's place (`#world/<class>/<profile>/<version>`, `#world/<class>/<profile>/<version>/clay[/skeleton|poses|bench]`, `#clay/library[/animation/anm/<id>]`,
   `#clay/scene/<stage>`, `#shots/<shot>/<level>`, `#episode`, `#bin`). A suite and
   its rail tab still name a place inside the code (`navigate({ suite, tab })`); the shell maps it onto its layer (`layerOf`), and a
   `?suite=` deep link or the dev start suite (`scripts/dev.ps1 -Suite`) lands there unless the hash names a place. `?suite=edit&doc=<id>`

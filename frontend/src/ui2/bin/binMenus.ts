@@ -5,7 +5,6 @@ import type { BinThing } from '../../api/types'
 import { handleKeyFor, sep, type MenuItem } from '../../frame/commands'
 import { listenFileDrop } from '../../shell/tauri'
 import { belongs, importInto, moveTargets } from './binCommands'
-import { navigate } from '../../frame/router'
 import { selectedThings, shownItems, TRASH, useBin } from './binStore'
 import { useSession } from '../../store/session'
 import { worldItems } from './verbs'
@@ -26,7 +25,7 @@ export function kindVerb(it: BinThing): { label: string; run: () => void } | nul
       if (then === 'record') await m.recordInClay()
     })
   }
-  const openLib = (kind: 'figure' | 'prop' | 'set') => () => { navigate({ suite: 'stage' }); void import('../clay/clayStore').then((m) => m.useClay.getState().openLibrary(kind, vers!.profile, vers!.version)) }
+  const openLib = (_kind: 'figure' | 'prop' | 'set') => () => void import('../world/worldStore').then((m) => m.useWorld.getState().openClay(vers!.profile, vers!.version, 'build'))   // RS1 (D197): World › Clay
   switch (it.shelf) {
     case 'passes': return shot ? { label: 'Render the passes again ▸', run: openShot('clay') } : null
     case 'takes': case 'stills': return shot ? { label: 'Re-take ▸', run: openShot('performance') } : null

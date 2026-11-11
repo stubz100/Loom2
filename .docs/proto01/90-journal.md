@@ -17044,3 +17044,33 @@ Checks: offline 897 (3 new, `test_rs0b.py`; CA0's route test now expects 784×11
 build, lint 63 warnings as before, settings audit 326 / 0, model literals 0, agents 0, the API contract regenerated (two docstrings), e2e alone: a
 first full run 90 / 92 (the live character sheet's mention and the recipe graph's Clay rail — both passed alone at once, 2 / 2), then **92 / 92**
 (7.0 min). One GPU job (the rig's make, then its SDPose read). Next: RS1 (World › Clay) and RS3 (a shot is its scene).
+
+## 2026-11-11 07:58 — RS1: World › Clay — the entity's 3D back in World, Make · Edit · Clay; the two jumps gone
+
+proto02 03's RS1 (D197), on the author's "continue".
+
+- **The mode rail is Make · Edit · Clay** (`ui2/world/WorldClay.tsx`, `worldStore`: `mode`, `clayTab`, `openClay`, `ensureBench`,
+  `openLineup`). Clay's parts by class: a character **Figure · Skeleton · Poses · Bench**, a prop **Model · Bench**, a place **Set · Bench**.
+  Figure is Clay's Library page moved whole (`CastBody`, the shell, the turn test); Skeleton is D190's rigging screen (panel, bench, parts);
+  Poses is the bench's Motion section on the character's figure (its own poses applied, saved *for ‹character›*, deleted); Bench the bench's
+  own column (its light, its camera). The centre is the entity's bench (D142's bench stage, opened for the version, the bound figure selected),
+  the Inspector the selected thing. The place kept in the hash: `#world/<class>/<profile>/<version>/clay[/skeleton|poses|bench]`. Clay stays
+  the mode from one entity to the next.
+- **A place's bench opens from its Bench part only**: made once from the picture's camera and kept (D142), a bench opened while the set is
+  still being fitted kept a stale camera (the e2e's find) — the Set part shows the place's bin.
+- **One readiness line** (`entityReadiness`): the pictures, then the 3D (body fitted · shell; 3D model · height; set built · faces filled),
+  counted together, "Ready for a scene"; a 3D item opens Clay. `ui2/clay/readiness.ts` folded into World's.
+- **The jumps are gone** (G6): *Open in Clay ▸* (World's header) and *Open in World ▸* (the builder, the Inspector, the skeleton panel). Every
+  old way in lands in World's Clay — `story.cast.bench`, `cast.skeleton.open`, back from a bench, the Bin's *The body ▸ / The model ▸ / The set
+  builder ▸*, and an old link `#clay/library/figure|prop|set/…[/bench|/skeleton]`.
+- **The line-up** (CW5) is on the Characters / Props rail button's right-click (`world.lineup`), on World's bench.
+- **Clay's Library holds the animations** (the rail's *Animations*): the kinds Figures / Props / Sets / Lights / Cameras, the tiles, the
+  builders and `clay.bench.*`, `clay.lineup`, `clay.asset.*` removed; Scenes unchanged (RS4's).
+- A fault found: the things sheet (D180) took its styles from `stage.css`, loaded only once a bench had been — it imports them itself now.
+
+Not built: the poses' stills and rename (01 §4.2 names them); the shell's run form is RS2's.
+
+Checks: Vitest 819 + 3 skipped (7 new, `rs1.test.ts`; `clay.test.ts` ported), typecheck + build, lint 63 warnings as before, agents 0 (frame's
+AGENTS.md amended); no backend change (offline as RS0b's 897); e2e alone: twelve sites ported to World's Clay — a first full run 90 / 92 (the
+place's bench camera, above; the live character sheet's flake again), after the fix 92 / 92 (7.4 min). Screenshots of the bench and the
+Skeleton part sent. No GPU job. Next: RS2 (the run form) and RS3 (a shot is its scene).

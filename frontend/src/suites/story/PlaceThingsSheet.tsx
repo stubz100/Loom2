@@ -11,6 +11,7 @@ import { useSession } from '../../store/session'
 import type { PlaceSet } from './setBuilder'
 import { containedRect, pointIn, setPicture, usePlaceThings } from './placeThingsStore'
 import { useStory } from './storyStore'
+import '../stage/stage.css'                                                // RS1: the sheet's own styles — it opens in World's Clay before any bench has loaded the stage's
 
 const TINTS = [[79, 209, 197], [246, 173, 85], [159, 122, 234], [104, 211, 145], [99, 179, 237], [252, 129, 129]]
 const NOW: [number, number, number] = [240, 166, 58]                                 // the accent: the mask the last click found

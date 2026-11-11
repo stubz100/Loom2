@@ -348,7 +348,7 @@ const cmds: Command[] = [
   { id: 'story.cast.bench', scope: 'story', label: 'Bench ▶', icon: Hammer, placement: ['panel', 'inspector', 'context'],
     hint: "Clay opened for this version: its figure (a prop: its model at its height beside a 1.75 m figure; a place: its set from the picture's camera) on a scene of its own, with all of Clay's tools",
     when: () => { const p = sy().profile(); const v = sy().version(); return !!p && !!v && (p.cls === 'character' || (p.cls === 'prop' && !!v.model_asset_id) || (p.cls === 'place' && !!v.place_set)) },
-    run: () => runCommand('clay.bench.open') },                                    // B2a → C0 (D181): the bench is Clay's Library's viewer
+    run: () => { const p = sy().profile(); if (p) void import('../../ui2/world/worldStore').then((m) => m.useWorld.getState().openClay(p.id, sy().versionId ?? p.current, 'bench')) } },   // RS1 (D197): the bench is World's Clay
   { id: 'story.cast.lineup', scope: 'story', label: 'Line-up ▶', icon: Users, placement: ['panel', 'context'], hint: 'the characters and props shown, side by side at their sizes in Clay (twelve at most)',
     when: () => castLineup().length > 0, run: () => { const items = castLineup().map((p) => ({ profile_id: p.id })); void import('../stage/stageStore').then((m) => m.st().openLineup(items, backToBoard('cast'))) } },
   { id: 'story.idea.lineup', scope: 'story', label: 'Line-up ▶', icon: Users, placement: ['panel', 'context'], hint: 'the ideas picked (Ctrl-click), else those shown, in their clay side by side in Clay',
@@ -397,9 +397,9 @@ const cmds: Command[] = [
     hint: "the reference's proportions measured (neck, shoulders, torso, limbs, hands) so the stage figure moves with the character's build; the height and build stay",
     placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character' && !fitBlocked(version()) && version()?.state === 'open', run: () => void sy().fitBody() },   // D140: only on an A-pose
   // CS2 (proto01_UIcast 03 §3.2, D136 U17): the skeleton bench — its view, its foot's verbs (its code loads with the stage's)
-  { id: 'cast.skeleton.open', scope: 'story', label: 'Skeleton', icon: PersonStanding, hint: "the character's skeleton against its reference, its figure and its guide — fit, tune and lock each part; its hands, its feet & legs (D190: Figure | Skeleton in Clay's Library)",
+  { id: 'cast.skeleton.open', scope: 'story', label: 'Skeleton', icon: PersonStanding, hint: "the character's skeleton against its reference, its figure and its guide — fit, tune and lock each part; its hands, its feet & legs",
     placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character' && !!version(),
-    run: () => { sy().setSkeleton(true); const p = profile(); if (p) void import('../../ui2/clay/clayStore').then((m) => m.useClay.getState().openLibrary('figure', p.id, version()?.id ?? p.current)) } },   // C0: in Clay's Library
+    run: () => { const p = profile(); if (p) void import('../../ui2/world/worldStore').then((m) => m.useWorld.getState().openClay(p.id, version()?.id ?? p.current, 'skeleton')) } },   // RS1 (D197): World › Clay › Skeleton
   // RG3 (D187 R4, D188 F4; proto01_rig 00): the rigging screen's parts — the body, the character's own hands, its feet & legs
   { id: 'cast.rig.body', scope: 'story', label: 'Body', icon: PersonStanding, hint: 'the twelve joints on the reference and the shell', placement: ['panel'], when: () => sy().skeleton,
     run: () => void import('../stage/benchState').then((m) => m.setUi({ part: 'body' })) },

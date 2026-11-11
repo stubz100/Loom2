@@ -379,12 +379,9 @@ interface StageState {
 
 let saveTimer: number | null = null
 let benchBack: (() => void) | null = null                                     // D142: where *← Back* from a bench or the line-up goes (this session)
-/** C0 (D181): Clay's Library on the entity version (its kind from its class), else on the figures. */
+/** RS1 (D197): back from a bench — World's Clay on the entity version (its builder); from the line-up with no entity, World as it was. */
 function libraryOf(profileId: string | null, version: string | null): void {
-  void Promise.all([import('../../ui2/clay/clayStore'), import('../story/storyStore')]).then(([m, s]) => {
-    const p = profileId ? s.useStory.getState().profiles.find((x) => x.id === profileId) : undefined
-    m.useClay.getState().openLibrary(p ? m.kindOfClass(p.cls) : 'figure', p?.id ?? null, p ? version ?? p.current : null)
-  })
+  void import('../../ui2/world/worldStore').then((m) => { if (profileId) m.useWorld.getState().openClay(profileId, version, 'build'); else m.useWorld.getState().setMode('make') })
 }
 let saveChain: Promise<void> = Promise.resolve()                              // V79: one PUT at a time — the next starts from the revision the last reply gave
 

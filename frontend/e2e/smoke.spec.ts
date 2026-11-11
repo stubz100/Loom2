@@ -1228,6 +1228,14 @@ test('a prop (D110 PS1–PS2, D125): Cast\'s props class lists the props (the ol
     await expect(section.locator('button', { hasText: 'Import a 3D model (GLB)' })).toBeEnabled()           // … the import is there in every build
     return
   }
+  // RS2 (D197 G2): the run form above the button — the model's tile, the measured defaults; a change is what the job runs and the version keeps
+  const form = section.locator('[data-testid="model-run-form"]')
+  await expect(form.locator('.model-card.active')).toHaveCount(1)
+  await expect(form.locator('[data-field="resolution"] button.active')).toHaveText('1024')
+  const faces = form.locator('[data-field="faces"] input')
+  await expect(faces).toHaveValue('50000')
+  await faces.fill('60000'); await faces.press('Enter')
+  await page.screenshot({ path: 'node_modules/.e2e/rs2-model-form.png' })
   await make.click()
   const dialog = page.locator('.modal.ask')
   await expect(dialog).toContainText(/upright/)
@@ -1237,6 +1245,9 @@ test('a prop (D110 PS1–PS2, D125): Cast\'s props class lists the props (the ol
   const ver = async () => (await api<{ versions: Ver[] }>('GET', `/story/profiles/${prop.id}`)).versions.find((v) => v.id === prop.current)!
   await expect.poll(async () => (await ver()).model_asset_id, { timeout: 90_000 }).not.toBeNull()
   const v = await ver()
+  expect((await api<{ versions: { mesh: { faces: number } | null }[] }>('GET', `/story/profiles/${prop.id}`)).versions[0].mesh?.faces).toBe(60000)   // RS2 (Q16): kept on the version
+  const meshJob = (await api<{ items: { recipe: { kind: string; asset_id?: string; faces?: number } }[] }>('GET', '/jobs')).items.find((j) => j.recipe.kind === 'image_to_mesh' && j.recipe.faces === 60000)
+  expect(meshJob).toBeTruthy()                                                                              // and what the job ran
   const hero = (await api<{ versions: { hero_asset_id: string | null }[] }>('GET', `/story/profiles/${prop.id}`)).versions[0].hero_asset_id
   expect(v.model_from).toBe(hero)                                                                           // made from the hero (no animation reference yet; K36: a copy when the picture had a home)
   const mesh = await api<{ kind: string; params: { upright_deg: number[] | null } }>('GET', `/assets/${v.model_asset_id}`)
@@ -2766,7 +2777,8 @@ test('an animation reference picked by hand (CA0 → D161): Make reference candi
   const p = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', hero_asset_id: hero, appearance: `${name}, a dancer in a red dress` })
   await openMake(page, 'character', p.id)                                                               // C0 (Q2): the A-pose slots under Make's sheet
   await expect(page.locator('.anim-ref-slot[data-side="front"]')).toContainText('none yet')
-  await page.locator('.anim-ref button', { hasText: /^Make reference candidates/ }).click()
+  await expect(page.locator('.anim-ref button', { hasText: /^Make reference candidates/ })).toHaveCount(0)   // RS2 (PG22): no make with settings of its own — Make's framing is the way
+  await api('POST', `/story/profiles/${p.id}/versions/v1/anim-ref`, { side: 'front', count: 2 })           // the candidates, as a reference make lands them
   const cands = page.locator('[data-testid="anim-ref-candidates"] .anim-ref-cand')
   await expect(cands).toHaveCount(2, { timeout: 60_000 })                                                  // both land as candidates
   const ver = async () => (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0]

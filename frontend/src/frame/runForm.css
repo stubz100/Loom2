@@ -1,0 +1,8 @@
+/* RS2 (D197 G2): the run form — rows of label · control, the verbs and the cost at its foot */
+.run-form { display: grid; gap: 6px; padding: 6px 0; }
+.run-form .run-row { display: grid; grid-template-columns: 84px 1fr; align-items: center; gap: 8px; font-size: 12px; }
+.run-form .run-row > span:first-child { color: var(--fg3); }
+.run-form .run-row input[type="number"] { width: 96px; }
+.run-form .run-fixed { grid-column: 2; color: var(--fg3); }
+.run-form .run-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.run-form .run-cost { color: var(--fg3); font-size: 12px; }

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, WithJsonSchema
+from pydantic import BaseModel, ConfigDict, Field, WithJsonSchema
 
 from .catalogue import AssetRecord
 from .clips import IDENTITY_SCHEMA, ClipRecord
@@ -368,6 +368,9 @@ class MeshCaps(Open):
     cold_seconds: float | None = None
     resolutions: list[int]
     faces: int
+    models: list[dict[str, Any]] = Field(default_factory=list)   # RS2 (G2): every offered image → 3D model, for the run form's tiles
+    faces_min: int = 2000
+    faces_max: int = 700000
     licences: dict[str, str]
     approx_gb: float
     why: str | None = None

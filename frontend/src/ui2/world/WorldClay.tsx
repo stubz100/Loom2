@@ -23,6 +23,7 @@ const SkeletonParts = lazy(() => import('../../suites/stage/SkeletonBench').then
 const RigPanel = lazy(() => import('../../suites/stage/RigPanel'))
 const CastBody = lazy(() => import('../../suites/story/CastBody').then((m) => ({ default: m.CastBody })))
 const PropModel = lazy(() => import('../../suites/story/CastParts').then((m) => ({ default: m.PropModel })))
+const MeshRunForm = lazy(() => import('../../suites/story/MeshRunForm').then((m) => ({ default: m.MeshRunForm })))   // RS2: the shell's run form
 const PlaceSetSection = lazy(() => import('../../suites/story/CastSet').then((m) => ({ default: m.PlaceSetSection })))
 
 type Version = Profile['versions'][number]
@@ -72,8 +73,8 @@ function Builder({ p, v }: { p: Profile; v: Version }) {
     <div className="w-sheet cast-page" data-testid="world-clay-builder">
       {p.cls === 'character' && <Part label="The body" quiet="line"><section className="w-build-body"><h3>Body <Help text="The figure Clay draws the character with: its height, build and proportions fitted to the A-pose front (picked in Make), its shell (the 3D model of the A-pose) and its skeleton." /></h3>
         <CastBody p={p} v={v} />
-        <h3>Shell <Help text="The 3D model of the A-pose front, made by Pixal3D in about four minutes in the background: the clay the character's figures are drawn in. A fitted body queues it by itself (D183)." /></h3>
-        <div className="w-verbs"><CommandButton id="cast.shell.make" text /><MakeShells /></div>
+        <h3>Shell <Help text="The 3D model of the A-pose front, made in the background: the clay the character's figures are drawn in. The form is what runs — also when a fitted body queues the shell by itself (D183)." /></h3>
+        <MeshRunForm p={p} v={v} testId="shell-run-form"><CommandButton id="cast.shell.make" text /><MakeShells /></MeshRunForm>
         <h3>Test <Help text="The turn test: the figure turning on the spot, performed from the A-pose on the shots' own guide — a GPU job; its cost is asked first." /></h3>
         <div className="w-verbs"><CommandButton id="story.cast.testAnimRef" text /></div></section></Part>}
       {p.cls === 'prop' && <Part label="The model" quiet="line"><PropModel p={p} v={v} /></Part>}

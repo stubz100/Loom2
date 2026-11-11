@@ -23,7 +23,7 @@ from ..stages import PlaceSet, Pose, SetFace, StageStore, encode_guide
 from ..shot_recipe import TEMPLATES, StampReader, Template, recipe_state, rerun_recipe, stale_plan, used_run
 from ..shot_graph import ShotGraph, clay_rows, final_for, shot_graph
 from ..shot_prompt import ShotPrompt, shot_prompt
-from ..story import FOR_SHOT, Animatic, anim_ref_frame, version_stage_stale, NODE_TYPES, VISUAL_TYPES, has_lines, node_type, StaleScenes, CastUse, cast_uses, body_fit_origin, fit_if_untouched, queue_part_fit, model_source, prop_model_origin, shell_box, shell_origin, with_sole, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
+from ..story import FOR_SHOT, Animatic, MeshSettings, anim_ref_frame, mesh_recipe, version_stage_stale, NODE_TYPES, VISUAL_TYPES, has_lines, node_type, StaleScenes, CastUse, cast_uses, body_fit_origin, fit_if_untouched, queue_part_fit, model_source, prop_model_origin, shell_box, shell_origin, with_sole, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
 from ..voices import VoiceRecord, VoiceStore, check_voice
 from .deps import Svc
 
@@ -526,7 +526,7 @@ class ShellQueued(BaseModel):
 
 
 @router.post("/story/profiles/{pid}/versions/{vid}/shell", response_model=ShellQueued)
-async def profile_shell_make(svc: Svc, pid: str, vid: str):
+async def profile_shell_make(svc: Svc, pid: str, vid: str, body: MeshSettings | None = None):
     """CS2 (D136 U6): a character version's shell — the image → 3D model (Pixal3D, about four minutes) of its animation reference, a
     background job; it becomes the version's when it lands, the clay its figures are drawn in, bound to the skeleton. D139: only from an
     A-pose picture — the reference fitted, its arms clear of the body."""
@@ -546,15 +546,17 @@ async def profile_shell_make(svc: Svc, pid: str, vid: str):
     from ..story import shell_blocked
     if (why := shell_blocked(v)) is not None:                                # D139: only from an A-pose picture
         raise HTTPException(422, why)
-    spec = next((s for s in registry.mesh_specs() if registry.offered(s, svc.app.settings.variant)), None)
-    if spec is None:
-        raise HTTPException(422, "no image → 3D model is offered in this build (Pixal3D needs DINOv3, full only)")
     try:
-        jobs = svc.queue.submit({"kind": "image_to_mesh", "asset_id": v.anim_ref_asset_id, "model_id": spec.id}, origin=shell_origin(p.id, v.id, v.anim_ref_asset_id))
+        if body is not None:                                                 # RS2 (G2, Q16): the run form's settings, kept on the version first
+            p = await asyncio.to_thread(StoryStore(ws).set_mesh_settings, pid, vid, body)
+            v = p.version(vid)
+            _changed(svc, p)
+        recipe = mesh_recipe(v, v.anim_ref_asset_id, svc.app.settings.variant)
+        jobs = svc.queue.submit(recipe, origin=shell_origin(p.id, v.id, v.anim_ref_asset_id))
     except ValueError as e:
         raise HTTPException(422, str(e))
     await svc.queue.flush()
-    return {"job_id": jobs[0].id, "source_asset_id": v.anim_ref_asset_id, "model_id": spec.id}
+    return {"job_id": jobs[0].id, "source_asset_id": v.anim_ref_asset_id, "model_id": recipe["model_id"]}
 
 
 @router.put("/story/profiles/{pid}/versions/{vid}/poses/{name}", response_model=Profile)
@@ -635,7 +637,7 @@ class PropModelQueued(BaseModel):
 
 
 @router.post("/story/profiles/{pid}/versions/{vid}/model", response_model=PropModelQueued)
-async def profile_model_make(svc: Svc, pid: str, vid: str):
+async def profile_model_make(svc: Svc, pid: str, vid: str, body: MeshSettings | None = None):
     """D110 (PS2): make a prop version's 3D model from its animation reference (else its hero) — the image → mesh job (P18), a background
     job of some minutes; the finisher stands it upright and sets it on the version with the image it came from."""
     ws, _, _ = svc.require_project()
@@ -653,15 +655,17 @@ async def profile_model_make(svc: Svc, pid: str, vid: str):
     source = model_source(v)
     if not source:
         raise HTTPException(422, "give the prop an image first: its animation reference (the prop alone, ¾ view) or a hero")
-    spec = next((s for s in registry.mesh_specs() if registry.offered(s, svc.app.settings.variant)), None)
-    if spec is None:
-        raise HTTPException(422, "no image → 3D model is offered in this build (Pixal3D needs DINOv3, full only): import the prop's model as a GLB (D128)")
     try:
-        jobs = svc.queue.submit({"kind": "image_to_mesh", "asset_id": source, "model_id": spec.id}, origin=prop_model_origin(p.id, v.id, source))
+        if body is not None:                                                 # RS2 (G2, Q16): the run form's settings, kept on the version first
+            p = await asyncio.to_thread(StoryStore(ws).set_mesh_settings, pid, vid, body)
+            v = p.version(vid)
+            _changed(svc, p)
+        recipe = mesh_recipe(v, source, svc.app.settings.variant)
+        jobs = svc.queue.submit(recipe, origin=prop_model_origin(p.id, v.id, source))
     except ValueError as e:
-        raise HTTPException(422, str(e))
+        raise HTTPException(422, f"{e}: import the prop's model as a GLB (D128)" if "offered in this build" in str(e) else str(e))
     await svc.queue.flush()
-    return {"job_id": jobs[0].id, "source_asset_id": source, "model_id": spec.id}
+    return {"job_id": jobs[0].id, "source_asset_id": source, "model_id": recipe["model_id"]}
 
 
 class PropModelPick(BaseModel):

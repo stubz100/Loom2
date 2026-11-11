@@ -6,7 +6,7 @@ import type { Profile, ProfileVersion, StageDoc, StageObject } from '../../api/t
 import { useStory } from '../story/storyStore'
 import { st, useStage } from './stageStore'
 
-const ver = (v: Partial<ProfileVersion>): ProfileVersion => ({ id: 'v1', label: 'v1', state: 'open', group_id: 'grp_1', candidates_group_id: null, hero_asset_id: null, body: null, anim_ref_asset_id: null,
+const ver = (v: Partial<ProfileVersion>): ProfileVersion => ({ id: 'v1', label: 'v1', state: 'open', group_id: 'grp_1', candidates_group_id: null, hero_asset_id: null, mesh: null, body: null, anim_ref_asset_id: null,
   anim_ref_back_asset_id: null, anim_ref_side_asset_id: null, hand_ref_asset_id: null, feet_ref_asset_id: null, hand_words: '', feet_words: '', hand_points: null, feet_points: null, hand_note: null, feet_note: null, anim_test_clip_id: null, shell_asset_id: null, shell_from: null, poses: {}, from_idea: null, height_m: null, place_set: null, model_asset_id: null, model_from: null, body_fit_from: null,
   body_points: null, anim_ref_note: null, appearance: '', outfit: '', colours: [], marks: '', trigger: null, lora: null, derived_from: null, created_at: '', locked_at: null, ...v })
 const prof = (id: string, name: string, cls: Profile['cls'], v: Partial<ProfileVersion>) => ({ id, name, cls, current: 'v1', schema_version: 3, revision: 0, voice_id: null, created_at: '', updated_at: '', versions: [ver(v)] }) as unknown as Profile

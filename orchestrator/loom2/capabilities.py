@@ -291,12 +291,14 @@ def _mesh(svc: Services, variant: str) -> dict:
         needs = spec.weights()
         healths = {x: svc.roster.resolve(x).health for x in needs}
         missing = [ROSTER_BY_ID[x].name for x, hh in healths.items() if hh in ("missing", "retired")]
-        return {"model_id": spec.id, "label": spec.label, "short": spec.short or spec.label, "hint": spec.hint,
+        offered = [{"id": x.id, "label": x.label, "short": x.short or x.label, "hint": x.hint, "seconds": x.estimates.base_seconds} for x in registry.mesh_specs() if _offered(x, variant)]
+        return {"model_id": spec.id, "label": spec.label, "short": spec.short or spec.label, "hint": spec.hint, "models": offered,   # RS2 (G2): the run form's tiles
+                "faces_min": 2000, "faces_max": 700000,
                 "health": "missing" if missing else ("verified" if all(h == "verified" for h in healths.values()) else "present"), "missing": missing,
                 "seconds": spec.estimates.base_seconds, "cold_seconds": spec.estimates.cold_seconds, "resolutions": [1024, 1536], "faces": 50000,
                 "licences": {x: ROSTER_BY_ID[x].license for x in needs}, "approx_gb": round(sum((ROSTER_BY_ID[x].approx_gb or 0) for x in needs), 1)}
     return {"model_id": None, "label": None, "short": None, "hint": None, "health": "unavailable", "missing": [], "seconds": None, "cold_seconds": None,
-            "resolutions": [], "faces": 50000, "licences": {}, "approx_gb": 0.0,
+            "resolutions": [], "faces": 50000, "models": [], "faces_min": 2000, "faces_max": 700000, "licences": {}, "approx_gb": 0.0,
             "why": "no image → mesh model is offered in this build (DINOv3's licence keeps Pixal3D full-only, D17 / D26)" if variant == "open" else "no image → mesh spec"}
 
 

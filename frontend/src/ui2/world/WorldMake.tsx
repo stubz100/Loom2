@@ -17,7 +17,8 @@ import { Help } from '../../frame/Help'
 import { useStory } from '../../suites/story/storyStore'
 import { CastSheet } from '../../suites/story/CastSheet'
 import { WorldRefs } from './WorldRefs'
-import { activeFraming, enterMake, FRAMINGS, linkEntity, partOf, REF_FRAMINGS, refFrame, refTree, type RefFraming } from './make'
+import { activeFraming, enterMake, FRAMINGS, linkEntity, partOf, REF_FRAMINGS, type RefFraming } from './make'
+import { frameReference } from './refFraming'
 import { sheetWords } from './refWords'
 import '../../suites/generate/generate.css'
 import '../../suites/story/story.css'
@@ -44,12 +45,7 @@ export function WorldMake() {
   const refFramings = REF_FRAMINGS[p.cls].filter((f) => !!refs?.[p.cls]?.[f.side])
   const frameRef = (f: RefFraming) => {                                 // D162: the server's sentence — nothing is queued; D177: an A-pose's frame is a 2:3 portrait
     if (active?.id === f.id) { g.set({ ref_framing: null }); return }  // D169: a second click turns it off, the words stay
-    g.set({ ref_framing: f.id })
-    g.setTree(refTree(p.cls, refs?.[p.cls]?.[f.side] ?? '', panel.tree.camera, f.side))
-    const [w, h] = refFrame(p.cls, panel.width, panel.height, f.side)
-    if (w !== panel.width || h !== panel.height) g.set({ width: w, height: h, tier: 'custom' })
-    const klein = useSession.getState().capabilities?.story?.model_id                 // RG1 (E62 a): Klein draws the clean close-up; the card may change it
-    if (partOf(f.id) && klein && panel.model_id !== klein) g.setModel(klein)
+    frameReference(p.cls, f.side)                                       // RS2: one way in (the commands' too)
   }
   const part = reference ? partOf(reference.id) : null                 // RG1 (D187, D188): a hand or feet picture — its own words, not the sheet's
   const partField = part === 'hand' ? 'hand_words' : 'feet_words'

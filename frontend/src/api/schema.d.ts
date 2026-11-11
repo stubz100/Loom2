@@ -11674,6 +11674,16 @@ export interface components {
             cold_seconds?: number | null;
             /** Faces */
             faces: number;
+            /**
+             * Faces Max
+             * @default 700000
+             */
+            faces_max?: number;
+            /**
+             * Faces Min
+             * @default 2000
+             */
+            faces_min?: number;
             /** Health */
             health: string;
             /** Hint */
@@ -11688,6 +11698,10 @@ export interface components {
             missing: string[];
             /** Model Id */
             model_id?: string | null;
+            /** Models */
+            models?: {
+                [key: string]: unknown;
+            }[];
             /** Resolutions */
             resolutions: number[];
             /** Seconds */
@@ -11698,6 +11712,58 @@ export interface components {
             why?: string | null;
         } & {
             [key: string]: unknown;
+        };
+        /**
+         * MeshSettings
+         * @description RS2 (D197 G2, proto02 Q16): what an image → 3D job of this version runs with — its run form's fields, kept on the version so a
+         *     re-make, the skeleton screen's *Make the shell ▶* and the shell queued by itself after a fit (D183) run what the form shows. The
+         *     defaults are the measured ones (E14, D84: 1024 — "1536 is the template's own, slower"; 50 000 faces after DecimateMesh; seed 0).
+         */
+        "MeshSettings-Input": {
+            /**
+             * Faces
+             * @default 50000
+             */
+            faces?: number;
+            /** Model Id */
+            model_id?: string | null;
+            /**
+             * Resolution
+             * @default 1024
+             * @enum {integer}
+             */
+            resolution?: 1024 | 1536;
+            /**
+             * Seed
+             * @default 0
+             */
+            seed?: number;
+        };
+        /**
+         * MeshSettings
+         * @description RS2 (D197 G2, proto02 Q16): what an image → 3D job of this version runs with — its run form's fields, kept on the version so a
+         *     re-make, the skeleton screen's *Make the shell ▶* and the shell queued by itself after a fit (D183) run what the form shows. The
+         *     defaults are the measured ones (E14, D84: 1024 — "1536 is the template's own, slower"; 50 000 faces after DecimateMesh; seed 0).
+         */
+        "MeshSettings-Output": {
+            /**
+             * Faces
+             * @default 50000
+             */
+            faces: number;
+            /** Model Id */
+            model_id: string | null;
+            /**
+             * Resolution
+             * @default 1024
+             * @enum {integer}
+             */
+            resolution: 1024 | 1536;
+            /**
+             * Seed
+             * @default 0
+             */
+            seed: number;
         };
         /** MissingWeight */
         MissingWeight: {
@@ -12864,6 +12930,7 @@ export interface components {
              * @default
              */
             marks: string;
+            mesh: components["schemas"]["MeshSettings-Output"] | null;
             /** Model Asset Id */
             model_asset_id: string | null;
             /** Model From */
@@ -24320,7 +24387,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MeshSettings-Input"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -25049,7 +25120,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MeshSettings-Input"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

@@ -181,6 +181,30 @@ class IdeaRef(BaseModel):
     variant_id: str
 
 
+class MeshSettings(BaseModel):
+    """RS2 (D197 G2, proto02 Q16): what an image → 3D job of this version runs with — its run form's fields, kept on the version so a
+    re-make, the skeleton screen's *Make the shell ▶* and the shell queued by itself after a fit (D183) run what the form shows. The
+    defaults are the measured ones (E14, D84: 1024 — "1536 is the template's own, slower"; 50 000 faces after DecimateMesh; seed 0)."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    model_id: str | None = None                        # None: the build's first offered image → 3D model
+    resolution: Literal[1024, 1536] = 1024
+    faces: int = Field(50000, ge=2000, le=700000)
+    seed: int = Field(0, ge=0, le=2**31 - 1)
+
+
+def mesh_recipe(v: "ProfileVersion", asset_id: str, variant: str | None) -> dict[str, Any]:
+    """RS2: the image → 3D recipe of a version's shell or model — its kept settings (`MeshSettings`, the defaults when it has none) on the
+    model it names, else the build's first offered one. ValueError when the build offers none, or not the one named."""
+    m = v.mesh or MeshSettings()
+    offered = [s for s in registry.mesh_specs() if registry.offered(s, variant)]
+    if not offered:
+        raise ValueError("no image → 3D model is offered in this build (Pixal3D needs DINOv3, full only)")
+    spec = next((s for s in offered if s.id == m.model_id), None) if m.model_id else offered[0]
+    if spec is None:
+        raise ValueError(f"{m.model_id!r} makes no 3D model in this build — one of: {', '.join(s.id for s in offered)}")
+    return {"kind": "image_to_mesh", "asset_id": asset_id, "model_id": spec.id, "resolution": m.resolution, "faces": m.faces, "seeds": [m.seed]}
+
+
 class ProfileVersion(BaseModel):
     """One version of a profile (loom §3.4): its reference set is an album group (`group_id`), its expansion candidates another; `open`
     is editable and expandable, `final` locks the group and the fields (a retake is a new version). `trigger` and `lora` wait for the
@@ -217,6 +241,7 @@ class ProfileVersion(BaseModel):
                                                   # the turn test's stance (S4), the skeleton bench's points (CS2)
     anim_ref_note: str | None = None              # S8: what the fit saw wrong in the reference's stance ("arms_close"); None = fine or not fitted
     anim_test_clip_id: str | None = None          # CA0: the last test animation of the reference (a turn on the spot, Wan Animate) — a clip id
+    mesh: MeshSettings | None = None              # RS2 (G2, Q16): the image → 3D run form's settings (the shell's, a prop's model's); None = the defaults
     shell_asset_id: str | None = None             # CS2 (D136 U6): a character version's shell — the image → 3D model of its animation reference, the clay
     shell_from: str | None = None                 #   its figures are drawn in (bound to the skeleton); the reference it was made from (a newer one marks it stale)
     poses: dict[str, Pose] = Field(default_factory=dict)   # AP1b (D141): the character's own poses, fitted to this body in the pose editor —
@@ -948,10 +973,11 @@ def shell_after_fit(queue: Any, p: Any, vid: str, variant: str | None) -> bool:
     v = p.version(vid)
     if p.cls != "character" or v.shell_asset_id or shell_blocked(v) is not None:
         return False
-    spec = next((s for s in registry.mesh_specs() if registry.offered(s, variant)), None)
-    if spec is None:
+    try:
+        recipe = mesh_recipe(v, v.anim_ref_asset_id, variant)                 # RS2: the version's own settings, as its run form shows them
+    except ValueError:
         return False
-    queue.submit({"kind": "image_to_mesh", "asset_id": v.anim_ref_asset_id, "model_id": spec.id}, origin=shell_origin(p.id, v.id, v.anim_ref_asset_id))
+    queue.submit(recipe, origin=shell_origin(p.id, v.id, v.anim_ref_asset_id))
     return True
 
 
@@ -2780,6 +2806,11 @@ class StoryStore(_ShotMixin, _FlowMixin):
             if v.body is not None:
                 v.body = with_sole(v.body, v.body_points, v.body_fit_from, v.shell_from, figure_box)
         return self._change_version(pid, vid, apply)
+
+    def set_mesh_settings(self, pid: str, vid: str, settings: MeshSettings | None) -> Profile:
+        """RS2 (Q16): the version's image → 3D settings, as its run form sent them (None: back to the defaults). No revision guard: a
+        setting of a product, like its shell."""
+        return self._change_version(pid, vid, lambda v, cur: setattr(v, "mesh", settings))
 
     def set_anim_test(self, pid: str, vid: str, clip_id: str | None) -> Profile:
         """CA0: the version's latest test animation (a clip). No revision guard, a final version too (a product, like its reference)."""

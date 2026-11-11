@@ -63,6 +63,11 @@ export function revealClass(cls: ProfileClass): void {
   if (f !== 'all' && f !== cls) useStory.getState().setCastFilter(cls)
 }
 
+/** RS2 (D197 G2): an image → 3D job's settings (the server's `MeshSettings`) and their measured defaults (E14, D84). */
+export type MeshSettings = { model_id: string | null; resolution: 1024 | 1536; faces: number; seed: number }
+export const MESH_DEFAULTS: MeshSettings = { model_id: null, resolution: 1024, faces: 50000, seed: 0 }
+export const meshKey = (pid: string, vid: string): string => `${pid}/${vid}`
+
 export interface TrainOpts { model_id: string | null; steps: number; rank: number; resolution: number; name: string; setting: string; stage: boolean }
 const DEFAULT_TRAIN: TrainOpts = { model_id: null, steps: 1000, rank: 16, resolution: 512, name: '', setting: '', stage: true }
 /** CN2 (19 §3b): a new voice — the draft tier's fixed Kokoro voice, or the cloning tier's reference clip with its transcript and the consent note. */
@@ -120,6 +125,9 @@ export interface StoryState {
   refitBody: (points: Record<string, unknown>) => Promise<boolean>
   /** CS2: the character's shell — made from its animation reference (a background job), or picked / cleared. */
   makeShell: () => Promise<void>
+  /** RS2 (G2, Q16): the image → 3D run form's settings not run yet, per version (`meshKey`) — the next make sends them and the version keeps them. */
+  meshDraft: Record<string, MeshSettings>
+  setMeshDraft: (pid: string, vid: string, m: MeshSettings) => void
   setShell: (assetId: string | null) => Promise<void>
   /** AP1b (D141): a character version's own pose saved (Animate's *Save for ‹character›*) or deleted; true when it landed. */
   saveCharacterPose: (pid: string, vid: string, name: string, pose: NonNullable<ProfileVersion['poses']>[string]) => Promise<boolean>
@@ -734,11 +742,15 @@ export const useStory = create<StoryState>()((set, get) => {
     makeModel: async () => {
       const p = get().profile(); const v = get().version(); if (!p || !v) return
       try {
-        await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/model', { params: { path: { pid: p.id, vid: v.id } } }))
+        const draft = get().meshDraft[meshKey(p.id, v.id)]                           // RS2: what the run form shows (none: what the version keeps)
+        await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/model', { params: { path: { pid: p.id, vid: v.id } }, ...(draft ? { body: draft } : {}) } as never))
+        if (draft) set({ meshDraft: Object.fromEntries(Object.entries(get().meshDraft).filter(([k]) => k !== meshKey(p.id, v.id))) })
         useSession.getState().toast(`Making ${p.name}'s 3D model in the background — it is stood upright and shown here when it lands (minutes)`, 'info')
       } catch (e) { toast(`3D model: ${detail(e)}`) }
     },
     setSkeleton: (on) => set({ skeleton: on }),
+    meshDraft: {},
+    setMeshDraft: (pid, vid, m) => set({ meshDraft: { ...get().meshDraft, [meshKey(pid, vid)]: m } }),
     refitBody: (points) => inTurn(async () => {
       const p = get().profile(); const v = get().version(); if (!p || !v) return false
       await patchWith({})                                                    // D191: an edit still queued (an unlock) goes first
@@ -751,7 +763,9 @@ export const useStory = create<StoryState>()((set, get) => {
     makeShell: async () => {
       const p = get().profile(); const v = get().version(); if (!p || !v) return
       try {
-        await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/shell', { params: { path: { pid: p.id, vid: v.id } } }))
+        const draft = get().meshDraft[meshKey(p.id, v.id)]                           // RS2: what the run form shows (none: what the version keeps)
+        await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/shell', { params: { path: { pid: p.id, vid: v.id } }, ...(draft ? { body: draft } : {}) } as never))
+        if (draft) set({ meshDraft: Object.fromEntries(Object.entries(get().meshDraft).filter(([k]) => k !== meshKey(p.id, v.id))) })
         useSession.getState().toast(`Making ${p.name}'s shell in the background — the 3D model of the animation reference, about four minutes; the bench shows it when it lands`, 'info')
       } catch (e) { toast(`Shell: ${detail(e)}`) }
     },

@@ -4,13 +4,13 @@ import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import { api, http, unwrap } from '../../api/client'
 import type { Profile } from '../../api/types'
 import { CommandButton } from '../../frame/CommandButton'
-import { command, markUsed, runCommand, type MenuItem } from '../../frame/commands'
+import { markUsed, runCommand, type MenuItem } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import { Help } from '../../frame/Help'
 import { useSession } from '../../store/session'
 import { partRead } from './partRead'
-import { partModel } from '../generate/generateStore'
 import { latestModelJob, modelSource, modelStale, NOT_WHOLE, SEVERAL, sy } from './storyStore'
+import { MeshRunForm } from './MeshRunForm'
 
 const ModelView = lazy(() => import('../stage/ModelView'))
 
@@ -37,7 +37,8 @@ export function PropModel({ p, v }: { p: Profile; v: Profile['versions'][number]
           : <div className="model-view empty"><span className="hint">{busy ? 'making…' : 'no model yet'}</span></div>}
         <div className="prop-model-side">
           <span className={`hint${modelStale(v) ? ' warn' : ''}`} data-status>{status}</span>
-          <div className="verbs"><CommandButton id="story.cast.makeModel" text /><CommandButton id="story.cast.importModel" text /><CommandButton id="story.cast.clearModel" text /><CommandButton id="story.cast.bench" text /></div>
+          <MeshRunForm p={p} v={v} testId="model-run-form"><CommandButton id="story.cast.makeModel" text /></MeshRunForm>{/* RS2 (G2): the model's run form */}
+          <div className="verbs"><CommandButton id="story.cast.importModel" text /><CommandButton id="story.cast.clearModel" text /><CommandButton id="story.cast.bench" text /></div>
           <div className="kv prop-height"><span>height</span>{/* CW4 (03 §4): the model scaled to it in Animate */}
             <span><input type="number" key={`h${v.id}${v.height_m ?? ''}`} defaultValue={v.height_m ?? ''} min={0.01} max={100} step={0.05} disabled={v.state !== 'open'} aria-label="the prop's height in metres" placeholder="1.0"
               onBlur={(e) => { const t = e.target.value.trim(), h = t ? Number(t) : null; if (h !== (v.height_m ?? null) && (h === null || h > 0)) sy().setSheet({ height_m: h }) }}
@@ -97,11 +98,7 @@ export function AnimRef({ p, v, children }: { p: Profile; v: Profile['versions']
         {p.cls === 'character' && slot('feet', v.feet_ref_asset_id, 'feet')}
         {p.cls === 'character' && <AnimTestSlot clipId={v.anim_test_clip_id ?? null} />}
         <div className="verbs">
-          <CommandButton id="story.cast.makeAnimRef" text label={withRun('story.cast.makeAnimRef', 2)} />
-          {p.cls === 'character' && <CommandButton id="story.cast.makeAnimRefBack" text label={withRun('story.cast.makeAnimRefBack', 2)} />}
-          {p.cls === 'character' && <CommandButton id="story.cast.makeAnimRefSide" text label={withRun('story.cast.makeAnimRefSide', 2)} />}
-          {p.cls === 'character' && <CommandButton id="story.cast.makeHandRef" text label={withRun('story.cast.makeHandRef', 2)} />}
-          {p.cls === 'character' && <CommandButton id="story.cast.makeFeetRef" text label={withRun('story.cast.makeFeetRef', 2)} />}
+          {/* RS2 (G2, PG22): no make buttons here — a reference is made with Make's framing above (its settings shown); a slot's right-click turns it on */}
           {p.cls === 'character' && <CommandButton id="story.cast.testAnimRef" text />}
         </div>
       </div>
@@ -110,16 +107,6 @@ export function AnimRef({ p, v, children }: { p: Profile; v: Profile['versions']
   )
 }
 
-/** W10: a run button says what it queues before it does — the model, how many, the time with the model warm. D190: a hand or feet picture
- *  runs on World's Make column card (any text-to-image model), named here; the time is said for the measured model only. */
-function withRun(id: string, n: number): string | undefined {
-  const caps = useSession.getState().capabilities, label = command(id)?.label, st = caps?.story
-  if (!label || !st?.model_id) return undefined
-  const part = id === 'story.cast.makeHandRef' || id === 'story.cast.makeFeetRef' ? partModel() : null
-  if (part && part !== st.model_id) return `${label} · ${caps?.models[part]?.label ?? part} · ${n}`
-  const s = (st.seconds ?? 0) * n
-  return `${label} · ${st.short ?? st.label ?? st.model_id} · ${n} · ${s ? `≈ ${s < 90 ? `${Math.round(s)} s` : `${Math.round(s / 60)} min`}` : 'time unknown'}`
-}
 
 /** CA0: the version's latest test animation (a turn on the spot) — its first frame, played in Animate. */
 function AnimTestSlot({ clipId }: { clipId: string | null }) {

@@ -17074,3 +17074,31 @@ Checks: Vitest 819 + 3 skipped (7 new, `rs1.test.ts`; `clay.test.ts` ported), ty
 AGENTS.md amended); no backend change (offline as RS0b's 897); e2e alone: twelve sites ported to World's Clay — a first full run 90 / 92 (the
 place's bench camera, above; the live character sheet's flake again), after the fix 92 / 92 (7.4 min). Screenshots of the bench and the
 Skeleton part sent. No GPU job. Next: RS2 (the run form) and RS3 (a shot is its scene).
+
+## 2026-11-11 18:11 — RS2a: the run form, the exposure audit, the shell's and the model's parameters, the A-pose buttons into Make's framing
+
+proto02 03's RS2, its first slice (D197 G2; Q13, Q16), on the author's "continue".
+
+- **The run form** (`frame/RunForm.tsx`): the model tiles (`ModelCards`; one tile when one model), each parameter as a choice or a number with
+  its measured reason behind a ?, the cost, the run's own command buttons — inline above the ▶ (Q13).
+- **Image → 3D** (`suites/story/MeshRunForm.tsx`): Pixal3D's tile, the resolution (1024 · 1536), the faces (2 000–700 000), the seed, on a
+  character's Shell (World › Clay › Figure) and a prop's Model. `ProfileVersion.mesh` (`MeshSettings`) keeps them (Q16); `story.mesh_recipe`
+  builds every such job of the version from them — the routes (a body = the form's settings, kept first; none = what is kept, else E14's
+  defaults 1024 / 50 000 / 0), and **the shell queued by itself after a fit** (D183). A change is the version's draft until the run sends it,
+  so *Make the shell ▶* on the skeleton screen or a ghost figure runs what the form shows. At 1536 the form says "not measured yet", no
+  invented estimate (T8). `/capabilities.mesh` lists the offered models and the faces' range.
+- **PG22, the rest:** the reference make buttons are gone from the A-pose section (they queued two pictures at settings of their own); their
+  commands — a slot's right-click, the "not the whole figure / arms touch / T-pose" links — turn Make's reference framing on
+  (`ui2/world/refFraming.ts`, the one `frameReference` Make's chips use too) and queue nothing: the settings, the model and the run are Make's.
+- **The exposure audit** (`scripts/exposure_audit.py`, in CI and CLAUDE.md): every recipe field is shown (the module that builds the recipe
+  names it), structural, allowed with a reason, or owed to a proto02 wave — 105 shown, 76 structural, 24 allowed, **28 owed**, 0 problems; nine
+  server-built jobs listed as owing a run form. The owed list only shrinks; RS9 closes it.
+
+Owed (RS2b): the set's relief and bake, the Fills', the crowd's, the walkers' and the clean's forms, the turn test, the moving things' and the
+Bin's 3D prop, and the rig check (a shell at 1536 / 100 000 against the default on char01, alone on the GPU).
+
+Checks: offline 899 (2 new, `test_rs2_mesh.py`), Vitest 822 + 3 skipped (3 new, `rs2.test.tsx`; eight fixtures gained `mesh`), typecheck +
+build, lint 63 warnings as before, settings audit 326 / 0, model literals 0, agents 0, exposure audit 0 problems, the API contract regenerated
+(`MeshSettings`, `MeshCaps.models`); e2e alone 91 / 92 — the live character sheet's mention again (it passes alone, as on 2026-11-10 and in
+RS1's first run: a load-order flake that predates proto02, to be looked at), the prop's scenario now changes the faces in the form and finds
+them on the job and the version. The form's screenshot sent. No GPU job.

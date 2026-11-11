@@ -391,8 +391,9 @@ const cmds: Command[] = [
   { id: 'story.cast.setHero', scope: 'story', label: 'Make it the hero', icon: ImageUp, placement: ['context', 'inspector'], when: () => openVersion() && picked().length === 1,
     run: () => void sy().setHero(picked()[0]) },
   // CA0 (01 step 2, §10): the animation reference — characters (front, back) and props (front, a three-quarter view); a final version takes one too
-  { id: 'story.cast.makeAnimRef', scope: 'story', label: 'Make reference candidates ▶', icon: PersonStanding, hint: 'queues two pictures from the sheet and references (a character: full body, A-pose, 16:9, plain ground) — pick the front from them (D161)',
-    placement: ['panel', 'inspector', 'context'], when: () => animRefable() && !!useSession.getState().capabilities?.story?.model_id, run: () => void sy().makeAnimRef('front') },
+  // RS2 (D197 G2, PG22): these four turn Make's reference framing on — the settings, the model and the run are Make's; they queue nothing
+  { id: 'story.cast.makeAnimRef', scope: 'story', label: 'Frame the reference in Make ▸', icon: PersonStanding, hint: "Make's framing set to the reference (a character: the A-pose front, a 2:3 portrait; a prop: its three-quarter view) — its settings are Make's, Give … a look ▶ makes the candidates to pick from (D161)",
+    placement: ['panel', 'inspector', 'context'], when: () => animRefable(), run: () => frameRef('front') },
   { id: 'story.cast.fitBody', scope: 'story', label: 'Fit the body to the animation reference', icon: Ruler,
     hint: "the reference's proportions measured (neck, shoulders, torso, limbs, hands) so the stage figure moves with the character's build; the height and build stay",
     placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character' && !fitBlocked(version()) && version()?.state === 'open', run: () => void sy().fitBody() },   // D140: only on an A-pose
@@ -462,10 +463,10 @@ const cmds: Command[] = [
     hint: "the 3D model of the animation reference in the A-pose (Pixal3D, about four minutes in the background): the clay the character's figures are drawn in — the reference fitted first; arms held against the body would be made part of it (D139)",
     placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character' && !shellBlocked(version()) && !!useSession.getState().capabilities?.mesh?.model_id,
     run: () => void sy().makeShell() },
-  { id: 'story.cast.makeAnimRefBack', scope: 'story', label: 'Make back-view candidates ▶', icon: PersonStanding, hint: 'queues two of the same A-pose from behind — pick the back from them, for a shot that starts turned away',
-    placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character' && !!useSession.getState().capabilities?.story?.model_id, run: () => void sy().makeAnimRef('back') },
-  { id: 'story.cast.makeAnimRefSide', scope: 'story', label: 'Make side-view candidates ▶', icon: PersonStanding, hint: 'queues two of the same A-pose in profile, facing left — pick the side from them, for a character seen from the side (the braid, the hood, what hangs behind)',
-    placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character' && !!useSession.getState().capabilities?.story?.model_id, run: () => void sy().makeAnimRef('side') },
+  { id: 'story.cast.makeAnimRefBack', scope: 'story', label: 'Frame the back view in Make ▸', icon: PersonStanding, hint: "Make's framing set to the same A-pose from behind — pick the back from its candidates, for a shot that starts turned away",
+    placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character', run: () => frameRef('back') },
+  { id: 'story.cast.makeAnimRefSide', scope: 'story', label: 'Frame the side view in Make ▸', icon: PersonStanding, hint: "Make's framing set to the same A-pose in profile, facing left — pick the side from its candidates, for a character seen from the side (the braid, the hood, what hangs behind)",
+    placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character', run: () => frameRef('side') },
   // RG1 (D187, D188; proto01_rig 00 §8–10): the hand and feet pictures — made from words of their own (no sheet, no references, on Klein),
   // picked by hand, read at once (SDPose on the picture shrunk into its canvas, the matte beside); the shape lands on the body
   { id: 'story.cast.makeHandRef', scope: 'story', label: 'Make hand-picture candidates ▶', icon: Hand,
@@ -517,8 +518,8 @@ const cmds: Command[] = [
   { id: 'story.cast.clearModel', scope: 'story', label: 'Clear the 3D model', icon: X, placement: ['inspector', 'context'], when: () => !!version()?.model_asset_id,
     run: () => void sy().setModel(null) },
   // CW6 (proto01_UIcast 04 §3–6; D143): a place's set — its picture (the place empty), the fit, the bake, the Fill
-  { id: 'cast.place.picture', scope: 'story', label: 'Make set-picture candidates ▶', icon: ImagePlus, hint: 'the place empty, from eye level, its floor and walls in view — two candidates from the sheet and references',
-    placement: ['panel', 'inspector', 'context'], when: () => isPlace() && !!useSession.getState().capabilities?.story?.model_id, run: () => void sy().makeAnimRef('front') },
+  { id: 'cast.place.picture', scope: 'story', label: 'Frame the set picture in Make ▸', icon: ImagePlus, hint: "Make's framing set to the set picture — the place empty, from eye level, its floor and walls in view; Give … a look ▶ makes the candidates",
+    placement: ['panel', 'inspector', 'context'], when: () => isPlace(), run: () => frameRef('front') },
   { id: 'cast.place.usePicture', scope: 'story', label: 'Use as the set picture', icon: ImagePlus, placement: ['context', 'inspector'], when: () => isPlace() && picked().length === 1,
     run: () => void sy().setAnimRef('front', picked()[0]) },
   { id: 'cast.place.build', scope: 'story', label: 'Build the set ▶', icon: Box, hint: "MoGe reads the set picture's depth: a room, a corridor, a street or open ground fitted to it, scaled by the camera's height, then the picture baked onto its faces",
@@ -802,6 +803,19 @@ const cmds: Command[] = [
     run: () => { const p = profile(); if (!p) return
       void askConfirm({ title: `Delete ${p.name}?`, okLabel: 'Delete', danger: true, text: 'The profile record goes; its reference sets and images stay in the album (no longer final). @mentions of it stop resolving.' }).then((ok) => { if (ok) void sy().deleteProfile() }) } },
 ]
+/** RS2 (D197 G2, PG22): the entity shown in World's Make with the reference framing of `side` on — nothing queued, the run is Make's. */
+function frameRef(side: 'front' | 'back' | 'side'): void {
+  const p = profile()
+  if (!p) return
+  void Promise.all([import('../../ui2/world/worldStore'), import('../../ui2/world/refFraming')]).then(([w, f]) => {
+    if (useStory.getState().profileId !== p.id) w.useWorld.getState().pick(p.id)
+    w.useWorld.getState().setMode('make')
+    navigate({ suite: 'generate' })
+    if (f.frameReference(p.cls, side)) useSession.getState().toast(`Make's framing is ${p.name}'s reference now — its settings are Make's; the run makes the candidates to pick from`, 'info')
+    else useSession.getState().toast('This build has no reference sentence for it', 'error')
+  })
+}
+
 registerCommands(cmds)
 
 /** The right-click menu of a row in the World editor: the row is selected first, so the Inspector shows it too. */

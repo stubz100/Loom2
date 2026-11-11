@@ -15797,6 +15797,16 @@
             "title": "Faces",
             "type": "integer"
           },
+          "faces_max": {
+            "default": 700000,
+            "title": "Faces Max",
+            "type": "integer"
+          },
+          "faces_min": {
+            "default": 2000,
+            "title": "Faces Min",
+            "type": "integer"
+          },
           "health": {
             "title": "Health",
             "type": "string"
@@ -15848,6 +15858,14 @@
             ],
             "title": "Model Id"
           },
+          "models": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Models",
+            "type": "array"
+          },
           "resolutions": {
             "items": {
               "type": "integer"
@@ -15898,6 +15916,94 @@
           "approx_gb"
         ],
         "title": "MeshCaps",
+        "type": "object"
+      },
+      "MeshSettings-Input": {
+        "description": "RS2 (D197 G2, proto02 Q16): what an image → 3D job of this version runs with — its run form's fields, kept on the version so a\nre-make, the skeleton screen's *Make the shell ▶* and the shell queued by itself after a fit (D183) run what the form shows. The\ndefaults are the measured ones (E14, D84: 1024 — \"1536 is the template's own, slower\"; 50 000 faces after DecimateMesh; seed 0).",
+        "properties": {
+          "faces": {
+            "default": 50000,
+            "maximum": 700000.0,
+            "minimum": 2000.0,
+            "title": "Faces",
+            "type": "integer"
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
+          "resolution": {
+            "default": 1024,
+            "enum": [
+              1024,
+              1536
+            ],
+            "title": "Resolution",
+            "type": "integer"
+          },
+          "seed": {
+            "default": 0,
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Seed",
+            "type": "integer"
+          }
+        },
+        "title": "MeshSettings",
+        "type": "object"
+      },
+      "MeshSettings-Output": {
+        "description": "RS2 (D197 G2, proto02 Q16): what an image → 3D job of this version runs with — its run form's fields, kept on the version so a\nre-make, the skeleton screen's *Make the shell ▶* and the shell queued by itself after a fit (D183) run what the form shows. The\ndefaults are the measured ones (E14, D84: 1024 — \"1536 is the template's own, slower\"; 50 000 faces after DecimateMesh; seed 0).",
+        "properties": {
+          "faces": {
+            "default": 50000,
+            "maximum": 700000.0,
+            "minimum": 2000.0,
+            "title": "Faces",
+            "type": "integer"
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
+          "resolution": {
+            "default": 1024,
+            "enum": [
+              1024,
+              1536
+            ],
+            "title": "Resolution",
+            "type": "integer"
+          },
+          "seed": {
+            "default": 0,
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Seed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "model_id",
+          "resolution",
+          "faces",
+          "seed"
+        ],
+        "title": "MeshSettings",
         "type": "object"
       },
       "MissingWeight": {
@@ -18881,6 +18987,16 @@
             "title": "Marks",
             "type": "string"
           },
+          "mesh": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MeshSettings-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "model_asset_id": {
             "anyOf": [
               {
@@ -18998,6 +19114,7 @@
           "body_points",
           "anim_ref_note",
           "anim_test_clip_id",
+          "mesh",
           "shell_asset_id",
           "shell_from",
           "poses",
@@ -40125,6 +40242,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/MeshSettings-Input"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
@@ -41419,6 +41553,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/MeshSettings-Input"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {

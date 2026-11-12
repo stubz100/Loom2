@@ -27,6 +27,7 @@ the engine. The author works mouse-first and is EU-based.
 | Frontend typecheck + build | `cd frontend; npm run build` (`tsc -b` + `vite build`) |
 | Lint (frontend) | `cd frontend; npm run lint` (oxlint) |
 | Frontend tests (D68) | `cd frontend; npm test` (Vitest, 560+ tests, ≈ 8 s) · `npm run build:e2e; npm run test:e2e` (Playwright on Edge against the orchestrator + fake engine, 74 scenarios, ≈ 6 min; needs 1420 free — run it alone, it flakes under load) · `npm run perf` then `python scripts/perf_compare.py` |
+| Token filter (rtk) | The project's .claude/settings.json hooks Bash through `rtk hook claude` (`git`, `ls`, `cat`, `grep`, `find`, `npm run build` … come back compacted; the PowerShell tool is untouched). Raw output: `rtk proxy <cmd>`; savings: `rtk gain`. `npm run lint` is excluded in `%APPDATA%\rtk\config.toml` (`rtk lint` reads ESLint JSON and hides oxlint's output) |
 | Agent-doc path check | `orchestrator/.venv/Scripts/python.exe scripts/agents_check.py` |
 | Settings audit (D60) | `orchestrator/.venv/Scripts/python.exe scripts/settings_audit.py` — every Settings field, recipe field and `/capabilities` parameter must reach the code that runs (allow-list with reasons) |
 | Exposure audit (D197 G2) | `orchestrator/.venv/Scripts/python.exe scripts/exposure_audit.py [-v]` — every recipe field is shown in a run form, structural, allowed with a reason or owed to a proto02 wave (the owed list only shrinks) |
